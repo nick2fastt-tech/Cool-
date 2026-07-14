@@ -2,471 +2,741 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#000000">
 <title>THE LAST CANDLE</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
-  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Georgia', serif; }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Georgia', 'Times New Roman', serif; }
   #game { display: block; position: absolute; top: 0; left: 0; touch-action: none; }
   .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
-    justify-content: center; text-align: center; color: #c9b48a; z-index: 10; padding: 24px;
-    background: radial-gradient(ellipse at center, rgba(30,10,10,0.85), rgba(0,0,0,0.98)); }
+    justify-content: center; text-align: center; color: #c9b48a; z-index: 20; padding: 24px;
+    background: radial-gradient(ellipse at center, rgba(30,10,10,0.88), rgba(0,0,0,0.985)); }
   .hidden { display: none !important; }
-  h1 { font-size: clamp(30px, 9vw, 60px); letter-spacing: 6px; color: #d8c090;
-    text-shadow: 0 0 18px rgba(180,40,40,0.6); margin-bottom: 8px; }
-  .sub { font-size: clamp(13px, 3.6vw, 18px); color: #7a6a4a; letter-spacing: 3px; margin-bottom: 30px; }
-  p.tip { font-size: clamp(12px, 3.4vw, 16px); color: #9a8560; line-height: 1.7; max-width: 340px; margin-bottom: 26px; }
-  .btn { font-family: 'Georgia', serif; font-size: clamp(16px, 4.4vw, 22px); letter-spacing: 4px;
-    color: #e8d5a0; background: transparent; border: 1px solid #6b4a2a; padding: 14px 40px;
-    border-radius: 2px; cursor: pointer; transition: all .3s; }
-  .btn:active { background: rgba(120,30,30,0.4); border-color: #b04040; color: #fff; }
-  #deadTitle { color: #a01818; text-shadow: 0 0 24px rgba(200,0,0,0.8); animation: shake .5s; }
-  @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-8px)} 75%{transform:translateX(8px)} }
-  #hud { position: absolute; top: 0; left: 0; right: 0; padding: 12px 16px; z-index: 5;
+  h1 { font-size: clamp(30px, 9vw, 62px); letter-spacing: 6px; color: #d8c090;
+    text-shadow: 0 0 18px rgba(180,40,40,0.6), 0 0 40px rgba(120,20,20,0.3); margin-bottom: 8px; }
+  .sub { font-size: clamp(13px, 3.6vw, 18px); color: #7a6a4a; letter-spacing: 3px; margin-bottom: 26px; }
+  p.tip { font-size: clamp(12px, 3.4vw, 16px); color: #9a8560; line-height: 1.75; max-width: 360px; margin-bottom: 26px; }
+  p.tip b { color: #e0c98a; }
+  .btn { font-family: inherit; font-size: clamp(16px, 4.4vw, 22px); letter-spacing: 4px;
+    color: #e8d5a0; background: rgba(20,12,6,0.6); border: 1px solid #6b4a2a; padding: 14px 44px;
+    border-radius: 2px; cursor: pointer; transition: all .25s; margin: 6px; }
+  .btn:active { background: rgba(120,30,30,0.45); border-color: #b04040; color: #fff; transform: scale(0.97); }
+  .btn.small { font-size: clamp(12px, 3.4vw, 15px); padding: 9px 22px; letter-spacing: 2px; }
+  #deadTitle { color: #a01818; text-shadow: 0 0 24px rgba(200,0,0,0.85); animation: shake .5s; }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translate(-9px,3px)} 40%{transform:translate(8px,-3px)}
+    60%{transform:translate(-6px,2px)} 80%{transform:translate(5px,-1px)} }
+  .row { display: flex; flex-wrap: wrap; justify-content: center; }
+  #hud { position: absolute; top: 0; left: 0; right: 0; padding: max(12px, env(safe-area-inset-top)) 16px 12px; z-index: 8;
     display: flex; justify-content: space-between; align-items: center; pointer-events: none;
-    color: #c9b48a; font-size: 14px; letter-spacing: 2px; text-shadow: 0 0 6px #000; }
-  #wax { flex: 1; max-width: 180px; height: 8px; margin-left: 12px; border: 1px solid #5a4326;
-    border-radius: 4px; overflow: hidden; background: rgba(0,0,0,0.5); }
-  #waxFill { height: 100%; width: 100%; background: linear-gradient(90deg,#7a1010,#e8a020,#f5e08a);
-    transition: width .2s linear; }
-  #keys { font-size: 20px; letter-spacing: 4px; }
-  #stick { position: absolute; bottom: 40px; left: 40px; width: 130px; height: 130px; z-index: 6;
-    border-radius: 50%; background: rgba(40,30,20,0.25); border: 1px solid rgba(120,90,50,0.35); display: none; }
-  #knob { position: absolute; top: 50%; left: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px;
+    color: #c9b48a; font-size: 15px; letter-spacing: 2px; text-shadow: 0 0 6px #000, 0 0 2px #000; }
+  #keys { font-size: 19px; letter-spacing: 3px; }
+  #meters { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+  .barwrap { display: flex; align-items: center; gap: 7px; font-size: 11px; letter-spacing: 1px; color: #8a7550; }
+  .bar { width: 150px; height: 9px; border: 1px solid #5a4326; border-radius: 5px; overflow: hidden; background: rgba(0,0,0,0.55); }
+  #waxFill { height: 100%; width: 100%; background: linear-gradient(90deg,#7a1010,#e8a020,#f5e08a); transition: width .15s linear; }
+  #stamFill { height: 100%; width: 100%; background: linear-gradient(90deg,#1d5a6a,#3fb0c8,#a0e8f5); transition: width .1s linear; }
+  #stick { position: absolute; bottom: max(40px, env(safe-area-inset-bottom)); left: 36px; width: 132px; height: 132px; z-index: 9;
+    border-radius: 50%; background: rgba(40,30,20,0.22); border: 1px solid rgba(120,90,50,0.35); display: none; }
+  #knob { position: absolute; top: 50%; left: 50%; width: 58px; height: 58px; margin: -29px 0 0 -29px;
     border-radius: 50%; background: radial-gradient(circle at 35% 30%, #b89050, #4a3210);
     border: 1px solid rgba(200,160,90,0.5); box-shadow: 0 0 14px rgba(0,0,0,0.6); }
-  .flick { position: absolute; inset: 0; z-index: 4; pointer-events: none;
-    background: radial-gradient(ellipse at 50% 55%, transparent 30%, rgba(0,0,0,0.55) 100%); }
-  #vig { position: absolute; inset: 0; z-index: 3; pointer-events: none; box-shadow: inset 0 0 200px 60px rgba(0,0,0,0.9); }
+  #sprintBtn { position: absolute; bottom: max(52px, env(safe-area-inset-bottom)); right: 40px; width: 96px; height: 96px; z-index: 9;
+    border-radius: 50%; background: rgba(60,20,20,0.28); border: 1px solid rgba(160,80,60,0.4); display: none;
+    align-items: center; justify-content: center; color: #d8b090; font-size: 13px; letter-spacing: 2px; text-align: center; }
+  #sprintBtn.on { background: rgba(150,40,30,0.5); border-color: #d06040; color: #fff; }
+  #topbtns { position: absolute; top: max(10px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+    z-index: 9; display: none; }
+  #pauseBtn { pointer-events: auto; background: rgba(20,12,6,0.5); border: 1px solid #5a4326; color: #c9b48a;
+    font-family: inherit; font-size: 13px; letter-spacing: 2px; padding: 6px 16px; border-radius: 3px; }
+  #hint { position: absolute; left: 0; right: 0; bottom: 26%; text-align: center; z-index: 7; pointer-events: none;
+    color: #c9b48a; font-size: clamp(13px, 3.6vw, 17px); letter-spacing: 2px; text-shadow: 0 0 8px #000;
+    opacity: 0; transition: opacity .6s; padding: 0 20px; }
+  #hint.show { opacity: 1; }
+  #muteBtn { position: absolute; top: max(10px, env(safe-area-inset-top)); right: 14px; z-index: 9; pointer-events: auto;
+    display: none; background: rgba(20,12,6,0.5); border: 1px solid #5a4326; color: #c9b48a;
+    font-size: 16px; width: 38px; height: 34px; border-radius: 3px; cursor: pointer; }
+  .credit { position: absolute; bottom: 14px; font-size: 11px; letter-spacing: 2px; color: #4a4030; }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
-<div class="flick" id="flick"></div>
-<div id="vig"></div>
 
 <div id="hud" class="hidden">
-  <div id="keys">🔑 0/3</div>
-  <div id="wax"><div id="waxFill"></div></div>
+  <div id="keys">🔑 0 / 3</div>
+  <div id="meters">
+    <div class="barwrap">🕯️<div class="bar"><div id="waxFill"></div></div></div>
+    <div class="barwrap">⚡<div class="bar"><div id="stamFill"></div></div></div>
+  </div>
 </div>
 
+<div id="topbtns"><button id="pauseBtn">❚❚ PAUSE</button></div>
+<button id="muteBtn">🔊</button>
 <div id="stick"><div id="knob"></div></div>
+<div id="sprintBtn">RUN</div>
+<div id="hint"></div>
 
 <div class="overlay" id="menu">
   <h1>THE LAST CANDLE</h1>
   <div class="sub">— a descent into the dark —</div>
-  <p class="tip">You are trapped in the black halls of an abandoned asylum.
-    Find the <b>3 keys</b> and reach the <b>gate</b> before your candle burns out.<br><br>
-    Something walks these halls. It hunts the light.<br>
-    Move with the joystick. Stay in the shadows when It is near.</p>
-  <button class="btn" id="startBtn">ENTER</button>
+  <p class="tip">You wake in the black halls of an abandoned asylum. One candle. Little wax left.
+    <br><br>Find the <b>3 keys</b> hidden in the dark and reach the <b>iron gate</b> before your flame dies.
+    Gather <b>wax</b> to keep it burning.<br><br>
+    Something walks these halls. It hunts the light and hears you run.
+    <b>Move</b> with the joystick, <b>hold RUN</b> to sprint — but running is loud.</p>
+  <button class="btn" id="startBtn">ENTER THE DARK</button>
+  <div class="credit">headphones recommended · v2</div>
+</div>
+
+<div class="overlay hidden" id="pause">
+  <h1 style="font-size:clamp(26px,7vw,44px)">PAUSED</h1>
+  <div class="sub">the dark waits</div>
+  <button class="btn" id="resumeBtn">RESUME</button>
+  <div class="row"><button class="btn small" id="quitBtn">ABANDON</button></div>
 </div>
 
 <div class="overlay hidden" id="dead">
   <h1 id="deadTitle">YOU DIED</h1>
   <div class="sub" id="deadMsg">The dark took you.</div>
+  <div class="sub" id="deadStat" style="color:#5a4a30"></div>
   <button class="btn" id="retryBtn">TRY AGAIN</button>
 </div>
 
 <div class="overlay hidden" id="win">
   <h1 style="color:#8ac98a;text-shadow:0 0 20px rgba(60,200,60,0.5)">YOU ESCAPED</h1>
-  <div class="sub" id="winMsg">Dawn breaks. You are free.</div>
+  <div class="sub" id="winMsg">Dawn breaks through the gate. You are free.</div>
+  <div class="sub" id="winStat" style="color:#5a4a30"></div>
   <button class="btn" id="againBtn">PLAY AGAIN</button>
 </div>
 
 <script>
+"use strict";
 (() => {
+  // ======================= Canvas / viewport =======================
   const cv = document.getElementById('game'), ctx = cv.getContext('2d');
-  const flick = document.getElementById('flick'), stick = document.getElementById('stick'), knob = document.getElementById('knob');
-  const hud = document.getElementById('hud'), keysEl = document.getElementById('keys'), waxFill = document.getElementById('waxFill');
-  const menu = document.getElementById('menu'), dead = document.getElementById('dead'), win = document.getElementById('win');
-  const deadMsg = document.getElementById('deadMsg');
-
   let W = 0, H = 0, DPR = 1;
   function resize() {
-    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    DPR = Math.min(window.devicePixelRatio || 1, 2.5);
     W = window.innerWidth; H = window.innerHeight;
-    cv.width = W * DPR; cv.height = H * DPR;
+    cv.width = Math.floor(W * DPR); cv.height = Math.floor(H * DPR);
     cv.style.width = W + 'px'; cv.style.height = H + 'px';
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   }
-  window.addEventListener('resize', resize); resize();
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', () => setTimeout(resize, 200));
+  resize();
 
-  // ---- Maze ----
-  const TS = 64; // world tile size
-  // 0 = floor, 1 = wall
-  const MAP = [
-    "111111111111111111111",
-    "1G.....1.......1....1",
-    "1.111.1.1.111.1.11..1",
-    "1.1...1...1...1..1..1",
-    "1.1.11111.1.111.11.11",
-    "1...1.....1...1.....1",
-    "111.1.111.111.1.111.1",
-    "1...1.1.....1.1...1.1",
-    "1.111.1.111.1.111.1.1",
-    "1.....1...1.....1...1",
-    "1.11111.1.1111.111.11",
-    "1.1.....1....1...1..1",
-    "1.1.1111.111.1.1.1.11",
-    "1...1......1...1.1..1",
-    "1.111.1111.11111.11.1",
-    "1.1...1......1......1",
-    "1.1.111.1111.1.1111.1",
-    "1.1...1....1.1....1.1",
-    "1.111.111.11.111.1.11",
-    "1.................S.1",
-    "111111111111111111111",
-  ];
-  const ROWS = MAP.length, COLS = MAP[0].length;
-  const wall = (c, r) => (c < 0 || r < 0 || c >= COLS || r >= ROWS) ? true : MAP[r][c] === '1';
+  // DOM refs
+  const el = id => document.getElementById(id);
+  const hud = el('hud'), keysEl = el('keys'), waxFill = el('waxFill'), stamFill = el('stamFill');
+  const stick = el('stick'), knob = el('knob'), sprintBtn = el('sprintBtn'), topbtns = el('topbtns');
+  const muteBtn = el('muteBtn'), hintEl = el('hint');
+  const menu = el('menu'), pauseScr = el('pause'), dead = el('dead'), win = el('win');
+  const deadMsg = el('deadMsg'), deadStat = el('deadStat'), winMsg = el('winMsg'), winStat = el('winStat');
+
+  // ======================= Maze =======================
+  const TS = 64;               // world pixels per tile
+  const COLS = 25, ROWS = 25;  // must be odd for the generator
   const WORLD_W = COLS * TS, WORLD_H = ROWS * TS;
-
-  // ---- Entities ----
-  let player, monster, keysList, gate, candle, keysHeld, state, jumpscare, tPrev, camX, camY, litTimer;
-
-  function tileCenter(pred) {
-    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++)
-      if (pred(MAP[r][c])) return { x: c * TS + TS / 2, y: r * TS + TS / 2 };
-    return { x: TS * 1.5, y: TS * 1.5 };
+  // Recursive-backtracker maze: guaranteed fully connected, every row equal width.
+  // '1'=wall  '.'=floor  'G'=gate  'S'=start
+  let MAP = [];
+  function generateMaze() {
+    const g = Array.from({ length: ROWS }, () => Array(COLS).fill('1'));
+    const stack = [[1, 1]]; g[1][1] = '.';
+    const dirs = [[2, 0], [-2, 0], [0, 2], [0, -2]];
+    while (stack.length) {
+      const [x, y] = stack[stack.length - 1], opts = [];
+      for (const [dx, dy] of dirs) {
+        const nx = x + dx, ny = y + dy;
+        if (nx > 0 && ny > 0 && nx < COLS - 1 && ny < ROWS - 1 && g[ny][nx] === '1') opts.push([nx, ny, dx, dy]);
+      }
+      if (opts.length) {
+        const [nx, ny, dx, dy] = opts[(Math.random() * opts.length) | 0];
+        g[y + dy / 2][x + dx / 2] = '.'; g[ny][nx] = '.'; stack.push([nx, ny]);
+      } else stack.pop();
+    }
+    // knock out extra walls so it's loopier (less dead-end, more escape routes)
+    let extra = Math.floor(COLS * ROWS * 0.06);
+    while (extra > 0) {
+      const x = 1 + ((Math.random() * (COLS - 2)) | 0), y = 1 + ((Math.random() * (ROWS - 2)) | 0);
+      if (g[y][x] === '1' && (x % 2 === 0) !== (y % 2 === 0)) { g[y][x] = '.'; extra--; }
+    }
+    g[1][1] = 'G';                       // gate, top-left
+    g[ROWS - 2][COLS - 2] = 'S';         // start, bottom-right (opposite corner)
+    MAP = g.map(row => row.join(''));
   }
-  function randFloor() {
-    let c, r;
-    do { c = 1 + (Math.random() * (COLS - 2)) | 0; r = 1 + (Math.random() * (ROWS - 2)) | 0; }
-    while (MAP[r][c] === '1');
-    return { x: c * TS + TS / 2, y: r * TS + TS / 2 };
+  generateMaze();
+  const isWall = (c, r) => (c < 0 || r < 0 || c >= COLS || r >= ROWS) ? true : MAP[r][c] === '1';
+  const tileOf = (x, y) => [Math.floor(x / TS), Math.floor(y / TS)];
+  const centerOf = (c, r) => [c * TS + TS / 2, r * TS + TS / 2];
+
+  function findTile(ch) {
+    for (let r = 0; r < ROWS; r++) { const c = MAP[r].indexOf(ch); if (c >= 0) return [c, r]; }
+    return [1, 1];
   }
+  function randFloorTile(minDistTile, fromC, fromR) {
+    for (let i = 0; i < 400; i++) {
+      const c = 1 + (Math.random() * (COLS - 2)) | 0, r = 1 + (Math.random() * (ROWS - 2)) | 0;
+      if (MAP[r][c] === '1') continue;
+      if (minDistTile && Math.hypot(c - fromC, r - fromR) < minDistTile) continue;
+      return [c, r];
+    }
+    return findTile('.');
+  }
+
+  // ======================= Audio (procedural, no assets) =======================
+  const Sound = (() => {
+    let ac = null, master = null, drone = null, muted = false, hb = 0;
+    function init() {
+      if (ac) return;
+      try {
+        ac = new (window.AudioContext || window.webkitAudioContext)();
+        master = ac.createGain(); master.gain.value = 0.9; master.connect(ac.destination);
+      } catch (e) { ac = null; }
+    }
+    function noiseBuf(dur) {
+      const n = ac.sampleRate * dur, b = ac.createBuffer(1, n, ac.sampleRate), d = b.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      return b;
+    }
+    function tone(freq, t, dur, type, vol, slideTo) {
+      if (!ac || muted) return;
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = type || 'sine'; o.frequency.setValueAtTime(freq, t);
+      if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.05);
+    }
+    function startDrone() {
+      if (!ac || drone) return;
+      const o = ac.createOscillator(), o2 = ac.createOscillator(), g = ac.createGain();
+      o.type = 'sawtooth'; o.frequency.value = 42; o2.type = 'sine'; o2.frequency.value = 56;
+      const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 180;
+      g.gain.value = 0.08; o.connect(lp); o2.connect(lp); lp.connect(g); g.connect(master);
+      o.start(); o2.start(); drone = { o, o2, g };
+      // slow LFO wobble
+      const lfo = ac.createOscillator(), lg = ac.createGain();
+      lfo.frequency.value = 0.08; lg.gain.value = 6; lfo.connect(lg); lg.connect(o.frequency); lfo.start();
+    }
+    return {
+      unlock() { init(); if (ac && ac.state === 'suspended') ac.resume(); startDrone(); },
+      setMuted(m) { muted = m; if (master) master.gain.value = m ? 0 : 0.9; },
+      isMuted() { return muted; },
+      key() { if (!ac) return; const t = ac.currentTime; tone(660, t, 0.12, 'triangle', 0.25); tone(990, t + 0.09, 0.18, 'triangle', 0.22); },
+      wax() { if (!ac) return; const t = ac.currentTime; tone(520, t, 0.1, 'sine', 0.2); tone(780, t + 0.06, 0.14, 'sine', 0.16); },
+      step() { if (!ac || muted) return; const t = ac.currentTime; const src = ac.createBufferSource();
+        src.buffer = noiseBuf(0.05); const g = ac.createGain(); g.gain.value = 0.04;
+        const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 220;
+        src.connect(bp); bp.connect(g); g.connect(master); src.start(t); },
+      scare() { if (!ac) return; const t = ac.currentTime;
+        const src = ac.createBufferSource(); src.buffer = noiseBuf(0.9);
+        const g = ac.createGain(); g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+        const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 500;
+        src.connect(hp); hp.connect(g); g.connect(master); src.start(t);
+        tone(180, t, 0.7, 'sawtooth', 0.35, 60); tone(1400, t, 0.5, 'square', 0.15, 200); },
+      win() { if (!ac) return; const t = ac.currentTime;
+        [523, 659, 784, 1047].forEach((f, i) => tone(f, t + i * 0.16, 0.4, 'sine', 0.2)); },
+      // heartbeat: call each frame with proximity 0..1
+      heartbeat(dt, prox) {
+        if (!ac || muted || prox <= 0) { hb = 0; return; }
+        const rate = 0.42 - prox * 0.28;        // seconds between beats
+        hb += dt;
+        if (hb >= rate) {
+          hb = 0; const t = ac.currentTime, v = 0.12 + prox * 0.4;
+          tone(58, t, 0.14, 'sine', v, 40); tone(52, t + 0.16, 0.12, 'sine', v * 0.7, 36);
+        }
+      },
+      whisper() { if (!ac || muted) return; const t = ac.currentTime;
+        const src = ac.createBufferSource(); src.buffer = noiseBuf(0.6);
+        const g = ac.createGain(); g.gain.setValueAtTime(0.001, t);
+        g.gain.linearRampToValueAtTime(0.06, t + 0.2); g.gain.linearRampToValueAtTime(0.001, t + 0.6);
+        const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1200; bp.Q.value = 4;
+        src.connect(bp); bp.connect(g); g.connect(master); src.start(t); }
+    };
+  })();
+
+  // ======================= Pathfinding (BFS) =======================
+  // Returns the next tile [c,r] to step from (sc,sr) toward (tc,tr), or null.
+  const bfsPrev = new Int32Array(ROWS * COLS);
+  const bfsQueue = new Int32Array(ROWS * COLS);
+  function bfsNextStep(sc, sr, tc, tr) {
+    if (sc === tc && sr === tr) return null;
+    if (isWall(tc, tr)) return null;
+    bfsPrev.fill(-1);
+    let head = 0, tail = 0;
+    const sIdx = sr * COLS + sc;
+    bfsPrev[sIdx] = sIdx; bfsQueue[tail++] = sIdx;
+    const tIdx = tr * COLS + tc;
+    let found = false;
+    const dirs = [1, -1, COLS, -COLS];
+    while (head < tail) {
+      const cur = bfsQueue[head++];
+      if (cur === tIdx) { found = true; break; }
+      const cc = cur % COLS, cr = (cur / COLS) | 0;
+      for (let d = 0; d < 4; d++) {
+        let nc = cc, nr = cr;
+        if (d === 0) nc++; else if (d === 1) nc--; else if (d === 2) nr++; else nr--;
+        if (nc < 0 || nr < 0 || nc >= COLS || nr >= ROWS) continue;
+        if (MAP[nr][nc] === '1') continue;
+        const ni = nr * COLS + nc;
+        if (bfsPrev[ni] !== -1) continue;
+        bfsPrev[ni] = cur; bfsQueue[tail++] = ni;
+      }
+    }
+    if (!found) return null;
+    let cur = tIdx;
+    while (bfsPrev[cur] !== sIdx) { cur = bfsPrev[cur]; if (cur === sIdx) return null; }
+    return [cur % COLS, (cur / COLS) | 0];
+  }
+
+  // Line of sight sampling
+  function canSee(ax, ay, bx, by) {
+    const dist = Math.hypot(bx - ax, by - ay), steps = Math.ceil(dist / (TS / 3));
+    for (let i = 1; i < steps; i++) {
+      const x = ax + (bx - ax) * i / steps, y = ay + (by - ay) * i / steps;
+      if (isWall((x / TS) | 0, (y / TS) | 0)) return false;
+    }
+    return true;
+  }
+
+  // ======================= Game state =======================
+  let state = 'menu';          // menu | play | pause | dead | win
+  let player, monster, keysList, waxList, gate, keysHeld, candle, stamina, jumpscare;
+  let tPrev = performance.now(), elapsed = 0, camX = 0, camY = 0, litFlash = 0;
+  let hintTimer = 0, whisperTimer = 6 + Math.random() * 8, closeTime = 0;
+
+  function showHint(txt, dur) { hintEl.textContent = txt; hintEl.classList.add('show'); hintTimer = dur || 3.2; }
 
   function reset() {
-    const s = tileCenter(ch => ch === 'S');
-    player = { x: s.x, y: s.y, r: 12, dir: 0, speed: 150 };
-    gate = tileCenter(ch => ch === 'G');
-    // monster spawns far away
-    monster = { x: gate.x, y: gate.y, r: 15, speed: 88, phase: 0, alertTimer: 0 };
+    generateMaze();
+    const [sc, sr] = findTile('S'), [gc, gr] = findTile('G');
+    const [sx, sy] = centerOf(sc, sr);
+    player = { x: sx, y: sy, r: 12, dir: -Math.PI / 2, walkSpeed: 158, runSpeed: 250, moving: false, stepAcc: 0 };
+    const [gx, gy] = centerOf(gc, gr);
+    gate = { x: gx, y: gy, c: gc, r: gr };
+    // monster spawns near gate, far from player
+    monster = { x: gx, y: gy, r: 15, speed: 0, phase: 0, alert: 0, mode: 'patrol',
+                tc: gc, tr: gr, tx: gx, ty: gy, think: 0, patrolTC: gc, patrolTR: gr };
     keysList = [];
     while (keysList.length < 3) {
-      const p = randFloor();
-      if (Math.hypot(p.x - s.x, p.y - s.y) > TS * 6 &&
-          keysList.every(k => Math.hypot(k.x - p.x, k.y - p.y) > TS * 4))
-        keysList.push({ x: p.x, y: p.y, taken: false, bob: Math.random() * 6.28 });
+      const [c, r] = randFloorTile(7, sc, sr);
+      const [x, y] = centerOf(c, r);
+      if (keysList.every(k => Math.hypot(k.x - x, k.y - y) > TS * 4)) keysList.push({ x, y, taken: false, bob: Math.random() * 6.28 });
     }
-    keysHeld = 0; candle = 100; litTimer = 0;
-    jumpscare = 0; state = 'play';
+    waxList = [];
+    for (let i = 0; i < 7; i++) {
+      const [c, r] = randFloorTile(3, sc, sr);
+      const [x, y] = centerOf(c, r);
+      waxList.push({ x, y, taken: false, bob: Math.random() * 6.28 });
+    }
+    keysHeld = 0; candle = 100; stamina = 100; jumpscare = 0; elapsed = 0; closeTime = 0;
+    litFlash = 0; whisperTimer = 6 + Math.random() * 8;
+    state = 'play';
     hud.classList.remove('hidden'); stick.style.display = 'block';
+    sprintBtn.style.display = 'flex'; topbtns.style.display = 'block'; muteBtn.style.display = 'block';
     updateHud();
+    showHint('Find 3 keys. Reach the gate. Don\'t let it catch the light.', 4);
   }
 
   function updateHud() {
-    keysEl.textContent = '🔑 ' + keysHeld + '/3';
+    keysEl.textContent = '🔑 ' + keysHeld + ' / 3';
     waxFill.style.width = Math.max(0, candle) + '%';
+    stamFill.style.width = Math.max(0, stamina) + '%';
   }
 
-  // ---- Input: virtual joystick ----
-  let touchId = null, joyBase = { x: 0, y: 0 }, move = { x: 0, y: 0 };
-  function stickStart(id, x, y) {
-    touchId = id; joyBase = { x, y };
-    stick.style.left = (x - 65) + 'px'; stick.style.top = (y - 65) + 'px';
-  }
+  // ======================= Input =======================
+  let touchId = null, joyBase = { x: 0, y: 0 }, move = { x: 0, y: 0 }, running = false;
+  function stickStart(id, x, y) { touchId = id; joyBase = { x, y };
+    stick.style.left = (x - 66) + 'px'; stick.style.top = (y - 66) + 'px'; }
   function stickMove(x, y) {
-    let dx = x - joyBase.x, dy = y - joyBase.y;
-    const d = Math.hypot(dx, dy), max = 55;
+    let dx = x - joyBase.x, dy = y - joyBase.y; const d = Math.hypot(dx, dy), max = 56;
     if (d > max) { dx = dx / d * max; dy = dy / d * max; }
-    knob.style.left = (65 + dx) + 'px'; knob.style.top = (65 + dy) + 'px';
+    knob.style.left = (66 + dx) + 'px'; knob.style.top = (66 + dy) + 'px';
     move.x = dx / max; move.y = dy / max;
   }
-  function stickEnd() {
-    touchId = null; move.x = 0; move.y = 0;
-    knob.style.left = '65px'; knob.style.top = '65px';
-  }
+  function stickEnd() { touchId = null; move.x = 0; move.y = 0; knob.style.left = '66px'; knob.style.top = '66px'; }
+
   cv.addEventListener('touchstart', e => {
     if (state !== 'play') return;
-    const t = e.changedTouches[0];
-    if (touchId === null) { stickStart(t.identifier, t.clientX, t.clientY); stickMove(t.clientX, t.clientY); }
+    for (const t of e.changedTouches) {
+      if (touchId === null && t.clientX < W * 0.6) { stickStart(t.identifier, t.clientX, t.clientY); stickMove(t.clientX, t.clientY); }
+    }
   }, { passive: false });
   cv.addEventListener('touchmove', e => {
     e.preventDefault();
     for (const t of e.changedTouches) if (t.identifier === touchId) stickMove(t.clientX, t.clientY);
   }, { passive: false });
-  cv.addEventListener('touchend', e => {
-    for (const t of e.changedTouches) if (t.identifier === touchId) stickEnd();
-  });
+  cv.addEventListener('touchend', e => { for (const t of e.changedTouches) if (t.identifier === touchId) stickEnd(); });
   cv.addEventListener('touchcancel', stickEnd);
-  // Mouse fallback for desktop
+
+  // sprint button (touch + mouse)
+  const setRun = v => { running = v; sprintBtn.classList.toggle('on', v); };
+  sprintBtn.addEventListener('touchstart', e => { e.preventDefault(); setRun(true); }, { passive: false });
+  sprintBtn.addEventListener('touchend', e => { e.preventDefault(); setRun(false); }, { passive: false });
+  sprintBtn.addEventListener('touchcancel', () => setRun(false));
+  sprintBtn.addEventListener('mousedown', e => { e.preventDefault(); setRun(true); });
+  window.addEventListener('mouseup', () => setRun(false));
+
+  // mouse joystick fallback (desktop) — only when clicking the canvas
   let mouseDown = false;
   cv.addEventListener('mousedown', e => { if (state === 'play') { mouseDown = true; stickStart('m', e.clientX, e.clientY); stickMove(e.clientX, e.clientY); } });
   window.addEventListener('mousemove', e => { if (mouseDown) stickMove(e.clientX, e.clientY); });
   window.addEventListener('mouseup', () => { if (mouseDown) { mouseDown = false; stickEnd(); } });
-  // Keyboard for desktop
-  const keyState = {};
-  window.addEventListener('keydown', e => keyState[e.key.toLowerCase()] = true);
-  window.addEventListener('keyup', e => keyState[e.key.toLowerCase()] = false);
 
-  // ---- Collision-aware movement ----
+  // keyboard (desktop)
+  const keyState = {};
+  window.addEventListener('keydown', e => {
+    const k = e.key.toLowerCase(); keyState[k] = true;
+    if (k === 'shift') setRun(true);
+    if (k === 'escape' || k === 'p') { if (state === 'play') doPause(); else if (state === 'pause') doResume(); }
+  });
+  window.addEventListener('keyup', e => { const k = e.key.toLowerCase(); keyState[k] = false; if (k === 'shift') setRun(false); });
+
+  // ======================= Movement / collision =======================
   function tryMove(ent, dx, dy) {
     const nx = ent.x + dx;
-    if (!wall(((nx - ent.r) / TS) | 0, (ent.y / TS) | 0) && !wall(((nx + ent.r) / TS) | 0, (ent.y / TS) | 0))
-      ent.x = nx;
+    if (!isWall(((nx - ent.r) / TS) | 0, (ent.y / TS) | 0) && !isWall(((nx + ent.r) / TS) | 0, (ent.y / TS) | 0)) ent.x = nx;
     const ny = ent.y + dy;
-    if (!wall((ent.x / TS) | 0, ((ny - ent.r) / TS) | 0) && !wall((ent.x / TS) | 0, ((ny + ent.r) / TS) | 0))
-      ent.y = ny;
+    if (!isWall((ent.x / TS) | 0, ((ny - ent.r) / TS) | 0) && !isWall((ent.x / TS) | 0, ((ny + ent.r) / TS) | 0)) ent.y = ny;
   }
 
-  // Line of sight between two points (Bresenham-ish sampling)
-  function canSee(ax, ay, bx, by) {
-    const dist = Math.hypot(bx - ax, by - ay);
-    const steps = Math.ceil(dist / (TS / 3));
-    for (let i = 1; i < steps; i++) {
-      const x = ax + (bx - ax) * i / steps, y = ay + (by - ay) * i / steps;
-      if (wall((x / TS) | 0, (y / TS) | 0)) return false;
-    }
-    return true;
-  }
-
-  // Monster pathing: greedy step toward player, wall-aware wandering otherwise
+  // ======================= Monster AI =======================
   function updateMonster(dt) {
-    const dx = player.x - monster.x, dy = player.y - monster.y;
-    const dist = Math.hypot(dx, dy);
-    const sees = canSee(monster.x, monster.y, player.x, player.y) && dist < TS * 7;
-    if (sees) monster.alertTimer = 3.5;
-    else monster.alertTimer = Math.max(0, monster.alertTimer - dt);
+    const dx = player.x - monster.x, dy = player.y - monster.y, dist = Math.hypot(dx, dy);
+    const sees = dist < TS * 8 && canSee(monster.x, monster.y, player.x, player.y);
+    // detection: sight, or noise when running, or being very close
+    const heardRunning = running && player.moving && dist < TS * 6.5;
+    if (sees || heardRunning || dist < TS * 1.6) monster.alert = 4.0;
+    else monster.alert = Math.max(0, monster.alert - dt);
 
-    let tx, ty;
-    if (monster.alertTimer > 0) { tx = dx; ty = dy; monster.speed = 108; }
+    monster.mode = monster.alert > 0 ? 'hunt' : 'patrol';
+    monster.speed = monster.mode === 'hunt' ? 122 : 74;
+
+    // decide target tile
+    const [mc, mr] = tileOf(monster.x, monster.y);
+    let goalC, goalR;
+    if (monster.mode === 'hunt') { [goalC, goalR] = tileOf(player.x, player.y); }
     else {
-      // wander toward a roaming target
-      if (!monster.wx || Math.hypot(monster.wx - monster.x, monster.wy - monster.y) < TS) {
-        const p = randFloor(); monster.wx = p.x; monster.wy = p.y;
+      if (Math.abs(monster.x - monster.tx) < 6 && Math.abs(monster.y - monster.ty) < 6 &&
+          mc === monster.patrolTC && mr === monster.patrolTR) {
+        const [pc, pr] = randFloorTile(0); monster.patrolTC = pc; monster.patrolTR = pr;
       }
-      tx = monster.wx - monster.x; ty = monster.wy - monster.y; monster.speed = 70;
+      goalC = monster.patrolTC; goalR = monster.patrolTR;
     }
-    const m = Math.hypot(tx, ty) || 1;
-    let vx = tx / m * monster.speed * dt, vy = ty / m * monster.speed * dt;
-    const bx = monster.x, by = monster.y;
-    tryMove(monster, vx, vy);
-    // if stuck, try axis-aligned nudge
-    if (Math.abs(monster.x - bx) < 0.1 && Math.abs(monster.y - by) < 0.1) {
-      tryMove(monster, vx, 0); tryMove(monster, 0, vy);
-      if (Math.abs(monster.x - bx) < 0.1 && Math.abs(monster.y - by) < 0.1) { monster.wx = null; }
-    }
-    monster.phase += dt * 6;
 
-    if (dist < player.r + monster.r + 6) die("It found you.");
+    // recompute next step when reached current target tile or on a timer
+    monster.think -= dt;
+    const reached = Math.abs(monster.x - monster.tx) < 8 && Math.abs(monster.y - monster.ty) < 8;
+    if (reached || monster.think <= 0) {
+      const next = bfsNextStep(mc, mr, goalC, goalR);
+      if (next) { const [nx, ny] = centerOf(next[0], next[1]); monster.tx = nx; monster.ty = ny; }
+      else { monster.tx = monster.x; monster.ty = monster.y; }
+      monster.think = 0.25;
+    }
+
+    // move toward target center
+    const tdx = monster.tx - monster.x, tdy = monster.ty - monster.y, tm = Math.hypot(tdx, tdy) || 1;
+    tryMove(monster, tdx / tm * monster.speed * dt, tdy / tm * monster.speed * dt);
+    monster.phase += dt * (monster.mode === 'hunt' ? 9 : 5);
+
+    if (dist < player.r + monster.r + 4) die('It wrapped you in the dark.');
   }
 
+  // ======================= Death / win =======================
   function die(msg) {
     if (state !== 'play') return;
-    state = 'dead'; jumpscare = 1;
+    state = 'dead'; jumpscare = 1.4; Sound.scare();
     deadMsg.textContent = msg;
-    setTimeout(() => { dead.classList.remove('hidden'); hud.classList.add('hidden'); stick.style.display = 'none'; }, 900);
+    deadStat.textContent = 'keys: ' + keysHeld + '/3  ·  survived ' + Math.floor(elapsed) + 's';
+    setTimeout(() => { dead.classList.remove('hidden'); hideControls(); }, 1100);
   }
   function winGame() {
-    state = 'win';
-    win.classList.remove('hidden'); hud.classList.add('hidden'); stick.style.display = 'none';
+    if (state !== 'play') return;
+    state = 'win'; Sound.win();
+    winStat.textContent = 'escaped in ' + Math.floor(elapsed) + 's with your candle at ' + Math.round(candle) + '%';
+    win.classList.remove('hidden'); hideControls();
   }
+  function hideControls() { hud.classList.add('hidden'); stick.style.display = 'none';
+    sprintBtn.style.display = 'none'; topbtns.style.display = 'none'; muteBtn.style.display = 'none'; setRun(false); }
 
-  // ---- Update loop ----
+  // ======================= Update =======================
   function update(dt) {
     if (state !== 'play') return;
-    // keyboard
+    elapsed += dt;
+
+    // input vector (joystick + keyboard)
     let kx = 0, ky = 0;
     if (keyState['arrowleft'] || keyState['a']) kx -= 1;
     if (keyState['arrowright'] || keyState['d']) kx += 1;
     if (keyState['arrowup'] || keyState['w']) ky -= 1;
     if (keyState['arrowdown'] || keyState['s']) ky += 1;
-    let mx = move.x + kx, my = move.y + ky;
-    const mm = Math.hypot(mx, my);
+    let mx = move.x + kx, my = move.y + ky; const mm = Math.hypot(mx, my);
     if (mm > 1) { mx /= mm; my /= mm; }
-    if (mm > 0.05) {
+    player.moving = mm > 0.08;
+
+    // sprint uses stamina
+    const wantRun = running && stamina > 1 && player.moving;
+    if (wantRun) stamina = Math.max(0, stamina - dt * 26);
+    else stamina = Math.min(100, stamina + dt * 14);
+    const speed = wantRun ? player.runSpeed : player.walkSpeed;
+
+    if (player.moving) {
       player.dir = Math.atan2(my, mx);
-      tryMove(player, mx * player.speed * dt, my * player.speed * dt);
+      tryMove(player, mx * speed * dt, my * speed * dt);
+      // footstep sfx
+      player.stepAcc += speed * dt;
+      const stride = wantRun ? 46 : 64;
+      if (player.stepAcc > stride) { player.stepAcc = 0; Sound.step(); }
     }
 
-    // candle burns; faster when moving
-    candle -= dt * (1.05 + (mm > 0.05 ? 0.6 : 0));
-    if (candle <= 0) { candle = 0; die("Your candle guttered out."); }
+    // candle burns; faster when moving/running
+    let burn = 0.9 + (player.moving ? 0.5 : 0) + (wantRun ? 0.7 : 0);
+    candle -= dt * burn;
+    if (candle <= 0) { candle = 0; die('Your candle guttered out. The dark rushed in.'); return; }
 
-    // keys pickup
+    // pickups
     for (const k of keysList) {
-      if (!k.taken && Math.hypot(k.x - player.x, k.y - player.y) < 28) {
-        k.taken = true; keysHeld++; candle = Math.min(100, candle + 12); litTimer = 0.6; updateHud();
-      }
       k.bob += dt * 3;
+      if (!k.taken && Math.hypot(k.x - player.x, k.y - player.y) < 26) {
+        k.taken = true; keysHeld++; litFlash = 0.7; Sound.key(); updateHud();
+        showHint(keysHeld < 3 ? ('Key ' + keysHeld + ' of 3. The gate lies at the far corner.') : 'All keys! Run for the gate!', 3);
+      }
+    }
+    for (const wx of waxList) {
+      wx.bob += dt * 3.4;
+      if (!wx.taken && Math.hypot(wx.x - player.x, wx.y - player.y) < 24) {
+        wx.taken = true; candle = Math.min(100, candle + 22); litFlash = 0.5; Sound.wax(); updateHud();
+      }
     }
 
     // gate
-    if (Math.hypot(gate.x - player.x, gate.y - player.y) < 34) {
-      if (keysHeld >= 3) winGame();
+    if (Math.hypot(gate.x - player.x, gate.y - player.y) < 32) {
+      if (keysHeld >= 3) { winGame(); return; }
+      else if (hintTimer <= 0) showHint('The gate is locked. You need all 3 keys.', 2);
     }
 
     updateMonster(dt);
-    litTimer = Math.max(0, litTimer - dt);
+
+    // ambience: heartbeat by proximity, whispers
+    const md = Math.hypot(monster.x - player.x, monster.y - player.y);
+    const prox = Math.max(0, 1 - md / (TS * 6));
+    Sound.heartbeat(dt, monster.alert > 0 ? prox : prox * 0.4);
+    if (md < TS * 2.4 && monster.alert > 0) closeTime += dt; else closeTime = Math.max(0, closeTime - dt * 0.5);
+    whisperTimer -= dt;
+    if (whisperTimer <= 0) { Sound.whisper(); whisperTimer = 7 + Math.random() * 10; }
+
+    litFlash = Math.max(0, litFlash - dt);
+    hintTimer -= dt; if (hintTimer <= 0) hintEl.classList.remove('show');
     updateHud();
 
-    // camera
-    camX = player.x - W / 2; camY = player.y - H / 2;
-    camX = Math.max(0, Math.min(WORLD_W - W, camX));
-    camY = Math.max(0, Math.min(WORLD_H - H, camY));
+    // camera clamp
+    camX = Math.max(0, Math.min(WORLD_W - W, player.x - W / 2));
+    camY = Math.max(0, Math.min(WORLD_H - H, player.y - H / 2));
     if (WORLD_W < W) camX = (WORLD_W - W) / 2;
     if (WORLD_H < H) camY = (WORLD_H - H) / 2;
   }
 
-  // ---- Render ----
+  // ======================= Render =======================
   function draw(time) {
-    ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = '#050507'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#040406'; ctx.fillRect(0, 0, W, H);
     const ox = -camX, oy = -camY;
-
-    // flicker light radius
-    const flickAmt = Math.sin(time / 90) * 6 + Math.sin(time / 37) * 4;
-    const baseLight = 60 + candle * 1.4 + (litTimer > 0 ? 90 : 0);
-    const lightR = baseLight + flickAmt;
-
-    // draw floor / walls only near light
     const px = player.x + ox, py = player.y + oy;
+
+    // flickering candle light radius
+    const flick = Math.sin(time / 90) * 6 + Math.sin(time / 37) * 4 + Math.sin(time / 211) * 5;
+    const lightR = 78 + candle * 1.25 + (litFlash > 0 ? 70 : 0) + flick;
+
+    // tiles near light
     const c0 = Math.max(0, ((camX) / TS | 0) - 1), c1 = Math.min(COLS, ((camX + W) / TS | 0) + 2);
     const r0 = Math.max(0, ((camY) / TS | 0) - 1), r1 = Math.min(ROWS, ((camY + H) / TS | 0) + 2);
     for (let r = r0; r < r1; r++) for (let c = c0; c < c1; c++) {
-      const wx = c * TS + ox, wy = r * TS + oy;
-      const cx = wx + TS / 2, cy = wy + TS / 2;
+      const wx = c * TS + ox, wy = r * TS + oy, cx = wx + TS / 2, cy = wy + TS / 2;
       const d = Math.hypot(cx - px, cy - py);
       if (d > lightR + TS) continue;
       const lum = Math.max(0, 1 - d / (lightR + TS));
       if (MAP[r][c] === '1') {
-        const v = (18 + lum * 70) | 0;
-        ctx.fillStyle = `rgb(${v + 8},${v},${(v * 0.85) | 0})`;
+        const v = (16 + lum * 74) | 0;
+        ctx.fillStyle = `rgb(${v + 10},${v + 2},${(v * 0.8) | 0})`;
         ctx.fillRect(wx, wy, TS + 1, TS + 1);
-        ctx.fillStyle = `rgba(0,0,0,${0.35})`;
-        ctx.fillRect(wx, wy, TS + 1, 4);
+        ctx.fillStyle = 'rgba(0,0,0,0.32)'; ctx.fillRect(wx, wy, TS + 1, 5);
+        ctx.fillStyle = `rgba(${20 + lum * 40},${10 + lum * 20},0,0.15)`; ctx.fillRect(wx, wy + TS - 4, TS + 1, 4);
       } else {
-        const v = (6 + lum * 26) | 0;
+        const v = (5 + lum * 24) | 0;
         ctx.fillStyle = `rgb(${v + 4},${v + 2},${v})`;
         ctx.fillRect(wx, wy, TS + 1, TS + 1);
+        if (lum > 0.15 && ((c * 7 + r * 13) % 5 === 0)) { ctx.fillStyle = `rgba(0,0,0,${0.2 * lum})`;
+          ctx.fillRect(wx + (c * 11 % TS), wy + (r * 17 % TS), 3, 3); }
       }
     }
 
     // gate
     const gx = gate.x + ox, gy = gate.y + oy;
-    if (Math.hypot(gx - px, gy - py) < lightR + 40) {
+    if (Math.hypot(gx - px, gy - py) < lightR + 50) {
       const open = keysHeld >= 3;
       ctx.save(); ctx.translate(gx, gy);
-      ctx.fillStyle = open ? '#3a6a3a' : '#3a2a1a';
-      ctx.fillRect(-20, -26, 40, 52);
-      ctx.strokeStyle = open ? '#7fff8f' : '#7a5a30'; ctx.lineWidth = 2;
-      ctx.strokeRect(-20, -26, 40, 52);
-      ctx.fillStyle = open ? '#9fffaf' : '#0a0a0a'; ctx.fillRect(-14, -20, 28, 40);
-      if (!open) { ctx.fillStyle = '#c9b48a'; ctx.font = '11px Georgia'; ctx.textAlign = 'center';
-        ctx.fillText('3 KEYS', 0, 4); }
+      if (open) { const gl = ctx.createRadialGradient(0, 0, 0, 0, 0, 46);
+        gl.addColorStop(0, 'rgba(120,255,140,0.35)'); gl.addColorStop(1, 'rgba(120,255,140,0)');
+        ctx.fillStyle = gl; ctx.fillRect(-46, -46, 92, 92); }
+      ctx.fillStyle = open ? '#264a26' : '#2a1e12'; ctx.fillRect(-22, -28, 44, 56);
+      ctx.strokeStyle = open ? '#7fff8f' : '#7a5a30'; ctx.lineWidth = 2.5;
+      for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(i * 11, -28); ctx.lineTo(i * 11, 28); ctx.stroke(); }
+      ctx.strokeRect(-22, -28, 44, 56);
+      ctx.fillStyle = open ? '#bfffca' : '#c9b48a'; ctx.font = '11px Georgia'; ctx.textAlign = 'center';
+      ctx.fillText(open ? 'ESCAPE' : '3 KEYS', 0, 44); ctx.restore();
+    }
+
+    // wax pickups
+    for (const wx of waxList) {
+      if (wx.taken) continue;
+      const x = wx.x + ox, y = wx.y + oy + Math.sin(wx.bob) * 3;
+      if (Math.hypot(x - px, y - py) > lightR + 24) continue;
+      ctx.save(); ctx.translate(x, y);
+      const gl = ctx.createRadialGradient(0, 0, 0, 0, 0, 16);
+      gl.addColorStop(0, 'rgba(255,170,60,0.5)'); gl.addColorStop(1, 'rgba(255,170,60,0)');
+      ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(0, 0, 16, 0, 6.28); ctx.fill();
+      ctx.font = '17px Georgia'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🕯️', 0, 1);
       ctx.restore();
     }
 
     // keys
     for (const k of keysList) {
       if (k.taken) continue;
-      const kx = k.x + ox, ky = k.y + oy + Math.sin(k.bob) * 4;
-      if (Math.hypot(kx - px, ky - py) > lightR + 30) continue;
-      ctx.save(); ctx.translate(kx, ky);
-      const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, 22);
-      glow.addColorStop(0, 'rgba(240,200,90,0.55)'); glow.addColorStop(1, 'rgba(240,200,90,0)');
-      ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(0, 0, 22, 0, 6.28); ctx.fill();
-      ctx.font = '22px Georgia'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('🔑', 0, 1); ctx.restore();
+      const x = k.x + ox, y = k.y + oy + Math.sin(k.bob) * 4;
+      if (Math.hypot(x - px, y - py) > lightR + 30) continue;
+      ctx.save(); ctx.translate(x, y);
+      const gl = ctx.createRadialGradient(0, 0, 0, 0, 0, 24);
+      gl.addColorStop(0, 'rgba(240,200,90,0.6)'); gl.addColorStop(1, 'rgba(240,200,90,0)');
+      ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(0, 0, 24, 0, 6.28); ctx.fill();
+      ctx.font = '23px Georgia'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🔑', 0, 1);
+      ctx.restore();
     }
 
     // monster
     const mx = monster.x + ox, my = monster.y + oy;
     const mdist = Math.hypot(mx - px, my - py);
-    const mVisible = mdist < lightR + 20 && canSee(monster.x, monster.y, player.x, player.y);
+    const mVisible = mdist < lightR + 26 && canSee(monster.x, monster.y, player.x, player.y);
     if (mVisible) {
       ctx.save(); ctx.translate(mx, my);
-      const sway = Math.sin(monster.phase) * 3;
-      // body: tall shadow figure
-      ctx.fillStyle = 'rgba(4,2,6,0.96)';
+      const sway = Math.sin(monster.phase) * 3, reach = Math.min(1, 1 - mdist / (TS * 6));
+      // long shadow trailing away from light
+      const ang = Math.atan2(my - py, mx - px);
+      ctx.save(); ctx.rotate(ang); ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.beginPath(); ctx.ellipse(14, 0, 30, 10, 0, 0, 6.28); ctx.fill(); ctx.restore();
+      // tall wispy body
+      ctx.fillStyle = 'rgba(3,1,5,0.97)';
       ctx.beginPath();
-      ctx.moveTo(-14, 20); ctx.quadraticCurveTo(-10 + sway, -18, 0, -30);
-      ctx.quadraticCurveTo(10 - sway, -18, 14, 20); ctx.closePath(); ctx.fill();
-      // wispy edge
-      ctx.strokeStyle = 'rgba(30,0,10,0.6)'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.moveTo(-15, 22);
+      ctx.quadraticCurveTo(-12 + sway, -20, -4, -34);
+      ctx.quadraticCurveTo(0, -40, 4, -34);
+      ctx.quadraticCurveTo(12 - sway, -20, 15, 22);
+      ctx.quadraticCurveTo(0, 14, -15, 22); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(40,0,12,0.6)'; ctx.lineWidth = 1.5; ctx.stroke();
+      // arms reaching when close
+      if (reach > 0.35) { ctx.strokeStyle = 'rgba(3,1,5,0.95)'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(-8, -8); ctx.lineTo(-20 - reach * 8, 4 + Math.sin(monster.phase) * 4); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(8, -8); ctx.lineTo(20 + reach * 8, 4 - Math.sin(monster.phase) * 4); ctx.stroke(); }
       // eyes
-      const er = 1 - Math.min(1, mdist / (TS * 6));
-      ctx.fillStyle = `rgba(255,${40 - er * 40},${30 - er * 30},${0.8 + er * 0.2})`;
-      ctx.beginPath(); ctx.arc(-5, -20, 2.6, 0, 6.28); ctx.arc(5, -20, 2.6, 0, 6.28); ctx.fill();
-      ctx.shadowColor = 'red'; ctx.shadowBlur = 12;
-      ctx.beginPath(); ctx.arc(-5, -20, 1.4, 0, 6.28); ctx.arc(5, -20, 1.4, 0, 6.28); ctx.fill();
+      ctx.fillStyle = 'rgba(255,30,20,0.95)'; ctx.shadowColor = 'red'; ctx.shadowBlur = 14;
+      ctx.beginPath(); ctx.arc(-5, -24, 2.6, 0, 6.28); ctx.arc(5, -24, 2.6, 0, 6.28); ctx.fill();
+      ctx.shadowBlur = 0; ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(-5, -24, 1, 0, 6.28); ctx.arc(5, -24, 1, 0, 6.28); ctx.fill();
       ctx.restore();
-    } else if (monster.alertTimer > 0 && mdist < lightR + 120) {
-      // hint: two faint eyes in the dark
-      ctx.fillStyle = 'rgba(180,20,20,0.5)';
-      ctx.beginPath(); ctx.arc(mx - 5, my - 18, 2, 0, 6.28); ctx.arc(mx + 5, my - 18, 2, 0, 6.28); ctx.fill();
+    } else if (monster.alert > 0 && mdist < lightR + 150) {
+      // faint eyes glowing in the dark
+      const pulse = 0.4 + Math.sin(time / 120) * 0.2;
+      ctx.fillStyle = `rgba(190,20,20,${pulse})`;
+      ctx.beginPath(); ctx.arc(mx - 5, my - 20, 2.4, 0, 6.28); ctx.arc(mx + 5, my - 20, 2.4, 0, 6.28); ctx.fill();
     }
 
-    // player: little candle bearer
+    // player (candle bearer)
     ctx.save(); ctx.translate(px, py);
-    ctx.fillStyle = '#1a1410'; ctx.beginPath(); ctx.arc(0, 0, player.r, 0, 6.28); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(0, 8, 12, 5, 0, 0, 6.28); ctx.fill();
+    ctx.fillStyle = '#221913'; ctx.beginPath(); ctx.arc(0, 0, player.r, 0, 6.28); ctx.fill();
     ctx.fillStyle = '#5a4a30'; ctx.beginPath(); ctx.arc(0, -3, 6, 0, 6.28); ctx.fill();
-    // candle flame in facing dir
-    const fx = Math.cos(player.dir) * 14, fy = Math.sin(player.dir) * 14;
-    const fg = ctx.createRadialGradient(fx, fy, 0, fx, fy, 10);
-    fg.addColorStop(0, '#fff6c8'); fg.addColorStop(0.5, '#ffb020'); fg.addColorStop(1, 'rgba(255,120,0,0)');
-    ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(fx, fy, 10, 0, 6.28); ctx.fill();
+    const fx = Math.cos(player.dir) * 15, fy = Math.sin(player.dir) * 15;
+    const fg = ctx.createRadialGradient(fx, fy - 2, 0, fx, fy - 2, 11 + Math.sin(time / 60) * 2);
+    fg.addColorStop(0, '#fff8d0'); fg.addColorStop(0.45, '#ffb020'); fg.addColorStop(1, 'rgba(255,120,0,0)');
+    ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(fx, fy - 2, 11, 0, 6.28); ctx.fill();
     ctx.restore();
 
-    // light gradient overlay (darkness closing in)
-    const g = ctx.createRadialGradient(px, py, lightR * 0.35, px, py, lightR);
-    g.addColorStop(0, 'rgba(0,0,0,0)');
-    g.addColorStop(0.7, 'rgba(2,1,3,0.5)');
-    g.addColorStop(1, 'rgba(0,0,0,0.97)');
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = 'rgba(0,0,0,0.85)';
-    // fill outside light circle fully
-    ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.arc(px, py, lightR, 0, 6.28, true); ctx.fill();
+    // darkness overlay — hard mask outside light + soft gradient inside
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.99)';
+    ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.arc(px, py, lightR, 0, 6.28, true); ctx.fill('evenodd');
+    const g = ctx.createRadialGradient(px, py, lightR * 0.32, px, py, lightR);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.68, 'rgba(3,1,4,0.45)'); g.addColorStop(1, 'rgba(0,0,0,0.98)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, lightR, 0, 6.28); ctx.fill();
+    ctx.restore();
 
-    // low-candle red pulse
-    if (candle < 25 && state === 'play') {
-      ctx.fillStyle = `rgba(120,0,0,${(0.15 + Math.sin(time / 160) * 0.12) * (1 - candle / 25)})`;
-      ctx.fillRect(0, 0, W, H);
+    // warm candle tint
+    ctx.fillStyle = 'rgba(60,30,4,0.06)'; ctx.fillRect(0, 0, W, H);
+
+    // low candle red warning pulse
+    if (candle < 28 && state === 'play') {
+      const a = (0.12 + Math.sin(time / 150) * 0.1) * (1 - candle / 28);
+      ctx.fillStyle = `rgba(130,0,0,${Math.max(0, a)})`; ctx.fillRect(0, 0, W, H);
     }
+    // proximity vignette
+    if (closeTime > 0) { ctx.fillStyle = `rgba(90,0,0,${Math.min(0.28, closeTime * 0.14)})`; ctx.fillRect(0, 0, W, H); }
 
     // jumpscare
     if (jumpscare > 0) {
-      ctx.fillStyle = `rgba(90,0,0,${jumpscare})`; ctx.fillRect(0, 0, W, H);
-      ctx.save(); ctx.translate(W / 2, H / 2);
-      const s = (1.6 - jumpscare) * 1.3;
-      ctx.scale(s, s); ctx.globalAlpha = Math.min(1, jumpscare * 1.4);
+      const j = Math.min(1, jumpscare);
+      ctx.fillStyle = `rgba(70,0,0,${j})`; ctx.fillRect(0, 0, W, H);
+      ctx.save(); ctx.translate(W / 2, H / 2 - 10);
+      const s = (1.7 - Math.min(1, jumpscare)) * 1.5 + 0.3;
+      ctx.scale(s, s); ctx.globalAlpha = Math.min(1, jumpscare * 1.5);
+      ctx.translate(Math.sin(time / 20) * 4, Math.cos(time / 17) * 4); // violent shake
       ctx.fillStyle = '#000';
-      ctx.beginPath();
-      ctx.moveTo(-80, 120); ctx.quadraticCurveTo(-60, -110, 0, -150);
-      ctx.quadraticCurveTo(60, -110, 80, 120); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = '#ff1010'; ctx.shadowColor = 'red'; ctx.shadowBlur = 40;
-      ctx.beginPath(); ctx.arc(-28, -70, 16, 0, 6.28); ctx.arc(28, -70, 16, 0, 6.28); ctx.fill();
-      ctx.fillStyle = '#000';
-      ctx.beginPath(); ctx.arc(-28, -66, 6, 0, 6.28); ctx.arc(28, -66, 6, 0, 6.28); ctx.fill();
-      // mouth
-      ctx.fillStyle = '#200';
-      ctx.beginPath(); ctx.ellipse(0, -20, 22, 34, 0, 0, 6.28); ctx.fill();
-      ctx.strokeStyle = '#600'; ctx.lineWidth = 3;
-      for (let i = -3; i <= 3; i++) { ctx.beginPath(); ctx.moveTo(i * 6, -46); ctx.lineTo(i * 6, 6); ctx.stroke(); }
+      ctx.beginPath(); ctx.moveTo(-90, 130); ctx.quadraticCurveTo(-70, -120, 0, -160);
+      ctx.quadraticCurveTo(70, -120, 90, 130); ctx.quadraticCurveTo(0, 90, -90, 130); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ff1414'; ctx.shadowColor = 'red'; ctx.shadowBlur = 46;
+      ctx.beginPath(); ctx.arc(-30, -74, 17, 0, 6.28); ctx.arc(30, -74, 17, 0, 6.28); ctx.fill();
+      ctx.shadowBlur = 0; ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.arc(-30, -70, 6, 0, 6.28); ctx.arc(30, -70, 6, 0, 6.28); ctx.fill();
+      ctx.fillStyle = '#140000'; ctx.beginPath(); ctx.ellipse(0, -14, 26, 40, 0, 0, 6.28); ctx.fill();
+      ctx.strokeStyle = '#700'; ctx.lineWidth = 3.5;
+      for (let i = -3; i <= 3; i++) { ctx.beginPath(); ctx.moveTo(i * 7, -52); ctx.lineTo(i * 7 + Math.sin(i) * 2, 18); ctx.stroke(); }
       ctx.restore();
-      jumpscare = Math.max(0, jumpscare - 0.02);
+      jumpscare = Math.max(0, jumpscare - 0.016);
     }
   }
 
-  // ---- Main loop ----
+  // ======================= Loop =======================
   function loop(t) {
     const dt = Math.min(0.05, (t - tPrev) / 1000 || 0); tPrev = t;
     update(dt);
-    draw(t);
+    if (state !== 'menu') draw(t);
+    else { ctx.fillStyle = '#040406'; ctx.fillRect(0, 0, W, H); }
     requestAnimationFrame(loop);
   }
 
-  // ---- Buttons ----
-  function start() { menu.classList.add('hidden'); dead.classList.add('hidden'); win.classList.add('hidden'); reset(); }
-  document.getElementById('startBtn').addEventListener('click', start);
-  document.getElementById('retryBtn').addEventListener('click', start);
-  document.getElementById('againBtn').addEventListener('click', start);
+  // ======================= UI wiring =======================
+  function startGame() {
+    Sound.unlock();
+    menu.classList.add('hidden'); dead.classList.add('hidden'); win.classList.add('hidden'); pauseScr.classList.add('hidden');
+    reset();
+  }
+  function doPause() { if (state !== 'play') return; state = 'pause'; pauseScr.classList.remove('hidden');
+    stick.style.display = 'none'; sprintBtn.style.display = 'none'; setRun(false); }
+  function doResume() { if (state !== 'pause') return; state = 'play'; pauseScr.classList.add('hidden');
+    stick.style.display = 'block'; sprintBtn.style.display = 'flex'; tPrev = performance.now(); }
+  function quitToMenu() { state = 'menu'; pauseScr.classList.add('hidden'); hideControls(); menu.classList.remove('hidden'); }
 
-  tPrev = performance.now();
+  el('startBtn').addEventListener('click', startGame);
+  el('retryBtn').addEventListener('click', startGame);
+  el('againBtn').addEventListener('click', startGame);
+  el('pauseBtn').addEventListener('click', doPause);
+  el('resumeBtn').addEventListener('click', doResume);
+  el('quitBtn').addEventListener('click', quitToMenu);
+  muteBtn.addEventListener('click', () => { const m = !Sound.isMuted(); Sound.setMuted(m); muteBtn.textContent = m ? '🔇' : '🔊'; });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play') doPause(); });
+
   requestAnimationFrame(loop);
 })();
 </script>
