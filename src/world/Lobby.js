@@ -56,9 +56,12 @@ export class Lobby {
       new THREE.CylinderGeometry(10, 11, 1, 32),
       new THREE.MeshStandardMaterial({ color: 0x9aa4b2, roughness: 0.9 })
     );
-    dais.position.y = 0.5;
+    dais.position.y = 0.5; // top surface at y = 1
     dais.receiveShadow = true;
     this.group.add(dais);
+    // Register the dais as a solid so players stand ON it (top at y=1) instead
+    // of sinking to the ground plane through it.
+    this.physics.addSolidFromMesh(dais);
 
     // Portals to each game.
     for (const p of PORTALS) this._buildPortal(p);

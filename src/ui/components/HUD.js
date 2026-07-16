@@ -55,7 +55,8 @@ export class HUD {
     // Leave-to-lobby button (only shown inside a game).
     this._leaveBtn = h('button.btn.small.ghost.hidden', {
       text: '⬅ Lobby',
-      style: { position: 'absolute', top: 'calc(var(--safe-top) + 108px)', left: 'calc(var(--safe-left) + 10px)' },
+      // z-index keeps it above the full-screen touch-layer (z-index 5).
+      style: { position: 'absolute', top: 'calc(var(--safe-top) + 108px)', left: 'calc(var(--safe-left) + 10px)', zIndex: '8' },
       onclick: () => bus.emit('game:leave'),
     });
 

@@ -85,6 +85,9 @@ async function start() {
   let animator = new Animator(avatar);
   const player = new PlayerController(engine, input, physics, avatar, animator, lighting);
   engine.addSystem(player);
+  if (new URLSearchParams(location.search).has('debug')) {
+    window.__nova = { engine, player, get cam() { return engine.camera.position.toArray().map((n) => +n.toFixed(2)); }, get av() { return player.avatar.root.position.toArray().map((n) => +n.toFixed(2)); }, get pos() { return player.position.toArray().map((n) => +n.toFixed(2)); } };
+  }
 
   // Rebuild the local avatar when customization changes.
   bus.on('avatar:changed', (custom) => {
