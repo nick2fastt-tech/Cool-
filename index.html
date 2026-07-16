@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+  />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#0b1020" />
+  <title>NovaVerse</title>
+
+  <!-- App UI styles -->
+  <link rel="stylesheet" href="./src/ui/styles.css" />
+
+  <!--
+    Import map. For fast in-browser development we pull Three.js from a CDN.
+    For a production/offline Android build, vendor three into ./vendor and
+    point these specifiers there (see docs/BUILD_ANDROID.md).
+  -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://esm.sh/three@0.160.0",
+        "three/addons/": "https://esm.sh/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <!-- The single WebGL canvas the engine renders into -->
+  <canvas id="game-canvas"></canvas>
+
+  <!-- Root node that the UIManager mounts all screens/HUD into -->
+  <div id="ui-root"></div>
+
+  <!-- Boot: a tiny loader shown before modules parse, replaced by LoadingScreen -->
+  <div id="boot">
+    <div class="boot-logo">NOVA<span>VERSE</span></div>
+    <div class="boot-bar"><div class="boot-bar-fill" id="boot-bar-fill"></div></div>
+    <div class="boot-hint" id="boot-hint">Warming up the engine…</div>
+    <div class="boot-error" id="boot-error"></div>
+  </div>
+
+  <script type="module">
+    // Surface early module/network errors to the boot screen so a blank
+    // page never happens silently on a phone with no dev tools.
+    window.addEventListener('error', (e) => {
+      const el = document.getElementById('boot-error');
+      if (el) el.textContent = 'Startup error: ' + (e.message || e.error);
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+      const el = document.getElementById('boot-error');
+      if (el) el.textContent = 'Startup error: ' + (e.reason?.message || e.reason);
+    });
+  </script>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
