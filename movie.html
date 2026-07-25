@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>THE LAST HALLWAY — a 90 second horror short</title>
+<style>
+  :root { color-scheme: dark; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:100%; height:100%; background:#000; overflow:hidden; }
+  body { font-family: "Times New Roman", Times, serif; color:#cfcac2; }
+
+  #stage { position:fixed; inset:0; background:#000; }
+  canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
+
+  /* letterbox */
+  .bar { position:absolute; left:0; right:0; height:9%; background:#000; z-index:5; pointer-events:none; }
+  .bar.top { top:0; } .bar.bottom { bottom:0; }
+
+  #card {
+    position:absolute; inset:0; z-index:6; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center;
+    opacity:0; pointer-events:none; text-shadow:0 0 24px rgba(0,0,0,.9);
+  }
+  #card .title {
+    font-size: clamp(26px, 6.4vw, 76px); letter-spacing:.42em; text-indent:.42em;
+    font-weight:400; color:#ded8cd;
+  }
+  #card .sub {
+    margin-top:1.6em; font-size: clamp(10px, 1.6vw, 15px); letter-spacing:.55em;
+    text-indent:.55em; color:#7d7770;
+  }
+  #card .slug {
+    font-family: ui-monospace, "Courier New", monospace; font-size: clamp(10px,1.5vw,14px);
+    letter-spacing:.28em; color:#8e8880;
+  }
+
+  #start {
+    position:fixed; inset:0; z-index:20; background:#000; display:flex;
+    flex-direction:column; align-items:center; justify-content:center; gap:2.2em;
+    cursor:pointer; text-align:center; padding:2em;
+  }
+  #start h1 { font-size:clamp(22px,5vw,54px); letter-spacing:.4em; text-indent:.4em; color:#d8d2c7; font-weight:400; }
+  #start p  { font-size:clamp(11px,1.7vw,15px); letter-spacing:.3em; color:#6f6a63; }
+  #start .go {
+    border:1px solid #4a4640; padding:.9em 2.4em; letter-spacing:.4em; text-indent:.4em;
+    font-size:clamp(10px,1.6vw,13px); color:#b9b3a9; animation:pulse 2.6s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:.45} 50%{opacity:1} }
+
+  #replay {
+    position:fixed; z-index:21; left:50%; bottom:14%; transform:translateX(-50%);
+    border:1px solid #3b3833; background:rgba(0,0,0,.6); color:#a9a39a; cursor:pointer;
+    font-family:inherit; font-size:13px; letter-spacing:.35em; text-indent:.35em;
+    padding:.85em 2.2em; opacity:0; transition:opacity 1.2s ease; pointer-events:none;
+  }
+  #replay.on { opacity:1; pointer-events:auto; }
+  #replay:hover { color:#e6e0d6; border-color:#6b6660; }
+
+  #err { position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+         padding:2em; text-align:center; color:#c8c2b8; z-index:30; background:#000; letter-spacing:.1em; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="c"></canvas>
+  <div class="bar top"></div>
+  <div class="bar bottom"></div>
+  <div id="card"></div>
+</div>
+
+<button id="replay">REPLAY</button>
+
+<div id="start">
+  <h1>THE LAST HALLWAY</h1>
+  <p>90 SECONDS &middot; HEADPHONES RECOMMENDED</p>
+  <div class="go">PRESS TO BEGIN</div>
+</div>
+
+<div id="err">WebGL2 is required to play this film.</div>
+
+<script type="x-shader/x-vertex" id="vs">#version 300 es
+in vec2 aPos;
+out vec2 vUv;
+void main(){ vUv = aPos*0.5+0.5; gl_Position = vec4(aPos,0.0,1.0); }
+</script>
+
+<script type="x-shader/x-fragment" id="fsScene">#version 300 es
+precision highp float;
+out vec4 outColor;
+
+uniform vec2  uRes;
+uniform float uTime;
+uniform vec3  uCamPos;
+uniform vec3  uCamTgt;
+uniform float uRoll;
+uniform float uFov;
+uniform float uLight;     // handheld light intensity
+uniform float uLamp;      // ceiling tube intensity
+uniform float uFigZ;      // world z of the figure
+uniform float uFigVis;    // 0/1 figure in scene
+uniform float uMode;      // 0 = hallway, 1 = face
+uniform float uMouth;     // face mouth open 0..1
+
+const float FAR = 70.0;
+
+/* ---------- noise ---------- */
+float hash13(vec3 p){
+  p = fract(p*0.1031);
+  p += dot(p, p.yzx + 33.33);
+  return fract((p.x + p.y) * p.z);
+}
+float noise3(vec3 x){
+  vec3 i = floor(x), f = fract(x);
+  f = f*f*(3.0-2.0*f);
+  return mix(mix(mix(hash13(i+vec3(0,0,0)), hash13(i+vec3(1,0,0)), f.x),
+                 mix(hash13(i+vec3(0,1,0)), hash13(i+vec3(1,1,0)), f.x), f.y),
+             mix(mix(hash13(i+vec3(0,0,1)), hash13(i+vec3(1,0,1)), f.x),
+                 mix(hash13(i+vec3(0,1,1)), hash13(i+vec3(1,1,1)), f.x), f.y), f.z);
+}
+float fbm(vec3 p){
+  float a = 0.5, s = 0.0;
+  for(int i=0;i<4;i++){ s += a*noise3(p); p *= 2.03; a *= 0.5; }
+  return s;
+}
+
+/* ---------- primitives ---------- */
+float sdBox(vec3 p, vec3 b){ vec3 q = abs(p)-b; return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0); }
+float sdCap(vec3 p, vec3 a, vec3 b, float r){
+  vec3 pa = p-a, ba = b-a;
+  float h = clamp(dot(pa,ba)/dot(ba,ba), 0.0, 1.0);
+  return length(pa - ba*h) - r;
+}
+float smin(float a, float b, float k){
+  float h = clamp(0.5+0.5*(b-a)/k, 0.0, 1.0);
+  return mix(b, a, h) - k*h*(1.0-h);
+}
+
+/* ---------- the corridor (positive = inside the walkable void) ---------- */
+float hallway(vec3 p){
+  float fl = p.y + 0.025*noise3(p*4.0);
+  float ce = 3.05 - p.y;
+  float wl = 2.05 - p.x + 0.02*noise3(p*3.0);
+  float wr = p.x + 2.05 + 0.02*noise3(p*3.0+7.0);
+  float d  = min(min(fl, ce), min(wl, wr));
+
+  // recessed doorways every 8 units, alternating sides
+  vec3 q = p; q.z = mod(p.z + 4.0, 8.0) - 4.0;
+  float alc = -sdBox(q - vec3(0.0, 1.02, 0.0), vec3(2.55, 1.02, 0.6));
+  d = max(d, alc);
+  return d;
+}
+
+/* ---------- the thing in the corridor ---------- */
+float figure(vec3 p){
+  p.z -= uFigZ;
+  float t = uTime;
+  p.x -= sin(t*1.6)*0.035;
+  p.y -= abs(sin(t*1.9))*0.035;
+
+  float d = sdCap(p, vec3(-0.13,0.02,0.0), vec3(-0.10,0.94,0.0), 0.085);
+  d = min(d, sdCap(p, vec3( 0.13,0.02,0.0), vec3( 0.10,0.94,0.0), 0.085));
+  d = smin(d, sdCap(p, vec3(0.0,0.88,0.0), vec3(0.0,1.62,-0.02), 0.150), 0.11);
+  float armS = sin(t*1.1)*0.05;
+  d = smin(d, sdCap(p, vec3(-0.19,1.60,0.0), vec3(-0.36+armS,0.46,0.08), 0.058), 0.11);
+  d = smin(d, sdCap(p, vec3( 0.19,1.60,0.0), vec3( 0.36+armS,0.46,0.08), 0.058), 0.11);
+  d = smin(d, sdCap(p, vec3(0.0,1.60,-0.01), vec3(0.0,1.70,0.0), 0.052), 0.05);
+  vec3 h = (p - vec3(0.0,1.86,0.015)) / vec3(1.0,1.22,1.05);
+  d = smin(d, (length(h)-0.152)*0.87, 0.055);
+
+  d += (noise3(p*9.0 + t*0.6) - 0.5) * 0.024;
+  return d;
+}
+
+/* ---------- the face ---------- */
+float faceSDF(vec3 p){
+  p.z -= 2.6;
+  vec3 q = p; q.x = abs(q.x);
+  float d = length(p / vec3(1.0,1.26,1.02)) - 0.92;
+  d += (fbm(p*5.0 + uTime*0.7) - 0.5) * 0.075;
+  // sunken sockets (the near side of the head faces -z)
+  d = max(d, -(length((q - vec3(0.36,0.26,-0.46)) / vec3(1.0,0.82,1.15)) - 0.305));
+  // mouth, opening wide
+  float m = 0.14 + 0.46*uMouth;
+  d = max(d, -(length((p - vec3(0.0,-0.40-0.16*uMouth,-0.54)) / vec3(1.0, m/0.17, 1.20)) - 0.30));
+  // nose ridge and hollow
+  d = smin(d, length((p - vec3(0.0,-0.05,-0.80))/vec3(0.55,1.5,1.0)) - 0.17, 0.10);
+  d = max(d, -(length((q - vec3(0.075,-0.20,-0.86))/vec3(1.0,1.3,1.0)) - 0.075));
+  // cheekbones
+  d -= 0.035*smoothstep(0.30,0.0,length(q - vec3(0.52,-0.02,-0.55)));
+  return d*0.75;
+}
+
+float map(vec3 p){
+  if(uMode > 0.5) return faceSDF(p);
+  float d = hallway(p);
+  if(uFigVis > 0.5) d = min(d, figure(p));
+  return d;
+}
+
+vec3 calcNormal(vec3 p){
+  vec2 e = vec2(0.0016, 0.0);
+  return normalize(vec3(
+    map(p+e.xyy) - map(p-e.xyy),
+    map(p+e.yxy) - map(p-e.yxy),
+    map(p+e.yyx) - map(p-e.yyx)));
+}
+
+float calcAO(vec3 p, vec3 n){
+  float occ = 0.0, sca = 1.0;
+  for(int i=0;i<5;i++){
+    float h = 0.02 + 0.14*float(i);
+    occ += (h - map(p + n*h)) * sca;
+    sca *= 0.72;
+  }
+  return clamp(1.0 - 1.4*occ, 0.0, 1.0);
+}
+
+mat3 camMat(vec3 ro, vec3 ta, float roll){
+  vec3 f = normalize(ta - ro);
+  vec3 up = vec3(sin(roll), cos(roll), 0.0);
+  vec3 r = normalize(cross(f, up));
+  vec3 u = cross(r, f);
+  return mat3(r, u, f);
+}
+
+void main(){
+  vec2 uv = (gl_FragCoord.xy - 0.5*uRes) / uRes.y;
+  vec3 ro = uCamPos;
+  vec3 rd = camMat(ro, uCamTgt, uRoll) * normalize(vec3(uv, uFov));
+  vec3 fwd = normalize(uCamTgt - ro);
+
+  float t = 0.02, d = 0.0;
+  bool hit = false;
+  for(int i=0;i<112;i++){
+    vec3 p = ro + rd*t;
+    d = map(p);
+    if(d < 0.0016*t){ hit = true; break; }
+    t += d*0.86;
+    if(t > FAR) break;
+  }
+
+  vec3 col = vec3(0.0);
+  vec3 fogCol = (uMode > 0.5) ? vec3(0.012,0.004,0.004) : vec3(0.006,0.007,0.011);
+
+  if(hit && t < FAR){
+    vec3 p = ro + rd*t;
+    vec3 n = calcNormal(p);
+    float ao = calcAO(p, n);
+
+    bool isFig = false;
+    if(uMode < 0.5 && uFigVis > 0.5) isFig = (figure(p) < hallway(p) + 0.004);
+
+    vec3 alb;
+    float rough = 1.0;
+    if(uMode > 0.5){
+      float grime = fbm(p*3.5);
+      alb = mix(vec3(0.42,0.31,0.29), vec3(0.15,0.085,0.085), grime);
+      alb *= 0.7 + 0.5*fbm(p*14.0);
+    } else if(isFig){
+      alb = vec3(0.026,0.025,0.030);
+    } else if(p.y < 0.06){
+      float g = fbm(p*2.2);
+      alb = vec3(0.200,0.186,0.170) * (0.45 + 0.9*g);
+      alb *= 0.75 + 0.5*smoothstep(0.35,0.5,fract(p.z*0.5));
+    } else if(p.y > 2.92){
+      alb = vec3(0.150,0.150,0.158) * (0.5 + fbm(p*2.0));
+    } else {
+      float stain = fbm(p*vec3(0.7,1.3,0.7));
+      alb = mix(vec3(0.360,0.340,0.300), vec3(0.115,0.100,0.088), stain);
+      alb = mix(alb, vec3(0.180,0.098,0.076), step(2.25, abs(p.x)));      // doors
+      float grout = smoothstep(0.015, 0.05, abs(fract(p.y*2.0)-0.5));     // tile lines
+      alb *= 0.55 + 0.45*grout;
+      alb *= 0.6 + 0.4*smoothstep(0.02, 0.06, abs(fract(p.z*0.5)-0.5));
+    }
+
+    // handheld light, riding the camera
+    vec3 lp = ro + fwd*0.10 + vec3(0.10,-0.06,0.0);
+    vec3 ld = lp - p;
+    float dist = max(length(ld), 0.001);
+    ld /= dist;
+    float diff = max(dot(n, ld), 0.0);
+    float spot = pow(max(dot(-ld, fwd), 0.0), 5.0)*1.10 + 0.055;
+    float atten = uLight * 13.0 / (1.0 + dist*dist*0.20);
+    col = alb * diff * atten * spot * vec3(1.0, 0.845, 0.63);
+
+    // ceiling tube nearest to the hit point
+    if(uMode < 0.5){
+      float lz = floor((p.z + 4.0)/8.0 + 0.5)*8.0 - 4.0;
+      vec3 lp2 = vec3(0.0, 3.02, lz);
+      vec3 l2 = lp2 - p;
+      float d2 = max(length(l2), 0.001);
+      l2 /= d2;
+      col += alb * max(dot(n,l2),0.0) * (uLamp*15.0/(1.0 + d2*d2*0.42)) * vec3(0.62,0.70,0.92);
+      // the tube itself
+      if(p.y > 2.90 && abs(p.z - lz) < 0.9 && abs(p.x) < 0.42)
+        col += vec3(0.55,0.62,0.85) * uLamp * 4.0;
+    }
+
+    col += alb * 0.075 * (0.3 + uLight);
+    col *= ao;
+
+    float fres = pow(1.0 - max(dot(n, -rd), 0.0), 3.0);
+    if(isFig) col += fres * vec3(0.34,0.36,0.45) * (0.16 + 0.75*max(uLight, uLamp));
+    if(uMode > 0.5) col += fres * vec3(0.22,0.10,0.10) * 0.5;
+
+    float fog = 1.0 - exp(-t * (uMode > 0.5 ? 0.13 : 0.072));
+    col = mix(col, fogCol, fog);
+  } else {
+    col = fogCol;
+  }
+
+  // floating dust
+  float dust = fbm(rd*26.0 + vec3(0.0, uTime*0.25, uTime*0.1));
+  col += vec3(0.030,0.030,0.034) * smoothstep(0.62, 0.95, dust) * uLight * 1.9;
+
+  outColor = vec4(max(col, 0.0), 1.0);
+}
+</script>
+
+<script type="x-shader/x-fragment" id="fsPost">#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 outColor;
+
+uniform sampler2D uTex;
+uniform vec2  uRes;
+uniform float uTime;
+uniform float uGlitch;
+uniform float uFade;
+uniform float uRed;
+uniform float uFlash;
+
+float hash21(vec2 p){
+  p = fract(p*vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x*p.y);
+}
+
+void main(){
+  vec2 uv = vUv;
+  float g = uGlitch;
+
+  // torn scanline blocks
+  float rowN = floor(uv.y * 44.0);
+  float jitter = (hash21(vec2(rowN, floor(uTime*22.0))) - 0.5);
+  float torn = step(0.72 - 0.45*g, hash21(vec2(rowN*1.7, floor(uTime*11.0))));
+  uv.x += jitter * 0.13 * g * torn;
+  uv.y += (hash21(vec2(floor(uTime*9.0), 3.7)) - 0.5) * 0.02 * g;
+  uv = clamp(uv, 0.0005, 0.9995);
+
+  // chromatic aberration grows toward the frame edge
+  vec2 dir = uv - 0.5;
+  float ca = (0.0016 + 0.026*g) * (0.35 + dot(dir,dir)*2.4);
+  vec3 col;
+  col.r = texture(uTex, uv + dir*ca).r;
+  col.g = texture(uTex, uv).g;
+  col.b = texture(uTex, uv - dir*ca).b;
+
+  col += uRed * vec3(0.42, 0.015, 0.02);
+  col += uFlash;
+
+  // grain
+  float grain = hash21(gl_FragCoord.xy + fract(uTime)*613.0);
+  col += (grain - 0.5) * (0.055 + 0.20*g);
+
+  // scanlines + slow vertical roll
+  col *= 0.93 + 0.07*sin(uv.y*uRes.y*1.7);
+  col *= 1.0 - 0.10*smoothstep(0.4, 1.0, fract(uv.y*0.5 - uTime*0.07));
+
+  // vignette
+  float v = 1.0 - dot(dir,dir)*1.75;
+  col *= clamp(v, 0.0, 1.0);
+
+  // filmic curve, cold shadows
+  col = max(col, 0.0);
+  col = mix(col, col*vec3(0.86,0.93,1.06), 0.5);
+  col = (col*(2.51*col + 0.03)) / (col*(2.43*col + 0.59) + 0.14);
+
+  outColor = vec4(col * uFade, 1.0);
+}
+</script>
+
+<script>
+(function(){
+'use strict';
+
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl2', { antialias:false, alpha:false, powerPreference:'high-performance' });
+if(!gl){ document.getElementById('err').style.display = 'flex'; return; }
+
+/* ---------------- GL plumbing ---------------- */
+function compile(type, src){
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src.trim());
+  gl.compileShader(s);
+  if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+function program(vsSrc, fsSrc){
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, vsSrc));
+  gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fsSrc));
+  gl.bindAttribLocation(p, 0, 'aPos');
+  gl.linkProgram(p);
+  if(!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {};
+  const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for(let i=0;i<n;i++){ const info = gl.getActiveUniform(p, i); u[info.name] = gl.getUniformLocation(p, info.name); }
+  return { p, u };
+}
+
+const vsSrc   = document.getElementById('vs').textContent;
+const scene   = program(vsSrc, document.getElementById('fsScene').textContent);
+const post    = program(vsSrc, document.getElementById('fsPost').textContent);
+
+const vao = gl.createVertexArray();
+gl.bindVertexArray(vao);
+const vbo = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0);
+gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+const tex = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D, tex);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+const fbo = gl.createFramebuffer();
+gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+let W = 1, H = 1, RW = 1, RH = 1;
+let renderScale = 0.68;
+function resize(){
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = Math.max(1, Math.floor(innerWidth  * dpr));
+  H = Math.max(1, Math.floor(innerHeight * dpr));
+  canvas.width = W; canvas.height = H;
+  let sc = renderScale;
+  // never raymarch more than ~0.62 MP, whatever the display is
+  const budget = 620000;
+  if(W*H*sc*sc > budget) sc = Math.sqrt(budget/(W*H));
+  RW = Math.max(1, Math.floor(W * sc));
+  RH = Math.max(1, Math.floor(H * sc));
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, RW, RH, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+}
+addEventListener('resize', resize);
+resize();
+
+/* ---------------- small math helpers ---------------- */
+const clamp = (x,a,b) => x<a?a:(x>b?b:x);
+const lerp  = (a,b,t) => a + (b-a)*t;
+const sstep = (e0,e1,x) => { const t = clamp((x-e0)/(e1-e0), 0, 1); return t*t*(3-2*t); };
+const easeIO = t => t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2;
+function rnd(x){ const s = Math.sin(x*127.1)*43758.5453; return s - Math.floor(s); }
+function vnoise(x){ const i = Math.floor(x), f = x-i, u = f*f*(3-2*f); return lerp(rnd(i), rnd(i+1), u); }
+// blinking fluorescent: mostly on, with stutters
+function flickerCurve(t, speed, depth){
+  const n = vnoise(t*speed) * 0.6 + vnoise(t*speed*3.3) * 0.4;
+  const stutter = rnd(Math.floor(t*13.0)) < 0.07 ? 0.15 : 1.0;
+  return clamp((1.0 - depth) + depth*n, 0, 1) * stutter;
+}
+
+/* ---------------- the shot list ---------------- */
+// Camera lives at y ~1.55 in a corridor running along +z.
+const RUNTIME = 90;
+const state = {
+  cam:[0,1.55,0], tgt:[0,1.5,6], roll:0, fov:1.5,
+  light:0.9, lamp:0.0, figZ:0, figVis:0, mode:0, mouth:0,
+  glitch:0, fade:0, red:0, flash:0
+};
+
+function shake(t, amt){
+  return [ (vnoise(t*9.1)-0.5)*amt, (vnoise(t*7.7+31.0)-0.5)*amt, (vnoise(t*5.3+77.0)-0.5)*amt*0.4 ];
+}
+
+function direct(t){
+  const s = state;
+  s.mode = 0; s.mouth = 0; s.figVis = 0; s.red = 0; s.flash = 0; s.glitch = 0.03;
+  s.roll = 0; s.fov = 1.5; s.lamp = 0;
+  const breathe = Math.sin(t*1.4)*0.012 + Math.sin(t*0.55)*0.02;
+  let camZ = 0, camX = 0, tgtX = 0, tgtY = 1.5, tgtZ = null;
+
+  if(t < 8){                                   // ---- 00:00 main title over near-black
+    const k = t/8;
+    camZ = lerp(-2.0, 0.6, k);
+    s.light = 0.10 + 0.06*flickerCurve(t, 1.2, 0.9);
+    s.fade  = sstep(0.4, 2.0, t);
+
+  } else if(t < 19){                           // ---- 00:08 first push down the corridor
+    const k = (t-8)/11;
+    camZ = lerp(0.6, 5.6, easeIO(k));
+    camX = Math.sin(t*0.7)*0.10;
+    tgtX = Math.sin(t*0.5)*0.30;
+    s.light = 0.85 * (0.82 + 0.18*flickerCurve(t, 2.0, 0.5));
+    s.lamp  = 0.35 * flickerCurve(t*1.3 + 4.0, 3.0, 0.85);
+
+  } else if(t < 29){                           // ---- 00:19 cut: something is behind the door
+    const k = (t-19)/10, kk = sstep(0.12, 0.72, k);
+    camZ = lerp(12.3, 13.2, easeIO(k));
+    camX = lerp(-0.15, -0.75, kk);
+    tgtX = lerp(0.15, 2.15, kk);
+    tgtY = lerp(1.5, 1.20, kk);
+    tgtZ = lerp(camZ + 6.0, 16.3, kk);
+    s.light = 0.78 * (0.8 + 0.2*flickerCurve(t, 2.4, 0.55));
+    s.lamp  = 0.18 * flickerCurve(t*1.7, 3.4, 0.9);
+    if(t > 26.6 && t < 27.2){ s.glitch = 0.30; }   // it moves past, off-frame
+
+  } else if(t < 40){                           // ---- 00:29 the glimpse
+    const k = (t-29)/11;
+    camZ = lerp(21.0, 22.1, easeIO(k));
+    tgtX = Math.sin(t*0.6)*0.12;
+    s.light = 0.70 * (0.72 + 0.28*flickerCurve(t, 2.6, 0.75));
+    s.lamp  = 0.50 * flickerCurve(t*1.1 + 9.0, 2.2, 0.9);
+    s.figZ  = camZ + 11.0;
+    // visible only inside two brief windows, as the lights stutter
+    const w1 = (t > 32.3 && t < 33.5), w2 = (t > 36.2 && t < 36.9);
+    if(w1 || w2){ s.figVis = 1; s.light = 0.55; s.lamp = 0.95; }
+    if(t > 33.5 && t < 33.9) s.glitch = 0.22;
+
+  } else if(t < 51){                           // ---- 00:40 it is closer, and it is waiting
+    const k = (t-40)/11;
+    camZ = lerp(22.1, 24.4, easeIO(k));
+    s.figVis = 1;
+    s.figZ  = camZ + lerp(9.5, 7.4, k);
+    tgtX = Math.sin(t*0.45)*0.06;
+    s.light = 0.62 * (0.78 + 0.22*flickerCurve(t, 3.0, 0.6));
+    s.lamp  = 0.60 * (0.72 + 0.28*flickerCurve(t*2.0, 4.0, 0.9));
+    const sh = shake(t, 0.012 + 0.02*k);
+    camX += sh[0]; tgtY += sh[1]; s.roll = sh[2]*0.5;
+
+  } else if(t < 63){                           // ---- 00:51 run
+    const k = (t-51)/12;
+    camZ = lerp(24.4, 17.6, easeIO(k));            // retreating
+    s.figVis = 1;
+    s.figZ = camZ + lerp(7.4, 3.1, k*k);           // it closes anyway
+    s.fov = lerp(1.5, 1.28, k);
+    s.light = 0.55 * (0.55 + 0.45*flickerCurve(t, 5.5, 0.85));
+    s.lamp  = 0.55 * (0.45 + 0.55*flickerCurve(t*2.6, 5.0, 0.9));
+    const sh = shake(t, 0.05 + 0.09*k);
+    camX += sh[0]; tgtX += sh[0]*2.6; tgtY += sh[1]*1.8; s.roll = sh[2]*1.6;
+    s.glitch = 0.03 + 0.12*k;
+
+  } else if(t < 74){                           // ---- 01:03 it is in the frame with you
+    const k = (t-63)/11;
+    camZ = lerp(17.6, 14.2, easeIO(k));
+    s.figVis = 1;
+    s.figZ = camZ + lerp(3.1, 1.05, easeIO(k));
+    s.fov = lerp(1.28, 1.05, k);
+    s.light = 0.62 * (0.35 + 0.65*flickerCurve(t, 8.0, 0.95));
+    if(t > 71.6){ s.light *= sstep(73.4, 71.6, t); s.lamp = 0; }   // total darkness before the hit
+    else s.lamp = 0.45 * (0.30 + 0.70*flickerCurve(t*3.2, 6.0, 0.95));
+    const sh = shake(t, 0.09 + 0.10*k);
+    camX += sh[0]; tgtX += sh[0]*3.2; tgtY += sh[1]*2.2; s.roll = sh[2]*2.4;
+    s.glitch = 0.15 + 0.25*k*k;
+
+  } else if(t < 82.5){                         // ---- 01:14 the face
+    const k = (t-74)/8.5;
+    s.mode = 1;
+    s.mouth = sstep(0.0, 0.30, k) * (1.0 - 0.25*Math.sin(k*11.0)*sstep(0.35,0.6,k));
+    const sh = shake(t, 0.10 + 0.16*(1-k));
+    state.cam = [ sh[0]*0.5, sh[1]*0.5, lerp(-1.30, -0.34, easeIO(clamp(k*1.35,0,1))) ];
+    state.tgt = [ sh[0], sh[1], 3.2 ];
+    s.roll = sh[2]*3.0;
+    s.fov = lerp(1.10, 1.32, k);
+    s.light = (0.40 - 0.12*k) * (0.55 + 0.45*flickerCurve(t*2.0, 12.0, 0.8));
+    s.glitch = 0.85 * Math.exp(-(t-74)*0.9) + 0.12;
+    s.red = 0.55 * Math.exp(-(t-74)*1.6) + 0.10*(1-k);
+    s.flash = 0.85 * Math.exp(-(t-74)*11.0);
+    s.fade = 1.0 - sstep(81.4, 82.4, t);
+    return;                                     // camera already set
+
+  } else {                                     // ---- 01:22 black, and the card
+    camZ = 14.2;
+    s.light = 0.0; s.lamp = 0.0;
+    s.glitch = 0.02;
+    s.fade = 0.0;
+  }
+
+  s.fade = (t < 8) ? sstep(0.4, 2.0, t) : (t < 82.5 ? 1.0 : 0.0);
+  state.cam = [camX, 1.55 + breathe, camZ];
+  state.tgt = [tgtX, tgtY + breathe*0.6, (tgtZ === null ? camZ + 6.0 : tgtZ)];
+}
+
+/* ---------------- title cards ---------------- */
+const cardEl = document.getElementById('card');
+let cardKey = '';
+function cards(t){
+  let html = '', op = 0;
+  if(t < 7.4){
+    html = '<div class="title">THE LAST HALLWAY</div><div class="sub">A SHORT FILM</div>';
+    op = sstep(1.0, 2.6, t) * (1 - sstep(6.0, 7.3, t));
+  } else if(t < 12.5){
+    html = '<div class="slug">SUBLEVEL B &middot; 03:47 AM</div>';
+    op = sstep(8.6, 9.6, t) * (1 - sstep(11.4, 12.4, t));
+  } else if(t > 83.4 && t < 90){
+    html = '<div class="title">END</div><div class="sub">IT IS STILL IN THE HALL</div>';
+    op = sstep(83.6, 85.2, t) * (1 - sstep(88.6, 89.8, t));
+  }
+  if(html !== cardKey){ cardEl.innerHTML = html; cardKey = html; }
+  cardEl.style.opacity = op.toFixed(3);
+}
+
+/* ---------------- sound, synthesized on the fly ---------------- */
+let ac = null;
+function buildAudio(){
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if(!Ctx) return;
+  ac = new Ctx();
+  const t0 = ac.currentTime + 0.06;
+  const master = ac.createGain();
+  master.gain.value = 0.85;
+  master.connect(ac.destination);
+
+  function noiseBuf(sec){
+    const b = ac.createBuffer(1, Math.floor(ac.sampleRate*sec), ac.sampleRate);
+    const d = b.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i] = Math.random()*2-1;
+    return b;
+  }
+  const NB = noiseBuf(3);
+
+  // --- sub drone, present the whole film
+  const droneG = ac.createGain(); droneG.gain.value = 0.0; droneG.connect(master);
+  const lp = ac.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=260; lp.Q.value=3;
+  lp.connect(droneG);
+  [55, 55.7, 82.6].forEach((f,i) => {
+    const o = ac.createOscillator();
+    o.type = i===2 ? 'triangle' : 'sawtooth';
+    o.frequency.setValueAtTime(f, t0);
+    o.frequency.linearRampToValueAtTime(f*1.16, t0+74);
+    const g = ac.createGain(); g.gain.value = i===2 ? 0.16 : 0.34;
+    o.connect(g); g.connect(lp); o.start(t0); o.stop(t0+91);
+  });
+  const dg = droneG.gain;
+  dg.setValueAtTime(0.0, t0);
+  dg.linearRampToValueAtTime(0.10, t0+6);
+  dg.linearRampToValueAtTime(0.13, t0+40);
+  dg.linearRampToValueAtTime(0.26, t0+70);
+  dg.linearRampToValueAtTime(0.30, t0+71.5);
+  dg.linearRampToValueAtTime(0.02, t0+73.4);     // the drop-out before the scare
+  dg.setValueAtTime(0.02, t0+74.0);
+  dg.linearRampToValueAtTime(0.34, t0+74.1);
+  dg.linearRampToValueAtTime(0.05, t0+82);
+  dg.linearRampToValueAtTime(0.0, t0+89.5);
+
+  // --- room tone: filtered noise wind
+  const wind = ac.createBufferSource(); wind.buffer = NB; wind.loop = true;
+  const wf = ac.createBiquadFilter(); wf.type='bandpass'; wf.frequency.value=420; wf.Q.value=0.6;
+  const wg = ac.createGain(); wg.gain.value = 0.0;
+  wind.connect(wf); wf.connect(wg); wg.connect(master);
+  wind.start(t0); wind.stop(t0+91);
+  wg.gain.linearRampToValueAtTime(0.045, t0+5);
+  wg.gain.linearRampToValueAtTime(0.075, t0+62);
+  wg.gain.linearRampToValueAtTime(0.010, t0+83);
+  wg.gain.linearRampToValueAtTime(0.0,  t0+89.5);
+
+  // --- one-shot helpers -------------------------------------------------
+  function burst(at, dur, freq, q, vol, type){
+    const s = ac.createBufferSource(); s.buffer = NB;
+    const f = ac.createBiquadFilter(); f.type = type || 'bandpass';
+    f.frequency.setValueAtTime(freq, at); f.Q.value = q;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(vol, at+Math.min(0.02,dur*0.2));
+    g.gain.exponentialRampToValueAtTime(0.0001, at+dur);
+    s.connect(f); f.connect(g); g.connect(master);
+    s.start(at, Math.random()*2); s.stop(at+dur+0.05);
+  }
+  function thump(at, freq, vol){
+    const o = ac.createOscillator(); o.type='sine';
+    o.frequency.setValueAtTime(freq, at);
+    o.frequency.exponentialRampToValueAtTime(freq*0.55, at+0.22);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(vol, at+0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, at+0.30);
+    o.connect(g); g.connect(master); o.start(at); o.stop(at+0.35);
+  }
+  function stinger(at, f0, f1, dur, vol, type){
+    const o = ac.createOscillator(); o.type = type||'sawtooth';
+    o.frequency.setValueAtTime(f0, at);
+    o.frequency.exponentialRampToValueAtTime(f1, at+dur);
+    const f = ac.createBiquadFilter(); f.type='lowpass'; f.frequency.value=2400; f.Q.value=6;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(vol, at+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, at+dur);
+    o.connect(f); f.connect(g); g.connect(master); o.start(at); o.stop(at+dur+0.05);
+  }
+
+  // --- footsteps of the person holding the light
+  for(let i=0; i<11; i++) burst(t0 + 9.0 + i*0.92, 0.16, 190 + Math.random()*90, 1.4, 0.10, 'bandpass');
+  // door handle rattling, 00:19 shot
+  for(let i=0; i<7; i++) burst(t0 + 21.5 + i*0.55 + Math.random()*0.2, 0.09, 2400+Math.random()*1400, 6, 0.075);
+  burst(t0+26.7, 0.45, 900, 1.2, 0.16);                      // something passes the door
+  stinger(t0+26.7, 1400, 220, 0.5, 0.10, 'sawtooth');
+
+  // the glimpse, 00:32
+  stinger(t0+32.3, 2600, 900, 1.1, 0.16, 'sawtooth');
+  burst(t0+32.3, 0.9, 3000, 1.0, 0.11);
+  stinger(t0+36.2, 1900, 700, 0.8, 0.12, 'sawtooth');
+
+  // heartbeat, from 00:38, accelerating
+  let ht = 38.0, bpm = 66;
+  while(ht < 73.4){
+    const vol = 0.16 + 0.30*clamp((ht-38)/34, 0, 1);
+    thump(t0+ht, 62, vol);
+    thump(t0+ht+0.22, 48, vol*0.62);
+    bpm = 66 + 92*clamp((ht-38)/34, 0, 1);
+    ht += 60/bpm;
+  }
+  // dragging steps closing in
+  for(let i=0;i<26;i++){
+    const at = 51 + i*0.44;
+    if(at > 73.2) break;
+    burst(t0+at, 0.22, 150 + i*14, 1.1, 0.06 + i*0.005, 'bandpass');
+  }
+  // breath
+  for(let i=0;i<16;i++) burst(t0 + 51 + i*1.35, 0.42, 700, 0.8, 0.05, 'bandpass');
+
+  // 01:13 everything stops
+  // 01:14 the hit
+  stinger(t0+74.0, 3400, 60, 1.5, 0.42, 'sawtooth');
+  stinger(t0+74.0, 900, 40, 2.4, 0.30, 'square');
+  burst(t0+74.0, 1.9, 1800, 0.5, 0.42, 'bandpass');
+  thump(t0+74.0, 44, 0.7);
+  for(let i=0;i<9;i++) burst(t0+74.15+i*0.28, 0.2, 500+Math.random()*3000, 3, 0.16);
+  stinger(t0+76.4, 320, 70, 3.2, 0.20, 'sawtooth');
+
+  // whispers over the end card
+  for(let i=0;i<10;i++){
+    const at = 83.4 + i*0.55 + Math.random()*0.25;
+    burst(t0+at, 0.35 + Math.random()*0.3, 1300 + Math.random()*1800, 8, 0.055);
+  }
+  return t0;
+}
+
+/* ---------------- run loop ---------------- */
+const params = new URLSearchParams(location.search);
+const seek = parseFloat(params.get('t') || '0') || 0;
+let startMs = 0, running = false, finished = false;
+const perf = { n:0, sum:0, last:0 };
+const replayBtn = document.getElementById('replay');
+
+function frame(now){
+  if(!running) return;
+  let t = (now - startMs)/1000 + seek;
+  if(t >= RUNTIME){
+    t = RUNTIME - 0.001;
+    if(!finished){ finished = true; replayBtn.classList.add('on'); }
+  } else {
+    requestAnimationFrame(frame);
+  }
+
+  // one-time quality check: drop resolution if the GPU is struggling
+  if(perf.n >= 0 && t > 1.0){
+    perf.n++; perf.sum += now - perf.last;
+    if(perf.n > 45){
+      const avg = perf.sum / perf.n;
+      if(avg > 30 && renderScale > 0.42){ renderScale = 0.42; resize(); }
+      else if(avg < 9 && renderScale < 0.9){ renderScale = 0.9; resize(); }
+      perf.n = -1;
+    }
+  }
+  perf.last = now;
+
+  direct(t);
+  cards(t);
+  const s = state;
+
+  // ---- pass 1: the scene
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.viewport(0, 0, RW, RH);
+  gl.useProgram(scene.p);
+  gl.uniform2f(scene.u.uRes, RW, RH);
+  gl.uniform1f(scene.u.uTime, t);
+  gl.uniform3f(scene.u.uCamPos, s.cam[0], s.cam[1], s.cam[2]);
+  gl.uniform3f(scene.u.uCamTgt, s.tgt[0], s.tgt[1], s.tgt[2]);
+  gl.uniform1f(scene.u.uRoll, s.roll);
+  gl.uniform1f(scene.u.uFov, s.fov);
+  gl.uniform1f(scene.u.uLight, s.light);
+  gl.uniform1f(scene.u.uLamp, s.lamp);
+  gl.uniform1f(scene.u.uFigZ, s.figZ);
+  gl.uniform1f(scene.u.uFigVis, s.figVis);
+  gl.uniform1f(scene.u.uMode, s.mode);
+  gl.uniform1f(scene.u.uMouth, s.mouth);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  // ---- pass 2: the print
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, W, H);
+  gl.useProgram(post.p);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.uniform1i(post.u.uTex, 0);
+  gl.uniform2f(post.u.uRes, W, H);
+  gl.uniform1f(post.u.uTime, t);
+  gl.uniform1f(post.u.uGlitch, s.glitch);
+  gl.uniform1f(post.u.uFade, s.fade);
+  gl.uniform1f(post.u.uRed, s.red);
+  gl.uniform1f(post.u.uFlash, s.flash);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+function play(){
+  const overlay = document.getElementById('start');
+  overlay.style.transition = 'opacity .8s ease';
+  overlay.style.opacity = '0';
+  setTimeout(() => overlay.remove(), 850);
+  try { buildAudio(); } catch(e) { /* film plays silent */ }
+  startMs = performance.now();
+  running = true;
+  requestAnimationFrame(frame);
+  const el = document.documentElement;
+  if(el.requestFullscreen) el.requestFullscreen().catch(()=>{});
+}
+
+document.getElementById('start').addEventListener('click', play, { once:true });
+document.addEventListener('keydown', e => {
+  if(e.code === 'Space' || e.code === 'Enter'){
+    const o = document.getElementById('start');
+    if(o) { e.preventDefault(); o.click(); }
+  }
+});
+replayBtn.addEventListener('click', () => location.reload());
+
+// render one dark frame behind the start screen so the canvas is never blank
+direct(0.6); running = true; requestAnimationFrame(function once(n){ startMs = n; frame(n); running = false; });
+})();
+</script>
+</body>
+</html>
