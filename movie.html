@@ -2,82 +2,287 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>THE LAST HALLWAY — a 90 second horror short</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<title>The Last Hallway</title>
 <style>
-  :root { color-scheme: dark; }
-  * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:100%; height:100%; background:#000; overflow:hidden; }
-  body { font-family: "Times New Roman", Times, serif; color:#cfcac2; }
+  :root{
+    --red:#e50914;
+    --ui:'Netflix Sans','Helvetica Neue',Helvetica,Arial,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{width:100%;height:100%;background:#000;overflow:hidden;}
+  body{font-family:var(--ui);color:#fff;user-select:none;}
 
-  #stage { position:fixed; inset:0; background:#000; }
-  canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
+  #player{position:fixed;inset:0;background:#000;overflow:hidden;cursor:default;}
+  #player.idle{cursor:none;}
 
-  /* letterbox */
-  .bar { position:absolute; left:0; right:0; height:9%; background:#000; z-index:5; pointer-events:none; }
-  .bar.top { top:0; } .bar.bottom { bottom:0; }
+  /* ---------- the film itself ---------- */
+  #video{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#000;}
+  #frame{position:relative;overflow:hidden;}
+  canvas#c{width:100%;height:100%;display:block;}
+  .bar{position:absolute;left:0;right:0;height:9%;background:#000;z-index:2;pointer-events:none;}
+  .bar.top{top:0;} .bar.bottom{bottom:0;}
+  #card{position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;align-items:center;
+        justify-content:center;text-align:center;opacity:0;pointer-events:none;
+        font-family:"Times New Roman",Times,serif;text-shadow:0 0 24px rgba(0,0,0,.9);color:#cfcac2;}
+  #card .title{font-size:clamp(26px,6.4vw,76px);letter-spacing:.42em;text-indent:.42em;color:#ded8cd;}
+  #card .sub{margin-top:1.6em;font-size:clamp(10px,1.6vw,15px);letter-spacing:.55em;text-indent:.55em;color:#7d7770;}
+  #card .slug{font-family:ui-monospace,"Courier New",monospace;font-size:clamp(10px,1.5vw,14px);
+              letter-spacing:.28em;color:#8e8880;}
 
-  #card {
-    position:absolute; inset:0; z-index:6; display:flex; flex-direction:column;
-    align-items:center; justify-content:center; text-align:center;
-    opacity:0; pointer-events:none; text-shadow:0 0 24px rgba(0,0,0,.9);
-  }
-  #card .title {
-    font-size: clamp(26px, 6.4vw, 76px); letter-spacing:.42em; text-indent:.42em;
-    font-weight:400; color:#ded8cd;
-  }
-  #card .sub {
-    margin-top:1.6em; font-size: clamp(10px, 1.6vw, 15px); letter-spacing:.55em;
-    text-indent:.55em; color:#7d7770;
-  }
-  #card .slug {
-    font-family: ui-monospace, "Courier New", monospace; font-size: clamp(10px,1.5vw,14px);
-    letter-spacing:.28em; color:#8e8880;
-  }
+  /* ---------- overlays ---------- */
+  #scrim{position:absolute;inset:0;z-index:4;background:rgba(0,0,0,.45);opacity:0;
+         transition:opacity .35s ease;pointer-events:none;}
+  #player.paused #scrim{opacity:1;}
 
-  #start {
-    position:fixed; inset:0; z-index:20; background:#000; display:flex;
-    flex-direction:column; align-items:center; justify-content:center; gap:2.2em;
-    cursor:pointer; text-align:center; padding:2em;
-  }
-  #start h1 { font-size:clamp(22px,5vw,54px); letter-spacing:.4em; text-indent:.4em; color:#d8d2c7; font-weight:400; }
-  #start p  { font-size:clamp(11px,1.7vw,15px); letter-spacing:.3em; color:#6f6a63; }
-  #start .go {
-    border:1px solid #4a4640; padding:.9em 2.4em; letter-spacing:.4em; text-indent:.4em;
-    font-size:clamp(10px,1.6vw,13px); color:#b9b3a9; animation:pulse 2.6s ease-in-out infinite;
-  }
-  @keyframes pulse { 0%,100%{opacity:.45} 50%{opacity:1} }
+  #pausecard{position:absolute;z-index:5;left:clamp(20px,5vw,72px);top:50%;transform:translateY(-50%);
+             max-width:min(46ch,60vw);opacity:0;transition:opacity .4s ease .15s;pointer-events:none;}
+  #player.paused.showinfo #pausecard{opacity:1;}
+  #pausecard .eyebrow{font-size:clamp(13px,1.5vw,20px);color:#d2d2d2;letter-spacing:.02em;}
+  #pausecard h2{font-size:clamp(30px,5.4vw,68px);font-weight:700;line-height:1.05;margin:.18em 0 .3em;}
+  #pausecard p{font-size:clamp(13px,1.5vw,19px);line-height:1.45;color:#d2d2d2;}
 
-  #replay {
-    position:fixed; z-index:21; left:50%; bottom:14%; transform:translateX(-50%);
-    border:1px solid #3b3833; background:rgba(0,0,0,.6); color:#a9a39a; cursor:pointer;
-    font-family:inherit; font-size:13px; letter-spacing:.35em; text-indent:.35em;
-    padding:.85em 2.2em; opacity:0; transition:opacity 1.2s ease; pointer-events:none;
-  }
-  #replay.on { opacity:1; pointer-events:auto; }
-  #replay:hover { color:#e6e0d6; border-color:#6b6660; }
+  #ripL,#ripR{position:absolute;top:0;bottom:0;width:34%;z-index:6;display:flex;align-items:center;
+              justify-content:center;flex-direction:column;gap:.4em;opacity:0;pointer-events:none;
+              background:radial-gradient(closest-side,rgba(255,255,255,.16),rgba(255,255,255,0) 78%);
+              font-size:15px;font-weight:500;letter-spacing:.02em;}
+  #ripL{left:0;border-radius:0 50% 50% 0/0 50% 50% 0;}
+  #ripR{right:0;border-radius:50% 0 0 50%/50% 0 0 50%;}
+  #ripL.go,#ripR.go{animation:rip .62s ease-out;}
+  @keyframes rip{0%{opacity:0}22%{opacity:1}100%{opacity:0}}
+  #ripL svg,#ripR svg{width:34px;height:34px;fill:#fff;}
 
-  #err { position:fixed; inset:0; display:none; align-items:center; justify-content:center;
-         padding:2em; text-align:center; color:#c8c2b8; z-index:30; background:#000; letter-spacing:.1em; }
+  #spinner{position:absolute;inset:0;z-index:9;display:none;align-items:center;justify-content:center;}
+  #spinner.on{display:flex;}
+  #spinner i{width:66px;height:66px;border-radius:50%;border:3px solid rgba(255,255,255,.22);
+             border-top-color:var(--red);animation:spin .9s linear infinite;display:block;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ---------- big opening play button ---------- */
+  #poster{position:absolute;inset:0;z-index:14;background:#000;display:flex;flex-direction:column;
+          align-items:center;justify-content:center;gap:26px;cursor:pointer;}
+  #poster .mark{font-size:clamp(52px,13vw,150px);font-weight:800;color:var(--red);line-height:.8;
+                letter-spacing:-.04em;text-shadow:0 0 46px rgba(229,9,20,.42);}
+  #poster .name{font-size:clamp(19px,3.6vw,40px);font-weight:700;letter-spacing:.06em;}
+  #poster .meta{font-size:clamp(11px,1.5vw,14px);color:#a3a3a3;letter-spacing:.16em;}
+  #poster .big{margin-top:8px;display:flex;align-items:center;gap:12px;background:#fff;color:#000;
+               border:0;border-radius:4px;padding:11px 26px;font-family:var(--ui);font-size:clamp(15px,2vw,19px);
+               font-weight:700;cursor:pointer;}
+  #poster .big svg{width:22px;height:22px;fill:#000;}
+  #poster .big:hover{background:rgba(255,255,255,.78);}
+
+  /* ---------- post play ---------- */
+  #postplay{position:absolute;inset:0;z-index:13;background:rgba(0,0,0,.72);display:none;
+            flex-direction:column;align-items:center;justify-content:center;gap:20px;}
+  #postplay.on{display:flex;}
+  #postplay .ring{width:74px;height:74px;border-radius:50%;border:2px solid #fff;display:flex;
+                  align-items:center;justify-content:center;cursor:pointer;transition:transform .2s ease;}
+  #postplay .ring:hover{transform:scale(1.09);}
+  #postplay .ring svg{width:34px;height:34px;fill:#fff;}
+  #postplay span{font-size:19px;font-weight:500;letter-spacing:.02em;}
+
+  /* ---------- top bar ---------- */
+  #topbar{position:absolute;top:0;left:0;right:0;z-index:11;padding:22px 26px;
+          background:linear-gradient(180deg,rgba(0,0,0,.72),rgba(0,0,0,0));
+          display:flex;align-items:center;gap:18px;transition:opacity .35s ease;}
+  #topbar svg{width:34px;height:34px;fill:#fff;}
+  #topbar .back{cursor:pointer;display:flex;align-items:center;gap:14px;font-size:17px;font-weight:500;}
+  #topbar .back:hover{opacity:.75;}
+
+  /* ---------- skip intro ---------- */
+  #skipintro{position:absolute;right:clamp(16px,3.4vw,46px);bottom:clamp(120px,17vh,170px);z-index:12;
+             display:none;background:rgba(35,35,35,.78);border:1px solid rgba(255,255,255,.42);
+             color:#fff;font-family:var(--ui);font-size:clamp(14px,1.6vw,17px);font-weight:600;
+             padding:11px 26px;border-radius:3px;cursor:pointer;letter-spacing:.01em;}
+  #skipintro.on{display:block;}
+  #skipintro:hover{background:#fff;color:#000;border-color:#fff;}
+
+  /* ---------- controls ---------- */
+  #controls{position:absolute;left:0;right:0;bottom:0;z-index:11;padding:0 clamp(14px,2.6vw,42px) clamp(14px,2vh,26px);
+            background:linear-gradient(180deg,rgba(0,0,0,0) 0%,rgba(0,0,0,.55) 42%,rgba(0,0,0,.86) 100%);
+            padding-top:70px;transition:opacity .35s ease;}
+  #topbar,#controls{opacity:1;}
+  #player.idle #topbar,#player.idle #controls{opacity:0;pointer-events:none;}
+
+  /* scrubber */
+  .scrubrow{display:flex;align-items:center;gap:16px;height:22px;}
+  #track{position:relative;flex:1;height:20px;display:flex;align-items:center;cursor:pointer;}
+  #track .rail{position:absolute;left:0;right:0;height:3px;background:rgba(255,255,255,.28);border-radius:2px;
+               transition:height .12s ease;}
+  #track .buf{position:absolute;left:0;height:3px;background:rgba(255,255,255,.45);border-radius:2px;
+              transition:height .12s ease;}
+  #track .play{position:absolute;left:0;height:3px;background:var(--red);border-radius:2px;
+               transition:height .12s ease;}
+  #track .knob{position:absolute;width:13px;height:13px;border-radius:50%;background:var(--red);
+               transform:translateX(-50%) scale(0);transition:transform .12s ease;}
+  #track:hover .rail,#track:hover .buf,#track:hover .play,#track.drag .rail,#track.drag .buf,#track.drag .play{height:5px;}
+  #track:hover .knob,#track.drag .knob{transform:translateX(-50%) scale(1);}
+  #remain{font-size:15px;font-weight:500;color:#fff;min-width:52px;text-align:right;font-variant-numeric:tabular-nums;}
+
+  /* preview thumbnail */
+  #preview{position:absolute;bottom:calc(100% + 14px);width:172px;opacity:0;pointer-events:none;
+           transition:opacity .14s ease;transform:translateX(-50%);}
+  #preview.on{opacity:1;}
+  #preview canvas{width:172px;height:97px;display:block;border:2px solid #fff;border-radius:2px;background:#000;}
+  #preview span{display:block;text-align:center;margin-top:5px;font-size:13px;font-weight:500;
+                text-shadow:0 1px 3px #000;}
+
+  /* button row */
+  .btnrow{position:relative;display:flex;align-items:center;justify-content:space-between;margin-top:6px;height:44px;}
+  .grp{display:flex;align-items:center;gap:clamp(10px,1.6vw,22px);}
+  .btn{position:relative;background:none;border:0;padding:0;cursor:pointer;display:flex;align-items:center;
+       justify-content:center;transition:transform .13s ease;}
+  .btn svg{width:clamp(26px,2.4vw,32px);height:clamp(26px,2.4vw,32px);fill:#fff;}
+  .btn:hover{transform:scale(1.18);}
+  .btn[data-tip]:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 14px);left:50%;
+       transform:translateX(-50%);background:rgba(0,0,0,.85);color:#fff;font-size:13px;font-weight:500;
+       white-space:nowrap;padding:6px 11px;border-radius:3px;pointer-events:none;}
+  #vol{display:flex;align-items:center;}
+  #volslide{width:0;overflow:hidden;transition:width .22s ease,margin .22s ease;}
+  #vol:hover #volslide,#vol.open #volslide{width:88px;margin-left:10px;}
+  #volslide input{width:88px;accent-color:#fff;cursor:pointer;vertical-align:middle;}
+  .ttl{position:absolute;left:50%;transform:translateX(-50%);font-size:clamp(13px,1.5vw,18px);
+       font-weight:500;white-space:nowrap;pointer-events:none;}
+  .ttl b{font-weight:700;}
+  .ttl i{font-style:normal;color:#b9b9b9;margin:0 .5em;}
+
+  /* quality menu */
+  #qwrap{position:relative;}
+  #qmenu{position:absolute;bottom:calc(100% + 18px);right:0;min-width:216px;background:rgba(0,0,0,.92);
+         border-radius:3px;padding:14px 0;display:none;box-shadow:0 6px 26px rgba(0,0,0,.6);}
+  #qmenu.on{display:block;}
+  #qmenu h4{font-size:15px;font-weight:700;color:#fff;padding:0 22px 10px;letter-spacing:.02em;}
+  #qmenu button{display:flex;align-items:center;gap:12px;width:100%;background:none;border:0;color:#fff;
+        font-family:var(--ui);font-size:15px;padding:9px 22px;cursor:pointer;text-align:left;
+        border-left:3px solid transparent;}
+  #qmenu button:hover{background:rgba(255,255,255,.11);}
+  #qmenu button.sel{border-left-color:var(--red);font-weight:700;}
+  #qmenu .tag{margin-left:auto;font-size:11px;font-weight:700;letter-spacing:.06em;color:#000;
+        background:#fff;border-radius:2px;padding:1px 5px;}
+  #qmenu .note{font-size:12px;color:#9a9a9a;padding:10px 22px 0;line-height:1.35;}
+  #qbadge{position:absolute;top:-9px;right:-16px;font-size:10px;font-weight:800;letter-spacing:.04em;
+          background:#fff;color:#000;border-radius:2px;padding:0 3px;}
+
+  #toast{position:absolute;left:50%;bottom:clamp(120px,17vh,170px);transform:translateX(-50%);z-index:12;
+         background:rgba(0,0,0,.82);border-radius:3px;padding:9px 18px;font-size:14px;opacity:0;
+         transition:opacity .3s ease;pointer-events:none;}
+  #toast.on{opacity:1;}
+
+  #err{position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:2em;
+       text-align:center;z-index:40;background:#000;font-size:17px;}
+
+  @media (max-width:640px){
+    #preview{width:132px;} #preview canvas{width:132px;height:74px;}
+    .ttl{display:none;}
+    #remain{font-size:13px;min-width:44px;}
+    #controls{padding-top:52px;}
+  }
 </style>
 </head>
 <body>
-<div id="stage">
-  <canvas id="c"></canvas>
-  <div class="bar top"></div>
-  <div class="bar bottom"></div>
-  <div id="card"></div>
+<div id="player" class="paused">
+
+  <div id="video">
+    <div id="frame">
+      <canvas id="c"></canvas>
+      <div class="bar top"></div>
+      <div class="bar bottom"></div>
+      <div id="card"></div>
+    </div>
+  </div>
+
+  <div id="scrim"></div>
+
+  <div id="pausecard">
+    <div class="eyebrow">You're watching</div>
+    <h2>The Last Hallway</h2>
+    <p>Sublevel B, 3:47 AM. A maintenance light stutters, and the corridor is no longer empty.</p>
+  </div>
+
+  <div id="ripL"><svg viewBox="0 0 24 24"><path d="M11 6v12L2.5 12 11 6zm10 0v12l-8.5-6L21 6z"/></svg><span>10 seconds</span></div>
+  <div id="ripR"><svg viewBox="0 0 24 24"><path d="M13 6v12l8.5-6L13 6zM3 6v12l8.5-6L3 6z"/></svg><span>10 seconds</span></div>
+
+  <div id="spinner"><i></i></div>
+  <div id="toast"></div>
+
+  <div id="postplay">
+    <div class="ring" id="again"><svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7a5.6 5.6 0 1 1-5.6 5.6H4.4A7.6 7.6 0 1 0 12 5z"/></svg></div>
+    <span>Watch again</span>
+  </div>
+
+  <div id="poster">
+    <div class="mark">TLH</div>
+    <div class="name">THE LAST HALLWAY</div>
+    <div class="meta">SHORT FILM &nbsp;&bull;&nbsp; 1 min 30 sec &nbsp;&bull;&nbsp; HORROR</div>
+    <button class="big" id="bigplay"><svg viewBox="0 0 24 24"><path d="M5 3.5 20 12 5 20.5z"/></svg>Play</button>
+  </div>
+
+  <div id="topbar">
+    <div class="back" id="back">
+      <svg viewBox="0 0 24 24"><path d="M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20v-2z"/></svg>
+      <span>The Last Hallway</span>
+    </div>
+  </div>
+
+  <button id="skipintro">Skip Intro</button>
+
+  <div id="controls">
+    <div class="scrubrow">
+      <div id="track">
+        <div class="rail"></div><div class="buf"></div><div class="play"></div><div class="knob"></div>
+        <div id="preview"><canvas id="pvc" width="256" height="144"></canvas><span>0:00</span></div>
+      </div>
+      <div id="remain">1:30</div>
+    </div>
+
+    <div class="btnrow">
+      <div class="grp">
+        <button class="btn" id="pp" data-tip="Play (space)">
+          <svg id="ppIcon" viewBox="0 0 24 24"><path d="M5 3.5 20 12 5 20.5z"/></svg>
+        </button>
+        <button class="btn" id="b10" data-tip="Back 10 seconds">
+          <svg viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round">
+            <path d="M12 5.2A7.4 7.4 0 1 1 4.9 10.6"/><path d="M8.2 2.6 4.6 6.2l3.6 3.6"/></g>
+            <text x="12" y="16.6" font-size="8.4" font-family="Helvetica,Arial" font-weight="700" text-anchor="middle" fill="#fff">10</text>
+          </svg>
+        </button>
+        <button class="btn" id="f10" data-tip="Forward 10 seconds">
+          <svg viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round">
+            <path d="M12 5.2A7.4 7.4 0 1 0 19.1 10.6"/><path d="M15.8 2.6l3.6 3.6-3.6 3.6"/></g>
+            <text x="12" y="16.6" font-size="8.4" font-family="Helvetica,Arial" font-weight="700" text-anchor="middle" fill="#fff">10</text>
+          </svg>
+        </button>
+        <div id="vol">
+          <button class="btn" id="mute" data-tip="Mute (m)">
+            <svg id="volIcon" viewBox="0 0 24 24"><path d="M3 9v6h4l5 4.5v-15L7 9H3zm12.5 3a4 4 0 0 0-2.2-3.6v7.2A4 4 0 0 0 15.5 12zm-2.2-7.9v2.1a6.5 6.5 0 0 1 0 11.6v2.1a8.5 8.5 0 0 0 0-15.8z"/></svg>
+          </button>
+          <div id="volslide"><input id="volrange" type="range" min="0" max="100" value="85"></div>
+        </div>
+      </div>
+
+      <div class="ttl"><b>The Last Hallway</b><i>&bull;</i>Short Film</div>
+
+      <div class="grp">
+        <div id="qwrap">
+          <button class="btn" id="qbtn" data-tip="Video quality">
+            <svg viewBox="0 0 24 24"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1l-.4-2.6h-4l-.4 2.6a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.4L6.6 11a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6zM12 15.2A3.2 3.2 0 1 1 15.2 12 3.2 3.2 0 0 1 12 15.2z"/></svg>
+            <span id="qbadge">HD</span>
+          </button>
+          <div id="qmenu">
+            <h4>Video Quality</h4>
+            <div id="qlist"></div>
+            <div class="note">Higher quality renders more pixels per frame. 2K is the best available.</div>
+          </div>
+        </div>
+        <button class="btn" id="fs" data-tip="Full screen (f)">
+          <svg id="fsIcon" viewBox="0 0 24 24"><path d="M3 9V3h6v2H5v4H3zm12-6h6v6h-2V5h-4V3zM3 15h2v4h4v2H3v-6zm16 0h2v6h-6v-2h4v-4z"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="err">WebGL2 is required to play this film.</div>
 </div>
-
-<button id="replay">REPLAY</button>
-
-<div id="start">
-  <h1>THE LAST HALLWAY</h1>
-  <p>90 SECONDS &middot; HEADPHONES RECOMMENDED</p>
-  <div class="go">PRESS TO BEGIN</div>
-</div>
-
-<div id="err">WebGL2 is required to play this film.</div>
 
 <script type="x-shader/x-vertex" id="vs">#version 300 es
 in vec2 aPos;
@@ -385,15 +590,15 @@ void main(){
 (function(){
 'use strict';
 
-const canvas = document.getElementById('c');
+const $ = id => document.getElementById(id);
+const canvas = $('c');
 const gl = canvas.getContext('webgl2', { antialias:false, alpha:false, powerPreference:'high-performance' });
-if(!gl){ document.getElementById('err').style.display = 'flex'; return; }
+if(!gl){ $('err').style.display='flex'; $('poster').style.display='none'; return; }
 
-/* ---------------- GL plumbing ---------------- */
+/* ================= GL plumbing ================= */
 function compile(type, src){
   const s = gl.createShader(type);
-  gl.shaderSource(s, src.trim());
-  gl.compileShader(s);
+  gl.shaderSource(s, src.trim()); gl.compileShader(s);
   if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
   return s;
 }
@@ -401,57 +606,75 @@ function program(vsSrc, fsSrc){
   const p = gl.createProgram();
   gl.attachShader(p, compile(gl.VERTEX_SHADER, vsSrc));
   gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fsSrc));
-  gl.bindAttribLocation(p, 0, 'aPos');
-  gl.linkProgram(p);
+  gl.bindAttribLocation(p, 0, 'aPos'); gl.linkProgram(p);
   if(!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
-  const u = {};
-  const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
-  for(let i=0;i<n;i++){ const info = gl.getActiveUniform(p, i); u[info.name] = gl.getUniformLocation(p, info.name); }
+  const u = {}, n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for(let i=0;i<n;i++){ const info = gl.getActiveUniform(p,i); u[info.name] = gl.getUniformLocation(p, info.name); }
   return { p, u };
 }
+const vsSrc = $('vs').textContent;
+const scene = program(vsSrc, $('fsScene').textContent);
+const post  = program(vsSrc, $('fsPost').textContent);
 
-const vsSrc   = document.getElementById('vs').textContent;
-const scene   = program(vsSrc, document.getElementById('fsScene').textContent);
-const post    = program(vsSrc, document.getElementById('fsPost').textContent);
-
-const vao = gl.createVertexArray();
-gl.bindVertexArray(vao);
-const vbo = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+const vbo = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
-gl.enableVertexAttribArray(0);
-gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
-const tex = gl.createTexture();
-gl.bindTexture(gl.TEXTURE_2D, tex);
-gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-const fbo = gl.createFramebuffer();
-gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
-gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+function makeTarget(w,h){
+  const t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  const f = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return { tex:t, fbo:f, w, h };
+}
+let main = makeTarget(2,2);
+const PV = makeTarget(256,144);              // scrubber preview thumbnails
+const pvPixels = new Uint8Array(256*144*4);
+const pvCtx = $('pvc').getContext('2d');
+const pvImage = pvCtx.createImageData(256,144);
 
-let W = 1, H = 1, RW = 1, RH = 1;
-let renderScale = 0.68;
+/* ================= quality ladder ================= */
+const QUALITIES = [
+  { id:'480',  label:'480p',  lines:480,  tag:'SD' },
+  { id:'720',  label:'720p',  lines:720,  tag:'HD' },
+  { id:'1080', label:'1080p', lines:1080, tag:'HD' },
+  { id:'2k',   label:'2K',    lines:1440, tag:'2K' }
+];
+let qIndex = 2, qLocked = false;             // 1080p by default, like a good connection
+let W=1, H=1;
+
 function resize(){
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  W = Math.max(1, Math.floor(innerWidth  * dpr));
-  H = Math.max(1, Math.floor(innerHeight * dpr));
+  let bw = innerWidth, bh = Math.round(innerWidth*9/16);
+  if(bh > innerHeight){ bh = innerHeight; bw = Math.round(innerHeight*16/9); }
+  const frame = $('frame');
+  frame.style.width = bw + 'px'; frame.style.height = bh + 'px';
+  W = Math.max(2, Math.round(bw*dpr));
+  H = Math.max(2, Math.round(bh*dpr));
   canvas.width = W; canvas.height = H;
-  let sc = renderScale;
-  // never raymarch more than ~0.62 MP, whatever the display is
-  const budget = 620000;
-  if(W*H*sc*sc > budget) sc = Math.sqrt(budget/(W*H));
-  RW = Math.max(1, Math.floor(W * sc));
-  RH = Math.max(1, Math.floor(H * sc));
-  gl.bindTexture(gl.TEXTURE_2D, tex);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, RW, RH, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  applyQuality();
+}
+function applyQuality(){
+  const lines = QUALITIES[qIndex].lines;
+  const rh = lines, rw = Math.max(2, Math.round(lines*16/9));
+  if(main.w !== rw || main.h !== rh){
+    gl.deleteTexture(main.tex); gl.deleteFramebuffer(main.fbo);
+    main = makeTarget(rw, rh);
+  }
+  $('qbadge').textContent = QUALITIES[qIndex].tag;
+  dirty = true;
 }
 addEventListener('resize', resize);
-resize();
 
+/* ================= the film ================= */
 /* ---------------- small math helpers ---------------- */
 const clamp = (x,a,b) => x<a?a:(x>b?b:x);
 const lerp  = (a,b,t) => a + (b-a)*t;
@@ -606,179 +829,13 @@ function cards(t){
   cardEl.style.opacity = op.toFixed(3);
 }
 
-/* ---------------- sound, synthesized on the fly ---------------- */
-let ac = null;
-function buildAudio(){
-  const Ctx = window.AudioContext || window.webkitAudioContext;
-  if(!Ctx) return;
-  ac = new Ctx();
-  const t0 = ac.currentTime + 0.06;
-  const master = ac.createGain();
-  master.gain.value = 0.85;
-  master.connect(ac.destination);
 
-  function noiseBuf(sec){
-    const b = ac.createBuffer(1, Math.floor(ac.sampleRate*sec), ac.sampleRate);
-    const d = b.getChannelData(0);
-    for(let i=0;i<d.length;i++) d[i] = Math.random()*2-1;
-    return b;
-  }
-  const NB = noiseBuf(3);
-
-  // --- sub drone, present the whole film
-  const droneG = ac.createGain(); droneG.gain.value = 0.0; droneG.connect(master);
-  const lp = ac.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=260; lp.Q.value=3;
-  lp.connect(droneG);
-  [55, 55.7, 82.6].forEach((f,i) => {
-    const o = ac.createOscillator();
-    o.type = i===2 ? 'triangle' : 'sawtooth';
-    o.frequency.setValueAtTime(f, t0);
-    o.frequency.linearRampToValueAtTime(f*1.16, t0+74);
-    const g = ac.createGain(); g.gain.value = i===2 ? 0.16 : 0.34;
-    o.connect(g); g.connect(lp); o.start(t0); o.stop(t0+91);
-  });
-  const dg = droneG.gain;
-  dg.setValueAtTime(0.0, t0);
-  dg.linearRampToValueAtTime(0.10, t0+6);
-  dg.linearRampToValueAtTime(0.13, t0+40);
-  dg.linearRampToValueAtTime(0.26, t0+70);
-  dg.linearRampToValueAtTime(0.30, t0+71.5);
-  dg.linearRampToValueAtTime(0.02, t0+73.4);     // the drop-out before the scare
-  dg.setValueAtTime(0.02, t0+74.0);
-  dg.linearRampToValueAtTime(0.34, t0+74.1);
-  dg.linearRampToValueAtTime(0.05, t0+82);
-  dg.linearRampToValueAtTime(0.0, t0+89.5);
-
-  // --- room tone: filtered noise wind
-  const wind = ac.createBufferSource(); wind.buffer = NB; wind.loop = true;
-  const wf = ac.createBiquadFilter(); wf.type='bandpass'; wf.frequency.value=420; wf.Q.value=0.6;
-  const wg = ac.createGain(); wg.gain.value = 0.0;
-  wind.connect(wf); wf.connect(wg); wg.connect(master);
-  wind.start(t0); wind.stop(t0+91);
-  wg.gain.linearRampToValueAtTime(0.045, t0+5);
-  wg.gain.linearRampToValueAtTime(0.075, t0+62);
-  wg.gain.linearRampToValueAtTime(0.010, t0+83);
-  wg.gain.linearRampToValueAtTime(0.0,  t0+89.5);
-
-  // --- one-shot helpers -------------------------------------------------
-  function burst(at, dur, freq, q, vol, type){
-    const s = ac.createBufferSource(); s.buffer = NB;
-    const f = ac.createBiquadFilter(); f.type = type || 'bandpass';
-    f.frequency.setValueAtTime(freq, at); f.Q.value = q;
-    const g = ac.createGain();
-    g.gain.setValueAtTime(0.0001, at);
-    g.gain.exponentialRampToValueAtTime(vol, at+Math.min(0.02,dur*0.2));
-    g.gain.exponentialRampToValueAtTime(0.0001, at+dur);
-    s.connect(f); f.connect(g); g.connect(master);
-    s.start(at, Math.random()*2); s.stop(at+dur+0.05);
-  }
-  function thump(at, freq, vol){
-    const o = ac.createOscillator(); o.type='sine';
-    o.frequency.setValueAtTime(freq, at);
-    o.frequency.exponentialRampToValueAtTime(freq*0.55, at+0.22);
-    const g = ac.createGain();
-    g.gain.setValueAtTime(0.0001, at);
-    g.gain.exponentialRampToValueAtTime(vol, at+0.015);
-    g.gain.exponentialRampToValueAtTime(0.0001, at+0.30);
-    o.connect(g); g.connect(master); o.start(at); o.stop(at+0.35);
-  }
-  function stinger(at, f0, f1, dur, vol, type){
-    const o = ac.createOscillator(); o.type = type||'sawtooth';
-    o.frequency.setValueAtTime(f0, at);
-    o.frequency.exponentialRampToValueAtTime(f1, at+dur);
-    const f = ac.createBiquadFilter(); f.type='lowpass'; f.frequency.value=2400; f.Q.value=6;
-    const g = ac.createGain();
-    g.gain.setValueAtTime(0.0001, at);
-    g.gain.exponentialRampToValueAtTime(vol, at+0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, at+dur);
-    o.connect(f); f.connect(g); g.connect(master); o.start(at); o.stop(at+dur+0.05);
-  }
-
-  // --- footsteps of the person holding the light
-  for(let i=0; i<11; i++) burst(t0 + 9.0 + i*0.92, 0.16, 190 + Math.random()*90, 1.4, 0.10, 'bandpass');
-  // door handle rattling, 00:19 shot
-  for(let i=0; i<7; i++) burst(t0 + 21.5 + i*0.55 + Math.random()*0.2, 0.09, 2400+Math.random()*1400, 6, 0.075);
-  burst(t0+26.7, 0.45, 900, 1.2, 0.16);                      // something passes the door
-  stinger(t0+26.7, 1400, 220, 0.5, 0.10, 'sawtooth');
-
-  // the glimpse, 00:32
-  stinger(t0+32.3, 2600, 900, 1.1, 0.16, 'sawtooth');
-  burst(t0+32.3, 0.9, 3000, 1.0, 0.11);
-  stinger(t0+36.2, 1900, 700, 0.8, 0.12, 'sawtooth');
-
-  // heartbeat, from 00:38, accelerating
-  let ht = 38.0, bpm = 66;
-  while(ht < 73.4){
-    const vol = 0.16 + 0.30*clamp((ht-38)/34, 0, 1);
-    thump(t0+ht, 62, vol);
-    thump(t0+ht+0.22, 48, vol*0.62);
-    bpm = 66 + 92*clamp((ht-38)/34, 0, 1);
-    ht += 60/bpm;
-  }
-  // dragging steps closing in
-  for(let i=0;i<26;i++){
-    const at = 51 + i*0.44;
-    if(at > 73.2) break;
-    burst(t0+at, 0.22, 150 + i*14, 1.1, 0.06 + i*0.005, 'bandpass');
-  }
-  // breath
-  for(let i=0;i<16;i++) burst(t0 + 51 + i*1.35, 0.42, 700, 0.8, 0.05, 'bandpass');
-
-  // 01:13 everything stops
-  // 01:14 the hit
-  stinger(t0+74.0, 3400, 60, 1.5, 0.42, 'sawtooth');
-  stinger(t0+74.0, 900, 40, 2.4, 0.30, 'square');
-  burst(t0+74.0, 1.9, 1800, 0.5, 0.42, 'bandpass');
-  thump(t0+74.0, 44, 0.7);
-  for(let i=0;i<9;i++) burst(t0+74.15+i*0.28, 0.2, 500+Math.random()*3000, 3, 0.16);
-  stinger(t0+76.4, 320, 70, 3.2, 0.20, 'sawtooth');
-
-  // whispers over the end card
-  for(let i=0;i<10;i++){
-    const at = 83.4 + i*0.55 + Math.random()*0.25;
-    burst(t0+at, 0.35 + Math.random()*0.3, 1300 + Math.random()*1800, 8, 0.055);
-  }
-  return t0;
-}
-
-/* ---------------- run loop ---------------- */
-const params = new URLSearchParams(location.search);
-const seek = parseFloat(params.get('t') || '0') || 0;
-let startMs = 0, running = false, finished = false;
-const perf = { n:0, sum:0, last:0 };
-const replayBtn = document.getElementById('replay');
-
-function frame(now){
-  if(!running) return;
-  let t = (now - startMs)/1000 + seek;
-  if(t >= RUNTIME){
-    t = RUNTIME - 0.001;
-    if(!finished){ finished = true; replayBtn.classList.add('on'); }
-  } else {
-    requestAnimationFrame(frame);
-  }
-
-  // one-time quality check: drop resolution if the GPU is struggling
-  if(perf.n >= 0 && t > 1.0){
-    perf.n++; perf.sum += now - perf.last;
-    if(perf.n > 45){
-      const avg = perf.sum / perf.n;
-      if(avg > 30 && renderScale > 0.42){ renderScale = 0.42; resize(); }
-      else if(avg < 9 && renderScale < 0.9){ renderScale = 0.9; resize(); }
-      perf.n = -1;
-    }
-  }
-  perf.last = now;
-
-  direct(t);
-  cards(t);
-  const s = state;
-
-  // ---- pass 1: the scene
-  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-  gl.viewport(0, 0, RW, RH);
+function drawScene(t, target){
+  gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
+  gl.viewport(0, 0, target.w, target.h);
   gl.useProgram(scene.p);
-  gl.uniform2f(scene.u.uRes, RW, RH);
+  const s = state;
+  gl.uniform2f(scene.u.uRes, target.w, target.h);
   gl.uniform1f(scene.u.uTime, t);
   gl.uniform3f(scene.u.uCamPos, s.cam[0], s.cam[1], s.cam[2]);
   gl.uniform3f(scene.u.uCamTgt, s.tgt[0], s.tgt[1], s.tgt[2]);
@@ -791,47 +848,459 @@ function frame(now){
   gl.uniform1f(scene.u.uMode, s.mode);
   gl.uniform1f(scene.u.uMouth, s.mouth);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
 
-  // ---- pass 2: the print
+function render(t){
+  direct(t); cards(t);
+  drawScene(t, main);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, W, H);
   gl.useProgram(post.p);
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, main.tex);
   gl.uniform1i(post.u.uTex, 0);
   gl.uniform2f(post.u.uRes, W, H);
   gl.uniform1f(post.u.uTime, t);
-  gl.uniform1f(post.u.uGlitch, s.glitch);
-  gl.uniform1f(post.u.uFade, s.fade);
-  gl.uniform1f(post.u.uRed, s.red);
-  gl.uniform1f(post.u.uFlash, s.flash);
+  gl.uniform1f(post.u.uGlitch, state.glitch);
+  gl.uniform1f(post.u.uFade, state.fade);
+  gl.uniform1f(post.u.uRed, state.red);
+  gl.uniform1f(post.u.uFlash, state.flash);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 }
 
-function play(){
-  const overlay = document.getElementById('start');
-  overlay.style.transition = 'opacity .8s ease';
-  overlay.style.opacity = '0';
-  setTimeout(() => overlay.remove(), 850);
-  try { buildAudio(); } catch(e) { /* film plays silent */ }
-  startMs = performance.now();
-  running = true;
-  requestAnimationFrame(frame);
-  const el = document.documentElement;
-  if(el.requestFullscreen) el.requestFullscreen().catch(()=>{});
+// a real frame from the timeline, drawn into the scrubber's thumbnail
+function renderPreview(t){
+  direct(t);
+  drawScene(t, PV);
+  gl.readPixels(0, 0, PV.w, PV.h, gl.RGBA, gl.UNSIGNED_BYTE, pvPixels);
+  const d = pvImage.data, stride = PV.w*4;
+  for(let y=0;y<PV.h;y++){
+    const src = (PV.h-1-y)*stride, dst = y*stride;
+    for(let i=0;i<stride;i++) d[dst+i] = pvPixels[src+i];
+  }
+  pvCtx.putImageData(pvImage, 0, 0);
+  dirty = true;                               // the main frame needs redrawing after this
 }
 
-document.getElementById('start').addEventListener('click', play, { once:true });
-document.addEventListener('keydown', e => {
-  if(e.code === 'Space' || e.code === 'Enter'){
-    const o = document.getElementById('start');
-    if(o) { e.preventDefault(); o.click(); }
-  }
-});
-replayBtn.addEventListener('click', () => location.reload());
+/* ================= sound ================= */
+const AC = { ctx:null, nodes:[], master:null, baseFilm:0, baseCtx:0, vol:0.85, muted:false, stale:true };
 
-// render one dark frame behind the start screen so the canvas is never blank
-direct(0.6); running = true; requestAnimationFrame(function once(n){ startMs = n; frame(n); running = false; });
+function envelope(param, pts, fromT, now){
+  let v = pts[0][1];
+  for(let i=0;i<pts.length;i++){
+    if(pts[i][0] <= fromT){ v = pts[i][1]; continue; }
+    if(i > 0){
+      const [t0,v0] = pts[i-1], [t1,v1] = pts[i];
+      if(fromT > t0) v = v0 + (v1-v0)*(fromT-t0)/(t1-t0);
+    }
+    break;
+  }
+  param.setValueAtTime(Math.max(v, 1e-4), now);
+  for(const [pt, pv] of pts) if(pt > fromT) param.linearRampToValueAtTime(Math.max(pv, 1e-4), now + (pt-fromT));
+}
+
+const DRONE_ENV = [[0,0.0001],[6,0.10],[40,0.13],[70,0.26],[71.5,0.30],[73.4,0.02],
+                   [74,0.02],[74.1,0.34],[82,0.05],[89.5,0.0001]];
+const WIND_ENV  = [[0,0.0001],[5,0.045],[62,0.075],[83,0.010],[89.5,0.0001]];
+
+function stopAudio(){
+  if(!AC.ctx) return;
+  for(const n of AC.nodes){ try{ n.stop(); }catch(e){} }
+  AC.nodes = [];
+  const old = AC.ctx; AC.ctx = null;
+  setTimeout(() => { try{ old.close(); }catch(e){} }, 60);
+}
+
+function startAudio(fromT){
+  stopAudio();
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if(!Ctx) return false;
+  const ctx = new Ctx(); AC.ctx = ctx;
+  const now = ctx.currentTime + 0.06;
+  AC.baseFilm = fromT; AC.baseCtx = now;
+
+  const master = ctx.createGain();
+  master.gain.value = AC.muted ? 0 : AC.vol;
+  master.connect(ctx.destination);
+  AC.master = master;
+
+  const nb = ctx.createBuffer(1, Math.floor(ctx.sampleRate*3), ctx.sampleRate);
+  const nd = nb.getChannelData(0);
+  for(let i=0;i<nd.length;i++) nd[i] = Math.random()*2-1;
+
+  // sub drone
+  const droneG = ctx.createGain(); droneG.connect(master);
+  envelope(droneG.gain, DRONE_ENV, fromT, now);
+  const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=260; lp.Q.value=3;
+  lp.connect(droneG);
+  [55, 55.7, 82.6].forEach((f,i) => {
+    const o = ctx.createOscillator();
+    o.type = i===2 ? 'triangle' : 'sawtooth';
+    envelope(o.frequency, [[0,f],[74,f*1.16],[90,f*1.16]], fromT, now);
+    const g = ctx.createGain(); g.gain.value = i===2 ? 0.16 : 0.34;
+    o.connect(g); g.connect(lp);
+    o.start(now); o.stop(now + (RUNTIME-fromT) + 1); AC.nodes.push(o);
+  });
+
+  // room tone
+  const wind = ctx.createBufferSource(); wind.buffer = nb; wind.loop = true;
+  const wf = ctx.createBiquadFilter(); wf.type='bandpass'; wf.frequency.value=420; wf.Q.value=0.6;
+  const wg = ctx.createGain();
+  envelope(wg.gain, WIND_ENV, fromT, now);
+  wind.connect(wf); wf.connect(wg); wg.connect(master);
+  wind.start(now); wind.stop(now + (RUNTIME-fromT) + 1); AC.nodes.push(wind);
+
+  // --- one shots
+  const burst = (at,dur,freq,q,vol,type) => {
+    const s = ctx.createBufferSource(); s.buffer = nb;
+    const f = ctx.createBiquadFilter(); f.type = type||'bandpass';
+    f.frequency.setValueAtTime(freq, at); f.Q.value = q;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(vol, at+Math.min(0.02,dur*0.2));
+    g.gain.exponentialRampToValueAtTime(0.0001, at+dur);
+    s.connect(f); f.connect(g); g.connect(master);
+    s.start(at, Math.random()*2); s.stop(at+dur+0.05); AC.nodes.push(s);
+  };
+  const thump = (at,freq,vol) => {
+    const o = ctx.createOscillator(); o.type='sine';
+    o.frequency.setValueAtTime(freq, at);
+    o.frequency.exponentialRampToValueAtTime(freq*0.55, at+0.22);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(vol, at+0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, at+0.30);
+    o.connect(g); g.connect(master); o.start(at); o.stop(at+0.35); AC.nodes.push(o);
+  };
+  const stinger = (at,f0,f1,dur,vol,type) => {
+    const o = ctx.createOscillator(); o.type = type||'sawtooth';
+    o.frequency.setValueAtTime(f0, at);
+    o.frequency.exponentialRampToValueAtTime(f1, at+dur);
+    const f = ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=2400; f.Q.value=6;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(vol, at+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, at+dur);
+    o.connect(f); f.connect(g); g.connect(master); o.start(at); o.stop(at+dur+0.05); AC.nodes.push(o);
+  };
+
+  // cue sheet, in film time
+  const cues = [];
+  const cue = (at, fn) => { if(at >= fromT) cues.push([at, fn]); };
+  for(let i=0;i<11;i++) cue(9.0+i*0.92, at => burst(at,0.16,190+Math.random()*90,1.4,0.10));
+  for(let i=0;i<7;i++)  cue(21.5+i*0.55, at => burst(at,0.09,2400+Math.random()*1400,6,0.075));
+  cue(26.7, at => { burst(at,0.45,900,1.2,0.16); stinger(at,1400,220,0.5,0.10); });
+  cue(32.3, at => { stinger(at,2600,900,1.1,0.16); burst(at,0.9,3000,1.0,0.11); });
+  cue(36.2, at => stinger(at,1900,700,0.8,0.12));
+  let ht = 38.0;
+  while(ht < 73.4){
+    const k = clamp((ht-38)/34, 0, 1), vol = 0.16 + 0.30*k, when = ht;
+    cue(when, at => { thump(at,62,vol); thump(at+0.22,48,vol*0.62); });
+    ht += 60/(66 + 92*k);
+  }
+  for(let i=0;i<26;i++){
+    const at = 51+i*0.44; if(at > 73.2) break;
+    cue(at, a => burst(a,0.22,150+i*14,1.1,0.06+i*0.005));
+  }
+  for(let i=0;i<16;i++) cue(51+i*1.35, at => burst(at,0.42,700,0.8,0.05));
+  cue(74.0, at => {
+    stinger(at,3400,60,1.5,0.42); stinger(at,900,40,2.4,0.30,'square');
+    burst(at,1.9,1800,0.5,0.42); thump(at,44,0.7);
+  });
+  for(let i=0;i<9;i++) cue(74.15+i*0.28, at => burst(at,0.2,500+Math.random()*3000,3,0.16));
+  cue(76.4, at => stinger(at,320,70,3.2,0.20));
+  for(let i=0;i<10;i++) cue(83.4+i*0.55+Math.random()*0.25, at => burst(at,0.35+Math.random()*0.3,1300+Math.random()*1800,8,0.055));
+
+  for(const [at, fn] of cues) fn(now + (at - fromT));
+  AC.stale = false;
+  return true;
+}
+
+function setVolume(v){
+  AC.vol = clamp(v, 0, 1);
+  if(AC.vol > 0) AC.muted = false;
+  if(AC.master) AC.master.gain.setTargetAtTime(AC.muted ? 0 : AC.vol, AC.ctx.currentTime, 0.02);
+  $('volrange').value = Math.round((AC.muted ? 0 : AC.vol)*100);
+  $('volIcon').innerHTML = (AC.muted || AC.vol === 0)
+    ? '<path d="M3 9v6h4l5 4.5v-15L7 9H3zm18.5-1.1-1.4-1.4L17 9.6 13.9 6.5l-1.4 1.4 3.1 3.1-3.1 3.1 1.4 1.4 3.1-3.1 3.1 3.1 1.4-1.4-3.1-3.1z"/>'
+    : '<path d="M3 9v6h4l5 4.5v-15L7 9H3zm12.5 3a4 4 0 0 0-2.2-3.6v7.2A4 4 0 0 0 15.5 12zm-2.2-7.9v2.1a6.5 6.5 0 0 1 0 11.6v2.1a8.5 8.5 0 0 0 0-15.8z"/>';
+}
+
+/* ================= transport ================= */
+const player = $('player');
+let clock = 0, playing = false, dirty = true, ended = false, started = false;
+let lastNow = performance.now();
+
+const params = new URLSearchParams(location.search);
+clock = clamp(parseFloat(params.get('t')||'0')||0, 0, RUNTIME-0.01);
+
+function fmt(sec){
+  sec = Math.max(0, Math.round(sec));
+  return Math.floor(sec/60) + ':' + String(sec%60).padStart(2,'0');
+}
+function syncUI(){
+  const pct = (clock/RUNTIME)*100;
+  $('track').querySelector('.play').style.width = pct + '%';
+  $('track').querySelector('.buf').style.width = '100%';
+  $('track').querySelector('.knob').style.left = pct + '%';
+  $('remain').textContent = fmt(RUNTIME - clock);
+  $('ppIcon').innerHTML = playing
+    ? '<path d="M6 3.5h4.2v17H6zM13.8 3.5H18v17h-4.2z"/>'
+    : '<path d="M5 3.5 20 12 5 20.5z"/>';
+  $('pp').dataset.tip = (playing ? 'Pause' : 'Play') + ' (space)';
+  player.classList.toggle('paused', !playing);
+  $('skipintro').classList.toggle('on', started && !ended && clock > 1.2 && clock < 7.6);
+}
+
+function play(){
+  if(ended) return replay();
+  started = true;
+  $('poster').style.display = 'none';
+  playing = true;
+  if(!AC.ctx || AC.stale) startAudio(clock);
+  else AC.ctx.resume();
+  lastNow = performance.now();
+  syncUI(); wake();
+}
+function pause(){
+  if(!playing) return;
+  playing = false;
+  if(AC.ctx) AC.ctx.suspend();
+  syncUI(); wake();
+  clearTimeout(infoTimer);
+  infoTimer = setTimeout(() => player.classList.add('showinfo'), 420);
+}
+function toggle(){ playing ? pause() : play(); }
+function replay(){
+  ended = false; $('postplay').classList.remove('on');
+  clock = 0; AC.stale = true; play();
+}
+function seek(to, commit){
+  clock = clamp(to, 0, RUNTIME-0.01);
+  ended = false; $('postplay').classList.remove('on');
+  dirty = true; syncUI();
+  if(commit){
+    AC.stale = true;
+    if(playing) startAudio(clock);
+  }
+}
+function onEnd(){
+  playing = false; ended = true; AC.stale = true;
+  stopAudio();
+  $('postplay').classList.add('on');
+  player.classList.remove('idle');
+  syncUI();
+}
+
+let infoTimer = 0;
+function loop(now){
+  requestAnimationFrame(loop);
+  const dt = Math.min((now - lastNow)/1000, 0.25); lastNow = now;
+  if(playing){
+    if(AC.ctx && AC.ctx.state === 'running') clock = Math.max(clock, AC.baseFilm + (AC.ctx.currentTime - AC.baseCtx));
+    else clock += dt;
+    if(clock >= RUNTIME){ clock = RUNTIME - 0.001; render(clock); syncUI(); onEnd(); return; }
+    render(clock); syncUI();
+  } else if(dirty){
+    render(clock); dirty = false;
+  }
+  if(pv.pending !== null){ renderPreview(pv.pending); pv.pending = null; }
+}
+requestAnimationFrame(loop);
+
+/* ================= controls behaviour ================= */
+let idleTimer = 0, overUI = false;
+function wake(){
+  player.classList.remove('idle');
+  clearTimeout(idleTimer);
+  if(playing) idleTimer = setTimeout(() => {
+    if(playing && !qOpen && !overUI && !dragging) player.classList.add('idle');
+  }, 3000);
+  if(playing){ player.classList.remove('showinfo'); clearTimeout(infoTimer); }
+}
+['pointermove','pointerdown','keydown','wheel'].forEach(e => addEventListener(e, wake, {passive:true}));
+['controls','topbar'].forEach(id => {
+  $(id).addEventListener('pointerenter', () => { overUI = true; wake(); });
+  $(id).addEventListener('pointerleave', () => { overUI = false; wake(); });
+});
+
+$('bigplay').addEventListener('click', e => { e.stopPropagation(); play(); });
+$('poster').addEventListener('click', play);
+$('pp').addEventListener('click', e => { e.stopPropagation(); toggle(); });
+$('again').addEventListener('click', e => { e.stopPropagation(); replay(); });
+$('back').addEventListener('click', () => { pause(); $('poster').style.display='flex'; started=false; syncUI(); });
+$('skipintro').addEventListener('click', e => { e.stopPropagation(); seek(7.9, true); });
+
+function bump(side){
+  const el = side < 0 ? $('ripL') : $('ripR');
+  el.classList.remove('go'); void el.offsetWidth; el.classList.add('go');
+  seek(clock + side*10, true);
+}
+$('b10').addEventListener('click', e => { e.stopPropagation(); bump(-1); });
+$('f10').addEventListener('click', e => { e.stopPropagation(); bump(1); });
+
+/* tap the picture: play / pause. double tap the sides: 10 seconds. */
+const DOUBLE = 400;
+let lastTap = 0, lastSide = 0, tapTimer = 0;
+$('video').addEventListener('pointerup', ev => {
+  if(!started || ended) return;
+  if(ev.pointerType === 'mouse'){ toggle(); return; }          // a click pauses at once
+  const now = performance.now(), x = ev.clientX / innerWidth;
+  const side = x < 0.34 ? -1 : (x > 0.66 ? 1 : 0);
+  if(side === 0){ clearTimeout(tapTimer); lastTap = 0; toggle(); return; }
+  if(now - lastTap < DOUBLE && side === lastSide){             // double tap a side: 10 seconds
+    clearTimeout(tapTimer); lastTap = 0; bump(side); return;
+  }
+  lastTap = now; lastSide = side;
+  tapTimer = setTimeout(() => { toggle(); lastTap = 0; }, DOUBLE + 30);
+});
+$('video').addEventListener('dblclick', () => { if(started && !ended) toggleFs(); });
+$('scrim').addEventListener('pointerup', () => { if(started && !ended) toggle(); });
+
+/* scrubbing, with live thumbnails */
+const track = $('track'), preview = $('preview');
+const pv = { pending:null, last:0 };
+function ratioAt(clientX){
+  const r = track.getBoundingClientRect();
+  return clamp((clientX - r.left)/r.width, 0, 1);
+}
+function showPreview(clientX){
+  const r = track.getBoundingClientRect();
+  const ratio = ratioAt(clientX), t = ratio*RUNTIME;
+  preview.classList.add('on');
+  const half = preview.offsetWidth/2 || 86;
+  preview.style.left = clamp(ratio*r.width, half+2, r.width-half-2) + 'px';
+  preview.querySelector('span').textContent = fmt(t);
+  const now = performance.now();
+  if(now - pv.last > 90){ pv.last = now; pv.pending = t; }
+}
+track.addEventListener('pointermove', ev => { if(!dragging) showPreview(ev.clientX); });
+track.addEventListener('pointerleave', () => { if(!dragging) preview.classList.remove('on'); });
+
+let dragging = false, wasPlaying = false;
+track.addEventListener('pointerdown', ev => {
+  ev.preventDefault(); ev.stopPropagation();
+  if(!started) return;
+  dragging = true; wasPlaying = playing;
+  player.classList.remove('showinfo'); clearTimeout(infoTimer);
+  track.classList.add('drag');
+  track.setPointerCapture(ev.pointerId);
+  if(playing && AC.ctx) AC.ctx.suspend();
+  seek(ratioAt(ev.clientX)*RUNTIME, false);
+  showPreview(ev.clientX);
+});
+track.addEventListener('pointermove', ev => {
+  if(!dragging) return;
+  seek(ratioAt(ev.clientX)*RUNTIME, false);
+  showPreview(ev.clientX);
+});
+function endDrag(ev){
+  if(!dragging) return;
+  dragging = false;
+  track.classList.remove('drag');
+  preview.classList.remove('on');
+  seek(ratioAt(ev.clientX)*RUNTIME, false);
+  AC.stale = true;
+  if(wasPlaying){ playing = true; startAudio(clock); lastNow = performance.now(); }
+  syncUI();
+}
+track.addEventListener('pointerup', endDrag);
+track.addEventListener('pointercancel', endDrag);
+
+/* volume */
+$('volrange').addEventListener('input', e => { AC.muted = false; setVolume(e.target.value/100); });
+$('mute').addEventListener('click', e => {
+  e.stopPropagation();
+  AC.muted = !AC.muted;
+  if(!AC.muted && AC.vol === 0) AC.vol = 0.6;
+  setVolume(AC.vol);
+});
+
+/* quality */
+let qOpen = false;
+const qlist = $('qlist');
+QUALITIES.forEach((q,i) => {
+  const b = document.createElement('button');
+  b.innerHTML = q.label + '<span class="tag">' + q.tag + '</span>';
+  b.addEventListener('click', ev => { ev.stopPropagation(); pickQuality(i); });
+  qlist.appendChild(b);
+});
+function markQuality(){
+  [...qlist.children].forEach((b,i) => b.classList.toggle('sel', i === qIndex));
+}
+function pickQuality(i, auto){
+  qIndex = i;
+  if(!auto) qLocked = true;
+  markQuality(); closeQ();
+  $('spinner').classList.add('on');          // a beat of buffering, like the real thing
+  applyQuality();
+  setTimeout(() => { $('spinner').classList.remove('on'); dirty = true; }, 520);
+  if(auto) toast('Quality lowered to ' + QUALITIES[i].label);
+}
+function closeQ(){ qOpen = false; $('qmenu').classList.remove('on'); }
+$('qbtn').addEventListener('click', ev => {
+  ev.stopPropagation();
+  qOpen = !qOpen; $('qmenu').classList.toggle('on', qOpen);
+});
+addEventListener('pointerdown', ev => { if(qOpen && !$('qwrap').contains(ev.target)) closeQ(); });
+markQuality();
+
+let toastTimer = 0;
+function toast(msg){
+  const el = $('toast'); el.textContent = msg; el.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('on'), 2600);
+}
+
+/* full screen */
+function toggleFs(){
+  if(document.fullscreenElement) document.exitFullscreen();
+  else if(player.requestFullscreen) player.requestFullscreen().catch(()=>{});
+}
+$('fs').addEventListener('click', e => { e.stopPropagation(); toggleFs(); });
+document.addEventListener('fullscreenchange', () => {
+  $('fsIcon').innerHTML = document.fullscreenElement
+    ? '<path d="M9 3v4a2 2 0 0 1-2 2H3V7h4V3h2zm6 0h2v4h4v2h-4a2 2 0 0 1-2-2V3zM3 15h4a2 2 0 0 1 2 2v4H7v-4H3v-2zm14 0h4v2h-4v4h-2v-4a2 2 0 0 1 2-2z"/>'
+    : '<path d="M3 9V3h6v2H5v4H3zm12-6h6v6h-2V5h-4V3zM3 15h2v4h4v2H3v-6zm16 0h2v6h-6v-2h4v-4z"/>';
+});
+
+/* keyboard, the same keys Netflix uses */
+addEventListener('keydown', ev => {
+  const k = ev.key.toLowerCase();
+  if(k === ' ' || k === 'k'){ ev.preventDefault(); started ? toggle() : play(); }
+  else if(ev.key === 'ArrowLeft'){ ev.preventDefault(); bump(-1); }
+  else if(ev.key === 'ArrowRight'){ ev.preventDefault(); bump(1); }
+  else if(ev.key === 'ArrowUp'){ ev.preventDefault(); setVolume(AC.vol + 0.1); }
+  else if(ev.key === 'ArrowDown'){ ev.preventDefault(); setVolume(AC.vol - 0.1); }
+  else if(k === 'f'){ toggleFs(); }
+  else if(k === 'm'){ $('mute').click(); }
+});
+
+/* if the GPU can't keep up, step down once, and say so */
+const perf = { done:false };
+let frames = 0, fsum = 0, fprev = 0;
+(function fpsProbe(){
+  function step(now){
+    if(playing && !perf.done && !qLocked){
+      if(fprev){ fsum += now - fprev; frames++; }
+      fprev = now;
+      if(frames > 60){
+        const avg = fsum/frames;
+        if(avg > 42 && qIndex > 0) pickQuality(qIndex-1, true);
+        else perf.done = true;
+        frames = 0; fsum = 0;
+      }
+    } else { fprev = 0; }
+    requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+})();
+
+/* boot */
+resize();
+setVolume(AC.vol);
+syncUI();
+render(clock);
+if(params.has('autoplay')) play();
 })();
 </script>
 </body>
