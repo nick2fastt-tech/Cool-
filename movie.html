@@ -29,6 +29,18 @@
   #card .sub{margin-top:1.6em;font-size:clamp(10px,1.6vw,15px);letter-spacing:.55em;text-indent:.55em;color:#7d7770;}
   #card .slug{font-family:ui-monospace,"Courier New",monospace;font-size:clamp(10px,1.5vw,14px);
               letter-spacing:.28em;color:#8e8880;}
+  #card .getout{color:#e8e2d6;font-size:clamp(34px,9vw,120px);letter-spacing:.30em;text-indent:.30em;}
+  #card .small{font-size:clamp(18px,3.4vw,44px);letter-spacing:.34em;text-indent:.34em;}
+
+  #caption{position:absolute;left:50%;bottom:12%;transform:translateX(-50%);z-index:4;
+    width:84%;text-align:center;font-family:var(--ui);font-weight:500;pointer-events:none;
+    font-size:clamp(14px,2.5vw,29px);line-height:1.28;color:#fff;opacity:0;
+    transition:opacity .12s linear;
+    text-shadow:0 0 5px #000,0 0 12px rgba(0,0,0,.85),0 2px 4px rgba(0,0,0,.95);}
+  #caption.vo{font-style:italic;}
+  #player.nocc #caption{display:none;}
+  #player:not(.idle) #caption{bottom:26%;}
+  #player.paused #caption{opacity:0;}
 
   /* ---------- overlays ---------- */
   #scrim{position:absolute;inset:0;z-index:4;background:rgba(0,0,0,.45);opacity:0;
@@ -188,6 +200,7 @@
       <div class="bar top"></div>
       <div class="bar bottom"></div>
       <div id="card"></div>
+      <div id="caption"></div>
     </div>
   </div>
 
@@ -196,7 +209,7 @@
   <div id="pausecard">
     <div class="eyebrow">You're watching</div>
     <h2>The Last Hallway</h2>
-    <p>Sublevel B, 3:47 AM. A maintenance light stutters, and the corridor is no longer empty.</p>
+    <p>A boy keeps dreaming about a corridor. This morning his father is taking him to work.</p>
   </div>
 
   <div id="ripL"><svg viewBox="0 0 24 24"><path d="M11 6v12L2.5 12 11 6zm10 0v12l-8.5-6L21 6z"/></svg><span>10 seconds</span></div>
@@ -213,7 +226,7 @@
   <div id="poster">
     <div class="mark">TLH</div>
     <div class="name">THE LAST HALLWAY</div>
-    <div class="meta">SHORT FILM &nbsp;&bull;&nbsp; 1 min 30 sec &nbsp;&bull;&nbsp; HORROR</div>
+    <div class="meta">SHORT FILM &nbsp;&bull;&nbsp; 5 min 3 sec &nbsp;&bull;&nbsp; HORROR</div>
     <button class="big" id="bigplay"><svg viewBox="0 0 24 24"><path d="M5 3.5 20 12 5 20.5z"/></svg>Play</button>
   </div>
 
@@ -263,6 +276,9 @@
       <div class="ttl"><b>The Last Hallway</b><i>&bull;</i>Short Film</div>
 
       <div class="grp">
+        <button class="btn" id="cc" data-tip="Subtitles">
+          <svg viewBox="0 0 24 24"><path d="M3 4h18a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H8.6L4 20.6V17H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm3.6 6.3c0-1 .7-1.6 1.7-1.6.7 0 1.2.3 1.5.9l1.3-.7c-.5-1-1.5-1.6-2.8-1.6-2 0-3.4 1.3-3.4 3s1.4 3 3.4 3c1.3 0 2.3-.6 2.8-1.6l-1.3-.7c-.3.6-.8.9-1.5.9-1 0-1.7-.6-1.7-1.6zm7.5 0c0-1 .7-1.6 1.7-1.6.7 0 1.2.3 1.5.9l1.3-.7c-.5-1-1.5-1.6-2.8-1.6-2 0-3.4 1.3-3.4 3s1.4 3 3.4 3c1.3 0 2.3-.6 2.8-1.6l-1.3-.7c-.3.6-.8.9-1.5.9-1 0-1.7-.6-1.7-1.6z"/></svg>
+        </button>
         <div id="qwrap">
           <button class="btn" id="qbtn" data-tip="Video quality">
             <svg viewBox="0 0 24 24"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1l-.4-2.6h-4l-.4 2.6a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.4L6.6 11a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6zM12 15.2A3.2 3.2 0 1 1 15.2 12 3.2 3.2 0 0 1 12 15.2z"/></svg>
@@ -306,6 +322,13 @@ uniform float uFigZ;      // world z of the figure
 uniform float uFigVis;    // 0/1 figure in scene
 uniform float uMode;      // 0 = hallway, 1 = face
 uniform float uMouth;     // face mouth open 0..1
+
+uniform int   uSet;
+uniform vec3  uKeyDir, uKeyCol, uAmbSky, uAmbGnd, uSky1, uSky2;
+uniform float uFogK, uExpo, uGlow, uAlarm, uDoor;
+uniform vec4  uProp;
+uniform vec4  uChA[3], uChB[3], uChC[3], uChD[3], uChE[3], uChF[3], uChG[3];
+
 
 const float FAR = 70.0;
 
@@ -403,19 +426,394 @@ float map(vec3 p){
   return d;
 }
 
+/* ================= people =================
+   Every figure is built from capsules in a unit space with the feet at y=0,
+   facing +z, then scaled and placed. Poses are lerps, so a character can sit
+   up in bed or walk without any skinning.
+   A = pos.xyz, yaw     B = mouth, blink, walkPhase, pitch
+   C = skin.rgb, vis    D = shirt.rgb, sit
+   E = hair.rgb, kind   F = pants.rgb, scale
+   G = gesture, headYaw, headNod, armCarry                                   */
+
+const float M_SKIN=30.0, M_SHIRT=31.0, M_PANTS=32.0, M_HAIR=33.0,
+            M_EYE=34.0, M_MOUTH=35.0, M_SHOE=36.0;
+
+vec2 opU(vec2 a, vec2 b){ return a.x < b.x ? a : b; }
+
+float sdEllip(vec3 p, vec3 r){
+  float k0 = length(p/r), k1 = length(p/(r*r));
+  return k0*(k0-1.0)/max(k1, 1e-5);
+}
+float sdRound(vec3 p, vec3 b, float r){ return sdBox(p,b) - r; }
+
+vec2 person(vec3 wp, int i){
+  vec4 A = uChA[i], B = uChB[i], C = uChC[i], D = uChD[i], E = uChE[i], F = uChF[i], G = uChG[i];
+  if(C.w < 0.5) return vec2(1e9, 0.0);
+
+  vec3 p = wp - A.xyz;
+  float ca = cos(A.w), sa = sin(A.w);
+  p.xz = mat2(ca, -sa, sa, ca) * p.xz;
+  float sc = max(F.w, 0.2);
+  p /= sc;
+
+  // cheap bail-out: everything lives inside this sphere
+  float bound = length(p - vec3(0.0, 0.80, 0.0)) - 1.35;
+  if(bound > 0.30) return vec2(bound*sc, 0.0);
+
+  float sit   = D.w;
+  float mouth = B.x, blink = B.y, ph = B.z;
+
+  // lying down pitches the whole body about the hips
+  vec3 hipC = vec3(0.0, 0.92, 0.0);
+  if(abs(B.w) > 0.001){
+    vec3 q = p - hipC; float cp = cos(B.w), sp = sin(B.w);
+    q.yz = mat2(cp, -sp, sp, cp) * q.yz; p = q + hipC;
+  }
+
+  float drop = 0.37*sit;
+  float hipY = 0.92 - drop;
+  float shY  = hipY + 0.55;
+  float sw = sin(ph), sw2 = sin(ph + 3.14159);
+
+  vec2 res = vec2(1e9, 0.0);
+
+  // ---- legs
+  for(int L=0; L<2; L++){
+    float s = L==0 ? -1.0 : 1.0;
+    float sg = L==0 ? sw : sw2;
+    vec3 hip  = vec3(0.115*s, hipY, 0.0);
+    vec3 knee = mix(vec3(0.125*s, 0.47, 0.10*sg),  vec3(0.135*s, hipY-0.02, 0.40), sit);
+    vec3 ank  = mix(vec3(0.125*s, 0.075, 0.13*sg - 0.03*min(sg,0.0)), vec3(0.135*s, 0.075, 0.44), sit);
+    float leg = sdCap(p, hip, knee, 0.078);
+    leg = smin(leg, sdCap(p, knee, ank, 0.062), 0.05);
+    res = opU(res, vec2(leg, M_PANTS));
+    vec3 foot = ank + vec3(0.0, -0.035, 0.05);
+    res = opU(res, vec2(sdRound(p - foot, vec3(0.055, 0.018, 0.095), 0.028), M_SHOE));
+  }
+
+  // ---- torso
+  float torso = sdCap(p, vec3(0.0, hipY, 0.0), vec3(0.0, hipY+0.26, 0.005), 0.132);
+  torso = smin(torso, sdCap(p, vec3(0.0, hipY+0.26, 0.005), vec3(0.0, shY, 0.0), 0.155), 0.10);
+  torso = smin(torso, sdCap(p, vec3(-0.15, shY, 0.0), vec3(0.15, shY, 0.0), 0.10), 0.09);
+  res = opU(res, vec2(torso, M_SHIRT));
+
+  // ---- arms
+  for(int L=0; L<2; L++){
+    float s = L==0 ? -1.0 : 1.0;
+    float sg = L==0 ? sw2 : sw;
+    vec3 sh = vec3(0.185*s, shY-0.02, 0.0);
+    vec3 elb = vec3(0.215*s, shY-0.28, 0.05*sg);
+    vec3 hnd = vec3(0.225*s, shY-0.54, 0.09*sg);
+    // sitting: hands rest on the thighs
+    elb = mix(elb, vec3(0.20*s, hipY-0.04, 0.14), sit);
+    hnd = mix(hnd, vec3(0.185*s, hipY-0.10, 0.34), sit);
+    // gesture: the right hand comes up while talking
+    if(L == 1){
+      float g = G.x;
+      elb = mix(elb, vec3(0.26*s, shY-0.22, 0.16), g);
+      hnd = mix(hnd, vec3(0.20*s, shY-0.02, 0.30), g);
+    }
+    res = opU(res, vec2(sdCap(p, sh, elb, 0.058), M_SHIRT));
+    res = opU(res, vec2(smin(sdCap(p, elb, hnd, 0.048),
+                             length(p-hnd)-0.056, 0.03), M_SKIN));
+  }
+
+  // ---- head
+  vec3 hc = vec3(0.0, shY + 0.245, 0.01);
+  res = opU(res, vec2(sdCap(p, vec3(0.0, shY-0.02, 0.0), hc, 0.052), M_SKIN));
+  vec3 h = p - hc;
+  { float cy = cos(G.y), sy = sin(G.y); h.xz = mat2(cy,-sy,sy,cy)*h.xz;
+    float cn = cos(G.z), sn = sin(G.z); h.yz = mat2(cn,-sn,sn,cn)*h.yz; }
+
+  float head = sdEllip(h, vec3(0.125, 0.152, 0.132));
+  float jaw  = sdEllip(h - vec3(0.0,-0.055, 0.020), vec3(0.108, 0.105, 0.125));
+  head = smin(head, jaw, 0.05);
+  // mouth cavity, the whole point of the exercise
+  float mo = 0.005 + 0.052*mouth;
+  vec3 mp = h - vec3(0.0, -0.088, 0.098);
+  float cav = sdEllip(mp, vec3(0.044, mo, 0.055));
+  head = max(head, -cav);
+  head = smin(head, length(h - vec3(0.0,-0.020,0.128)) - 0.030, 0.035);   // nose
+  res = opU(res, vec2(head, M_SKIN));
+  res = opU(res, vec2(sdEllip(h - vec3(0.0,-0.088, 0.045), vec3(0.050, 0.048, 0.055)), M_MOUTH));
+
+  vec3 e = h; e.x = abs(e.x);
+  res = opU(res, vec2(length(e - vec3(0.13, 0.005,-0.005)) - 0.035, M_SKIN));   // ears
+  float eyeH = 0.0295 * max(1.0 - blink, 0.12);
+  res = opU(res, vec2(sdEllip(e - vec3(0.050, 0.028, 0.090), vec3(0.028, eyeH, 0.030)), M_EYE));
+
+  // ---- hair
+  int kind = int(E.w + 0.5);
+  float hair = 1e9;
+  if(kind == 0){                                   // boy: short mop
+    hair = sdEllip(h - vec3(0.0, 0.028,-0.012), vec3(0.140, 0.160, 0.146));
+    hair = max(hair, -(h.y + 0.02 - 0.34*max(h.z,0.0)));
+    hair = max(hair, -(sdEllip(h - vec3(0.0,0.02,0.0), vec3(0.122,0.150,0.129))));
+  } else if(kind == 1){                            // father: cropped, receding, stubble
+    hair = sdEllip(h - vec3(0.0, 0.045,-0.022), vec3(0.132, 0.150, 0.140));
+    hair = max(hair, -(h.y + 0.01 - 0.55*max(h.z,0.0)));
+    hair = max(hair, -(sdEllip(h - vec3(0.0,0.03,0.0), vec3(0.122,0.150,0.130))));
+    float beard = sdEllip(h - vec3(0.0,-0.070, 0.028), vec3(0.116, 0.108, 0.126));
+    beard = max(beard, -(sdEllip(h - vec3(0.0,-0.062, 0.020), vec3(0.104, 0.096, 0.116))));
+    beard = max(beard, -(h.y*0.4 + h.z - 0.02));
+    beard = max(beard, -cav - 0.012);
+    hair = min(hair, beard);
+  } else {                                         // girl: long hair
+    hair = sdEllip(h - vec3(0.0, 0.030,-0.020), vec3(0.142, 0.162, 0.152));
+    hair = max(hair, -(sdEllip(h - vec3(0.0,0.02,0.012), vec3(0.124,0.152,0.132))));
+    float back = sdRound(h - vec3(0.0,-0.16,-0.085), vec3(0.105, 0.175, 0.045), 0.045);
+    hair = min(hair, back);
+    vec3 sidep = h; sidep.x = abs(sidep.x);
+    hair = min(hair, sdCap(sidep, vec3(0.115, 0.02,-0.03), vec3(0.10,-0.30,-0.05), 0.055));
+    hair = max(hair, -(sdEllip(h - vec3(0.0,-0.01, 0.10), vec3(0.098,0.115,0.10))));
+  }
+  res = opU(res, vec2(hair, M_HAIR));
+
+  return vec2(res.x*sc*0.92, res.y + float(i)*10.0);
+}
+
+vec2 people(vec3 p){
+  vec2 r = vec2(1e9, 0.0);
+  for(int i=0;i<3;i++) r = opU(r, person(p, i));
+  return r;
+}
+
+/* ================= sets =================
+   2 bedroom  3 landing  4 bus stop  5 tower  6 lobby  7 elevator  8 void      */
+
+const float M_FLOOR=10.0, M_WALL=11.0, M_CEIL=12.0, M_WOOD=13.0, M_CLOTH=14.0,
+            M_METAL=15.0, M_GLASS=16.0, M_GLOW=17.0, M_ROAD=18.0, M_GRASS=19.0,
+            M_SIGN=20.0, M_DARK=21.0, M_RED=22.0, M_TILE=23.0;
+
+/* a 5x7 bitmap font, just enough for the sign over the door */
+const uint FONT[13] = uint[13](
+  0x1F8FA1Fu, 0x118A22A3u, 0x1E8FA108u, 0x1E8FA5A3u, 0x1F210843u,
+  0x11DAD631u, 0x11D6B631u, 0x1F210842u, 0x0E8FE31u,  0x108421F0u,
+  0x0E8C210Eu, 0x0E8C631Cu, 0x0000018u
+);
+const int SIGN[15] = int[15](0,1,2,0,3,4,5,0,6,7,8,9,12,10,11);
+
+float signMask(vec2 uv){                       // uv in 0..1 across the sign face
+  if(uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return 0.0;
+  float gx = uv.x*90.0, gy = uv.y*5.0;
+  int gi = int(gx/6.0); float lx = gx - float(gi)*6.0;
+  if(gi < 0 || gi > 14 || lx > 5.0) return 0.0;
+  int col = int(lx), row = int(gy);
+  if(row < 0 || row > 4) return 0.0;
+  uint bits = FONT[SIGN[gi]];
+  return float((bits >> uint(row*5 + (4-col))) & 1u);
+}
+
+/* ---------------- 2 : the bedroom ---------------- */
+vec2 setBedroom(vec3 p){
+  vec2 r = vec2(-sdBox(p - vec3(0.0,1.30,0.0), vec3(2.10,1.30,2.30)), M_WALL);
+  if(p.y < 0.04) r.y = M_FLOOR;
+  if(p.y > 2.54) r.y = M_CEIL;
+
+  // window in the far wall, and the pale square of dawn behind it
+  vec3 wp = p - vec3(0.55, 1.55, -2.30);
+  float win = sdBox(wp, vec3(0.62, 0.48, 0.10));
+  r = opU(r, vec2(max(-win, r.x*0.0 + sdBox(p - vec3(0.55,1.55,-2.36), vec3(0.60,0.46,0.02))), M_GLOW));
+  r = opU(r, vec2(max(sdBox(wp, vec3(0.68,0.54,0.06)), -sdBox(wp, vec3(0.60,0.46,0.20))), M_WOOD));
+
+  // bed
+  vec3 b = p - vec3(-1.05, 0.0, 0.10);
+  r = opU(r, vec2(sdRound(b - vec3(0.0,0.20,0.0), vec3(0.90,0.18,1.06), 0.03), M_WOOD));
+  r = opU(r, vec2(sdRound(b - vec3(0.0,0.47,0.0), vec3(0.88,0.10,1.04), 0.04), M_CLOTH));
+  r = opU(r, vec2(sdRound(b - vec3(0.0,0.50,0.72), vec3(0.90,0.07,0.36), 0.05), M_CLOTH));  // duvet
+  r = opU(r, vec2(sdRound(b - vec3(0.0,0.55,-0.78), vec3(0.42,0.07,0.22), 0.05), M_CLOTH)); // pillow
+  r = opU(r, vec2(sdRound(b - vec3(0.0,0.55,-1.10), vec3(0.92,0.35,0.05), 0.03), M_WOOD));  // headboard
+
+  // nightstand and the alarm clock
+  vec3 n = p - vec3(0.30, 0.0,-1.62);
+  r = opU(r, vec2(sdRound(n - vec3(0.0,0.26,0.0), vec3(0.26,0.26,0.24), 0.02), M_WOOD));
+  vec3 al = n - vec3(0.0, 0.60, 0.0);
+  al.xy += vec2(sin(uTime*61.0), cos(uTime*57.0))*0.012*uAlarm;
+  r = opU(r, vec2(sdRound(al, vec3(0.115,0.070,0.075), 0.02), M_DARK));
+  r = opU(r, vec2(sdBox(al - vec3(0.0,0.005,0.082), vec3(0.075,0.035,0.004)), M_RED));
+  vec3 bell = al; bell.x = abs(bell.x);
+  r = opU(r, vec2(length(bell - vec3(0.085,0.088,0.0)) - 0.042, M_METAL));
+
+  // desk, chair, clothes on the floor
+  r = opU(r, vec2(sdRound(p - vec3(1.55,0.72,0.90), vec3(0.50,0.03,0.62), 0.02), M_WOOD));
+  vec3 lg = p - vec3(1.55,0.36,0.90); lg.xz = abs(lg.xz);
+  r = opU(r, vec2(sdBox(lg - vec3(0.44,0.0,0.55), vec3(0.03,0.36,0.03)), M_WOOD));
+  r = opU(r, vec2(sdRound(p - vec3(0.10,0.05,1.30), vec3(0.30,0.03,0.22), 0.06), M_CLOTH));
+  return r;
+}
+
+/* ---------------- 3 : the upstairs landing ---------------- */
+vec2 setLanding(vec3 p){
+  vec2 r = vec2(-sdBox(p - vec3(0.0,1.30,0.0), vec3(2.60,1.30,3.20)), M_WALL);
+  if(p.y > 2.54) r.y = M_CEIL;
+  // the floor is a slab with the stairwell cut out of it
+  float slab = sdBox(p - vec3(0.0,-0.30,0.0), vec3(2.60,0.30,3.20));
+  float well = sdBox(p - vec3(1.55,-0.30,1.30), vec3(0.95,0.40,1.35));
+  float flr  = max(slab, -well);
+  r = opU(r, vec2(flr, M_FLOOR));
+  // stair treads dropping into the well
+  for(int i=0;i<6;i++){
+    float f = float(i);
+    r = opU(r, vec2(sdBox(p - vec3(1.55, -0.10-0.17*f, 0.10+0.22*f), vec3(0.92,0.03,0.11)), M_WOOD));
+  }
+  // banister along the well
+  r = opU(r, vec2(sdCap(p, vec3(0.58,0.90,-0.10), vec3(0.58,0.90,2.60), 0.035), M_WOOD));
+  vec3 post = p; post.z = mod(post.z + 0.4, 0.85) - 0.425;
+  r = opU(r, vec2(max(sdCap(post, vec3(0.58,0.0,0.0), vec3(0.58,0.88,0.0), 0.022),
+                      sdBox(p - vec3(0.58,0.45,1.25), vec3(0.2,0.5,1.45))), M_WOOD));
+  // doors along the back wall
+  vec3 d = p; d.z = mod(d.z + 1.6, 2.4) - 1.2;
+  r = opU(r, vec2(max(sdBox(d - vec3(-2.52,1.02,0.0), vec3(0.05,1.02,0.42)),
+                      -sdBox(d - vec3(-2.44,1.02,0.0), vec3(0.06,0.96,0.36))), M_WOOD));
+  // ceiling light
+  r = opU(r, vec2(length(p - vec3(0.0,2.42,0.0)) - 0.16, M_GLOW));
+  return r;
+}
+
+/* ---------------- shared exterior: ground, sky, background ---------------- */
+vec2 street(vec3 p, bool tower){
+  vec2 r = vec2(p.y, M_FLOOR);                       // sidewalk
+  if(p.z > 3.2) r = vec2(p.y + 0.12, M_ROAD);        // road, a step lower
+  r = opU(r, vec2(sdBox(p - vec3(0.0,-0.06,3.25), vec3(60.0,0.06,0.12)), M_FLOOR));  // kerb
+
+  // low wall / hedge behind the stop
+  r = opU(r, vec2(sdRound(p - vec3(0.0,0.35,-2.6), vec3(60.0,0.35,0.45), 0.10), M_GRASS));
+
+  // background blocks
+  vec3 q = p; q.x = mod(q.x + 6.0, 12.0) - 6.0;
+  r = opU(r, vec2(sdBox(q - vec3(0.0,2.6,-9.0), vec3(3.4,2.6,2.5)), M_WALL));
+  r = opU(r, vec2(sdBox(q - vec3(0.0,5.3,-9.0), vec3(3.6,0.2,2.7)), M_DARK));
+
+  // street lamps
+  vec3 l = p; l.x = mod(l.x + 9.0, 18.0) - 9.0;
+  r = opU(r, vec2(sdCap(l, vec3(0.0,0.0,2.9), vec3(0.0,3.6,2.9), 0.055), M_METAL));
+  r = opU(r, vec2(sdCap(l, vec3(0.0,3.6,2.9), vec3(0.0,3.7,2.35), 0.05), M_METAL));
+
+  if(tower){
+    // the building: a slab set back across the road, with a window grid
+    vec3 t = p - vec3(0.0, 15.0, 26.0);
+    float body = sdBox(t, vec3(9.0, 15.0, 6.0));
+    vec2 tw = vec2(body, M_WALL);
+    // windows, cut as a repeating grid on the near face
+    vec3 g = t; g.xy = vec2(mod(g.x + 1.1, 2.2) - 1.1, mod(g.y + 1.0, 2.0) - 1.0);
+    float win = max(sdBox(g - vec3(0.0,0.0,6.0), vec3(0.70,0.62,0.35)),
+                    sdBox(t, vec3(8.6, 13.6, 8.0)));
+    tw.x = max(tw.x, -win);
+    r = opU(r, tw);
+    r = opU(r, vec2(max(sdBox(t - vec3(0.0,0.0,5.68), vec3(8.6,13.6,0.06)),
+                        -sdBox(g - vec3(0.0,0.0,5.7), vec3(0.70,0.62,0.4))), M_GLASS));
+    // entrance
+    r = opU(r, vec2(sdBox(p - vec3(0.0,1.6,19.9), vec3(3.2,1.6,0.12)), M_GLASS));
+    r = opU(r, vec2(sdBox(p - vec3(0.0,3.5,19.8), vec3(6.2,0.6,0.22)), M_SIGN));
+    r = opU(r, vec2(sdBox(p - vec3(0.0,0.02,16.0), vec3(9.0,0.03,4.0)), M_FLOOR));
+  } else {
+    // bus shelter
+    r = opU(r, vec2(sdBox(p - vec3(0.0,1.25,-1.15), vec3(1.85,1.25,0.06)), M_GLASS));
+    r = opU(r, vec2(sdBox(p - vec3(0.0,2.45,-0.20), vec3(1.95,0.06,1.10)), M_METAL));
+    vec3 c = p; c.x = abs(c.x);
+    r = opU(r, vec2(sdCap(c, vec3(1.92,0.0,-1.10), vec3(1.92,2.45,-1.10), 0.05), M_METAL));
+    // bench
+    r = opU(r, vec2(sdRound(p - vec3(0.0,0.46,-0.72), vec3(1.55,0.05,0.24), 0.03), M_WOOD));
+    r = opU(r, vec2(sdRound(p - vec3(0.0,0.78,-1.02), vec3(1.55,0.28,0.05), 0.03), M_WOOD));
+    r = opU(r, vec2(sdBox(p - vec3(0.0,0.23,-0.72), vec3(1.5,0.23,0.03)), M_METAL));
+    // stop sign on a pole
+    r = opU(r, vec2(sdCap(p, vec3(2.6,0.0,0.3), vec3(2.6,2.5,0.3), 0.045), M_METAL));
+    r = opU(r, vec2(sdBox(p - vec3(2.6,2.35,0.3), vec3(0.30,0.22,0.02)), M_SIGN));
+  }
+
+  // the bus
+  if(uProp.y > 0.5){
+    vec3 b = p - vec3(uProp.x, 0.0, 5.6);
+    float body = sdRound(b - vec3(0.0,1.55,0.0), vec3(5.2,1.05,1.20), 0.28);
+    vec2 bus = vec2(body, M_RED);
+    float glass = max(sdRound(b - vec3(0.0,2.05,0.0), vec3(4.7,0.42,1.32), 0.10), -sdBox(b - vec3(0.0,2.05,0.0), vec3(3.0,0.6,1.0)));
+    bus = opU(bus, vec2(glass, M_GLASS));
+    vec3 w = b; w.x = abs(w.x); w.z = abs(w.z);
+    bus = opU(bus, vec2(max(length(w.xy - vec2(3.5,0.52)) - 0.52, w.z - 1.18), M_DARK));
+    r = opU(r, bus);
+  }
+  return r;
+}
+
+/* ---------------- 6 : the lobby ---------------- */
+vec2 setLobby(vec3 p){
+  vec2 r = vec2(-sdBox(p - vec3(0.0,2.10,0.0), vec3(7.0,2.10,7.5)), M_WALL);
+  if(p.y < 0.04) r.y = M_TILE;
+  if(p.y > 4.14) r.y = M_CEIL;
+  // ceiling light panels
+  vec3 c = p; c.x = mod(c.x + 1.6, 3.2) - 1.6; c.z = mod(c.z + 2.0, 4.0) - 2.0;
+  r = opU(r, vec2(max(sdBox(c - vec3(0.0,4.13,0.0), vec3(1.05,0.03,1.30)),
+                      sdBox(p - vec3(0.0,4.0,0.0), vec3(6.5,0.5,7.0))), M_GLOW));
+  // reception desk
+  r = opU(r, vec2(sdRound(p - vec3(0.0,0.55,2.20), vec3(2.30,0.55,0.42), 0.05), M_WOOD));
+  r = opU(r, vec2(sdRound(p - vec3(0.0,1.14,2.20), vec3(2.42,0.05,0.52), 0.03), M_DARK));
+  // logo band on the wall behind
+  r = opU(r, vec2(sdBox(p - vec3(0.0,2.55,3.40), vec3(3.6,0.55,0.06)), M_SIGN));
+  // glass front and doors
+  r = opU(r, vec2(max(sdBox(p - vec3(0.0,2.0,-7.42), vec3(7.0,2.0,0.06)),
+                      -sdBox(p - vec3(0.0,1.5,-7.5), vec3(1.6,1.5,0.4))), M_GLASS));
+  // planters
+  vec3 pl = p; pl.x = abs(pl.x);
+  r = opU(r, vec2(sdRound(pl - vec3(4.6,0.30,0.4), vec3(0.34,0.30,0.34), 0.06), M_DARK));
+  r = opU(r, vec2(sdEllip(pl - vec3(4.6,0.95,0.4), vec3(0.42,0.55,0.42)), M_GRASS));
+  // lift doors on the far side
+  vec3 e = p - vec3(0.0,1.30,7.42); e.x = abs(e.x) - 1.05;
+  r = opU(r, vec2(sdBox(e, vec3(0.62,1.30,0.06)), M_METAL));
+  return r;
+}
+
+/* ---------------- 7 : the lift ---------------- */
+vec2 setLift(vec3 p){
+  vec2 r = vec2(-sdBox(p - vec3(0.0,1.25,0.0), vec3(1.25,1.25,1.15)), M_METAL);
+  if(p.y < 0.03) r.y = M_DARK;
+  float pan = abs(mod(p.x + 0.30, 0.60) - 0.30) - 0.008;
+  if(p.y > 0.06 && p.z > 1.0 && pan < 0.0) r.y = M_DARK;
+  // ceiling panel
+  r = opU(r, vec2(sdBox(p - vec3(0.0,2.46,0.0), vec3(0.80,0.035,0.66)), M_GLOW));
+  // handrail around three sides
+  r = opU(r, vec2(sdCap(p, vec3(-1.18,0.95,1.08), vec3(1.18,0.95,1.08), 0.028), M_METAL));
+  vec3 hs = p; hs.x = abs(hs.x);
+  r = opU(r, vec2(sdCap(hs, vec3(1.18,0.95,-1.0), vec3(1.18,0.95,1.08), 0.028), M_METAL));
+  // doors, with a seam that opens
+  float gap = 0.02 + 0.62*uDoor;
+  vec3 d = p - vec3(0.0,1.25,-1.16); d.x = abs(d.x) - gap;
+  r = opU(r, vec2(sdBox(d, vec3(0.62,1.25,0.05)), M_METAL));
+  // floor indicator over the doors
+  r = opU(r, vec2(sdBox(p - vec3(0.0,2.22,-1.10), vec3(0.24,0.055,0.02)), M_RED));
+  // button panel
+  r = opU(r, vec2(sdRound(p - vec3(1.10,1.25,-0.75), vec3(0.10,0.30,0.07), 0.02), M_DARK));
+  return r;
+}
+
+vec2 mapNew(vec3 p){
+  vec2 r;
+  if(uSet == 2) r = setBedroom(p);
+  else if(uSet == 3) r = setLanding(p);
+  else if(uSet == 4) r = street(p, false);
+  else if(uSet == 5) r = street(p, true);
+  else if(uSet == 6) r = setLobby(p);
+  else if(uSet == 7) r = setLift(p);
+  else r = vec2(1e9, 0.0);
+  r = opU(r, people(p));
+  if(uFigVis > 0.5 && uSet >= 2) r = opU(r, vec2(figure(p), 5.0));
+  return r;
+}
+
+float mapD(vec3 p){ return uSet <= 1 ? map(p) : mapNew(p).x; }
+
 vec3 calcNormal(vec3 p){
   vec2 e = vec2(0.0016, 0.0);
   return normalize(vec3(
-    map(p+e.xyy) - map(p-e.xyy),
-    map(p+e.yxy) - map(p-e.yxy),
-    map(p+e.yyx) - map(p-e.yyx)));
+    mapD(p+e.xyy) - mapD(p-e.xyy),
+    mapD(p+e.yxy) - mapD(p-e.yxy),
+    mapD(p+e.yyx) - mapD(p-e.yyx)));
 }
 
 float calcAO(vec3 p, vec3 n){
   float occ = 0.0, sca = 1.0;
   for(int i=0;i<5;i++){
     float h = 0.02 + 0.14*float(i);
-    occ += (h - map(p + n*h)) * sca;
+    occ += (h - mapD(p + n*h)) * sca;
     sca *= 0.72;
   }
   return clamp(1.0 - 1.4*occ, 0.0, 1.0);
@@ -429,10 +827,7 @@ mat3 camMat(vec3 ro, vec3 ta, float roll){
   return mat3(r, u, f);
 }
 
-void main(){
-  vec2 uv = (gl_FragCoord.xy - 0.5*uRes) / uRes.y;
-  vec3 ro = uCamPos;
-  vec3 rd = camMat(ro, uCamTgt, uRoll) * normalize(vec3(uv, uFov));
+vec3 renderOld(vec3 ro, vec3 rd){
   vec3 fwd = normalize(uCamTgt - ro);
 
   float t = 0.02, d = 0.0;
@@ -519,6 +914,133 @@ void main(){
   float dust = fbm(rd*26.0 + vec3(0.0, uTime*0.25, uTime*0.1));
   col += vec3(0.030,0.030,0.034) * smoothstep(0.62, 0.95, dust) * uLight * 1.9;
 
+  return max(col, 0.0);
+}
+
+/* ================= look ================= */
+
+bool is(float a, float b){ return abs(a-b) < 0.5; }
+
+vec3 skyOf(vec3 rd){
+  float h = clamp(rd.y*0.5 + 0.5, 0.0, 1.0);
+  vec3 c = mix(uSky1, uSky2, pow(h, 0.75));
+  float cl = fbm(rd*2.6 + vec3(uTime*0.008, 0.0, 0.0));
+  c = mix(c, uSky2*1.25 + 0.06, smoothstep(0.48, 0.82, cl)*smoothstep(0.0, 0.30, rd.y)*0.7);
+  // a low sun bloom behind the key light
+  c += uKeyCol * pow(max(dot(rd, uKeyDir), 0.0), 26.0) * 0.55;
+  return c;
+}
+
+vec3 albedoOf(float m, vec3 p, vec3 n){
+  if(m > 29.5){                                   // people
+    int ci = int((m - 30.0)/10.0 + 0.001);
+    float part = m - 30.0 - float(ci)*10.0;
+    if(is(part,0.0)) return uChC[ci].rgb;
+    if(is(part,1.0)) return uChD[ci].rgb;
+    if(is(part,2.0)) return uChF[ci].rgb;
+    if(is(part,3.0)) return uChE[ci].rgb;
+    if(is(part,4.0)) return vec3(0.035,0.032,0.030);
+    if(is(part,5.0)) return vec3(0.075,0.020,0.022);
+    return vec3(0.045,0.042,0.048);
+  }
+  if(is(m, M_FLOOR)){
+    if(uSet == 2 || uSet == 3){                   // boards indoors
+      float g = smoothstep(0.02,0.05,abs(fract(p.x*1.4)-0.5));
+      return mix(vec3(0.055,0.032,0.020), vec3(0.20,0.125,0.070), 0.35+0.65*fbm(p*3.0))*(0.55+0.45*g);
+    }
+    float slab = smoothstep(0.02,0.06,abs(fract(p.x*0.55)-0.5)) * smoothstep(0.02,0.06,abs(fract(p.z*0.55)-0.5));
+    return vec3(0.30,0.295,0.285)*(0.72+0.45*fbm(p*2.2))*(0.7+0.3*slab);
+  }
+  if(is(m, M_WALL)){
+    if(uSet == 6) return vec3(0.52,0.53,0.55)*(0.9+0.15*fbm(p*1.6));
+    if(uSet == 5) return vec3(0.44,0.44,0.43)*(0.80+0.35*fbm(p*0.8));
+    if(uSet == 4) return vec3(0.30,0.295,0.285)*(0.75+0.5*fbm(p*0.8));
+    return vec3(0.34,0.33,0.30)*(0.80+0.30*fbm(p*2.4));
+  }
+  if(is(m, M_CEIL))  return vec3(0.40,0.40,0.42);
+  if(is(m, M_WOOD))  return mix(vec3(0.085,0.048,0.026), vec3(0.24,0.145,0.078), 0.4+0.6*fbm(p*vec3(6.0,1.5,6.0)));
+  if(is(m, M_CLOTH)) return vec3(0.42,0.44,0.50)*(0.85+0.3*fbm(p*7.0));
+  if(is(m, M_METAL)) return vec3(0.30,0.31,0.33);
+  if(is(m, M_GLASS)) return vec3(0.045,0.055,0.070);
+  if(is(m, M_GLOW))  return vec3(0.85,0.87,0.92);
+  if(is(m, M_ROAD))  return vec3(0.055,0.055,0.060)*(0.7+0.6*fbm(p*3.5));
+  if(is(m, M_GRASS)) return vec3(0.055,0.115,0.045)*(0.6+0.8*fbm(p*4.0));
+  if(is(m, M_TILE)){
+    float g = smoothstep(0.01,0.03,abs(fract(p.x*0.7)-0.5))*smoothstep(0.01,0.03,abs(fract(p.z*0.7)-0.5));
+    return vec3(0.36,0.37,0.39)*(0.55+0.45*g);
+  }
+  if(is(m, M_DARK))  return vec3(0.030,0.030,0.034);
+  if(is(m, M_RED))   return vec3(0.42,0.030,0.030);
+  if(is(m, M_SIGN))  return vec3(0.045,0.045,0.05);
+  return vec3(0.2);
+}
+
+float emissiveOf(float m, vec3 p, out vec3 ec){
+  ec = vec3(0.0);
+  if(is(m, M_GLOW)){ ec = vec3(1.0,0.99,0.94); return uGlow; }
+  if(is(m, M_RED)){
+    if(uSet == 2){ ec = vec3(1.0,0.10,0.06); return 0.55*uAlarm + 0.12; }
+    if(uSet == 7){ ec = vec3(1.0,0.18,0.10); return 0.5; }
+  }
+  if(is(m, M_SIGN)){
+    float band = (uSet == 5) ? smoothstep(0.12, 0.30, abs(p.y - 3.5))
+                             : smoothstep(0.10, 0.26, abs(p.y - 2.55));
+    ec = vec3(1.0,0.26,0.18);
+    return (1.0 - band)*1.5 + 0.12;
+  }
+  return 0.0;
+}
+
+vec3 renderNew(vec3 ro, vec3 rd){
+  float t = 0.02, m = 0.0;
+  bool hit = false;
+  for(int i=0;i<104;i++){
+    vec3 p = ro + rd*t;
+    vec2 h = mapNew(p);
+    if(h.x < 0.0014*t){ hit = true; m = h.y; break; }
+    t += h.x*0.88;
+    if(t > 140.0) break;
+  }
+
+  vec3 sky = (uSet == 4 || uSet == 5) ? skyOf(rd) : uSky1;
+  if(!hit) return sky * uExpo;
+
+  vec3 p = ro + rd*t;
+  vec3 n = calcNormal(p);
+  float ao = calcAO(p, n);
+  vec3 alb = albedoOf(m, p, n);
+
+  // key light with a cheap contact shadow under each person
+  float sh = 1.0;
+  for(int i=0;i<3;i++){
+    if(uChC[i].w < 0.5) continue;
+    vec2 d = p.xz - uChA[i].xz;
+    sh *= 1.0 - 0.62*exp(-dot(d,d)*4.0)*smoothstep(1.4, 0.05, abs(p.y - uChA[i].y));
+  }
+  float key = max(dot(n, uKeyDir), 0.0);
+  vec3 col = alb * key * uKeyCol * mix(1.0, sh, smoothstep(0.35, 0.85, n.y));
+  col += alb * (0.55 + 0.45*n.y) * uAmbSky;
+  col += alb * (0.45 - 0.45*n.y) * uAmbGnd;
+  col *= ao;
+
+  vec3 ec; float ei = emissiveOf(m, p, ec);
+  col += ec * ei;
+
+  float fres = pow(1.0 - max(dot(n, -rd), 0.0), 4.0);
+  if(is(m, M_METAL) || is(m, M_GLASS) || is(m, M_TILE)) col += fres * uAmbSky * 3.2;
+  if(m > 29.5) col += fres * uAmbSky * 0.7;
+  if(uFigVis > 0.5 && is(m, 5.0)) col = alb*0.02 + fres*vec3(0.20,0.21,0.26);
+
+  float fog = 1.0 - exp(-t*uFogK);
+  col = mix(col, sky, fog);
+  return col * uExpo;
+}
+
+void main(){
+  vec2 uv = (gl_FragCoord.xy - 0.5*uRes) / uRes.y;
+  vec3 ro = uCamPos;
+  vec3 rd = camMat(ro, uCamTgt, uRoll) * normalize(vec3(uv, uFov));
+  vec3 col = (uSet <= 1) ? renderOld(ro, rd) : renderNew(ro, rd);
   outColor = vec4(max(col, 0.0), 1.0);
 }
 </script>
@@ -648,7 +1170,10 @@ const QUALITIES = [
   { id:'1080', label:'1080p', lines:1080, tag:'HD' },
   { id:'2k',   label:'2K',    lines:1440, tag:'2K' }
 ];
-let qIndex = 2, qLocked = false;             // 1080p by default, like a good connection
+let qIndex = 1, qLocked = false;             // 720p by default: three characters is a lot of shader
+{ const q0 = new URLSearchParams(location.search).get('q');
+  const qi = QUALITIES.findIndex(q => q.id === q0);
+  if(qi >= 0){ qIndex = qi; qLocked = true; } }
 let W=1, H=1;
 
 function resize(){
@@ -691,18 +1216,21 @@ function flickerCurve(t, speed, depth){
 
 /* ---------------- the shot list ---------------- */
 // Camera lives at y ~1.55 in a corridor running along +z.
-const RUNTIME = 90;
+const RUNTIME = 303;
 const state = {
   cam:[0,1.55,0], tgt:[0,1.5,6], roll:0, fov:1.5,
   light:0.9, lamp:0.0, figZ:0, figVis:0, mode:0, mouth:0,
-  glitch:0, fade:0, red:0, flash:0
+  glitch:0, fade:0, red:0, flash:0,
+  set:0, key:[0,1,0], keyC:[0,0,0], ambS:[0,0,0], ambG:[0,0,0],
+  sky1:[0,0,0], sky2:[0,0,0], fogK:0, expo:1, glow:0, alarm:0, door:0,
+  prop:[0,0,0,0], ch:null
 };
 
 function shake(t, amt){
   return [ (vnoise(t*9.1)-0.5)*amt, (vnoise(t*7.7+31.0)-0.5)*amt, (vnoise(t*5.3+77.0)-0.5)*amt*0.4 ];
 }
 
-function direct(t){
+function directIntro(t){
   const s = state;
   s.mode = 0; s.mouth = 0; s.figVis = 0; s.red = 0; s.flash = 0; s.glitch = 0.03;
   s.roll = 0; s.fov = 1.5; s.lamp = 0;
@@ -810,6 +1338,440 @@ function direct(t){
   state.tgt = [tgtX, tgtY + breathe*0.6, (tgtZ === null ? camZ + 6.0 : tgtZ)];
 }
 
+/* ================= act two =================
+   The cold open above runs to 1:30. Everything from here is the film proper:
+   sets, blocking, camera, dialogue, and the mouths that go with it.          */
+
+const BOY = 0, DAD = 1, GIRL = 2;
+const CAST = [
+  { skin:[0.62,0.44,0.32], hair:[0.085,0.055,0.038], shirt:[0.15,0.26,0.47], pants:[0.10,0.11,0.15], kind:0, scale:0.86 },
+  { skin:[0.55,0.38,0.27], hair:[0.055,0.045,0.045], shirt:[0.27,0.28,0.31], pants:[0.085,0.095,0.13], kind:1, scale:1.00 },
+  { skin:[0.50,0.32,0.21], hair:[0.035,0.028,0.030], shirt:[0.46,0.12,0.17], pants:[0.09,0.09,0.12], kind:2, scale:0.87 }
+];
+
+function newChar(){ return { vis:0, x:0, y:0, z:0, yaw:0, mouth:0, blink:0, walk:0,
+                             pitch:0, sit:0, gest:0, hyaw:0, nod:0, kind:0, scale:1 }; }
+function clearCast(){
+  for(let i=0;i<3;i++){
+    const c = state.ch[i];
+    c.vis = 0; c.sit = 0; c.pitch = 0; c.walk = 0;
+    c.gest = 0; c.hyaw = 0; c.nod = 0; c.mouth = 0; c.blink = 0;
+  }
+}
+
+/* ---------------- the script ---------------- */
+const LINES = [
+  { t:103.0, who:BOY,  s:"No, no, no. I'm late!" },
+  { t:105.8, who:BOY,  s:"I'm late for school!" },
+  { t:108.6, who:BOY,  s:"Why didn't anybody wake me up?" },
+
+  { t:118.0, who:DAD,  s:"Hey! You're gonna come with me today to work, okay?" },
+  { t:123.4, who:BOY,  s:"Okay! But what about that test?", off:true },
+  { t:127.0, who:DAD,  s:"Forget about that test." },
+  { t:129.4, who:DAD,  s:"You'll take it tomorrow. Today you're with me." },
+
+  { t:150.0, who:BOY,  s:"I didn't have great sleep yesterday." },
+  { t:154.0, who:DAD,  s:"Hm? What happened?" },
+  { t:157.0, who:BOY,  s:"I was dreaming of this hallway." },
+  { t:161.6, who:BOY,  s:"It was dark. The lights kept going out.", vo:true },
+  { t:166.2, who:BOY,  s:"And there was this dark figure. Just standing there.", vo:true },
+  { t:174.6, who:DAD,  s:"Okay, I'm so confused. Did that black figure kill you in your dream?" },
+  { t:181.2, who:BOY,  s:"No. I don't remember the rest." },
+  { t:185.0, who:DAD,  s:"Okay. Also, your mom will be back from the trip in Mexico." },
+  { t:191.2, who:BOY,  s:"Okay." },
+
+  { t:210.0, who:BOY,  s:"Whoa. Dad, is that where you work?" },
+  { t:214.0, who:DAD,  s:"Experimental dot Co." },
+  { t:216.6, who:DAD,  s:"It's a big building where we test experiments." },
+  { t:221.2, who:BOY,  s:"That is so cool." },
+  { t:223.8, who:DAD,  s:"They pay a way higher budget than my last job." },
+  { t:230.0, who:DAD,  s:"Anyway. Let's go." },
+
+  { t:239.6, who:GIRL, s:"Welcome!" },
+  { t:241.2, who:GIRL, s:"I'm the manager's daughter, I just wanted to inform you." },
+  { t:246.2, who:GIRL, s:"And hey, I remember you from last week. Are you new?" },
+  { t:251.4, who:DAD,  s:"Yes, I am." },
+  { t:253.2, who:DAD,  s:"Um, there was a problem, that's the reason I couldn't come." },
+  { t:258.4, who:DAD,  s:"Can I write down an excuse, or talk to anybody, so it doesn't look like I'm lazy?" },
+  { t:265.8, who:GIRL, s:"No. But you can work for those days." },
+  { t:270.0, who:GIRL, s:"Anyway. Is this your son?" },
+  { t:272.6, who:DAD,  s:"Yeah, his school was gonna have a boring test, but he's gonna do that tomorrow. Today we have fun." },
+  { t:279.2, who:GIRL, s:"Okay." },
+
+  { t:283.4, who:BOY,  s:"So what are we doing today?" },
+  { t:286.4, who:DAD,  s:"We? Oh no, you're good." },
+  { t:288.8, who:DAD,  s:"I just gotta work for three hours today, this is a half day." },
+  { t:293.4, who:DAD,  s:"Fridays are always like that, I guess." },
+  { t:296.4, who:BOY,  s:"Wow, thanks dad! Will we get pizza?" },
+  { t:299.4, who:DAD,  s:"Yeah, sure!" }
+];
+const SPEAKER = ['BOY', 'DAD', 'RECEPTIONIST'];
+for(const L of LINES) L.dur = clamp(L.s.length*0.062 + 0.30, 0.7, 9.0);
+
+/* ---------------- voices ---------------- */
+const VOICE = [ { pitch:1.55, rate:1.06 }, { pitch:0.70, rate:0.95 }, { pitch:1.40, rate:1.10 } ];
+let ttsReady = false, ttsOn = true, spokenTo = -1;
+
+function loadVoices(){
+  if(!window.speechSynthesis) return;
+  const all = speechSynthesis.getVoices().filter(v => /^en/i.test(v.lang));
+  if(!all.length) return;
+  const pick = re => all.find(v => re.test(v.name));
+  const male = pick(/male|daniel|alex|fred|george|rishi|david|guy/i);
+  const fem  = pick(/female|samantha|karen|victoria|zira|serena|moira|tessa/i);
+  const other = all.find(v => v !== male && v !== fem) || all[0];
+  VOICE[BOY].voice  = fem || all[0];
+  VOICE[DAD].voice  = male || other;
+  VOICE[GIRL].voice = fem || other;
+  ttsReady = true;
+}
+if(window.speechSynthesis){
+  loadVoices();
+  speechSynthesis.onvoiceschanged = loadVoices;
+}
+function speakLine(L){
+  if(!ttsOn || !window.speechSynthesis || AC.muted) return;
+  try{
+    if(speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(L.s);
+    const V = VOICE[L.who];
+    if(V.voice) u.voice = V.voice;
+    u.pitch = V.pitch; u.rate = V.rate; u.volume = clamp(AC.vol + 0.15, 0, 1);
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+function hushVoice(){ try{ speechSynthesis.cancel(); }catch(e){} }
+
+/* fire lines as the clock passes them; a seek just re-points the marker */
+function runDialogue(t, playing){
+  let cur = -1;
+  for(let i=0;i<LINES.length;i++){
+    const L = LINES[i];
+    if(t >= L.t && t < L.t + Math.max(L.dur, 0.9) + 0.6) cur = i;
+  }
+  if(playing && cur >= 0 && cur !== spokenTo && t - LINES[cur].t < 1.5){
+    spokenTo = cur; speakLine(LINES[cur]);
+  }
+  if(cur < 0) spokenTo = Math.max(spokenTo, -1);
+  return cur;
+}
+
+/* a jaw that opens on syllables rather than a flat flap */
+function mouthOf(who, t){
+  let m = 0;
+  for(const L of LINES){
+    if(L.who !== who) continue;
+    const e = t - L.t;
+    if(e < -0.05 || e > L.dur) continue;
+    const s = Math.max(e, 0)*5.4;
+    const v = Math.abs(Math.sin(s*Math.PI));
+    const j = 0.45 + 0.55*vnoise(s*1.9 + who*4.0);
+    const gate = sstep(0, 0.07, e) * (1 - sstep(L.dur-0.14, L.dur, e));
+    m = Math.max(m, clamp(v*j*gate, 0, 1));
+  }
+  return m;
+}
+function talking(who, t){
+  for(const L of LINES) if(L.who === who && t >= L.t - 0.15 && t <= L.t + L.dur + 0.15) return true;
+  return false;
+}
+function blinkOf(i, t){
+  const per = 3.4, k = Math.floor(t/per);
+  const at = k*per + rnd(k*7.1 + i*3.3)*(per - 0.5);
+  const d = t - at;
+  return (d > 0 && d < 0.15) ? Math.sin((d/0.15)*Math.PI) : 0;
+}
+
+/* ---------------- lighting presets ---------------- */
+function look3(a, b, c){ return [a, b, c]; }
+function setLight(o){
+  const s = state;
+  s.key = o.key; s.keyC = o.keyC; s.ambS = o.ambS; s.ambG = o.ambG;
+  s.sky1 = o.sky1; s.sky2 = o.sky2 || o.sky1;
+  s.fogK = o.fogK === undefined ? 0.008 : o.fogK;
+  s.expo = o.expo === undefined ? 1.0 : o.expo;
+  s.glow = o.glow === undefined ? 0.0 : o.glow;
+}
+const L_BEDROOM = { key:[0.22,0.36,-0.90], keyC:[1.35,1.55,1.95], ambS:[0.24,0.28,0.38],
+                    ambG:[0.085,0.075,0.068], sky1:[0.020,0.026,0.042], fogK:0.010, glow:0.95, expo:1.0 };
+const L_HOUSE   = { key:[0.10,0.95,0.20], keyC:[1.70,1.42,1.00], ambS:[0.30,0.28,0.28],
+                    ambG:[0.105,0.092,0.080], sky1:[0.020,0.018,0.020], fogK:0.012, glow:1.1, expo:1.0 };
+const L_STREET  = { key:[-0.42,0.34,0.84], keyC:[1.45,1.20,0.92], ambS:[0.78,0.86,1.05],
+                    ambG:[0.24,0.21,0.18], sky1:[0.62,0.56,0.54], sky2:[0.20,0.30,0.52],
+                    fogK:0.0055, glow:0.6, expo:1.0 };
+const L_LOBBY   = { key:[0.05,0.98,0.15], keyC:[1.55,1.55,1.60], ambS:[0.88,0.90,0.98],
+                    ambG:[0.34,0.34,0.36], sky1:[0.60,0.61,0.66], fogK:0.004, glow:3.4, expo:1.0 };
+const L_LIFT    = { key:[0.0,1.0,0.05], keyC:[1.85,1.68,1.40], ambS:[0.72,0.70,0.70],
+                    ambG:[0.26,0.25,0.23], sky1:[0.015,0.015,0.016], fogK:0.0, glow:2.2, expo:1.0 };
+
+/* ---------------- blocking helpers ---------------- */
+function cam(px,py,pz, tx,ty,tz, fov){
+  state.cam = [px,py,pz]; state.tgt = [tx,ty,tz];
+  if(fov !== undefined) state.fov = fov;
+}
+function put(i, x,y,z, yaw){
+  const c = state.ch[i];
+  c.vis = 1; c.x = x; c.y = y; c.z = z; c.yaw = yaw;
+  c.kind = CAST[i].kind; c.scale = CAST[i].scale;
+  return c;
+}
+function act(i, t){                        // the per-frame acting pass
+  const c = state.ch[i];
+  if(!c.vis) return c;
+  c.mouth = mouthOf(i, t);
+  c.blink = blinkOf(i, t);
+  if(talking(i, t)){
+    c.nod += (Math.sin(t*2.7 + i)*0.035 - c.nod)*0.2;
+    c.gest = (i === DAD) ? 0.45 + 0.25*Math.sin(t*1.6) : 0.12;
+  } else {
+    c.nod *= 0.9;
+    c.gest *= 0.9;
+  }
+  return c;
+}
+function breathe(t, amp){ return Math.sin(t*1.5)*amp; }
+
+/* ---------------- act two, shot by shot ---------------- */
+function directStory(t){
+  const s = state;
+  s.light = 0; s.lamp = 0; s.figVis = 0; s.mode = 0; s.glitch = 0.02;
+  s.fade = 1; s.red = 0; s.flash = 0; s.roll = 0; s.fov = 1.5;
+  s.alarm = 0; s.door = 0; s.prop = [0,0,0,0];
+  clearCast();
+
+  /* ---- 1:30 the title ---- */
+  if(t < 99){
+    s.set = 8; setLight(L_LIFT); s.sky1 = [0,0,0]; s.glow = 0;
+    s.fade = sstep(90.2, 91.4, t) * (1 - sstep(98.2, 99.0, t));
+    s.glitch = 0.04 + 0.10*sstep(96.5, 98.8, t);
+    cam(0,1.5,0, 0,1.5,1);
+    return;
+  }
+
+  /* ---- 1:39 the bedroom ---- */
+  if(t < 116){
+    s.set = 2; setLight(L_BEDROOM);
+    s.alarm = t < 111.6 ? 1 : 0;
+    const woke = sstep(104.2, 104.75, t);
+    const stand = sstep(111.9, 112.7, t);
+    const gone  = sstep(113.6, 114.6, t);
+
+    const c = put(BOY, -1.02, -0.02, 0.05, 0.0);
+    c.pitch = -1.5708*(1 - woke);
+    c.sit = woke*(1 - stand);
+    c.y = lerp(-0.02, 0.10, woke);
+    c.z = lerp(0.05, 0.42, woke);
+    if(stand > 0){
+      c.y = lerp(0.10, 0.0, stand);
+      c.x = lerp(-1.02, -0.45, stand);
+      c.z = lerp(0.42, 1.05, stand);
+      c.yaw = lerp(0.0, 1.35, stand);
+      c.walk = t*9.0;
+    }
+    if(gone > 0){ c.x = lerp(-0.45, 1.6, gone); c.z = lerp(1.05, 2.0, gone); c.vis = gone > 0.96 ? 0 : 1; }
+    act(BOY, t);
+    if(t < 104.4) c.blink = 1;                     // still asleep
+
+    if(t < 104.6){                                  // wide, slow push
+      const k = sstep(99, 104.6, t);
+      cam(lerp(1.80,1.45,k), lerp(1.55,1.42,k), lerp(0.35,0.20,k), -0.95, 0.68, 0.05, 1.40);
+    } else if(t < 108.4){                           // in on him
+      const k = sstep(104.6, 108.4, t);
+      cam(lerp(0.75,0.35,k), lerp(1.35,1.28,k), lerp(1.45,1.15,k), -0.92, 1.10, 0.35, lerp(1.55,1.85,k));
+    } else if(t < 111.8){                           // tight
+      const k = sstep(108.4, 111.8, t);
+      cam(-0.10, lerp(1.30,1.26,k), lerp(1.05,0.92,k), -0.95, 1.18, 0.40, 2.15);
+    } else {                                        // he bolts
+      const k = sstep(111.8, 116, t);
+      cam(1.55, 1.50, 0.30, lerp(-0.8,0.2,k), lerp(1.0,1.1,k), lerp(0.3,1.5,k), 1.35);
+    }
+    s.fade = sstep(99.1, 100.2, t) * (1 - sstep(115.4, 116.0, t));
+    return;
+  }
+
+  /* ---- 1:56 the landing ---- */
+  if(t < 136){
+    s.set = 3; setLight(L_HOUSE);
+    const walk = sstep(131.5, 135.4, t);
+    const d = put(DAD, lerp(-0.15, -0.35, walk), 0, lerp(1.35, -1.9, walk), lerp(1.05, 3.05, walk));
+    d.walk = walk > 0.02 && walk < 0.99 ? t*7.4 : 0;
+    d.hyaw = lerp(0.35, 0.0, walk);
+    act(DAD, t);
+
+    if(t < 124.6){
+      const k = sstep(116, 124.6, t);
+      cam(-1.85, 1.62, lerp(3.1,2.6,k), -0.15, 1.34, 1.35, 1.55);
+    } else if(t < 131.5){
+      cam(1.30, 0.30, 2.35, -0.10, 1.46, 1.30, 1.35);      // low, from the stairwell
+    } else {
+      const k = sstep(131.5, 136, t);
+      cam(-0.55, 1.55, lerp(-1.2,-2.6,k), d.x, 1.40, d.z, 1.5);
+    }
+    s.fade = sstep(116.1, 116.9, t) * (1 - sstep(135.3, 136.0, t));
+    return;
+  }
+
+  /* ---- 2:16 out on the street ---- */
+  if(t < 140){
+    s.set = 4; setLight(L_STREET);
+    cam(-3.0, 1.7, 1.2, 4.0, 1.5, 1.6, 1.5);
+    s.fade = sstep(136.2, 137.2, t);
+    return;
+  }
+
+  /* ---- 2:20 the bus stop ---- */
+  if(t < 204){
+    const flash = (t >= 160.6 && t < 173.2);
+    if(flash){                                   // ---- the dream, remembered
+      s.set = 0; s.mode = 0;
+      const k = (t - 160.6)/12.6;
+      const camZ = lerp(20.5, 22.6, k);
+      s.light = 0.55*(0.6 + 0.4*flickerCurve(t, 3.0, 0.8));
+      s.lamp  = 0.75*(0.5 + 0.5*flickerCurve(t*1.4, 2.6, 0.9));
+      s.figVis = (t > 165.4) ? 1 : 0;
+      s.figZ = camZ + lerp(13.0, 8.5, sstep(165.4, 172.0, t));
+      s.glitch = 0.10 + 0.22*Math.abs(Math.sin(t*1.7));
+      s.fov = 1.5;
+      cam(Math.sin(t*0.6)*0.12, 1.55 + breathe(t,0.02), camZ, 0, 1.5, camZ + 6);
+      s.fade = sstep(160.6, 161.3, t) * (1 - sstep(172.4, 173.2, t));
+      return;
+    }
+
+    s.set = 4; setLight(L_STREET);
+    const busIn = sstep(194.0, 199.5, t);
+    if(t > 193.0){ s.prop = [lerp(-46, 0.5, busIn), 1, 0, 0]; }
+
+    const stand = sstep(199.6, 201.2, t);
+    const b = put(BOY,  0.52, 0.045 - 0.045*stand, -0.72 + 0.30*stand, 0.0);
+    const d = put(DAD, -0.50, -0.040 + 0.040*stand, -0.72 + 0.30*stand, 0.0);
+    b.sit = 1 - stand; d.sit = 1 - stand;
+    if(stand > 0.02){ b.walk = t*7.0; d.walk = t*7.0; }
+    // they look at each other when the conversation gets going
+    const face = (talking(BOY,t) || talking(DAD,t)) ? 1 : 0;
+    b.hyaw = lerp(b.hyaw || 0, -0.55*face, 0.08);
+    d.hyaw = lerp(d.hyaw || 0,  0.55*face, 0.08);
+    act(BOY, t); act(DAD, t);
+
+    if(t < 150.0){                                 // wide two shot, nobody talking
+      const k = sstep(140, 150, t);
+      cam(lerp(0.4,0.1,k), 1.62, lerp(4.6,3.9,k), 0.0, 1.05, -0.85, 1.42);
+    } else if(t < 154.0 || (t >= 157.0 && t < 160.6)){
+      cam(1.55, 1.24, 1.15, 0.52, 1.10, -0.70, 1.85);          // on the boy
+    } else if(t < 157.0){
+      cam(-1.60, 1.30, 1.10, -0.50, 1.16, -0.70, 1.85);        // on the father
+    } else if(t < 181.0){
+      cam(-1.70, 1.32, 1.30, -0.50, 1.16, -0.70, 1.80);
+    } else if(t < 185.0){
+      cam(1.55, 1.24, 1.15, 0.52, 1.10, -0.70, 1.85);
+    } else if(t < 193.0){
+      const k = sstep(185, 193, t);
+      cam(lerp(0.15,0.0,k), 1.58, lerp(3.7,3.2,k), 0.0, 1.05, -0.85, 1.45);
+    } else {
+      const k = sstep(193, 204, t);
+      cam(lerp(0.0,-1.2,k), lerp(1.58,1.62,k), lerp(3.2,4.4,k), lerp(0.0,0.6,k), 1.15, lerp(-0.85,0.4,k), 1.5);
+    }
+    s.fade = sstep(140.2, 141.0, t) * (1 - sstep(203.2, 204.0, t));
+    return;
+  }
+
+  /* ---- 3:24 the building ---- */
+  if(t < 238){
+    s.set = 5; setLight(L_STREET);
+    if(t < 209) s.prop = [lerp(0.5, 52, sstep(204, 209, t)), 1, 0, 0];
+
+    const walkOff = sstep(231.6, 237.4, t);
+    const b = put(BOY,  0.62, 0, lerp(11.6, 18.4, walkOff), 0.0);
+    const d = put(DAD, -0.34, 0, lerp(11.2, 18.4, walkOff), 0.0);
+    if(walkOff > 0.01 && walkOff < 0.99){ b.walk = t*7.2; d.walk = t*7.2; }
+    b.nod = -0.30*sstep(209, 213, t)*(1 - sstep(228, 231, t));    // craning his neck
+    act(BOY, t); act(DAD, t);
+
+    if(t < 213.5){                                   // low, behind them, the tower over their heads
+      const k = sstep(204, 213.5, t);
+      cam(1.05, 0.62, lerp(10.1,9.7,k), 0.25, lerp(2.6,8.5,k), 19.5, 0.95);
+    } else if(t < 221.0){
+      cam(2.45, 1.52, 9.90, 0.10, 2.90, 15.5, 1.30);             // past them, onto the tower
+    } else if(t < 229.5){                            // craning up the face of it
+      const k = sstep(221, 229.5, t);
+      cam(0.4, 1.2, 15.2, 0.2, lerp(3.0, 27.0, k), 20.5, lerp(1.5, 1.05, k));
+    } else {
+      const k = sstep(229.5, 238, t);
+      cam(lerp(-2.4,-1.6,k), 1.62, lerp(12.6,16.4,k), d.x, 1.35, d.z + 1.5, 1.5);
+    }
+    s.fade = sstep(204.2, 205.0, t) * (1 - sstep(237.4, 238.0, t));
+    return;
+  }
+
+  /* ---- 3:58 the lobby ---- */
+  if(t < 282){
+    s.set = 6; setLight(L_LOBBY);
+    const walkIn = sstep(238, 242.4, t);
+    const b = put(BOY,  0.58, 0, lerp(-5.6, 1.15, walkIn), 0.0);
+    const d = put(DAD, -0.46, 0, lerp(-6.1, 1.05, walkIn), 0.0);
+    if(walkIn > 0.01 && walkIn < 0.99){ b.walk = t*7.2; d.walk = t*7.2; }
+    const g = put(GIRL, 0.10, 0, 3.05, 3.14159);
+    g.gest = 0.15 + 0.2*Math.sin(t*0.8);
+    act(BOY, t); act(DAD, t); act(GIRL, t);
+    if(t > 278.6) g.blink = 0;                       // she stops blinking
+    b.hyaw = 0.12; d.hyaw = 0.08;
+
+    if(t < 242.6){
+      const k = sstep(238, 242.6, t);
+      cam(-3.1, 1.78, lerp(-4.6,-2.2,k), -0.1, 1.35, 2.2, 1.35);
+    } else if(t < 251.0){
+      cam(0.05, 1.56, 1.72, 0.10, 1.44, 3.05, 1.75);             // on the receptionist
+    } else if(t < 265.4){
+      cam(0.20, 1.66, 2.62, 0.02, 1.38, 1.10, 1.60);             // over her shoulder, onto them
+    } else if(t < 279.0){
+      const k = sstep(265.4, 279.0, t);
+      cam(0.05, 1.54, lerp(1.85,1.62,k), 0.10, 1.44, 3.05, lerp(1.8, 2.4, k));
+    } else {
+      cam(0.05, 1.54, 1.62, 0.10, 1.44, 3.05, 2.4);              // held, unblinking
+    }
+    s.fade = sstep(238.2, 239.0, t) * (1 - sstep(281.4, 282.0, t));
+    return;
+  }
+
+  /* ---- 4:42 the lift ---- */
+  s.set = 7; setLight(L_LIFT);
+  const close = sstep(282.4, 284.6, t);
+  s.door = 1 - close;
+  const b2 = put(BOY,  0.42, 0, 0.62, 3.14159);
+  const d2 = put(DAD, -0.46, 0, 0.58, 3.14159);
+  b2.hyaw = -0.5; d2.hyaw = 0.5;
+  act(BOY, t); act(DAD, t);
+
+  if(t < 300.4){
+    const k = sstep(282, 300, t);
+    cam(lerp(0.95,0.80,k), 1.60, -0.95, -0.05, lerp(1.28,1.22,k), 0.60, lerp(1.10,1.30,k));
+    s.glow = 2.2;
+  } else {
+    // the lights go, and it is in here with them
+    const k = sstep(300.4, 301.4, t);
+    s.glow = 1.15*(1 - k)*flickerCurve(t*3.0, 14.0, 0.95);
+    s.figVis = 1; s.figZ = 1.02;
+    state.ch[BOY].blink = 1; state.ch[DAD].blink = 1;
+    s.glitch = 0.10 + 0.55*k;
+    s.red = 0.18*k;
+    cam(0.85, 1.58, -0.95, -0.05, 1.24, 0.62, 1.25);
+  }
+  s.fade = sstep(282.2, 282.9, t) * (1 - sstep(301.5, 302.0, t));
+}
+
+state.ch = [newChar(), newChar(), newChar()];
+
+function direct(t){
+  if(t < 90.0){
+    clearCast();
+    state.alarm = 0; state.door = 0; state.prop = [0,0,0,0];
+    state.expo = 1; state.fogK = 0; state.glow = 0;
+    directIntro(t);
+    state.set = state.mode > 0.5 ? 1 : 0;
+  } else {
+    directStory(t);
+  }
+}
+
 /* ---------------- title cards ---------------- */
 const cardEl = document.getElementById('card');
 let cardKey = '';
@@ -821,14 +1783,43 @@ function cards(t){
   } else if(t < 12.5){
     html = '<div class="slug">SUBLEVEL B &middot; 03:47 AM</div>';
     op = sstep(8.6, 9.6, t) * (1 - sstep(11.4, 12.4, t));
-  } else if(t > 83.4 && t < 90){
-    html = '<div class="title">END</div><div class="sub">IT IS STILL IN THE HALL</div>';
-    op = sstep(83.6, 85.2, t) * (1 - sstep(88.6, 89.8, t));
+  } else if(t >= 90 && t < 99.4){
+    html = '<div class="title getout">GET OUT</div>';
+    op = sstep(90.6, 92.0, t) * (1 - sstep(98.3, 99.2, t));
+  } else if(t > 205.4 && t < 211.4){
+    html = '<div class="slug">EXPERIMENTAL.CO</div>';
+    op = sstep(205.8, 206.6, t) * (1 - sstep(210.3, 211.2, t));
+  } else if(t > 136 && t < 140.4){
+    html = '<div class="slug">FRIDAY &middot; 07:12 AM</div>';
+    op = sstep(136.5, 137.3, t) * (1 - sstep(139.4, 140.2, t));
+  } else if(t > 301.4){
+    html = '<div class="title small">TO BE CONTINUED</div>';
+    op = sstep(301.6, 302.0, t);
   }
   if(html !== cardKey){ cardEl.innerHTML = html; cardKey = html; }
   cardEl.style.opacity = op.toFixed(3);
 }
 
+
+const CH = { A:new Float32Array(12), B:new Float32Array(12), C:new Float32Array(12),
+             D:new Float32Array(12), E:new Float32Array(12), F:new Float32Array(12),
+             G:new Float32Array(12) };
+function packCast(){
+  for(let i=0;i<3;i++){
+    const c = state.ch[i], k = CAST[i], o = i*4;
+    CH.A[o]=c.x; CH.A[o+1]=c.y; CH.A[o+2]=c.z; CH.A[o+3]=c.yaw;
+    CH.B[o]=c.mouth; CH.B[o+1]=c.blink; CH.B[o+2]=c.walk; CH.B[o+3]=c.pitch;
+    CH.C[o]=k.skin[0]; CH.C[o+1]=k.skin[1]; CH.C[o+2]=k.skin[2]; CH.C[o+3]=c.vis;
+    CH.D[o]=k.shirt[0]; CH.D[o+1]=k.shirt[1]; CH.D[o+2]=k.shirt[2]; CH.D[o+3]=c.sit;
+    CH.E[o]=k.hair[0]; CH.E[o+1]=k.hair[1]; CH.E[o+2]=k.hair[2]; CH.E[o+3]=k.kind;
+    CH.F[o]=k.pants[0]; CH.F[o+1]=k.pants[1]; CH.F[o+2]=k.pants[2]; CH.F[o+3]=k.scale;
+    CH.G[o]=c.gest; CH.G[o+1]=c.hyaw; CH.G[o+2]=c.nod; CH.G[o+3]=0;
+  }
+}
+function nrm(v){
+  const l = Math.hypot(v[0],v[1],v[2]) || 1;
+  return [v[0]/l, v[1]/l, v[2]/l];
+}
 
 function drawScene(t, target){
   gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
@@ -847,11 +1838,46 @@ function drawScene(t, target){
   gl.uniform1f(scene.u.uFigVis, s.figVis);
   gl.uniform1f(scene.u.uMode, s.mode);
   gl.uniform1f(scene.u.uMouth, s.mouth);
+  gl.uniform1i(scene.u.uSet, s.set);
+  const kd = nrm(s.key);
+  gl.uniform3f(scene.u.uKeyDir, kd[0], kd[1], kd[2]);
+  gl.uniform3f(scene.u.uKeyCol, s.keyC[0], s.keyC[1], s.keyC[2]);
+  gl.uniform3f(scene.u.uAmbSky, s.ambS[0], s.ambS[1], s.ambS[2]);
+  gl.uniform3f(scene.u.uAmbGnd, s.ambG[0], s.ambG[1], s.ambG[2]);
+  gl.uniform3f(scene.u.uSky1, s.sky1[0], s.sky1[1], s.sky1[2]);
+  gl.uniform3f(scene.u.uSky2, s.sky2[0], s.sky2[1], s.sky2[2]);
+  gl.uniform1f(scene.u.uFogK, s.fogK);
+  gl.uniform1f(scene.u.uExpo, s.expo);
+  gl.uniform1f(scene.u.uGlow, s.glow);
+  gl.uniform1f(scene.u.uAlarm, s.alarm);
+  gl.uniform1f(scene.u.uDoor, s.door);
+  gl.uniform4f(scene.u.uProp, s.prop[0], s.prop[1], s.prop[2], s.prop[3]);
+  packCast();
+  gl.uniform4fv(scene.u['uChA[0]'], CH.A);
+  gl.uniform4fv(scene.u['uChB[0]'], CH.B);
+  gl.uniform4fv(scene.u['uChC[0]'], CH.C);
+  gl.uniform4fv(scene.u['uChD[0]'], CH.D);
+  gl.uniform4fv(scene.u['uChE[0]'], CH.E);
+  gl.uniform4fv(scene.u['uChF[0]'], CH.F);
+  gl.uniform4fv(scene.u['uChG[0]'], CH.G);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+let capKey = -2;
+function showCaption(i){
+  if(i === capKey) return;
+  capKey = i;
+  const el = $('caption');
+  if(i < 0){ el.textContent = ''; el.style.opacity = '0'; return; }
+  const L = LINES[i];
+  el.classList.toggle('vo', !!(L.vo || L.off));
+  el.textContent = ((L.vo || L.off) ? '[' + SPEAKER[L.who] + '] ' : '') + L.s;
+  el.style.opacity = '1';
 }
 
 function render(t){
   direct(t); cards(t);
+  showCaption(runDialogue(t, playing));
   drawScene(t, main);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, W, H);
@@ -899,8 +1925,14 @@ function envelope(param, pts, fromT, now){
 }
 
 const DRONE_ENV = [[0,0.0001],[6,0.10],[40,0.13],[70,0.26],[71.5,0.30],[73.4,0.02],
-                   [74,0.02],[74.1,0.34],[82,0.05],[89.5,0.0001]];
-const WIND_ENV  = [[0,0.0001],[5,0.045],[62,0.075],[83,0.010],[89.5,0.0001]];
+  [74,0.02],[74.1,0.34],[82,0.05],[88,0.03],
+  [90,0.12],[97.5,0.34],[98.9,0.42],[99.25,0.02],           // the title swell, cut on the cut
+  [104,0.03],[116,0.025],[140,0.02],[160.4,0.03],[161.2,0.17],[172.4,0.17],[173.3,0.02],
+  [204,0.03],[219,0.06],[228,0.15],[231,0.05],[238,0.02],
+  [278.6,0.03],[281.4,0.12],[282.4,0.02],
+  [300.3,0.03],[300.62,0.36],[302.2,0.30],[303,0.0001]];
+const WIND_ENV  = [[0,0.0001],[5,0.045],[62,0.075],[83,0.010],[90,0.006],[99,0.014],
+  [116,0.016],[136,0.05],[196,0.055],[204,0.05],[238,0.03],[241,0.022],[282,0.012],[303,0.0001]];
 
 function stopAudio(){
   if(!AC.ctx) return;
@@ -1010,6 +2042,127 @@ function startAudio(fromT){
   cue(76.4, at => stinger(at,320,70,3.2,0.20));
   for(let i=0;i<10;i++) cue(83.4+i*0.55+Math.random()*0.25, at => burst(at,0.35+Math.random()*0.3,1300+Math.random()*1800,8,0.055));
 
+  // ---- act two -------------------------------------------------------
+  const beep = (at, f, dur, vol) => {
+    const o = ctx.createOscillator(); o.type = 'square';
+    o.frequency.setValueAtTime(f, at);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(vol, at+0.008);
+    g.gain.setValueAtTime(vol, at+dur*0.7);
+    g.gain.exponentialRampToValueAtTime(0.0001, at+dur);
+    o.connect(g); g.connect(master); o.start(at); o.stop(at+dur+0.02); AC.nodes.push(o);
+  };
+  const note = (at, f, dur, vol, type) => {
+    const o = ctx.createOscillator(); o.type = type || 'triangle';
+    o.frequency.setValueAtTime(f, at);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(vol, at+0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, at+dur);
+    o.connect(g); g.connect(master); o.start(at); o.stop(at+dur+0.03); AC.nodes.push(o);
+  };
+  const chirp = at => {
+    for(let i=0;i<3;i++){
+      const o = ctx.createOscillator(); o.type='sine';
+      const a = at + i*0.09;
+      o.frequency.setValueAtTime(2600+Math.random()*900, a);
+      o.frequency.exponentialRampToValueAtTime(3900+Math.random()*900, a+0.05);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, a);
+      g.gain.exponentialRampToValueAtTime(0.030, a+0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, a+0.075);
+      o.connect(g); g.connect(master); o.start(a); o.stop(a+0.1); AC.nodes.push(o);
+    }
+  };
+  const engine = (at, dur, peak, f0, f1) => {
+    const o = ctx.createOscillator(); o.type='sawtooth';
+    o.frequency.setValueAtTime(f0, at);
+    o.frequency.linearRampToValueAtTime(f1, at+dur);
+    const lpf = ctx.createBiquadFilter(); lpf.type='lowpass'; lpf.frequency.value=320; lpf.Q.value=2;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.linearRampToValueAtTime(peak, at+dur*0.55);
+    g.gain.linearRampToValueAtTime(0.0001, at+dur);
+    o.connect(lpf); lpf.connect(g); g.connect(master);
+    o.start(at); o.stop(at+dur+0.05); AC.nodes.push(o);
+    const n = ctx.createBufferSource(); n.buffer = nb; n.loop = true;
+    const nf = ctx.createBiquadFilter(); nf.type='bandpass'; nf.frequency.value=620; nf.Q.value=0.7;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.0001, at);
+    ng.gain.linearRampToValueAtTime(peak*0.5, at+dur*0.55);
+    ng.gain.linearRampToValueAtTime(0.0001, at+dur);
+    n.connect(nf); nf.connect(ng); ng.connect(master);
+    n.start(at); n.stop(at+dur+0.05); AC.nodes.push(n);
+  };
+  const hum = (at, dur, vol) => {
+    const o = ctx.createOscillator(); o.type='sawtooth'; o.frequency.setValueAtTime(120, at);
+    const f = ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=380;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.linearRampToValueAtTime(vol, at+1.2);
+    g.gain.setValueAtTime(vol, at+dur-1.2);
+    g.gain.linearRampToValueAtTime(0.0001, at+dur);
+    o.connect(f); f.connect(g); g.connect(master); o.start(at); o.stop(at+dur+0.1); AC.nodes.push(o);
+  };
+
+  // title: the suspense gets louder, then an alarm starts underneath it
+  cue(90.0, at => { thump(at, 46, 0.55); stinger(at, 190, 44, 3.2, 0.20); });
+  for(let i=0;i<7;i++) cue(91.6+i*1.02, at => stinger(at, 780+i*200, 1500+i*300, 1.3, 0.045));
+  cue(98.9, at => { thump(at, 52, 0.5); burst(at, 0.55, 2400, 0.8, 0.20); });
+  for(let k=0;k<48;k++){
+    const at = 96.0 + k*0.34;
+    if(at > 111.3) break;
+    const v = at < 99.2 ? 0.045 : 0.15;
+    cue(at, a => { beep(a, 2150, 0.13, v); beep(a+0.165, 2500, 0.12, v*0.8); });
+  }
+  cue(111.45, at => burst(at, 0.14, 900, 3, 0.12));            // slapped off
+  cue(112.6, at => { for(let i=0;i<7;i++) burst(at+i*0.26, 0.14, 210+i*30, 1.6, 0.09); });
+
+  // morning outside
+  for(let i=0;i<14;i++) cue(141 + i*4.2 + Math.random()*1.6, chirp);
+  cue(140.5, at => hum(at, 56, 0.012));
+  cue(193.6, at => engine(at, 7.0, 0.16, 46, 30));             // the bus arriving
+  cue(199.3, at => burst(at, 0.9, 3200, 1.4, 0.16));           // air brakes
+  cue(200.4, at => burst(at, 0.5, 1200, 2.0, 0.10));           // doors
+  cue(204.3, at => engine(at, 5.6, 0.14, 32, 58));             // and pulling away
+
+  // the building
+  cue(212.0, at => stinger(at, 150, 62, 6.0, 0.09));
+  cue(228.4, at => { stinger(at, 2500, 320, 2.4, 0.13); thump(at, 40, 0.34); });
+
+  // the lobby
+  cue(238.4, at => hum(at, 44, 0.022));
+  cue(252.0, at => { for(let i=0;i<2;i++){ beep(at+i*1.1, 900, 0.35, 0.035); beep(at+i*1.1+0.45, 900, 0.35, 0.035); } });
+  cue(278.8, at => stinger(at, 320, 110, 3.0, 0.10));
+
+  // lift muzak, and what happens to it
+  const MEL = [392,440,494,440,392,330,349,392];
+  const BASS = [196,196,165,175];
+  for(let loop=0; loop<4; loop++){
+    const b0 = 284.0 + loop*4.4;
+    if(b0 > 300.0) break;
+    for(let i=0;i<8;i++){
+      const at = b0 + i*0.55;
+      if(at > 300.2) break;
+      cue(at, a => note(a, MEL[i], 0.5, 0.055, 'triangle'));
+      cue(at, a => burst(a, 0.06, 7000, 1.0, 0.012));
+    }
+    for(let i=0;i<2;i++){
+      const at = b0 + i*2.2;
+      if(at > 300.2) break;
+      cue(at, a => note(a, BASS[(loop*2+i)%4], 1.6, 0.075, 'sine'));
+    }
+  }
+  cue(300.45, at => {
+    stinger(at, 392, 42, 1.6, 0.20, 'triangle');
+    stinger(at, 494, 50, 1.7, 0.16, 'triangle');
+    thump(at, 40, 0.62);
+    burst(at, 1.5, 1600, 0.6, 0.34);
+    stinger(at, 2600, 55, 1.9, 0.32);
+  });
+  cue(302.0, at => stinger(at, 120, 38, 1.4, 0.14));
+
   for(const [at, fn] of cues) fn(now + (at - fromT));
   AC.stale = false;
   return true;
@@ -1048,7 +2201,9 @@ function syncUI(){
     : '<path d="M5 3.5 20 12 5 20.5z"/>';
   $('pp').dataset.tip = (playing ? 'Pause' : 'Play') + ' (space)';
   player.classList.toggle('paused', !playing);
-  $('skipintro').classList.toggle('on', started && !ended && clock > 1.2 && clock < 7.6);
+  const sk = skipWindow(clock);
+  $('skipintro').textContent = sk ? sk.label : 'Skip Intro';
+  $('skipintro').classList.toggle('on', started && !ended && !!sk);
 }
 
 function play(){
@@ -1058,6 +2213,7 @@ function play(){
   playing = true;
   if(!AC.ctx || AC.stale) startAudio(clock);
   else AC.ctx.resume();
+  try{ speechSynthesis.resume(); }catch(e){}
   lastNow = performance.now();
   syncUI(); wake();
 }
@@ -1065,6 +2221,7 @@ function pause(){
   if(!playing) return;
   playing = false;
   if(AC.ctx) AC.ctx.suspend();
+  try{ speechSynthesis.pause(); }catch(e){}
   syncUI(); wake();
   clearTimeout(infoTimer);
   infoTimer = setTimeout(() => player.classList.add('showinfo'), 420);
@@ -1078,6 +2235,7 @@ function seek(to, commit){
   clock = clamp(to, 0, RUNTIME-0.01);
   ended = false; $('postplay').classList.remove('on');
   dirty = true; syncUI();
+  hushVoice(); spokenTo = -1; capKey = -2;
   if(commit){
     AC.stale = true;
     if(playing) startAudio(clock);
@@ -1085,7 +2243,7 @@ function seek(to, commit){
 }
 function onEnd(){
   playing = false; ended = true; AC.stale = true;
-  stopAudio();
+  stopAudio(); hushVoice();
   $('postplay').classList.add('on');
   player.classList.remove('idle');
   syncUI();
@@ -1128,7 +2286,21 @@ $('poster').addEventListener('click', play);
 $('pp').addEventListener('click', e => { e.stopPropagation(); toggle(); });
 $('again').addEventListener('click', e => { e.stopPropagation(); replay(); });
 $('back').addEventListener('click', () => { pause(); $('poster').style.display='flex'; started=false; syncUI(); });
-$('skipintro').addEventListener('click', e => { e.stopPropagation(); seek(7.9, true); });
+function skipWindow(t){
+  if(t > 1.2 && t < 7.6)  return { to: 7.9,  label:'Skip Intro' };
+  if(t > 91.0 && t < 98.4) return { to: 99.2, label:'Skip Titles' };
+  return null;
+}
+$('skipintro').addEventListener('click', e => {
+  e.stopPropagation();
+  const sk = skipWindow(clock);
+  if(sk) seek(sk.to, true);
+});
+$('cc').addEventListener('click', e => {
+  e.stopPropagation();
+  player.classList.toggle('nocc');
+  toast(player.classList.contains('nocc') ? 'Subtitles off' : 'Subtitles on');
+});
 
 function bump(side){
   const el = side < 0 ? $('ripL') : $('ripR');
