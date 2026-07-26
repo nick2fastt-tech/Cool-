@@ -226,7 +226,7 @@
   <div id="poster">
     <div class="mark">TLH</div>
     <div class="name">THE LAST HALLWAY</div>
-    <div class="meta">SHORT FILM &nbsp;&bull;&nbsp; 5 min 3 sec &nbsp;&bull;&nbsp; HORROR</div>
+    <div class="meta">FEATURE &nbsp;&bull;&nbsp; 15 min 16 sec &nbsp;&bull;&nbsp; HORROR</div>
     <button class="big" id="bigplay"><svg viewBox="0 0 24 24"><path d="M5 3.5 20 12 5 20.5z"/></svg>Play</button>
   </div>
 
@@ -327,7 +327,7 @@ uniform int   uSet;
 uniform vec3  uKeyDir, uKeyCol, uAmbSky, uAmbGnd, uSky1, uSky2;
 uniform float uFogK, uExpo, uGlow, uAlarm, uDoor;
 uniform vec4  uProp;
-uniform vec4  uChA[3], uChB[3], uChC[3], uChD[3], uChE[3], uChF[3], uChG[3];
+uniform vec4  uChA[4], uChB[4], uChC[4], uChD[4], uChE[4], uChF[4], uChG[4];
 
 
 const float FAR = 62.0;
@@ -411,7 +411,10 @@ float faceSDF(vec3 p){
   d = max(d, -(length((q - vec3(0.36,0.26,-0.46)) / vec3(1.0,0.82,1.15)) - 0.305));
   // mouth, opening wide
   float m = 0.14 + 0.46*uMouth;
-  d = max(d, -(length((p - vec3(0.0,-0.40-0.16*uMouth,-0.54)) / vec3(1.0, m/0.17, 1.20)) - 0.30));
+  float grin = uProp.x;
+  vec3 mq = p - vec3(0.0,-0.40-0.16*uMouth,-0.54);
+  mq.y -= grin*0.55*mq.x*mq.x;                    // corners lift into a smile
+  d = max(d, -(length(mq / vec3(1.0 + 1.5*grin, m/0.17, 1.20)) - 0.30));
   // nose ridge and hollow
   d = smin(d, length((p - vec3(0.0,-0.05,-0.80))/vec3(0.55,1.5,1.0)) - 0.17, 0.10);
   d = max(d, -(length((q - vec3(0.075,-0.20,-0.86))/vec3(1.0,1.3,1.0)) - 0.075));
@@ -437,7 +440,7 @@ float map(vec3 p){
    G = gesture, headYaw, headNod, armCarry                                   */
 
 const float M_SKIN=30.0, M_SHIRT=31.0, M_PANTS=32.0, M_HAIR=33.0,
-            M_EYE=34.0, M_MOUTH=35.0, M_SHOE=36.0;
+            M_EYE=34.0, M_MOUTH=35.0, M_SHOE=36.0, M_EYEGLOW=37.0;
 
 vec2 opU(vec2 a, vec2 b){ return a.x < b.x ? a : b; }
 
@@ -541,7 +544,8 @@ vec2 person(vec3 wp, int i){
   vec3 e = h; e.x = abs(e.x);
   res = opU(res, vec2(length(e - vec3(0.13, 0.005,-0.005)) - 0.035, M_SKIN));   // ears
   float eyeH = 0.0295 * max(1.0 - blink, 0.12);
-  res = opU(res, vec2(sdEllip(e - vec3(0.050, 0.028, 0.090), vec3(0.028, eyeH, 0.030)), M_EYE));
+  res = opU(res, vec2(sdEllip(e - vec3(0.050, 0.028, 0.090), vec3(0.028, eyeH, 0.030)),
+                      G.w > 0.5 ? M_EYEGLOW : M_EYE));
 
   // ---- hair
   int kind = int(E.w + 0.5);
@@ -559,6 +563,10 @@ vec2 person(vec3 wp, int i){
     beard = max(beard, -(h.y*0.4 + h.z - 0.02));
     beard = max(beard, -cav - 0.012);
     hair = min(hair, beard);
+  } else if(kind == 3){                            // neat, combed, no beard
+    hair = sdEllip(h - vec3(0.0, 0.040,-0.016), vec3(0.134, 0.152, 0.142));
+    hair = max(hair, -(h.y + 0.005 - 0.30*max(h.z,0.0)));
+    hair = max(hair, -(sdEllip(h - vec3(0.0,0.025,0.0), vec3(0.122,0.150,0.130))));
   } else {                                         // girl: long hair
     hair = sdEllip(h - vec3(0.0, 0.030,-0.020), vec3(0.142, 0.162, 0.152));
     hair = max(hair, -(sdEllip(h - vec3(0.0,0.02,0.012), vec3(0.124,0.152,0.132))));
@@ -575,7 +583,7 @@ vec2 person(vec3 wp, int i){
 
 vec2 people(vec3 p){
   vec2 r = vec2(1e9, 0.0);
-  for(int i=0;i<3;i++) r = opU(r, person(p, i));
+  for(int i=0;i<4;i++) r = opU(r, person(p, i));
   return r;
 }
 
@@ -786,6 +794,103 @@ vec2 setLift(vec3 p){
   return r;
 }
 
+/* ---------------- 9 : the second floor ---------------- */
+vec2 setFloor2(vec3 p){
+  vec2 r = vec2(-sdBox(p - vec3(0.0,1.35,0.0), vec3(2.0,1.35,15.0)), M_WALL);
+  if(p.y < 0.04) r.y = M_TILE;
+  if(p.y > 2.64) r.y = M_CEIL;
+  vec3 c = p; c.z = mod(c.z + 2.0, 4.0) - 2.0;
+  r = opU(r, vec2(max(sdBox(c - vec3(0.0,2.62,0.0), vec3(0.58,0.035,0.80)),
+                      sdBox(p - vec3(0.0,2.6,0.0), vec3(1.6,0.4,14.0))), M_GLOW));
+  vec3 d = p; d.z = mod(d.z + 3.0, 6.0) - 3.0; d.x = abs(d.x);
+  r = opU(r, vec2(max(sdBox(d - vec3(1.97,1.02,0.0), vec3(0.05,1.02,0.46)),
+                      -sdBox(d - vec3(1.88,1.02,0.0), vec3(0.06,0.95,0.38))), M_WOOD));
+  return r;
+}
+
+/* ---------------- 10 : the laundry room ---------------- */
+vec2 setLaundry(vec3 p){
+  vec2 r = vec2(-sdBox(p - vec3(0.0,1.30,0.0), vec3(2.6,1.30,3.0)), M_WALL);
+  if(p.y < 0.04) r.y = M_TILE;
+  if(p.y > 2.54) r.y = M_CEIL;
+  r = opU(r, vec2(sdBox(p - vec3(0.0,2.52,0.0), vec3(0.75,0.035,1.3)), M_GLOW));
+  vec3 w = p - vec3(-2.05, 0.0, 0.0); w.z = mod(w.z + 1.05, 2.1) - 1.05;
+  r = opU(r, vec2(sdRound(w - vec3(0.0,0.45,0.0), vec3(0.42,0.45,0.44), 0.04), M_METAL));
+  r = opU(r, vec2(sdEllip(w - vec3(0.44,0.52,0.0), vec3(0.05,0.24,0.24)), M_GLASS));
+  r = opU(r, vec2(sdRound(p - vec3(1.55,0.46,0.0), vec3(0.30,0.05,1.30), 0.03), M_WOOD));
+  r = opU(r, vec2(sdBox(p - vec3(1.55,0.22,0.0), vec3(0.24,0.22,1.24)), M_METAL));
+  r = opU(r, vec2(sdRound(p - vec3(0.3,0.86,-2.5), vec3(1.0,0.035,0.42), 0.02), M_WOOD));
+  return r;
+}
+
+/* ---------------- 11 : the bathroom ---------------- */
+vec2 setBath(vec3 p){
+  vec2 r = vec2(-sdBox(p - vec3(0.0,1.30,0.0), vec3(2.2,1.30,2.7)), M_TILE);
+  if(p.y > 2.54) r.y = M_CEIL;
+  r = opU(r, vec2(sdBox(p - vec3(0.0,2.52,0.0), vec3(1.0,0.035,1.1)), M_GLOW));
+  // stall partitions and doors
+  vec3 sp = p; sp.x = mod(sp.x + 0.78, 1.56) - 0.78;
+  r = opU(r, vec2(max(sdBox(sp - vec3(0.78,1.00,1.55), vec3(0.03,1.00,1.05)),
+                      sdBox(p - vec3(0.0,1.00,1.55), vec3(2.2,1.00,1.10))), M_METAL));
+  r = opU(r, vec2(max(sdBox(p - vec3(0.0,1.05,0.52), vec3(2.2,0.92,0.03)),
+                      -sdBox(p - vec3(uProp.w,1.05,0.52), vec3(0.62,1.0,0.2))), M_METAL));
+  // basins and mirror
+  vec3 k = p - vec3(-2.0,0.0,-1.3); k.z = mod(k.z + 0.60, 1.2) - 0.60;
+  r = opU(r, vec2(sdRound(k - vec3(0.20,0.86,0.0), vec3(0.20,0.06,0.24), 0.05), M_GLASS));
+  r = opU(r, vec2(sdBox(p - vec3(-2.14,1.55,-1.3), vec3(0.03,0.36,1.25)), M_GLASS));
+  return r;
+}
+
+/* ---------------- 12 : the lab ---------------- */
+vec2 setLab(vec3 p){
+  vec2 r = vec2(-sdBox(p - vec3(0.0,1.45,0.0), vec3(4.0,1.45,4.6)), M_WALL);
+  if(p.y < 0.04) r.y = M_TILE;
+  if(p.y > 2.84) r.y = M_CEIL;
+  vec3 c = p; c.x = mod(c.x + 1.6, 3.2) - 1.6; c.z = mod(c.z + 1.9, 3.8) - 1.9;
+  r = opU(r, vec2(max(sdBox(c - vec3(0.0,2.82,0.0), vec3(0.95,0.035,0.52)),
+                      sdBox(p - vec3(0.0,2.8,0.0), vec3(3.6,0.4,4.1))), M_GLOW));
+  // benches front and back
+  r = opU(r, vec2(sdRound(p - vec3(0.0,0.92,2.75), vec3(3.5,0.045,0.55), 0.03), M_METAL));
+  r = opU(r, vec2(sdBox(p - vec3(0.0,0.45,2.80), vec3(3.4,0.45,0.48)), M_DARK));
+  r = opU(r, vec2(sdRound(p - vec3(0.0,0.92,-3.0), vec3(3.5,0.045,0.55), 0.03), M_METAL));
+  r = opU(r, vec2(sdBox(p - vec3(0.0,0.45,-3.05), vec3(3.4,0.45,0.48)), M_DARK));
+  // glassware
+  vec3 gl = p - vec3(-1.9, 0.97, 2.7); gl.x = mod(gl.x + 0.26, 0.52) - 0.26;
+  r = opU(r, vec2(max(sdEllip(gl - vec3(0.0,0.10,0.0), vec3(0.075,0.10,0.075)),
+                      sdBox(p - vec3(-1.9,1.07,2.7), vec3(0.62,0.14,0.3))), M_GLASS));
+  // the containment box, and what is asleep inside it
+  if(uProp.z > 0.5){
+    vec3 g = p - vec3(1.35, 1.24, 2.72);
+    r = opU(r, vec2(max(sdBox(g, vec3(0.34,0.30,0.30)), -sdBox(g, vec3(0.31,0.275,0.27))), M_GLASS));
+    vec3 b = g - vec3(0.0,-0.20,0.0);
+    float bun = sdEllip(b, vec3(0.155,0.095,0.105));
+    bun = smin(bun, sdEllip(b - vec3(0.13,0.055,0.0), vec3(0.075,0.070,0.070)), 0.05);
+    vec3 e2 = b - vec3(0.12,0.13,0.0); e2.z = abs(e2.z);
+    bun = smin(bun, sdCap(e2, vec3(0.0,0.0,0.030), vec3(-0.035,0.10,0.055), 0.020), 0.03);
+    r = opU(r, vec2(bun, M_CLOTH));
+  }
+  return r;
+}
+
+/* ---------------- 13 : the manager's office ---------------- */
+vec2 setOffice(vec3 p){
+  vec2 r = vec2(-sdBox(p - vec3(0.0,1.35,0.0), vec3(3.0,1.35,3.4)), M_WALL);
+  if(p.y < 0.04) r.y = M_FLOOR;
+  if(p.y > 2.64) r.y = M_CEIL;
+  r = opU(r, vec2(sdBox(p - vec3(0.0,2.62,0.0), vec3(1.15,0.035,0.72)), M_GLOW));
+  // the city behind him
+  r = opU(r, vec2(sdBox(p - vec3(0.0,1.60,3.34), vec3(2.55,0.85,0.05)), M_GLOW));
+  r = opU(r, vec2(sdBox(p - vec3(0.0,1.60,3.30), vec3(2.62,0.92,0.03)), M_METAL));
+  // desk and chair
+  r = opU(r, vec2(sdRound(p - vec3(0.0,0.76,1.55), vec3(1.25,0.04,0.55), 0.02), M_WOOD));
+  r = opU(r, vec2(sdBox(p - vec3(0.0,0.38,1.60), vec3(1.15,0.38,0.44)), M_WOOD));
+  r = opU(r, vec2(sdRound(p - vec3(0.0,0.46,2.55), vec3(0.28,0.05,0.28), 0.04), M_DARK));
+  r = opU(r, vec2(sdRound(p - vec3(0.0,0.82,2.82), vec3(0.28,0.32,0.05), 0.04), M_DARK));
+  // the box she is carrying, once it is on the desk
+  if(uProp.z > 0.5) r = opU(r, vec2(sdRound(p - vec3(0.15,0.87,1.45), vec3(0.16,0.07,0.12), 0.015), M_RED));
+  return r;
+}
+
 vec2 mapNew(vec3 p){
   vec2 r;
   if(uSet == 2) r = setBedroom(p);
@@ -794,6 +899,11 @@ vec2 mapNew(vec3 p){
   else if(uSet == 5) r = street(p, true);
   else if(uSet == 6) r = setLobby(p);
   else if(uSet == 7) r = setLift(p);
+  else if(uSet == 9) r = setFloor2(p);
+  else if(uSet == 10) r = setLaundry(p);
+  else if(uSet == 11) r = setBath(p);
+  else if(uSet == 12) r = setLab(p);
+  else if(uSet == 13) r = setOffice(p);
   else r = vec2(1e9, 0.0);
   r = opU(r, people(p));
   if(uFigVis > 0.5 && uSet >= 2) r = opU(r, vec2(figure(p), 5.0));
@@ -941,6 +1051,7 @@ vec3 albedoOf(float m, vec3 p, vec3 n){
     if(is(part,3.0)) return uChE[ci].rgb;
     if(is(part,4.0)) return vec3(0.035,0.032,0.030);
     if(is(part,5.0)) return vec3(0.075,0.020,0.022);
+    if(is(part,7.0)) return vec3(0.90,0.06,0.05);
     return vec3(0.045,0.042,0.048);
   }
   if(is(m, M_FLOOR)){
@@ -994,7 +1105,7 @@ float emissiveOf(float m, vec3 p, out vec3 ec){
 vec3 renderNew(vec3 ro, vec3 rd){
   float t = 0.02, m = 0.0;
   bool hit = false;
-  float far = (uSet == 4 || uSet == 5) ? 92.0 : 26.0;
+  float far = (uSet == 4 || uSet == 5) ? 92.0 : (uSet == 9 ? 40.0 : 26.0);
   for(int i=0;i<76;i++){
     vec3 p = ro + rd*t;
     vec2 h = mapNew(p);
@@ -1013,7 +1124,7 @@ vec3 renderNew(vec3 ro, vec3 rd){
 
   // key light with a cheap contact shadow under each person
   float sh = 1.0;
-  for(int i=0;i<3;i++){
+  for(int i=0;i<4;i++){
     if(uChC[i].w < 0.5) continue;
     vec2 d = p.xz - uChA[i].xz;
     sh *= 1.0 - 0.62*exp(-dot(d,d)*4.0)*smoothstep(1.4, 0.05, abs(p.y - uChA[i].y));
@@ -1026,6 +1137,10 @@ vec3 renderNew(vec3 ro, vec3 rd){
 
   vec3 ec; float ei = emissiveOf(m, p, ec);
   col += ec * ei;
+  if(m > 29.5){
+    int ci = int((m - 30.0)/10.0 + 0.001);
+    if(is(m - 30.0 - float(ci)*10.0, 7.0)) col += vec3(1.0,0.05,0.03)*2.6;
+  }
 
   float fres = pow(1.0 - max(dot(n, -rd), 0.0), 4.0);
   if(is(m, M_METAL) || is(m, M_GLASS) || is(m, M_TILE)) col += fres * uAmbSky * 3.2;
@@ -1055,6 +1170,7 @@ uniform sampler2D uTex;
 uniform vec2  uRes;
 uniform float uTime;
 uniform float uGlitch;
+uniform float uClean;
 uniform float uFade;
 uniform float uRed;
 uniform float uFlash;
@@ -1079,7 +1195,7 @@ void main(){
 
   // chromatic aberration grows toward the frame edge
   vec2 dir = uv - 0.5;
-  float ca = (0.0016 + 0.026*g) * (0.35 + dot(dir,dir)*2.4);
+  float ca = (0.0016 + 0.026*g) * (0.35 + dot(dir,dir)*2.4) * (1.0 - 0.8*uClean);
   vec3 col;
   col.r = texture(uTex, uv + dir*ca).r;
   col.g = texture(uTex, uv).g;
@@ -1090,14 +1206,14 @@ void main(){
 
   // grain
   float grain = hash21(gl_FragCoord.xy + fract(uTime)*613.0);
-  col += (grain - 0.5) * (0.055 + 0.20*g);
+  col += (grain - 0.5) * (0.055 + 0.20*g) * (1.0 - 0.85*uClean);
 
   // scanlines + slow vertical roll
-  col *= 0.93 + 0.07*sin(uv.y*uRes.y*1.7);
-  col *= 1.0 - 0.10*smoothstep(0.4, 1.0, fract(uv.y*0.5 - uTime*0.07));
+  col *= 1.0 - (0.07 - 0.07*sin(uv.y*uRes.y*1.7)) * (1.0 - uClean);
+  col *= 1.0 - 0.10*smoothstep(0.4, 1.0, fract(uv.y*0.5 - uTime*0.07)) * (1.0 - uClean);
 
   // vignette
-  float v = 1.0 - dot(dir,dir)*1.75;
+  float v = 1.0 - dot(dir,dir)*(1.75 - 1.05*uClean);
   col *= clamp(v, 0.0, 1.0);
 
   // filmic curve, cold shadows
@@ -1220,14 +1336,14 @@ function flickerCurve(t, speed, depth){
 
 /* ---------------- the shot list ---------------- */
 // Camera lives at y ~1.55 in a corridor running along +z.
-const RUNTIME = 303;
+const RUNTIME = 916;
 const state = {
   cam:[0,1.55,0], tgt:[0,1.5,6], roll:0, fov:1.5,
   light:0.9, lamp:0.0, figZ:0, figVis:0, mode:0, mouth:0,
   glitch:0, fade:0, red:0, flash:0,
   set:0, key:[0,1,0], keyC:[0,0,0], ambS:[0,0,0], ambG:[0,0,0],
   sky1:[0,0,0], sky2:[0,0,0], fogK:0, expo:1, glow:0, alarm:0, door:0,
-  prop:[0,0,0,0], ch:null
+  prop:[0,0,0,0], clean:0, ch:null
 };
 
 function shake(t, amt){
@@ -1347,74 +1463,92 @@ function directIntro(t){
    sets, blocking, camera, dialogue, and the mouths that go with it.          */
 
 const BOY = 0, DAD = 1, GIRL = 2;
-const CAST = [
-  { skin:[0.62,0.44,0.32], hair:[0.085,0.055,0.038], shirt:[0.15,0.26,0.47], pants:[0.10,0.11,0.15], kind:0, scale:0.86 },
-  { skin:[0.55,0.38,0.27], hair:[0.055,0.045,0.045], shirt:[0.27,0.28,0.31], pants:[0.085,0.095,0.13], kind:1, scale:1.00 },
-  { skin:[0.50,0.32,0.21], hair:[0.035,0.028,0.030], shirt:[0.46,0.12,0.17], pants:[0.09,0.09,0.12], kind:2, scale:0.87 }
-];
+const COAT = [0.80,0.81,0.83];
+const ROLE = {
+  TRAVIS:  { name:'TRAVIS', skin:[0.62,0.44,0.32], hair:[0.085,0.055,0.038], shirt:[0.15,0.26,0.47],
+             pants:[0.10,0.11,0.15], kind:0, scale:0.86, v:{pitch:1.55,rate:1.06,sex:'f'} },
+  GERALD:  { name:'GERALD', skin:[0.55,0.38,0.27], hair:[0.055,0.045,0.045], shirt:[0.27,0.28,0.31],
+             pants:[0.085,0.095,0.13], kind:1, scale:1.00, v:{pitch:0.70,rate:0.95,sex:'m'} },
+  ALINA:   { name:'ALINA', skin:[0.50,0.32,0.21], hair:[0.035,0.028,0.030], shirt:[0.46,0.12,0.17],
+             pants:[0.09,0.09,0.12], kind:2, scale:0.87, v:{pitch:1.40,rate:1.10,sex:'f'} },
+  RALPH:   { name:'RALPH', skin:[0.72,0.58,0.46], hair:[0.10,0.09,0.08], shirt:COAT,
+             pants:[0.18,0.19,0.23], kind:3, scale:1.00, v:{pitch:0.92,rate:1.00,sex:'m'} },
+  LARRY:   { name:'LARRY', skin:[0.58,0.42,0.30], hair:[0.32,0.20,0.09], shirt:COAT,
+             pants:[0.18,0.19,0.23], kind:1, scale:0.96, v:{pitch:1.15,rate:1.14,sex:'m'} },
+  NOOR:    { name:'DR. NOOR', skin:[0.70,0.55,0.42], hair:[0.42,0.30,0.16], shirt:COAT,
+             pants:[0.18,0.19,0.23], kind:2, scale:0.90, v:{pitch:1.25,rate:1.02,sex:'f'} },
+  MANAGER: { name:'MANAGER', skin:[0.50,0.32,0.21], hair:[0.05,0.04,0.04], shirt:[0.15,0.17,0.30],
+             pants:[0.08,0.09,0.14], kind:3, scale:1.02, v:{pitch:0.78,rate:0.94,sex:'m'} },
+  OLDLADY: { name:'WOMAN', skin:[0.66,0.52,0.42], hair:[0.72,0.72,0.70], shirt:[0.36,0.20,0.33],
+             pants:[0.14,0.13,0.16], kind:2, scale:0.82, v:{pitch:1.30,rate:0.88,sex:'f'} },
+  STRANGER:{ name:'MAN', skin:[0.45,0.32,0.24], hair:[0.06,0.05,0.05], shirt:[0.26,0.33,0.25],
+             pants:[0.10,0.11,0.14], kind:1, scale:1.00, v:{pitch:0.84,rate:1.02,sex:'m'} }
+};
+const DEFAULT_ROLE = ['TRAVIS','GERALD','ALINA','RALPH'];
 
 function newChar(){ return { vis:0, x:0, y:0, z:0, yaw:0, mouth:0, blink:0, walk:0,
-                             pitch:0, sit:0, gest:0, hyaw:0, nod:0, kind:0, scale:1 }; }
+                             pitch:0, sit:0, gest:0, hyaw:0, nod:0, kind:0, scale:1, glow:0,
+                             role:'TRAVIS', skin:[0.6,0.4,0.3], hair:[0.1,0.1,0.1],
+                             shirt:[0.3,0.3,0.3], pants:[0.1,0.1,0.1] }; }
 function clearCast(){
-  for(let i=0;i<3;i++){
+  for(let i=0;i<4;i++){
     const c = state.ch[i];
     c.vis = 0; c.sit = 0; c.pitch = 0; c.walk = 0;
-    c.gest = 0; c.hyaw = 0; c.nod = 0; c.mouth = 0; c.blink = 0;
+    c.gest = 0; c.hyaw = 0; c.nod = 0; c.mouth = 0; c.blink = 0; c.glow = 0;
   }
 }
 
 /* ---------------- the script ---------------- */
 const LINES = [
-  { t:103.0, who:BOY,  s:"No, no, no. I'm late!" },
-  { t:105.8, who:BOY,  s:"I'm late for school!" },
-  { t:108.6, who:BOY,  s:"Why didn't anybody wake me up?" },
+  { t:103.0, who:'TRAVIS',  s:"No, no, no. I'm late!" },
+  { t:105.8, who:'TRAVIS',  s:"I'm late for school!" },
+  { t:108.6, who:'TRAVIS',  s:"Why didn't anybody wake me up?" },
 
-  { t:118.0, who:DAD,  s:"Hey! You're gonna come with me today to work, okay?" },
-  { t:123.4, who:BOY,  s:"Okay! But what about that test?", off:true },
-  { t:127.0, who:DAD,  s:"Forget about that test." },
-  { t:129.4, who:DAD,  s:"You'll take it tomorrow. Today you're with me." },
+  { t:118.0, who:'GERALD',  s:"Hey! You're gonna come with me today to work, okay?" },
+  { t:123.4, who:'TRAVIS',  s:"Okay! But what about that test?", off:true },
+  { t:127.0, who:'GERALD',  s:"Forget about that test." },
+  { t:129.4, who:'GERALD',  s:"You'll take it tomorrow. Today you're with me." },
 
-  { t:150.0, who:BOY,  s:"I didn't have great sleep yesterday." },
-  { t:154.0, who:DAD,  s:"Hm? What happened?" },
-  { t:157.0, who:BOY,  s:"I was dreaming of this hallway." },
-  { t:161.6, who:BOY,  s:"It was dark. The lights kept going out.", vo:true },
-  { t:166.2, who:BOY,  s:"And there was this dark figure. Just standing there.", vo:true },
-  { t:174.6, who:DAD,  s:"Okay, I'm so confused. Did that black figure kill you in your dream?" },
-  { t:181.2, who:BOY,  s:"No. I don't remember the rest." },
-  { t:185.0, who:DAD,  s:"Okay. Also, your mom will be back from the trip in Mexico." },
-  { t:191.2, who:BOY,  s:"Okay." },
+  { t:150.0, who:'TRAVIS',  s:"I didn't have great sleep yesterday." },
+  { t:154.0, who:'GERALD',  s:"Hm? What happened?" },
+  { t:157.0, who:'TRAVIS',  s:"I was dreaming of this hallway." },
+  { t:161.6, who:'TRAVIS',  s:"It was dark. The lights kept going out.", vo:true },
+  { t:166.2, who:'TRAVIS',  s:"And there was this dark figure. Just standing there.", vo:true },
+  { t:174.6, who:'GERALD',  s:"Okay, I'm so confused. Did that black figure kill you in your dream?" },
+  { t:181.2, who:'TRAVIS',  s:"No. I don't remember the rest." },
+  { t:185.0, who:'GERALD',  s:"Okay. Also, your mom will be back from the trip in Mexico." },
+  { t:191.2, who:'TRAVIS',  s:"Okay." },
 
-  { t:210.0, who:BOY,  s:"Whoa. Dad, is that where you work?" },
-  { t:214.0, who:DAD,  s:"Experimental dot Co." },
-  { t:216.6, who:DAD,  s:"It's a big building where we test experiments." },
-  { t:221.2, who:BOY,  s:"That is so cool." },
-  { t:223.8, who:DAD,  s:"They pay a way higher budget than my last job." },
-  { t:230.0, who:DAD,  s:"Anyway. Let's go." },
+  { t:210.0, who:'TRAVIS',  s:"Whoa. Dad, is that where you work?" },
+  { t:214.0, who:'GERALD',  s:"Experimental dot Co." },
+  { t:216.6, who:'GERALD',  s:"It's a big building where we test experiments." },
+  { t:221.2, who:'TRAVIS',  s:"That is so cool." },
+  { t:223.8, who:'GERALD',  s:"They pay a way higher budget than my last job." },
+  { t:230.0, who:'GERALD',  s:"Anyway. Let's go." },
 
-  { t:239.6, who:GIRL, s:"Welcome!" },
-  { t:241.2, who:GIRL, s:"I'm the manager's daughter, I just wanted to inform you." },
-  { t:246.2, who:GIRL, s:"And hey, I remember you from last week. Are you new?" },
-  { t:251.4, who:DAD,  s:"Yes, I am." },
-  { t:253.2, who:DAD,  s:"Um, there was a problem, that's the reason I couldn't come." },
-  { t:258.4, who:DAD,  s:"Can I write down an excuse, or talk to anybody, so it doesn't look like I'm lazy?" },
-  { t:265.8, who:GIRL, s:"No. But you can work for those days." },
-  { t:270.0, who:GIRL, s:"Anyway. Is this your son?" },
-  { t:272.6, who:DAD,  s:"Yeah, his school was gonna have a boring test, but he's gonna do that tomorrow. Today we have fun." },
-  { t:279.2, who:GIRL, s:"Okay." },
+  { t:239.6, who:'ALINA', s:"Welcome!" },
+  { t:241.2, who:'ALINA', s:"I'm the manager's daughter, I just wanted to inform you." },
+  { t:246.2, who:'ALINA', s:"And hey, I remember you from last week. Are you new?" },
+  { t:251.4, who:'GERALD',  s:"Yes, I am." },
+  { t:253.2, who:'GERALD',  s:"Um, there was a problem, that's the reason I couldn't come." },
+  { t:258.4, who:'GERALD',  s:"Can I write down an excuse, or talk to anybody, so it doesn't look like I'm lazy?" },
+  { t:265.8, who:'ALINA', s:"No. But you can work for those days." },
+  { t:270.0, who:'ALINA', s:"Anyway. Is this your son?" },
+  { t:272.6, who:'GERALD',  s:"Yeah, his school was gonna have a boring test, but he's gonna do that tomorrow. Today we have fun." },
+  { t:279.2, who:'ALINA', s:"Okay." },
 
-  { t:283.4, who:BOY,  s:"So what are we doing today?" },
-  { t:286.4, who:DAD,  s:"We? Oh no, you're good." },
-  { t:288.8, who:DAD,  s:"I just gotta work for three hours today, this is a half day." },
-  { t:293.4, who:DAD,  s:"Fridays are always like that, I guess." },
-  { t:296.4, who:BOY,  s:"Wow, thanks dad! Will we get pizza?" },
-  { t:299.4, who:DAD,  s:"Yeah, sure!" }
+  { t:283.4, who:'TRAVIS',  s:"So what are we doing today?" },
+  { t:286.4, who:'GERALD',  s:"We? Oh no, you're good." },
+  { t:288.8, who:'GERALD',  s:"I just gotta work for three hours today, this is a half day." },
+  { t:293.4, who:'GERALD',  s:"Fridays are always like that, I guess." },
+  { t:296.4, who:'TRAVIS',  s:"Wow, thanks dad! Will we get pizza?" },
+  { t:299.4, who:'GERALD',  s:"Yeah, sure!" }
 ];
-const SPEAKER = ['BOY', 'DAD', 'RECEPTIONIST'];
 for(const L of LINES) L.dur = clamp(L.s.length*0.062 + 0.30, 0.7, 9.0);
 
 /* ---------------- voices ---------------- */
-const VOICE = [ { pitch:1.55, rate:1.06 }, { pitch:0.70, rate:0.95 }, { pitch:1.40, rate:1.10 } ];
 let ttsReady = false, ttsOn = true, spokenTo = -1;
+const VOX = { m:null, f:null };
 
 function loadVoices(){
   if(!window.speechSynthesis) return;
@@ -1423,10 +1557,8 @@ function loadVoices(){
   const pick = re => all.find(v => re.test(v.name));
   const male = pick(/male|daniel|alex|fred|george|rishi|david|guy/i);
   const fem  = pick(/female|samantha|karen|victoria|zira|serena|moira|tessa/i);
-  const other = all.find(v => v !== male && v !== fem) || all[0];
-  VOICE[BOY].voice  = fem || all[0];
-  VOICE[DAD].voice  = male || other;
-  VOICE[GIRL].voice = fem || other;
+  VOX.m = male || all[0];
+  VOX.f = fem || all.find(v => v !== VOX.m) || all[0];
   ttsReady = true;
 }
 if(window.speechSynthesis){
@@ -1434,12 +1566,13 @@ if(window.speechSynthesis){
   speechSynthesis.onvoiceschanged = loadVoices;
 }
 function speakLine(L){
-  if(!ttsOn || !window.speechSynthesis || AC.muted) return;
+  if(L.sfx || !ttsOn || !window.speechSynthesis || AC.muted) return;
   try{
     if(speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(L.s);
-    const V = VOICE[L.who];
-    if(V.voice) u.voice = V.voice;
+    const V = ROLE[L.who].v;
+    const voice = V.sex === 'm' ? VOX.m : VOX.f;
+    if(voice) u.voice = voice;
     u.pitch = V.pitch; u.rate = V.rate; u.volume = clamp(AC.vol + 0.15, 0, 1);
     speechSynthesis.speak(u);
   }catch(e){}
@@ -1464,19 +1597,19 @@ function runDialogue(t, playing){
 function mouthOf(who, t){
   let m = 0;
   for(const L of LINES){
-    if(L.who !== who) continue;
+    if(L.who !== who || L.sfx) continue;
     const e = t - L.t;
     if(e < -0.05 || e > L.dur) continue;
     const s = Math.max(e, 0)*5.4;
     const v = Math.abs(Math.sin(s*Math.PI));
-    const j = 0.45 + 0.55*vnoise(s*1.9 + who*4.0);
+    const j = 0.45 + 0.55*vnoise(s*1.9 + L.t*0.13);
     const gate = sstep(0, 0.07, e) * (1 - sstep(L.dur-0.14, L.dur, e));
     m = Math.max(m, clamp(v*j*gate, 0, 1));
   }
   return m;
 }
 function talking(who, t){
-  for(const L of LINES) if(L.who === who && t >= L.t - 0.15 && t <= L.t + L.dur + 0.15) return true;
+  for(const L of LINES) if(L.who === who && !L.sfx && t >= L.t - 0.15 && t <= L.t + L.dur + 0.15) return true;
   return false;
 }
 function blinkOf(i, t){
@@ -1513,20 +1646,24 @@ function cam(px,py,pz, tx,ty,tz, fov){
   state.cam = [px,py,pz]; state.tgt = [tx,ty,tz];
   if(fov !== undefined) state.fov = fov;
 }
-function put(i, x,y,z, yaw){
-  const c = state.ch[i];
-  c.vis = 1; c.x = x; c.y = y; c.z = z; c.yaw = yaw;
-  c.kind = CAST[i].kind; c.scale = CAST[i].scale;
+function put(i, a, b, c2, d, e){
+  let role, x, y, z, yaw;
+  if(typeof a === 'string'){ role = a; x = b; y = c2; z = d; yaw = e; }
+  else { role = DEFAULT_ROLE[i]; x = a; y = b; z = c2; yaw = d; }
+  const c = state.ch[i], k = ROLE[role];
+  c.vis = 1; c.x = x; c.y = y; c.z = z; c.yaw = yaw; c.role = role;
+  c.kind = k.kind; c.scale = k.scale;
+  c.skin = k.skin; c.hair = k.hair; c.shirt = k.shirt; c.pants = k.pants;
   return c;
 }
 function act(i, t){                        // the per-frame acting pass
   const c = state.ch[i];
   if(!c.vis) return c;
-  c.mouth = mouthOf(i, t);
+  c.mouth = mouthOf(c.role, t);
   c.blink = blinkOf(i, t);
-  if(talking(i, t)){
+  if(talking(c.role, t)){
     c.nod += (Math.sin(t*2.7 + i)*0.035 - c.nod)*0.2;
-    c.gest = (i === DAD) ? 0.45 + 0.25*Math.sin(t*1.6) : 0.12;
+    c.gest = (c.role === 'GERALD' || c.role === 'RALPH') ? 0.45 + 0.25*Math.sin(t*1.6) : 0.12;
   } else {
     c.nod *= 0.9;
     c.gest *= 0.9;
@@ -1540,7 +1677,7 @@ function directStory(t){
   const s = state;
   s.light = 0; s.lamp = 0; s.figVis = 0; s.mode = 0; s.glitch = 0.02;
   s.fade = 1; s.red = 0; s.flash = 0; s.roll = 0; s.fov = 1.5;
-  s.alarm = 0; s.door = 0; s.prop = [0,0,0,0];
+  s.alarm = 0; s.door = 0; s.prop = [0,0,0,0]; s.clean = 0;
   clearCast();
 
   /* ---- 1:30 the title ---- */
@@ -1762,17 +1899,475 @@ function directStory(t){
   s.fade = sstep(282.2, 282.9, t) * (1 - sstep(301.5, 302.0, t));
 }
 
-state.ch = [newChar(), newChar(), newChar()];
+/* ================= act three =================
+   From the lift doors on the second floor to the rabbit in the box.        */
+
+const LINES3 = [
+  // ---- the laundry room
+  { t:345.5, who:'TRAVIS', s:"Wait. What— what's happening?" },
+  { t:349.5, who:'TRAVIS', s:"[SCREAMING]", sfx:true },
+  { t:355.0, who:'TRAVIS', s:"Somebody help me!" },
+  { t:360.0, who:'TRAVIS', s:"[SCREAMING]", sfx:true },
+
+  // ---- the lab
+  { t:387.5, who:'GERALD', s:"So, uh. Question." },
+  { t:390.5, who:'GERALD', s:"If we had to save the world, if there was a zombie apocalypse-" },
+  { t:397.0, who:'RALPH',  s:"You're funny. But trust me, that will never happen." },
+  { t:403.0, who:'RALPH',  s:"Unless it's a fungus, or from animals. Which is impossible." },
+  { t:410.0, who:'RALPH',  s:"I mean, COVID was kind of like that." },
+  { t:414.5, who:'RALPH',  s:"But the black death? Oooh." },
+  { t:418.5, who:'RALPH',  s:"We are still shocked what happened in that century." },
+  { t:424.5, who:'GERALD', s:"Okay." },
+  { t:426.5, who:'GERALD', s:"What's your name?" },
+  { t:429.5, who:'LARRY',  s:"Ralph! And he got a little P-" },
+  { t:433.5, who:'RALPH',  s:"Not now, Larry." },
+  { t:436.5, who:'GERALD', s:"I'm Gerald. And my son is Travis." },
+  { t:441.5, who:'RALPH',  s:"Oh, how cool." },
+  { t:444.0, who:'RALPH',  s:"Now I need you to put on your uniform." },
+  { t:448.0, who:'RALPH',  s:"We're gonna do some tests on this so-called cancer cure." },
+  { t:453.5, who:'GERALD', s:"Okay." },
+
+  // ---- released
+  { t:466.0, who:'TRAVIS', s:"Owww." },
+  { t:469.0, who:'TRAVIS', s:"What is happening, man." },
+
+  // ---- the corridor
+  { t:492.5, who:'ALINA',  s:"Hi." },
+  { t:494.5, who:'TRAVIS', s:"Hi." },
+
+  // ---- the bathroom
+  { t:516.0, who:'STRANGER', s:"What the hell. You good, man?" },
+  { t:520.5, who:'TRAVIS', s:"I'm okay." },
+  { t:522.5, who:'TRAVIS', s:"If you don't wanna get possessed too, I advise you leave." },
+  { t:528.5, who:'STRANGER', s:"Okay?" },
+
+  // ---- back upstairs
+  { t:557.5, who:'TRAVIS', s:"Dad!" },
+  { t:560.0, who:'GERALD', s:"What? What's going on?" },
+  { t:564.0, who:'TRAVIS', s:"Is there any pills for being possessed?" },
+  { t:569.0, who:'GERALD', s:"Uh. Umm. I have no clue, but you ca-" },
+  { t:574.0, who:'LARRY',  s:"Yes kid! All you gotta do is fight that fucker in your dream." },
+  { t:581.0, who:'GERALD', s:"Watch your language, genius." },
+  { t:584.5, who:'TRAVIS', s:"Fine. I'll just find pills." },
+
+  { t:604.0, who:'GERALD', s:"What are you doing? We can't be joking around like that." },
+  { t:610.5, who:'GERALD', s:"I don't wanna get fired anymore because of assholes like you." },
+  { t:617.0, who:'LARRY',  s:"I'm sorry sir. Let's just keep doing what we were doing." },
+
+  // ---- the office
+  { t:663.0, who:'MANAGER', s:"You got a present for me, Alina?" },
+  { t:667.5, who:'ALINA',  s:"Mhm. Here you go." },
+  { t:673.0, who:'MANAGER', s:"Wow. A new watch. Thank you, Alina." },
+
+  // ---- the bench
+  { t:709.0, who:'ALINA',  s:"What do you do for fun, Travis?" },
+  { t:713.5, who:'TRAVIS', s:"Huh? How do you know my name?" },
+  { t:720.0, who:'TRAVIS', s:"Oh. I forgot about this." },
+  { t:740.0, who:'TRAVIS', s:"Well, I play sports for fun. And umm, read books." },
+  { t:746.5, who:'ALINA',  s:"Me too! I play volleyball." },
+  { t:750.5, who:'ALINA',  s:"And I write, basically a poem I've been working on at school." },
+  { t:757.5, who:'ALINA',  s:"Wait! We go to the same school, right?" },
+  { t:763.0, who:'TRAVIS', s:"I think so. But I swear I never seen you before." },
+  { t:769.0, who:'TRAVIS', s:"You go downstairs, right?" },
+  { t:772.5, who:'ALINA',  s:"Yep. Upstairs is where you're lacking in a lot of classes." },
+  { t:779.0, who:'ALINA',  s:"The downstairs is mostly tests and exams." },
+  { t:784.0, who:'ALINA',  s:"And I go upstairs only after school." },
+  { t:788.5, who:'TRAVIS', s:"Oh. You probably never see me because I'm on the soccer team." },
+  { t:795.5, who:'ALINA',  s:"Oh, I see you. But my friends think that you're weird." },
+  { t:802.0, who:'ALINA',  s:"And honestly, I never cared about what they said." },
+  { t:808.0, who:'ALINA',  s:"So what do you think, you wanna get outta here?" },
+  { t:814.0, who:'TRAVIS', s:"Sure!" },
+
+  // ---- the rabbit
+  { t:886.0, who:'NOOR',   s:"Oh yeah. That bunny stays in the box." },
+  { t:891.0, who:'NOOR',   s:"We only take her out if we're gonna cure her." },
+  { t:897.5, who:'GERALD', s:"Oh. Okay." }
+];
+
+/* ---------------- more light ---------------- */
+const L_FLOOR2 = { key:[0.06,0.98,0.12], keyC:[1.35,1.34,1.36], ambS:[0.68,0.70,0.76],
+                   ambG:[0.26,0.26,0.27], sky1:[0.42,0.43,0.47], fogK:0.010, glow:2.8, expo:1.0 };
+const L_LAUNDRY= { key:[0.10,0.96,0.20], keyC:[1.10,1.08,1.05], ambS:[0.48,0.48,0.52],
+                   ambG:[0.18,0.17,0.17], sky1:[0.20,0.20,0.22], fogK:0.012, glow:2.4, expo:1.0 };
+const L_BATH   = { key:[0.10,0.97,0.15], keyC:[1.30,1.30,1.32], ambS:[0.62,0.64,0.68],
+                   ambG:[0.24,0.24,0.25], sky1:[0.30,0.31,0.33], fogK:0.008, glow:2.9, expo:1.0 };
+const L_LAB    = { key:[0.05,0.98,0.18], keyC:[1.60,1.60,1.62], ambS:[0.92,0.94,1.00],
+                   ambG:[0.36,0.36,0.37], sky1:[0.58,0.59,0.62], fogK:0.005, glow:3.2, expo:1.0 };
+const L_OFFICE = { key:[0.10,0.60,0.78], keyC:[1.40,1.32,1.18], ambS:[0.72,0.74,0.80],
+                   ambG:[0.26,0.25,0.24], sky1:[0.46,0.47,0.52], fogK:0.006, glow:2.6, expo:1.0 };
+
+/* ---------------- act three, shot by shot ---------------- */
+function directAct3(t){
+  const s = state;
+  s.light = 0; s.lamp = 0; s.figVis = 0; s.mode = 0; s.glitch = 0.02;
+  s.fade = 1; s.red = 0; s.flash = 0; s.roll = 0; s.fov = 1.5;
+  s.alarm = 0; s.door = 0; s.prop = [0,0,0,0]; s.clean = 0;
+  clearCast();
+
+  /* ---- 5:03 out of the lift, along the second floor ---- */
+  if(t < 320){
+    s.set = 9; setLight(L_FLOOR2);
+    const k = sstep(303, 320, t);
+    const z = lerp(-13.0, 1.5, k);
+    const b = put(0, 'TRAVIS', 0.42, 0, z, 0.0);
+    const d = put(1, 'GERALD', -0.42, 0, z - 0.15, 0.0);
+    b.walk = t*7.0; d.walk = t*7.0 + 1.1;
+    // they catch each other's eye
+    const glance = sstep(311.5, 313.0, t) * (1 - sstep(316.0, 317.5, t));
+    b.hyaw = -0.75*glance; d.hyaw = 0.75*glance;
+    b.mouth = 0.13*glance;  d.mouth = 0.11*glance;
+    act(0, t); act(1, t);
+    b.mouth = Math.max(b.mouth, 0.13*glance);
+    d.mouth = Math.max(d.mouth, 0.11*glance);
+    cam(0.0, 1.62, z - 3.4, 0.0, 1.42, z + 1.0, 1.45);
+    s.fade = sstep(303.2, 304.2, t) * (1 - sstep(319.3, 320.0, t));
+    return;
+  }
+
+  /* ---- 5:20 the laundry room ---- */
+  if(t < 368){
+    s.set = 10; setLight(L_LAUNDRY);
+    const lift = sstep(344.5, 349.0, t) * (1 - sstep(362.0, 364.5, t));
+    const shake = lift > 0.02 ? 1 : 0;
+    const b = put(0, 'TRAVIS', 1.30, 0, 0.10, 1.5708);
+    b.sit = 1 - lift;
+    b.y = lift * (0.52 + 0.05*Math.sin(t*23.0));
+    b.x += shake * (vnoise(t*31.0) - 0.5) * 0.07;
+    b.z += shake * (vnoise(t*27.0 + 9.0) - 0.5) * 0.07;
+    b.glow = lift > 0.15 ? 1 : 0;
+    act(0, t);
+    if(lift > 0.15){
+      b.mouth = Math.max(b.mouth, 0.55 + 0.45*Math.abs(Math.sin(t*7.0)));
+      b.blink = 0;
+      b.nod = -0.35*lift;
+    }
+    if(t > 330 && t < 344) b.gest = sstep(330.5, 333.0, t)*0.7;   // reaching for the phone
+
+    if(t < 331){                                    // bored, wide
+      const k = sstep(320, 331, t);
+      cam(-0.55, 1.42, lerp(2.55,2.20,k), 1.25, 1.02, 0.10, 1.45);
+    } else if(t < 344.5){                           // in on him and the phone
+      cam(0.10, 1.20, 1.55, 1.22, 1.06, 0.10, 1.90);
+    } else {                                        // he goes up
+      const k = sstep(344.5, 368, t);
+      cam(-0.78, lerp(1.30,1.52,k), lerp(2.50,2.15,k), 1.22, lerp(1.00,1.32,k), 0.10, lerp(1.45,1.18,k));
+      s.roll = (vnoise(t*9.0) - 0.5) * 0.10 * lift;
+    }
+    // the red glitch, then nothing, then it takes him
+    if(t > 336.0 && t < 340.0){
+      const g = 1 - Math.abs((t - 338.0)/2.0);
+      s.glitch = 0.10 + 0.75*g; s.red = 0.45*g;
+    }
+    if(lift > 0.02){ s.glitch = 0.12 + 0.30*lift; s.red = 0.16*lift; }
+    s.fade = sstep(320.2, 321.2, t) * (1 - sstep(367.2, 368.0, t));
+    return;
+  }
+
+  /* ---- 6:08 inside his head ---- */
+  if(t < 386){
+    s.set = 1; s.mode = 1;
+    const k = sstep(368, 386, t);
+    s.mouth = 0.15 + 0.25*k;
+    s.prop = [k, 0, 0, 0];                          // the grin widens
+    s.light = 0.42 * (0.6 + 0.4*flickerCurve(t*2.0, 9.0, 0.6));
+    s.fov = lerp(1.35, 1.05, k);
+    s.red = 0.30 + 0.22*Math.abs(Math.sin(t*1.3));
+    s.glitch = 0.16 + 0.30*k;
+    const sh = shake(t, 0.05);
+    cam(sh[0]*0.4, sh[1]*0.4, lerp(-1.15,-0.55,k), sh[0], sh[1], 3.2, s.fov);
+    s.roll = sh[2]*1.6;
+    s.fade = sstep(368.2, 369.0, t) * (1 - sstep(385.2, 386.0, t));
+    return;
+  }
+
+  /* ---- 6:26 the lab, and everything looks normal again ---- */
+  if(t < 456){
+    s.set = 12; setLight(L_LAB); s.clean = 1; s.glitch = 0.0;
+    const g = put(1, 'GERALD', -0.55, 0, 0.30, 0.35);
+    const r = put(2, 'RALPH',   0.75, 0, 0.95, 3.55);
+    const l = put(3, 'LARRY',   1.70, 0, 0.05, 3.30);
+    act(1, t); act(2, t); act(3, t);
+    g.hyaw = 0.30; r.hyaw = -0.20; l.hyaw = 0.15;
+
+    if(t < 397){
+      cam(-2.30, 1.58, 1.55, 0.10, 1.42, 0.60, 1.50);
+    } else if(t < 424.5){
+      cam(1.20, 1.56, -1.35, 0.60, 1.44, 1.10, 1.65);          // on Ralph
+    } else if(t < 436.5){
+      cam(2.60, 1.58, 0.75, 0.40, 1.42, 0.60, 1.45);           // the three of them
+    } else if(t < 444){
+      cam(-1.85, 1.52, -0.75, -0.45, 1.44, 0.35, 1.75);        // on Gerald
+    } else {
+      const k = sstep(444, 456, t);
+      cam(lerp(2.4,2.0,k), 1.58, lerp(0.9,1.6,k), 0.30, 1.42, 0.60, 1.50);
+    }
+    s.fade = sstep(386.2, 387.2, t) * (1 - sstep(455.2, 456.0, t));
+    return;
+  }
+
+  /* ---- 7:36 it lets him go ---- */
+  if(t < 478){
+    s.set = 10; setLight(L_LAUNDRY);
+    const drop = sstep(457.5, 458.6, t);
+    const up = 1 - drop;
+    const b = put(0, 'TRAVIS', 1.30, 0, 0.10, 1.5708);
+    b.y = up * (0.52 + 0.05*Math.sin(t*23.0));
+    b.glow = t < 458.0 ? 1 : 0;
+    b.pitch = drop * (1 - sstep(470.0, 473.0, t)) * 1.35;       // down on the floor, then up
+    b.sit = sstep(470.0, 473.5, t);
+    act(0, t);
+    if(t < 458) b.mouth = Math.max(b.mouth, 0.7);
+    if(t > 458.6 && t < 462) b.blink = 1;
+    s.glitch = 0.02 + 0.5*Math.exp(-(t - 457.5)*3.0)*(t > 457.5 ? 1 : 0);
+    s.red = 0.30*Math.exp(-(t - 457.5)*2.2)*(t > 457.5 ? 1 : 0);
+    if(t < 462){
+      cam(-0.72, 1.60, 1.95, 1.22, lerp(1.4,0.45,sstep(457.5,459.0,t)), 0.10, 1.30);
+    } else {
+      const k = sstep(462, 478, t);
+      cam(lerp(-0.10,0.35,k), lerp(1.05,1.25,k), lerp(1.55,1.75,k), 1.24, lerp(0.55,1.05,k), 0.10, 1.75);
+    }
+    s.fade = sstep(456.2, 457.0, t) * (1 - sstep(477.2, 478.0, t));
+    return;
+  }
+
+  /* ---- 7:58 down the corridor, into Alina ---- */
+  if(t < 500){
+    s.set = 9; setLight(L_FLOOR2);
+    const run = sstep(478, 491.5, t);
+    const z = lerp(2.0, 11.0, run);
+    const b = put(0, 'TRAVIS', 0.25, 0, z, 0.0);
+    b.walk = t*13.0;
+    const a = put(2, 'ALINA', -0.62, 0, 12.4, 3.14159);
+    a.walk = t < 490 ? t*6.0 : 0;
+    act(0, t); act(2, t);
+    if(t > 490.5){ b.hyaw = -0.5; a.hyaw = 0.4; }
+    if(t < 490.5){
+      cam(0.15, 1.55, z - 3.0, 0.20, 1.40, z + 2.0, 1.5);
+    } else {
+      const k = sstep(490.5, 500, t);
+      cam(-1.35, 1.55, 13.4, lerp(-0.55,-0.05,k), 1.44, lerp(12.3,11.6,k), 1.75);
+    }
+    s.fade = sstep(478.2, 479.0, t) * (1 - sstep(499.2, 500.0, t));
+    return;
+  }
+
+  /* ---- 8:20 the bathroom ---- */
+  if(t < 534){
+    s.set = 11; setLight(L_BATH);
+    s.prop = [0, 0, 0, t > 514 ? 0.75 : 3.0];        // which stall stands open
+    const shirtOff = sstep(507.5, 509.5, t);
+    const b = put(0, 'TRAVIS', -1.05, 0, -1.30, -1.5708);
+    b.gest = 0.35 + 0.35*Math.sin(t*1.4);
+    act(0, t);
+    if(shirtOff > 0.5) b.shirt = [b.skin[0], b.skin[1], b.skin[2]];
+    if(t > 514){
+      const m = put(1, 'STRANGER', 0.75, 0, lerp(1.2, -0.6, sstep(514, 517, t)), 3.14159);
+      m.walk = t < 517 ? t*6.5 : 0;
+      m.hyaw = 0.35;
+      act(1, t);
+      if(t > 530) m.z = lerp(-0.6, -2.6, sstep(530, 534, t)), m.yaw = 3.14159, m.walk = t*7.0;
+    }
+    if(t < 514){
+      cam(-0.15, 1.52, -1.95, -1.00, 1.46, -1.25, 1.85);
+    } else if(t < 528.5){
+      cam(-0.20, 1.58, -0.35, 0.55, 1.48, 0.55, 1.55);
+    } else {
+      cam(-1.60, 1.50, -0.60, 0.30, 1.42, -0.20, 1.50);
+    }
+    s.fade = sstep(500.2, 501.0, t) * (1 - sstep(533.2, 534.0, t));
+    return;
+  }
+
+  /* ---- 8:54 the lift, with company ---- */
+  if(t < 556){
+    s.set = 7; setLight(L_LIFT); s.door = 0;
+    const b = put(0, 'TRAVIS', 0.50, 0, 0.55, 3.14159);
+    const o = put(1, 'OLDLADY', -0.55, 0, 0.62, 3.14159);
+    b.hyaw = -0.25*Math.sin(t*0.5); o.hyaw = 0.0;
+    act(0, t); act(1, t);
+    const k = sstep(534, 556, t);
+    cam(0.88, 1.58, -0.98, lerp(-0.10,0.10,k), 1.24, 0.60, 1.30);
+    s.glow = 2.2;
+    s.fade = sstep(534.2, 535.0, t) * (1 - sstep(555.2, 556.0, t));
+    return;
+  }
+
+  /* ---- 9:16 pills for being possessed ---- */
+  if(t < 602){
+    s.set = 12; setLight(L_LAB); s.clean = 1; s.glitch = 0.0;
+    const arrive = sstep(556, 559.5, t);
+    const leave = sstep(588.0, 594.0, t);
+    const b = put(0, 'TRAVIS', lerp(-2.6, -0.95, arrive) + leave*3.4, 0, lerp(-2.2, 0.10, arrive), lerp(0.2, 1.4, arrive));
+    b.walk = (arrive < 0.98 || leave > 0.02) ? t*10.0 : 0;
+    b.vis = leave > 0.95 ? 0 : 1;
+    const g = put(1, 'GERALD', -0.10, 0, 0.85, 3.55);
+    const l = put(3, 'LARRY',  1.60, 0, 0.15, 3.30);
+    act(0, t); act(1, t); act(3, t);
+    b.hyaw = 0.35; g.hyaw = -0.35;
+    if(t < 574){
+      cam(-2.40, 1.55, 1.85, -0.50, 1.40, 0.45, 1.55);
+    } else if(t < 581){
+      cam(0.60, 1.58, -1.25, 1.45, 1.46, 0.10, 1.70);            // on Larry
+    } else if(t < 588){
+      cam(-1.95, 1.52, -0.55, -0.35, 1.44, 0.55, 1.65);
+    } else {
+      const k = sstep(588, 602, t);
+      cam(lerp(-2.2,-2.6,k), 1.58, lerp(1.6,2.2,k), -0.20, 1.40, 0.45, 1.50);
+    }
+    s.fade = sstep(556.2, 557.0, t) * (1 - sstep(601.2, 602.0, t));
+    return;
+  }
+
+  /* ---- 10:02 a word about language ---- */
+  if(t < 626){
+    s.set = 12; setLight(L_LAB); s.clean = 1; s.glitch = 0.0;
+    const g = put(1, 'GERALD', -0.10, 0, 0.85, 3.90);
+    const l = put(3, 'LARRY',  1.55, 0, 0.20, 3.10);
+    act(1, t); act(3, t);
+    g.hyaw = -0.25; l.hyaw = 0.30;
+    if(t < 617){
+      cam(-1.55, 1.56, -1.05, 0.30, 1.44, 0.60, 1.60);
+    } else {
+      cam(0.95, 1.54, -1.45, 1.35, 1.44, 0.20, 1.75);
+    }
+    s.fade = sstep(602.2, 603.0, t) * (1 - sstep(625.2, 626.0, t));
+    return;
+  }
+
+  /* ---- 10:26 Alina, humming, with a box ---- */
+  if(t < 656){
+    s.set = 9; setLight(L_FLOOR2);
+    const k = sstep(626, 650, t);
+    const z = lerp(9.5, -2.0, k);
+    const a = put(2, 'ALINA', -0.20, 0, z, 3.14159);
+    a.walk = t < 650 ? t*6.2 : 0;
+    a.gest = 0.85;                                   // holding the box
+    a.mouth = 0.10 + 0.09*Math.sin(t*6.0);           // humming
+    act(2, t);
+    a.mouth = Math.max(a.mouth, 0.10 + 0.09*Math.sin(t*6.0));
+    cam(1.15, 1.50, z - 2.9, -0.20, 1.42, z + 0.6, 1.55);
+    s.fade = sstep(626.2, 627.0, t) * (1 - sstep(655.2, 656.0, t));
+    return;
+  }
+
+  /* ---- 10:56 the fourth floor ---- */
+  if(t < 698){
+    s.set = 13; setLight(L_OFFICE);
+    s.prop = [0, 0, t > 670 ? 1 : 0, 0];
+    const walkIn = sstep(656, 661.0, t);
+    const walkOut = sstep(680.0, 686.0, t);
+    const a = put(2, 'ALINA', lerp(-0.30, 0.10, walkIn) - walkOut*2.6, 0, lerp(-2.6, 0.75, walkIn), 0.0);
+    a.walk = (walkIn < 0.98 || walkOut > 0.02) ? t*6.2 : 0;
+    a.gest = t < 670 ? 0.85 : 0.1;
+    a.vis = walkOut > 0.95 ? 0 : 1;
+    const m = put(1, 'MANAGER', 0.05, 0, 2.45, 3.14159);
+    m.sit = 1;
+    act(1, t); act(2, t);
+    m.hyaw = 0.0;
+    if(t > 686) m.gest = 0.5 + 0.3*Math.sin(t*1.1);   // admiring the watch
+    if(t < 673){
+      cam(-1.75, 1.55, -0.35, 0.10, 1.35, 1.90, 1.55);
+    } else if(t < 686){
+      cam(0.05, 1.52, -0.15, 0.05, 1.42, 2.45, 1.85);            // on him
+    } else {
+      const k = sstep(686, 698, t);
+      cam(lerp(0.9,0.5,k), 1.46, lerp(0.6,0.15,k), 0.05, 1.40, 2.45, lerp(1.8,2.1,k));
+    }
+    s.fade = sstep(656.2, 657.0, t) * (1 - sstep(697.2, 698.0, t));
+    return;
+  }
+
+  /* ---- 11:38 asleep on the bench ---- */
+  if(t < 836){
+    s.set = 6; setLight(L_LOBBY);
+    const wake = sstep(707.5, 708.6, t);
+    const b = put(0, 'TRAVIS', -3.30, 0.03, -1.10, 1.5708);
+    b.sit = 1;
+    b.nod = lerp(0.55, 0.0, wake);                   // head lolling on the wall
+    const a = put(2, 'ALINA', -2.35, 0, -1.05, -1.5708);
+    a.sit = t > 726 ? 1 : 0;
+    if(t > 726) a.z = -1.10, a.x = -2.45, a.yaw = 1.5708*0.55;
+    act(0, t); act(2, t);
+    if(t < 708) b.blink = 1;
+    if(t > 708.6 && t < 712) b.blink = 0;
+    if(t > 726){ b.hyaw = -0.45; a.hyaw = 0.45; }
+
+    if(t < 709){
+      const k = sstep(698, 709, t);
+      cam(lerp(-1.0,-1.6,k), 1.45, lerp(-0.1,-0.6,k), -3.10, 1.20, -1.10, 1.60);
+    } else if(t < 726){
+      cam(-2.05, 1.42, -0.05, -3.05, 1.24, -1.10, 1.85);
+    } else if(t < 795){
+      cam(-2.85, 1.40, 0.95, -2.85, 1.20, -1.10, 1.45);          // both on the bench
+    } else {
+      const k = sstep(795, 836, t);
+      cam(lerp(-2.85,-2.6,k), lerp(1.40,1.48,k), lerp(0.95,1.55,k), -2.85, 1.20, -1.10, lerp(1.45,1.35,k));
+    }
+    s.fade = sstep(698.2, 699.0, t) * (1 - sstep(835.2, 836.0, t));
+    return;
+  }
+
+  /* ---- 13:56 out of the building ---- */
+  if(t < 866){
+    s.set = 5; setLight(L_STREET);
+    const k = sstep(836, 862, t);
+    const z = lerp(18.0, 6.0, k);
+    const b = put(0, 'TRAVIS', 0.55, 0, z, 3.14159);
+    const a = put(2, 'ALINA', -0.45, 0, z + 0.2, 3.14159);
+    b.walk = t*6.6; a.walk = t*6.6 + 1.4;
+    b.hyaw = -0.2; a.hyaw = 0.2;
+    act(0, t); act(2, t);
+    cam(0.05, 1.62, z - 5.2, 0.05, 1.40, z + 1.0, 1.40);
+    s.fade = sstep(836.2, 837.2, t) * (1 - sstep(865.2, 866.0, t));
+    return;
+  }
+
+  /* ---- 14:26 the rabbit ---- */
+  if(t < 910){
+    s.set = 12; setLight(L_LAB); s.clean = 1; s.glitch = 0.0;
+    s.prop = [0, 0, 1, 0];
+    const g = put(1, 'GERALD', 0.75, 0, 1.95, 3.14159);
+    const n = put(3, 'NOOR',  -0.65, 0, 1.75, 3.30);
+    g.gest = 0.55 + 0.2*Math.sin(t*0.9);
+    act(1, t); act(3, t);
+    g.hyaw = -0.35; n.hyaw = 0.25;
+    if(t < 886){
+      const k = sstep(866, 886, t);
+      cam(lerp(2.4,1.9,k), 1.44, lerp(0.6,1.05,k), 1.35, lerp(1.30,1.24,k), 2.55, lerp(1.5,1.9,k));
+    } else if(t < 897){
+      cam(-1.55, 1.55, 0.85, -0.55, 1.44, 1.60, 1.70);
+    } else {
+      const k = sstep(897, 910, t);
+      cam(1.95, 1.52, lerp(0.75,0.35,k), 0.65, 1.42, 1.85, 1.60);
+    }
+    if(t > 905) s.glitch = 0.02 + 0.25*sstep(905, 910, t), s.clean = 1 - sstep(906, 910, t);
+    s.fade = sstep(866.2, 867.2, t) * (1 - sstep(909.2, 910.0, t));
+    return;
+  }
+
+  /* ---- 15:10 ---- */
+  s.set = 8; setLight(L_LIFT); s.sky1 = [0,0,0]; s.glow = 0;
+  cam(0, 1.5, 0, 0, 1.5, 1);
+  s.fade = 0;
+}
+
+for(const L of LINES3) L.dur = clamp(L.s.length*0.062 + 0.30, 0.7, 9.0);
+LINES.push(...LINES3);
+LINES.sort((a,b) => a.t - b.t);
+
+state.ch = [newChar(), newChar(), newChar(), newChar()];
 
 function direct(t){
   if(t < 90.0){
     clearCast();
     state.alarm = 0; state.door = 0; state.prop = [0,0,0,0];
-    state.expo = 1; state.fogK = 0; state.glow = 0;
+    state.expo = 1; state.fogK = 0; state.glow = 0; state.clean = 0;
     directIntro(t);
     state.set = state.mode > 0.5 ? 1 : 0;
-  } else {
+  } else if(t < 303.0){
     directStory(t);
+  } else {
+    directAct3(t);
   }
 }
 
@@ -1796,28 +2391,28 @@ function cards(t){
   } else if(t > 136 && t < 140.4){
     html = '<div class="slug">FRIDAY &middot; 07:12 AM</div>';
     op = sstep(136.5, 137.3, t) * (1 - sstep(139.4, 140.2, t));
-  } else if(t > 301.4){
+  } else if(t > 910.4){
     html = '<div class="title small">TO BE CONTINUED</div>';
-    op = sstep(301.6, 302.0, t);
+    op = sstep(910.8, 911.6, t);
   }
   if(html !== cardKey){ cardEl.innerHTML = html; cardKey = html; }
   cardEl.style.opacity = op.toFixed(3);
 }
 
 
-const CH = { A:new Float32Array(12), B:new Float32Array(12), C:new Float32Array(12),
-             D:new Float32Array(12), E:new Float32Array(12), F:new Float32Array(12),
-             G:new Float32Array(12) };
+const CH = { A:new Float32Array(16), B:new Float32Array(16), C:new Float32Array(16),
+             D:new Float32Array(16), E:new Float32Array(16), F:new Float32Array(16),
+             G:new Float32Array(16) };
 function packCast(){
-  for(let i=0;i<3;i++){
-    const c = state.ch[i], k = CAST[i], o = i*4;
+  for(let i=0;i<4;i++){
+    const c = state.ch[i], k = c, o = i*4;
     CH.A[o]=c.x; CH.A[o+1]=c.y; CH.A[o+2]=c.z; CH.A[o+3]=c.yaw;
     CH.B[o]=c.mouth; CH.B[o+1]=c.blink; CH.B[o+2]=c.walk; CH.B[o+3]=c.pitch;
     CH.C[o]=k.skin[0]; CH.C[o+1]=k.skin[1]; CH.C[o+2]=k.skin[2]; CH.C[o+3]=c.vis;
     CH.D[o]=k.shirt[0]; CH.D[o+1]=k.shirt[1]; CH.D[o+2]=k.shirt[2]; CH.D[o+3]=c.sit;
     CH.E[o]=k.hair[0]; CH.E[o+1]=k.hair[1]; CH.E[o+2]=k.hair[2]; CH.E[o+3]=k.kind;
     CH.F[o]=k.pants[0]; CH.F[o+1]=k.pants[1]; CH.F[o+2]=k.pants[2]; CH.F[o+3]=k.scale;
-    CH.G[o]=c.gest; CH.G[o+1]=c.hyaw; CH.G[o+2]=c.nod; CH.G[o+3]=0;
+    CH.G[o]=c.gest; CH.G[o+1]=c.hyaw; CH.G[o+2]=c.nod; CH.G[o+3]=c.glow;
   }
 }
 function nrm(v){
@@ -1874,8 +2469,8 @@ function showCaption(i){
   const el = $('caption');
   if(i < 0){ el.textContent = ''; el.style.opacity = '0'; return; }
   const L = LINES[i];
-  el.classList.toggle('vo', !!(L.vo || L.off));
-  el.textContent = ((L.vo || L.off) ? '[' + SPEAKER[L.who] + '] ' : '') + L.s;
+  el.classList.toggle('vo', !!(L.vo || L.off || L.sfx));
+  el.textContent = ((L.vo || L.off || L.sfx) ? '[' + ROLE[L.who].name + '] ' : '') + L.s;
   el.style.opacity = '1';
 }
 
@@ -1891,6 +2486,7 @@ function render(t){
   gl.uniform2f(post.u.uRes, W, H);
   gl.uniform1f(post.u.uTime, t);
   gl.uniform1f(post.u.uGlitch, state.glitch);
+  gl.uniform1f(post.u.uClean, state.clean || 0);
   gl.uniform1f(post.u.uFade, state.fade);
   gl.uniform1f(post.u.uRed, state.red);
   gl.uniform1f(post.u.uFlash, state.flash);
@@ -1934,9 +2530,16 @@ const DRONE_ENV = [[0,0.0001],[6,0.10],[40,0.13],[70,0.26],[71.5,0.30],[73.4,0.0
   [104,0.03],[116,0.025],[140,0.02],[160.4,0.03],[161.2,0.17],[172.4,0.17],[173.3,0.02],
   [204,0.03],[219,0.06],[228,0.15],[231,0.05],[238,0.02],
   [278.6,0.03],[281.4,0.12],[282.4,0.02],
-  [300.3,0.03],[300.62,0.36],[302.2,0.30],[303,0.0001]];
+  [300.3,0.03],[300.62,0.36],[302.2,0.30],[303.2,0.02],
+  [320,0.02],[335.8,0.04],[336.2,0.26],[340.0,0.03],[344.0,0.05],[349,0.30],[362,0.34],
+  [364.5,0.10],[368,0.26],[385.6,0.30],[386.4,0.01],                 // the head, then clean air
+  [456,0.01],[457.4,0.30],[459,0.06],[478,0.04],[500,0.05],[534,0.02],
+  [556,0.02],[602,0.02],[626,0.015],[656,0.015],[698,0.02],[836,0.03],
+  [866,0.03],[903,0.04],[905.5,0.30],[909,0.26],[916,0.0001]];
 const WIND_ENV  = [[0,0.0001],[5,0.045],[62,0.075],[83,0.010],[90,0.006],[99,0.014],
-  [116,0.016],[136,0.05],[196,0.055],[204,0.05],[238,0.03],[241,0.022],[282,0.012],[303,0.0001]];
+  [116,0.016],[136,0.05],[196,0.055],[204,0.05],[238,0.03],[241,0.022],[282,0.012],
+  [303,0.014],[320,0.020],[368,0.030],[386,0.012],[456,0.020],[500,0.016],[534,0.010],
+  [556,0.012],[626,0.014],[656,0.012],[698,0.020],[836,0.045],[866,0.014],[916,0.0001]];
 
 function stopAudio(){
   if(!AC.ctx) return;
@@ -2166,6 +2769,92 @@ function startAudio(fromT){
     stinger(at, 2600, 55, 1.9, 0.32);
   });
   cue(302.0, at => stinger(at, 120, 38, 1.4, 0.14));
+
+  // ================= act three =================
+  // second floor: two sets of footsteps down a hard corridor
+  for(let i=0;i<19;i++) cue(304.0 + i*0.78, a => burst(a, 0.13, 260 + Math.random()*140, 2.0, 0.075));
+  cue(303.5, at => hum(at, 17, 0.014));
+
+  // the laundry room, and what happens in it
+  cue(320.0, at => hum(at, 46, 0.030));
+  for(let i=0;i<7;i++) cue(321 + i*3.1, a => burst(a, 0.9, 320, 0.9, 0.035));   // a drum turning
+  cue(336.0, at => {                                   // the red flash
+    burst(at, 0.5, 2600, 0.7, 0.30); stinger(at, 3000, 240, 0.7, 0.26);
+    for(let i=0;i<6;i++) burst(at + 0.1 + i*0.28, 0.14, 400 + Math.random()*3000, 4, 0.16);
+  });
+  cue(340.2, at => burst(at, 0.3, 200, 1.2, 0.05));    // and then nothing at all
+  cue(344.6, at => { stinger(at, 60, 3200, 4.2, 0.24); thump(at, 42, 0.55); });   // the riser
+  cue(349.2, at => {                                   // he goes up
+    thump(at, 38, 0.75); burst(at, 2.4, 900, 0.5, 0.34); stinger(at, 2800, 90, 2.6, 0.30);
+  });
+  for(let i=0;i<14;i++) cue(350 + i*0.85, a => burst(a, 0.3, 120 + Math.random()*200, 1.4, 0.10));
+  cue(362.2, at => stinger(at, 320, 44, 2.6, 0.26));
+
+  // inside his head
+  cue(368.2, at => { thump(at, 44, 0.6); stinger(at, 180, 52, 6.0, 0.20); });
+  let hb = 368.5;
+  while(hb < 385.4){ const v = 0.20 + 0.22*clamp((hb-368)/17,0,1);
+    cue(hb, a => { thump(a, 58, v); thump(a+0.21, 46, v*0.6); }); hb += 0.52; }
+  for(let i=0;i<9;i++) cue(369 + i*1.9, a => burst(a, 0.5, 1500 + Math.random()*2000, 7, 0.05));
+  cue(385.5, at => { burst(at, 0.5, 2400, 0.8, 0.30); thump(at, 40, 0.5); });
+
+  // the lab is a calm room
+  cue(386.5, at => hum(at, 69, 0.024));
+  cue(556.5, at => hum(at, 45, 0.024));
+  cue(602.5, at => hum(at, 23, 0.024));
+  cue(866.5, at => hum(at, 43, 0.024));
+
+  // it lets go, and he hits the floor
+  cue(457.5, at => { stinger(at, 900, 40, 1.6, 0.30); burst(at, 1.0, 1200, 0.6, 0.26); });
+  cue(458.5, at => { thump(at, 52, 0.62); burst(at, 0.22, 260, 1.6, 0.20); });
+  for(let i=0;i<10;i++) cue(462 + i*1.5, a => burst(a, 0.45, 620, 0.8, 0.045));   // winded breathing
+
+  // running the corridor
+  for(let i=0;i<26;i++) cue(478.5 + i*0.42, a => burst(a, 0.11, 300 + Math.random()*160, 2.2, 0.085));
+  cue(491.0, at => burst(at, 0.25, 500, 1.2, 0.10));
+
+  // tiled room, running water
+  cue(500.5, at => hum(at, 33, 0.012));
+  cue(505.0, at => burst(at, 2.6, 2600, 0.6, 0.055));
+  cue(514.4, at => burst(at, 0.5, 900, 1.6, 0.13));    // the stall door
+  cue(534.6, at => burst(at, 0.35, 700, 2.2, 0.11));
+
+  // lift, again
+  cue(534.2, at => { for(let i=0;i<2;i++) beep(at + i*0.4, 1180, 0.28, 0.06); });
+  const MEL2 = [392,440,494,440,392,330,349,392];
+  for(let loop=0; loop<4; loop++){
+    const b0 = 535.5 + loop*4.4;
+    if(b0 > 554) break;
+    for(let i=0;i<8;i++){
+      const at = b0 + i*0.55;
+      if(at > 555) break;
+      cue(at, a => note(a, MEL2[i], 0.5, 0.030, 'triangle'));
+    }
+  }
+  cue(555.6, at => { for(let i=0;i<2;i++) beep(at + i*0.4, 1180, 0.28, 0.06); });
+
+  // Alina, humming to herself
+  const HUM = [440,494,523,494,440,392,440,523];
+  for(let i=0;i<20;i++){
+    const at = 627.0 + i*1.25;
+    if(at > 650) break;
+    cue(at, a => note(a, HUM[i%8], 1.0, 0.045, 'sine'));
+  }
+  for(let i=0;i<26;i++) cue(627 + i*0.86, a => burst(a, 0.12, 240 + Math.random()*120, 2.0, 0.05));
+
+  // the office, and a watch coming out of a box
+  cue(656.5, at => hum(at, 41, 0.018));
+  cue(671.5, at => { burst(at, 0.35, 1400, 1.6, 0.11); burst(at + 0.4, 0.5, 900, 1.2, 0.09); });
+  cue(674.5, at => { note(at, 660, 0.5, 0.05, 'sine'); note(at + 0.3, 880, 0.7, 0.045, 'sine'); });
+
+  // the lobby, two kids talking
+  cue(698.5, at => hum(at, 137, 0.020));
+  cue(707.8, at => burst(at, 0.2, 700, 2.4, 0.07));    // the tap on his shoulder
+  cue(836.5, at => { for(let i=0;i<9;i++) burst(at + i*0.5, 0.13, 300, 2.0, 0.07); });
+
+  // last look at the rabbit
+  cue(905.6, at => { thump(at, 40, 0.6); stinger(at, 2200, 60, 2.2, 0.30); burst(at, 1.6, 1400, 0.6, 0.28); });
+  cue(908.5, at => stinger(at, 140, 40, 2.0, 0.16));
 
   for(const [at, fn] of cues) fn(now + (at - fromT));
   AC.stale = false;
