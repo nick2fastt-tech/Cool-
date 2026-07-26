@@ -226,7 +226,7 @@
   <div id="poster">
     <div class="mark">TLH</div>
     <div class="name">THE LAST HALLWAY</div>
-    <div class="meta">FEATURE &nbsp;&bull;&nbsp; 17 min 36 sec &nbsp;&bull;&nbsp; HORROR</div>
+    <div class="meta">FEATURE &nbsp;&bull;&nbsp; 25 min 20 sec &nbsp;&bull;&nbsp; HORROR</div>
     <button class="big" id="bigplay"><svg viewBox="0 0 24 24"><path d="M5 3.5 20 12 5 20.5z"/></svg>Play</button>
   </div>
 
@@ -441,7 +441,8 @@ float map(vec3 p){
    G = gesture, headYaw, headNod, armCarry                                   */
 
 const float M_SKIN=30.0, M_SHIRT=31.0, M_PANTS=32.0, M_HAIR=33.0,
-            M_EYE=34.0, M_MOUTH=35.0, M_SHOE=36.0, M_EYEGLOW=37.0;
+            M_EYE=34.0, M_MOUTH=35.0, M_SHOE=36.0, M_EYEGLOW=37.0,
+            M_SCLERA=38.0, M_LIP=39.0;
 
 vec2 opU(vec2 a, vec2 b){ return a.x < b.x ? a : b; }
 
@@ -501,6 +502,10 @@ vec2 person(vec3 wp, int i){
   torso = smin(torso, sdCap(p, vec3(0.0, hipY+0.26, 0.005), vec3(0.0, shY, 0.0), 0.155), 0.10);
   torso = smin(torso, sdCap(p, vec3(-0.15, shY, 0.0), vec3(0.15, shY, 0.0), 0.10), 0.09);
   res = opU(res, vec2(torso, M_SHIRT));
+  // collar and waistband
+  res = opU(res, vec2(max(sdEllip(p - vec3(0.0, shY+0.045, 0.0), vec3(0.112,0.052,0.112)),
+                          -sdEllip(p - vec3(0.0, shY+0.075, 0.0), vec3(0.070,0.10,0.070))), M_SHIRT));
+  res = opU(res, vec2(sdRound(p - vec3(0.0, hipY-0.005, 0.0), vec3(0.120,0.020,0.098), 0.022), M_SHOE));
 
   // ---- arms
   for(int L=0; L<2; L++){
@@ -522,6 +527,7 @@ vec2 person(vec3 wp, int i){
       hnd = mix(hnd, vec3(0.15*s, shY+0.20, 0.01), ph2);
     }
     res = opU(res, vec2(sdCap(p, sh, elb, 0.058), M_SHIRT));
+    res = opU(res, vec2(sdCap(p, mix(elb, sh, 0.16), elb, 0.064), M_SHIRT));   // cuff
     res = opU(res, vec2(smin(sdCap(p, elb, hnd, 0.048),
                              length(p-hnd)-0.056, 0.03), M_SKIN));
   }
@@ -547,9 +553,17 @@ vec2 person(vec3 wp, int i){
 
   vec3 e = h; e.x = abs(e.x);
   res = opU(res, vec2(length(e - vec3(0.13, 0.005,-0.005)) - 0.035, M_SKIN));   // ears
-  float eyeH = 0.0295 * max(1.0 - blink, 0.12);
-  res = opU(res, vec2(sdEllip(e - vec3(0.050, 0.028, 0.090), vec3(0.028, eyeH, 0.030)),
+  float eyeH = 0.0295 * max(1.0 - blink, 0.10);
+  res = opU(res, vec2(sdEllip(e - vec3(0.050, 0.028, 0.094), vec3(0.0275, eyeH, 0.026)), M_SCLERA));
+  res = opU(res, vec2(sdEllip(e - vec3(0.050, 0.028, 0.108), vec3(0.019, min(eyeH,0.020), 0.014)),
                       G.w > 0.5 ? M_EYEGLOW : M_EYE));
+  // brows, angled down toward the nose
+  vec3 bw = e - vec3(0.052, 0.081, 0.092);
+  bw.xy = mat2(0.985, 0.174, -0.174, 0.985) * bw.xy;
+  res = opU(res, vec2(sdRound(bw, vec3(0.025, 0.0042, 0.005), 0.005), M_HAIR));
+  // lips around the opening
+  float lip = sdEllip(h - vec3(0.0,-0.088, 0.086), vec3(0.048, 0.013 + 0.030*mouth, 0.019));
+  res = opU(res, vec2(max(lip, -cav), M_LIP));
 
   // ---- hair
   int kind = int(E.w + 0.5);
@@ -901,6 +915,82 @@ vec2 setOffice(vec3 p){
   return r;
 }
 
+/* ---------------- 14 : the bodega ---------------- */
+vec2 setBodega(vec3 p){
+  vec2 r = vec2(-sdBox(p - vec3(0.0,1.35,0.0), vec3(3.2,1.35,4.6)), M_WALL);
+  if(p.y < 0.04) r.y = M_TILE;
+  if(p.y > 2.64) r.y = M_CEIL;
+  vec3 c = p; c.z = mod(c.z + 1.7, 3.4) - 1.7;
+  r = opU(r, vec2(max(sdBox(c - vec3(0.0,2.62,0.0), vec3(1.5,0.035,0.42)),
+                      sdBox(p - vec3(0.0,2.6,0.0), vec3(2.7,0.4,4.2))), M_GLOW));
+  // counter along +x
+  r = opU(r, vec2(sdRound(p - vec3(2.35,0.55,0.7), vec3(0.55,0.55,2.3), 0.04), M_WOOD));
+  r = opU(r, vec2(sdRound(p - vec3(2.35,1.13,0.7), vec3(0.62,0.05,2.4), 0.03), M_DARK));
+  // shelving along -x, stacked with product
+  vec3 sv = p - vec3(-2.85,0.0,0.0); sv.z = mod(sv.z + 0.85, 1.7) - 0.85;
+  r = opU(r, vec2(sdBox(sv - vec3(0.0,0.92,0.0), vec3(0.34,0.025,0.78)), M_METAL));
+  r = opU(r, vec2(sdBox(sv - vec3(0.0,1.52,0.0), vec3(0.34,0.025,0.78)), M_METAL));
+  vec3 pr = sv; pr.z = mod(pr.z + 0.135, 0.27) - 0.135;
+  r = opU(r, vec2(sdBox(pr - vec3(0.0,1.09,0.0), vec3(0.16,0.14,0.085)), M_RED));
+  r = opU(r, vec2(sdBox(pr - vec3(0.0,1.69,0.0), vec3(0.16,0.14,0.085)), M_GRASS));
+  // drinks fridge at the back
+  vec3 fg = p - vec3(0.4,1.05,4.35);
+  r = opU(r, vec2(max(sdBox(fg, vec3(1.65,1.05,0.35)), -sdBox(fg - vec3(0.0,0.0,-0.12), vec3(1.5,0.92,0.3))), M_METAL));
+  r = opU(r, vec2(sdBox(fg - vec3(0.0,0.0,-0.30), vec3(1.5,0.92,0.02)), M_GLASS));
+  r = opU(r, vec2(sdBox(fg - vec3(0.0,0.0,-0.05), vec3(1.45,0.88,0.12)), M_GLOW));
+  // door at -z, and the daylight outside it
+  vec3 dr = p - vec3(-1.7,1.10,-4.55);
+  r = opU(r, vec2(max(sdBox(dr, vec3(0.66,1.10,0.06)), -sdBox(dr, vec3(0.54,0.92,0.2))), M_METAL));
+  r = opU(r, vec2(sdBox(dr - vec3(0.0,0.0,0.02), vec3(0.54,0.92,0.02)), M_GLOW));
+  return r;
+}
+
+/* ---------------- 15 : the park ---------------- */
+vec2 setPark(vec3 p){
+  vec2 r = vec2(p.y + 0.02*noise3(p*0.7), M_GRASS);
+  if(abs(p.x) < 2.3) r = vec2(p.y, M_FLOOR);
+  // bench
+  r = opU(r, vec2(sdRound(p - vec3(0.0,0.46,-1.75), vec3(1.15,0.05,0.24), 0.03), M_WOOD));
+  r = opU(r, vec2(sdRound(p - vec3(0.0,0.78,-2.05), vec3(1.15,0.28,0.05), 0.03), M_WOOD));
+  vec3 bl = p; bl.x = abs(bl.x);
+  r = opU(r, vec2(sdBox(bl - vec3(1.05,0.23,-1.85), vec3(0.04,0.23,0.24)), M_METAL));
+  // trees
+  vec3 tr = p; tr.x = mod(tr.x + 8.0, 16.0) - 8.0; tr.z = mod(tr.z + 10.0, 20.0) - 10.0;
+  r = opU(r, vec2(sdCap(tr, vec3(4.2,0.0,3.4), vec3(4.2,2.5,3.4), 0.22), M_WOOD));
+  r = opU(r, vec2(sdEllip(tr - vec3(4.2,3.5,3.4), vec3(1.8,1.4,1.8)), M_GRASS));
+  // a couple of people crossing in the distance
+  for(int i=0;i<2;i++){
+    float f = float(i);
+    float x = mod(uTime*0.55 + f*9.0, 26.0) - 13.0;
+    vec3 w = p - vec3(x, 0.0, 7.5 + f*2.5);
+    float body = sdCap(w, vec3(0.0,0.42,0.0), vec3(0.0,1.42,0.0), 0.19);
+    body = min(body, length(w - vec3(0.0,1.62,0.0)) - 0.15);
+    r = opU(r, vec2(body, M_DARK));
+  }
+  return r;
+}
+
+/* ---------------- 16 : the bus, from inside ---------------- */
+vec2 setBusIn(vec3 p){
+  vec2 r = vec2(-sdBox(p - vec3(0.0,1.15,0.0), vec3(1.30,1.15,4.6)), M_METAL);
+  if(p.y < 0.04) r.y = M_DARK;
+  if(p.y > 2.24) r.y = M_CEIL;
+  // windows, with the street streaking past
+  vec3 w = p; w.x = abs(w.x); w.z = mod(w.z + 1.15, 2.3) - 1.15;
+  r = opU(r, vec2(max(sdBox(w - vec3(1.29,1.42,0.0), vec3(0.03,0.40,0.90)),
+                      sdBox(p - vec3(0.0,1.42,0.0), vec3(1.4,0.45,4.3))), M_GLOW));
+  // seat rows
+  vec3 s2 = p; s2.x = abs(s2.x); s2.z = mod(s2.z + 0.85, 1.7) - 0.85;
+  r = opU(r, vec2(sdRound(s2 - vec3(0.80,0.46,0.0), vec3(0.42,0.05,0.26), 0.04), M_RED));
+  r = opU(r, vec2(sdRound(s2 - vec3(1.00,0.78,0.0), vec3(0.22,0.28,0.26), 0.04), M_RED));
+  r = opU(r, vec2(sdBox(s2 - vec3(0.80,0.22,0.0), vec3(0.38,0.22,0.04)), M_METAL));
+  // grab poles
+  vec3 pl = p; pl.z = mod(pl.z + 1.7, 3.4) - 1.7;
+  r = opU(r, vec2(sdCap(pl, vec3(0.0,0.0,0.0), vec3(0.0,2.2,0.0), 0.032), M_METAL));
+  r = opU(r, vec2(sdCap(p, vec3(-1.2,2.15,-4.4), vec3(1.2,2.15,-4.4), 0.032), M_METAL));
+  return r;
+}
+
 vec2 mapNew(vec3 p){
   vec2 r;
   if(uSet == 2) r = setBedroom(p);
@@ -914,6 +1004,9 @@ vec2 mapNew(vec3 p){
   else if(uSet == 11) r = setBath(p);
   else if(uSet == 12) r = setLab(p);
   else if(uSet == 13) r = setOffice(p);
+  else if(uSet == 14) r = setBodega(p);
+  else if(uSet == 15) r = setPark(p);
+  else if(uSet == 16) r = setBusIn(p);
   else r = vec2(1e9, 0.0);
   r = opU(r, people(p));
   if(uFigVis > 0.5 && uSet >= 2) r = opU(r, vec2(figure(p), 5.0));
@@ -1062,6 +1155,8 @@ vec3 albedoOf(float m, vec3 p, vec3 n){
     if(is(part,4.0)) return vec3(0.035,0.032,0.030);
     if(is(part,5.0)) return vec3(0.075,0.020,0.022);
     if(is(part,7.0)) return vec3(0.90,0.06,0.05);
+    if(is(part,8.0)) return vec3(0.60,0.59,0.57);
+    if(is(part,9.0)) return uChC[ci].rgb * vec3(0.72,0.52,0.50);
     return vec3(0.045,0.042,0.048);
   }
   if(is(m, M_FLOOR)){
@@ -1115,7 +1210,7 @@ float emissiveOf(float m, vec3 p, out vec3 ec){
 vec3 renderNew(vec3 ro, vec3 rd){
   float t = 0.02, m = 0.0;
   bool hit = false;
-  float far = (uSet == 4 || uSet == 5) ? 92.0 : (uSet == 9 ? 30.0 : 24.0);
+  float far = (uSet == 4 || uSet == 5 || uSet == 15) ? 92.0 : (uSet == 9 ? 30.0 : 24.0);
   for(int i=0;i<76;i++){
     vec3 p = ro + rd*t;
     vec2 h = mapNew(p);
@@ -1362,7 +1457,7 @@ function flickerCurve(t, speed, depth){
 
 /* ---------------- the shot list ---------------- */
 // Camera lives at y ~1.55 in a corridor running along +z.
-const RUNTIME = 1056;
+const RUNTIME = 1520;
 const state = {
   cam:[0,1.55,0], tgt:[0,1.5,6], roll:0, fov:1.5,
   light:0.9, lamp:0.0, figZ:0, figVis:0, mode:0, mouth:0,
@@ -1507,6 +1602,8 @@ const ROLE = {
              pants:[0.08,0.09,0.14], kind:3, scale:1.02, v:{pitch:0.78,rate:0.94,sex:'m'} },
   OLDLADY: { name:'WOMAN', skin:[0.66,0.52,0.42], hair:[0.72,0.72,0.70], shirt:[0.36,0.20,0.33],
              pants:[0.14,0.13,0.16], kind:2, scale:0.82, v:{pitch:1.30,rate:0.88,sex:'f'} },
+  DEVON:   { name:'DEVON', skin:[0.42,0.28,0.19], hair:[0.045,0.035,0.030], shirt:[0.20,0.42,0.26],
+             pants:[0.12,0.13,0.17], kind:0, scale:1.06, v:{pitch:0.98,rate:1.06,sex:'m'} },
   STRANGER:{ name:'MAN', skin:[0.45,0.32,0.24], hair:[0.06,0.05,0.05], shirt:[0.26,0.33,0.25],
              pants:[0.10,0.11,0.14], kind:1, scale:1.00, v:{pitch:0.84,rate:1.02,sex:'m'} }
 };
@@ -2466,7 +2563,7 @@ function directAct4(t){
   }
 
   /* ---- 17:00 and off they go ---- */
-  if(t < 1046){
+  {
     s.set = 5; setLight(L_STREET); s.key = [-0.78, 0.44, 0.32];
     const k = sstep(1020, 1044, t);
     const x = -29.5 - k*11.0;
@@ -2476,11 +2573,248 @@ function directAct4(t){
     b.hyaw = -0.30; a.hyaw = 0.30;
     act(0, t); act(2, t);
     cam(x + 7.0, lerp(1.55, 7.5, k), lerp(9.6, 15.0, k), x - 0.5, lerp(1.40, 0.9, k), 8.7, lerp(1.45, 1.15, k));
-    s.fade = sstep(1020.2, 1021.2, t) * (1 - sstep(1044.6, 1046.0, t));
+    s.fade = sstep(1020.2, 1021.2, t) * (1 - sstep(1052.6, 1056.0, t));
     return;
   }
 
-  /* ---- 17:26 ---- */
+}
+
+/* ================= act five ================= */
+const LINES5 = [
+  { t:1072.0, who:'TRAVIS', s:"Alina, you go get the drinks. I'll order." },
+
+  { t:1123.0, who:'GERALD', s:"Well, I think that's it. That was a good session, guys." },
+  { t:1130.0, who:'RALPH',  s:"Yes it has been. We figured out some things, but not all things." },
+  { t:1138.0, who:'GERALD', s:"Yeah. Sadly." },
+  { t:1147.0, who:'GERALD', s:"Alright, my shift is up. I gotta go now, see y'all later." },
+  { t:1154.0, who:'LARRY',  s:"See you later!" },
+  { t:1157.0, who:'NOOR',   s:"See y'all later." },
+
+  { t:1186.0, who:'TRAVIS', s:"Oh, what's good Devon." },
+  { t:1204.0, who:'DEVON',  s:"Wassup Travis. And Alina." },
+  { t:1208.5, who:'DEVON',  s:"I noticed y'all are skipping that test, right?" },
+  { t:1215.0, who:'TRAVIS', s:"Well, I was gonna do it today, but my dad wanted me to go to work, so." },
+  { t:1223.5, who:'ALINA',  s:"I was about to take my finals too, but they delayed that to next Friday." },
+  { t:1232.0, who:'DEVON',  s:"Ha! Same thing." },
+  { t:1235.5, who:'DEVON',  s:"My mom wants me to babysit my little sister today, since she's going out." },
+  { t:1244.0, who:'DEVON',  s:"So I think I gotta head back." },
+  { t:1248.5, who:'TRAVIS', s:"Okay, have fun man." },
+
+  { t:1334.0, who:'TRAVIS', s:"Oh, my favorite. A breakfast sandwich." },
+  { t:1340.0, who:'ALINA',  s:"Yep. You can never go wrong with that." },
+
+  { t:1368.0, who:'TRAVIS', s:"Give me a second." },
+  { t:1374.0, who:'TRAVIS', s:"Yeah, dad?" },
+  { t:1378.0, who:'GERALD', s:"I'm finally out of work, so we can go to the movies and get as much pizza as you want." },
+  { t:1387.5, who:'TRAVIS', s:"Yes, for sure! But what movie?" },
+  { t:1392.5, who:'GERALD', s:"Remember that graveyard movie? Yeah, we should go there." },
+  { t:1399.0, who:'TRAVIS', s:"Yeah, for sure." }
+];
+
+const L_BODEGA = { key:[0.08,0.96,0.20], keyC:[1.70,1.66,1.56], ambS:[0.92,0.92,0.94],
+                   ambG:[0.34,0.33,0.31], sky1:[0.46,0.46,0.47], fogK:0.008, glow:3.4, expo:1.0 };
+const L_PARK   = { key:[-0.55,0.62,0.55], keyC:[1.55,1.42,1.15], ambS:[0.80,0.86,1.00],
+                   ambG:[0.22,0.24,0.18], sky1:[0.66,0.66,0.62], sky2:[0.26,0.40,0.66],
+                   fogK:0.0045, glow:0.5, expo:1.0 };
+const L_BUSIN  = { key:[0.30,0.80,0.20], keyC:[1.15,1.10,1.00], ambS:[0.55,0.56,0.60],
+                   ambG:[0.18,0.17,0.17], sky1:[0.30,0.31,0.34], fogK:0.006, glow:2.2, expo:1.0 };
+
+function directAct5(t){
+  const s = state;
+  s.light = 0; s.lamp = 0; s.figVis = 0; s.mode = 0; s.glitch = 0.02;
+  s.fade = 1; s.red = 0; s.flash = 0; s.roll = 0; s.fov = 1.5;
+  s.alarm = 0; s.door = 0; s.prop = [0,0,0,0]; s.clean = 0;
+  clearCast();
+
+  /* ---- 17:36 into the bodega ---- */
+  if(t < 1090){
+    s.set = 14; setLight(L_BODEGA);
+    const walkIn = sstep(1056, 1064.0, t);
+    const split = sstep(1076.0, 1086.0, t);
+    const b = put(0, 'TRAVIS', lerp(-1.70, 1.35, walkIn), 0, lerp(-4.2, 0.30, walkIn), lerp(0.6, 0.0, walkIn) + split*1.3);
+    b.walk = (walkIn < 0.98) ? t*7.0 : 0;
+    const a = put(2, 'ALINA', lerp(-2.10, 0.55, walkIn) - split*0.9, 0,
+                              lerp(-4.6, -0.20, walkIn) + split*3.9, lerp(0.6, 0.0, walkIn));
+    a.walk = (walkIn < 0.98 || (split > 0.02 && split < 0.98)) ? t*6.6 : 0;
+    if(t > 1074 && t < 1078) a.nod = 0.30*Math.sin((t-1074)*3.4);     // she nods
+    b.hyaw = t > 1070 && t < 1078 ? -0.45 : 0.55;
+    a.hyaw = t > 1070 && t < 1078 ?  0.45 : 0.0;
+    act(0, t); act(2, t);
+    if(t < 1066){
+      const k = sstep(1056, 1066, t);
+      cam(-2.30, 1.66, lerp(-6.2,-3.1,k), lerp(-1.6,0.4,k), 1.35, lerp(-3.0,0.6,k), 1.45);
+    } else if(t < 1080){
+      cam(-0.30, 1.52, -1.35, 1.15, 1.42, 0.20, 1.65);
+    } else {
+      const k = sstep(1080, 1090, t);
+      cam(-0.55, 1.55, lerp(-1.6,-2.3,k), 1.25, 1.40, 0.35, 1.55);
+    }
+    s.fade = sstep(1056.2, 1057.2, t) * (1 - sstep(1089.2, 1090.0, t));
+    return;
+  }
+
+  /* ---- 18:10 someone comes in behind him ---- */
+  if(t < 1120){
+    s.set = 14; setLight(L_BODEGA);
+    const b = put(0, 'TRAVIS', 1.35, 0, 0.30, 1.3);
+    b.gest = 0.35 + 0.25*Math.sin(t*1.3);
+    b.mouth = 0.16 + 0.14*Math.abs(Math.sin(t*4.4));           // ordering, off mic
+    act(0, t);
+    b.mouth = Math.max(b.mouth, 0.16 + 0.14*Math.abs(Math.sin(t*4.4)));
+    const a = put(2, 'ALINA', -0.35, 0, 3.55, 0.2);
+    a.hyaw = 0.4; act(2, t);
+    // the door, and whoever is standing in it
+    const enter = sstep(1104.0, 1109.0, t);
+    if(t > 1103.5){
+      const d = put(1, 'DEVON', lerp(-1.70,-0.35, enter), 0, lerp(-4.9,-1.35, enter), 0.35);
+      d.walk = enter < 0.98 ? t*6.4 : 0;
+      act(1, t);
+    }
+    const k = sstep(1090, 1120, t);
+    cam(-1.15, 1.58, lerp(-2.9,-1.9,k), lerp(0.9,1.25,k), lerp(1.44,1.40,k), lerp(0.3,0.35,k), lerp(1.35,1.85,k));
+    s.glitch = 0.02 + 0.06*sstep(1108, 1119, t);
+    s.fade = sstep(1090.2, 1091.0, t) * (1 - sstep(1119.2, 1120.0, t));
+    return;
+  }
+
+  /* ---- 18:40 wrapping up the session ---- */
+  if(t < 1180){
+    s.set = 12; setLight(L_LAB); s.clean = 1; s.glitch = 0.0;
+    const leave = sstep(1163.0, 1176.0, t);
+    const g = put(0, 'GERALD', -0.60 - leave*3.2, 0, 0.35 - leave*2.6, 0.35 + leave*1.1);
+    g.walk = leave > 0.02 ? t*6.6 : 0;
+    g.vis = leave > 0.96 ? 0 : 1;
+    if(t > 1141 && t < 1147) g.gest = 1.7;                     // checking the time
+    const r = put(1, 'RALPH', 0.80, 0, 1.05, 3.55);
+    const l = put(2, 'LARRY', 1.85, 0, 0.10, 3.30);
+    const n = put(3, 'NOOR', -0.30, 0, 1.90, 3.60);
+    act(0, t); act(1, t); act(2, t); act(3, t);
+    g.hyaw = 0.30; r.hyaw = -0.25; l.hyaw = 0.20; n.hyaw = -0.10;
+    if(t < 1138){
+      cam(-2.45, 1.58, 1.70, 0.10, 1.42, 0.70, 1.45);
+    } else if(t < 1147){
+      cam(-1.75, 1.50, -0.55, -0.55, 1.44, 0.40, 1.85);
+    } else if(t < 1163){
+      cam(2.55, 1.58, 0.90, 0.20, 1.42, 0.70, 1.40);
+    } else {
+      const k = sstep(1163, 1180, t);
+      cam(lerp(2.4,2.0,k), 1.58, lerp(1.0,1.9,k), lerp(0.0,-1.6,k), 1.40, lerp(0.6,-0.9,k), 1.45);
+    }
+    s.fade = sstep(1120.2, 1121.0, t) * (1 - sstep(1179.2, 1180.0, t));
+    return;
+  }
+
+  /* ---- 19:40 what's good Devon ---- */
+  if(t < 1290){
+    s.set = 14; setLight(L_BODEGA);
+    const leave = sstep(1256.0, 1272.0, t);
+    const b = put(0, 'TRAVIS', 1.10 - leave*2.6, 0, 0.30 - leave*4.2, 1.1 - leave*2.4);
+    const d = put(1, 'DEVON', -0.20, 0, -1.20, 0.30 + sstep(1250,1258,t)*2.6);
+    const a = put(2, 'ALINA', 0.15 - leave*2.4, 0, lerp(2.6, 0.55, sstep(1188, 1200, t)) - leave*4.4, 3.0 - leave*5.6);
+    if(sstep(1188,1200,t) > 0.02 && sstep(1188,1200,t) < 0.98) a.walk = t*6.4;
+    if(leave > 0.02){ b.walk = t*6.8; a.walk = t*6.8; d.walk = t*6.6; d.z = -1.20 - leave*3.4; }
+    b.vis = leave > 0.95 ? 0 : 1; a.vis = b.vis; d.vis = leave > 0.95 ? 0 : 1;
+    act(0, t); act(1, t); act(2, t);
+    b.hyaw = -0.35; d.hyaw = 0.25; a.hyaw = -0.30;
+    if(t < 1192){
+      cam(1.55, 1.55, -1.95, 1.15, 1.44, 0.15, 1.75);            // over Devon's shoulder
+    } else if(t < 1215){
+      const k = sstep(1192, 1215, t);
+      cam(lerp(-1.9,-1.5,k), 1.60, lerp(-2.7,-2.2,k), 0.45, 1.40, 0.10, 1.35);
+    } else if(t < 1232){
+      cam(-0.95, 1.50, -2.55, 0.95, 1.42, 0.20, 1.80);
+    } else if(t < 1252){
+      cam(0.95, 1.52, -2.85, -0.25, 1.46, -1.05, 1.75);          // on Devon
+    } else {
+      const k = sstep(1252, 1290, t);
+      cam(-1.35, 1.62, lerp(-2.4,-3.4,k), lerp(0.4,-1.2,k), 1.38, lerp(-0.6,-3.4,k), 1.40);
+    }
+    s.fade = sstep(1180.2, 1181.0, t) * (1 - sstep(1289.2, 1290.0, t));
+    return;
+  }
+
+  /* ---- 21:30 the park ---- */
+  if(t < 1360){
+    s.set = 15; setLight(L_PARK);
+    const arrive = sstep(1290, 1306.0, t);
+    const sitDown = sstep(1306.0, 1310.0, t);
+    const b = put(0, 'TRAVIS', lerp(0.9, 0.45, arrive), 0, lerp(6.5, -1.45, arrive), 3.14159);
+    const a = put(2, 'ALINA', lerp(-0.2, -0.50, arrive), 0, lerp(6.9, -1.45, arrive), 3.14159);
+    b.walk = arrive < 0.98 ? t*6.4 : 0; a.walk = arrive < 0.98 ? t*6.4 + 1.5 : 0;
+    b.sit = sitDown; a.sit = sitDown;
+    if(sitDown > 0.5){ b.y = 0.03; a.y = 0.03; b.yaw = 0.0; a.yaw = 0.0; b.z = -1.62; a.z = -1.62; }
+    b.hyaw = sitDown > 0.5 ? -0.40 : 0.0;
+    a.hyaw = sitDown > 0.5 ?  0.40 : 0.0;
+    act(0, t); act(2, t);
+    if(t < 1308){
+      const k = sstep(1290, 1308, t);
+      cam(lerp(3.6,2.4,k), 1.70, lerp(9.0,2.2,k), lerp(0.4,0.0,k), 1.35, lerp(4.5,-1.4,k), 1.40);
+    } else if(t < 1346){
+      const k = sstep(1308, 1346, t);
+      cam(lerp(2.5,1.9,k), 1.35, lerp(1.4,0.7,k), 0.0, 1.12, -1.55, 1.45);
+    } else {
+      cam(0.10, 1.28, 1.05, 0.0, 1.10, -1.55, 1.75);
+    }
+    s.fade = sstep(1290.2, 1291.2, t) * (1 - sstep(1359.2, 1360.0, t));
+    return;
+  }
+
+  /* ---- 22:40 the call ---- */
+  if(t < 1440){
+    if(t < 1404){
+      s.set = 15; setLight(L_PARK);
+      const up = sstep(1365.0, 1372.0, t);
+      const b = put(0, 'TRAVIS', lerp(0.45, 2.95, up), lerp(0.03,0,up), lerp(-1.62, 1.05, up), lerp(0.0, -1.1, up));
+      b.sit = 1 - up;
+      b.walk = (up > 0.05 && up < 0.95) ? t*6.6 : 0;
+      b.gest = t > 1371 ? 1.75 : 0.2;
+      const a = put(2, 'ALINA', -0.50, 0.03, -1.62, 0.0);
+      a.sit = 1; a.hyaw = 0.35;
+      act(0, t); act(2, t);
+      if(t < 1372){
+        cam(1.85, 1.30, 0.85, 0.2, 1.14, -1.55, 1.60);
+      } else {
+        const k = sstep(1372, 1404, t);
+        cam(lerp(4.6,4.2,k), 1.55, lerp(1.9,1.4,k), 3.0, lerp(1.42,1.46,k), 1.05, lerp(1.55,1.95,k));
+      }
+    } else {
+      s.set = 15; setLight(L_PARK);
+      const back = sstep(1408.0, 1420.0, t);
+      const b = put(0, 'TRAVIS', lerp(2.95, 0.45, back), 0.03*back, lerp(1.05, -1.62, back), lerp(-1.1, 0.0, back));
+      b.sit = back; b.walk = (back > 0.05 && back < 0.95) ? t*6.4 : 0;
+      const a = put(2, 'ALINA', -0.50, 0.03, -1.62, 0.0);
+      a.sit = 1; a.hyaw = 0.35;
+      act(0, t); act(2, t);
+      const k = sstep(1404, 1440, t);
+      cam(lerp(3.0,2.2,k), lerp(1.45,1.32,k), lerp(1.6,1.0,k), 0.0, 1.14, -1.55, 1.45);
+    }
+    s.fade = sstep(1360.2, 1361.0, t) * (1 - sstep(1439.2, 1440.0, t));
+    return;
+  }
+
+  /* ---- 24:00 Gerald, on the bus, writing it all down ---- */
+  if(t < 1512){
+    s.set = 16; setLight(L_BUSIN);
+    const g = put(0, 'GERALD', -0.78, 0.02, 0.30, 1.5708);
+    g.sit = 1;
+    g.gest = 0.30 + 0.10*Math.sin(t*1.7);
+    g.nod = 0.30 + 0.06*Math.sin(t*0.9);                       // head down over the notebook
+    act(0, t);
+    if(t < 1462){
+      const k = sstep(1440, 1462, t);
+      cam(lerp(1.05,0.75,k), 1.48, lerp(-2.2,-1.4,k), -0.55, 1.15, 0.35, 1.40);
+    } else if(t < 1488){
+      cam(0.45, 1.22, -0.85, -0.62, 1.10, 0.30, 1.85);
+    } else {
+      const k = sstep(1488, 1512, t);
+      cam(lerp(0.55,0.95,k), lerp(1.28,1.52,k), lerp(-1.1,-2.4,k), -0.60, 1.14, 0.30, lerp(1.7,1.35,k));
+    }
+    if(t > 1504) s.clean = 0, s.glitch = 0.02 + 0.30*sstep(1504, 1512, t);
+    s.fade = sstep(1440.2, 1441.2, t) * (1 - sstep(1511.2, 1512.0, t));
+    return;
+  }
+
+  /* ---- 25:12 ---- */
   s.set = 8; setLight(L_LIFT); s.sky1 = [0,0,0]; s.glow = 0;
   cam(0, 1.5, 0, 0, 1.5, 1);
   s.fade = 0;
@@ -2488,7 +2822,8 @@ function directAct4(t){
 
 for(const L of LINES3) L.dur = clamp(L.s.length*0.062 + 0.30, 0.7, 9.0);
 for(const L of LINES4) L.dur = clamp(L.s.length*0.062 + 0.30, 0.7, 9.0);
-LINES.push(...LINES3, ...LINES4);
+for(const L of LINES5) L.dur = clamp(L.s.length*0.062 + 0.30, 0.7, 9.0);
+LINES.push(...LINES3, ...LINES4, ...LINES5);
 LINES.sort((a,b) => a.t - b.t);
 
 state.ch = [newChar(), newChar(), newChar(), newChar()];
@@ -2504,8 +2839,10 @@ function direct(t){
     directStory(t);
   } else if(t < 910.0){
     directAct3(t);
-  } else {
+  } else if(t < 1056.0){
     directAct4(t);
+  } else {
+    directAct5(t);
   }
 }
 
@@ -2529,9 +2866,9 @@ function cards(t){
   } else if(t > 136 && t < 140.4){
     html = '<div class="slug">FRIDAY &middot; 07:12 AM</div>';
     op = sstep(136.5, 137.3, t) * (1 - sstep(139.4, 140.2, t));
-  } else if(t > 1046.0){
+  } else if(t > 1512.0){
     html = '<div class="title small">TO BE CONTINUED</div>';
-    op = sstep(1046.6, 1047.6, t);
+    op = sstep(1512.6, 1513.6, t);
   }
   if(html !== cardKey){ cardEl.innerHTML = html; cardKey = html; }
   cardEl.style.opacity = op.toFixed(3);
@@ -2680,12 +3017,16 @@ const DRONE_ENV = [[0,0.0001],[6,0.10],[40,0.13],[70,0.26],[71.5,0.30],[73.4,0.0
   [456,0.01],[457.4,0.30],[459,0.06],[478,0.04],[500,0.05],[534,0.02],
   [556,0.02],[602,0.02],[626,0.015],[656,0.015],[698,0.02],[836,0.03],
   [866,0.03],[903,0.04],[905.5,0.30],[909,0.26],[910.5,0.03],
-  [942,0.025],[972,0.03],[1020,0.04],[1032,0.14],[1044,0.10],[1050,0.03],[1056,0.0001]];
+  [942,0.025],[972,0.03],[1020,0.04],[1032,0.14],[1044,0.10],[1056,0.03],
+  [1090,0.05],[1112,0.26],[1119,0.30],[1120.5,0.01],           // someone in the doorway
+  [1180,0.06],[1186,0.16],[1190,0.03],[1290,0.02],[1360,0.02],[1404,0.02],
+  [1440,0.04],[1500,0.05],[1505,0.28],[1512,0.24],[1520,0.0001]];
 const WIND_ENV  = [[0,0.0001],[5,0.045],[62,0.075],[83,0.010],[90,0.006],[99,0.014],
   [116,0.016],[136,0.05],[196,0.055],[204,0.05],[238,0.03],[241,0.022],[282,0.012],
   [303,0.014],[320,0.020],[368,0.030],[386,0.012],[456,0.020],[500,0.016],[534,0.010],
   [556,0.012],[626,0.014],[656,0.012],[698,0.020],[836,0.045],[866,0.014],
-  [910,0.050],[942,0.020],[972,0.030],[1020,0.050],[1046,0.030],[1056,0.0001]];
+  [910,0.050],[942,0.020],[972,0.030],[1020,0.050],[1056,0.020],
+  [1090,0.024],[1120,0.012],[1180,0.022],[1290,0.055],[1440,0.030],[1520,0.0001]];
 
 function stopAudio(){
   if(!AC.ctx) return;
@@ -3021,6 +3362,49 @@ function startAudio(fromT){
   });
   cue(1032.0, at => stinger(at, 90, 44, 6.0, 0.10));
   cue(1046.5, at => { thump(at, 42, 0.42); stinger(at, 300, 60, 3.0, 0.16); });
+
+  // ================= act five =================
+  cue(1057.0, at => { beep(at, 1320, 0.10, 0.06); beep(at + 0.14, 1760, 0.16, 0.055); });  // door chime
+  cue(1058.0, at => hum(at, 62, 0.020));                       // fridge compressor
+  for(let i=0;i<16;i++) cue(1058 + i*0.62, a => burst(a, 0.11, 300 + Math.random()*160, 2.2, 0.05));
+  const RAD = [392,349,330,392,440,392,330,294];               // a radio behind the counter
+  for(let loop=0; loop<5; loop++){
+    for(let i=0;i<8;i++){
+      const at = 1062 + loop*4.8 + i*0.6;
+      if(at > 1118) break;
+      cue(at, a => note(a, RAD[i], 0.5, 0.020, 'triangle'));
+    }
+  }
+  cue(1104.5, at => { beep(at, 1320, 0.10, 0.07); beep(at + 0.14, 1760, 0.16, 0.065); });
+  for(let i=0;i<8;i++) cue(1105 + i*0.55, a => burst(a, 0.14, 200 + i*22, 2.0, 0.085));
+  cue(1109.0, at => stinger(at, 70, 900, 9.0, 0.16));          // the suspense under it
+  cue(1119.2, at => { thump(at, 44, 0.5); burst(at, 0.5, 2200, 0.8, 0.24); });
+
+  cue(1120.5, at => hum(at, 58, 0.024));                       // the lab, clean and calm
+  cue(1141.5, at => beep(at, 900, 0.10, 0.05));                // phone screen
+  for(let i=0;i<14;i++) cue(1163 + i*0.62, a => burst(a, 0.12, 280 + Math.random()*140, 2.2, 0.06));
+
+  cue(1181.0, at => hum(at, 106, 0.020));
+  cue(1186.2, at => { stinger(at, 900, 300, 0.8, 0.09); });    // he turns around, and it is fine
+  for(let i=0;i<18;i++) cue(1256 + i*0.60, a => burst(a, 0.11, 290 + Math.random()*150, 2.2, 0.055));
+  cue(1272.0, at => { beep(at, 1320, 0.10, 0.06); beep(at + 0.14, 1760, 0.16, 0.055); });
+
+  // the park
+  for(let i=0;i<30;i++) cue(1292 + i*4.6 + Math.random()*2.0, chirp);
+  for(let i=0;i<22;i++) cue(1291 + i*0.66, a => burst(a, 0.10, 260 + Math.random()*120, 2.0, 0.05));
+  cue(1364.0, at => {                                          // his phone goes
+    for(let i=0;i<3;i++){
+      note(at + i*1.6, 880, 0.18, 0.055, 'triangle');
+      note(at + i*1.6 + 0.24, 1174, 0.22, 0.05, 'triangle');
+    }
+  });
+  cue(1401.0, at => beep(at, 700, 0.12, 0.05));                // hangs up
+
+  // the bus home
+  cue(1441.0, at => engine(at, 70, 0.10, 44, 40));
+  for(let i=0;i<34;i++) cue(1444 + i*1.9, a => burst(a, 0.09, 3600 + Math.random()*1800, 9, 0.020));  // pen
+  cue(1504.5, at => { thump(at, 40, 0.55); stinger(at, 2400, 60, 2.4, 0.28); burst(at, 1.6, 1500, 0.6, 0.26); });
+  cue(1509.0, at => stinger(at, 130, 38, 2.4, 0.16));
 
   for(const [at, fn] of cues) fn(now + (at - fromT));
   AC.stale = false;
