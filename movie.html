@@ -226,7 +226,7 @@
   <div id="poster">
     <div class="mark">TLH</div>
     <div class="name">THE LAST HALLWAY</div>
-    <div class="meta">FEATURE &nbsp;&bull;&nbsp; 15 min 16 sec &nbsp;&bull;&nbsp; HORROR</div>
+    <div class="meta">FEATURE &nbsp;&bull;&nbsp; 17 min 36 sec &nbsp;&bull;&nbsp; HORROR</div>
     <button class="big" id="bigplay"><svg viewBox="0 0 24 24"><path d="M5 3.5 20 12 5 20.5z"/></svg>Play</button>
   </div>
 
@@ -327,6 +327,7 @@ uniform int   uSet;
 uniform vec3  uKeyDir, uKeyCol, uAmbSky, uAmbGnd, uSky1, uSky2;
 uniform float uFogK, uExpo, uGlow, uAlarm, uDoor;
 uniform vec4  uProp;
+uniform int   uNChar;
 uniform vec4  uChA[4], uChB[4], uChC[4], uChD[4], uChE[4], uChF[4], uChG[4];
 
 
@@ -513,9 +514,12 @@ vec2 person(vec3 wp, int i){
     hnd = mix(hnd, vec3(0.185*s, hipY-0.10, 0.34), sit);
     // gesture: the right hand comes up while talking
     if(L == 1){
-      float g = G.x;
+      float g = clamp(G.x, 0.0, 1.0);
       elb = mix(elb, vec3(0.26*s, shY-0.22, 0.16), g);
       hnd = mix(hnd, vec3(0.20*s, shY-0.02, 0.30), g);
+      float ph2 = smoothstep(1.4, 1.9, G.x);              // on the phone
+      elb = mix(elb, vec3(0.30*s, shY-0.26, 0.02), ph2);
+      hnd = mix(hnd, vec3(0.15*s, shY+0.20, 0.01), ph2);
     }
     res = opU(res, vec2(sdCap(p, sh, elb, 0.058), M_SHIRT));
     res = opU(res, vec2(smin(sdCap(p, elb, hnd, 0.048),
@@ -552,7 +556,7 @@ vec2 person(vec3 wp, int i){
   float hair = 1e9;
   if(kind == 0){                                   // boy: short mop
     hair = sdEllip(h - vec3(0.0, 0.028,-0.012), vec3(0.140, 0.160, 0.146));
-    hair = max(hair, -(h.y + 0.02 - 0.34*max(h.z,0.0)));
+    hair = max(hair, -(h.y - 0.02 - 0.34*max(h.z,0.0)));
     hair = max(hair, -(sdEllip(h - vec3(0.0,0.02,0.0), vec3(0.122,0.150,0.129))));
   } else if(kind == 1){                            // father: cropped, receding, stubble
     hair = sdEllip(h - vec3(0.0, 0.045,-0.022), vec3(0.132, 0.150, 0.140));
@@ -583,7 +587,7 @@ vec2 person(vec3 wp, int i){
 
 vec2 people(vec3 p){
   vec2 r = vec2(1e9, 0.0);
-  for(int i=0;i<4;i++) r = opU(r, person(p, i));
+  for(int i=0;i<uNChar;i++) r = opU(r, person(p, i));
   return r;
 }
 
@@ -765,6 +769,11 @@ vec2 setLobby(vec3 p){
   vec3 pl = p; pl.x = abs(pl.x);
   r = opU(r, vec2(sdRound(pl - vec3(4.6,0.30,0.4), vec3(0.34,0.30,0.34), 0.06), M_DARK));
   r = opU(r, vec2(sdEllip(pl - vec3(4.6,0.95,0.4), vec3(0.42,0.55,0.42)), M_GRASS));
+  // drinks machine by the lifts
+  float vm = sdRound(p - vec3(-3.15,0.90,6.95), vec3(0.42,0.90,0.34), 0.04);
+  r = opU(r, vec2(vm, M_DARK));
+  r = opU(r, vec2(sdBox(p - vec3(-3.15,1.12,6.58), vec3(0.30,0.52,0.03)), M_GLOW));
+
   // lift doors on the far side
   vec3 e = p - vec3(0.0,1.30,7.42); e.x = abs(e.x) - 1.05;
   r = opU(r, vec2(sdBox(e, vec3(0.62,1.30,0.06)), M_METAL));
@@ -797,6 +806,7 @@ vec2 setLift(vec3 p){
 /* ---------------- 9 : the second floor ---------------- */
 vec2 setFloor2(vec3 p){
   vec2 r = vec2(-sdBox(p - vec3(0.0,1.35,0.0), vec3(2.0,1.35,15.0)), M_WALL);
+  if(p.y < -0.5 || p.y > 3.2) return vec2(0.4, M_WALL);
   if(p.y < 0.04) r.y = M_TILE;
   if(p.y > 2.64) r.y = M_CEIL;
   vec3 c = p; c.z = mod(c.z + 2.0, 4.0) - 2.0;
@@ -921,12 +931,12 @@ vec3 calcNormal(vec3 p){
 
 float calcAO(vec3 p, vec3 n){
   float occ = 0.0, sca = 1.0;
-  for(int i=0;i<3;i++){
-    float h = 0.03 + 0.19*float(i);
+  for(int i=0;i<2;i++){
+    float h = 0.04 + 0.24*float(i);
     occ += (h - mapD(p + n*h)) * sca;
-    sca *= 0.62;
+    sca *= 0.55;
   }
-  return clamp(1.0 - 1.6*occ, 0.0, 1.0);
+  return clamp(1.0 - 2.0*occ, 0.0, 1.0);
 }
 
 mat3 camMat(vec3 ro, vec3 ta, float roll){
@@ -1105,7 +1115,7 @@ float emissiveOf(float m, vec3 p, out vec3 ec){
 vec3 renderNew(vec3 ro, vec3 rd){
   float t = 0.02, m = 0.0;
   bool hit = false;
-  float far = (uSet == 4 || uSet == 5) ? 92.0 : (uSet == 9 ? 40.0 : 26.0);
+  float far = (uSet == 4 || uSet == 5) ? 92.0 : (uSet == 9 ? 30.0 : 24.0);
   for(int i=0;i<76;i++){
     vec3 p = ro + rd*t;
     vec2 h = mapNew(p);
@@ -1124,7 +1134,7 @@ vec3 renderNew(vec3 ro, vec3 rd){
 
   // key light with a cheap contact shadow under each person
   float sh = 1.0;
-  for(int i=0;i<4;i++){
+  for(int i=0;i<uNChar;i++){
     if(uChC[i].w < 0.5) continue;
     vec2 d = p.xz - uChA[i].xz;
     sh *= 1.0 - 0.62*exp(-dot(d,d)*4.0)*smoothstep(1.4, 0.05, abs(p.y - uChA[i].y));
@@ -1171,6 +1181,8 @@ uniform vec2  uRes;
 uniform float uTime;
 uniform float uGlitch;
 uniform float uClean;
+uniform vec2  uSrcRes;
+uniform float uSharp;
 uniform float uFade;
 uniform float uRed;
 uniform float uFlash;
@@ -1200,6 +1212,14 @@ void main(){
   col.r = texture(uTex, uv + dir*ca).r;
   col.g = texture(uTex, uv).g;
   col.b = texture(uTex, uv - dir*ca).b;
+
+  // unsharp mask against the source texels, so an upscaled frame still reads crisp
+  if(uSharp > 0.001){
+    vec2 ts = 1.0/uSrcRes;
+    vec3 blur = (texture(uTex, uv + vec2(ts.x,0.0)).rgb + texture(uTex, uv - vec2(ts.x,0.0)).rgb +
+                 texture(uTex, uv + vec2(0.0,ts.y)).rgb + texture(uTex, uv - vec2(0.0,ts.y)).rgb) * 0.25;
+    col += (col - blur) * uSharp;
+  }
 
   col += uRed * vec3(0.42, 0.015, 0.02);
   col += uFlash;
@@ -1289,13 +1309,14 @@ const QUALITIES = [
 ];
 let qIndex = 1, qLocked = false;             // 720p by default: three characters is a lot of shader
 // the chosen quality is a ceiling; this rides underneath it to hold the frame rate
-const DYN = [1.0, 0.84, 0.70, 0.58, 0.48];
+const DYN = [1.0, 0.86, 0.74, 0.62, 0.52, 0.44, 0.36];
 let dynIdx = 0;
 { const q0 = new URLSearchParams(location.search).get('q');
   const qi = QUALITIES.findIndex(q => q.id === q0);
   if(qi >= 0){ qIndex = qi; qLocked = true; } }
 let W=1, H=1;
 
+let sizedOnce = false;
 function resize(){
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   let bw = innerWidth, bh = Math.round(innerWidth*9/16);
@@ -1305,6 +1326,11 @@ function resize(){
   W = Math.max(2, Math.round(bw*dpr));
   H = Math.max(2, Math.round(bh*dpr));
   canvas.width = W; canvas.height = H;
+  if(!sizedOnce){                            // don't make a 4K panel discover this the hard way
+    sizedOnce = true;
+    const mp = (W*H)/1e6;
+    if(mp > 4.0) dynIdx = 2; else if(mp > 2.2) dynIdx = 1;
+  }
   applyQuality();
 }
 function applyQuality(){
@@ -1336,7 +1362,7 @@ function flickerCurve(t, speed, depth){
 
 /* ---------------- the shot list ---------------- */
 // Camera lives at y ~1.55 in a corridor running along +z.
-const RUNTIME = 916;
+const RUNTIME = 1056;
 const state = {
   cam:[0,1.55,0], tgt:[0,1.5,6], roll:0, fov:1.5,
   light:0.9, lamp:0.0, figZ:0, figVis:0, mode:0, mouth:0,
@@ -2323,7 +2349,7 @@ function directAct3(t){
   }
 
   /* ---- 14:26 the rabbit ---- */
-  if(t < 910){
+  {
     s.set = 12; setLight(L_LAB); s.clean = 1; s.glitch = 0.0;
     s.prop = [0, 0, 1, 0];
     const g = put(1, 'GERALD', 0.75, 0, 1.95, 3.14159);
@@ -2345,14 +2371,124 @@ function directAct3(t){
     return;
   }
 
-  /* ---- 15:10 ---- */
+}
+
+/* ================= act four ================= */
+const LINES4 = [
+  { t:913.5, who:'ALINA',  s:"So what are we gonna do? It's like eleven in the morning." },
+  { t:920.0, who:'TRAVIS', s:"I mean, we can go get something to eat." },
+  { t:925.5, who:'ALINA',  s:"Oh yeah! I know a hotdog place. Or a deli." },
+  { t:931.5, who:'TRAVIS', s:"Okay fine. At least they make great sandwiches there." },
+  { t:937.5, who:'TRAVIS', s:"I'm starving." },
+
+  { t:958.0, who:'GERALD', s:"Where is this kid, man?" },
+  { t:967.5, who:'GERALD', s:"Come on. Pick up." },
+
+  { t:979.0, who:'GERALD', s:"Where did you go?" },
+  { t:983.5, who:'TRAVIS', s:"Outside, to the store. I'm starving." },
+  { t:990.0, who:'GERALD', s:"Okay, have fun." },
+  { t:993.5, who:'GERALD', s:"My shift is about to be over at twelve thirty." },
+  { t:999.5, who:'GERALD', s:"So if you wanna still get pizza, let me know." },
+  { t:1006.0, who:'TRAVIS', s:"Okay!", cap:"Okay \u{1F44D}\u{1F3FE}" }
+];
+
+function directAct4(t){
+  const s = state;
+  s.light = 0; s.lamp = 0; s.figVis = 0; s.mode = 0; s.glitch = 0.02;
+  s.fade = 1; s.red = 0; s.flash = 0; s.roll = 0; s.fov = 1.5;
+  s.alarm = 0; s.door = 0; s.prop = [0,0,0,0]; s.clean = 0;
+  clearCast();
+
+  /* ---- 15:10 the two of them, out in the morning ---- */
+  if(t < 942){
+    s.set = 5; setLight(L_STREET); s.key = [-0.78, 0.44, 0.32];
+    const k = sstep(910, 942, t);
+    const x = lerp(2.0, -16.0, k);
+    const b = put(0, 'TRAVIS', x, 0, 8.4, 1.5708);
+    const a = put(2, 'ALINA', x - 0.95, 0, 8.9, 1.5708);
+    b.walk = t*6.2; a.walk = t*6.2 + 1.6;
+    b.hyaw = -0.35; a.hyaw = 0.35;
+    act(0, t); act(2, t);
+    if(t < 926){
+      cam(x - 3.3, 1.55, 6.6, x, 1.42, 8.7, 1.45);               // tracking beside them
+    } else {
+      cam(x - 2.4, 1.48, 11.2, x - 0.4, 1.40, 8.6, 1.60);        // the other side
+    }
+    s.fade = sstep(910.2, 911.2, t) * (1 - sstep(941.2, 942.0, t));
+    return;
+  }
+
+  /* ---- 15:42 downstairs, for a hot chocolate ---- */
+  if(t < 972){
+    s.set = 6; setLight(L_LOBBY);
+    const walk = sstep(942, 950.0, t);
+    const back = sstep(962.0, 968.0, t);
+    const g = put(1, 'GERALD', lerp(-1.2,-2.95,walk) + back*0.5, 0, lerp(4.6,6.2,walk), lerp(3.6,3.14159,walk));
+    g.walk = (walk < 0.98) ? t*6.4 : 0;
+    g.gest = t > 964 ? 1.7 : (t > 950 ? 0.5 : 0.1);              // drink, then phone
+    act(1, t);
+    g.hyaw = t > 952 && t < 962 ? 0.7*Math.sin((t-952)*0.7) : 0; // looking around for him
+    if(t < 952){
+      const k = sstep(942, 952, t);
+      cam(-0.6, 1.66, lerp(3.2,4.4,k), -2.6, 1.40, 6.4, 1.40);
+    } else if(t < 964){
+      cam(-2.15, 1.55, 4.55, -2.95, 1.44, 6.15, 1.70);
+    } else {
+      cam(-1.85, 1.50, 5.05, -2.90, 1.46, 6.20, 1.95);
+    }
+    s.fade = sstep(942.2, 943.0, t) * (1 - sstep(971.2, 972.0, t));
+    return;
+  }
+
+  /* ---- 16:12 the call ---- */
+  if(t < 1020){
+    const onGerald = (t < 983) || (t >= 989 && t < 1005);
+    if(onGerald){
+      s.set = 6; setLight(L_LOBBY);
+      const g = put(1, 'GERALD', -2.95, 0, 6.20, 3.14159);
+      g.gest = 1.75;
+      act(1, t);
+      const k = sstep(972, 1005, t);
+      cam(-1.90, 1.52, lerp(5.10,4.85,k), -2.92, 1.46, 6.20, lerp(1.95,2.10,k));
+    } else {
+      s.set = 5; setLight(L_STREET); s.key = [-0.78, 0.44, 0.32];
+      const x = -16.0 - (t - 942)*0.35;
+      const b = put(0, 'TRAVIS', x, 0, 8.4, 1.5708);
+      const a = put(2, 'ALINA', x - 0.95, 0, 8.9, 1.5708);
+      b.walk = t*5.0; a.walk = t*5.0 + 1.6;
+      b.gest = 1.75;
+      b.hyaw = -0.15; a.hyaw = 0.30;
+      act(0, t); act(2, t);
+      cam(x - 2.1, 1.50, 6.8, x - 0.1, 1.44, 8.5, 1.85);
+    }
+    s.fade = sstep(972.2, 973.0, t) * (1 - sstep(1019.2, 1020.0, t));
+    return;
+  }
+
+  /* ---- 17:00 and off they go ---- */
+  if(t < 1046){
+    s.set = 5; setLight(L_STREET); s.key = [-0.78, 0.44, 0.32];
+    const k = sstep(1020, 1044, t);
+    const x = -29.5 - k*11.0;
+    const b = put(0, 'TRAVIS', x, 0, 8.4, 1.5708);
+    const a = put(2, 'ALINA', x - 0.95, 0, 8.9, 1.5708);
+    b.walk = t*6.0; a.walk = t*6.0 + 1.6;
+    b.hyaw = -0.30; a.hyaw = 0.30;
+    act(0, t); act(2, t);
+    cam(x + 7.0, lerp(1.55, 7.5, k), lerp(9.6, 15.0, k), x - 0.5, lerp(1.40, 0.9, k), 8.7, lerp(1.45, 1.15, k));
+    s.fade = sstep(1020.2, 1021.2, t) * (1 - sstep(1044.6, 1046.0, t));
+    return;
+  }
+
+  /* ---- 17:26 ---- */
   s.set = 8; setLight(L_LIFT); s.sky1 = [0,0,0]; s.glow = 0;
   cam(0, 1.5, 0, 0, 1.5, 1);
   s.fade = 0;
 }
 
 for(const L of LINES3) L.dur = clamp(L.s.length*0.062 + 0.30, 0.7, 9.0);
-LINES.push(...LINES3);
+for(const L of LINES4) L.dur = clamp(L.s.length*0.062 + 0.30, 0.7, 9.0);
+LINES.push(...LINES3, ...LINES4);
 LINES.sort((a,b) => a.t - b.t);
 
 state.ch = [newChar(), newChar(), newChar(), newChar()];
@@ -2366,8 +2502,10 @@ function direct(t){
     state.set = state.mode > 0.5 ? 1 : 0;
   } else if(t < 303.0){
     directStory(t);
-  } else {
+  } else if(t < 910.0){
     directAct3(t);
+  } else {
+    directAct4(t);
   }
 }
 
@@ -2391,9 +2529,9 @@ function cards(t){
   } else if(t > 136 && t < 140.4){
     html = '<div class="slug">FRIDAY &middot; 07:12 AM</div>';
     op = sstep(136.5, 137.3, t) * (1 - sstep(139.4, 140.2, t));
-  } else if(t > 910.4){
+  } else if(t > 1046.0){
     html = '<div class="title small">TO BE CONTINUED</div>';
-    op = sstep(910.8, 911.6, t);
+    op = sstep(1046.6, 1047.6, t);
   }
   if(html !== cardKey){ cardEl.innerHTML = html; cardKey = html; }
   cardEl.style.opacity = op.toFixed(3);
@@ -2403,7 +2541,10 @@ function cards(t){
 const CH = { A:new Float32Array(16), B:new Float32Array(16), C:new Float32Array(16),
              D:new Float32Array(16), E:new Float32Array(16), F:new Float32Array(16),
              G:new Float32Array(16) };
+let nChar = 4;
 function packCast(){
+  nChar = 0;
+  for(let i=0;i<4;i++) if(state.ch[i].vis) nChar = i + 1;
   for(let i=0;i<4;i++){
     const c = state.ch[i], k = c, o = i*4;
     CH.A[o]=c.x; CH.A[o+1]=c.y; CH.A[o+2]=c.z; CH.A[o+3]=c.yaw;
@@ -2452,6 +2593,7 @@ function drawScene(t, target){
   gl.uniform1f(scene.u.uDoor, s.door);
   gl.uniform4f(scene.u.uProp, s.prop[0], s.prop[1], s.prop[2], s.prop[3]);
   packCast();
+  gl.uniform1i(scene.u.uNChar, nChar);
   gl.uniform4fv(scene.u['uChA[0]'], CH.A);
   gl.uniform4fv(scene.u['uChB[0]'], CH.B);
   gl.uniform4fv(scene.u['uChC[0]'], CH.C);
@@ -2470,7 +2612,7 @@ function showCaption(i){
   if(i < 0){ el.textContent = ''; el.style.opacity = '0'; return; }
   const L = LINES[i];
   el.classList.toggle('vo', !!(L.vo || L.off || L.sfx));
-  el.textContent = ((L.vo || L.off || L.sfx) ? '[' + ROLE[L.who].name + '] ' : '') + L.s;
+  el.textContent = ((L.vo || L.off || L.sfx) ? '[' + ROLE[L.who].name + '] ' : '') + (L.cap || L.s);
   el.style.opacity = '1';
 }
 
@@ -2487,6 +2629,8 @@ function render(t){
   gl.uniform1f(post.u.uTime, t);
   gl.uniform1f(post.u.uGlitch, state.glitch);
   gl.uniform1f(post.u.uClean, state.clean || 0);
+  gl.uniform2f(post.u.uSrcRes, main.w, main.h);
+  gl.uniform1f(post.u.uSharp, clamp((1.0 - main.h/H) * 1.5, 0, 0.80));
   gl.uniform1f(post.u.uFade, state.fade);
   gl.uniform1f(post.u.uRed, state.red);
   gl.uniform1f(post.u.uFlash, state.flash);
@@ -2535,11 +2679,13 @@ const DRONE_ENV = [[0,0.0001],[6,0.10],[40,0.13],[70,0.26],[71.5,0.30],[73.4,0.0
   [364.5,0.10],[368,0.26],[385.6,0.30],[386.4,0.01],                 // the head, then clean air
   [456,0.01],[457.4,0.30],[459,0.06],[478,0.04],[500,0.05],[534,0.02],
   [556,0.02],[602,0.02],[626,0.015],[656,0.015],[698,0.02],[836,0.03],
-  [866,0.03],[903,0.04],[905.5,0.30],[909,0.26],[916,0.0001]];
+  [866,0.03],[903,0.04],[905.5,0.30],[909,0.26],[910.5,0.03],
+  [942,0.025],[972,0.03],[1020,0.04],[1032,0.14],[1044,0.10],[1050,0.03],[1056,0.0001]];
 const WIND_ENV  = [[0,0.0001],[5,0.045],[62,0.075],[83,0.010],[90,0.006],[99,0.014],
   [116,0.016],[136,0.05],[196,0.055],[204,0.05],[238,0.03],[241,0.022],[282,0.012],
   [303,0.014],[320,0.020],[368,0.030],[386,0.012],[456,0.020],[500,0.016],[534,0.010],
-  [556,0.012],[626,0.014],[656,0.012],[698,0.020],[836,0.045],[866,0.014],[916,0.0001]];
+  [556,0.012],[626,0.014],[656,0.012],[698,0.020],[836,0.045],[866,0.014],
+  [910,0.050],[942,0.020],[972,0.030],[1020,0.050],[1046,0.030],[1056,0.0001]];
 
 function stopAudio(){
   if(!AC.ctx) return;
@@ -2856,6 +3002,26 @@ function startAudio(fromT){
   cue(905.6, at => { thump(at, 40, 0.6); stinger(at, 2200, 60, 2.2, 0.30); burst(at, 1.6, 1400, 0.6, 0.28); });
   cue(908.5, at => stinger(at, 140, 40, 2.0, 0.16));
 
+  // ================= act four =================
+  for(let i=0;i<40;i++) cue(911 + i*0.80, a => burst(a, 0.12, 250 + Math.random()*150, 2.0, 0.06));
+  for(let i=0;i<8;i++)  cue(912 + i*4.0 + Math.random()*1.5, chirp);
+  cue(942.5, at => hum(at, 78, 0.020));
+  for(let i=0;i<10;i++) cue(943 + i*0.78, a => burst(a, 0.13, 300 + Math.random()*140, 2.2, 0.07));
+  cue(953.5, at => {                                   // the machine gives up a cup
+    burst(at, 0.7, 500, 1.2, 0.09); burst(at + 0.9, 1.6, 1800, 0.8, 0.06);
+  });
+  cue(967.8, at => { for(let i=0;i<4;i++) beep(at + i*0.16, 700 + i*220, 0.10, 0.05); });  // dialling
+  for(let i=0;i<3;i++) cue(969.0 + i*1.9, a => { beep(a, 440, 0.4, 0.055); beep(a+0.55, 440, 0.4, 0.055); });
+  cue(977.8, at => beep(at, 900, 0.12, 0.06));          // picked up
+  for(let i=0;i<26;i++) cue(1006 + i*0.80, a => burst(a, 0.12, 250 + Math.random()*150, 2.0, 0.055));
+  cue(1020.5, at => {                                   // the outro lifts
+    note(at, 262, 3.4, 0.045, 'triangle'); note(at, 330, 3.4, 0.035, 'triangle');
+    note(at + 3.4, 294, 3.4, 0.045, 'triangle'); note(at + 3.4, 392, 3.4, 0.035, 'triangle');
+    note(at + 6.8, 262, 4.6, 0.045, 'triangle'); note(at + 6.8, 349, 4.6, 0.035, 'triangle');
+  });
+  cue(1032.0, at => stinger(at, 90, 44, 6.0, 0.10));
+  cue(1046.5, at => { thump(at, 42, 0.42); stinger(at, 300, 60, 3.0, 0.16); });
+
   for(const [at, fn] of cues) fn(now + (at - fromT));
   AC.stale = false;
   return true;
@@ -3154,11 +3320,13 @@ function adapt(now, dt){
   perf.n = 0; perf.sum = 0; perf.t0 = now;
   if(now - perf.hold < 900) return;
 
-  if(avg > 21.0 && dynIdx < DYN.length-1){
-    dynIdx += (avg > 60.0 && dynIdx < DYN.length-2) ? 2 : 1;   // badly behind: skip a rung
+  if(avg > 19.5 && dynIdx < DYN.length-1){
+    // vsync quantises a missed frame to 33ms, so anything over ~19 is a real miss
+    const jump = avg > 100.0 ? 3 : (avg > 45.0 ? 2 : 1);
+    dynIdx = Math.min(dynIdx + jump, DYN.length-1);
     perf.hold = now; perf.good = 0; applyQuality();
-  } else if(avg < 17.5){
-    // vsync pins a healthy frame near 16.7ms, so recovery needs a sustained run
+  } else if(avg < 14.5){
+    // a healthy vsynced frame sits at 16.7ms, so recovery needs real headroom
     if(++perf.good >= 5 && dynIdx > 0 && perf.ups < 3){
       dynIdx--; perf.ups++; perf.good = 0; perf.hold = now; applyQuality();
     }
