@@ -13,28 +13,40 @@ on every device.
 
 Open the file in a browser. Nothing to install.
 
-### The four engines
+### The three engines
 
-| Engine | Passes | Dream length | What it adds |
+| Engine | Passes | Dream length | What it is |
 |---|---|---|---|
-| **Dreamer V2** | 1 | 2:30 | The fast core. Reads the prompt literally and puts it on the ground. |
-| **Dreamer V2.1** | 2 | 3:30 | A second pass: richer palette, ground detail, layered weather, a horizon, ambient life. |
-| **Dreamer 2.3 Fast** | 2 | 4:00 | Everything V2.1 does plus semantic expansion, compiled in one shot with no thinking pauses. Stronger than V2.1 and the quickest of the four. |
-| **Dreament Agent 2** | 6 | 5:00 | Plans, expands the idea with what it implies, designs each object, raises a landmark at the centre of the world, then reviews its own build and fixes what is missing. Time of day moves while you are inside. |
+| **Dreamer 2.3 Fast** | 2 | 4:00 | The quick one. Reads what your prompt implies and compiles in one shot, no thinking pauses. |
+| **Dreament Agent 2** | 6 | 5:00 | Plans, expands, designs, raises a landmark at the centre of the world, then reviews its own build and fixes what is missing. |
+| **Dreamer V2.5** | 8 | 6:00 | **Strongest.** Builds every word you write and tells you what it did with each one. Lights the world from a real sun angle with contact shadows under everything, paints rock into the steep ground, and gives each object weight when the wind moves through it. |
 
 Each engine also runs at three effort levels — Instant, Deep and Max — which
 change how much it thinks and how dense the world gets.
 
-**Engine stats** in the menu benchmarks all four live on your device: every
+**Engine stats** in the menu benchmarks all three live on your device: every
 engine compiles the same six scenes and is scored on world size, variety,
 reasoning depth and how long it keeps you waiting. Typical result:
 
 | | Strength | World | Build |
 |---|---|---|---|
+| Dreamer V2.5 | 308 | 202 | 2.4s |
 | Dreament Agent 2 | 223 | 155 | 3.7s |
 | Dreamer 2.3 Fast | 122 | 139 | 0.2s |
-| Dreamer V2.1 | 95 | 121 | 1.7s |
-| Dreamer V2 | 43 | 48 | 0.9s |
+
+#### What V2.5 does that the others do not
+
+- **Literal to the word.** It keeps a ledger of your sentence: every word you
+  wrote and what it became. `"sunset" → sun angle and colour`,
+  `"gloomberry" → invented shape ×3`. The ledger is shown while it builds.
+- **Real sun.** Time of day sets an actual sun elevation, so dusk rakes across
+  the ground with long shadows and noon sits overhead.
+- **Contact shadows.** A soft darkening under everything that stands still, so
+  objects sit on the ground instead of hovering over it.
+- **Slope-aware terrain.** Steep faces wear rock; flat ground keeps its colour.
+- **Wind with weight.** One wind blows through the whole world, slowly turning.
+  Vegetation bends around its base, so a trunk barely shifts while the canopy
+  swings. Stone and buildings stay put, which is both truer and cheaper.
 
 ### What the compiler understands
 
