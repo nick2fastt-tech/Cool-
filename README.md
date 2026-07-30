@@ -1,6 +1,6 @@
 # Cool-
 
-## DREAMVISION II — `dreamvision-2.html`
+## DREAMVISION II — `index.html`
 
 A single-file 3D dream engine. You describe a place in plain words, it compiles
 that sentence into a world, and you walk around inside it.
@@ -34,6 +34,14 @@ becomes an object.
 
 Agent 2 additionally infers what a prompt implies — a city at night gets
 streetlights and traffic — and reports every inference in its trace panel.
+
+### The interface
+
+Everything is built around bubbles. Each keystroke releases one from the caret
+as you write, finishing a word lets a bigger one go, the send button breaks into
+a burst, and slow bubbles drift behind the whole page. Messages and dream cards
+pop in on a spring rather than a fade. All of it is suppressed under
+`prefers-reduced-motion`.
 
 ### Inside a dream
 

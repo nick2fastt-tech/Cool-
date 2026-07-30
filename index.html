@@ -95,9 +95,36 @@ button{font-family:inherit}
   color:var(--ink);font-size:12.5px;padding:11px 14px;border-radius:14px;cursor:pointer;
   transition:transform .12s,border-color .2s,background .2s;max-width:74vw;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis}
-.chip:active{transform:scale(.95);border-color:rgba(124,92,255,.5);background:rgba(124,92,255,.14)}
+.chip:active{transform:scale(.93);border-color:rgba(124,92,255,.5);background:rgba(124,92,255,.14)}
+.card{animation:bubin .5s cubic-bezier(.3,1.28,.45,1) both}
+.enter:active{transform:scale(.975)}
+#send.live:active{transform:scale(.86)}
 
-.row{display:flex;gap:10px;margin:16px 0;animation:rise .4s cubic-bezier(.2,.8,.2,1) both}
+/* ─────────── bubbles ─────────── */
+#bubbles{position:absolute;inset:0;pointer-events:none;z-index:6;overflow:hidden;contain:strict}
+.bub-dot{position:absolute;border-radius:50%;will-change:transform,opacity;
+  background:radial-gradient(circle at 32% 26%,rgba(255,255,255,.95),rgba(178,150,255,.55) 40%,
+    rgba(124,92,255,.16) 68%,rgba(124,92,255,0) 74%);
+  box-shadow:0 0 10px rgba(124,92,255,.35),inset 0 0 6px rgba(255,255,255,.4);
+  animation:bubrise var(--d,1.2s) cubic-bezier(.22,.7,.35,1) forwards}
+.bub-dot.cy{background:radial-gradient(circle at 32% 26%,rgba(255,255,255,.95),rgba(120,230,250,.5) 40%,
+    rgba(53,224,245,.14) 68%,rgba(53,224,245,0) 74%);box-shadow:0 0 10px rgba(53,224,245,.35)}
+.bub-dot.pk{background:radial-gradient(circle at 32% 26%,rgba(255,255,255,.95),rgba(255,150,220,.5) 40%,
+    rgba(255,111,216,.14) 68%,rgba(255,111,216,0) 74%);box-shadow:0 0 10px rgba(255,111,216,.35)}
+@keyframes bubrise{
+  0%{transform:translate3d(0,0,0) scale(.25);opacity:0}
+  14%{transform:translate3d(calc(var(--dx)*.12),calc(var(--dy)*.10),0) scale(1);opacity:.95}
+  72%{transform:translate3d(calc(var(--dx)*.72),calc(var(--dy)*.74),0) scale(1.04);opacity:.7}
+  92%{transform:translate3d(var(--dx),var(--dy),0) scale(var(--s,1.4));opacity:.25}
+  100%{transform:translate3d(var(--dx),var(--dy),0) scale(calc(var(--s,1.4) * 1.22));opacity:0}}
+#bar.pop{animation:barpop .3s cubic-bezier(.3,1.4,.5,1)}
+@keyframes barpop{0%{transform:scale(1,1)}38%{transform:scale(1.014,.978)}70%{transform:scale(.997,1.006)}100%{transform:scale(1,1)}}
+#orb.live{animation:spin 9s linear infinite,orbpulse 1.1s ease-in-out infinite}
+@keyframes orbpulse{0%,100%{box-shadow:0 0 22px var(--glow)}50%{box-shadow:0 0 34px rgba(124,92,255,.75)}}
+
+.row{display:flex;gap:10px;margin:16px 0;animation:bubin .46s cubic-bezier(.3,1.35,.45,1) both}
+@keyframes bubin{0%{opacity:0;transform:translateY(12px) scale(.84)}
+  58%{opacity:1;transform:translateY(0) scale(1.035)}100%{transform:scale(1)}}
 @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 .row.me{justify-content:flex-end}
 .av{flex:0 0 auto;width:24px;height:24px;border-radius:50%;margin-top:2px;position:relative;
@@ -414,6 +441,8 @@ button{font-family:inherit}
       </div>
       <input type="file" id="file" accept="image/*" multiple hidden>
     </div>
+
+    <div id="bubbles"></div>
   </div>
 
   <div id="sheet">
@@ -1838,6 +1867,52 @@ let atts=[],busy=false,TIER='deep',MODEL='v21',history=[],pending=[],
     OPT={quality:1,sway:1,invert:0};
 
 function haptic(ms){ try{ navigator.vibrate&&navigator.vibrate(ms||8); }catch(e){} }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   BUBBLES — the interface breathes. Every keystroke lets one go, the
+   send button releases a burst, and the backdrop drifts with them.
+   ═══════════════════════════════════════════════════════════════════════ */
+const REDUCED=(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)||false;
+const blayer=$('#bubbles');
+const TINTS=['','cy','pk'];
+let liveBubbles=0,lastPop=0,_measure=null;
+
+function bubbleAt(x,y,o){
+  if(REDUCED||!blayer||document.hidden||liveBubbles>36) return;
+  o=o||{};
+  const br=blayer.getBoundingClientRect();
+  const size=(o.size||5)+Math.random()*(o.vary||6);
+  const dx=(o.dx||0)+(Math.random()-.5)*(o.spread||30);
+  const dy=-((o.rise||64)+Math.random()*44);
+  const d=document.createElement('i');
+  d.className='bub-dot'+(o.tint===undefined?(Math.random()<.34?' '+TINTS[1+((Math.random()*2)|0)]:''):(o.tint?' '+o.tint:''));
+  d.style.cssText='left:'+(x-br.left-size/2).toFixed(1)+'px;top:'+(y-br.top-size/2).toFixed(1)+'px;'+
+    'width:'+size.toFixed(1)+'px;height:'+size.toFixed(1)+'px;'+
+    '--dx:'+dx.toFixed(1)+'px;--dy:'+dy.toFixed(1)+'px;'+
+    '--s:'+(1.2+Math.random()*.55).toFixed(2)+';--d:'+((o.dur||1050)+Math.random()*550|0)+'ms';
+  blayer.appendChild(d); liveBubbles++;
+  d.addEventListener('animationend',()=>{ d.remove(); liveBubbles--; },{once:true});
+}
+function burstFrom(el,n,o){
+  if(!el) return;
+  const r=el.getBoundingClientRect(), cx=r.left+r.width/2, cy=r.top+r.height/2;
+  for(let i=0;i<n;i++) setTimeout(()=>bubbleAt(cx,cy,o),i*22);
+}
+/* where the caret sits, so bubbles leave the words as you write them */
+function caretPoint(){
+  const r=input.getBoundingClientRect();
+  try{
+    if(!_measure) _measure=document.createElement('canvas').getContext('2d');
+    const cs=getComputedStyle(input);
+    _measure.font=cs.fontStyle+' '+cs.fontWeight+' '+cs.fontSize+' '+cs.fontFamily;
+    const upto=input.value.slice(0,input.selectionStart==null?input.value.length:input.selectionStart);
+    const line=upto.split('\n').pop();
+    const avail=r.width-parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight);
+    const w=_measure.measureText(line).width%Math.max(40,avail);   /* wrap-aware enough */
+    return {x:Math.min(r.left+parseFloat(cs.paddingLeft)+w,r.right-8),y:r.bottom-12};
+  }catch(e){ return {x:r.left+r.width*.4,y:r.bottom-12}; }
+}
+function pulseBar(){ const b=$('#bar'); b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop'); }
 function toast(msg){ const el=$('#toast'); el.innerHTML=msg; el.classList.add('on');
   clearTimeout(toast._t); toast._t=setTimeout(()=>el.classList.remove('on'),2600); }
 function esc(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -1857,7 +1932,7 @@ function syncUI(){
   DETAIL=OPT.quality?1:0;
 }
 function setTier(t){ TIER=t; syncUI(); haptic(); }
-function setModel(m){ MODEL=m; syncUI(); haptic(12);
+function setModel(m){ MODEL=m; syncUI(); haptic(12); burstFrom($('#modelbtn'),9,{size:5,vary:7,rise:100,spread:70,dur:1200});
   const M=MODELS[m];
   toast('<b>'+M.name+'</b> · '+M.blurb+' · '+fmtTime(M.seconds)+' dreams'); }
 
@@ -1916,7 +1991,8 @@ function shuffleChips(){
   const pool=SEED_PROMPTS.slice().sort(()=>Math.random()-.5).slice(0,6);
   box.innerHTML='';
   pool.forEach(p=>{ const c=document.createElement('div'); c.className='chip'; c.textContent=p;
-    c.onclick=()=>{ input.value=p; refresh(); submit(); }; box.appendChild(c); });
+    c.onclick=()=>{ burstFrom(c,7,{size:4,vary:6,rise:80,spread:60,dur:1050});
+      input.value=p; refresh(); submit(); }; box.appendChild(c); });
 }
 
 /* composer */
@@ -1925,8 +2001,27 @@ function refresh(){ const n=words(input.value);
   countEl.innerHTML='<b>'+n+'</b> word'+(n===1?'':'s')+' · ∞';
   send.classList.toggle('live',n>0&&!busy);
   input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,window.innerHeight*.34)+'px'; }
-input.addEventListener('input',refresh);
-input.addEventListener('focus',()=>$('#bar').classList.add('focus'));
+let orbTimer=null;
+input.addEventListener('input',e=>{
+  refresh();
+  const now=performance.now();
+  const typed=e.inputType!=='deleteContentBackward'&&e.inputType!=='deleteContentForward';
+  if(now-lastPop>38&&typed&&input.value){
+    lastPop=now;
+    const p=caretPoint();
+    bubbleAt(p.x,p.y,{size:4,vary:5,rise:52,spread:22,dur:900});
+    if(Math.random()<.45) bubbleAt(p.x,p.y,{size:3,vary:3,rise:40,spread:32,dur:820});
+    /* a finished word lets a bigger one go */
+    if(/\s$/.test(input.value)) bubbleAt(p.x,p.y,{size:7,vary:6,rise:86,spread:40,dur:1250});
+    pulseBar();
+  }
+  $('#orb').classList.add('live');
+  clearTimeout(orbTimer); orbTimer=setTimeout(()=>$('#orb').classList.remove('live'),700);
+});
+input.addEventListener('focus',()=>{ $('#bar').classList.add('focus');
+  const r=$('#bar').getBoundingClientRect();
+  for(let i=0;i<5;i++) setTimeout(()=>bubbleAt(r.left+20+Math.random()*(r.width-40),r.bottom-10,
+    {size:4,vary:5,rise:70,spread:26,dur:1200}),i*55); });
 input.addEventListener('blur',()=>$('#bar').classList.remove('focus'));
 input.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey&&!/Mobi|Android/i.test(navigator.userAgent)){
   e.preventDefault(); submit(); }});
@@ -1945,9 +2040,13 @@ else{ const rec=new SR(); rec.continuous=true; rec.interimResults=true; rec.lang
   let listening=false,locked='';
   mic.addEventListener('click',()=>{ if(listening){ rec.stop(); return; }
     locked=input.value?input.value.trim()+' ':''; try{ rec.start(); }catch(e){} });
-  rec.onstart=()=>{ listening=true; mic.classList.add('on'); input.placeholder='Listening…'; };
-  rec.onend=()=>{ listening=false; mic.classList.remove('on'); input.placeholder='Describe a dream — anything at all…'; refresh(); };
-  rec.onerror=()=>{ listening=false; mic.classList.remove('on'); };
+  let micLoop=null;
+  rec.onstart=()=>{ listening=true; mic.classList.add('on'); input.placeholder='Listening…';
+    clearInterval(micLoop);
+    micLoop=setInterval(()=>burstFrom(mic,2,{size:4,vary:5,rise:74,spread:30,dur:1100,tint:'pk'}),260); };
+  rec.onend=()=>{ listening=false; mic.classList.remove('on'); clearInterval(micLoop);
+    input.placeholder='Describe a dream — anything at all…'; refresh(); };
+  rec.onerror=()=>{ listening=false; mic.classList.remove('on'); clearInterval(micLoop); };
   rec.onresult=e=>{ let out=''; for(let i=e.resultIndex;i<e.results.length;i++) out+=e.results[i][0].transcript;
     input.value=locked+out; refresh(); };
 }
@@ -2034,6 +2133,7 @@ function dreamCard(spec){
     '<div class="tags">'+tags+'</div></div>'+
     '<button class="enter">Enter the dream<span class="kbd">'+fmtTime(spec.seconds)+'</span></button>';
   feed.appendChild(card);
+  burstFrom(card,10,{size:6,vary:9,rise:130,spread:150,dur:1500});
   paintPreview(card.querySelector('canvas'),spec);
   card.querySelector('.enter').addEventListener('click',()=>startDream(spec));
   feed.scrollTop=feed.scrollHeight;
@@ -2122,6 +2222,8 @@ async function submit(){
   const text=input.value.trim();
   if(!text||busy) return;
   busy=true; send.classList.remove('live'); haptic();
+  burstFrom(send,16,{size:5,vary:8,rise:120,spread:78,dur:1300});
+  pulseBar();
   const hero=$('#hero'); if(hero) hero.remove();
   const thumbs=atts.length?'<div class="thumbs">'+atts.map(a=>'<img src="'+a.url+'">').join('')+'</div>':'';
   bubble('me',esc(text)+thumbs);
@@ -2934,18 +3036,39 @@ function loop(){
    ═══════════════════════════════════════════════════════════════════════ */
 (function backdrop(){
   const cv=$('#bg'),g=cv.getContext('2d');
-  let w,h,stars=[];
-  function fit(){ w=cv.width=innerWidth*Math.min(devicePixelRatio,2); h=cv.height=innerHeight*Math.min(devicePixelRatio,2);
+  const DPR=()=>Math.min(devicePixelRatio,2);
+  let w,h,stars=[],orbs=[];
+  function fit(){
+    const d=DPR();
+    w=cv.width=innerWidth*d; h=cv.height=innerHeight*d;
     cv.style.width=innerWidth+'px'; cv.style.height=innerHeight+'px';
     stars=[]; const n=Math.round(w*h/26000);
     for(let i=0;i<n;i++) stars.push({x:Math.random()*w,y:Math.random()*h,r:Math.random()*1.6+.3,
-      s:Math.random()*.5+.15,p:Math.random()*TAU}); }
+      s:Math.random()*.5+.15,p:Math.random()*TAU});
+    /* slow bubbles rising behind everything */
+    orbs=[]; const m=REDUCED?0:Math.round(w*h/150000);
+    for(let i=0;i<m;i++) orbs.push(newOrb(Math.random()*h,d));
+  }
+  function newOrb(y,d){ return {x:Math.random()*w,y,r:(7+Math.random()*26)*d,
+    s:(.10+Math.random()*.26)*d,wob:.4+Math.random()*1.1,p:Math.random()*TAU,
+    a:.05+Math.random()*.09,hue:Math.random()<.5?'124,92,255':'53,224,245'}; }
   fit(); addEventListener('resize',fit);
   let tt=0;
   (function tick(){
     requestAnimationFrame(tick);
-    if($('#game').classList.contains('on')) return;
+    if($('#game').classList.contains('on')||document.hidden) return;
     tt+=.016; g.clearRect(0,0,w,h);
+    for(const o of orbs){
+      const x=o.x+Math.sin(tt*o.wob+o.p)*o.r*.55;
+      const grd=g.createRadialGradient(x-o.r*.3,o.y-o.r*.35,o.r*.05,x,o.y,o.r);
+      grd.addColorStop(0,'rgba(255,255,255,'+(o.a*2.1).toFixed(3)+')');
+      grd.addColorStop(.45,'rgba('+o.hue+','+(o.a*.85).toFixed(3)+')');
+      grd.addColorStop(1,'rgba('+o.hue+',0)');
+      g.fillStyle=grd; g.beginPath(); g.arc(x,o.y,o.r,0,TAU); g.fill();
+      g.strokeStyle='rgba(255,255,255,'+(o.a*.7).toFixed(3)+')'; g.lineWidth=1;
+      g.beginPath(); g.arc(x,o.y,o.r*.96,0,TAU); g.stroke();
+      o.y-=o.s; if(o.y<-o.r-4) Object.assign(o,newOrb(h+o.r+4,DPR()));
+    }
     for(const s of stars){
       const a=.25+Math.abs(Math.sin(tt*s.s+s.p))*.6;
       g.fillStyle='rgba(200,210,255,'+a.toFixed(3)+')';
