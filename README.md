@@ -44,8 +44,9 @@ biomes, times of day, weather (two layers can stack), movement (`flying`,
 `swimming`), and seven moods that regrade the whole palette. Anything left over
 becomes an object.
 
-Agent 2 additionally infers what a prompt implies — a city at night gets
-streetlights and traffic — and reports every inference in its trace panel.
+Dreamer 2.3 Fast and Agent 2 additionally infer what a prompt implies — a city
+at night gets streetlights and traffic — and report every inference in their
+trace panel.
 
 ### The interface
 
