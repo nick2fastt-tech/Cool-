@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Tower Defense V1.52</title>
+<title>Tower Defense V1.6 Beta</title>
 <style>
 :root{
   --void:#04050c;
@@ -179,6 +179,31 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 .card.coinLock{border-color:#6b5a1e;background:rgba(90,70,20,.14)}
 .lockTag{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold)}
 .coinTag{font-size:11px;color:var(--gold);letter-spacing:.06em;text-transform:none;margin-left:8px}
+/* matchmaking + events */
+.mmHead{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;color:var(--dim);margin-bottom:6px}
+.mmHead b{color:var(--ink);font-size:14px}
+.mmBar{height:5px;background:#0a0e22;border-radius:3px;overflow:hidden;margin-bottom:10px}
+.mmFill{height:100%;width:40%;background:linear-gradient(90deg,#4a5ae0,#8b97ff);
+  animation:mmSlide 1.3s ease-in-out infinite}
+@keyframes mmSlide{0%{margin-left:-40%}100%{margin-left:100%}}
+.mmp{display:flex;justify-content:space-between;align-items:center;background:rgba(25,25,112,.18);
+  border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-bottom:6px;font-size:13px}
+.mmp.me{border-color:#8b97ff;background:linear-gradient(180deg,#232c8f,#12163f)}
+.mmp i{font-style:normal;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--good)}
+#lobbyBtns{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);display:none;gap:8px}
+#lobbyBtns.on{display:flex}
+#ui.sheeted #lobbyBtns,#ui.prompting #lobbyBtns{visibility:hidden;pointer-events:none}
+.evCard{display:flex;gap:12px;background:rgba(25,25,112,.16);border:1px solid var(--line);
+  border-radius:12px;padding:12px}
+.evIcon{width:52px;height:52px;flex:0 0 52px;border-radius:12px;display:grid;place-items:center;
+  font-size:26px;background:linear-gradient(160deg,#3a2f6e,#120e28);border:1px solid var(--line2)}
+.evBody{flex:1;min-width:0}
+.evName{font-size:15px;font-weight:bold}
+.evSoon{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);margin-left:6px}
+.evDesc{font-size:11px;color:var(--dim);line-height:1.5;margin-top:3px}
+.evBar{height:6px;background:#0a0e22;border-radius:3px;overflow:hidden;margin-top:9px}
+.evFill{height:100%;width:100%;background:repeating-linear-gradient(45deg,#3d4bb5 0 8px,#26307a 8px 16px)}
+.evNote{font-size:10px;color:var(--dim);margin-top:6px;font-style:italic}
 #coins{position:absolute;top:64px;left:8px;display:none;background:var(--panel);
   border:1px solid var(--line2);border-radius:10px;padding:5px 11px;font-size:13px;
   font-weight:bold;color:var(--gold);letter-spacing:.04em}
@@ -199,7 +224,7 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 .eq{font-size:9px;color:var(--good)}
 .card.drag{cursor:grab}
 #shop.faded{opacity:.16}
-#party{position:absolute;top:70px;right:8px;display:none;flex-direction:column;gap:4px;align-items:flex-end}
+#party{position:absolute;top:112px;right:8px;display:none;flex-direction:column;gap:4px;align-items:flex-end}
 #party.on{display:flex}
 .pmem{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:4px 8px;
   font-size:10px;display:flex;gap:7px;align-items:center;white-space:nowrap}
@@ -329,6 +354,32 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 
   <div id="coins">🪙 <b id="coinV">0</b></div>
 
+  <div class="sheet pe" id="match">
+    <div class="sheetHead"><h2>Matchmaking</h2><button class="btn sm pe" id="mmCancel">Cancel</button></div>
+    <div class="mmHead"><span id="mmState">Searching for players…</span><b id="mmCount">1 / 4</b></div>
+    <div class="mmBar"><div class="mmFill"></div></div>
+    <div id="mmList"></div>
+  </div>
+
+  <div id="lobbyBtns">
+    <button class="btn go pe" id="playNow">▶ Play</button>
+    <button class="btn sm pe" id="eventBtn">🧱 Event</button>
+  </div>
+
+  <div class="sheet pe" id="event">
+    <div class="sheetHead"><h2>Events</h2><button class="btn sm pe" id="closeEvent">Close</button></div>
+    <div class="evCard">
+      <div class="evIcon">🧱</div>
+      <div class="evBody">
+        <div class="evName">The Blocky Event <span class="evSoon">coming soon</span></div>
+        <div class="evDesc">A blocked-out world with blocky zombies, blocky towers and a limited-time boss.
+          Event coins, an exclusive tower and a lobby trophy for clearing it.</div>
+        <div class="evBar"><div class="evFill"></div></div>
+        <div class="evNote">Not available yet — it will show up here the moment it opens.</div>
+      </div>
+    </div>
+  </div>
+
   <div id="prompt">
     <div class="pTitle" id="promptT">Loadout Shop</div>
     <div class="pSub" id="promptS">Equip your five towers</div>
@@ -337,7 +388,19 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 
   <div class="sheet pe" id="log">
     <div class="sheetHead"><h2>Update Log</h2><button class="btn sm pe" id="closeLog">Close</button></div>
-    <div class="logV">V1.52 <span>current</span></div>
+    <div class="logV">V1.6 <span>beta</span></div>
+    <ul class="logL">
+      <li>Fixed the walk: every character in the game bent their knees the wrong way, snapping the shin forward through the joint. Players, teammates, lobby crowds and all eleven zombie types now walk, plod and sprint properly, with the heel kicking up behind on the swing</li>
+      <li>The spawn is a portal now, not a pile of grey spheres — stepped dais, carved arch and keystone, counter-rotating rune rings, embers pouring out of the mouth, braziers and rune stones, themed per map</li>
+      <li>New map: The Volcano — 25 waves, ash falling, lava pools, burnt spars and a smoking cone. Unlocked by clearing The Forest</li>
+      <li>Five new enemies: Ash Walker, Ember Runner, Magma Brute, Cinder Priest, and the boss — The Corpse, 3,000 HP</li>
+      <li>New tower: The Slasher — furnace-heated twin blades, 10 dmg every 0.40s at Lv1 up to 25 every 0.30s at Lv4, range 3 → 4, $600. Shortest reach in the game</li>
+      <li>Press Play in the lobby to matchmake — the queue fills your squad and hands you straight to the map vote</li>
+      <li>Coming soon: The Blocky Event, listed on the lobby Event board</li>
+      <li>Teammates fixed: they bank cash toward the next level instead of dribbling it on more level-1 towers, they have a per-wave tower budget, they place to cover track nothing else covers and favour corners, and they stroll between spots and stand watching their own towers rather than freezing on the spot</li>
+      <li>The map vote is rebuilt for three maps and shows each map&#39;s difficulty and coin payout</li>
+    </ul>
+    <div class="logV">V1.52</div>
     <ul class="logL">
       <li>Every tower re-animated: they now stand easy with the weapon down when nothing is in range and shoulder it when a zombie walks in, recoil rolls through the shoulder into the torso and head at a weight that suits the weapon, and the body leads and banks into a turn instead of spinning like a turntable</li>
       <li>Idle behaviour: the Scout checks his binoculars, the Cop and Survivor stretch, the Commander directs the line with his stick, and they all sweep the field between waves</li>
@@ -408,26 +471,7 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
   <div id="voter">
     <div class="vh">Map Vote</div>
     <div id="voteT">15</div>
-    <div class="vmaps">
-      <button class="vmap pe" id="voteGrassy">
-        <div class="vi">🌿</div>
-        <div class="vb">
-          <div class="vn">Grassy Field</div>
-          <div class="vs">Demo Map · 10 waves</div>
-          <div class="vbar"><div class="vfill" id="fillGrassy"></div></div>
-        </div>
-        <div class="vc" id="cntGrassy">0</div>
-      </button>
-      <button class="vmap pe" id="voteForest">
-        <div class="vi">🌲</div>
-        <div class="vb">
-          <div class="vn" id="forestName">The Forest 🔒</div>
-          <div class="vs" id="forestSub">The Grave Digger · 20 waves · clear the Demo Map first</div>
-          <div class="vbar"><div class="vfill" id="fillForest"></div></div>
-        </div>
-        <div class="vc" id="cntForest">0</div>
-      </button>
-    </div>
+    <div class="vmaps" id="vmaps"></div>
     <div class="vh" id="voteMsg">Tap a map to vote</div>
   </div>
 
@@ -440,14 +484,14 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
   </div>
 
   <div id="title" class="pe">
-    <div class="sub">Alpha Version</div>
+    <div class="sub">Beta Version</div>
     <h1>Tower<br>Defense</h1>
-    <div class="sub" style="letter-spacing:.5em">V 1.52</div>
+    <div class="sub" style="letter-spacing:.5em">V 1.6</div>
     <ul>
-      <li>Demo Map · 10 waves · clear it to unlock The Grave Digger</li>
+      <li>Clear a map to unlock the next: Grassy Field → The Forest → The Volcano</li>
       <li>Left side of the screen = move · right side = look</li>
       <li>Walk around the lobby — shop, squad desk and deploy pad</li>
-      <li>7 towers, 5 slots · pick a squad size to start the map vote</li>
+      <li>8 towers, 5 slots · 3 maps · press Play to matchmake</li>
     </ul>
     <button class="btn go pe" id="startBtn" style="margin-top:8px">Enter Lobby</button>
   </div>
@@ -472,16 +516,22 @@ const $=id=>document.getElementById(id);
 
 /* ---------- maps ---------- */
 const MAPS={
-  grassy:{key:'grassy',name:'Grassy Field',mode:'Demo Map',waves:10,hpScale:1,icon:'\ud83c\udf3f',coins:500,
+  grassy:{key:'grassy',name:'Grassy Field',mode:'Demo Map',waves:10,hpScale:1,diff:'Easy',icon:'\ud83c\udf3f',coins:500,portalCol:0x63ff8c,stoneCol:0x5d636e,stoneCol2:0x424855,stoneCol3:0x717886,scorchCol:0x4a4126,
     blurb:'10 waves \u00b7 the demo run',
     fog:{col:0x0a1030,near:44,far:96},sun:0xfff3d0,sunI:1.05,hemi:[0x9fb4ff,0x2c4a24,.75],
     wp:[[-24,-12],[-8,-12],[-8,6],[6,6],[6,-8],[18,-8],[18,12],[0,12],[0,18]],
     spawn:[-14,-4]},
-  forest:{key:'forest',name:'The Forest',mode:'The Grave Digger',waves:20,hpScale:1.4,icon:'\ud83c\udf32',coins:700,
+  forest:{key:'forest',name:'The Forest',mode:'The Grave Digger',waves:20,hpScale:1.4,diff:'Medium',icon:'\ud83c\udf32',coins:700,portalCol:0xb07cff,stoneCol:0x585c56,stoneCol2:0x3d4440,stoneCol3:0x6b7168,scorchCol:0x2e2a20,
     blurb:'20 waves \u00b7 clear the Demo Map to unlock',
     fog:{col:0x0b1a16,near:24,far:74},sun:0xbfd6c0,sunI:.72,hemi:[0x6f8fa8,0x1c2e18,.6],
     wp:[[-30,12],[-14,12],[-14,-6],[-28,-6],[-28,-20],[-6,-20],[-6,-2],[10,-2],[10,-16],[24,-16],[24,10],[4,10],[4,17]],
-    spawn:[-2,5]}
+    spawn:[-2,5]},
+  volcanic:{key:'volcanic',name:'The Volcano',mode:'The Corpse',waves:25,hpScale:1.9,icon:'🌋',coins:1000,
+    diff:'Hard',portalCol:0xff6a2a,stoneCol:0x4a3b34,stoneCol2:0x2e2420,stoneCol3:0x635046,scorchCol:0x22160f,
+    blurb:'25 waves · clear The Forest to unlock',
+    fog:{col:0x3a1408,near:26,far:78},sun:0xffc294,sunI:.95,hemi:[0xff9a5a,0x3a1810,.8],
+    wp:[[-32,-16],[-12,-16],[-12,4],[-30,4],[-30,18],[-4,18],[-4,-4],[12,-4],[12,-20],[28,-20],[28,6],[16,6],[16,20],[2,20],[2,26]],
+    spawn:[-20,-6]}
 };
 let MAP=MAPS.grassy;
 let WP=MAP.wp,SEG=[],PATH_LEN=0;
@@ -529,7 +579,13 @@ const ZT={
   toxic  :{n:'Toxic Zombie',  hp:320, spd:2.3,cash:140,leak:5,  sc:1.1, skin:0x8ce05a,shirt:0x2f6b2a,pants:0x244a22,glow:0x9dff5e},
   necro  :{n:'Necromancer',   hp:600, spd:1.9,cash:200,leak:8,  sc:1.2, skin:0xb9c7a2,shirt:0x241a4a,pants:0x1a1330,glow:0x7a5cff,split:['quick',2]},
   boss   :{n:'Patient Zero',  hp:1200,spd:1.25,cash:300,leak:100,sc:2.3,skin:0x5c8046,shirt:0x3a1c1c,pants:0x231a1a,glow:0xff4a4a,arm:2,boss:1},
-  digger :{n:'The Grave Digger',hp:2500,spd:1.05,cash:600,leak:100,sc:2.7,skin:0x6b7a4a,shirt:0x2a2418,pants:0x1e1a12,glow:0x9b6bff,arm:4,boss:1}
+  digger :{n:'The Grave Digger',hp:2500,spd:1.05,cash:600,leak:100,sc:2.7,skin:0x6b7a4a,shirt:0x2a2418,pants:0x1e1a12,glow:0x9b6bff,arm:4,boss:1},
+  /* ---- volcanic ---- */
+  ash    :{n:'Ash Walker',   hp:90,  spd:2.5,cash:25, leak:1,  sc:1.02,skin:0x8a7a6e,shirt:0x3d332c,pants:0x2b2420,glow:0xff7a3a},
+  ember  :{n:'Ember Runner', hp:130, spd:5.8,cash:60, leak:2,  sc:.96, skin:0xc4663a,shirt:0x6b2a14,pants:0x2f1c14,glow:0xff9a3a},
+  magma  :{n:'Magma Brute',  hp:520, spd:1.55,cash:130,leak:4, sc:1.6, skin:0x7a3a22,shirt:0x3a1a10,pants:0x281410,glow:0xff5a1e,arm:3},
+  cinder :{n:'Cinder Priest',hp:760, spd:2.0,cash:230,leak:6,  sc:1.24,skin:0x9c8878,shirt:0x2a140e,pants:0x1e0f0a,glow:0xffb347,split:['ember',3]},
+  corpse :{n:'The Corpse',   hp:3000,spd:1.15,cash:900,leak:100,sc:2.9,skin:0x5c2a18,shirt:0x2a1008,pants:0x1c0b06,glow:0xff4a12,arm:5,boss:1}
 };
 const WAVES=[
   {gap:1.15,mix:[['normal',8]]},
@@ -566,6 +622,39 @@ const GRAVE_MIX=[
   [['digger',1],['boss',1],['necro',8],['giant',10],['toxic',10],['runner',14]]
 ];
 const WAVES20=GRAVE_MIX.map((mix,i)=>({gap:Math.max(.3,1.1-i*.042),mix}));
+/* The Volcano, 25 waves. Ash Walkers and Ember Runners carry the early game,
+   the graveyard's regulars still turn up, Magma Brutes and Cinder Priests take
+   over late, and The Corpse closes it out. */
+const VOLCANO_MIX=[
+  [['ash',12]],
+  [['ash',14],['normal',6]],
+  [['ash',12],['ember',6],['slow',4]],
+  [['ember',10],['ash',12],['quick',6]],
+  [['ash',14],['heavy',5],['ember',8]],
+  [['magma',3],['ash',14],['ember',8]],
+  [['ember',12],['armored',6],['ash',10]],
+  [['magma',5],['runner',8],['ash',12]],
+  [['cinder',2],['ember',12],['heavy',8]],
+  [['boss',1],['magma',5],['ash',14],['ember',10]],
+  [['magma',7],['armored',10],['ember',12]],
+  [['cinder',3],['giant',5],['ash',16]],
+  [['ember',18],['runner',12],['magma',6]],
+  [['magma',9],['toxic',6],['cinder',3]],
+  [['digger',1],['magma',8],['ember',14],['necro',3]],
+  [['cinder',5],['armored',14],['ember',14]],
+  [['magma',10],['giant',8],['ash',18]],
+  [['ember',22],['runner',16],['cinder',4]],
+  [['magma',12],['necro',6],['toxic',8]],
+  [['boss',1],['cinder',6],['magma',10],['ember',16]],
+  [['magma',14],['giant',10],['armored',16]],
+  [['cinder',8],['ember',24],['runner',18]],
+  [['magma',16],['toxic',10],['necro',8],['ash',20]],
+  [['digger',1],['cinder',8],['magma',14],['giant',10]],
+  [['corpse',1],['digger',1],['cinder',10],['magma',14],['ember',20],['giant',10]]
+];
+const WAVES25=VOLCANO_MIX.map((mix,i)=>({gap:Math.max(.26,1.05-i*.032),mix}));
+// each map names the wave table it runs on
+const WAVE_SETS={grassy:null,forest:WAVES20,volcanic:WAVES25};
 /* The Cop, rebalanced. He used to be the worst value in the game — 4 dmg on a
    1.2s swing for $500 is 3.3 dps, worse per dollar than a $200 Scout — and the
    taser he pulled when the baton broke actually out-damaged the baton, so
@@ -638,6 +727,19 @@ const KNIFE={
     {dmg:22,cd:.55,rng:7,  up:null}
   ]
 };
+/* The Slasher — the Knife Master's blade, lit. Even shorter reach than the
+   knife (3 → 4, the shortest in the game) in exchange for the hardest, fastest
+   hits: he only covers a sliver either side of the track, so where you stand
+   him matters more than for anything else. */
+const SLASHER={
+  key:'slasher',name:'The Slasher',cost:600,icon:'🔥',
+  lv:[
+    {dmg:10,cd:.40,rng:3,   up:450},
+    {dmg:15,cd:.37,rng:3.35,up:800},
+    {dmg:20,cd:.34,rng:3.7, up:1400},
+    {dmg:25,cd:.30,rng:4,   up:null}
+  ]
+};
 /* The Commander — bought once with coins, then deployed with cash like anyone
    else. He shoots, but the point of him is the aura: every friendly tower
    standing inside his ring hits harder and reloads faster. */
@@ -651,12 +753,12 @@ const COMMANDER={
   ]
 };
 const TOWERS={police:POLICE,scout:SCOUT,robber:ROBBER,survivor:SURVIVOR,
-              blitzer:BLITZER,knife:KNIFE,commander:COMMANDER};
+              blitzer:BLITZER,knife:KNIFE,slasher:SLASHER,commander:COMMANDER};
 const TOWER_CAP=5;
 
 /* ---------- coins: the only thing that survives a run ---------- */
 const SAVE_KEY='towerDefenseSave1';
-const SAVE={coins:0,commander:false,grave:false};
+const SAVE={coins:0,commander:false,grave:false,volcano:false};
 function loadSave(){
   try{
     const raw=localStorage.getItem(SAVE_KEY);
@@ -725,130 +827,278 @@ const world=new THREE.Group();scene.add(world);
 const DECOR=[];
 const MAPG={};
 
+/* ---------- spawn portal ----------
+   Was a pile of grey spheres with a tunnel poked through it. Now it is a
+   built thing: a stepped dais, a carved arch, a live portal surface with
+   counter-rotating rings and embers pouring out of it, braziers, and rune
+   stones. Animated bits get pushed into SPAWN_ANIM and driven from the loop. */
+const SPAWN_ANIM=[];
 function buildSpawn(map){
-  const forest=map.key==='forest';
   const cave=new THREE.Group();
-  const rkA=M(forest?0x585c56:0x5d636e),rkB=M(forest?0x3d4440:0x424855),
-        rkC=M(forest?0x6b7168:0x717886),rkD=M(0x33383f);
-  const hill=new THREE.Mesh(new THREE.SphereGeometry(5.4,14,9),rkA);
-  hill.scale.set(1.05,.9,1.2);hill.position.y=.1;hill.castShadow=true;cave.add(hill);
-  const hill2=new THREE.Mesh(new THREE.SphereGeometry(3.6,12,8),rkB);
-  hill2.scale.set(1,1.15,1);hill2.position.set(-2.6,1.1,-2.2);hill2.castShadow=true;cave.add(hill2);
-  const hill3=new THREE.Mesh(new THREE.SphereGeometry(3,12,8),rkC);
-  hill3.scale.set(1,1.05,1);hill3.position.set(-2.2,.8,2.8);hill3.castShadow=true;cave.add(hill3);
-  for(let i=0;i<14;i++){
-    const bl=new THREE.Mesh(new THREE.DodecahedronGeometry(rnd(.6,2),0),[rkA,rkB,rkC][i%3]);
-    bl.position.set(rnd(-5,2.2),rnd(.2,4.6),rnd(-5,5));
-    bl.rotation.set(rnd(0,3),rnd(0,3),rnd(0,3));bl.castShadow=true;cave.add(bl);
+  const PC=map.portalCol||0x63ff8c;                 // portal energy colour
+  const stoneA=M(map.stoneCol||0x5d636e),
+        stoneB=M(map.stoneCol2||0x424855),
+        stoneC=M(map.stoneCol3||0x717886),
+        dark=M(0x23262e);
+  const anim={t:0,parts:[]};
+
+  /* --- stepped dais the arch stands on --- */
+  const dais=new THREE.Mesh(new THREE.CylinderGeometry(5,5.5,.5,20),stoneB);
+  dais.position.set(.6,.25,0);dais.receiveShadow=true;dais.castShadow=true;cave.add(dais);
+  const daisTop=new THREE.Mesh(new THREE.CylinderGeometry(4.4,4.4,.16,20),stoneA);
+  daisTop.position.set(.6,.56,0);daisTop.receiveShadow=true;cave.add(daisTop);
+  // inlaid ring on the deck, glowing faintly
+  const inlay=new THREE.Mesh(new THREE.RingGeometry(2.6,3,32),
+    new THREE.MeshBasicMaterial({color:PC,transparent:true,opacity:.32,side:THREE.DoubleSide}));
+  inlay.rotation.x=-Math.PI/2;inlay.position.set(.6,.65,0);cave.add(inlay);
+  anim.parts.push({m:inlay,kind:'pulse',base:.32});
+  // steps down onto the track
+  for(let i=0;i<3;i++){
+    const st=new THREE.Mesh(new THREE.BoxGeometry(.9,.18,5.4-i*.7),i%2?stoneA:stoneC);
+    st.position.set(5.3+i*.85,.42-i*.17,0);st.receiveShadow=true;cave.add(st);
   }
-  const tunnel=new THREE.Mesh(new THREE.CylinderGeometry(1.85,1.85,8,14,1,true),
-    new THREE.MeshLambertMaterial({color:0x0c0f1a,side:THREE.BackSide}));
-  tunnel.rotation.z=Math.PI/2;tunnel.position.set(-2.1,1.75,0);cave.add(tunnel);
-  const backWall=new THREE.Mesh(new THREE.CircleGeometry(1.85,14),M(0x05060b));
-  backWall.rotation.y=Math.PI/2;backWall.position.set(-6.1,1.75,0);cave.add(backWall);
-  const haze=new THREE.Mesh(new THREE.CircleGeometry(1.8,18),
-    new THREE.MeshBasicMaterial({color:forest?0x1a1030:0x0d2415,transparent:true,opacity:.55}));
-  haze.rotation.y=Math.PI/2;haze.position.set(1.75,1.75,0);cave.add(haze);
-  for(let i=0;i<14;i++){
-    const ang=(i/14)*Math.PI*2;
-    const r=new THREE.Mesh(new THREE.DodecahedronGeometry(rnd(.32,.72),0),i%2?rkB:rkD);
-    r.position.set(1.9+rnd(-.25,.25),1.75+Math.sin(ang)*2.05,Math.cos(ang)*2.05);
-    r.rotation.set(rnd(0,3),rnd(0,3),rnd(0,3));r.castShadow=true;cave.add(r);
-  }
-  for(let i=0;i<6;i++){
-    const c=new THREE.Mesh(new THREE.ConeGeometry(rnd(.09,.17),rnd(.45,.95),6),rkD);
-    c.position.set(1.55,3.35,rnd(-1.3,1.3));c.rotation.x=Math.PI;cave.add(c);
-    const c2=new THREE.Mesh(new THREE.ConeGeometry(rnd(.09,.16),rnd(.3,.6),6),rkD);
-    c2.position.set(1.6,.15,rnd(-1.5,1.5));cave.add(c2);
-  }
-  const glow=new THREE.PointLight(forest?0xb07cff:0x63ff8c,1.5,11);
-  glow.position.set(-.8,1.7,0);cave.add(glow);
-  const dirt=new THREE.Mesh(new THREE.CircleGeometry(4.4,16),M(forest?0x3b3227:0x54492f));
-  dirt.rotation.x=-Math.PI/2;dirt.position.set(3.2,.045,0);cave.add(dirt);
-  for(let i=0;i<7;i++){
-    const bone=new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,rnd(.3,.6),5),M(0xd8d2bd));
-    bone.position.set(rnd(2,5.4),.07,rnd(-2.6,2.6));bone.rotation.set(Math.PI/2,0,rnd(0,3));cave.add(bone);
-  }
-  const skull=new THREE.Mesh(new THREE.SphereGeometry(.16,8,6),M(0xd8d2bd));
-  skull.position.set(4.1,.16,-1.5);cave.add(skull);
-  if(forest){
-    // mausoleum front bolted onto the hillside
-    const stone=M(0x74776b),stoneD=M(0x53564d);
-    for(const sx of [-1,1]){
-      const col=new THREE.Mesh(new THREE.CylinderGeometry(.34,.4,3.9,10),stone);
-      col.position.set(2.1,1.95,sx*2.5);col.castShadow=true;cave.add(col);
-      const cap=new THREE.Mesh(new THREE.BoxGeometry(1,.3,1),stoneD);
-      cap.position.set(2.1,4.05,sx*2.5);cave.add(cap);
+
+  /* --- the arch: two carved pillars and a keystone lintel --- */
+  for(const sz of [-1,1]){
+    const base=new THREE.Mesh(new THREE.BoxGeometry(1.5,.5,1.5),stoneC);
+    base.position.set(0,.85,sz*3);base.castShadow=true;cave.add(base);
+    const col=new THREE.Mesh(new THREE.CylinderGeometry(.52,.62,4.6,8),stoneA);
+    col.position.set(0,3.4,sz*3);col.castShadow=true;cave.add(col);
+    // banding
+    for(let i=0;i<3;i++){
+      const bnd=new THREE.Mesh(new THREE.CylinderGeometry(.64,.64,.16,8),stoneC);
+      bnd.position.set(0,1.9+i*1.5,sz*3);cave.add(bnd);
     }
-    const lintel=new THREE.Mesh(new THREE.BoxGeometry(1.1,.55,6.4),stoneD);
-    lintel.position.set(2.1,4.4,0);lintel.castShadow=true;cave.add(lintel);
-    const gable=new THREE.Mesh(new THREE.ConeGeometry(3.4,1.5,4),stone);
-    gable.rotation.y=Math.PI/4;gable.rotation.z=Math.PI/2;
-    gable.position.set(2.1,5.2,0);cave.add(gable);
-    // gravestones in front
+    const cap=new THREE.Mesh(new THREE.BoxGeometry(1.5,.55,1.5),stoneC);
+    cap.position.set(0,5.9,sz*3);cap.castShadow=true;cave.add(cap);
+    // a lit sconce on the inner face of each pillar
+    const scon=new THREE.Mesh(new THREE.ConeGeometry(.3,.5,7),dark);
+    scon.position.set(.35,4.5,sz*2.6);cave.add(scon);
+    const fl=new THREE.Mesh(new THREE.ConeGeometry(.2,.6,6),
+      new THREE.MeshBasicMaterial({color:PC,transparent:true,opacity:.85}));
+    fl.position.set(.35,5,sz*2.6);cave.add(fl);
+    anim.parts.push({m:fl,kind:'flame',ph:sz});
+  }
+  const lintel=new THREE.Mesh(new THREE.BoxGeometry(1.7,.8,7.6),stoneA);
+  lintel.position.set(0,6.5,0);lintel.castShadow=true;cave.add(lintel);
+  const key=new THREE.Mesh(new THREE.CylinderGeometry(.7,.55,1,6),stoneC);
+  key.rotation.z=Math.PI/2;key.position.set(0,7.1,0);cave.add(key);
+  const keyGem=new THREE.Mesh(new THREE.OctahedronGeometry(.34,0),
+    new THREE.MeshBasicMaterial({color:PC}));
+  keyGem.position.set(.75,7.1,0);cave.add(keyGem);
+  anim.parts.push({m:keyGem,kind:'spin'});
+
+  /* --- the portal surface itself, facing down the track --- */
+  const portal=new THREE.Group();
+  portal.rotation.y=Math.PI/2;portal.position.set(0,3.1,0);cave.add(portal);
+  // dark throat so you cannot see the field through it
+  const throat=new THREE.Mesh(new THREE.CircleGeometry(2.5,32),M(0x05060b));
+  throat.position.z=-.06;portal.add(throat);
+  const core=new THREE.Mesh(new THREE.CircleGeometry(2.4,32),
+    new THREE.MeshBasicMaterial({color:PC,transparent:true,opacity:.34}));
+  portal.add(core);
+  anim.parts.push({m:core,kind:'pulse',base:.34});
+  // counter-rotating rune rings
+  for(let i=0;i<3;i++){
+    const r=new THREE.Mesh(new THREE.RingGeometry(1.1+i*.55,1.32+i*.55,26,1,0,Math.PI*(1.1+i*.25)),
+      new THREE.MeshBasicMaterial({color:PC,transparent:true,opacity:.55-i*.1,side:THREE.DoubleSide}));
+    r.position.z=.02+i*.01;portal.add(r);
+    anim.parts.push({m:r,kind:'spin2',spd:(i%2?1:-1)*(.5+i*.25)});
+  }
+  // stone rim around the opening
+  const rim=new THREE.Mesh(new THREE.TorusGeometry(2.55,.28,7,28),stoneC);
+  rim.position.z=-.02;portal.add(rim);
+  for(let i=0;i<10;i++){
+    const a=(i/10)*Math.PI*2;
+    const stud=new THREE.Mesh(new THREE.BoxGeometry(.3,.3,.34),stoneA);
+    stud.position.set(Math.cos(a)*2.55,Math.sin(a)*2.55,0);stud.rotation.z=a;portal.add(stud);
+  }
+  const glow=new THREE.PointLight(PC,1.9,15);
+  glow.position.set(1.2,3.1,0);cave.add(glow);
+  anim.parts.push({m:glow,kind:'lightPulse',base:1.9});
+
+  /* --- embers streaming out of the mouth --- */
+  const embers=[];
+  for(let i=0;i<16;i++){
+    const em=new THREE.Mesh(new THREE.SphereGeometry(.08,5,4),
+      new THREE.MeshBasicMaterial({color:PC,transparent:true,opacity:.8}));
+    em.position.set(rnd(0,3),rnd(.5,5),rnd(-2.2,2.2));
+    cave.add(em);embers.push({m:em,sp:rnd(.5,1.4),ph:rnd(0,6.28)});
+  }
+  anim.embers=embers;
+
+  /* --- rune stones and wreckage on the approach --- */
+  for(let i=0;i<7;i++){
+    const a=rnd(-1.15,1.15);
+    const mono=new THREE.Mesh(new THREE.BoxGeometry(.7,rnd(1.6,2.8),.5),i%2?stoneA:stoneC);
+    mono.position.set(5+Math.cos(a)*rnd(1,4),.8,Math.sin(a)*rnd(3.2,6.5));
+    mono.rotation.set(rnd(-.12,.12),rnd(0,3),rnd(-.16,.16));
+    mono.castShadow=true;cave.add(mono);
+    const gl=new THREE.Mesh(new THREE.BoxGeometry(.16,.5,.06),
+      new THREE.MeshBasicMaterial({color:PC,transparent:true,opacity:.55}));
+    gl.position.set(0,.3,.28);mono.add(gl);
+  }
+  for(let i=0;i<10;i++){
+    const rk=new THREE.Mesh(new THREE.DodecahedronGeometry(rnd(.25,.75),0),i%2?stoneB:dark);
+    rk.position.set(rnd(1,8),rnd(.15,.5),rnd(-7,7));
+    rk.rotation.set(rnd(0,3),rnd(0,3),rnd(0,3));rk.castShadow=true;cave.add(rk);
+  }
+  // scorched ground in front of the arch
+  const scorch=new THREE.Mesh(new THREE.CircleGeometry(5.6,20),M(map.scorchCol||0x2f2a1e));
+  scorch.rotation.x=-Math.PI/2;scorch.position.set(5.2,.04,0);cave.add(scorch);
+  for(let i=0;i<8;i++){
+    const bone=new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,rnd(.3,.6),5),M(0xd8d2bd));
+    bone.position.set(rnd(3,8.5),.07,rnd(-3.4,3.4));
+    bone.rotation.set(Math.PI/2,0,rnd(0,3));cave.add(bone);
+  }
+  const skull=new THREE.Mesh(new THREE.SphereGeometry(.17,8,6),M(0xd8d2bd));
+  skull.position.set(6.2,.17,-1.8);cave.add(skull);
+  const skull2=new THREE.Mesh(new THREE.SphereGeometry(.15,8,6),M(0xcfc9b4));
+  skull2.position.set(4.4,.15,2.4);cave.add(skull2);
+
+  if(map.key==='forest'){
+    // gravestones crowding the approach
     for(let i=0;i<9;i++){
       const gs=new THREE.Group();
-      const slab=new THREE.Mesh(new THREE.BoxGeometry(.7,1.1,.16),i%3?stone:stoneD);
+      const slab=new THREE.Mesh(new THREE.BoxGeometry(.7,1.1,.16),i%3?stoneA:stoneB);
       slab.position.y=.55;slab.castShadow=true;gs.add(slab);
-      const top=new THREE.Mesh(new THREE.CylinderGeometry(.35,.35,.16,10,1,false,0,Math.PI),i%3?stone:stoneD);
+      const top=new THREE.Mesh(new THREE.CylinderGeometry(.35,.35,.16,10,1,false,0,Math.PI),i%3?stoneA:stoneB);
       top.rotation.x=Math.PI/2;top.rotation.z=Math.PI;top.position.y=1.1;gs.add(top);
       const mound=new THREE.Mesh(new THREE.SphereGeometry(.75,8,5),M(0x3a3226));
       mound.scale.set(1,.22,1.5);mound.position.set(0,.05,.9);gs.add(mound);
-      gs.position.set(rnd(3.5,8),0,rnd(-6,6));gs.rotation.y=rnd(-.5,.5);
+      gs.position.set(rnd(6,10),0,rnd(-7,7));gs.rotation.y=rnd(-.5,.5);
       cave.add(gs);
     }
+  }else if(map.key==='volcanic'){
+    // lava runnels bleeding away from the arch
+    for(let i=0;i<6;i++){
+      const a=rnd(-1.2,1.2);
+      const lav=new THREE.Mesh(new THREE.BoxGeometry(rnd(2,5),.05,rnd(.3,.7)),
+        new THREE.MeshBasicMaterial({color:0xff5a1e}));
+      lav.position.set(6+Math.cos(a)*2,.06,Math.sin(a)*rnd(2,6));
+      lav.rotation.y=rnd(0,3);cave.add(lav);
+      anim.parts.push({m:lav,kind:'lava'});
+    }
   }else{
-    const post=new THREE.Mesh(new THREE.CylinderGeometry(.06,.06,1.7,6),M(0x5a4a33));
-    post.position.set(4.6,.85,2.9);cave.add(post);
-    const sign=new THREE.Mesh(new THREE.BoxGeometry(.9,.6,.06),M(0xd9b13a));
-    sign.position.set(4.6,1.65,2.9);sign.rotation.y=-.4;cave.add(sign);
-    const mark=new THREE.Mesh(new THREE.BoxGeometry(.3,.3,.04),M(0x1a1408));
-    mark.position.set(4.63,1.65,2.93);mark.rotation.y=-.4;cave.add(mark);
+    const post=new THREE.Mesh(new THREE.CylinderGeometry(.07,.07,1.9,6),M(0x5a4a33));
+    post.position.set(7.2,.95,3.4);post.castShadow=true;cave.add(post);
+    const sign=new THREE.Mesh(new THREE.BoxGeometry(1.1,.7,.07),M(0xd9b13a));
+    sign.position.set(7.2,1.9,3.4);sign.rotation.y=-.4;cave.add(sign);
+    const mark=new THREE.Mesh(new THREE.BoxGeometry(.36,.36,.05),M(0x1a1408));
+    mark.position.set(7.24,1.9,3.44);mark.rotation.y=-.4;cave.add(mark);
   }
-  cave.position.set(map.wp[0][0]-2.5,0,map.wp[0][1]);
-  // aim the mouth along the first path segment
+
+  // aim the mouth along the first path segment: local +x is the way out
   cave.rotation.y=Math.atan2(map.segs[0].dx,map.segs[0].dz)-Math.PI/2;
   cave.position.set(map.wp[0][0]-map.segs[0].dx*2.5,0,map.wp[0][1]-map.segs[0].dz*2.5);
+  cave.userData.anim=anim;
+  SPAWN_ANIM.push(anim);
   return cave;
 }
+/* drives every portal: pulsing energy, spinning rings, drifting embers.
+   Also breathes the lava pools and drifts the ash down on the volcano. */
+let _volT=0;
+function stepPortals(dt){
+  _volT+=dt;
+  for(const set of LAVA_MATS)
+    for(let i=0;i<set.length;i++)
+      set[i].color.setHSL(.042,1,.44+Math.sin(_volT*1.3+i*1.7)*.09);
+  for(const ap of ASH_FALL){
+    if(!ap.visible)continue;
+    const a=ap.geometry.attributes.position;
+    for(let i=1;i<a.count*3;i+=3){
+      a.array[i]-=dt*1.6;
+      if(a.array[i]<0)a.array[i]=26;
+    }
+    a.needsUpdate=true;
+  }
+  for(const a of SPAWN_ANIM){
+    a.t+=dt;
+    const t=a.t;
+    for(const p of a.parts){
+      if(p.kind==='pulse')      p.m.material.opacity=p.base*(.72+Math.sin(t*2.1)*.28);
+      else if(p.kind==='spin')  {p.m.rotation.y=t*1.3;p.m.rotation.x=t*.8;}
+      else if(p.kind==='spin2') p.m.rotation.z=t*p.spd;
+      else if(p.kind==='flame') {const k=.85+Math.sin(t*7+p.ph)*.15;p.m.scale.set(k,1/k,k);}
+      else if(p.kind==='lightPulse') p.m.intensity=p.base*(.75+Math.sin(t*2.1)*.25);
+      else if(p.kind==='lava')  p.m.material.color.setHSL(.045,1,.42+Math.sin(t*1.7+p.m.position.z)*.08);
+    }
+    for(const e of a.embers){
+      // ride out of the mouth, fade, then wrap back to the portal face
+      const life=(t*e.sp+e.ph)%6;
+      e.m.position.x=life*1.1;
+      e.m.position.y=1.2+Math.sin(life*1.5+e.ph)*.7+life*.35;
+      e.m.material.opacity=Math.max(0,.85-life/6);
+    }
+  }
+}
 
+const LAVA_MATS=[],ASH_FALL=[];
 function buildTerrain(map){
   const g=new THREE.Group();
-  const forest=map.key==='forest',segs=map.segs;
+  const forest=map.key==='forest',volc=map.key==='volcanic',segs=map.segs;
   const dp=(x,z)=>distOn(x,z,segs);
-  const ground=new THREE.Mesh(new THREE.PlaneGeometry(94,84,1,1),M(forest?0x2b4423:0x3f7a34));
+  // 94x84 stopped short of the fog on the bigger volcanic layout, so you could
+  // see the edge of the world as a hard dark wedge. Run it past the fog instead.
+  const ground=new THREE.Mesh(new THREE.PlaneGeometry(150,140,1,1),
+    M(volc?0x3d2a20:forest?0x2b4423:0x3f7a34));
   ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;g.add(ground);
-  for(let i=0;i<46;i++){
+  for(let i=0;i<60;i++){
     const s=rnd(4,11);
     const p=new THREE.Mesh(new THREE.CircleGeometry(s,7),
-      M(forest?(Math.random()<.5?0x33512a:0x24391d):(Math.random()<.5?0x468a3a:0x376d2e)));
-    p.rotation.x=-Math.PI/2;p.position.set(rnd(-42,42),.01+i*0.0004,rnd(-36,36));g.add(p);
+      M(volc?(Math.random()<.5?0x46312a:0x35241b)
+        :forest?(Math.random()<.5?0x33512a:0x24391d)
+        :(Math.random()<.5?0x468a3a:0x376d2e)));
+    p.rotation.x=-Math.PI/2;p.position.set(rnd(-62,62),.01+i*0.0004,rnd(-56,56));g.add(p);
   }
   // path
   for(const s of segs){
-    const m=new THREE.Mesh(new THREE.PlaneGeometry(s.len+PATH_W,PATH_W),M(forest?0x5c4a35:0x8a7350));
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(s.len+PATH_W,PATH_W),
+      M(volc?0x4a2e20:forest?0x5c4a35:0x8a7350));
     m.rotation.x=-Math.PI/2;m.rotation.z=-Math.atan2(s.dz,s.dx);
     m.position.set((s.ax+s.bx)/2,.06,(s.az+s.bz)/2);
     m.receiveShadow=true;g.add(m);
-    const e=new THREE.Mesh(new THREE.PlaneGeometry(s.len+PATH_W+.7,PATH_W+.7),M(forest?0x44381f:0x6d5a3e));
+    const e=new THREE.Mesh(new THREE.PlaneGeometry(s.len+PATH_W+.7,PATH_W+.7),
+      M(volc?0x2e1b13:forest?0x44381f:0x6d5a3e));
     e.rotation.copy(m.rotation);e.position.set(m.position.x,.05,m.position.z);g.add(e);
   }
   // ground cover
-  const tuft=forest?new THREE.ConeGeometry(.22,.4,4):new THREE.ConeGeometry(.14,.55,4);
-  const im=new THREE.InstancedMesh(tuft,M(forest?0x3f7a44:0x59a044),360);
+  const tuft=volc?new THREE.ConeGeometry(.13,.3,4)
+            :forest?new THREE.ConeGeometry(.22,.4,4):new THREE.ConeGeometry(.14,.55,4);
+  // One cap for both the buffer and the fill loop. They drifted apart when the
+  // volcano was added (buffer 200, loop still 360) and setMatrixAt ran off the
+  // end of the instance matrix — which draws as a huge stretched black wedge
+  // across the map rather than failing loudly.
+  const TUFTS=volc?200:360;
+  const im=new THREE.InstancedMesh(tuft,M(volc?0x4a3428:forest?0x3f7a44:0x59a044),TUFTS);
   const d=new THREE.Object3D();let n=0;
-  for(let i=0;i<1100&&n<360;i++){
+  for(let i=0;i<1100&&n<TUFTS;i++){
     const x=rnd(-42,42),z=rnd(-36,36);
     if(dp(x,z)<2.6)continue;
     d.position.set(x,.22,z);d.rotation.y=rnd(0,6.28);d.scale.setScalar(rnd(.7,1.6));
     d.updateMatrix();im.setMatrixAt(n++,d.matrix);
   }
-  im.count=n;g.add(im);DECOR.push(im);
-  // trees
-  const treeN=forest?74:26;
+  im.count=Math.min(n,TUFTS);g.add(im);DECOR.push(im);
+  // trees — burnt spars on the volcano, nothing with leaves left
+  const treeN=volc?34:forest?74:26;
   for(let i=0;i<treeN;i++){
     const x=rnd(-43,43),z=rnd(-37,37);
-    if(dp(x,z)<(forest?4.4:6))continue;
+    if(dp(x,z)<(forest?4.4:volc?5:6))continue;
+    if(volc){
+      const t2=new THREE.Group();
+      const h2=rnd(2.4,4.4);
+      const tr2=new THREE.Mesh(new THREE.CylinderGeometry(.1,.26,h2,6),M(0x1c130f));
+      tr2.position.y=h2/2;tr2.castShadow=true;t2.add(tr2);
+      for(let j=0;j<3;j++){
+        const br=new THREE.Mesh(new THREE.CylinderGeometry(.04,.08,rnd(.7,1.5),5),M(0x241812));
+        br.position.y=h2*rnd(.5,.92);
+        br.rotation.z=rnd(-1.1,1.1);br.rotation.y=rnd(0,3);
+        br.position.x=Math.sin(br.rotation.z)*-.35;t2.add(br);
+      }
+      t2.position.set(x,0,z);t2.rotation.y=rnd(0,3);t2.rotation.z=rnd(-.09,.09);
+      g.add(t2);DECOR.push(t2);
+      continue;
+    }
     const t=new THREE.Group();
     const h=forest?rnd(3.2,4.6):2.4;
     const tr=new THREE.Mesh(new THREE.CylinderGeometry(.2,.34,h,6),M(forest?0x3f2c1c:0x5a3f28));
@@ -865,7 +1115,8 @@ function buildTerrain(map){
   for(let i=0;i<22;i++){
     const x=rnd(-44,44),z=rnd(-38,38);
     if(dp(x,z)<3)continue;
-    const r=new THREE.Mesh(new THREE.DodecahedronGeometry(rnd(.25,.6),0),M(forest?0x5a6154:0x6f7480));
+    const r=new THREE.Mesh(new THREE.DodecahedronGeometry(rnd(.25,.6),0),
+      M(volc?0x2b211c:forest?0x5a6154:0x6f7480));
     r.position.set(x,.2,z);r.rotation.set(rnd(0,3),rnd(0,3),rnd(0,3));r.castShadow=true;g.add(r);DECOR.push(r);
   }
   if(forest){
@@ -895,6 +1146,62 @@ function buildTerrain(map){
         new THREE.MeshBasicMaterial({color:0x9fc4b8,transparent:true,opacity:.07,depthWrite:false}));
       mist.rotation.x=-Math.PI/2;mist.position.y=.5+i*.7;g.add(mist);DECOR.push(mist);
     }
+  }else if(volc){
+    // lava pools, obsidian spires, ash drifts and a smoking cone on the horizon
+    const lavaMats=[];
+    for(let i=0;i<14;i++){
+      const x=rnd(-42,42),z=rnd(-36,36);
+      if(dp(x,z)<5)continue;
+      const pool=new THREE.Mesh(new THREE.CircleGeometry(rnd(1.6,4.2),9),
+        new THREE.MeshBasicMaterial({color:0xff5a1e}));
+      pool.rotation.x=-Math.PI/2;pool.position.set(x,.03,z);g.add(pool);
+      lavaMats.push(pool.material);
+      const crust=new THREE.Mesh(new THREE.RingGeometry(1,1.25,9),M(0x1d1310));
+      crust.rotation.x=-Math.PI/2;crust.position.set(x,.025,z);
+      crust.scale.setScalar(pool.geometry.parameters.radius);g.add(crust);DECOR.push(crust);
+      const heat=new THREE.PointLight(0xff5a1e,.55,9);
+      heat.position.set(x,1,z);g.add(heat);DECOR.push(heat);
+    }
+    LAVA_MATS.push(lavaMats);
+    for(let i=0;i<18;i++){
+      const x=rnd(-43,43),z=rnd(-37,37);
+      if(dp(x,z)<4)continue;
+      const sp=new THREE.Mesh(new THREE.ConeGeometry(rnd(.5,1.3),rnd(2,5.5),5),M(0x211712));
+      sp.position.set(x,0,z);sp.rotation.y=rnd(0,3);sp.rotation.z=rnd(-.14,.14);
+      sp.geometry.translate(0,sp.geometry.parameters.height/2,0);
+      sp.castShadow=true;g.add(sp);DECOR.push(sp);
+    }
+    for(let i=0;i<20;i++){
+      const x=rnd(-42,42),z=rnd(-36,36);
+      if(dp(x,z)<3.4)continue;
+      const drift=new THREE.Mesh(new THREE.SphereGeometry(rnd(.8,2.2),7,5),M(0x4a3d34));
+      drift.scale.set(1,.22,1);drift.position.set(x,.05,z);g.add(drift);DECOR.push(drift);
+    }
+    // Vents rather than a mountain: a 26-unit cone on the horizon just read as
+    // a black wedge across the sky once the fog got hold of it.
+    for(let i=0;i<5;i++){
+      const x=rnd(-40,40),z=rnd(-34,34);
+      if(dp(x,z)<6)continue;
+      const vent=new THREE.Mesh(new THREE.CylinderGeometry(1.5,2.6,rnd(1.2,2.2),8),M(0x241812));
+      vent.position.set(x,.6,z);vent.castShadow=true;g.add(vent);DECOR.push(vent);
+      const mouth=new THREE.Mesh(new THREE.CircleGeometry(1.4,10),
+        new THREE.MeshBasicMaterial({color:0xff6a2a}));
+      mouth.rotation.x=-Math.PI/2;mouth.position.set(x,1.75,z);g.add(mouth);
+      const heat2=new THREE.PointLight(0xff6a2a,.7,10);
+      heat2.position.set(x,2.4,z);g.add(heat2);DECOR.push(heat2);
+      for(let j=0;j<2;j++){
+        const puff=new THREE.Mesh(new THREE.SphereGeometry(rnd(.8,1.5),7,5),
+          new THREE.MeshBasicMaterial({color:0x4a3a34,transparent:true,opacity:.3}));
+        puff.position.set(x+rnd(-.6,.6),2.6+j*1.5,z+rnd(-.6,.6));g.add(puff);DECOR.push(puff);
+      }
+    }
+    // falling ash
+    const ashG=new THREE.BufferGeometry();
+    const pts=[];
+    for(let i=0;i<400;i++)pts.push(rnd(-46,46),rnd(0,26),rnd(-40,40));
+    ashG.setAttribute('position',new THREE.Float32BufferAttribute(pts,3));
+    const ashP=new THREE.Points(ashG,new THREE.PointsMaterial({color:0xb8a89c,size:.16,transparent:true,opacity:.5}));
+    g.add(ashP);DECOR.push(ashP);ASH_FALL.push(ashP);
   }else{
     const fm=M(0x59422c);
     for(let i=-44;i<=44;i+=4)[-38,38].forEach(z=>{
@@ -1149,8 +1456,9 @@ function spawnEnemy(key,dist){
   P.foreL.rotation.x=-.25;P.foreR.rotation.x=-.15;
   P.torso.rotation.x=.14;
   decayPass(g,P,d,key);
-  const style=(key==='quick'||key==='runner')?'sprint'
-            :(key==='giant'||key==='boss'||key==='digger'||key==='heavy')?'stomp':'shamble';
+  const style=(key==='quick'||key==='runner'||key==='ember')?'sprint'
+            :(key==='giant'||key==='boss'||key==='digger'||key==='heavy'
+              ||key==='magma'||key==='corpse')?'stomp':'shamble';
   const limp=Math.random()<.5?1:-1;
   g.add(blobShadow(.42));
   if(d.glow){const l=new THREE.PointLight(d.glow,.9,6);l.position.y=1.5;g.add(l);}
@@ -1192,6 +1500,68 @@ function spawnEnemy(key,dist){
     grip.rotation.x=Math.PI/2;grip.position.y=.06;sh.add(grip);
     sh.position.set(0,-.06,.03);sh.rotation.x=-.35;P.handR.add(sh);
     g.userData.shovel=sh;
+  }
+  if(key==='ash'||key==='ember'||key==='magma'||key==='cinder'||key==='corpse'){
+    // cooked meat: cracked crust with fire showing through the splits
+    const heat=key==='corpse'?0xff4a12:key==='magma'?0xff5a1e:0xff8a3a;
+    const crackM=new THREE.MeshBasicMaterial({color:heat});
+    const n=key==='ash'?4:key==='ember'?5:8;
+    for(let i=0;i<n;i++){
+      const cr=new THREE.Mesh(new THREE.BoxGeometry(rnd(.02,.045),rnd(.07,.2),.02),crackM);
+      const r=Math.random();
+      if(r<.5){cr.position.set(rnd(-.14,.14),rnd(.1,.44),.142);cr.rotation.z=rnd(-.9,.9);P.torso.add(cr);}
+      else if(r<.75){cr.position.set(rnd(-.04,.04),rnd(-.3,-.1),.07);cr.rotation.z=rnd(-.6,.6);P[Math.random()<.5?'armL':'armR'].add(cr);}
+      else{cr.position.set(rnd(-.05,.05),rnd(-.35,-.12),.1);P[Math.random()<.5?'legL':'legR'].add(cr);}
+    }
+    // eyes burning out of the sockets
+    for(const sx of [-1,1]){
+      const ey=new THREE.Mesh(new THREE.SphereGeometry(.022,6,5),crackM);
+      ey.position.set(sx*.046,.013,.1);P.head.add(ey);
+    }
+    // smoke curling off the shoulders
+    for(let i=0;i<2;i++){
+      const sm=new THREE.Mesh(new THREE.SphereGeometry(rnd(.09,.16),6,5),
+        new THREE.MeshBasicMaterial({color:0x3a2f2a,transparent:true,opacity:.32}));
+      sm.position.set(rnd(-.2,.2),rnd(.45,.62),rnd(-.1,.05));P.torso.add(sm);
+    }
+  }
+  if(key==='magma'||key==='corpse'){
+    // slabs of cooled crust bolted on like armour
+    const slab=M(key==='corpse'?0x3a1a10:0x2e1a12);
+    const plate=new THREE.Mesh(new THREE.CylinderGeometry(.185,.16,.32,7),slab);
+    plate.scale.set(1.34,1,.92);plate.position.y=.3;P.torso.add(plate);
+    for(const sd of ['armL','armR']){
+      const pl=new THREE.Mesh(new THREE.SphereGeometry(.095,7,5),slab);
+      pl.scale.set(1,.82,1);P[sd].add(pl);
+      const spike=new THREE.Mesh(new THREE.ConeGeometry(.05,.2,5),M(0x1b100c));
+      spike.position.set(0,.06,-.05);spike.rotation.x=-.8;P[sd].add(spike);
+    }
+    const crown=new THREE.Mesh(new THREE.SphereGeometry(.13,9,6,0,Math.PI*2,0,1.3),slab);
+    crown.position.y=.01;P.head.add(crown);
+    for(let i=0;i<5;i++){
+      const horn=new THREE.Mesh(new THREE.ConeGeometry(.032,rnd(.14,.26),5),M(0x140c09));
+      const a=(i/5)*Math.PI-Math.PI/2;
+      horn.position.set(Math.sin(a)*.1,.1,Math.cos(a)*.06);
+      horn.rotation.z=-Math.sin(a)*.5;P.head.add(horn);
+    }
+  }
+  if(key==='corpse'){
+    // The Corpse: a smouldering wreck with a molten core showing through
+    const core=new THREE.Mesh(new THREE.SphereGeometry(.13,10,7),
+      new THREE.MeshBasicMaterial({color:0xffb347}));
+    core.scale.set(1.3,1.5,.6);core.position.set(0,.3,.11);P.torso.add(core);
+    for(let i=0;i<4;i++){
+      const rib=new THREE.Mesh(new THREE.BoxGeometry(.19,.022,.03),M(0x6b5a4a));
+      rib.position.set(0,.16+i*.09,.145);rib.rotation.z=rnd(-.1,.1);P.torso.add(rib);
+    }
+    const mantle=new THREE.Mesh(new THREE.SphereGeometry(.3,10,7,0,Math.PI*2,0,1.9),M(0x1c0d08));
+    mantle.scale.set(1.05,.8,.75);mantle.position.set(0,.4,-.12);P.torso.add(mantle);
+    for(let i=0;i<6;i++){
+      const drip=new THREE.Mesh(new THREE.ConeGeometry(.028,rnd(.15,.35),4),
+        new THREE.MeshBasicMaterial({color:0xff7a1e}));
+      drip.position.set(rnd(-.22,.22),.05,rnd(-.1,.14));P.torso.add(drip);
+    }
+    const halo=new THREE.PointLight(0xff4a12,2.2,11);halo.position.y=1.6;g.add(halo);
   }
   if(key==='toxic'||key==='necro'){
     const drip=new THREE.Mesh(new THREE.SphereGeometry(.09,8,6),
@@ -1657,6 +2027,92 @@ function buildKnife(){
   g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
   return g;
 }
+function buildSlasher(){
+  const g=person({skin:0x9c6a44,hair:false,eye:0xffb347,shirt:0x241a16,pants:0x1c1512,shoe:0x120d0b,mouth:0x1a0f0c});
+  const P=g.userData.P,T=P.torso,H=P.head;
+  const leather=M(0x30231c),leatherD=M(0x1f1712),iron=M(0x4a4038),
+        emberM=M(0xff6a1e),coalM=M(0x2a1410),ashM=M(0x5a4a42);
+  // scorched leathers, plates riveted on
+  const coat=new THREE.Mesh(new THREE.CylinderGeometry(.178,.15,.31,8),leather);
+  coat.scale.set(1.3,1,.92);coat.position.y=.3;T.add(coat);
+  const bib=new THREE.Mesh(new THREE.BoxGeometry(.28,.26,.05),leatherD);
+  bib.position.set(0,.33,.135);T.add(bib);
+  for(let i=0;i<4;i++){
+    const rivet=new THREE.Mesh(new THREE.SphereGeometry(.017,5,4),iron);
+    rivet.position.set(-.1+ (i%2)*.2,.42-((i/2)|0)*.16,.155);T.add(rivet);
+  }
+  const belt=new THREE.Mesh(new THREE.CylinderGeometry(.152,.152,.08,12),leatherD);
+  belt.scale.set(1.28,1,.88);belt.position.y=-.02;T.add(belt);
+  // a bank of embers smouldering at his back
+  const furnace=new THREE.Mesh(new THREE.BoxGeometry(.26,.28,.14),coalM);
+  furnace.position.set(0,.3,-.16);furnace.castShadow=true;T.add(furnace);
+  for(let i=0;i<4;i++){
+    const coal=new THREE.Mesh(new THREE.BoxGeometry(.05,.05,.03),emberM);
+    coal.position.set(-.08+i*.055,.3+((i%2)?.06:-.05),-.235);T.add(coal);
+  }
+  const vent=new THREE.Mesh(new THREE.CylinderGeometry(.03,.04,.2,6),iron);
+  vent.position.set(-.11,.5,-.14);vent.rotation.z=.25;T.add(vent);
+  const vent2=vent.clone();vent2.position.x=.11;vent2.rotation.z=-.25;T.add(vent2);
+  // hood + iron half-mask, eyes lit from inside
+  const hood=new THREE.Mesh(new THREE.SphereGeometry(.142,10,8,0,Math.PI*2,0,1.6),leatherD);
+  hood.scale.set(1.05,1.06,1.02);hood.position.y=.02;H.add(hood);
+  const drape=new THREE.Mesh(new THREE.SphereGeometry(.16,10,7),leatherD);
+  drape.scale.set(1.05,.78,.66);drape.position.set(0,.4,-.11);T.add(drape);
+  const mask=new THREE.Mesh(new THREE.SphereGeometry(.104,10,7),iron);
+  mask.scale.set(.98,.6,1.01);mask.position.set(0,-.06,.01);H.add(mask);
+  for(let i=0;i<4;i++){
+    const slit=new THREE.Mesh(new THREE.BoxGeometry(.012,.05,.02),coalM);
+    slit.position.set(-.045+i*.03,-.078,.098);H.add(slit);
+  }
+  for(const sx of [-1,1]){
+    const eye=new THREE.Mesh(new THREE.BoxGeometry(.045,.018,.02),emberM);
+    eye.position.set(sx*.045,.014,.104);H.add(eye);
+  }
+  const eyeGlow=new THREE.PointLight(0xff6a1e,.55,3.2);
+  eyeGlow.position.set(0,1.62,.2);g.add(eyeGlow);
+  // gauntlets
+  for(const h of ['handL','handR']){
+    const gl=new THREE.Mesh(new THREE.BoxGeometry(.094,.13,.056),iron);
+    gl.position.y=-.055;P[h].add(gl);
+    const knuckle=new THREE.Mesh(new THREE.BoxGeometry(.088,.03,.05),coalM);
+    knuckle.position.y=-.115;P[h].add(knuckle);
+  }
+  // thigh sheath of spare blades, glowing at the tips
+  for(const [k,sd] of [['legL',-1],['legR',1]]){
+    const sh=new THREE.Mesh(new THREE.BoxGeometry(.05,.18,.04),leatherD);
+    sh.position.set(sd*.075,-.2,.055);P[k].add(sh);
+    const tip=new THREE.Mesh(new THREE.BoxGeometry(.02,.05,.014),emberM);
+    tip.position.set(sd*.075,-.09,.06);P[k].add(tip);
+  }
+  // ---- the blades: heated steel running white at the edge ----
+  const flames=[];
+  const mkBlade=()=>{
+    const k=new THREE.Group();
+    const handle=new THREE.Mesh(new THREE.CylinderGeometry(.021,.024,.12,6),M(0x241a14));
+    handle.position.y=.035;k.add(handle);
+    const guard=new THREE.Mesh(new THREE.BoxGeometry(.09,.02,.03),iron);
+    guard.position.y=-.03;k.add(guard);
+    const blade=new THREE.Mesh(new THREE.BoxGeometry(.034,.3,.012),M(0x8a2f14));
+    blade.position.y=-.19;k.add(blade);
+    const hot=new THREE.Mesh(new THREE.BoxGeometry(.014,.28,.016),M(0xffb347));
+    hot.position.y=-.19;k.add(hot);
+    const point=new THREE.Mesh(new THREE.ConeGeometry(.019,.1,4),M(0xffd27a));
+    point.rotation.x=Math.PI;point.position.y=-.39;k.add(point);
+    // flame licking off the steel
+    for(let i=0;i<3;i++){
+      const f=new THREE.Mesh(new THREE.ConeGeometry(.035-i*.006,.16+i*.05,5),
+        new THREE.MeshBasicMaterial({color:[0xff8a2a,0xffb347,0xffe08a][i],transparent:true,opacity:.62-i*.14}));
+      f.position.set(0,-.18-i*.05,.02);k.add(f);
+      flames.push(f);
+    }
+    return k;
+  };
+  const kR=mkBlade();kR.position.set(0,-.05,.02);kR.rotation.x=-.2;P.handR.add(kR);
+  const kL=mkBlade();kL.position.set(0,-.05,.02);kL.rotation.x=-.2;P.handL.add(kL);
+  g.userData.bladeR=kR;g.userData.bladeL=kL;g.userData.flames=flames;
+  g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+  return g;
+}
 function buildCommander(){
   const g=person({skin:0xd8ab80,hair:0x2a2621,eye:0x3d5a78,shirt:0x2f3524,pants:0x272c1d,shoe:0x16180f});
   const P=g.userData.P,T=P.torso,H=P.head;
@@ -1743,7 +2199,7 @@ function buildCommander(){
   return g;
 }
 const TOWER_BUILD={police:buildPolice,scout:buildScout,robber:buildRobber,survivor:buildSurvivor,
-                   blitzer:buildBlitzer,knife:buildKnife,commander:buildCommander};
+                   blitzer:buildBlitzer,knife:buildKnife,slasher:buildSlasher,commander:buildCommander};
 function placeTower(key,x,z){
   const def=TOWERS[key];
   const g=TOWER_BUILD[key]();
@@ -1850,9 +2306,9 @@ function fxLaser(a,b){
   },end:()=>removeFromWorld(m)});
 }
 // Knife Master: an arc sweeping through the target
-function fxSlash(pos,ang){
+function fxSlash(pos,ang,col){
   const m=new THREE.Mesh(new THREE.TorusGeometry(.42,.03,4,12,1.7),
-    new THREE.MeshBasicMaterial({color:0xe6edff,transparent:true,opacity:.9,side:THREE.DoubleSide}));
+    new THREE.MeshBasicMaterial({color:col||0xe6edff,transparent:true,opacity:.9,side:THREE.DoubleSide}));
   m.position.copy(pos);
   m.rotation.set(rnd(-.35,.35),ang||0,rnd(1.5,2.5));
   world.add(m);
@@ -1897,7 +2353,7 @@ function syncHud(){
    so every reference stays live. */
 const LOADOUT=['police','scout','robber','survivor',null];
 const SHORT={police:'Cop',scout:'Scout',robber:'Robber',survivor:'Survivor',
-             blitzer:'Blitzer',knife:'Knife',commander:'Cmdr'};
+             blitzer:'Blitzer',knife:'Knife',slasher:'Slasher',commander:'Cmdr'};
 const TOWER_DESC={
   police:'Baton: 9 dmg every 1.0s at Lv1 up to 40 at Lv5, range 10 → 12. It breaks after 30 hits and he falls back on the taser — weaker, but it stuns. Upgrading issues a fresh baton. 5 levels.',
   scout:'2 dmg · 0.9s · 8 range. Cheap, fast chip damage. 3 levels.',
@@ -1905,9 +2361,10 @@ const TOWER_DESC={
   survivor:'M14 EBR: 2 dmg every 0.30s at Lv1 → 5 dmg every 0.08s at Lv5. Range 12 → 20, the longest reach in the game. 5 levels.',
   blitzer:'Battery gun: 20 yellow laser rounds at one every 0.04s, then it has to recharge. 5 dmg → 15, range 8 → 12. 4 levels.',
   knife:'Twin blades: 8 dmg → 22, no gun at all. Range 5 → 7, the shortest reach in the game, so put him on a corner. 4 levels.',
+  slasher:'Twin blades kept in a furnace on his back: 10 dmg every 0.40s at Lv1 up to 25 every 0.30s at Lv4. Range 3 → 4, the shortest reach in the game, so placement matters more than for anything else. 4 levels.',
   commander:'Sidearm plus an aura: every friendly tower inside his ring hits +15% harder and reloads +10% faster at Lv1, up to +40% and +28% at Lv4. Auras do not stack. 4 levels.'
 };
-const ALL_TOWERS=['police','scout','robber','survivor','blitzer','knife','commander'];
+const ALL_TOWERS=['police','scout','robber','survivor','blitzer','knife','slasher','commander'];
 function placedCount(key){let n=0;for(const t of G.towers)if(t.key===key&&!t.owner)n++;return n;}
 let slotsSig='';
 function renderSlots(){
@@ -1995,7 +2452,7 @@ function closeInfo(){
 /* keep #ui.sheeted in step with whichever sheet is open, wherever it was
    toggled from — there are a dozen call sites and they used to fight the
    Inventory button for the bottom of the screen */
-const SHEETS=['shop','info','settings','log','loadout','squad'].map($);
+const SHEETS=['shop','info','settings','log','loadout','squad','match','event'].map($);
 function syncSheetState(){
   $('ui').classList.toggle('sheeted',SHEETS.some(s=>s.classList.contains('on')));
 }
@@ -2209,7 +2666,7 @@ function validSpot(x,z){
 
 /* ---------- waves ---------- */
 function buildQueue(w){
-  const set=MAP.waves>10?WAVES20:WAVES;
+  const set=WAVE_SETS[MAP.key]||WAVES;
   const cfg=set[Math.min(w,set.length)-1],pool=[];
   const bosses=[];
   cfg.mix.forEach(([k,n])=>{
@@ -2442,7 +2899,7 @@ function fire(t,dt){
       t.swDur=t.key==='scout'?.2
              :t.key==='survivor'?Math.min(.16,s.cd*.8)
              :t.key==='blitzer'?Math.min(.1,s.cd*2.2)
-             :t.key==='knife'?Math.min(.42,s.cd*.85):.34;
+             :(t.key==='knife'||t.key==='slasher')?Math.min(.42,s.cd*.85):.34;
       t.swing=t.swDur;t.rec=1;                 // recoil impulse, decays per weapon
       const from=t.g.position.clone().add(V3(0,1.35,0));
       const to=target.g.position.clone().add(V3(0,1.1*target.d.sc,0));
@@ -2485,12 +2942,15 @@ function fire(t,dt){
           t.rech=s.rech;blitzerCharge(t);sfx('recharge');
           if(G.sel===t)showInfo(t);
         }
-      }else if(t.key==='knife'){
+      }else if(t.key==='knife'||t.key==='slasher'){
         // alternate hands so the two blades trade off
         t.hand=t.hand==='R'?'L':'R';
         const ang=Math.atan2(target.g.position.x-t.g.position.x,target.g.position.z-t.g.position.z);
-        fxSlash(to,ang);fxSpark(to,0xdfe9ff);
-        hurt(target,s.dmg);sfx('slash');
+        const hot=t.key==='slasher';
+        fxSlash(to,ang,hot?0xffa33a:0xe6edff);
+        fxSpark(to,hot?0xff7a1e:0xdfe9ff);
+        if(hot){fxSpark(to.clone().add(V3(rnd(-.3,.3),rnd(-.2,.4),rnd(-.3,.3))),0xffd27a);}
+        hurt(target,s.dmg);sfx(hot?'burn':'slash');
       }else if(t.weapon==='baton'){
         fxSpark(to,0xbfd0ff);hurt(target,s.dmg);sfx('baton');
         t.batonHits--;
@@ -2526,7 +2986,7 @@ function fire(t,dt){
    the pose continuous when the swing ends.
    ============================================================ */
 const mix=(a,b,k)=>a+(b-a)*k;
-const RECOIL_DECAY={scout:9,survivor:11,robber:4.5,blitzer:15,knife:6,police:7,commander:8};
+const RECOIL_DECAY={scout:9,survivor:11,robber:4.5,blitzer:15,knife:6,slasher:7,police:7,commander:8};
 function towerPose(t,dt,target,s){
   const P=t.g.userData.P;
   const now=performance.now()*.001,seed=t.seed;
@@ -2559,8 +3019,9 @@ function towerPose(t,dt,target,s){
   P.legR.rotation.z=mix(-.05,-.13,A)+shift*.4;
   P.legL.rotation.x=mix(0,-.13,A);
   P.legR.rotation.x=mix(0,.15,A);
-  P.shinL.rotation.x=mix(-.05,-.12,A);
-  P.shinR.rotation.x=mix(-.05,-.22,A);
+  // soft knees, bent the way knees actually bend (positive on this rig)
+  P.shinL.rotation.x=mix(.05,.13,A);
+  P.shinR.rotation.x=mix(.05,.22,A);
   P.footL.rotation.x=mix(0,.06,A);P.footR.rotation.x=mix(0,-.05,A);
   P.torso.rotation.z=shift-lead*.35;
   P.torso.rotation.x=mix(.02,-.05,A);
@@ -2661,7 +3122,7 @@ function towerPose(t,dt,target,s){
       P.torso.rotation.x+=-R*.05;
       P.head.rotation.x=mix(.02,-.03,A)-R*.03;
     }
-  }else if(key==='knife'){
+  }else if(key==='knife'||key==='slasher'){
     // ---- blades: low guard when relaxed, high guard ready, alternating slash ----
     const sw=t.hand,off=sw==='R'?'L':'R',sg=sw==='R'?1:-1;
     let arc=0,arcF=0;
@@ -2716,6 +3177,16 @@ function towerPose(t,dt,target,s){
     P.head.rotation.x=mix(.02,-.06,A);
   }
 
+  // --- flaming blades flicker, and flare when he swings ---------------
+  if(t.g.userData.flames){
+    const flare=1+(t.swing>0?Math.sin(u*Math.PI)*.9:0)+A*.25;
+    t.g.userData.flames.forEach((f,i)=>{
+      const k=(.82+Math.sin(now*(9+i*2.3)+seed+i)*.18)*flare;
+      f.scale.set(k,k*1.15,k);
+      f.material.opacity=(.62-i*.14)*(.75+.25*Math.sin(now*(7+i)+seed));
+    });
+  }
+
   // --- head: locked on the target, or sweeping the field when idle ------
   const scan=Math.sin(now*.62+seed)*.6+(gK===0?gA*.7:0);
   const tilt=gK===1?gA*.3:0;
@@ -2766,6 +3237,7 @@ function sfx(k){
     case 'recharge': tone(300,.5,'sawtooth',.11,90);noise(.2,.1,700,.6);break;
     case 'charged': tone(700,.09,'triangle',.1);setTimeout(()=>tone(1250,.12,'triangle',.09),70);break;
     case 'slash': noise(.07,.22,4200,2.6);tone(1500,.06,'triangle',.07,520);break;
+    case 'burn':  noise(.13,.26,1600,1.1);tone(820,.09,'sawtooth',.08,240);break;
     case 'cash':  tone(880,.08,'sine',.11);setTimeout(()=>tone(1320,.1,'sine',.09),70);break;
     case 'leak':  tone(150,.45,'sawtooth',.22,55);break;
     case 'wave':  tone(392,.18,'triangle',.16);setTimeout(()=>tone(587,.28,'triangle',.14),150);break;
@@ -2852,16 +3324,18 @@ function botWalkPose(b,moving,dt){
   if(moving){
     b.walk+=dt*8;
     const S1=Math.sin(b.walk);
-    P.legL.rotation.x=S1*.7;P.legR.rotation.x=-S1*.7;
-    P.shinL.rotation.x=-.1-Math.max(0,-S1)*.8;P.shinR.rotation.x=-.1-Math.max(0,S1)*.8;
-    P.footL.rotation.x=.1+Math.max(0,-S1)*.3;P.footR.rotation.x=.1+Math.max(0,S1)*.3;
-    P.armL.rotation.x=-S1*.55;P.armR.rotation.x=S1*.55;
+    // same corrected gait as the player: knees flex backwards (positive shin)
+    P.legL.rotation.x=-S1*.7;P.legR.rotation.x=S1*.7;
+    P.shinL.rotation.x=.08+Math.max(0,-S1)*.85;P.shinR.rotation.x=.08+Math.max(0,S1)*.85;
+    P.footL.rotation.x=.05+Math.max(0,-S1)*.28-Math.max(0,S1)*.12;
+    P.footR.rotation.x=.05+Math.max(0,S1)*.28-Math.max(0,-S1)*.12;
+    P.armL.rotation.x=S1*.55;P.armR.rotation.x=-S1*.55;
     P.armL.rotation.z=.1;P.armR.rotation.z=-.1;
-    P.foreL.rotation.x=-.3-Math.max(0,-S1)*.35;P.foreR.rotation.x=-.3-Math.max(0,S1)*.35;
-    P.torso.rotation.x=.1;P.torso.rotation.y=-S1*.1;P.torso.rotation.z=0;
-    P.head.rotation.x=0;P.head.rotation.y=S1*.05;P.head.rotation.z=0;
+    P.foreL.rotation.x=-.3-Math.max(0,S1)*.35;P.foreR.rotation.x=-.3-Math.max(0,-S1)*.35;
+    P.torso.rotation.x=.09;P.torso.rotation.y=S1*.1;P.torso.rotation.z=-S1*.045;
+    P.head.rotation.x=0;P.head.rotation.y=-S1*.05;P.head.rotation.z=0;
     P.chest.scale.y=1;
-    b.g.position.y=Math.abs(Math.sin(b.walk*2))*.04;
+    b.g.position.y=Math.abs(Math.sin(b.walk*2))*.045;
   }else{
     const t=performance.now()*.0016+b.seed;
     const k=1-Math.min(1,dt*8);
@@ -2969,7 +3443,7 @@ const lobbyNPCs=[];
   // screen on the far wall
   boardMesh=new THREE.Mesh(new THREE.PlaneGeometry(12,6),
     new THREE.MeshBasicMaterial({map:signTex([
-      {t:'TOWER DEFENSE',b:1,s:54,y:100},{t:'V1.52  ·  7 TOWERS  ·  2 MAPS',s:28,c:'#8b95cf',y:158}])}));
+      {t:'TOWER DEFENSE',b:1,s:54,y:100},{t:'BETA  ·  V1.6  ·  8 TOWERS  ·  3 MAPS',s:26,c:'#8b95cf',y:158}])}));
   // the bezel is .35 deep, so its front face sits at -D+.195 — the screen has
   // to clear that or the frame swallows it
   boardMesh.position.set(0,4.8,-D+.42);lobby.add(boardMesh);
@@ -3099,7 +3573,7 @@ const lobbyNPCs=[];
   {
     const st=stationAt('log'),g=new THREE.Group();
     const board=new THREE.Mesh(new THREE.PlaneGeometry(4.6,2.6),
-      new THREE.MeshBasicMaterial({map:signTex([{t:'UPDATE LOG',b:1,s:56,y:110},{t:'V1.52',s:40,c:'#5ef2a0',y:180}])}));
+      new THREE.MeshBasicMaterial({map:signTex([{t:'UPDATE LOG',b:1,s:56,y:110},{t:'V1.6 BETA',s:38,c:'#5ef2a0',y:180}])}));
     board.position.set(0,2.5,.13);g.add(board);
     const back=new THREE.Mesh(new THREE.BoxGeometry(5,3,.22),M(0x232a4e));
     back.position.set(0,2.5,0);back.castShadow=true;g.add(back);
@@ -3185,6 +3659,15 @@ Array.prototype.forEach.call(document.querySelectorAll('#modes .mode'),b=>{
   };
 });
 $('closeLog').onclick=()=>$('log').classList.remove('on');
+$('playNow').onclick=()=>{initAudio();openMatchmaking();};
+$('mmCancel').onclick=()=>cancelMatchmaking();
+$('eventBtn').onclick=()=>{
+  initAudio();closeInfo();
+  $('loadout').classList.remove('on');$('squad').classList.remove('on');
+  $('log').classList.remove('on');$('match').classList.remove('on');mmOn=false;
+  $('event').classList.toggle('on');
+};
+$('closeEvent').onclick=()=>$('event').classList.remove('on');
 
 function enterLobby(won){
   G.mode='lobby';G.waveActive=false;G.nextT=0;
@@ -3205,6 +3688,9 @@ function enterLobby(won){
   $('log').classList.remove('on');
   clearStation();
   $('coins').classList.add('on');syncCoins();
+  $('lobbyBtns').classList.add('on');
+  $('match').classList.remove('on');$('event').classList.remove('on');
+  mmOn=false;
   const runLine=G.kills+' zombies dropped  ·  $'+G.earned.toLocaleString()+' earned';
   // the wave totals used to be hardcoded to 10 and read wrong on the 20-wave map
   const total=MAP.waves;
@@ -3216,7 +3702,7 @@ function enterLobby(won){
       {t:'made it to wave '+G.wave+' of '+total,s:25,y:128},{t:runLine,s:22,c:'#8b95cf',y:168},
       {t:coinLine,b:1,s:30,c:'#ffd166',y:212}]);
   else setBoard([{t:'TOWER DEFENSE',b:1,s:54,y:100},
-      {t:'V1.52  ·  WALK OVER AND PICK',s:28,c:'#8b95cf',y:158}]);
+      {t:'BETA V1.6  ·  PRESS PLAY OR WALK OVER',s:24,c:'#8b95cf',y:158}]);
   buildPals();
 }
 function toLobby(won){
@@ -3303,16 +3789,51 @@ function crowding(x,z){
   }
   return c;
 }
+/* How much NEW track a spot would cover. The first tower watching a stretch is
+   worth far more than the fifth, so bots spread out along the route instead of
+   piling onto the same corner. */
+function coverGain(x,z,rng){
+  let gain=0,n=0;
+  for(let d=2;d<PATH_LEN;d+=4){
+    const p=pathPos(d);n++;
+    if(Math.hypot(p.x-x,p.z-z)>rng)continue;
+    let covered=0;
+    for(const t of G.towers){
+      const s=t.def.lv[t.lvl];
+      if(Math.hypot(p.x-t.g.position.x,p.z-t.g.position.z)<=s.rng)covered++;
+    }
+    gain+=1/(1+covered);
+  }
+  return n?gain/n:0;
+}
+/* Corners are worth more than straights: a zombie rounding a bend stays inside
+   a nearby tower's circle far longer than one walking past it. */
+function cornerBonus(x,z,rng){
+  let best=0;
+  for(let i=1;i<SEG.length;i++){
+    const c=SEG[i];
+    const d=Math.hypot(x-c.ax,z-c.az);
+    if(d<=rng)best=Math.max(best,1-d/rng);
+  }
+  return best;
+}
 function bestSpotFor(key,tries){
   const def=TOWERS[key],rng=def.lv[0].rng;
   let best=null,bs=-1e9;
-  for(let k=0;k<(tries||26);k++){
-    const pp=pathPos(rnd(4,PATH_LEN-4)),a=rnd(0,6.283);
-    const r=rnd(PATH_W/2+1.4,Math.max(3,rng*.7));
+  const n=tries||30;
+  for(let k=0;k<n;k++){
+    // sample near the track, biased to a stand-off that suits this tower's reach
+    const pp=pathPos(rnd(3,PATH_LEN-3)),a=rnd(0,6.283);
+    const lo=PATH_W/2+1.3, hi=Math.max(lo+.4,Math.min(rng*.75,9));
+    const r=rnd(lo,hi);
     const x=pp.x+Math.cos(a)*r,z=pp.z+Math.sin(a)*r;
     if(!botValid(x,z))continue;
-    const cov=pathCoverage(x,z,rng);
-    const sc=cov*100+lateBias(x,z)*22-crowding(x,z)*16-Math.abs(distToPath(x,z)-rng*.45)*1.4;
+    const sc=coverGain(x,z,rng)*220         // new ground is the main prize
+            +pathCoverage(x,z,rng)*45       // ... but raw coverage still counts
+            +cornerBonus(x,z,rng)*40        // corners hold zombies in range
+            +lateBias(x,z)*20               // leaks happen at the far end
+            -crowding(x,z)*22               // don't bunch up
+            -Math.max(0,distToPath(x,z)-rng*.65)*9;   // never stand out of reach
     if(sc>bs){bs=sc;best={x,z};}
   }
   return best;
@@ -3330,11 +3851,13 @@ function botPick(b){
   const opts=[];
   const add=(k,score)=>{
     const d=TOWERS[k];
+    if(d.coin&&!SAVE[d.key==='commander'?'commander':'_'])return;   // coin-locked
     if(b.cash>=d.cost&&c[k]<TOWER_CAP)opts.push([k,score-c[k]*9]);
   };
   // early: cheap coverage. mid: damage. late: range and dps
   add('survivor',(wave>=3?70:26)+(c.survivor===0?45:0));
   add('blitzer', (wave>=4?66:24)+(c.blitzer===0?40:0));
+  add('slasher', (wave>=3?60:30)+(c.slasher===0?32:0));
   add('police',  48+(c.police===0?30:0));
   add('robber',  (total<3?54:30)+(c.robber===0?20:0));
   add('knife',   (total<4?44:24)+(c.knife===0?26:0));
@@ -3343,6 +3866,24 @@ function botPick(b){
   opts.sort((p,q)=>q[1]-p[1]);
   // mostly the best call, sometimes the runner-up so squads don't look cloned
   return (opts.length>1&&Math.random()<.22)?opts[1][0]:opts[0][0];
+}
+/* How many towers this bot should own by now. Without a cap they spent every
+   coin on new bodies and never levelled anything — which is exactly the
+   "they never upgrade" complaint. */
+function botTowerBudget(b){
+  return Math.min(TOWER_CAP,2+Math.floor(G.wave/4));
+}
+/* The cheapest level-up available to this bot, affordable or not. Without this
+   they would spend every spare $150 on another level-1 body and never bank
+   enough to level anything. */
+function cheapestUpgrade(b){
+  let c=null;
+  for(const t of b.mine){
+    if(t.lvl>=t.def.lv.length-1)continue;
+    const u=upgradeCost(t);
+    if(u!=null&&(c===null||u<c))c=u;
+  }
+  return c;
 }
 function botUpgradePick(b){
   let best=null,bs=-1;
@@ -3355,7 +3896,8 @@ function botUpgradePick(b){
     const now=t.def.lv[t.lvl],next=t.def.lv[t.lvl+1];
     const gainNow=now.dmg/now.cd,gainNext=next.dmg/next.cd;
     const value=((gainNext-gainNow)/Math.max(.01,gainNow))*100/(c/300);
-    const boost=value+pathCoverage(t.g.position.x,t.g.position.z,next.rng)*40;
+    const boost=value+pathCoverage(t.g.position.x,t.g.position.z,next.rng)*40
+               +(t.lvl===0?25:0);          // getting off level 1 matters most
     if(boost>bs){bs=boost;best=t;}
   }
   return best;
@@ -3409,10 +3951,20 @@ function botStep(dt){
         const want=botPick(b);
         if(spot&&want){b.dest={x:spot.x,z:spot.z,want};botSay(b,'covering the end!');b.cd=rnd(2,4);continue;}
       }
-      // 2) upgrade when it beats buying another body
+      // 2) upgrade when it beats buying another body. They used to flip a coin
+      //    on this and always had something cheap to buy, so they sprawled
+      //    across the map at level 1 and never levelled anything. Now each bot
+      //    has a tower budget for the wave and levels up what it already owns
+      //    once it hits it.
       const up=botUpgradePick(b);
-      const buy=botPick(b);
-      const preferUp=up&&(!buy||b.mine.length>=3||Math.random()<.45);
+      const overBudget=b.mine.length>=botTowerBudget(b);
+      // once they own a couple of towers they bank toward the next level
+      // instead of dribbling the cash away on more level-1 bodies
+      const nextUp=cheapestUpgrade(b);
+      const saving=!up&&nextUp!==null&&b.mine.length>=2&&b.cash<nextUp;
+      const buy=(overBudget||saving)?null:botPick(b);
+      const preferUp=!!up;
+      if(saving&&b.sayT<=0&&Math.random()<.25)botSay(b,'saving for an upgrade');
       if(preferUp){
         const c=upgradeCost(up);
         b.cash-=c;up.spent+=c;
@@ -3427,15 +3979,24 @@ function botStep(dt){
         // saving up — drift near the track so it's in position. The old version
         // never checked the spot, so teammates would happily park in the middle
         // of the road and let the horde walk through them.
-        if(Math.random()<.4){
+        // wander: mostly drift along the track, sometimes go and stand near
+        // one of their own towers to watch it work
+        if(Math.random()<.88){
+          const own=b.mine.length&&Math.random()<.35?b.mine[(Math.random()*b.mine.length)|0]:null;
           for(let k=0;k<24;k++){
-            const pp=pathPos(rnd(PATH_LEN*.3,PATH_LEN*.9));
-            const a=rnd(0,6.283),r=rnd(3.5,7);
-            const x=pp.x+Math.cos(a)*r,z=pp.z+Math.sin(a)*r;
+            let x,z;
+            if(own){
+              const a=rnd(0,6.283),r=rnd(2.2,4);
+              x=own.g.position.x+Math.cos(a)*r;z=own.g.position.z+Math.sin(a)*r;
+            }else{
+              const pp=pathPos(rnd(PATH_LEN*.15,PATH_LEN*.95));
+              const a=rnd(0,6.283),r=rnd(3.5,8);
+              x=pp.x+Math.cos(a)*r;z=pp.z+Math.sin(a)*r;
+            }
             if(botValid(x,z)){b.dest={x,z,want:null};break;}
           }
         }
-        b.cd=rnd(2,4);
+        b.cd=rnd(1.5,3.5);
       }
     }
     let moving=false;
@@ -3473,7 +4034,9 @@ function botStep(dt){
         // meaningless — that was the spin. Snap back to the real direction.
         if(sl<.35){b.sx=sx;b.sz=sz;sl=1;}
         const mx=b.sx/sl,mz=b.sz/sl;
-        const sp=4.8*clamp(d/2.5,.4,1);           // ease in instead of stopping dead
+        // stroll when just moving about, jog when there is a tower to plant
+        const base=b.dest.want?5.2:2.9;
+        const sp=base*clamp(d/2.5,.4,1);          // ease in instead of stopping dead
         b.g.position.x=clamp(b.g.position.x+mx*sp*dt,-43,43);
         b.g.position.z=clamp(b.g.position.z+mz*sp*dt,-37,37);
         const want=Math.atan2(mx,mz);
@@ -3510,7 +4073,22 @@ function botStep(dt){
           }
           if(skip){botWalkPose(b,true,dt);continue;}
         }
-        b.dest=null;b.cd=rnd(2.5,6);
+        // a short breather after a stroll, a longer one after building
+        const wasBuilding=!!b.dest.want;
+        b.dest=null;b.cd=wasBuilding?rnd(2.5,5):rnd(.8,2.4);
+      }
+    }
+    if(!moving&&b.mine.length){
+      // stood still: turn and watch their nearest tower
+      let near=null,nd=1e9;
+      for(const t of b.mine){
+        const d2=Math.hypot(t.g.position.x-b.g.position.x,t.g.position.z-b.g.position.z);
+        if(d2<nd){nd=d2;near=t;}
+      }
+      if(near&&nd>.4&&nd<14){
+        const want=Math.atan2(near.g.position.x-b.g.position.x,near.g.position.z-b.g.position.z);
+        const diff=((want-b.g.rotation.y+Math.PI*3)%(Math.PI*2))-Math.PI;
+        b.g.rotation.y+=clamp(diff*Math.min(1,dt*2.5),-2*dt,2*dt);
       }
     }
     botWalkPose(b,moving,dt);
@@ -3548,6 +4126,7 @@ const STATION_ACT={
 };
 function clearStation(){
   nearStation=null;$('prompt').classList.remove('on');
+  $('ui').classList.remove('prompting');
 }
 function stationStep(dt){
   // nothing to walk up to mid-vote
@@ -3565,8 +4144,9 @@ function stationStep(dt){
       $('promptS').textContent=best.hint;
       $('promptBtn').textContent=best.btn;
       $('prompt').classList.add('on');
+      $('ui').classList.add('prompting');
       sfx('place');
-    }else $('prompt').classList.remove('on');
+    }else{$('prompt').classList.remove('on');$('ui').classList.remove('prompting');}
   }
   const pad=stationAt('pad');
   if(pad.ring){
@@ -3584,6 +4164,7 @@ addEventListener('keydown',e=>{
 });
 function lobbyStep(dt){
   voteStep(dt);
+  matchStep(dt);
   stationStep(dt);
   const t=performance.now()*.0016;
   lobbyPals.forEach((g,i)=>{
@@ -3621,7 +4202,8 @@ function toMatch(mapKey){
     $('slots').classList.add('on');
     $('log').classList.remove('on');$('loadout').classList.remove('on');
     $('squad').classList.remove('on');clearStation();
-    $('coins').classList.remove('on');
+    $('coins').classList.remove('on');$('lobbyBtns').classList.remove('on');
+    $('match').classList.remove('on');$('event').classList.remove('on');mmOn=false;
     $('voter').classList.remove('on');
     $('party').classList.toggle('on',PARTY>0);
     spawnTeammates();
@@ -3632,54 +4214,86 @@ function toMatch(mapKey){
 }
 
 /* ---------- map voter (15 seconds, TDS style) ---------- */
+/* Rebuilt data-driven: the rows are generated from MAPS, so adding a map is
+   just adding an entry rather than hand-writing another block of markup. */
+const MAP_ORDER=['grassy','forest','volcanic'];
+function mapUnlocked(k){
+  if(k==='forest')return SAVE.grave;
+  if(k==='volcanic')return SAVE.volcano;
+  return true;
+}
+function unlockHint(k){
+  return k==='forest'?'clear the Demo Map first'
+       : k==='volcanic'?'clear The Forest first':'';
+}
 let GRAVE_UNLOCKED=SAVE.grave;
-const VOTE={grassy:0,forest:0};
-let voting=false,voteT=0,myVote=null,botVotes=[];
-// voteRefresh runs every frame, so only touch the DOM when something moved
-const voteLast={g:-1,f:-1,my:'',t:-1};
+const VOTE={};
+let voting=false,voteT=0,myVote=null,botVotes=[],voteBuilt=false;
+const voteLast={sig:'',t:-1};
+function buildVoteRows(){
+  $('vmaps').innerHTML=MAP_ORDER.map(k=>{
+    const m=MAPS[k];
+    return '<button class="vmap pe" data-k="'+k+'">'+
+      '<div class="vi">'+m.icon+'</div>'+
+      '<div class="vb"><div class="vn" data-n="'+k+'"></div>'+
+      '<div class="vs" data-s="'+k+'"></div>'+
+      '<div class="vbar"><div class="vfill" data-f="'+k+'"></div></div></div>'+
+      '<div class="vc" data-c="'+k+'">0</div></button>';
+  }).join('');
+  Array.prototype.forEach.call($('vmaps').children,el=>{
+    const k=el.getAttribute('data-k');
+    if(k)el.onclick=()=>castVote(k);
+  });
+  voteBuilt=true;
+}
 function voteRefresh(){
-  if(VOTE.grassy!==voteLast.g||VOTE.forest!==voteLast.f||myVote!==voteLast.my){
-    voteLast.g=VOTE.grassy;voteLast.f=VOTE.forest;voteLast.my=myVote;
-    const tot=Math.max(1,VOTE.grassy+VOTE.forest);
-    $('cntGrassy').textContent=VOTE.grassy;
-    $('cntForest').textContent=VOTE.forest;
-    $('fillGrassy').style.width=(VOTE.grassy/tot*100)+'%';
-    $('fillForest').style.width=(VOTE.forest/tot*100)+'%';
-    $('voteGrassy').classList.toggle('picked',myVote==='grassy');
-    $('voteForest').classList.toggle('picked',myVote==='forest');
-    $('voteForest').classList.toggle('lock',!GRAVE_UNLOCKED);
-    $('forestName').textContent=GRAVE_UNLOCKED?'The Forest':'The Forest \ud83d\udd12';
-    $('forestSub').textContent=GRAVE_UNLOCKED
-      ?'The Grave Digger \u00b7 20 waves \u00b7 tougher zombies'
-      :'The Grave Digger \u00b7 20 waves \u00b7 clear the Demo Map first';
+  if(!voteBuilt)buildVoteRows();
+  const sig=MAP_ORDER.map(k=>VOTE[k]|0).join(',')+'|'+myVote+'|'+
+            MAP_ORDER.map(k=>mapUnlocked(k)?1:0).join('');
+  if(sig!==voteLast.sig){
+    voteLast.sig=sig;
+    let tot=0;for(const k of MAP_ORDER)tot+=VOTE[k]|0;
+    tot=Math.max(1,tot);
+    for(const k of MAP_ORDER){
+      const m=MAPS[k],open=mapUnlocked(k),row=$('vmaps').querySelector('[data-k="'+k+'"]');
+      row.querySelector('[data-c="'+k+'"]').textContent=VOTE[k]|0;
+      row.querySelector('[data-f="'+k+'"]').style.width=((VOTE[k]|0)/tot*100)+'%';
+      row.querySelector('[data-n="'+k+'"]').textContent=m.name+(open?'':' 🔒');
+      row.querySelector('[data-s="'+k+'"]').textContent=
+        m.mode+' · '+m.waves+' waves · '+(open?(m.diff||'')+' · 🪙 '+m.coins:unlockHint(k));
+      row.classList.toggle('picked',myVote===k);
+      row.classList.toggle('lock',!open);
+    }
   }
   const sec=Math.max(0,Math.ceil(voteT));
   if(sec!==voteLast.t){voteLast.t=sec;$('voteT').textContent=sec;}
 }
 function castVote(k){
   if(!voting)return;
-  if(k==='forest'&&!GRAVE_UNLOCKED){banner('Clear the Demo Map to unlock The Forest');sfx('no');return;}
+  if(!mapUnlocked(k)){banner(MAPS[k].name+' — '+unlockHint(k));sfx('no');return;}
   if(myVote===k)return;
   if(myVote)VOTE[myVote]--;
-  myVote=k;VOTE[k]++;sfx('up');
+  myVote=k;VOTE[k]=(VOTE[k]|0)+1;sfx('up');
   $('voteMsg').textContent='You voted '+MAPS[k].name;
   voteRefresh();
 }
 function startVote(){
   voting=true;voteT=15;myVote=null;
-  VOTE.grassy=0;VOTE.forest=0;
+  for(const k of MAP_ORDER)VOTE[k]=0;
   // force a full redraw: the unlock state may have changed since the last vote
-  voteLast.g=voteLast.f=voteLast.t=-1;voteLast.my='';
+  voteLast.sig='';voteLast.t=-1;
   $('voteMsg').textContent='Tap a map to vote';
   clearStation();
   $('loadout').classList.remove('on');$('squad').classList.remove('on');
-  $('log').classList.remove('on');
+  $('log').classList.remove('on');$('match').classList.remove('on');
   $('voter').classList.add('on');
-  // teammates vote on their own clock
+  // teammates vote on their own clock, only for maps that are actually open
+  const open=MAP_ORDER.filter(mapUnlocked);
   botVotes=[];
   for(let i=0;i<PARTY;i++){
-    botVotes.push({name:BOT_NAMES[i],t:rnd(1.5,11),
-      k:(GRAVE_UNLOCKED&&Math.random()<.55)?'forest':'grassy'});
+    // they lean toward the newest thing they can play
+    const pick=open.length>1&&Math.random()<.6?open[open.length-1-((Math.random()*2)|0)]:open[0];
+    botVotes.push({name:BOT_NAMES[i],t:rnd(1.5,11),k:pick||'grassy'});
   }
   voteRefresh();
 }
@@ -3689,23 +4303,71 @@ function voteStep(dt){
   for(const b of botVotes){
     if(b.t>0){
       b.t-=dt;
-      if(b.t<=0){VOTE[b.k]++;$('voteMsg').textContent=b.name+' voted '+MAPS[b.k].name;sfx('place');}
+      if(b.t<=0){VOTE[b.k]=(VOTE[b.k]|0)+1;$('voteMsg').textContent=b.name+' voted '+MAPS[b.k].name;sfx('place');}
     }
   }
   voteRefresh();
   if(voteT<=0){
     voting=false;
-    let win='grassy';
-    if(VOTE.forest>VOTE.grassy&&GRAVE_UNLOCKED)win='forest';
-    else if(VOTE.forest===VOTE.grassy&&myVote&&GRAVE_UNLOCKED)win=myVote;
-    if(VOTE.grassy+VOTE.forest===0)win=myVote||'grassy';
+    // most votes wins; ties go to your pick, and a locked map can never win
+    let win=null,best=-1;
+    for(const k of MAP_ORDER){
+      if(!mapUnlocked(k))continue;
+      const v=VOTE[k]|0;
+      if(v>best||(v===best&&myVote===k)){best=v;win=k;}
+    }
+    if(!win||best<=0)win=(myVote&&mapUnlocked(myVote))?myVote:'grassy';
     $('voteMsg').textContent=MAPS[win].name+' wins the vote';
     $('voteT').textContent='GO';
     setTimeout(()=>{$('voter').classList.remove('on');toMatch(win);},900);
   }
 }
-$('voteGrassy').onclick=()=>castVote('grassy');
-$('voteForest').onclick=()=>castVote('forest');
+
+/* ---------- matchmaking ----------
+   The Play button runs a short fake queue — squad size is picked for you and
+   teammates drop in one at a time — then hands straight over to the map vote. */
+let mmOn=false,mmT=0,mmTarget=0,mmFound=0,mmNames=[];
+function openMatchmaking(){
+  closeInfo();
+  $('loadout').classList.remove('on');$('squad').classList.remove('on');
+  $('log').classList.remove('on');
+  mmOn=true;mmT=0;mmFound=0;
+  mmTarget=1+((Math.random()*3)|0);            // 1-3 other players
+  mmNames=BOT_NAMES.slice().sort(()=>Math.random()-.5).slice(0,mmTarget);
+  $('mmList').innerHTML='';
+  $('mmState').textContent='Searching for players…';
+  $('mmCount').textContent='1 / '+(mmTarget+1);
+  $('match').classList.add('on');
+  mmRow('You',true);
+  sfx('place');
+}
+function mmRow(name,you){
+  const d=document.createElement('div');
+  d.className='mmp'+(you?' me':'');
+  d.innerHTML='<b>'+name+'</b><i>'+(you?'host':'ready')+'</i>';
+  $('mmList').appendChild(d);
+}
+function cancelMatchmaking(){
+  mmOn=false;$('match').classList.remove('on');
+}
+function matchStep(dt){
+  if(!mmOn)return;
+  mmT+=dt;
+  if(mmFound<mmTarget&&mmT>1.1+mmFound*1.3){
+    mmRow(mmNames[mmFound],false);
+    mmFound++;
+    $('mmCount').textContent=(mmFound+1)+' / '+(mmTarget+1);
+    sfx('cash');
+    if(mmFound<mmTarget)$('mmState').textContent='Found '+mmFound+'…';
+  }
+  if(mmFound>=mmTarget&&mmT>1.1+mmFound*1.3+1){
+    mmOn=false;
+    // the queue decides the squad size, then the vote takes over
+    setMode(mmTarget+1,true);
+    $('mmState').textContent='Squad full — loading map vote';
+    setTimeout(()=>{$('match').classList.remove('on');if(G.mode==='lobby')startVote();},700);
+  }
+}
 
 /* ---------- loop ---------- */
 const clock=new THREE.Clock();
@@ -3714,6 +4376,7 @@ function tick(){
   requestAnimationFrame(tick);
   const dt=Math.min(.05,clock.getDelta());
   if(started&&!G.over)step(dt);
+  stepPortals(dt);
   updateCamera(dt);
   renderer.render(scene,camera);
 }
@@ -3744,16 +4407,27 @@ function step(dt){
     pS.walk+=dt*sp*1.85;
     const P=player.userData.P,w=pS.walk,S1=Math.sin(w),C1=Math.cos(w);
     const run=clamp(sp/5.6,0,1);
-    P.legL.rotation.x=S1*(.55+run*.5);P.legR.rotation.x=-S1*(.55+run*.5);
-    P.shinL.rotation.x=-.08-Math.max(0,-S1)*(.5+run*.9);
-    P.shinR.rotation.x=-.08-Math.max(0,S1)*(.5+run*.9);
-    P.footL.rotation.x=.1+Math.max(0,-S1)*.35;P.footR.rotation.x=.1+Math.max(0,S1)*.35;
-    P.armL.rotation.x=-S1*(.45+run*.5);P.armR.rotation.x=S1*(.45+run*.5);
+    // A knee bends BACKWARDS: on this rig that is a POSITIVE shin rotation.
+    // Every walk cycle in the game used to drive it negative, which snapped the
+    // shin forward through the knee — the "legs are breaking" look.
+    const A=.55+run*.5,KNEE=.62+run*1.05;
+    // thigh: negative swings the leg forward, so left leg leads on sin>0
+    P.legL.rotation.x=-S1*A;P.legR.rotation.x=S1*A;
+    // knee flexes hardest just after toe-off, while the leg is still behind,
+    // and straightens out to meet the ground on the forward swing
+    P.shinL.rotation.x=.07+Math.max(0,-S1)*KNEE;
+    P.shinR.rotation.x=.07+Math.max(0, S1)*KNEE;
+    // ankle: toe points on the push-off, heel leads on the way down
+    P.footL.rotation.x=.05+Math.max(0,-S1)*.30-Math.max(0,S1)*.14;
+    P.footR.rotation.x=.05+Math.max(0, S1)*.30-Math.max(0,-S1)*.14;
+    // arms swing opposite the leg on the same side
+    P.armL.rotation.x=S1*(.45+run*.5);P.armR.rotation.x=-S1*(.45+run*.5);
     P.armL.rotation.z=.1;P.armR.rotation.z=-.1;
-    P.foreL.rotation.x=-.35-Math.max(0,-S1)*.5;P.foreR.rotation.x=-.35-Math.max(0,S1)*.5;
-    P.torso.rotation.x=.06+run*.14;P.torso.rotation.y=-S1*.12;P.torso.rotation.z=0;
-    P.head.rotation.y=S1*.06;P.head.rotation.x=-run*.06;
-    player.position.y=Math.abs(Math.sin(w*2))*.04;
+    P.foreL.rotation.x=-.35-Math.max(0,S1)*.5;P.foreR.rotation.x=-.35-Math.max(0,-S1)*.5;
+    P.torso.rotation.x=.06+run*.14;P.torso.rotation.y=S1*.12;P.torso.rotation.z=-S1*.05;
+    P.head.rotation.y=-S1*.06;P.head.rotation.x=-run*.06;
+    // hips rise over the straight stance leg, twice per stride
+    player.position.y=Math.abs(Math.sin(w*2))*.045;
   }else{
     const P=player.userData.P,k=1-Math.min(1,dt*9);
     ['legL','legR','armL','armR','shinL','shinR','foreL','foreR','footL','footR'].forEach(n=>P[n].rotation.x*=k);
@@ -3858,37 +4532,40 @@ function step(dt){
     e.ph+=dt*sp*(e.style==='sprint'?2.2:e.style==='stomp'?1.05:1.5);
     const P=e.g.userData.P,ph=e.ph,S1=Math.sin(ph),C1=Math.cos(ph);
     if(e.style==='sprint'){
-      P.legL.rotation.x=S1*1.15;P.legR.rotation.x=-S1*1.15;
-      P.shinL.rotation.x=-.2-Math.max(0,-S1)*1.5;P.shinR.rotation.x=-.2-Math.max(0,S1)*1.5;
-      P.footL.rotation.x=Math.max(0,-S1)*.5;P.footR.rotation.x=Math.max(0,S1)*.5;
-      P.armL.rotation.x=-.5-S1*1.3;P.armR.rotation.x=-.5+S1*1.3;
+      // full sprint: long stride, heel kicks up hard behind on the swing
+      P.legL.rotation.x=-S1*1.15;P.legR.rotation.x=S1*1.15;
+      P.shinL.rotation.x=.15+Math.max(0,-S1)*1.55;P.shinR.rotation.x=.15+Math.max(0,S1)*1.55;
+      P.footL.rotation.x=.1+Math.max(0,-S1)*.45;P.footR.rotation.x=.1+Math.max(0,S1)*.45;
+      P.armL.rotation.x=-.5+S1*1.3;P.armR.rotation.x=-.5-S1*1.3;
       P.armL.rotation.z=.18;P.armR.rotation.z=-.18;
       P.foreL.rotation.x=-1.25;P.foreR.rotation.x=-1.25;
-      P.torso.rotation.x=.34;P.torso.rotation.z=0;P.torso.rotation.y=S1*.14;
-      P.head.rotation.x=-.34;P.head.rotation.z=S1*.1;P.head.rotation.y=0;
+      P.torso.rotation.x=.34;P.torso.rotation.z=0;P.torso.rotation.y=-S1*.14;
+      P.head.rotation.x=-.34;P.head.rotation.z=-S1*.1;P.head.rotation.y=0;
       e.g.position.y=Math.abs(S1)*.1;e.g.rotation.z=0;
     }else if(e.style==='stomp'){
-      P.legL.rotation.x=S1*.5;P.legR.rotation.x=-S1*.5;
-      P.shinL.rotation.x=-Math.max(0,-S1)*.75;P.shinR.rotation.x=-Math.max(0,S1)*.75;
+      // heavy plod: stiff legs, barely any knee, weight dropping onto each foot
+      P.legL.rotation.x=-S1*.5;P.legR.rotation.x=S1*.5;
+      P.shinL.rotation.x=.05+Math.max(0,-S1)*.55;P.shinR.rotation.x=.05+Math.max(0,S1)*.55;
       P.footL.rotation.x=.1;P.footR.rotation.x=.1;
-      P.armL.rotation.x=-.6-C1*.22;P.armR.rotation.x=-.6+C1*.22;
+      P.armL.rotation.x=-.6+C1*.22;P.armR.rotation.x=-.6-C1*.22;
       P.armL.rotation.z=.4;P.armR.rotation.z=-.4;
       P.foreL.rotation.x=-.75;P.foreR.rotation.x=-.75;
-      P.torso.rotation.x=.14;P.torso.rotation.z=-S1*.1;P.torso.rotation.y=-S1*.12;
-      P.head.rotation.x=.06;P.head.rotation.y=S1*.2;P.head.rotation.z=0;
-      e.g.position.y=Math.max(0,-C1)*.07;e.g.rotation.z=S1*.03;
+      P.torso.rotation.x=.14;P.torso.rotation.z=S1*.1;P.torso.rotation.y=S1*.12;
+      P.head.rotation.x=.06;P.head.rotation.y=-S1*.2;P.head.rotation.z=0;
+      e.g.position.y=Math.max(0,-C1)*.07;e.g.rotation.z=-S1*.03;
     }else{
+      // shamble: one leg drags, the good leg does the work
       const lp=e.limp;
-      P.legL.rotation.x=S1*(lp>0?.72:.44)+.08;P.legR.rotation.x=-S1*(lp>0?.44:.72);
-      P.shinL.rotation.x=-.12-Math.max(0,-S1)*(lp>0?.95:.4);
-      P.shinR.rotation.x=-.12-Math.max(0,S1)*(lp>0?.4:.95);
+      P.legL.rotation.x=-S1*(lp>0?.72:.44)+.08;P.legR.rotation.x=S1*(lp>0?.44:.72);
+      P.shinL.rotation.x=.10+Math.max(0,-S1)*(lp>0?.85:.3);
+      P.shinR.rotation.x=.10+Math.max(0,S1)*(lp>0?.3:.85);
       P.footL.rotation.x=.14;P.footR.rotation.x=.14;
-      P.armL.rotation.x=-1.5+S1*.18;P.armR.rotation.x=-1.3-S1*.16;
+      P.armL.rotation.x=-1.5-S1*.18;P.armR.rotation.x=-1.3+S1*.16;
       const ud=e.g.userData;
       P.armL.rotation.z=.15+(ud.dgL||0);P.armR.rotation.z=-.24+(ud.dgR||0);
       P.foreL.rotation.x=-.3+C1*.14;P.foreR.rotation.x=-.1-C1*.12;
-      P.torso.rotation.x=.22;P.torso.rotation.z=S1*.13;P.torso.rotation.y=-S1*.1;
-      P.head.rotation.z=-S1*.24;P.head.rotation.x=.14+C1*.1;
+      P.torso.rotation.x=.22;P.torso.rotation.z=-S1*.13;P.torso.rotation.y=S1*.1;
+      P.head.rotation.z=S1*.24;P.head.rotation.x=.14+C1*.1;
       P.head.rotation.y=Math.sin(ph*.37+e.twitch)*.3;
       e.g.position.y=Math.abs(S1)*.06;e.g.rotation.z=S1*.055;
     }
@@ -3984,9 +4661,14 @@ function win(){
   if(G.ending)return;
   G.ending=true;
   G.waveActive=false;G.nextT=0;
-  if(MAP.key==='grassy'&&!GRAVE_UNLOCKED){
+  if(MAP.key==='grassy'&&!SAVE.grave){
     GRAVE_UNLOCKED=true;SAVE.grave=true;writeSave();
     setTimeout(()=>banner('Unlocked: The Grave Digger \u2014 The Forest, 20 waves'),3200);
+  }
+  // clearing the graveyard boss opens the volcano
+  if(MAP.key==='forest'&&!SAVE.volcano){
+    SAVE.volcano=true;writeSave();
+    setTimeout(()=>banner('Unlocked: The Corpse \u2014 The Volcano, 25 waves'),3200);
   }
   const c=payCoins(true);
   banner('Field secured — +'+c.toLocaleString()+' coins');sfx('win');
@@ -3998,7 +4680,7 @@ $('startBtn').onclick=()=>{
   $('title').style.display='none';
   started=true;
   enterLobby(null);
-  banner('Walk over to a station \u2014 shop, squad desk or deploy pad');
+  banner('Press Play to matchmake, or walk over to a station');
 };
 
 addEventListener('resize',()=>{
