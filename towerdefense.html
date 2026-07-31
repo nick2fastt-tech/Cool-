@@ -3595,6 +3595,15 @@ function musicEnabled(on){
   if(musicBus)musicBus.gain.value=on?MUSIC.vol:0;
   if(MUSIC.el){if(on)MUSIC.el.play().catch(()=>{});else MUSIC.el.pause();}
 }
+/* Some mobile browsers only allow play() from a direct tap and will refuse the
+   first attempt. Retry quietly on the next interaction so the music always
+   ends up running rather than silently never starting. */
+function musicNudge(){
+  if(AC&&AC.state==='suspended')AC.resume();
+  if(MUSIC.el&&MUSIC.on&&MUSIC.el.paused&&!document.hidden)MUSIC.el.play().catch(()=>{});
+}
+['pointerdown','touchstart','keydown'].forEach(ev=>
+  document.addEventListener(ev,musicNudge,{passive:true}));
 // nothing playing to an empty room
 document.addEventListener('visibilitychange',()=>{
   if(!musicBus)return;
