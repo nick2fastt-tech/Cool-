@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Tower Defense V1.62 Beta</title>
+<title>Tower Defense V1.63 Beta</title>
 <style>
 :root{
   --void:#04050c;
@@ -204,19 +204,33 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 .evBar{height:6px;background:#0a0e22;border-radius:3px;overflow:hidden;margin-top:9px}
 .evFill{height:100%;width:100%;background:repeating-linear-gradient(45deg,#3d4bb5 0 8px,#26307a 8px 16px)}
 .evNote{font-size:10px;color:var(--dim);margin-top:6px;font-style:italic}
-#np{position:absolute;top:104px;left:8px;right:8px;max-width:330px;display:none;
-  align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line2);
-  border-radius:12px;padding:7px 9px}
-#np.on{display:flex}
-#ui.sheeted #np{visibility:hidden;pointer-events:none}
-.npb{background:rgba(25,25,112,.3);border:1px solid var(--line);color:var(--ink);
-  border-radius:8px;padding:5px 8px;font-size:13px;line-height:1}
-.npb:active{transform:translateY(1px)}
-.npMid{flex:1;min-width:0}
-.npT{font-size:11px;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.npBar{height:3px;background:#0a0e22;border-radius:2px;overflow:hidden;margin-top:4px}
-.npFill{height:100%;width:0%;background:linear-gradient(90deg,#4a5ae0,#8b97ff)}
-.npTime{font-size:9px;color:var(--dim);white-space:nowrap;letter-spacing:.04em}
+/* what's playing: just the title, with notes drifting off it */
+#nowPlaying{position:absolute;top:10px;left:50%;transform:translateX(-50%);
+  display:none;max-width:min(80vw,340px);padding:5px 14px;border-radius:999px;
+  background:rgba(8,11,28,.72);border:1px solid var(--line);
+  font-size:11.5px;letter-spacing:.07em;color:var(--ink);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;text-align:center;
+  opacity:0;transition:opacity .5s}
+#nowPlaying.on{display:block;opacity:1}
+/* in a match the pill takes its own row under the HUD and everything below
+   it shifts down, rather than landing on top of the wave banner */
+#ui.matchmode #nowPlaying{top:70px}
+#ui.matchmode #banner{top:102px}
+#ui.matchmode #bossBar{top:140px}
+#ui.matchmode #party{top:186px}
+#ui.sheeted #nowPlaying{opacity:.25}
+#npTitle{color:#cfd8ff}
+/* music glyphs live in symbol fonts, so name a few fallbacks explicitly */
+#npTitle::before{content:'\266b\00a0';color:var(--gold);
+  font-family:'Segoe UI Symbol','Apple Symbols','Noto Music','Noto Sans Symbols 2',sans-serif}
+.mnote{position:absolute;font-size:14px;color:var(--gold);pointer-events:none;
+  font-family:'Segoe UI Symbol','Apple Symbols','Noto Music','Noto Sans Symbols 2',sans-serif;
+  opacity:0;animation:noteOut 2.1s ease-out forwards;text-shadow:0 0 8px rgba(255,209,102,.7)}
+@keyframes noteOut{
+  0%  {opacity:0;transform:translate(0,0) rotate(0deg) scale(.6)}
+  18% {opacity:.95}
+  100%{opacity:0;transform:translate(var(--dx),-46px) rotate(var(--rot)) scale(1.15)}
+}
 #coins{position:absolute;top:64px;left:8px;display:none;background:var(--panel);
   border:1px solid var(--line2);border-radius:10px;padding:5px 11px;font-size:13px;
   font-weight:bold;color:var(--gold);letter-spacing:.04em}
@@ -373,15 +387,7 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 
   <div id="coins">🪙 <b id="coinV">0</b></div>
 
-  <div id="np">
-    <button class="npb pe" id="npPrev" aria-label="Previous track">⏮</button>
-    <div class="npMid">
-      <div class="npT" id="npTitle">—</div>
-      <div class="npBar"><div class="npFill" id="npFill"></div></div>
-    </div>
-    <div class="npTime" id="npTime">0:00 / 0:00</div>
-    <button class="npb pe" id="npNext" aria-label="Next track">⏭</button>
-  </div>
+  <div id="nowPlaying"><span id="npTitle"></span></div>
 
   <div class="sheet pe" id="match">
     <div class="sheetHead"><h2>Matchmaking</h2><button class="btn sm pe" id="mmCancel">Cancel</button></div>
@@ -417,7 +423,15 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 
   <div class="sheet pe" id="log">
     <div class="sheetHead"><h2>Update Log</h2><button class="btn sm pe" id="closeLog">Close</button></div>
-    <div class="logV">V1.62 <span>beta</span></div>
+    <div class="logV">V1.63 <span>beta</span></div>
+    <ul class="logL">
+      <li>Six more songs, twelve in all — including Big Wave</li>
+      <li>The music player UI is gone. All that is left is the track title at the top of the screen, with notes drifting up out of it</li>
+      <li>The playlist carries straight through into a match now instead of stopping at the lobby door — same song, no break</li>
+      <li>M skips a track on a keyboard</li>
+      <li>Fixed the title sitting on top of the wave banner; the HUD, title, banner, boss bar and squad list are one clean stack now</li>
+    </ul>
+    <div class="logV">V1.62</div>
     <ul class="logL">
       <li>The lobby plays a six-track playlist from a <b>music</b> folder next to the game — straight through, then round again</li>
       <li>Now-playing strip in the lobby with the track name, elapsed time, a progress bar and skip buttons</li>
@@ -531,7 +545,7 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
   <div id="title" class="pe">
     <div class="sub">Beta Version</div>
     <h1>Tower<br>Defense</h1>
-    <div class="sub" style="letter-spacing:.5em">V 1.62</div>
+    <div class="sub" style="letter-spacing:.5em">V 1.63</div>
     <ul>
       <li>Clear a map to unlock the next: Grassy Field → The Forest → The Volcano</li>
       <li>Left side of the screen = move · right side = look</li>
@@ -3320,7 +3334,13 @@ const CUSTOM_MUSIC={
     {file:'music/03-loving-you.mp3',               title:'Loving You',                secs:197},
     {file:'music/04-for-all-time.mp3',             title:'For All Time',              secs:244},
     {file:'music/05-someone-put-your-hand-out.mp3',title:'Someone Put Your Hand Out', secs:326},
-    {file:'music/06-will-you-be-there.mp3',        title:'Will You Be There',         secs:351}
+    {file:'music/06-will-you-be-there.mp3',        title:'Will You Be There',         secs:351},
+    {file:'music/07-big-wave.mp3',                 title:'Big Wave \u2014 Nick',           secs:141},
+    {file:'music/08-ddg-yea-i-kno.mp3',            title:'Yea I Kno \u2014 DDG',           secs:133},
+    {file:'music/09-ddg-i-hate-moo.mp3',           title:'I Hate Moo \u2014 DDG',          secs:150},
+    {file:'music/10-raud-no.mp3',                  title:'No \u2014 RAUD',                 secs:117},
+    {file:'music/11-chris-brown-poppin.mp3',       title:'Poppin \u2014 Chris Brown',      secs:266},
+    {file:'music/12-diva.mp3',                     title:'Diva',                      secs:160}
   ],
   // Screens left null play the built-in synth score. Put a single filename
   // here (or another playlist array) to use your own music for a map too.
@@ -3331,7 +3351,7 @@ const CUSTOM_MUSIC={
 
 const NOTE=n=>440*Math.pow(2,(n-69)/12);
 const MUSIC={on:true,vol:.55,key:null,step:0,next:0,timer:null,boss:false,
-             el:null,list:null,single:false,idx:0,resume:{},warned:false,fails:0};
+             el:null,list:null,single:false,idx:0,resume:null,lastSrc:null,warned:false,fails:0};
 
 /* Four original pieces. Chords are one bar each; the sequencer walks 16 steps
    per bar. Everything here is written for this game — none of it is anyone
@@ -3465,16 +3485,20 @@ function musicStart(){
 function setMusic(key){
   if(MUSIC.key===key)return;
   if(MUSIC.el){
-    // remember our place in the playlist before we walk away from it
-    MUSIC.resume[MUSIC.key]={idx:MUSIC.idx,at:MUSIC.el.currentTime||0};
+    // remember our place before walking away from it
+    MUSIC.resume={idx:MUSIC.idx,at:MUSIC.el.currentTime||0};
     MUSIC.el.pause();MUSIC.el=null;
   }
   MUSIC.key=key;MUSIC.step=0;MUSIC.next=0;
-  const src=CUSTOM_MUSIC[key];
+  // A screen with no music of its own keeps the lobby playlist going rather
+  // than cutting it off, so the songs carry straight through into a match.
+  const src=CUSTOM_MUSIC[key]||CUSTOM_MUSIC.lobby;
+  const same=MUSIC.lastSrc===src;
+  MUSIC.lastSrc=src;
   MUSIC.list=Array.isArray(src)?src:(src?[{file:src,title:'',secs:0}]:null);
   MUSIC.single=!Array.isArray(src)&&!!src;
   if(!MUSIC.list){MUSIC.idx=0;npSync();return;}
-  const r=MUSIC.resume[key]||{idx:0,at:0};
+  const r=(same&&MUSIC.resume)||{idx:0,at:0};
   MUSIC.idx=Math.min(r.idx,MUSIC.list.length-1);
   playTrack(MUSIC.idx,r.at);
 }
@@ -3524,32 +3548,42 @@ function playTrack(i,at){
   if(MUSIC.on&&!document.hidden)el.play().catch(()=>{});
   npSync();
 }
+/* no on-screen controls any more; M skips a track on a keyboard */
 function musicSkip(d){
   if(!MUSIC.list||MUSIC.single)return;
   playTrack(MUSIC.idx+d,0);
-  sfx('place');
 }
-/* the now-playing strip in the lobby */
-let npLast='';
+/* What's playing: the title, and nothing else. Notes drift up out of it while
+   a track is running. */
+let npLast='',noteT=0;
 function npSync(){
-  const box=$('np');
+  const box=$('nowPlaying');
   if(!box)return;
-  const show=G.mode==='lobby'&&!!MUSIC.list&&!MUSIC.single;
-  box.classList.toggle('on',show);
-  if(!show)return;
+  const on=!!MUSIC.list&&!!MUSIC.el&&MUSIC.on;
+  box.classList.toggle('on',on);
+  if(!on){npLast='';return;}
   const tr=MUSIC.list[MUSIC.idx];
-  const label=(MUSIC.idx+1)+'. '+(tr.title||tr.file);
+  const label=tr.title||tr.file;
   if(label!==npLast){npLast=label;$('npTitle').textContent=label;}
 }
-function npTick(){
-  if(!MUSIC.list||MUSIC.single||!MUSIC.el)return;
-  const tr=MUSIC.list[MUSIC.idx];
-  const dur=MUSIC.el.duration||tr.secs||0;
-  const at=MUSIC.el.currentTime||0;
-  $('npFill').style.width=(dur?clamp(at/dur*100,0,100):0)+'%';
-  const mm=n=>Math.floor(n/60)+':'+String(Math.floor(n%60)).padStart(2,'0');
-  const t=mm(at)+' / '+mm(dur);
-  if($('npTime').textContent!==t)$('npTime').textContent=t;
+function npTick(dt){
+  const box=$('nowPlaying');
+  if(!box||!box.classList.contains('on'))return;
+  // a note pops off the pill every so often and drifts up and away
+  noteT-=dt;
+  if(noteT<=0){
+    noteT=rnd(.5,1.05);
+    const n=document.createElement('span');
+    n.className='mnote';
+    n.textContent=['♪','♫','♬','♩'][(Math.random()*4)|0];
+    n.style.left=rnd(6,88)+'%';
+    n.style.top='2px';
+    n.style.setProperty('--dx',rnd(-26,26).toFixed(0)+'px');
+    n.style.setProperty('--rot',rnd(-40,40).toFixed(0)+'deg');
+    n.style.fontSize=rnd(11,17).toFixed(0)+'px';
+    box.appendChild(n);
+    n.addEventListener('animationend',()=>n.remove());
+  }
 }
 function musicVolume(v){
   MUSIC.vol=v;
@@ -3603,8 +3637,6 @@ $('vol').addEventListener('input',e=>{
   if(MUSIC.el)MUSIC.el.volume=clamp(VOL*.8*MUSIC.vol,0,1);
   SAVE.vol=VOL;writeSave();
 });
-$('npPrev').onclick=()=>{initAudio();musicSkip(-1);};
-$('npNext').onclick=()=>{initAudio();musicSkip(1);};
 $('mus').addEventListener('input',e=>{
   initAudio();
   musicVolume(+e.target.value/100);
@@ -3789,7 +3821,7 @@ const lobbyNPCs=[];
   // screen on the far wall
   boardMesh=new THREE.Mesh(new THREE.PlaneGeometry(12,6),
     new THREE.MeshBasicMaterial({map:signTex([
-      {t:'TOWER DEFENSE',b:1,s:54,y:100},{t:'BETA  ·  V1.62  ·  8 TOWERS  ·  3 MAPS',s:24,c:'#8b95cf',y:158}])}));
+      {t:'TOWER DEFENSE',b:1,s:54,y:100},{t:'BETA  ·  V1.63  ·  8 TOWERS  ·  3 MAPS',s:24,c:'#8b95cf',y:158}])}));
   // the bezel is .35 deep, so its front face sits at -D+.195 — the screen has
   // to clear that or the frame swallows it
   boardMesh.position.set(0,4.8,-D+.42);lobby.add(boardMesh);
@@ -3919,7 +3951,7 @@ const lobbyNPCs=[];
   {
     const st=stationAt('log'),g=new THREE.Group();
     const board=new THREE.Mesh(new THREE.PlaneGeometry(4.6,2.6),
-      new THREE.MeshBasicMaterial({map:signTex([{t:'UPDATE LOG',b:1,s:56,y:110},{t:'V1.62 BETA',s:36,c:'#5ef2a0',y:180}])}));
+      new THREE.MeshBasicMaterial({map:signTex([{t:'UPDATE LOG',b:1,s:56,y:110},{t:'V1.63 BETA',s:36,c:'#5ef2a0',y:180}])}));
     board.position.set(0,2.5,.13);g.add(board);
     const back=new THREE.Mesh(new THREE.BoxGeometry(5,3,.22),M(0x232a4e));
     back.position.set(0,2.5,0);back.castShadow=true;g.add(back);
@@ -4034,6 +4066,7 @@ function enterLobby(won){
   $('log').classList.remove('on');
   clearStation();
   $('coins').classList.add('on');syncCoins();MUSIC.boss=false;
+  $('ui').classList.remove('matchmode');
   $('lobbyBtns').classList.add('on');
   $('match').classList.remove('on');$('event').classList.remove('on');
   mmOn=false;
@@ -4048,7 +4081,7 @@ function enterLobby(won){
       {t:'made it to wave '+G.wave+' of '+total,s:25,y:128},{t:runLine,s:22,c:'#8b95cf',y:168},
       {t:coinLine,b:1,s:30,c:'#ffd166',y:212}]);
   else setBoard([{t:'TOWER DEFENSE',b:1,s:54,y:100},
-      {t:'BETA V1.62  ·  PRESS PLAY OR WALK OVER',s:23,c:'#8b95cf',y:158}]);
+      {t:'BETA V1.63  ·  PRESS PLAY OR WALK OVER',s:23,c:'#8b95cf',y:158}]);
   buildPals();
 }
 function toLobby(won){
@@ -4505,13 +4538,13 @@ $('promptBtn').onclick=()=>{
   if(nearStation&&STATION_ACT[nearStation.id])STATION_ACT[nearStation.id]();
 };
 addEventListener('keydown',e=>{
+  if(e.key.toLowerCase()==='m'){initAudio();musicSkip(1);return;}
   if(e.key.toLowerCase()!=='e'||G.mode!=='lobby')return;
   if(nearStation&&STATION_ACT[nearStation.id])STATION_ACT[nearStation.id]();
 });
 function lobbyStep(dt){
   voteStep(dt);
   matchStep(dt);
-  npTick();
   stationStep(dt);
   const t=performance.now()*.0016;
   lobbyPals.forEach((g,i)=>{
@@ -4551,7 +4584,7 @@ function toMatch(mapKey){
     $('log').classList.remove('on');$('loadout').classList.remove('on');
     $('squad').classList.remove('on');clearStation();
     $('coins').classList.remove('on');$('lobbyBtns').classList.remove('on');
-    $('np').classList.remove('on');
+    $('ui').classList.add('matchmode');
     $('match').classList.remove('on');$('event').classList.remove('on');mmOn=false;
     $('voter').classList.remove('on');
     $('party').classList.toggle('on',PARTY>0);
@@ -4726,6 +4759,7 @@ function tick(){
   const dt=Math.min(.05,clock.getDelta());
   if(started&&!G.over)step(dt);
   stepPortals(dt);
+  npTick(dt);
   updateCamera(dt);
   renderer.render(scene,camera);
 }
