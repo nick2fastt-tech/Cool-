@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Tower Defense V1.61 Beta</title>
+<title>Tower Defense V1.62 Beta</title>
 <style>
 :root{
   --void:#04050c;
@@ -204,6 +204,19 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 .evBar{height:6px;background:#0a0e22;border-radius:3px;overflow:hidden;margin-top:9px}
 .evFill{height:100%;width:100%;background:repeating-linear-gradient(45deg,#3d4bb5 0 8px,#26307a 8px 16px)}
 .evNote{font-size:10px;color:var(--dim);margin-top:6px;font-style:italic}
+#np{position:absolute;top:104px;left:8px;right:8px;max-width:330px;display:none;
+  align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line2);
+  border-radius:12px;padding:7px 9px}
+#np.on{display:flex}
+#ui.sheeted #np{visibility:hidden;pointer-events:none}
+.npb{background:rgba(25,25,112,.3);border:1px solid var(--line);color:var(--ink);
+  border-radius:8px;padding:5px 8px;font-size:13px;line-height:1}
+.npb:active{transform:translateY(1px)}
+.npMid{flex:1;min-width:0}
+.npT{font-size:11px;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.npBar{height:3px;background:#0a0e22;border-radius:2px;overflow:hidden;margin-top:4px}
+.npFill{height:100%;width:0%;background:linear-gradient(90deg,#4a5ae0,#8b97ff)}
+.npTime{font-size:9px;color:var(--dim);white-space:nowrap;letter-spacing:.04em}
 #coins{position:absolute;top:64px;left:8px;display:none;background:var(--panel);
   border:1px solid var(--line2);border-radius:10px;padding:5px 11px;font-size:13px;
   font-weight:bold;color:var(--gold);letter-spacing:.04em}
@@ -360,6 +373,16 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 
   <div id="coins">🪙 <b id="coinV">0</b></div>
 
+  <div id="np">
+    <button class="npb pe" id="npPrev" aria-label="Previous track">⏮</button>
+    <div class="npMid">
+      <div class="npT" id="npTitle">—</div>
+      <div class="npBar"><div class="npFill" id="npFill"></div></div>
+    </div>
+    <div class="npTime" id="npTime">0:00 / 0:00</div>
+    <button class="npb pe" id="npNext" aria-label="Next track">⏭</button>
+  </div>
+
   <div class="sheet pe" id="match">
     <div class="sheetHead"><h2>Matchmaking</h2><button class="btn sm pe" id="mmCancel">Cancel</button></div>
     <div class="mmHead"><span id="mmState">Searching for players…</span><b id="mmCount">1 / 4</b></div>
@@ -394,7 +417,15 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 
   <div class="sheet pe" id="log">
     <div class="sheetHead"><h2>Update Log</h2><button class="btn sm pe" id="closeLog">Close</button></div>
-    <div class="logV">V1.61 <span>beta</span></div>
+    <div class="logV">V1.62 <span>beta</span></div>
+    <ul class="logL">
+      <li>The lobby plays a six-track playlist from a <b>music</b> folder next to the game — straight through, then round again</li>
+      <li>Now-playing strip in the lobby with the track name, elapsed time, a progress bar and skip buttons</li>
+      <li>Leaving for a match pauses the playlist and hands over to the map score; coming back picks the same song up where it left off</li>
+      <li>A track that will not play is stepped over rather than taking the whole playlist down; if none of them play the built-in score comes back</li>
+      <li>Music files not there? The game says so once and carries on with the built-in score</li>
+    </ul>
+    <div class="logV">V1.61</div>
     <ul class="logL">
       <li>Background music — four original pieces played live on the game&#39;s own synth: a warm, unhurried one for the lobby, and a track each for the Grassy Field, The Forest and The Volcano. Nothing to download, so it starts instantly</li>
       <li>The score leans on its low end while a boss is on the field</li>
@@ -500,7 +531,7 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
   <div id="title" class="pe">
     <div class="sub">Beta Version</div>
     <h1>Tower<br>Defense</h1>
-    <div class="sub" style="letter-spacing:.5em">V 1.61</div>
+    <div class="sub" style="letter-spacing:.5em">V 1.62</div>
     <ul>
       <li>Clear a map to unlock the next: Grassy Field → The Forest → The Volcano</li>
       <li>Left side of the screen = move · right side = look</li>
@@ -3281,14 +3312,26 @@ function sfx(k){
    filename in, e.g. lobby:'my-song.mp3'.
    ============================================================ */
 const CUSTOM_MUSIC={
-  lobby   :null,
+  // A whole playlist for the lobby: plays in order, then loops back round.
+  // Keep the six files in a "music" folder sitting next to this .html.
+  lobby:[
+    {file:'music/01-human-nature.mp3',             title:'Human Nature',              secs:248},
+    {file:'music/02-the-lady-in-my-life.mp3',      title:'The Lady in My Life',       secs:302},
+    {file:'music/03-loving-you.mp3',               title:'Loving You',                secs:197},
+    {file:'music/04-for-all-time.mp3',             title:'For All Time',              secs:244},
+    {file:'music/05-someone-put-your-hand-out.mp3',title:'Someone Put Your Hand Out', secs:326},
+    {file:'music/06-will-you-be-there.mp3',        title:'Will You Be There',         secs:351}
+  ],
+  // Screens left null play the built-in synth score. Put a single filename
+  // here (or another playlist array) to use your own music for a map too.
   grassy  :null,
   forest  :null,
   volcanic:null
 };
 
 const NOTE=n=>440*Math.pow(2,(n-69)/12);
-const MUSIC={on:true,vol:.55,key:null,step:0,next:0,timer:null,boss:false,el:null};
+const MUSIC={on:true,vol:.55,key:null,step:0,next:0,timer:null,boss:false,
+             el:null,list:null,single:false,idx:0,resume:{},warned:false,fails:0};
 
 /* Four original pieces. Chords are one bar each; the sequencer walks 16 steps
    per bar. Everything here is written for this game — none of it is anyone
@@ -3376,7 +3419,7 @@ function mNoise(t,dur,gain,freq,q,type){
 
 /* ---- the sequencer ---- */
 function musicTick(){
-  if(!AC||!MUSIC.on||MUSIC.el)return;
+  if(!AC||!MUSIC.on||MUSIC.el||MUSIC.list)return;
   const T=TRACKS[MUSIC.key];
   if(!T)return;
   const barDur=60/T.bpm*4, stepDur=barDur/16;
@@ -3416,19 +3459,97 @@ function musicStart(){
   if(MUSIC.timer)clearInterval(MUSIC.timer);
   MUSIC.timer=setInterval(musicTick,60);
 }
-/* Switch screens. Custom files take over from the synth when one is set. */
+/* Switch screens. Custom files take over from the synth when one is set:
+   a string plays on loop, an array plays through as a playlist. Leaving a
+   screen remembers where the track had got to so coming back picks it up. */
 function setMusic(key){
   if(MUSIC.key===key)return;
-  MUSIC.key=key;MUSIC.step=0;MUSIC.next=0;
-  if(MUSIC.el){MUSIC.el.pause();MUSIC.el=null;}
-  const src=CUSTOM_MUSIC[key];
-  if(src){
-    const el=new Audio(src);
-    el.loop=true;el.volume=clamp(VOL*.8*MUSIC.vol,0,1);
-    el.play().catch(()=>{/* browser wants another gesture — the synth is silent
-                             for this screen, that is the author's choice */});
-    MUSIC.el=el;
+  if(MUSIC.el){
+    // remember our place in the playlist before we walk away from it
+    MUSIC.resume[MUSIC.key]={idx:MUSIC.idx,at:MUSIC.el.currentTime||0};
+    MUSIC.el.pause();MUSIC.el=null;
   }
+  MUSIC.key=key;MUSIC.step=0;MUSIC.next=0;
+  const src=CUSTOM_MUSIC[key];
+  MUSIC.list=Array.isArray(src)?src:(src?[{file:src,title:'',secs:0}]:null);
+  MUSIC.single=!Array.isArray(src)&&!!src;
+  if(!MUSIC.list){MUSIC.idx=0;npSync();return;}
+  const r=MUSIC.resume[key]||{idx:0,at:0};
+  MUSIC.idx=Math.min(r.idx,MUSIC.list.length-1);
+  playTrack(MUSIC.idx,r.at);
+}
+function playTrack(i,at){
+  const list=MUSIC.list;
+  if(!list||!list.length)return;
+  MUSIC.idx=((i%list.length)+list.length)%list.length;
+  const tr=list[MUSIC.idx];
+  if(MUSIC.el){MUSIC.el.pause();MUSIC.el.src='';MUSIC.el=null;}
+  const el=new Audio(tr.file);
+  el.loop=!!MUSIC.single;
+  el.volume=clamp(VOL*.8*MUSIC.vol,0,1);
+  el.preload='auto';
+  if(at)el.currentTime=at;
+  // Every handler checks it is still the live element first. Dropping the old
+  // track's src fires an error on it, and without this guard that error ran the
+  // "skip to next" path a second time — so Next jumped two tracks and Prev
+  // bounced straight back to where it started.
+  el.addEventListener('loadedmetadata',()=>{
+    if(MUSIC.el!==el)return;
+    if(at&&el.currentTime<at)el.currentTime=at;
+    npSync();
+  });
+  el.addEventListener('ended',()=>{
+    if(MUSIC.el!==el||MUSIC.single)return;
+    playTrack(MUSIC.idx+1,0);
+  });
+  el.addEventListener('error',()=>{
+    if(MUSIC.el!==el)return;
+    // one bad track shouldn't take the playlist down with it — step over it and
+    // only give up on the whole thing once every track has failed
+    MUSIC.fails++;
+    if(MUSIC.fails>=list.length){
+      if(!MUSIC.warned){
+        MUSIC.warned=true;
+        banner('Music files not found — using the built-in score');
+      }
+      MUSIC.list=null;MUSIC.el=null;npSync();
+      return;
+    }
+    MUSIC.el=null;
+    playTrack(MUSIC.idx+1,0);
+  });
+  // a track that actually starts clears the failure run
+  el.addEventListener('playing',()=>{if(MUSIC.el===el)MUSIC.fails=0;});
+  MUSIC.el=el;
+  if(MUSIC.on&&!document.hidden)el.play().catch(()=>{});
+  npSync();
+}
+function musicSkip(d){
+  if(!MUSIC.list||MUSIC.single)return;
+  playTrack(MUSIC.idx+d,0);
+  sfx('place');
+}
+/* the now-playing strip in the lobby */
+let npLast='';
+function npSync(){
+  const box=$('np');
+  if(!box)return;
+  const show=G.mode==='lobby'&&!!MUSIC.list&&!MUSIC.single;
+  box.classList.toggle('on',show);
+  if(!show)return;
+  const tr=MUSIC.list[MUSIC.idx];
+  const label=(MUSIC.idx+1)+'. '+(tr.title||tr.file);
+  if(label!==npLast){npLast=label;$('npTitle').textContent=label;}
+}
+function npTick(){
+  if(!MUSIC.list||MUSIC.single||!MUSIC.el)return;
+  const tr=MUSIC.list[MUSIC.idx];
+  const dur=MUSIC.el.duration||tr.secs||0;
+  const at=MUSIC.el.currentTime||0;
+  $('npFill').style.width=(dur?clamp(at/dur*100,0,100):0)+'%';
+  const mm=n=>Math.floor(n/60)+':'+String(Math.floor(n%60)).padStart(2,'0');
+  const t=mm(at)+' / '+mm(dur);
+  if($('npTime').textContent!==t)$('npTime').textContent=t;
 }
 function musicVolume(v){
   MUSIC.vol=v;
@@ -3482,6 +3603,8 @@ $('vol').addEventListener('input',e=>{
   if(MUSIC.el)MUSIC.el.volume=clamp(VOL*.8*MUSIC.vol,0,1);
   SAVE.vol=VOL;writeSave();
 });
+$('npPrev').onclick=()=>{initAudio();musicSkip(-1);};
+$('npNext').onclick=()=>{initAudio();musicSkip(1);};
 $('mus').addEventListener('input',e=>{
   initAudio();
   musicVolume(+e.target.value/100);
@@ -3666,7 +3789,7 @@ const lobbyNPCs=[];
   // screen on the far wall
   boardMesh=new THREE.Mesh(new THREE.PlaneGeometry(12,6),
     new THREE.MeshBasicMaterial({map:signTex([
-      {t:'TOWER DEFENSE',b:1,s:54,y:100},{t:'BETA  ·  V1.61  ·  8 TOWERS  ·  3 MAPS',s:24,c:'#8b95cf',y:158}])}));
+      {t:'TOWER DEFENSE',b:1,s:54,y:100},{t:'BETA  ·  V1.62  ·  8 TOWERS  ·  3 MAPS',s:24,c:'#8b95cf',y:158}])}));
   // the bezel is .35 deep, so its front face sits at -D+.195 — the screen has
   // to clear that or the frame swallows it
   boardMesh.position.set(0,4.8,-D+.42);lobby.add(boardMesh);
@@ -3796,7 +3919,7 @@ const lobbyNPCs=[];
   {
     const st=stationAt('log'),g=new THREE.Group();
     const board=new THREE.Mesh(new THREE.PlaneGeometry(4.6,2.6),
-      new THREE.MeshBasicMaterial({map:signTex([{t:'UPDATE LOG',b:1,s:56,y:110},{t:'V1.61 BETA',s:36,c:'#5ef2a0',y:180}])}));
+      new THREE.MeshBasicMaterial({map:signTex([{t:'UPDATE LOG',b:1,s:56,y:110},{t:'V1.62 BETA',s:36,c:'#5ef2a0',y:180}])}));
     board.position.set(0,2.5,.13);g.add(board);
     const back=new THREE.Mesh(new THREE.BoxGeometry(5,3,.22),M(0x232a4e));
     back.position.set(0,2.5,0);back.castShadow=true;g.add(back);
@@ -3925,7 +4048,7 @@ function enterLobby(won){
       {t:'made it to wave '+G.wave+' of '+total,s:25,y:128},{t:runLine,s:22,c:'#8b95cf',y:168},
       {t:coinLine,b:1,s:30,c:'#ffd166',y:212}]);
   else setBoard([{t:'TOWER DEFENSE',b:1,s:54,y:100},
-      {t:'BETA V1.61  ·  PRESS PLAY OR WALK OVER',s:23,c:'#8b95cf',y:158}]);
+      {t:'BETA V1.62  ·  PRESS PLAY OR WALK OVER',s:23,c:'#8b95cf',y:158}]);
   buildPals();
 }
 function toLobby(won){
@@ -4388,6 +4511,7 @@ addEventListener('keydown',e=>{
 function lobbyStep(dt){
   voteStep(dt);
   matchStep(dt);
+  npTick();
   stationStep(dt);
   const t=performance.now()*.0016;
   lobbyPals.forEach((g,i)=>{
@@ -4427,6 +4551,7 @@ function toMatch(mapKey){
     $('log').classList.remove('on');$('loadout').classList.remove('on');
     $('squad').classList.remove('on');clearStation();
     $('coins').classList.remove('on');$('lobbyBtns').classList.remove('on');
+    $('np').classList.remove('on');
     $('match').classList.remove('on');$('event').classList.remove('on');mmOn=false;
     $('voter').classList.remove('on');
     $('party').classList.toggle('on',PARTY>0);
