@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Tower Defense V1.51</title>
+<title>Tower Defense V1.52</title>
 <style>
 :root{
   --void:#04050c;
@@ -176,6 +176,13 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 .lchip b{font-size:19px;line-height:1}
 .lchip span{font-size:7.5px;letter-spacing:.06em;color:var(--dim);text-transform:uppercase}
 .card.eqOn{border-color:#8b97ff;box-shadow:0 0 12px rgba(122,138,255,.45)}
+.card.coinLock{border-color:#6b5a1e;background:rgba(90,70,20,.14)}
+.lockTag{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold)}
+.coinTag{font-size:11px;color:var(--gold);letter-spacing:.06em;text-transform:none;margin-left:8px}
+#coins{position:absolute;top:64px;left:8px;display:none;background:var(--panel);
+  border:1px solid var(--line2);border-radius:10px;padding:5px 11px;font-size:13px;
+  font-weight:bold;color:var(--gold);letter-spacing:.04em}
+#coins.on{display:block}
 .card .tag{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--good);
   white-space:nowrap;font-weight:bold}
 .card .tag.off{color:var(--dim)}
@@ -247,7 +254,7 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
   <div id="banner"></div>
 
   <div id="bossBar">
-    <div class="bn"><span>PATIENT ZERO</span><span id="bossPct">100%</span></div>
+    <div class="bn"><span id="bossName">PATIENT ZERO</span><span id="bossPct">100%</span></div>
     <div id="bossOut"><div id="bossFill"></div></div>
   </div>
 
@@ -273,7 +280,7 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
   </div>
 
   <div class="sheet pe" id="loadout">
-    <div class="sheetHead"><h2>Loadout Shop</h2><button class="btn sm pe" id="closeLoad">Close</button></div>
+    <div class="sheetHead"><h2>Loadout Shop <span id="loadCoins" class="coinTag">0 coins</span></h2><button class="btn sm pe" id="closeLoad">Close</button></div>
     <div id="loadSlots" class="lslots"></div>
     <div class="hint" style="margin:2px 0 10px">Five slots. Tap a tower to equip it, tap an equipped tower to drop it.</div>
     <div id="loadList"></div>
@@ -320,6 +327,8 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 
   <div id="party"></div>
 
+  <div id="coins">🪙 <b id="coinV">0</b></div>
+
   <div id="prompt">
     <div class="pTitle" id="promptT">Loadout Shop</div>
     <div class="pSub" id="promptS">Equip your five towers</div>
@@ -328,7 +337,19 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 
   <div class="sheet pe" id="log">
     <div class="sheetHead"><h2>Update Log</h2><button class="btn sm pe" id="closeLog">Close</button></div>
-    <div class="logV">V1.51 <span>current</span></div>
+    <div class="logV">V1.52 <span>current</span></div>
+    <ul class="logL">
+      <li>Every tower re-animated: they now stand easy with the weapon down when nothing is in range and shoulder it when a zombie walks in, recoil rolls through the shoulder into the torso and head at a weight that suits the weapon, and the body leads and banks into a turn instead of spinning like a turntable</li>
+      <li>Idle behaviour: the Scout checks his binoculars, the Cop and Survivor stretch, the Commander directs the line with his stick, and they all sweep the field between waves</li>
+      <li>New tower: The Commander — bought once with coins, then deployed for $1,200. Sidearm plus an aura: every friendly tower in his ring gets +15% damage and +10% fire rate at Lv1, up to +40% and +28% at Lv4. Auras do not stack</li>
+      <li>Coins: clear a map for its full payout, lose and you still bank half. Grassy Field pays 500, The Forest pays 700. Coins and unlocks are saved between sessions</li>
+      <li>The Cop rebalanced — he was the worst value in the game. Baton now 9 dmg on a 1.0s swing up to 40, and the taser is a weaker but stunning fallback, so the baton breaking is a real loss</li>
+      <li>Zombies now show their remaining HP as a number above the bar</li>
+      <li>Patient Zero cut to 1,200 HP; new boss The Grave Digger, 2,500 HP, hood and shovel, closes out The Forest</li>
+      <li>Picking your squad size at the desk drops you straight into the map vote</li>
+      <li>The boss bar now names whichever boss is on the field and reads out exact HP</li>
+    </ul>
+    <div class="logV">V1.51</div>
     <ul class="logL">
       <li>New tower: The Blitzer — battery gun, 20 yellow laser rounds at one every 0.04s then a recharge. 5 dmg → 15, range 8 → 12, $700</li>
       <li>New tower: Knife Master — twin blades, 8 dmg → 22, range 5 → 7, $350</li>
@@ -421,12 +442,12 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
   <div id="title" class="pe">
     <div class="sub">Alpha Version</div>
     <h1>Tower<br>Defense</h1>
-    <div class="sub" style="letter-spacing:.5em">V 1.51</div>
+    <div class="sub" style="letter-spacing:.5em">V 1.52</div>
     <ul>
       <li>Demo Map · 10 waves · clear it to unlock The Grave Digger</li>
       <li>Left side of the screen = move · right side = look</li>
       <li>Walk around the lobby — shop, squad desk and deploy pad</li>
-      <li>6 towers, 5 slots · pinch to zoom · waves start on their own</li>
+      <li>7 towers, 5 slots · pick a squad size to start the map vote</li>
     </ul>
     <button class="btn go pe" id="startBtn" style="margin-top:8px">Enter Lobby</button>
   </div>
@@ -451,12 +472,12 @@ const $=id=>document.getElementById(id);
 
 /* ---------- maps ---------- */
 const MAPS={
-  grassy:{key:'grassy',name:'Grassy Field',mode:'Demo Map',waves:10,hpScale:1,icon:'\ud83c\udf3f',
+  grassy:{key:'grassy',name:'Grassy Field',mode:'Demo Map',waves:10,hpScale:1,icon:'\ud83c\udf3f',coins:500,
     blurb:'10 waves \u00b7 the demo run',
     fog:{col:0x0a1030,near:44,far:96},sun:0xfff3d0,sunI:1.05,hemi:[0x9fb4ff,0x2c4a24,.75],
     wp:[[-24,-12],[-8,-12],[-8,6],[6,6],[6,-8],[18,-8],[18,12],[0,12],[0,18]],
     spawn:[-14,-4]},
-  forest:{key:'forest',name:'The Forest',mode:'The Grave Digger',waves:20,hpScale:1.4,icon:'\ud83c\udf32',
+  forest:{key:'forest',name:'The Forest',mode:'The Grave Digger',waves:20,hpScale:1.4,icon:'\ud83c\udf32',coins:700,
     blurb:'20 waves \u00b7 clear the Demo Map to unlock',
     fog:{col:0x0b1a16,near:24,far:74},sun:0xbfd6c0,sunI:.72,hemi:[0x6f8fa8,0x1c2e18,.6],
     wp:[[-30,12],[-14,12],[-14,-6],[-28,-6],[-28,-20],[-6,-20],[-6,-2],[10,-2],[10,-16],[24,-16],[24,10],[4,10],[4,17]],
@@ -507,7 +528,8 @@ const ZT={
   giant  :{n:'Giant',         hp:460, spd:1.3,cash:110,leak:6,  sc:1.75,skin:0x5f8a4c,shirt:0x44523a,pants:0x2e3442},
   toxic  :{n:'Toxic Zombie',  hp:320, spd:2.3,cash:140,leak:5,  sc:1.1, skin:0x8ce05a,shirt:0x2f6b2a,pants:0x244a22,glow:0x9dff5e},
   necro  :{n:'Necromancer',   hp:600, spd:1.9,cash:200,leak:8,  sc:1.2, skin:0xb9c7a2,shirt:0x241a4a,pants:0x1a1330,glow:0x7a5cff,split:['quick',2]},
-  boss   :{n:'Patient Zero',  hp:2400,spd:1.25,cash:300,leak:100,sc:2.3,skin:0x5c8046,shirt:0x3a1c1c,pants:0x231a1a,glow:0xff4a4a,arm:2}
+  boss   :{n:'Patient Zero',  hp:1200,spd:1.25,cash:300,leak:100,sc:2.3,skin:0x5c8046,shirt:0x3a1c1c,pants:0x231a1a,glow:0xff4a4a,arm:2,boss:1},
+  digger :{n:'The Grave Digger',hp:2500,spd:1.05,cash:600,leak:100,sc:2.7,skin:0x6b7a4a,shirt:0x2a2418,pants:0x1e1a12,glow:0x9b6bff,arm:4,boss:1}
 };
 const WAVES=[
   {gap:1.15,mix:[['normal',8]]},
@@ -536,29 +558,36 @@ const GRAVE_MIX=[
   [['giant',8],['toxic',6],['quick',12]],
   [['necro',5],['armored',12],['runner',12]],
   [['giant',10],['heavy',10],['toxic',6]],
-  [['boss',1],['giant',8],['necro',4],['runner',12]],
+  [['digger',1],['giant',8],['necro',4],['runner',12]],
   [['toxic',10],['necro',6],['armored',14]],
   [['runner',18],['quick',16],['heavy',10]],
   [['giant',12],['toxic',8],['necro',6],['armored',10]],
   [['necro',8],['giant',10],['armored',16],['runner',12]],
-  [['boss',2],['necro',8],['giant',10],['toxic',10],['runner',14]]
+  [['digger',1],['boss',1],['necro',8],['giant',10],['toxic',10],['runner',14]]
 ];
 const WAVES20=GRAVE_MIX.map((mix,i)=>({gap:Math.max(.3,1.1-i*.042),mix}));
+/* The Cop, rebalanced. He used to be the worst value in the game — 4 dmg on a
+   1.2s swing for $500 is 3.3 dps, worse per dollar than a $200 Scout — and the
+   taser he pulled when the baton broke actually out-damaged the baton, so
+   "your weapon broke" was secretly an upgrade.
+   Now the baton is a real melee opener, the taser is a weaker but stunning
+   fallback, and upgrading hands him a fresh baton — so the break is a genuine
+   loss you want to fix. */
 const POLICE={
-  key:'police',name:'The Cop',cost:500,icon:'👮',
+  key:'police',name:'The Cop',cost:450,icon:'👮',
   lv:[
-    {dmg:4, cd:1.2,rng:10,  dur:25,up:350},
-    {dmg:6, cd:1.1,rng:10.5,dur:30,up:650},
-    {dmg:9, cd:1.0,rng:11,  dur:35,up:1100},
-    {dmg:13,cd:0.9,rng:11.5,dur:40,up:1800},
-    {dmg:18,cd:0.8,rng:12,  dur:50,up:null}
+    {dmg:9, cd:1.00,rng:10,  dur:30,up:300},
+    {dmg:14,cd:0.95,rng:10.5,dur:35,up:550},
+    {dmg:20,cd:0.90,rng:11,  dur:45,up:950},
+    {dmg:28,cd:0.85,rng:11.5,dur:55,up:1600},
+    {dmg:40,cd:0.80,rng:12,  dur:70,up:null}
   ],
   taser:[
-    {dmg:8, cd:2.0,rng:11},
-    {dmg:12,cd:1.85,rng:11.5},
-    {dmg:18,cd:1.7,rng:12},
-    {dmg:26,cd:1.55,rng:12.5},
-    {dmg:36,cd:1.4,rng:13}
+    {dmg:6, cd:1.30,rng:11},
+    {dmg:9, cd:1.20,rng:11.5},
+    {dmg:13,cd:1.10,rng:12},
+    {dmg:18,cd:1.00,rng:12.5},
+    {dmg:25,cd:0.90,rng:13}
   ]
 };
 const SCOUT={
@@ -609,8 +638,35 @@ const KNIFE={
     {dmg:22,cd:.55,rng:7,  up:null}
   ]
 };
-const TOWERS={police:POLICE,scout:SCOUT,robber:ROBBER,survivor:SURVIVOR,blitzer:BLITZER,knife:KNIFE};
+/* The Commander — bought once with coins, then deployed with cash like anyone
+   else. He shoots, but the point of him is the aura: every friendly tower
+   standing inside his ring hits harder and reloads faster. */
+const COMMANDER={
+  key:'commander',name:'The Commander',cost:1200,icon:'⭐',coin:2500,
+  lv:[
+    {dmg:6, cd:1.0,rng:11,aura:9,  dmgB:.15,rateB:.10,up:900},
+    {dmg:9, cd:0.9,rng:12,aura:10, dmgB:.22,rateB:.15,up:1500},
+    {dmg:13,cd:0.8,rng:13,aura:11, dmgB:.30,rateB:.20,up:2400},
+    {dmg:18,cd:0.7,rng:14,aura:12.5,dmgB:.40,rateB:.28,up:null}
+  ]
+};
+const TOWERS={police:POLICE,scout:SCOUT,robber:ROBBER,survivor:SURVIVOR,
+              blitzer:BLITZER,knife:KNIFE,commander:COMMANDER};
 const TOWER_CAP=5;
+
+/* ---------- coins: the only thing that survives a run ---------- */
+const SAVE_KEY='towerDefenseSave1';
+const SAVE={coins:0,commander:false,grave:false};
+function loadSave(){
+  try{
+    const raw=localStorage.getItem(SAVE_KEY);
+    if(raw)Object.assign(SAVE,JSON.parse(raw));
+  }catch(e){/* private mode or file:// with storage off — play unsaved */}
+}
+function writeSave(){
+  try{localStorage.setItem(SAVE_KEY,JSON.stringify(SAVE));}catch(e){}
+}
+loadSave();
 
 /* ---------- three setup ---------- */
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
@@ -995,7 +1051,8 @@ const pIdle={g:0,play:-1,wait:3};
 /* ---------- game state ---------- */
 const G={cash:500,hp:100,maxHp:100,wave:0,running:false,over:false,mode:'match',
   enemies:[],towers:[],fx:[],queue:[],spawnT:0,gap:1,waveActive:false,nextT:0,
-  placing:null,sel:null,warned:false,padT:0,bots:[],partyT:0,kills:0,earned:0,hpMul:1,ending:false,bossWave:false};
+  placing:null,sel:null,warned:false,padT:0,bots:[],partyT:0,kills:0,earned:0,hpMul:1,ending:false,
+  bossWave:false,bossName:'',coinsWon:0};
 
 /* ---------- enemies ---------- */
 const _bq=new THREE.Quaternion();   // scratch quaternion for billboarding
@@ -1093,7 +1150,7 @@ function spawnEnemy(key,dist){
   P.torso.rotation.x=.14;
   decayPass(g,P,d,key);
   const style=(key==='quick'||key==='runner')?'sprint'
-            :(key==='giant'||key==='boss'||key==='heavy')?'stomp':'shamble';
+            :(key==='giant'||key==='boss'||key==='digger'||key==='heavy')?'stomp':'shamble';
   const limp=Math.random()<.5?1:-1;
   g.add(blobShadow(.42));
   if(d.glow){const l=new THREE.PointLight(d.glow,.9,6);l.position.y=1.5;g.add(l);}
@@ -1105,6 +1162,36 @@ function spawnEnemy(key,dist){
     const pauldR=pauldL.clone();P.armR.add(pauldR);
     const helm=new THREE.Mesh(new THREE.SphereGeometry(.125,10,7,0,Math.PI*2,0,1.3),M(key==='boss'?0x6a2626:0x7d8492));
     helm.scale.set(1,.95,1);helm.position.y=.01;P.head.add(helm);
+  }
+  if(key==='digger'){
+    // gravedigger: leather apron, a hood full of nothing, and the shovel
+    const apron=new THREE.Mesh(new THREE.BoxGeometry(.34,.44,.06),M(0x4a3b24));
+    apron.position.set(0,.16,.135);P.torso.add(apron);
+    const strapA=new THREE.Mesh(new THREE.BoxGeometry(.05,.3,.03),M(0x3a2e1c));
+    strapA.position.set(-.09,.36,.13);strapA.rotation.z=.3;P.torso.add(strapA);
+    const strapB=strapA.clone();strapB.position.x=.09;strapB.rotation.z=-.3;P.torso.add(strapB);
+    const hood=new THREE.Mesh(new THREE.SphereGeometry(.15,10,8,0,Math.PI*2,0,1.6),M(0x241f18));
+    hood.scale.set(1.05,1.08,1.02);hood.position.y=.02;P.head.add(hood);
+    const cowl=new THREE.Mesh(new THREE.SphereGeometry(.17,10,7),M(0x1d1912));
+    cowl.scale.set(1.1,.8,.7);cowl.position.set(0,.42,-.12);P.torso.add(cowl);
+    for(const sx of [-1,1]){
+      const spike=new THREE.Mesh(new THREE.ConeGeometry(.05,.22,5),M(0x8d8472));
+      spike.position.set(sx*.2,.44,-.02);spike.rotation.z=sx*.4;P.torso.add(spike);
+    }
+    // shovel, gripped in the right hand with the blade down
+    const sh=new THREE.Group();
+    const shaft=new THREE.Mesh(new THREE.CylinderGeometry(.032,.036,1.15,7),M(0x6b512e));
+    shaft.position.y=-.5;sh.add(shaft);
+    const collar=new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,.1,7),M(0x555a60));
+    collar.position.y=-1.05;sh.add(collar);
+    const blade=new THREE.Mesh(new THREE.BoxGeometry(.34,.42,.04),M(0x6f757e));
+    blade.position.y=-1.3;sh.add(blade);
+    const edge=new THREE.Mesh(new THREE.BoxGeometry(.34,.09,.05),M(0xa8aeb8));
+    edge.position.y=-1.5;sh.add(edge);
+    const grip=new THREE.Mesh(new THREE.TorusGeometry(.07,.02,4,10),M(0x4a3b24));
+    grip.rotation.x=Math.PI/2;grip.position.y=.06;sh.add(grip);
+    sh.position.set(0,-.06,.03);sh.rotation.x=-.35;P.handR.add(sh);
+    g.userData.shovel=sh;
   }
   if(key==='toxic'||key==='necro'){
     const drip=new THREE.Mesh(new THREE.SphereGeometry(.09,8,6),
@@ -1124,9 +1211,30 @@ function spawnEnemy(key,dist){
 
   const hpM=Math.round(d.hp*(G.hpMul||1));
   const e={key,d,g,bar,fg,mats,style,limp,hp:hpM,max:hpM,dist:dist||0,spd:d.spd,
-    slow:0,flash:0,dead:false,ph:Math.random()*6,twitch:rnd(1,3)};
+    slow:0,flash:0,dead:false,ph:Math.random()*6,twitch:rnd(1,3),
+    hpShown:-1,hpT:0};
+  // the HP readout: one canvas per zombie, redrawn only when the number moves
+  const c=document.createElement('canvas');c.width=192;c.height=52;
+  const tex=new THREE.CanvasTexture(c);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false}));
+  sp.scale.set(1.5,.41,1);sp.position.y=2.44;sp.renderOrder=1000;g.add(sp);
+  e.hpCanvas=c;e.hpCtx=c.getContext('2d');e.hpTex=tex;e.hpSprite=sp;
+  drawHp(e);
   world.add(g);G.enemies.push(e);
   return e;
+}
+function drawHp(e){
+  const n=Math.max(0,Math.ceil(e.hp));
+  if(n===e.hpShown)return;
+  e.hpShown=n;
+  const x=e.hpCtx,txt=n.toLocaleString();
+  x.clearRect(0,0,192,52);
+  x.font='bold 38px Verdana';x.textAlign='center';x.textBaseline='middle';
+  x.lineWidth=7;x.strokeStyle='#05070f';x.strokeText(txt,96,27);
+  const r=e.max?e.hp/e.max:1;
+  x.fillStyle=r>.5?'#d6ffe9':r>.22?'#ffe6a8':'#ffc2c6';
+  x.fillText(txt,96,27);
+  e.hpTex.needsUpdate=true;
 }
 function hurt(e,dmg,slowT){
   if(e.dead)return;
@@ -1139,6 +1247,8 @@ function hurt(e,dmg,slowT){
 function kill(e,reward){
   if(e.dead)return;
   e.dead=true;
+  if(e.hpSprite)e.hpSprite.visible=false;
+  if(e.bar)e.bar.visible=false;
   if(reward){
     addCash(e.d.cash);G.kills++;G.earned+=e.d.cash;
     for(const b of G.bots)b.cash+=Math.floor(e.d.cash*.6);
@@ -1547,8 +1657,93 @@ function buildKnife(){
   g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
   return g;
 }
+function buildCommander(){
+  const g=person({skin:0xd8ab80,hair:0x2a2621,eye:0x3d5a78,shirt:0x2f3524,pants:0x272c1d,shoe:0x16180f});
+  const P=g.userData.P,T=P.torso,H=P.head;
+  const dress=M(0x3a4128),dressD=M(0x2b3020),gold=M(0xe8c552),brass=M(0xd2a83c),
+        blackM=M(0x141410),red=M(0x8c2a2a),silver=M(0xc6ccd8);
+  // dress tunic with a shoulder cord
+  const tunic=new THREE.Mesh(new THREE.CylinderGeometry(.178,.152,.31,8),dress);
+  tunic.scale.set(1.3,1,.92);tunic.position.y=.3;T.add(tunic);
+  const lapelL=new THREE.Mesh(new THREE.BoxGeometry(.07,.24,.03),dressD);
+  lapelL.position.set(-.06,.34,.13);lapelL.rotation.z=.2;T.add(lapelL);
+  const lapelR=lapelL.clone();lapelR.position.x=.06;lapelR.rotation.z=-.2;T.add(lapelR);
+  const sash=new THREE.Mesh(new THREE.BoxGeometry(.07,.42,.02),red);
+  sash.position.set(0,.3,.135);sash.rotation.z=.45;T.add(sash);
+  const aigL=new THREE.Mesh(new THREE.TorusGeometry(.055,.008,4,10),gold);
+  aigL.rotation.y=.5;aigL.position.set(-.15,.36,.09);T.add(aigL);
+  const aigL2=aigL.clone();aigL2.scale.setScalar(.75);aigL2.position.y=.3;T.add(aigL2);
+  // ribbon rack + medals
+  for(let i=0;i<3;i++)for(let j=0;j<2;j++){
+    const rib=new THREE.Mesh(new THREE.BoxGeometry(.045,.022,.012),
+      M([0x9a2f2f,0x2f5a9a,0xd2a83c][(i+j)%3]));
+    rib.position.set(-.13+i*.05,.36-j*.028,.14);T.add(rib);
+  }
+  const star=new THREE.Mesh(new THREE.CylinderGeometry(.03,.03,.012,5),gold);
+  star.rotation.x=Math.PI/2;star.position.set(.115,.3,.14);T.add(star);
+  // epaulettes
+  for(const sd of [-1,1]){
+    const ep=new THREE.Mesh(new THREE.BoxGeometry(.09,.03,.075),dressD);
+    ep.position.set(sd*.17,.415,0);T.add(ep);
+    const pip=new THREE.Mesh(new THREE.CylinderGeometry(.016,.016,.012,5),gold);
+    pip.rotation.x=Math.PI/2;pip.position.set(sd*.19,.435,0);T.add(pip);
+    const fringe=new THREE.Mesh(new THREE.BoxGeometry(.085,.05,.02),brass);
+    fringe.position.set(sd*.2,.395,.02);T.add(fringe);
+  }
+  const belt=new THREE.Mesh(new THREE.CylinderGeometry(.152,.152,.075,12),blackM);
+  belt.scale.set(1.28,1,.88);belt.position.y=-.02;T.add(belt);
+  const buckle=new THREE.Mesh(new THREE.BoxGeometry(.07,.055,.022),gold);
+  buckle.position.set(0,-.02,.138);T.add(buckle);
+  const cross=new THREE.Mesh(new THREE.BoxGeometry(.05,.34,.02),blackM);
+  cross.position.set(-.02,.28,.135);cross.rotation.z=-.4;T.add(cross);
+  const holster=new THREE.Mesh(new THREE.BoxGeometry(.075,.145,.06),M(0x3b2f1e));
+  holster.position.set(.185,-.09,.01);T.add(holster);
+  const radioC=new THREE.Mesh(new THREE.BoxGeometry(.05,.11,.04),blackM);
+  radioC.position.set(-.175,-.02,-.06);T.add(radioC);
+  // peaked officer's cap with scrambled-egg brim
+  const band=new THREE.Mesh(new THREE.CylinderGeometry(.122,.127,.05,12),blackM);band.position.y=.088;H.add(band);
+  const crown=new THREE.Mesh(new THREE.CylinderGeometry(.15,.122,.06,12),dress);crown.position.y=.14;H.add(crown);
+  const top=new THREE.Mesh(new THREE.CylinderGeometry(.15,.15,.014,12),dressD);top.position.y=.174;H.add(top);
+  const brim=new THREE.Mesh(new THREE.BoxGeometry(.225,.022,.12),blackM);
+  brim.position.set(0,.07,.118);brim.rotation.x=.2;H.add(brim);
+  const egg=new THREE.Mesh(new THREE.BoxGeometry(.2,.016,.03),gold);
+  egg.position.set(0,.081,.135);egg.rotation.x=.2;H.add(egg);
+  const capStar=new THREE.Mesh(new THREE.CylinderGeometry(.032,.032,.012,5),gold);
+  capStar.rotation.x=Math.PI/2;capStar.position.set(0,.132,.108);H.add(capStar);
+  const shades=new THREE.Mesh(new THREE.BoxGeometry(.16,.032,.02),blackM);
+  shades.position.set(0,.012,.106);H.add(shades);
+  const jawline=new THREE.Mesh(new THREE.BoxGeometry(.075,.02,.02),M(0x3a332c));
+  jawline.position.set(0,-.086,.088);H.add(jawline);
+  // gloves
+  for(const h of ['handL','handR']){
+    const gl=new THREE.Mesh(new THREE.BoxGeometry(.09,.125,.052),M(0xe6e2d6));
+    gl.position.y=-.055;P[h].add(gl);
+  }
+  // sidearm in the right hand
+  const gun=new THREE.Group();
+  const slide=new THREE.Mesh(new THREE.BoxGeometry(.044,.22,.05),M(0x25252c));slide.position.y=-.11;gun.add(slide);
+  const barrelC=new THREE.Mesh(new THREE.CylinderGeometry(.014,.014,.06,7),silver);barrelC.position.y=-.23;gun.add(barrelC);
+  const frameC=new THREE.Mesh(new THREE.BoxGeometry(.042,.075,.072),M(0x1b1b21));frameC.position.set(0,-.012,-.02);gun.add(frameC);
+  const gripC=new THREE.Mesh(new THREE.BoxGeometry(.044,.12,.058),M(0x4a3524));
+  gripC.position.set(0,.048,-.058);gripC.rotation.x=.25;gun.add(gripC);
+  const inlay=new THREE.Mesh(new THREE.BoxGeometry(.048,.05,.012),gold);
+  inlay.position.set(0,-.1,.028);gun.add(inlay);
+  gun.position.set(0,-.05,.02);P.handR.add(gun);
+  // swagger stick in the left, used when he's directing rather than shooting
+  const stick=new THREE.Group();
+  const cane=new THREE.Mesh(new THREE.CylinderGeometry(.014,.016,.5,6),M(0x3b2a1c));
+  cane.position.y=-.22;stick.add(cane);
+  const capT=new THREE.Mesh(new THREE.CylinderGeometry(.022,.022,.05,8),brass);
+  capT.position.y=.02;stick.add(capT);
+  const ferrule=new THREE.Mesh(new THREE.CylinderGeometry(.017,.017,.04,8),brass);
+  ferrule.position.y=-.46;stick.add(ferrule);
+  stick.position.set(0,-.05,.02);stick.rotation.x=-.15;P.handL.add(stick);
+  g.userData.gun=gun;g.userData.muzzle=barrelC;g.userData.stick=stick;
+  g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+  return g;
+}
 const TOWER_BUILD={police:buildPolice,scout:buildScout,robber:buildRobber,survivor:buildSurvivor,
-                   blitzer:buildBlitzer,knife:buildKnife};
+                   blitzer:buildBlitzer,knife:buildKnife,commander:buildCommander};
 function placeTower(key,x,z){
   const def=TOWERS[key];
   const g=TOWER_BUILD[key]();
@@ -1562,16 +1757,44 @@ function placeTower(key,x,z){
   const rng=new THREE.Mesh(new THREE.RingGeometry(1,1.04,44),
     new THREE.MeshBasicMaterial({color:0x7f8dff,transparent:true,opacity:.4,side:THREE.DoubleSide}));
   rng.rotation.x=-Math.PI/2;rng.position.y=.13;rng.visible=false;g.add(rng);
+  let auraRing=null;
+  if(key==='commander'){
+    auraRing=new THREE.Mesh(new THREE.RingGeometry(.97,1,64),
+      new THREE.MeshBasicMaterial({color:0xffd166,transparent:true,opacity:.22,side:THREE.DoubleSide}));
+    auraRing.rotation.x=-Math.PI/2;auraRing.position.y=.1;
+    auraRing.scale.setScalar(def.lv[0].aura);g.add(auraRing);
+  }
   world.add(g);
   const PP=g.userData.P;
   PP.legL.rotation.z=.05;PP.legR.rotation.z=-.05;
   PP.footL.rotation.y=-.12;PP.footR.rotation.y=.12;
-  const t={key,def,g,rngMesh:rng,lvl:0,cd:0,swing:0,swDur:.34,spent:def.cost,
+  const t={key,def,g,rngMesh:rng,auraRing,lvl:0,cd:0,swing:0,swDur:.34,spent:def.cost,
     weapon:key==='police'?'baton':'gun',batonHits:key==='police'?def.lv[0].dur:0,
-    ammo:key==='blitzer'?def.battery:0,rech:0,hand:'R'};
+    ammo:key==='blitzer'?def.battery:0,rech:0,hand:'R',
+    // animation state: alertness, recoil, idle gesture clock, turn tracking
+    seed:rnd(0,6.283),alert:0,rec:0,gest:-1,gestT:rnd(2,7),prevY:0,turn:0,lastSeen:99};
   if(key==='blitzer')blitzerCharge(t);
   G.towers.push(t);
   return t;
+}
+/* Commanders in range hand out the best single buff they've got — they don't
+   stack, so a wall of Commanders isn't a strategy. */
+const COMMANDERS=[];
+function refreshCommanders(){
+  COMMANDERS.length=0;
+  for(const t of G.towers)if(t.key==='commander')COMMANDERS.push(t);
+}
+function auraBuff(t){
+  let dmgB=0,rateB=0;
+  for(const c of COMMANDERS){
+    if(c===t)continue;
+    const s=c.def.lv[c.lvl];
+    if(Math.hypot(t.g.position.x-c.g.position.x,t.g.position.z-c.g.position.z)<=s.aura){
+      if(s.dmgB>dmgB)dmgB=s.dmgB;
+      if(s.rateB>rateB)rateB=s.rateB;
+    }
+  }
+  return dmgB?{dmgB,rateB}:null;
 }
 /* paints the Blitzer's battery cells to match what's left in the magazine */
 function blitzerCharge(t){
@@ -1674,16 +1897,17 @@ function syncHud(){
    so every reference stays live. */
 const LOADOUT=['police','scout','robber','survivor',null];
 const SHORT={police:'Cop',scout:'Scout',robber:'Robber',survivor:'Survivor',
-             blitzer:'Blitzer',knife:'Knife'};
+             blitzer:'Blitzer',knife:'Knife',commander:'Cmdr'};
 const TOWER_DESC={
-  police:'Baton: 4 dmg · 1.2s · 10 range. When it breaks he draws the taser: 8 dmg · 2.0s · 11 range, stuns. 5 levels.',
+  police:'Baton: 9 dmg every 1.0s at Lv1 up to 40 at Lv5, range 10 → 12. It breaks after 30 hits and he falls back on the taser — weaker, but it stuns. Upgrading issues a fresh baton. 5 levels.',
   scout:'2 dmg · 0.9s · 8 range. Cheap, fast chip damage. 3 levels.',
   robber:'Shotgun: 3 dmg per blast at Lv1, 20 at Lv4. Short 7 range, hits up to 5 zombies in the cone. 4 levels.',
   survivor:'M14 EBR: 2 dmg every 0.30s at Lv1 → 5 dmg every 0.08s at Lv5. Range 12 → 20, the longest reach in the game. 5 levels.',
   blitzer:'Battery gun: 20 yellow laser rounds at one every 0.04s, then it has to recharge. 5 dmg → 15, range 8 → 12. 4 levels.',
-  knife:'Twin blades: 8 dmg → 22, no gun at all. Range 5 → 7, the shortest reach in the game, so put him on a corner. 4 levels.'
+  knife:'Twin blades: 8 dmg → 22, no gun at all. Range 5 → 7, the shortest reach in the game, so put him on a corner. 4 levels.',
+  commander:'Sidearm plus an aura: every friendly tower inside his ring hits +15% harder and reloads +10% faster at Lv1, up to +40% and +28% at Lv4. Auras do not stack. 4 levels.'
 };
-const ALL_TOWERS=['police','scout','robber','survivor','blitzer','knife'];
+const ALL_TOWERS=['police','scout','robber','survivor','blitzer','knife','commander'];
 function placedCount(key){let n=0;for(const t of G.towers)if(t.key===key&&!t.owner)n++;return n;}
 let slotsSig='';
 function renderSlots(){
@@ -1735,7 +1959,15 @@ function showInfo(t){
     : t.key==='blitzer' ? (t.rech>0?'Battery gun — recharging, '+t.rech.toFixed(1)+'s'
                                    :'Battery gun — '+t.ammo+' / '+t.def.battery+' laser rounds left')
     : t.key==='knife'   ? 'Twin blades — short reach, heavy hits'
+    : t.key==='commander'? 'Sidearm + command aura — +'+Math.round(s.dmgB*100)+'% damage and +'
+                           +Math.round(s.rateB*100)+'% fire rate to towers within '+s.aura
     : 'Service pistol';
+  // a buffed tower shows the numbers it is actually shooting with
+  if(t.buffed&&t.key!=='commander'){
+    const ab=auraBuff(t);
+    if(ab)$('iWeapon').textContent+='  ·  under command: +'+Math.round(ab.dmgB*100)+'% dmg, +'
+      +Math.round(ab.rateB*100)+'% rate';
+  }
   $('iDmg').textContent=s.dmg;
   $('iRate').textContent=s.cd.toFixed(2)+'s';
   $('iRange').textContent=s.rng;
@@ -1813,7 +2045,19 @@ renderShop();
 
 /* ---------- loadout shop (lobby) ---------- */
 function equippedAt(k){return LOADOUT.indexOf(k);}
+function owned(k){return !TOWERS[k].coin||SAVE.commander;}
 function toggleEquip(k){
+  const d=TOWERS[k];
+  if(!owned(k)){
+    // coin-locked: tapping it buys it, if you can afford it
+    if(SAVE.coins<d.coin){
+      banner('Need '+d.coin.toLocaleString()+' coins — you have '+SAVE.coins.toLocaleString());
+      sfx('no');return;
+    }
+    SAVE.coins-=d.coin;SAVE.commander=true;writeSave();
+    banner(d.name+' unlocked');sfx('win');
+    renderLoadout();syncCoins();return;
+  }
   const at=equippedAt(k);
   if(at>=0){LOADOUT[at]=null;sfx('no');}
   else{
@@ -1823,24 +2067,34 @@ function toggleEquip(k){
   }
   renderLoadout();renderSlots();renderShop();
 }
+function syncCoins(){
+  const el=$('coinV');
+  if(el)el.textContent=SAVE.coins.toLocaleString();
+  const c=$('loadCoins');
+  if(c)c.textContent=SAVE.coins.toLocaleString()+' coins';
+}
 function renderLoadout(){
   $('loadSlots').innerHTML=LOADOUT.map((k,i)=>
     k?'<div class="lchip on"><b>'+TOWERS[k].icon+'</b><span>'+SHORT[k]+'</span></div>'
      :'<div class="lchip"><b style="color:var(--dim)">+</b><span>slot '+(i+1)+'</span></div>').join('');
   const list=$('loadList');
   list.innerHTML=ALL_TOWERS.map(k=>{
-    const d=TOWERS[k],on=equippedAt(k)>=0;
-    return '<div class="card'+(on?' eqOn':'')+'" data-k="'+k+'">'+
+    const d=TOWERS[k],on=equippedAt(k)>=0,have=owned(k);
+    const tag=!have?(SAVE.coins>=d.coin?'tap to buy':'not enough coins')
+             :on?'equipped':'tap to equip';
+    const price=have?'$'+d.cost:'🪙 '+d.coin.toLocaleString();
+    return '<div class="card'+(on?' eqOn':'')+(have?'':' coinLock')+'" data-k="'+k+'">'+
       '<div class="avi">'+d.icon+'</div>'+
-      '<div class="info"><div class="nm">'+d.name+'</div>'+
+      '<div class="info"><div class="nm">'+d.name+(have?'':' <span class="lockTag">locked</span>')+'</div>'+
       '<div class="ds">'+TOWER_DESC[k]+'</div></div>'+
-      '<div style="text-align:right"><div class="price">$'+d.cost+'</div>'+
-      '<div class="tag'+(on?'':' off')+'">'+(on?'equipped':'tap to equip')+'</div></div></div>';
+      '<div style="text-align:right"><div class="price">'+price+'</div>'+
+      '<div class="tag'+(on?'':' off')+'">'+tag+'</div></div></div>';
   }).join('');
   Array.prototype.forEach.call(list.children,el=>{
     const k=el.getAttribute('data-k');
     if(k)el.onclick=()=>toggleEquip(k);
   });
+  syncCoins();
 }
 function openLoadout(){
   closeInfo();$('shop').classList.remove('on');$('settings').classList.remove('on');
@@ -1875,6 +2129,7 @@ function applyUpgrade(t,announce){
     t.rech=0;t.ammo=t.def.battery;blitzerCharge(t);
     if(announce)banner('Battery swapped — full charge');
   }
+  if(t.key==='commander'&&t.auraRing)t.auraRing.scale.setScalar(t.def.lv[t.lvl].aura);
   fxSpark(t.g.position.clone().add(V3(0,1.4,0)),0x7f8dff);
 }
 $('upBtn').onclick=()=>{
@@ -1956,14 +2211,16 @@ function validSpot(x,z){
 function buildQueue(w){
   const set=MAP.waves>10?WAVES20:WAVES;
   const cfg=set[Math.min(w,set.length)-1],pool=[];
-  let bosses=0;
+  const bosses=[];
   cfg.mix.forEach(([k,n])=>{
-    if(k==='boss'){bosses=n;return;}
+    // any type flagged as a boss is held back and walks in last
+    if(ZT[k]&&ZT[k].boss){for(let i=0;i<n;i++)bosses.push(k);return;}
     for(let i=0;i<n;i++)pool.push(k);
   });
   for(let i=pool.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[pool[i],pool[j]]=[pool[j],pool[i]];}
-  for(let i=0;i<bosses;i++)pool.push('boss');
-  G.bossWave=bosses>0;
+  for(const k of bosses)pool.push(k);
+  G.bossWave=bosses.length>0;
+  G.bossName=bosses.length?ZT[bosses[0]].n:'';
   G.queue=pool;G.gap=cfg.gap;G.spawnT=2.5;
 }
 function startWave(){
@@ -1973,7 +2230,7 @@ function startWave(){
   G.hpMul=MAP.hpScale*(1+Math.max(0,G.wave-10)*.16);
   buildQueue(G.wave);
   G.waveActive=true;G.nextT=0;
-  banner('Wave '+G.wave+(G.bossWave?' \u2014 Patient Zero':''));sfx('wave');
+  banner('Wave '+G.wave+(G.bossWave?' \u2014 '+G.bossName:''));sfx('wave');
   $('nextV').textContent='in progress';
   $('slots').classList.add('on');
   syncHud();
@@ -2154,7 +2411,14 @@ function tapWorld(cx,cy){
 function fire(t,dt){
   t.cd-=dt;
   if(t.swing>0)t.swing=Math.max(0,t.swing-dt);
-  const s=tStats(t);
+  const base=tStats(t);
+  // a Commander's aura rewrites the numbers this frame. tStats hands back the
+  // shared level object, so buffed stats have to go on a copy.
+  const ab=auraBuff(t);
+  const s=ab?{dmg:Math.max(1,Math.round(base.dmg*(1+ab.dmgB))),cd:base.cd/(1+ab.rateB),
+              rng:base.rng,pel:base.pel,rech:base.rech,aura:base.aura,
+              dmgB:base.dmgB,rateB:base.rateB,dur:base.dur}:base;
+  t.buffed=!!ab;
   // the Blitzer sits out its recharge before the magazine comes back
   if(t.rech>0){
     t.rech-=dt;
@@ -2179,7 +2443,7 @@ function fire(t,dt){
              :t.key==='survivor'?Math.min(.16,s.cd*.8)
              :t.key==='blitzer'?Math.min(.1,s.cd*2.2)
              :t.key==='knife'?Math.min(.42,s.cd*.85):.34;
-      t.swing=t.swDur;
+      t.swing=t.swDur;t.rec=1;                 // recoil impulse, decays per weapon
       const from=t.g.position.clone().add(V3(0,1.35,0));
       const to=target.g.position.clone().add(V3(0,1.1*target.d.sc,0));
       if(t.key==='scout'){
@@ -2243,94 +2507,220 @@ function fire(t,dt){
       }
     }
   }
-  // pose / animation
-  if(P){
-    const now=performance.now()*.001,seed=t.g.position.x*.7+t.g.position.z*.4;
-    const breathe=Math.sin(now*1.9+seed)*.5+.5;
-    const dur=t.swDur||.34,u=t.swing>0?1-t.swing/dur:1;
-    P.chest.scale.y=1+breathe*.035;
-    P.torso.position.y=1.04+breathe*.012;
-    // relaxed stance with a slow weight shift
-    const shift=Math.sin(now*.9+seed)*.05;
-    P.legL.rotation.z=.05+shift*.3;P.legR.rotation.z=-.05+shift*.3;
-    P.torso.rotation.z=shift;
-    P.shinL.rotation.x=-.07;P.shinR.rotation.x=-.07;
-    if(t.key==='police'&&t.weapon==='baton'){
-      let a;
-      if(u<.28)a=-.45-(u/.28)*1.4;                 // wind up over the shoulder
-      else if(u<.52)a=-1.85+((u-.28)/.24)*2.85;    // crack down
-      else a=1.0-((u-.52)/.48)*1.45;               // follow through
-      P.armR.rotation.x=a;P.armR.rotation.z=-.22;
-      P.foreR.rotation.x=-.5+Math.sin(Math.min(1,u)*Math.PI)*.55;
-      P.armL.rotation.x=-.3-Math.max(0,a)*.25;P.armL.rotation.z=.24;P.foreL.rotation.x=-.5;
-      P.torso.rotation.y=-a*.26;P.torso.rotation.x=Math.max(0,a)*.2;
-      P.head.rotation.x=Math.max(0,a)*.18;
-    }else if(t.key==='police'){
-      const kick=Math.max(0,1-u*3.2);
-      P.armR.rotation.x=-1.44+kick*.55;P.armR.rotation.z=-.1;
-      P.foreR.rotation.x=-.06-kick*.2;
-      P.armL.rotation.x=-1.12;P.armL.rotation.z=.34;P.foreL.rotation.x=-.62;
-      P.torso.rotation.x=-.04-kick*.12;P.torso.rotation.y=-.16;
-      P.head.rotation.x=-.05;
-    }else if(t.key==='survivor'){
-      const kick=Math.max(0,1-u*3.4);
-      P.armR.rotation.x=-1.33+kick*.3;P.armR.rotation.z=-.2;
-      P.foreR.rotation.x=-.26-kick*.16;
-      P.armL.rotation.x=-1.5;P.armL.rotation.z=.6;P.foreL.rotation.x=-.8;
-      P.torso.rotation.x=-.02-kick*.07;P.torso.rotation.y=-.3;
-      P.head.rotation.x=-.02-kick*.06;
-    }else if(t.key==='blitzer'){
-      if(t.rech>0){
-        // battery swap: gun drops, off hand works the pack
-        const r=1-t.rech/Math.max(.01,s.rech);
-        const w=Math.sin(clamp(r,0,1)*Math.PI);
-        P.armR.rotation.x=-.55-w*.35;P.armR.rotation.z=-.16;
-        P.foreR.rotation.x=-.9-w*.5;
-        P.armL.rotation.x=-.35+w*1.5;P.armL.rotation.z=.3+w*.5;
-        P.foreL.rotation.x=-.5-w*1.5;
-        P.torso.rotation.x=.05;P.torso.rotation.y=.22*w;
-        P.head.rotation.x=.16*w;
-      }else{
-        const kick=Math.max(0,1-u*3.6);
-        P.armR.rotation.x=-1.4+kick*.22;P.armR.rotation.z=-.16;
-        P.foreR.rotation.x=-.2-kick*.12;
-        P.armL.rotation.x=-1.46;P.armL.rotation.z=.52;P.foreL.rotation.x=-.72;
-        P.torso.rotation.x=-.03-kick*.05;P.torso.rotation.y=-.26;
-        P.head.rotation.x=-.03;
-      }
-    }else if(t.key==='knife'){
-      // the swinging arm leads; the other stays guarded across the chest
-      const sw=t.hand==='R'?'R':'L',off=sw==='R'?'L':'R',sg=sw==='R'?1:-1;
-      let a;
-      if(u<.3)a=-.5-(u/.3)*1.15;                  // cock back
-      else if(u<.55)a=-1.65+((u-.3)/.25)*2.5;     // drive through
-      else a=.85-((u-.55)/.45)*1.35;              // recover
-      P['arm'+sw].rotation.x=a;P['arm'+sw].rotation.z=sg*-.3;
-      P['fore'+sw].rotation.x=-.65+Math.sin(Math.min(1,u)*Math.PI)*.85;
-      P['arm'+off].rotation.x=-1.1;P['arm'+off].rotation.z=sg*.42;
-      P['fore'+off].rotation.x=-1.05;
-      P.torso.rotation.y=sg*-a*.34;P.torso.rotation.x=Math.max(0,a)*.24;
-      P.head.rotation.x=Math.max(0,a)*.14;
-    }else if(t.key==='robber'){
-      const kick=Math.max(0,1-u*2.6);
-      const pump=clamp((u-.4)/.35,0,1)*(1-clamp((u-.75)/.25,0,1));
-      P.armR.rotation.x=-1.34+kick*.72;P.armR.rotation.z=-.14;
-      P.foreR.rotation.x=-.12-kick*.3;
-      P.armL.rotation.x=-1.16-pump*.35;P.armL.rotation.z=.46;
-      P.foreL.rotation.x=-.66+pump*.5;
-      P.torso.rotation.x=-.02-kick*.2;P.torso.rotation.y=-.3+kick*.16;
-      P.head.rotation.x=-.04-kick*.12;
-    }else{
-      const kick=Math.max(0,1-u*4);
-      P.armR.rotation.x=-1.5+kick*.5;P.armR.rotation.z=-.06;
-      P.foreR.rotation.x=-.04-kick*.15;
-      P.armL.rotation.x=-1.38;P.armL.rotation.z=.42;P.foreL.rotation.x=-.4;
-      P.torso.rotation.x=-.06-kick*.09;P.torso.rotation.y=-.1;
-      P.head.rotation.x=-.06;
+  if(P)towerPose(t,dt,target,s);
+}
+
+/* ============================================================
+   Tower animation.
+
+   Three signals drive every tower instead of one swing timer:
+     alert  0..1  nothing to shoot -> weapon down and relaxed, target in range
+                  -> weapon up and braced. Comes up fast, settles slowly.
+     rec    0..1  a recoil impulse set on each shot that decays exponentially
+                  at a rate that suits the weapon, so a shotgun rolls through
+                  the body and a laser carbine barely twitches.
+     turn         smoothed angular velocity, so the torso leads the hips into a
+                  turn and banks into it instead of the whole body rotating
+                  like a turntable.
+   Melee swings ride on top as an arc offset that returns to zero, which keeps
+   the pose continuous when the swing ends.
+   ============================================================ */
+const mix=(a,b,k)=>a+(b-a)*k;
+const RECOIL_DECAY={scout:9,survivor:11,robber:4.5,blitzer:15,knife:6,police:7,commander:8};
+function towerPose(t,dt,target,s){
+  const P=t.g.userData.P;
+  const now=performance.now()*.001,seed=t.seed;
+
+  // --- alertness -------------------------------------------------------
+  t.lastSeen=target?0:t.lastSeen+dt;
+  const want=target?1:(t.lastSeen<2.2?1:0);      // stay ready for a beat after
+  t.alert+=(want-t.alert)*Math.min(1,dt*(want?7:1.8));
+  const A=t.alert;
+
+  // --- recoil ----------------------------------------------------------
+  t.rec*=Math.exp(-dt*(RECOIL_DECAY[t.key]||7));
+  if(t.rec<.0005)t.rec=0;
+  const R=t.rec;
+
+  // --- turn lead -------------------------------------------------------
+  let dy=t.g.rotation.y-t.prevY;
+  dy=((dy+Math.PI*3)%(Math.PI*2))-Math.PI;
+  t.prevY=t.g.rotation.y;
+  t.turn+=((dt>0?dy/dt:0)-t.turn)*Math.min(1,dt*7);
+  const lead=clamp(t.turn*.07,-.3,.3);
+
+  // --- breathing, stance, weight shift ---------------------------------
+  const breath=Math.sin(now*(1.5+A*1.1)+seed);
+  const shift=Math.sin(now*.62+seed)*.055*(1-A*.75);
+  P.chest.scale.y=1+(breath*.5+.5)*(.05-A*.02);
+  P.torso.position.y=1.04+(breath*.5+.5)*.015-A*.03;   // sinks slightly when braced
+  // relaxed: feet close, weight rocking. ready: bladed stance, knees soft.
+  P.legL.rotation.z=mix(.05,.13,A)+shift*.4;
+  P.legR.rotation.z=mix(-.05,-.13,A)+shift*.4;
+  P.legL.rotation.x=mix(0,-.13,A);
+  P.legR.rotation.x=mix(0,.15,A);
+  P.shinL.rotation.x=mix(-.05,-.12,A);
+  P.shinR.rotation.x=mix(-.05,-.22,A);
+  P.footL.rotation.x=mix(0,.06,A);P.footR.rotation.x=mix(0,-.05,A);
+  P.torso.rotation.z=shift-lead*.35;
+  P.torso.rotation.x=mix(.02,-.05,A);
+  P.torso.rotation.y=lead;
+  P.head.rotation.z=0;
+
+  // --- idle gestures ---------------------------------------------------
+  // only while genuinely relaxed; each returns to neutral through a sine
+  let gA=0,gK=t.gest;
+  if(A<.25){
+    t.gestT-=dt;
+    if(t.gest<0&&t.gestT<=0){t.gest=(Math.random()*3)|0;t.gestT=0;t.gestP=0;}
+    if(t.gest>=0){
+      t.gestP+=dt;
+      gA=Math.sin(clamp(t.gestP/2.6,0,1)*Math.PI);
+      if(t.gestP>2.6){t.gest=-1;t.gestT=rnd(3.5,9);}
     }
-    // scan the field when nothing is in range
-    P.head.rotation.y=target?P.head.rotation.y*.86:Math.sin(now*.7+seed)*.55;
+  }else if(t.gest>=0){t.gest=-1;t.gestT=rnd(3,7);}
+  gA*=1-A;
+
+  const dur=t.swDur||.34,u=t.swing>0?1-t.swing/dur:1;
+  const key=t.key,taser=key==='police'&&t.weapon==='taser';
+
+  if(key==='police'&&!taser){
+    // ---- baton: hangs at the side, comes up on guard, swings overhead ----
+    let arc=0,arcF=0;
+    if(t.swing>0){
+      if(u<.30)      {arc=-(u/.30)*1.15;      arcF=-(u/.30)*.55;}      // wind up
+      else if(u<.56) {const k=(u-.30)/.26; arc=-1.15+k*2.75; arcF=-.55+k*1.15;} // crack down
+      else           {const k=1-(u-.56)/.44; arc=1.6*k;      arcF=.6*k;}        // follow through
+    }
+    P.armR.rotation.x=mix(-.12,-.75,A)+arc;
+    P.armR.rotation.z=mix(-.10,-.24,A);
+    P.foreR.rotation.x=mix(-.20,-.85,A)+arcF;
+    P.armL.rotation.x=mix(-.08,-.55,A)-Math.max(0,arc)*.3+gA*(gK===2?-1.1:0);
+    P.armL.rotation.z=mix(.10,.30,A);
+    P.foreL.rotation.x=mix(-.18,-.75,A)+gA*(gK===2?-.9:0);
+    P.torso.rotation.y+=-arc*.3-A*.10;
+    P.torso.rotation.x+=Math.max(0,arc)*.22;
+    P.head.rotation.x=mix(.02,-.06,A)+Math.max(0,arc)*.16;
+  }else if(key==='police'){
+    // ---- taser: held out one-handed, the off hand braces the wrist ----
+    P.armR.rotation.x=mix(-.14,-1.44,A)+R*.60;
+    P.armR.rotation.z=mix(-.10,-.10,A);
+    P.foreR.rotation.x=mix(-.22,-.06,A)-R*.24;
+    P.armL.rotation.x=mix(-.08,-1.10,A)+R*.20+gA*(gK===2?-1.0:0);
+    P.armL.rotation.z=mix(.10,.34,A);
+    P.foreL.rotation.x=mix(-.18,-.66,A);
+    P.torso.rotation.y+=-A*.16;
+    P.torso.rotation.x+=-R*.14;
+    P.head.rotation.x=mix(.02,-.05,A)-R*.10;
+  }else if(key==='scout'){
+    // ---- pistol: two hands, tight snap recoil, checks the binos when idle ----
+    const bino=gK===0?gA:0;
+    P.armR.rotation.x=mix(-.12,-1.50,A)+R*.55;
+    P.armR.rotation.z=mix(-.10,-.06,A);
+    P.foreR.rotation.x=mix(-.22,-.04,A)-R*.22;
+    P.armL.rotation.x=mix(-.10,-1.38,A)+R*.18-bino*1.35;
+    P.armL.rotation.z=mix(.10,.42,A)+bino*.2;
+    P.foreL.rotation.x=mix(-.20,-.40,A)-bino*1.15;
+    P.torso.rotation.y+=-A*.10;
+    P.torso.rotation.x+=-R*.10;
+    P.head.rotation.x=mix(.02,-.07,A)-R*.06+bino*.1;
+  }else if(key==='survivor'){
+    // ---- marksman rifle: cheek welded to the stock, small fast recoil ----
+    P.armR.rotation.x=mix(-.14,-1.34,A)+R*.30;
+    P.armR.rotation.z=mix(-.12,-.20,A);
+    P.foreR.rotation.x=mix(-.24,-.26,A)-R*.16;
+    P.armL.rotation.x=mix(-.10,-1.50,A)+gA*(gK===1?-.5:0);
+    P.armL.rotation.z=mix(.12,.60,A);
+    P.foreL.rotation.x=mix(-.22,-.80,A);
+    P.torso.rotation.y+=-A*.30;
+    P.torso.rotation.x+=-R*.08;
+    P.head.rotation.x=mix(.02,-.03,A)-R*.06;
+    P.head.rotation.z=A*-.12;                      // tilts onto the scope
+  }else if(key==='blitzer'){
+    if(t.rech>0){
+      // ---- battery swap: gun drops, off hand pulls a cell from the pack ----
+      const r=clamp(1-t.rech/Math.max(.01,s.rech),0,1);
+      const w=Math.sin(r*Math.PI);
+      const grab=Math.sin(clamp(r*2,0,1)*Math.PI);   // reach back, then forward
+      P.armR.rotation.x=-.55-w*.40;P.armR.rotation.z=-.16;
+      P.foreR.rotation.x=-.95-w*.45;
+      P.armL.rotation.x=-.30+grab*1.65;P.armL.rotation.z=.28+grab*.55;
+      P.foreL.rotation.x=-.45-grab*1.60;
+      P.torso.rotation.y+=.24*w;P.torso.rotation.x+=.06*w;
+      P.head.rotation.x=.18*w;
+    }else{
+      // ---- carbine: shouldered, tiny high-frequency shudder while firing ----
+      const buzz=R*Math.sin(now*70)*.05;
+      P.armR.rotation.x=mix(-.14,-1.40,A)+R*.18+buzz;
+      P.armR.rotation.z=mix(-.12,-.16,A);
+      P.foreR.rotation.x=mix(-.24,-.20,A)-R*.10;
+      P.armL.rotation.x=mix(-.10,-1.46,A)+buzz*.6;
+      P.armL.rotation.z=mix(.12,.52,A);
+      P.foreL.rotation.x=mix(-.22,-.72,A);
+      P.torso.rotation.y+=-A*.26;
+      P.torso.rotation.x+=-R*.05;
+      P.head.rotation.x=mix(.02,-.03,A)-R*.03;
+    }
+  }else if(key==='knife'){
+    // ---- blades: low guard when relaxed, high guard ready, alternating slash ----
+    const sw=t.hand,off=sw==='R'?'L':'R',sg=sw==='R'?1:-1;
+    let arc=0,arcF=0;
+    if(t.swing>0){
+      if(u<.32)      {arc=-(u/.32)*1.05;  arcF=-(u/.32)*.7;}
+      else if(u<.58) {const k=(u-.32)/.26; arc=-1.05+k*2.55; arcF=-.7+k*1.5;}
+      else           {const k=1-(u-.58)/.42; arc=1.5*k;      arcF=.8*k;}
+    }
+    P['arm'+sw].rotation.x=mix(-.12,-.95,A)+arc;
+    P['arm'+sw].rotation.z=sg*mix(-.10,-.34,A);
+    P['fore'+sw].rotation.x=mix(-.22,-.95,A)+arcF;
+    P['arm'+off].rotation.x=mix(-.12,-1.05,A);
+    P['arm'+off].rotation.z=sg*mix(.10,.46,A);
+    P['fore'+off].rotation.x=mix(-.22,-1.05,A);
+    P.torso.rotation.y+=sg*-arc*.36-sg*A*.14;
+    P.torso.rotation.x+=Math.max(0,arc)*.26;
+    P.head.rotation.x=mix(.02,-.08,A)+Math.max(0,arc)*.13;
+  }else if(key==='robber'){
+    // ---- sawn-off: heavy roll-through recoil, then works the pump ----
+    const pump=clamp((u-.35)/.30,0,1)*(1-clamp((u-.70)/.30,0,1))*A;
+    P.armR.rotation.x=mix(-.14,-1.34,A)+R*.80;
+    P.armR.rotation.z=mix(-.12,-.14,A);
+    P.foreR.rotation.x=mix(-.24,-.12,A)-R*.34;
+    P.armL.rotation.x=mix(-.10,-1.16,A)-pump*.40+R*.15;
+    P.armL.rotation.z=mix(.12,.46,A);
+    P.foreL.rotation.x=mix(-.22,-.66,A)+pump*.55;
+    P.torso.rotation.y+=-A*.30+R*.18;
+    P.torso.rotation.x+=-R*.24;
+    P.head.rotation.x=mix(.02,-.04,A)-R*.14;
+    P.head.rotation.z+=R*.06;
+  }else if(key==='commander'){
+    // ---- sidearm in one hand, swagger stick in the other. When there's
+    //      nothing to shoot he directs the line with the stick. ----
+    const point=gK===0?gA:0, salute=gK===1?gA:0;
+    P.armR.rotation.x=mix(-.12,-1.42,A)+R*.50+salute*-1.9;
+    P.armR.rotation.z=mix(-.10,-.10,A)-salute*.35;
+    P.foreR.rotation.x=mix(-.20,-.10,A)-R*.20-salute*1.25;
+    P.armL.rotation.x=mix(-.14,-.55,A)-point*1.75;
+    P.armL.rotation.z=mix(.16,.30,A)+point*.22;
+    P.foreL.rotation.x=mix(-.55,-.85,A)+point*.55;   // stick tucked under the arm
+    P.torso.rotation.y+=-A*.14+point*.24;
+    P.torso.rotation.x+=-R*.10;
+    P.head.rotation.x=mix(-.02,-.05,A)-R*.07+salute*.12;
+  }else{
+    P.armR.rotation.x=mix(-.14,-1.50,A)+R*.5;
+    P.armR.rotation.z=mix(-.10,-.06,A);
+    P.foreR.rotation.x=mix(-.22,-.04,A)-R*.15;
+    P.armL.rotation.x=mix(-.10,-1.38,A);
+    P.armL.rotation.z=mix(.10,.42,A);
+    P.foreL.rotation.x=mix(-.20,-.40,A);
+    P.torso.rotation.y+=-A*.10;
+    P.head.rotation.x=mix(.02,-.06,A);
   }
+
+  // --- head: locked on the target, or sweeping the field when idle ------
+  const scan=Math.sin(now*.62+seed)*.6+(gK===0?gA*.7:0);
+  const tilt=gK===1?gA*.3:0;
+  P.head.rotation.y=mix(scan,-lead*.5,A);
+  P.head.rotation.z+=mix(tilt,0,A)+lead*.12;
 }
 
 /* ---------- audio ---------- */
@@ -2579,7 +2969,7 @@ const lobbyNPCs=[];
   // screen on the far wall
   boardMesh=new THREE.Mesh(new THREE.PlaneGeometry(12,6),
     new THREE.MeshBasicMaterial({map:signTex([
-      {t:'TOWER DEFENSE',b:1,s:54,y:100},{t:'V1.51  ·  6 TOWERS  ·  2 MAPS',s:28,c:'#8b95cf',y:158}])}));
+      {t:'TOWER DEFENSE',b:1,s:54,y:100},{t:'V1.52  ·  7 TOWERS  ·  2 MAPS',s:28,c:'#8b95cf',y:158}])}));
   // the bezel is .35 deep, so its front face sits at -D+.195 — the screen has
   // to clear that or the frame swallows it
   boardMesh.position.set(0,4.8,-D+.42);lobby.add(boardMesh);
@@ -2709,7 +3099,7 @@ const lobbyNPCs=[];
   {
     const st=stationAt('log'),g=new THREE.Group();
     const board=new THREE.Mesh(new THREE.PlaneGeometry(4.6,2.6),
-      new THREE.MeshBasicMaterial({map:signTex([{t:'UPDATE LOG',b:1,s:56,y:110},{t:'V1.51',s:40,c:'#5ef2a0',y:180}])}));
+      new THREE.MeshBasicMaterial({map:signTex([{t:'UPDATE LOG',b:1,s:56,y:110},{t:'V1.52',s:40,c:'#5ef2a0',y:180}])}));
     board.position.set(0,2.5,.13);g.add(board);
     const back=new THREE.Mesh(new THREE.BoxGeometry(5,3,.22),M(0x232a4e));
     back.position.set(0,2.5,0);back.castShadow=true;g.add(back);
@@ -2774,12 +3164,18 @@ function buildPals(){
     lobby.add(g);lobbyPals.push(g);
   }
 }
-function setMode(m){
+function setMode(m,quiet){
   PARTY=Math.max(0,m-1);
   Array.prototype.forEach.call(document.querySelectorAll('#modes .mode'),b=>
     b.classList.toggle('on',+b.getAttribute('data-m')===m));
   buildPals();
   sfx('place');
+  // picking a squad size IS the "play" button now — straight into the vote
+  if(!quiet&&G.mode==='lobby'&&!voting){
+    $('squad').classList.remove('on');
+    banner(['Solo','Duo','Trio'][m-1]+' \u2014 to the map vote');
+    setTimeout(()=>{if(G.mode==='lobby'&&!voting)startVote();},450);
+  }
 }
 Array.prototype.forEach.call(document.querySelectorAll('#modes .mode'),b=>{
   b.onclick=()=>{
@@ -2808,15 +3204,19 @@ function enterLobby(won){
   $('loadout').classList.remove('on');$('squad').classList.remove('on');
   $('log').classList.remove('on');
   clearStation();
+  $('coins').classList.add('on');syncCoins();
   const runLine=G.kills+' zombies dropped  ·  $'+G.earned.toLocaleString()+' earned';
   // the wave totals used to be hardcoded to 10 and read wrong on the 20-wave map
   const total=MAP.waves;
-  if(won===true)setBoard([{t:'FIELD SECURED',b:1,s:52,c:'#5ef2a0',y:92},
-      {t:total+' / '+total+' waves  ·  Patient Zero down',s:26,y:146},{t:runLine,s:23,c:'#8b95cf',y:192}]);
-  else if(won===false)setBoard([{t:'BASE LOST',b:1,s:52,c:'#ff5f6d',y:92},
-      {t:'made it to wave '+G.wave+' of '+total,s:26,y:146},{t:runLine,s:23,c:'#8b95cf',y:192}]);
+  const coinLine=G.coinsWon?'+ '+G.coinsWon.toLocaleString()+' coins':'';
+  if(won===true)setBoard([{t:'FIELD SECURED',b:1,s:50,c:'#5ef2a0',y:80},
+      {t:total+' / '+total+' waves cleared',s:25,y:128},{t:runLine,s:22,c:'#8b95cf',y:168},
+      {t:coinLine,b:1,s:30,c:'#ffd166',y:212}]);
+  else if(won===false)setBoard([{t:'BASE LOST',b:1,s:50,c:'#ff5f6d',y:80},
+      {t:'made it to wave '+G.wave+' of '+total,s:25,y:128},{t:runLine,s:22,c:'#8b95cf',y:168},
+      {t:coinLine,b:1,s:30,c:'#ffd166',y:212}]);
   else setBoard([{t:'TOWER DEFENSE',b:1,s:54,y:100},
-      {t:'V1.51  ·  WALK OVER AND PICK',s:28,c:'#8b95cf',y:158}]);
+      {t:'V1.52  ·  WALK OVER AND PICK',s:28,c:'#8b95cf',y:158}]);
   buildPals();
 }
 function toLobby(won){
@@ -2835,7 +3235,8 @@ function resetMatch(){
   G.cash=500;G.hp=G.maxHp;G.wave=0;G.over=false;G.waveActive=false;
   G.queue.length=0;G.warned=false;G.sel=null;G.kills=0;G.earned=0;
   G.ending=false;G.hpMul=1;G.bossWave=false;G.placing=null;
-  G.spawnT=0;G.nextT=0;G.partyT=0;
+  G.spawnT=0;G.nextT=0;G.partyT=0;G.coinsWon=0;G.bossName='';
+  COMMANDERS.length=0;
   $('over').classList.remove('on');
   $('bossBar').classList.remove('on');
   $('party').innerHTML='';
@@ -3220,6 +3621,7 @@ function toMatch(mapKey){
     $('slots').classList.add('on');
     $('log').classList.remove('on');$('loadout').classList.remove('on');
     $('squad').classList.remove('on');clearStation();
+    $('coins').classList.remove('on');
     $('voter').classList.remove('on');
     $('party').classList.toggle('on',PARTY>0);
     spawnTeammates();
@@ -3230,7 +3632,7 @@ function toMatch(mapKey){
 }
 
 /* ---------- map voter (15 seconds, TDS style) ---------- */
-let GRAVE_UNLOCKED=false;
+let GRAVE_UNLOCKED=SAVE.grave;
 const VOTE={grassy:0,forest:0};
 let voting=false,voteT=0,myVote=null,botVotes=[];
 // voteRefresh runs every frame, so only touch the DOM when something moved
@@ -3496,6 +3898,9 @@ function step(dt){
     const r=clamp(e.hp/e.max,0,1);
     e.fg.scale.x=r;e.fg.position.x=-(1-r)/2;
     e.fg.material.color.setHex(r>.5?0x5ef2a0:r>.22?0xffd166:0xff5f6d);
+    // numeric HP, repainted at most ~16x a second and only when it changed
+    e.hpT-=dt;
+    if(e.hpT<=0){e.hpT=.06;drawHp(e);}
     if(e.flash>0){
       e.flash-=dt;
       const c=e.flash>0?0x6b2222:0x000000;
@@ -3516,7 +3921,11 @@ function step(dt){
 
   // hud extras: how many are still coming, and the boss health bar
   let alive=0,bossE=null;
-  for(const e of G.enemies){if(e.dead)continue;alive++;if(e.key==='boss')bossE=e;}
+  // whichever boss is furthest along owns the bar
+  for(const e of G.enemies){
+    if(e.dead)continue;alive++;
+    if(e.d.boss&&(!bossE||e.dist>bossE.dist))bossE=e;
+  }
   if(G.waveActive){
     const left=alive+G.queue.length;
     $('nextV').textContent=left+' zombie'+(left===1?'':'s')+' left';
@@ -3525,10 +3934,13 @@ function step(dt){
     $('bossBar').classList.add('on');
     const br=clamp(bossE.hp/bossE.max,0,1);
     $('bossFill').style.width=(br*100)+'%';
-    $('bossPct').textContent=Math.ceil(br*100)+'%';
+    $('bossPct').textContent=Math.ceil(bossE.hp).toLocaleString()+' / '+bossE.max.toLocaleString();
+    const nm=bossE.d.n.toUpperCase();
+    if($('bossName').textContent!==nm)$('bossName').textContent=nm;
   }else $('bossBar').classList.remove('on');
 
   // towers
+  refreshCommanders();
   for(const t of G.towers)fire(t,dt);
 
   // fx
@@ -3550,12 +3962,22 @@ function updateCamera(dt){
   sun.position.set(player.position.x+24,40,player.position.z+16);
   sunT.position.copy(player.position);sunT.updateMatrixWorld();
 }
+/* Clear a map and it pays its full coin value; lose and you still walk away
+   with half of it, so a bad run is never wasted. */
+function payCoins(won){
+  const full=MAP.coins||500;
+  G.coinsWon=won?full:Math.floor(full/2);
+  SAVE.coins+=G.coinsWon;
+  writeSave();syncCoins();
+  return G.coinsWon;
+}
 function lose(){
   if(G.ending)return;
   G.ending=true;
   G.waveActive=false;G.nextT=0;G.queue.length=0;
   $('bossBar').classList.remove('on');
-  banner('Base lost on wave '+G.wave+' — returning to the lobby');sfx('lose');
+  const c=payCoins(false);
+  banner('Base lost on wave '+G.wave+' — +'+c.toLocaleString()+' coins');sfx('lose');
   setTimeout(()=>toLobby(false),2400);
 }
 function win(){
@@ -3563,10 +3985,11 @@ function win(){
   G.ending=true;
   G.waveActive=false;G.nextT=0;
   if(MAP.key==='grassy'&&!GRAVE_UNLOCKED){
-    GRAVE_UNLOCKED=true;
+    GRAVE_UNLOCKED=true;SAVE.grave=true;writeSave();
     setTimeout(()=>banner('Unlocked: The Grave Digger \u2014 The Forest, 20 waves'),3200);
   }
-  banner('Field secured — teleporting to the lobby');sfx('win');
+  const c=payCoins(true);
+  banner('Field secured — +'+c.toLocaleString()+' coins');sfx('win');
   setTimeout(()=>toLobby(true),2000);
 }
 $('againBtn').onclick=()=>{$('over').classList.remove('on');toLobby(false);};
@@ -3582,7 +4005,7 @@ addEventListener('resize',()=>{
   camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
   renderer.setSize(innerWidth,innerHeight);
 });
-syncHud();tick();
+syncHud();syncCoins();renderLoadout();tick();
 </script>
 </body>
 </html>
