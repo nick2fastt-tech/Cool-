@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Tower Defense V1.63 Beta</title>
+<title>Tower Defense V1.64 Beta</title>
 <style>
 :root{
   --void:#04050c;
@@ -425,7 +425,15 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 
   <div class="sheet pe" id="log">
     <div class="sheetHead"><h2>Update Log</h2><button class="btn sm pe" id="closeLog">Close</button></div>
-    <div class="logV">V1.63 <span>beta</span></div>
+    <div class="logV">V1.64 <span>beta</span></div>
+    <ul class="logL">
+      <li><b>The music actually plays now.</b> There is a build with all twelve songs baked into the HTML itself — one file, nothing beside it, no folder to keep track of</li>
+      <li>The other build hunts for the songs instead of giving up: a <b>music</b> folder, or loose in the same place as the game. Drop everything in Downloads together and it still works</li>
+      <li>Once one song plays the game remembers where they live and goes straight there for the rest</li>
+      <li>The built-in theme tunes are gone. If there is no music the game just runs quiet — no fallback score nobody asked for</li>
+      <li>The "no music files" message only shows up after all twelve have genuinely failed, and it tells you where to put them</li>
+    </ul>
+    <div class="logV">V1.63</div>
     <ul class="logL">
       <li>Six more songs, twelve in all — including Big Wave</li>
       <li>The music player UI is gone. All that is left is the track title at the top of the screen, with notes drifting up out of it</li>
@@ -547,7 +555,7 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
   <div id="title" class="pe">
     <div class="sub">Beta Version</div>
     <h1>Tower<br>Defense</h1>
-    <div class="sub" style="letter-spacing:.5em">V 1.63</div>
+    <div class="sub" style="letter-spacing:.5em">V 1.64</div>
     <ul>
       <li>Clear a map to unlock the next: Grassy Field → The Forest → The Volcano</li>
       <li>Left side of the screen = move · right side = look</li>
@@ -3331,18 +3339,18 @@ const CUSTOM_MUSIC={
   // A whole playlist for the lobby: plays in order, then loops back round.
   // Keep the six files in a "music" folder sitting next to this .html.
   lobby:[
-    {file:'music/01-human-nature.mp3',             title:'Human Nature',              secs:248},
-    {file:'music/02-the-lady-in-my-life.mp3',      title:'The Lady in My Life',       secs:302},
-    {file:'music/03-loving-you.mp3',               title:'Loving You',                secs:197},
-    {file:'music/04-for-all-time.mp3',             title:'For All Time',              secs:244},
-    {file:'music/05-someone-put-your-hand-out.mp3',title:'Someone Put Your Hand Out', secs:326},
-    {file:'music/06-will-you-be-there.mp3',        title:'Will You Be There',         secs:351},
-    {file:'music/07-big-wave.mp3',                 title:'Big Wave \u2014 Nick',           secs:141},
-    {file:'music/08-ddg-yea-i-kno.mp3',            title:'Yea I Kno \u2014 DDG',           secs:133},
-    {file:'music/09-ddg-i-hate-moo.mp3',           title:'I Hate Moo \u2014 DDG',          secs:150},
-    {file:'music/10-raud-no.mp3',                  title:'No \u2014 RAUD',                 secs:117},
-    {file:'music/11-chris-brown-poppin.mp3',       title:'Poppin \u2014 Chris Brown',      secs:266},
-    {file:'music/12-diva.mp3',                     title:'Diva',                      secs:160}
+    {file:'01-human-nature.mp3',             title:'Human Nature',              secs:248},
+    {file:'02-the-lady-in-my-life.mp3',      title:'The Lady in My Life',       secs:302},
+    {file:'03-loving-you.mp3',               title:'Loving You',                secs:197},
+    {file:'04-for-all-time.mp3',             title:'For All Time',              secs:244},
+    {file:'05-someone-put-your-hand-out.mp3',title:'Someone Put Your Hand Out', secs:326},
+    {file:'06-will-you-be-there.mp3',        title:'Will You Be There',         secs:351},
+    {file:'07-big-wave.mp3',                 title:'Big Wave \u2014 Nick',           secs:141},
+    {file:'08-ddg-yea-i-kno.mp3',            title:'Yea I Kno \u2014 DDG',           secs:133},
+    {file:'09-ddg-i-hate-moo.mp3',           title:'I Hate Moo \u2014 DDG',          secs:150},
+    {file:'10-raud-no.mp3',                  title:'No \u2014 RAUD',                 secs:117},
+    {file:'11-chris-brown-poppin.mp3',       title:'Poppin \u2014 Chris Brown',      secs:266},
+    {file:'12-diva.mp3',                     title:'Diva',                      secs:160}
   ],
   // Screens left null play the built-in synth score. Put a single filename
   // here (or another playlist array) to use your own music for a map too.
@@ -3351,9 +3359,29 @@ const CUSTOM_MUSIC={
   volcanic:null
 };
 
+/* Where the audio actually lives. Tried in order, so the songs work whether
+   they sit in a "music" folder or loose in the same folder as this page —
+   which is what you get when everything lands in Downloads together.
+   MUSIC_DATA is set by a small block at the top of the bundled build, where the
+   songs are baked into the file itself; when it has the track it wins outright,
+   because then there is nothing to go looking for. */
+const MUSIC_PATHS=['music/','','./'];
+window.MUSIC_DATA=window.MUSIC_DATA||{};
+function trackSources(name){
+  if(window.MUSIC_DATA[name])return [window.MUSIC_DATA[name]];
+  /* Once one song has played we know which folder they are all in, so try that
+     one first — otherwise every track re-runs the same doomed guesses. */
+  const p=MUSIC_PATHS.slice();
+  if(MUSIC.found!==null&&MUSIC.found!==undefined){
+    const i=p.indexOf(MUSIC.found);
+    if(i>0){p.splice(i,1);p.unshift(MUSIC.found);}
+  }
+  return p.map(pre=>pre+name);
+}
 const NOTE=n=>440*Math.pow(2,(n-69)/12);
 const MUSIC={on:true,vol:.55,key:null,step:0,next:0,timer:null,boss:false,
-             el:null,list:null,single:false,idx:0,resume:null,lastSrc:null,warned:false,fails:0};
+             el:null,list:null,single:false,idx:0,resume:null,lastSrc:null,warned:false,fails:0,
+             found:null};
 
 /* Four original pieces. Chords are one bar each; the sequencer walks 16 steps
    per bar. Everything here is written for this game — none of it is anyone
@@ -3440,7 +3468,12 @@ function mNoise(t,dur,gain,freq,q,type){
 }
 
 /* ---- the sequencer ---- */
+/* The built-in synth score is switched off. The songs are the soundtrack now;
+   if they cannot be found the game just runs quiet rather than falling back to
+   a theme tune nobody asked for. Flip SYNTH_SCORE to true to bring it back. */
+const SYNTH_SCORE=false;
 function musicTick(){
+  if(!SYNTH_SCORE)return;
   if(!AC||!MUSIC.on||MUSIC.el||MUSIC.list)return;
   const T=TRACKS[MUSIC.key];
   if(!T)return;
@@ -3504,13 +3537,20 @@ function setMusic(key){
   MUSIC.idx=Math.min(r.idx,MUSIC.list.length-1);
   playTrack(MUSIC.idx,r.at);
 }
-function playTrack(i,at){
+function playTrack(i,at,srcIdx){
   const list=MUSIC.list;
   if(!list||!list.length)return;
   MUSIC.idx=((i%list.length)+list.length)%list.length;
   const tr=list[MUSIC.idx];
+  const srcs=trackSources(tr.file);
+  const si=srcIdx||0;
+  if(si>=srcs.length){          // nowhere left to look for this one
+    MUSIC.el=null;
+    trackFailed();
+    return;
+  }
   if(MUSIC.el){MUSIC.el.pause();MUSIC.el.src='';MUSIC.el=null;}
-  const el=new Audio(tr.file);
+  const el=new Audio(srcs[si]);
   el.loop=!!MUSIC.single;
   el.volume=clamp(VOL*.8*MUSIC.vol,0,1);
   el.preload='auto';
@@ -3530,25 +3570,34 @@ function playTrack(i,at){
   });
   el.addEventListener('error',()=>{
     if(MUSIC.el!==el)return;
-    // one bad track shouldn't take the playlist down with it — step over it and
-    // only give up on the whole thing once every track has failed
-    MUSIC.fails++;
-    if(MUSIC.fails>=list.length){
-      if(!MUSIC.warned){
-        MUSIC.warned=true;
-        banner('Music files not found — using the built-in score');
-      }
-      MUSIC.list=null;MUSIC.el=null;npSync();
-      return;
-    }
+    // not there under this name — try the next place the file could live
+    // before writing the track off entirely
     MUSIC.el=null;
-    playTrack(MUSIC.idx+1,0);
+    playTrack(MUSIC.idx,at,si+1);
   });
-  // a track that actually starts clears the failure run
-  el.addEventListener('playing',()=>{if(MUSIC.el===el)MUSIC.fails=0;});
+  // a track that actually starts means the whole folder is fine
+  el.addEventListener('playing',()=>{
+    if(MUSIC.el!==el)return;
+    MUSIC.fails=0;
+    const pre=srcs[si].slice(0,srcs[si].lastIndexOf('/')+1);
+    if(MUSIC_PATHS.indexOf(pre)>=0)MUSIC.found=pre;   // ignore blob: urls from the bundled build
+  });
   MUSIC.el=el;
   if(MUSIC.on&&!document.hidden)el.play().catch(()=>{});
   npSync();
+}
+/* A track that could not be found anywhere. Step over it; only complain once
+   every single one has failed, and then say something useful. */
+function trackFailed(){
+  const list=MUSIC.list;
+  if(!list)return;
+  MUSIC.fails++;
+  if(MUSIC.fails<list.length){playTrack(MUSIC.idx+1,0);return;}
+  if(!MUSIC.warned){
+    MUSIC.warned=true;
+    banner('No music files found \u2014 put the 12 songs beside this page, or in a folder called music');
+  }
+  MUSIC.list=null;MUSIC.el=null;npSync();
 }
 /* no on-screen controls any more; M skips a track on a keyboard */
 function musicSkip(d){
@@ -3832,7 +3881,7 @@ const lobbyNPCs=[];
   // screen on the far wall
   boardMesh=new THREE.Mesh(new THREE.PlaneGeometry(12,6),
     new THREE.MeshBasicMaterial({map:signTex([
-      {t:'TOWER DEFENSE',b:1,s:54,y:100},{t:'BETA  ·  V1.63  ·  8 TOWERS  ·  3 MAPS',s:24,c:'#8b95cf',y:158}])}));
+      {t:'TOWER DEFENSE',b:1,s:54,y:100},{t:'BETA  ·  V1.64  ·  8 TOWERS  ·  3 MAPS',s:24,c:'#8b95cf',y:158}])}));
   // the bezel is .35 deep, so its front face sits at -D+.195 — the screen has
   // to clear that or the frame swallows it
   boardMesh.position.set(0,4.8,-D+.42);lobby.add(boardMesh);
@@ -3962,7 +4011,7 @@ const lobbyNPCs=[];
   {
     const st=stationAt('log'),g=new THREE.Group();
     const board=new THREE.Mesh(new THREE.PlaneGeometry(4.6,2.6),
-      new THREE.MeshBasicMaterial({map:signTex([{t:'UPDATE LOG',b:1,s:56,y:110},{t:'V1.63 BETA',s:36,c:'#5ef2a0',y:180}])}));
+      new THREE.MeshBasicMaterial({map:signTex([{t:'UPDATE LOG',b:1,s:56,y:110},{t:'V1.64 BETA',s:36,c:'#5ef2a0',y:180}])}));
     board.position.set(0,2.5,.13);g.add(board);
     const back=new THREE.Mesh(new THREE.BoxGeometry(5,3,.22),M(0x232a4e));
     back.position.set(0,2.5,0);back.castShadow=true;g.add(back);
@@ -4092,7 +4141,7 @@ function enterLobby(won){
       {t:'made it to wave '+G.wave+' of '+total,s:25,y:128},{t:runLine,s:22,c:'#8b95cf',y:168},
       {t:coinLine,b:1,s:30,c:'#ffd166',y:212}]);
   else setBoard([{t:'TOWER DEFENSE',b:1,s:54,y:100},
-      {t:'BETA V1.63  ·  PRESS PLAY OR WALK OVER',s:23,c:'#8b95cf',y:158}]);
+      {t:'BETA V1.64  ·  PRESS PLAY OR WALK OVER',s:23,c:'#8b95cf',y:158}]);
   buildPals();
 }
 function toLobby(won){
