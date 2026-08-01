@@ -20,7 +20,7 @@
   #video{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#000;}
   #frame{position:relative;overflow:hidden;}
   canvas#c{width:100%;height:100%;display:block;}
-  .bar{position:absolute;left:0;right:0;height:9%;background:#000;z-index:2;pointer-events:none;}
+  .bar{position:absolute;left:0;right:0;height:9%;background:#000;z-index:5;pointer-events:none;}
   .bar.top{top:0;} .bar.bottom{bottom:0;}
   #card{position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;align-items:center;
         justify-content:center;text-align:center;opacity:0;pointer-events:none;
@@ -39,6 +39,18 @@
     text-shadow:0 0 5px #000,0 0 12px rgba(0,0,0,.85),0 2px 4px rgba(0,0,0,.95);}
   #caption.vo{font-style:italic;}
   #player.nocc #caption{display:none;}
+
+  #credits{position:absolute;left:50%;transform:translateX(-50%);width:min(90%,760px);
+    z-index:4;display:none;text-align:center;font-family:var(--ui);color:#e8e4dc;
+    line-height:1.5;pointer-events:none;}
+  #credits.on{display:block;}
+  #credits .ct{font-family:"Times New Roman",Times,serif;font-size:clamp(24px,4.4vw,54px);
+    letter-spacing:.34em;text-indent:.34em;margin-bottom:1.6em;color:#ded8cd;}
+  #credits h4{font-size:clamp(10px,1.35vw,14px);letter-spacing:.42em;text-indent:.42em;
+    color:#8a857d;font-weight:400;margin:2.4em 0 .7em;}
+  #credits p{font-size:clamp(13px,1.9vw,21px);margin:.18em 0;font-weight:500;}
+  #credits p span{color:#9a958d;font-weight:400;}
+  #credits .fine{font-size:clamp(10px,1.35vw,13px);color:#7d7870;margin-top:.4em;font-weight:400;}
   #player:not(.idle) #caption{bottom:26%;}
   #player.paused #caption{opacity:0;}
 
@@ -201,6 +213,41 @@
       <div class="bar bottom"></div>
       <div id="card"></div>
       <div id="caption"></div>
+      <div id="credits">
+        <div class="ct">THE LAST HALLWAY</div>
+        <h4>CAST</h4>
+        <p>TRAVIS <span>a boy who sleeps badly</span></p>
+        <p>GERALD <span>his father</span></p>
+        <p>ALINA <span>the manager's daughter</span></p>
+        <p>DEVON <span>fourteen, and taller than everyone</span></p>
+        <p>RALPH <span>who opened the box</span></p>
+        <p>LARRY <span>who was right, and was laughed at</span></p>
+        <p>DR. NOOR <span>who had ninety seconds</span></p>
+        <p>THE MANAGER <span>who forgets his card</span></p>
+        <p>THE FIGURE <span>at the end of the hallway</span></p>
+        <h4>AND</h4>
+        <p>THE RABBIT <span>as herself</span></p>
+        <h4>VOICES</h4>
+        <p>Speech synthesised in the browser</p>
+        <p class="fine">Every line is spoken live at playback. No audio was recorded or shipped.</p>
+        <h4>PHOTOGRAPHED IN</h4>
+        <p>Signed distance fields</p>
+        <p class="fine">Every frame raymarched from maths. No models, no textures, no meshes.</p>
+        <h4>SETS</h4>
+        <p>Sublevel corridor &middot; a bedroom &middot; a landing &middot; a bus stop</p>
+        <p>Experimental.Co &middot; the lobby &middot; the lift &middot; a laundry room</p>
+        <p>A bathroom &middot; the lab &middot; a fourth floor office &middot; a bodega</p>
+        <p>A park &middot; a bus &middot; a cinema &middot; and the hallway again</p>
+        <h4>SCORE</h4>
+        <p>Synthesised at runtime</p>
+        <p class="fine">Drones, alarm clocks, lift muzak, birdsong, a heartbeat that keeps up with the cutting.</p>
+        <h4>RENDERED BY</h4>
+        <p>WebGL2, in one file</p>
+        <p class="fine">No engine, no framework, no network. Open it anywhere.</p>
+        <h4>WITH THANKS</h4>
+        <p>To whoever left the box open</p>
+        <div class="ct" style="margin-top:2.2em;font-size:clamp(16px,2.6vw,30px)">TO BE CONTINUED</div>
+      </div>
     </div>
   </div>
 
@@ -226,7 +273,7 @@
   <div id="poster">
     <div class="mark">TLH</div>
     <div class="name">THE LAST HALLWAY</div>
-    <div class="meta">FEATURE &nbsp;&bull;&nbsp; 25 min 20 sec &nbsp;&bull;&nbsp; HORROR</div>
+    <div class="meta">FEATURE &nbsp;&bull;&nbsp; 1 hr 20 min &nbsp;&bull;&nbsp; HORROR</div>
     <button class="big" id="bigplay"><svg viewBox="0 0 24 24"><path d="M5 3.5 20 12 5 20.5z"/></svg>Play</button>
   </div>
 
@@ -991,6 +1038,49 @@ vec2 setBusIn(vec3 p){
   return r;
 }
 
+/* ---------------- 17 : the cinema ---------------- */
+vec2 setCinema(vec3 p){
+  vec2 r = vec2(-sdBox(p - vec3(0.0,2.4,0.0), vec3(6.0,2.4,9.0)), M_DARK);
+  if(p.y < 0.04) r.y = M_DARK;
+  // the screen, and everything it lights
+  r = opU(r, vec2(sdBox(p - vec3(0.0,2.5,8.9), vec3(5.2,2.0,0.06)), M_GLOW));
+  // rows of seats, stepped up toward the back
+  vec3 s2 = p; s2.z = mod(s2.z + 0.55, 1.1) - 0.55;
+  float row = floor((p.z + 0.55)/1.1);
+  float lift = clamp(-row*0.16, 0.0, 2.2);
+  vec3 st = s2 - vec3(0.0, lift, 0.0);
+  vec3 sx = st; sx.x = mod(sx.x + 0.42, 0.84) - 0.42;
+  r = opU(r, vec2(sdRound(sx - vec3(0.0,0.46,0.0), vec3(0.34,0.05,0.24), 0.04), M_RED));
+  r = opU(r, vec2(sdRound(sx - vec3(0.0,0.80,-0.24), vec3(0.34,0.32,0.06), 0.05), M_RED));
+  // step fronts
+  r = opU(r, vec2(sdBox(st - vec3(0.0,-0.08,0.55), vec3(6.0,0.10,0.06)), M_DARK));
+  // aisle lights
+  vec3 al = p; al.x = abs(al.x); al.z = mod(al.z + 1.1, 2.2) - 1.1;
+  r = opU(r, vec2(length(al.xz - vec2(4.6,0.0)) - 0.05 + max(0.0, p.y-0.14), M_RED));
+  return r;
+}
+
+/* ---------------- 18 : the corridor, after ---------------- */
+vec2 setRuin(vec3 p){
+  float fl = p.y;
+  float ce = 3.05 - p.y;
+  float wl = 2.05 - p.x;
+  float wr = p.x + 2.05;
+  vec2 r = vec2(min(min(fl, ce), min(wl, wr)), M_WALL);
+  if(p.y < 0.05) r.y = M_TILE;
+  vec3 q = p; q.z = mod(p.z + 4.0, 8.0) - 4.0;
+  float alc = -sdBox(q - vec3(0.0, 1.02, 0.0), vec3(2.55, 1.02, 0.6));
+  r.x = max(r.x, alc);
+  // emergency strip, hanging fittings, fallen panels
+  vec3 c = p; c.z = mod(c.z + 3.0, 6.0) - 3.0;
+  r = opU(r, vec2(max(sdBox(c - vec3(0.0,2.98,0.0), vec3(0.36,0.05,0.5)),
+                      sdBox(p - vec3(0.0,2.9,0.0), vec3(1.2,0.4,1e4))), M_RED));
+  vec3 d = p; d.z = mod(p.z + 9.0, 18.0) - 9.0;
+  r = opU(r, vec2(sdRound(d - vec3(1.2,0.06,0.0), vec3(0.7,0.05,0.5), 0.03), M_METAL));
+  r = opU(r, vec2(sdCap(d, vec3(-1.0,3.0,1.6), vec3(-0.7,2.1,1.9), 0.03), M_METAL));
+  return r;
+}
+
 vec2 mapNew(vec3 p){
   vec2 r;
   if(uSet == 2) r = setBedroom(p);
@@ -1007,6 +1097,8 @@ vec2 mapNew(vec3 p){
   else if(uSet == 14) r = setBodega(p);
   else if(uSet == 15) r = setPark(p);
   else if(uSet == 16) r = setBusIn(p);
+  else if(uSet == 17) r = setCinema(p);
+  else if(uSet == 18) r = setRuin(p);
   else r = vec2(1e9, 0.0);
   r = opU(r, people(p));
   if(uFigVis > 0.5 && uSet >= 2) r = opU(r, vec2(figure(p), 5.0));
@@ -1210,7 +1302,8 @@ float emissiveOf(float m, vec3 p, out vec3 ec){
 vec3 renderNew(vec3 ro, vec3 rd){
   float t = 0.02, m = 0.0;
   bool hit = false;
-  float far = (uSet == 4 || uSet == 5 || uSet == 15) ? 92.0 : (uSet == 9 ? 30.0 : 24.0);
+  float far = (uSet == 4 || uSet == 5 || uSet == 15) ? 92.0 :
+              ((uSet == 9 || uSet == 17 || uSet == 18) ? 46.0 : 24.0);
   for(int i=0;i<76;i++){
     vec3 p = ro + rd*t;
     vec2 h = mapNew(p);
@@ -1457,7 +1550,8 @@ function flickerCurve(t, speed, depth){
 
 /* ---------------- the shot list ---------------- */
 // Camera lives at y ~1.55 in a corridor running along +z.
-const RUNTIME = 1520;
+const RUNTIME = 4823;
+const CREDITS_AT = 4703;
 const state = {
   cam:[0,1.55,0], tgt:[0,1.5,6], roll:0, fov:1.5,
   light:0.9, lamp:0.0, figZ:0, figVis:0, mode:0, mouth:0,
@@ -1602,6 +1696,8 @@ const ROLE = {
              pants:[0.08,0.09,0.14], kind:3, scale:1.02, v:{pitch:0.78,rate:0.94,sex:'m'} },
   OLDLADY: { name:'WOMAN', skin:[0.66,0.52,0.42], hair:[0.72,0.72,0.70], shirt:[0.36,0.20,0.33],
              pants:[0.14,0.13,0.16], kind:2, scale:0.82, v:{pitch:1.30,rate:0.88,sex:'f'} },
+  FIGURE:  { name:'THE FIGURE', skin:[0.03,0.03,0.03], hair:[0.02,0.02,0.02], shirt:[0.03,0.03,0.03],
+             pants:[0.03,0.03,0.03], kind:1, scale:1.15, v:{pitch:0.42,rate:0.80,sex:'m'} },
   DEVON:   { name:'DEVON', skin:[0.42,0.28,0.19], hair:[0.045,0.035,0.030], shirt:[0.20,0.42,0.26],
              pants:[0.12,0.13,0.17], kind:0, scale:1.06, v:{pitch:0.98,rate:1.06,sex:'m'} },
   STRANGER:{ name:'MAN', skin:[0.45,0.32,0.24], hair:[0.06,0.05,0.05], shirt:[0.26,0.33,0.25],
@@ -2793,7 +2889,7 @@ function directAct5(t){
   }
 
   /* ---- 24:00 Gerald, on the bus, writing it all down ---- */
-  if(t < 1512){
+  {
     s.set = 16; setLight(L_BUSIN);
     const g = put(0, 'GERALD', -0.78, 0.02, 0.30, 1.5708);
     g.sit = 1;
@@ -2809,12 +2905,571 @@ function directAct5(t){
       const k = sstep(1488, 1512, t);
       cam(lerp(0.55,0.95,k), lerp(1.28,1.52,k), lerp(-1.1,-2.4,k), -0.60, 1.14, 0.30, lerp(1.7,1.35,k));
     }
-    if(t > 1504) s.clean = 0, s.glitch = 0.02 + 0.30*sstep(1504, 1512, t);
-    s.fade = sstep(1440.2, 1441.2, t) * (1 - sstep(1511.2, 1512.0, t));
+    if(t > 1508) s.clean = 0, s.glitch = 0.02 + 0.20*sstep(1508, 1518, t);
+    s.fade = sstep(1440.2, 1441.2, t) * (1 - sstep(1517.0, 1520.0, t));
     return;
   }
 
-  /* ---- 25:12 ---- */
+}
+
+/* ================= acts six to twelve =================
+   The threads laid down earlier - the cure, the rabbit, the figure in the
+   corridor, and Larry's joke about fighting it in your dream - all come due. */
+
+const LINES6 = [
+  // ---- the cinema
+  { t:1546, who:'GERALD', s:"Two tickets for the graveyard one. And the large pizza." },
+  { t:1553, who:'TRAVIS', s:"Dad. You actually got the large." },
+  { t:1557, who:'GERALD', s:"I said as much as you want. I meant it." },
+  { t:1585, who:'TRAVIS', s:"Dad, can I tell you something weird?" },
+  { t:1590, who:'GERALD', s:"You can tell me anything." },
+  { t:1594, who:'TRAVIS', s:"In the laundry room today. Something picked me up." },
+  { t:1601, who:'TRAVIS', s:"Off the floor. My whole body." },
+  { t:1606, who:'GERALD', s:"Travis." },
+  { t:1610, who:'GERALD', s:"You didn't sleep. You've been dreaming about that hallway all week." },
+  { t:1618, who:'TRAVIS', s:"Yeah. Maybe." },
+  { t:1623, who:'GERALD', s:"Eat your pizza. Watch the movie." },
+  { t:1660, who:'TRAVIS', s:"Dad, that's the hallway." },
+  { t:1665, who:'GERALD', s:"That's a graveyard, buddy." },
+  { t:1670, who:'TRAVIS', s:"No. On the screen. That's my hallway." },
+  { t:1740, who:'GERALD', s:"Okay. That was not worth the large pizza." },
+  { t:1745, who:'TRAVIS', s:"It was worth the large pizza." },
+  // ---- the call back
+  { t:1772, who:'GERALD', s:"Hello? Ralph, it's nine at night." },
+  { t:1780, who:'GERALD', s:"What do you mean it's awake?" },
+  { t:1787, who:'GERALD', s:"It's a rabbit, Ralph." },
+  { t:1794, who:'GERALD', s:"Okay. Okay, I'm coming in." },
+  { t:1802, who:'TRAVIS', s:"You're going back?" },
+  { t:1806, who:'GERALD', s:"An hour. Two at most. Lock the door behind me." },
+  { t:1812, who:'TRAVIS', s:"Dad." },
+  { t:1816, who:'GERALD', s:"Two hours, Travis." },
+  // ---- the dream, sharper now
+  { t:1912, who:'FIGURE', s:"You left the box open.", vo:true },
+  { t:1930, who:'FIGURE', s:"I have been waiting in here since you were small.", vo:true },
+  { t:1948, who:'FIGURE', s:"Now there is a door.", vo:true },
+  { t:1962, who:'TRAVIS', s:"Who are you?" },
+  { t:1968, who:'FIGURE', s:"Ask your father what they cured.", vo:true },
+
+  // ---- morning
+  { t:2002, who:'TRAVIS', s:"Dad?" },
+  { t:2012, who:'TRAVIS', s:"Dad, I'm up. You home?" },
+  { t:2030, who:'TRAVIS', s:"He never came back." },
+  { t:2062, who:'ALINA',  s:"Travis? It's seven in the morning." },
+  { t:2068, who:'TRAVIS', s:"My dad didn't come home." },
+  { t:2073, who:'ALINA',  s:"Okay. Okay, where are you?" },
+  { t:2078, who:'TRAVIS', s:"The park. Can you get to the building?" },
+  { t:2084, who:'ALINA',  s:"My dad didn't come home either." },
+  // ---- the cordon
+  { t:2168, who:'ALINA',  s:"They taped the whole block." },
+  { t:2174, who:'TRAVIS', s:"There's nobody guarding it." },
+  { t:2179, who:'ALINA',  s:"That's worse. That's so much worse." },
+  { t:2190, who:'TRAVIS', s:"Every light in there is on. At seven in the morning." },
+  { t:2262, who:'ALINA',  s:"I have my dad's card. He forgets it every other day." },
+  { t:2270, who:'TRAVIS', s:"Alina, you don't have to come in." },
+  { t:2276, who:'ALINA',  s:"My father is in there. Don't say that to me again." },
+  { t:2285, who:'TRAVIS', s:"Okay." },
+  { t:2356, who:'ALINA',  s:"The desk is on its side." },
+  { t:2362, who:'TRAVIS', s:"Don't look at the floor." },
+  { t:2368, who:'ALINA',  s:"I already looked at the floor." },
+
+  // ---- the lab
+  { t:2462, who:'LARRY',  s:"Kid? Is that the kid?" },
+  { t:2468, who:'TRAVIS', s:"Larry. Larry, where's my dad?" },
+  { t:2474, who:'LARRY',  s:"He's alive. He's alive, he's on four, he locked himself in." },
+  { t:2483, who:'ALINA',  s:"What happened here?" },
+  { t:2488, who:'LARRY',  s:"The cure worked." },
+  { t:2493, who:'LARRY',  s:"That's the part nobody wants to hear. It worked." },
+  { t:2500, who:'LARRY',  s:"The rabies went. Everything else about her went too." },
+  { t:2508, who:'LARRY',  s:"She was still moving. She's still moving now." },
+  { t:2516, who:'TRAVIS', s:"The rabbit." },
+  { t:2521, who:'LARRY',  s:"Ralph opened the box. He wanted to check her heart." },
+  { t:2530, who:'LARRY',  s:"Watch your language, genius. That's what your dad said to me." },
+  { t:2538, who:'LARRY',  s:"I keep thinking about that. Isn't that stupid." },
+  { t:2562, who:'ALINA',  s:"Where's Ralph now?" },
+  { t:2568, who:'LARRY',  s:"Down. He went down and he didn't come back up." },
+  { t:2600, who:'NOOR',   s:"Don't move. Don't move, don't move." },
+  { t:2608, who:'NOOR',   s:"Oh, thank god. You have faces." },
+  { t:2615, who:'TRAVIS', s:"What does that mean?" },
+  { t:2620, who:'NOOR',   s:"You'll know when you see one that doesn't." },
+  { t:2690, who:'GERALD', s:"Travis?" },
+  { t:2696, who:'GERALD', s:"Travis, no. No, no, you are not in this building." },
+  { t:2704, who:'TRAVIS', s:"Open the door, dad." },
+  { t:2710, who:'GERALD', s:"I can't. The magnet's dead, it locked when the power dropped." },
+  { t:2720, who:'GERALD', s:"Are you hurt? Is Alina with you?" },
+  { t:2726, who:'ALINA',  s:"I'm here, Mister Gerald." },
+  { t:2732, who:'GERALD', s:"Okay. Okay. Good girl. Stay with him." },
+  { t:2810, who:'NOOR',   s:"The lights just went on four." },
+  { t:2818, who:'TRAVIS', s:"That's not a person." },
+  { t:2824, who:'NOOR',   s:"No. It isn't." },
+
+  // ---- run
+  { t:2932, who:'ALINA',  s:"Stairs. Stairs, stairs, stairs!" },
+  { t:2960, who:'TRAVIS', s:"It's the hallway. It's my hallway, Alina, it's exactly it." },
+  { t:2970, who:'ALINA',  s:"Then you know where it ends. Which way?" },
+  { t:2977, who:'TRAVIS', s:"Left. It's always left." },
+  { t:3060, who:'NOOR',   s:"In here. In, in, in!" },
+  { t:3090, who:'ALINA',  s:"Where's Larry?" },
+  { t:3096, who:'NOOR',   s:"Larry stayed on the door." },
+  { t:3102, who:'ALINA',  s:"Doctor Noor. Where is Larry." },
+  { t:3110, who:'NOOR',   s:"He stayed on the door." },
+  { t:3190, who:'TRAVIS', s:"It isn't chasing us." },
+  { t:3196, who:'NOOR',   s:"No." },
+  { t:3200, who:'TRAVIS', s:"It's herding us." },
+  { t:3290, who:'FIGURE', s:"Closer.", vo:true },
+  { t:3310, who:'FIGURE', s:"You always run left.", vo:true },
+
+  // ---- the plan
+  { t:3410, who:'NOOR',   s:"It didn't come out of the rabbit. It came in through her." },
+  { t:3420, who:'NOOR',   s:"We cleared a body out. We made a room with nobody in it." },
+  { t:3430, who:'TRAVIS', s:"And it moved in." },
+  { t:3436, who:'NOOR',   s:"And it moved in." },
+  { t:3444, who:'ALINA',  s:"So how do you evict something like that?" },
+  { t:3452, who:'NOOR',   s:"It has one address. It sleeps in him." },
+  { t:3460, who:'NOOR',   s:"It has been in his head since he was small. He told us that himself." },
+  { t:3470, who:'TRAVIS', s:"The hallway." },
+  { t:3478, who:'NOOR',   s:"I can put you under in ninety seconds. Same compound." },
+  { t:3486, who:'ALINA',  s:"No. Absolutely not." },
+  { t:3492, who:'NOOR',   s:"I know how that sounds." },
+  { t:3498, who:'ALINA',  s:"It sounds like the stupidest thing a scientist ever said out loud." },
+  { t:3506, who:'TRAVIS', s:"Larry said it first." },
+  { t:3512, who:'TRAVIS', s:"He said fight it in your dream. Everyone laughed." },
+  { t:3522, who:'NOOR',   s:"Yes. Everyone laughed." },
+  { t:3560, who:'GERALD', s:"Travis. Travis, listen to me." },
+  { t:3568, who:'TRAVIS', s:"You can hear me now?" },
+  { t:3573, who:'GERALD', s:"The vent carries. I heard all of it." },
+  { t:3580, who:'GERALD', s:"You are fourteen years old." },
+  { t:3586, who:'TRAVIS', s:"You said forget about the test. Today we have fun." },
+  { t:3594, who:'GERALD', s:"That is not funny." },
+  { t:3599, who:'TRAVIS', s:"It's a little bit funny." },
+  { t:3606, who:'GERALD', s:"Yeah." },
+  { t:3612, who:'GERALD', s:"Yeah, it's a little bit funny." },
+  { t:3700, who:'ALINA',  s:"I'll be right here. The whole time." },
+  { t:3708, who:'TRAVIS', s:"If it takes too long, you leave." },
+  { t:3714, who:'ALINA',  s:"No." },
+  { t:3718, who:'TRAVIS', s:"Alina." },
+  { t:3722, who:'ALINA',  s:"I said no. Go to sleep, Travis." },
+  { t:3790, who:'NOOR',   s:"Count back from ten for me." },
+  { t:3796, who:'TRAVIS', s:"Ten. Nine." },
+  { t:3806, who:'TRAVIS', s:"Eight." },
+
+  // ---- the dream
+  { t:3900, who:'FIGURE', s:"You came in on your own.", vo:true },
+  { t:3914, who:'FIGURE', s:"Nobody has ever done that.", vo:true },
+  { t:3930, who:'TRAVIS', s:"I know how this hallway works." },
+  { t:3938, who:'TRAVIS', s:"The lights go out and you're closer. That's the whole trick." },
+  { t:3950, who:'FIGURE', s:"It has always been enough.", vo:true },
+  { t:3990, who:'TRAVIS', s:"You only move when I'm not looking." },
+  { t:4010, who:'FIGURE', s:"Then do not blink.", vo:true },
+  { t:4090, who:'FIGURE', s:"You will get tired. Everything gets tired.", vo:true },
+  { t:4120, who:'TRAVIS', s:"I have a whole hallway of practice." },
+  { t:4180, who:'TRAVIS', s:"This is my dream." },
+  { t:4190, who:'TRAVIS', s:"Not the building. Not the rabbit. Mine." },
+  { t:4200, who:'FIGURE', s:"Stop.", vo:true },
+  { t:4210, who:'TRAVIS', s:"Lights on." },
+  { t:4260, who:'FIGURE', s:"Wait-", vo:true },
+  { t:4272, who:'TRAVIS', s:"Get out of my head." },
+
+  // ---- after
+  { t:4372, who:'ALINA',  s:"Travis. Travis." },
+  { t:4380, who:'TRAVIS', s:"Did it work?" },
+  { t:4386, who:'ALINA',  s:"The lights came on." },
+  { t:4392, who:'ALINA',  s:"Every light in the building came on at once." },
+  { t:4402, who:'NOOR',   s:"His heart rate dropped through the floor and came back." },
+  { t:4410, who:'NOOR',   s:"I have no idea what to write in the report." },
+  { t:4418, who:'TRAVIS', s:"Say the kid slept badly." },
+  { t:4450, who:'GERALD', s:"Travis!" },
+  { t:4458, who:'TRAVIS', s:"Hey dad." },
+  { t:4462, who:'GERALD', s:"Hey dad? Hey dad?" },
+  { t:4470, who:'GERALD', s:"You are grounded until you are forty." },
+  { t:4478, who:'TRAVIS', s:"Okay." },
+  { t:4484, who:'GERALD', s:"And then we're getting pizza." },
+  { t:4492, who:'TRAVIS', s:"Okay." },
+  { t:4530, who:'ALINA',  s:"Dad. Dad, it's me." },
+  { t:4540, who:'MANAGER',s:"Alina. Alina, I told you to stay home." },
+  { t:4548, who:'ALINA',  s:"You forgot your card again." },
+  { t:4600, who:'GERALD', s:"They'll shut the whole programme down." },
+  { t:4606, who:'NOOR',   s:"They'll rename it and start again in March." },
+  { t:4614, who:'GERALD', s:"Yeah." },
+  { t:4620, who:'GERALD', s:"Yeah, I know." },
+  { t:4660, who:'TRAVIS', s:"Dad. Where's the rabbit?" }
+];
+
+const L_NIGHT  = { key:[-0.30,0.55,-0.75], keyC:[0.42,0.46,0.72], ambS:[0.20,0.24,0.38],
+                   ambG:[0.06,0.06,0.08], sky1:[0.10,0.12,0.20], sky2:[0.03,0.04,0.09],
+                   fogK:0.010, glow:1.6, expo:1.0 };
+const L_CINEMA = { key:[0.0,0.10,0.99], keyC:[1.05,1.02,1.10], ambS:[0.16,0.17,0.22],
+                   ambG:[0.05,0.05,0.06], sky1:[0.02,0.02,0.03], fogK:0.012, glow:2.2, expo:1.0 };
+const L_EMERG  = { key:[0.0,0.94,0.20], keyC:[1.15,0.44,0.34], ambS:[0.52,0.30,0.29],
+                   ambG:[0.17,0.11,0.11], sky1:[0.07,0.028,0.028], fogK:0.016, glow:2.6, expo:1.0 };
+const L_DREAM  = { key:[0.0,1.0,0.0], keyC:[0.0,0.0,0.0], ambS:[0.05,0.05,0.06],
+                   ambG:[0.02,0.02,0.02], sky1:[0.006,0.006,0.010], fogK:0.070, glow:1.2, expo:1.0 };
+
+/* pick a camera out of a table: [untilTime, cx,cy,cz, tx,ty,tz, fov] */
+function shots(t, list){
+  let s = list[list.length-1];
+  for(const q of list) if(t < q[0]){ s = q; break; }
+  cam(s[1], s[2], s[3], s[4], s[5], s[6], s[7]);
+}
+function pace(t, t0, t1, a, b){ return lerp(a, b, sstep(t0, t1, t)); }
+
+function directFinal(t){
+  const s = state;
+  s.light = 0; s.lamp = 0; s.figVis = 0; s.mode = 0; s.glitch = 0.02;
+  s.fade = 1; s.red = 0; s.flash = 0; s.roll = 0; s.fov = 1.5;
+  s.alarm = 0; s.door = 0; s.prop = [0,0,0,0]; s.clean = 0;
+  clearCast();
+  const fadeIn = (a) => sstep(a + 0.2, a + 1.2, t);
+
+  /* ---- 25:20 outside the cinema, then inside it ---- */
+  if(t < 1650){
+    s.set = t < 1566 ? 5 : 17;
+    if(t < 1566){
+      setLight(L_NIGHT);
+      const x = pace(t, 1520, 1566, 4.0, -3.0);
+      const g = put(0, 'GERALD', x, 0, 9.0, 1.5708);
+      const b = put(1, 'TRAVIS', x + 0.95, 0, 8.6, 1.5708);
+      g.walk = t*6.2; b.walk = t*6.2 + 1.5;
+      g.hyaw = -0.30; b.hyaw = 0.30;
+      act(0, t); act(1, t);
+      shots(t, [[1566, x - 3.2, 1.58, 7.0, x, 1.42, 8.9, 1.45]]);
+    } else {
+      setLight(L_CINEMA);
+      const g = put(0, 'GERALD', -0.45, 0.62, -1.10, 0.0);
+      const b = put(1, 'TRAVIS', 0.42, 0.62, -1.10, 0.0);
+      g.sit = 1; b.sit = 1;
+      g.hyaw = 0.35*Math.sin(t*0.3); b.hyaw = -0.40;
+      act(0, t); act(1, t);
+      shots(t, [[1600, 0.05, 1.30, -3.30, 0.0, 1.16, -1.15, 1.55],
+                [1626, 1.30, 1.22, -2.10, 0.42, 1.18, -1.10, 1.90],
+                [1650, -1.35, 1.24, -2.20, -0.45, 1.20, -1.10, 1.85]]);
+    }
+    s.fade = fadeIn(1520);
+    return;
+  }
+
+  /* ---- 27:10 the movie, and what he sees in it ---- */
+  if(t < 1730){
+    s.set = 17; setLight(L_CINEMA);
+    const g = put(0, 'GERALD', -0.45, 0.62, -1.10, 0.0);
+    const b = put(1, 'TRAVIS', 0.42, 0.62, -1.10, 0.0);
+    g.sit = 1; b.sit = 1; b.hyaw = -0.15;
+    act(0, t); act(1, t);
+    // the screen flickers the way his hallway flickers
+    s.glow = 2.2 * (0.75 + 0.25*flickerCurve(t*1.4, 2.2, 0.5));
+    if(t > 1656 && t < 1676){ s.glow *= 0.4 + 0.6*flickerCurve(t*4.0, 9.0, 0.9); s.glitch = 0.10; }
+    shots(t, [[1668, 0.05, 1.34, -3.60, 0.0, 1.18, -1.10, 1.50],
+              [1690, 0.95, 1.22, -1.95, 0.42, 1.18, -1.10, 2.00],
+              [1730, 0.05, 1.60, -5.20, 0.0, 1.60, 4.0, 1.30]]);
+    s.fade = 1;
+    return;
+  }
+
+  /* ---- 28:50 out on the night street, and the phone goes ---- */
+  if(t < 1830){
+    s.set = 5; setLight(L_NIGHT);
+    const x = pace(t, 1730, 1768, -6.0, -13.0);
+    const g = put(0, 'GERALD', x, 0, 9.0, 1.5708);
+    const b = put(1, 'TRAVIS', x + 0.95, 0, 8.6, 1.5708);
+    if(t < 1770){ g.walk = t*6.0; b.walk = t*6.0 + 1.5; }
+    if(t > 1770) g.gest = 1.75;
+    g.hyaw = t > 1770 ? 0.0 : -0.25; b.hyaw = 0.30;
+    act(0, t); act(1, t);
+    shots(t, [[1770, x - 3.0, 1.55, 7.2, x + 0.4, 1.42, 8.8, 1.50],
+              [1800, x - 2.0, 1.50, 7.4, x - 0.1, 1.46, 8.9, 1.90],
+              [1830, x + 2.6, 1.52, 7.0, x + 0.7, 1.44, 8.7, 1.70]]);
+    s.fade = fadeIn(1730) * (1 - sstep(1829.2, 1830.0, t));
+    return;
+  }
+
+  /* ---- 30:30 the house, alone, and then asleep ---- */
+  if(t < 1900){
+    s.set = 2; setLight(L_BEDROOM); s.keyC = [0.30,0.34,0.55]; s.ambS = [0.10,0.11,0.16];
+    const b = put(0, 'TRAVIS', -1.02, -0.02, 0.05, 0.0);
+    b.pitch = -1.5708; b.blink = 1;
+    act(0, t); b.blink = 1;
+    shots(t, [[1860, 1.55, 1.45, 0.60, -0.95, 0.70, 0.05, 1.45],
+              [1900, 0.30, 1.10, 0.90, -0.95, 0.72, -0.30, 1.75]]);
+    s.fade = fadeIn(1830) * (1 - sstep(1898.6, 1900.0, t));
+    return;
+  }
+
+  /* ---- 31:40 the hallway, and it talks ---- */
+  if(t < 1980){
+    s.set = 0; s.mode = 0;
+    const k = sstep(1900, 1980, t);
+    const camZ = pace(t, 1900, 1980, 20.0, 24.5);
+    s.light = 0.50*(0.55 + 0.45*flickerCurve(t, 2.6, 0.85));
+    s.lamp = 0.70*(0.40 + 0.60*flickerCurve(t*1.3, 2.2, 0.9));
+    s.figVis = 1;
+    s.figZ = camZ + lerp(15.0, 5.5, k);
+    s.glitch = 0.06 + 0.18*k;
+    cam(Math.sin(t*0.5)*0.10, 1.55 + Math.sin(t*1.3)*0.02, camZ, 0, 1.5, camZ + 6);
+    s.fade = fadeIn(1900) * (1 - sstep(1978.6, 1980.0, t));
+    return;
+  }
+
+  /* ---- 33:00 morning, and nobody came home ---- */
+  if(t < 2100){
+    if(t < 2050){
+      s.set = 3; setLight(L_HOUSE);
+      const b = put(0, 'TRAVIS', -0.20, 0, 1.10, 1.20);
+      b.walk = t < 2020 ? t*5.4 : 0;
+      act(0, t);
+      shots(t, [[2020, -1.85, 1.55, 2.85, -0.20, 1.36, 1.10, 1.50],
+                [2050, 1.20, 1.45, 2.30, -0.15, 1.40, 1.15, 1.70]]);
+    } else {
+      s.set = 15; setLight(L_PARK); s.keyC = [1.20,1.12,0.95];
+      const b = put(0, 'TRAVIS', 0.45, 0.03, -1.62, 0.0);
+      b.sit = 1; b.gest = 1.75;
+      act(0, t);
+      shots(t, [[2100, 1.70, 1.30, 0.90, 0.30, 1.14, -1.55, 1.70]]);
+    }
+    s.fade = fadeIn(1980);
+    return;
+  }
+
+  /* ---- 35:00 the cordon ---- */
+  if(t < 2250){
+    s.set = 5; setLight(L_STREET); s.keyC = [1.05,1.00,0.95]; s.ambS = [0.60,0.64,0.78];
+    const arrive = sstep(2100, 2150, t);
+    const b = put(0, 'TRAVIS', pace(t,2100,2150,-6.0,0.9), 0, pace(t,2100,2150,4.0,11.0), 0.0);
+    const a = put(2, 'ALINA', pace(t,2100,2150,-6.9,-0.2), 0, pace(t,2100,2150,3.6,11.4), 0.0);
+    if(arrive < 0.98){ b.walk = t*6.4; a.walk = t*6.4 + 1.4; }
+    b.nod = -0.25*sstep(2160, 2200, t); a.nod = -0.20*sstep(2160, 2200, t);
+    act(0, t); act(2, t);
+    shots(t, [[2160, 1.20, 1.62, 6.5, 0.4, 3.0, 15.0, 1.20],
+              [2200, 2.60, 1.50, 12.6, 0.2, 1.44, 11.2, 1.60],
+              [2250, 0.35, 0.75, 13.6, 0.3, 9.0, 20.0, 0.95]]);
+    s.fade = fadeIn(2100);
+    return;
+  }
+
+  /* ---- 37:30 her father's card ---- */
+  if(t < 2450){
+    s.set = t < 2340 ? 5 : 6;
+    if(t < 2340){
+      setLight(L_STREET); s.keyC = [1.05,1.00,0.95]; s.ambS = [0.60,0.64,0.78];
+      const b = put(0, 'TRAVIS', 0.75, 0, 15.5, 0.25);
+      const a = put(2, 'ALINA', -0.35, 0, 15.9, 0.30);
+      a.gest = t > 2262 ? 0.9 : 0.15;
+      b.hyaw = -0.4; a.hyaw = 0.4;
+      act(0, t); act(2, t);
+      shots(t, [[2290, 1.85, 1.52, 13.9, -0.15, 1.44, 15.9, 1.75],
+                [2340, -1.55, 1.55, 14.2, 0.60, 1.42, 16.0, 1.70]]);
+    } else {
+      setLight(L_EMERG);
+      const b = put(0, 'TRAVIS', 0.55, 0, pace(t,2340,2420,-6.5,1.0), 0.0);
+      const a = put(2, 'ALINA', -0.50, 0, pace(t,2340,2420,-6.9,0.7), 0.0);
+      b.walk = t < 2420 ? t*5.6 : 0; a.walk = t < 2420 ? t*5.6 + 1.4 : 0;
+      act(0, t); act(2, t);
+      shots(t, [[2400, -2.9, 1.72, -3.0, 0.0, 1.35, 2.2, 1.35],
+                [2450, 0.15, 1.55, 3.3, 0.0, 1.30, -1.0, 1.55]]);
+      s.glitch = 0.05;
+    }
+    s.fade = fadeIn(2250);
+    return;
+  }
+  return directFinal2(t);
+}
+
+function directFinal2(t){
+  const s = state;
+  const fadeIn = (a) => sstep(a + 0.2, a + 1.2, t);
+
+  /* ---- 40:50 the lab, and what is left of the session ---- */
+  if(t < 2660){
+    s.set = 12; setLight(L_EMERG); s.glitch = 0.06;
+    const b = put(0, 'TRAVIS', 0.10, 0, -0.60, 3.0);
+    const l = put(1, 'LARRY', 1.15, 0.02, 1.90, 3.6);
+    const a = put(2, 'ALINA', -0.85, 0, -0.40, 3.1);
+    l.sit = 1; l.nod = 0.22;                       // down against the bench
+    act(0, t); act(1, t); act(2, t);
+    b.hyaw = 0.3; a.hyaw = 0.25;
+    if(t > 2596){
+      const n = put(3, 'NOOR', -2.30, 0, 2.40, 2.2);
+      n.gest = 0.8; act(3, t);
+    }
+    shots(t, [[2482, -1.90, 1.60, -1.70, 0.90, 1.20, 1.60, 1.40],
+              [2516, 0.35, 1.20, 0.55, 1.15, 1.05, 1.85, 1.85],
+              [2560, -1.55, 1.55, 0.05, 0.30, 1.40, -0.30, 1.65],
+              [2596, 0.45, 1.22, 0.70, 1.15, 1.06, 1.88, 1.80],
+              [2660, -1.20, 1.52, 0.90, -2.10, 1.40, 2.30, 1.70]]);
+    s.fade = fadeIn(2450);
+    return;
+  }
+
+  /* ---- 44:20 four floors up, through a door ---- */
+  if(t < 2800){
+    s.set = 9; setLight(L_EMERG); s.glitch = 0.07;
+    const b = put(0, 'TRAVIS', 0.30, 0, pace(t,2660,2686,-8.0,1.6), 0.0);
+    const a = put(2, 'ALINA', -0.55, 0, pace(t,2660,2686,-8.6,1.2), 0.0);
+    if(t < 2688){ b.walk = t*7.4; a.walk = t*7.4 + 1.4; }
+    if(t > 2690){ b.gest = 0.6 + 0.3*Math.sin(t*2.0); b.hyaw = 0.5; }
+    act(0, t); act(2, t);
+    shots(t, [[2690, 0.10, 1.58, -3.4, 0.10, 1.42, 2.6, 1.45],
+              [2740, 1.55, 1.50, 3.10, 0.35, 1.44, 1.70, 1.80],
+              [2800, -1.20, 1.55, 2.60, 0.20, 1.40, 1.90, 1.60]]);
+    s.fade = fadeIn(2660);
+    return;
+  }
+
+  /* ---- 46:40 the lights come on above them ---- */
+  if(t < 2920){
+    s.set = 9; setLight(L_EMERG);
+    s.glow = 1.9*(0.3 + 0.7*flickerCurve(t*2.2, 6.0, 0.9));
+    const b = put(0, 'TRAVIS', 0.30, 0, 1.6, 0.0);
+    const a = put(2, 'ALINA', -0.55, 0, 1.2, 0.0);
+    const n = put(3, 'NOOR', 0.10, 0, 0.1, 0.2);
+    b.nod = -0.30; a.nod = -0.25;
+    act(0, t); act(2, t); act(3, t);
+    s.figVis = t > 2860 ? 1 : 0;
+    s.figZ = pace(t, 2860, 2920, 22.0, 13.0);
+    s.glitch = 0.05 + 0.25*sstep(2860, 2920, t);
+    shots(t, [[2860, 0.10, 1.30, 3.60, 0.20, 2.55, 0.6, 1.50],
+              [2920, 0.10, 1.56, -1.20, 0.15, 1.44, 12.0, 1.35]]);
+    s.fade = fadeIn(2800);
+    return;
+  }
+
+  /* ---- 48:40 it herds them ---- */
+  if(t < 3400){
+    s.set = 18; setLight(L_EMERG); s.sky1 = [0.02,0.006,0.006];
+    const run = (t - 2920)/480;
+    const camZ = pace(t, 2920, 3400, 4.0, 74.0);
+    const b = put(0, 'TRAVIS', 0.35, 0, camZ + 2.2, 0.0);
+    const a = put(2, 'ALINA', -0.50, 0, camZ + 2.6, 0.0);
+    b.walk = t*12.0; a.walk = t*12.0 + 1.4;
+    if(t > 3040){
+      const n = put(3, 'NOOR', 0.0, 0, camZ + 3.4, 0.0);
+      n.walk = t*11.0; act(3, t);
+    }
+    act(0, t); act(2, t);
+    s.figVis = 1;
+    s.figZ = camZ - lerp(9.0, 2.6, Math.min(run*1.6, 1.0));
+    s.glow = 1.9*(0.25 + 0.75*flickerCurve(t*3.0, 7.0, 0.95));
+    s.glitch = 0.10 + 0.22*Math.abs(Math.sin(t*0.7));
+    const sh = shake(t, 0.05 + 0.05*run);
+    s.roll = sh[2]*1.4;
+    if(t < 3180) cam(sh[0], 1.55 + sh[1], camZ, 0.1, 1.45, camZ + 7.0, 1.45);
+    else if(t < 3280) cam(sh[0], 1.58 + sh[1], camZ + 6.0, 0.1, 1.45, camZ - 4.0, 1.55);
+    else cam(sh[0]*2.0, 1.52 + sh[1], camZ + 1.0, 0.2, 1.42, camZ + 8.0, 1.40);
+    s.fade = fadeIn(2920);
+    return;
+  }
+
+  /* ---- 56:40 the only address it has ---- */
+  if(t < 3780){
+    s.set = 12; setLight(L_EMERG); s.glitch = 0.05;
+    const b = put(0, 'TRAVIS', 0.20, 0, -0.30, 3.0);
+    const a = put(2, 'ALINA', -0.95, 0, -0.10, 3.0);
+    const n = put(3, 'NOOR', 0.55, 0, 1.60, 3.5);
+    act(0, t); act(2, t); act(3, t);
+    b.hyaw = 0.35; a.hyaw = 0.2; n.hyaw = -0.3;
+    if(t > 3550 && t < 3640){ b.hyaw = -0.6; b.nod = 0.15; }   // talking up at the vent
+    shots(t, [[3444, -1.85, 1.55, 0.85, 0.55, 1.44, 1.55, 1.60],
+              [3506, 1.75, 1.52, 0.60, -0.40, 1.42, -0.20, 1.70],
+              [3550, -1.30, 1.50, -1.30, 0.35, 1.44, 0.60, 1.55],
+              [3620, 1.10, 1.30, -0.95, 0.10, 1.90, 0.20, 1.85],
+              [3700, -1.60, 1.50, 0.40, -0.35, 1.42, -0.05, 1.70],
+              [3780, 0.90, 1.40, -1.10, -0.30, 1.36, -0.10, 1.75]]);
+    s.fade = fadeIn(3400);
+    return;
+  }
+
+  /* ---- 63:00 ninety seconds ---- */
+  if(t < 3880){
+    s.set = 12; setLight(L_EMERG);
+    const under = sstep(3800, 3860, t);
+    const b = put(0, 'TRAVIS', 0.20, 0.02, -0.30, 3.14159);
+    b.sit = 1; b.nod = 0.10 + 0.45*under; b.blink = under > 0.4 ? 1 : 0;
+    const a = put(2, 'ALINA', -0.75, 0, -0.20, 2.7);
+    const n = put(3, 'NOOR', 0.95, 0, 0.45, 3.4);
+    act(0, t); act(2, t); act(3, t);
+    if(under > 0.4) b.blink = 1;
+    a.hyaw = 0.3; n.hyaw = -0.2;
+    shots(t, [[3830, -1.40, 1.35, -1.55, 0.20, 1.15, -0.25, 1.75],
+              [3880, -0.55, 1.12, -1.05, 0.20, 1.05, -0.28, 2.10]]);
+    s.glitch = 0.05 + 0.5*under;
+    s.fade = fadeIn(3780) * (1 - sstep(3874.0, 3880.0, t));
+    return;
+  }
+
+  /* ---- 64:40 the hallway, on his terms ---- */
+  if(t < 4300){
+    s.set = 0; s.mode = 0;
+    const k = (t - 3880)/420;
+    const camZ = pace(t, 3880, 4300, 18.0, 34.0);
+    // he stops running: the torch steadies, and the tubes answer him
+    const grip = sstep(4150, 4260, t);
+    s.light = lerp(0.42, 0.95, grip) * (0.5 + 0.5*flickerCurve(t, 3.0, lerp(0.9, 0.15, grip)));
+    s.lamp = lerp(0.45, 1.30, grip) * (0.35 + 0.65*flickerCurve(t*1.4, 2.4, lerp(0.95, 0.1, grip)));
+    s.figVis = 1;
+    s.figZ = camZ + lerp(11.0, 2.4, sstep(3900, 4210, t)) + grip*7.0;
+    s.glitch = lerp(0.28, 0.03, grip) * (0.6 + 0.4*Math.abs(Math.sin(t*0.9)));
+    s.red = 0.16*(1 - grip);
+    const sh = shake(t, 0.05*(1 - grip));
+    s.roll = sh[2]*1.2*(1 - grip);
+    cam(sh[0], 1.55 + sh[1], camZ, 0.0, 1.5, camZ + 6.0, lerp(1.55, 1.35, grip));
+    if(t > 4262 && t < 4276){ s.flash = 0.9*Math.exp(-(t - 4262)*1.4); s.lamp = 2.2; s.light = 1.4; }
+    s.fade = fadeIn(3880) * (1 - sstep(4294.0, 4300.0, t));
+    return;
+  }
+
+  /* ---- 71:40 waking up ---- */
+  if(t < 4440){
+    s.set = 12; setLight(L_LAB); s.clean = sstep(4300, 4340, t);
+    const wake = sstep(4360, 4372, t);
+    const b = put(0, 'TRAVIS', 0.20, 0.02, -0.30, 3.14159);
+    b.sit = 1; b.nod = lerp(0.55, 0.05, wake); b.blink = wake < 0.5 ? 1 : 0;
+    const a = put(2, 'ALINA', -0.75, 0, -0.20, 2.7);
+    const n = put(3, 'NOOR', 0.95, 0, 0.45, 3.4);
+    act(0, t); act(2, t); act(3, t);
+    if(wake < 0.5) b.blink = 1;
+    if(t > 4444) { }
+    shots(t, [[4400, -0.60, 1.14, -1.10, 0.20, 1.06, -0.28, 2.05],
+              [4440, -1.70, 1.50, -1.20, 0.10, 1.30, -0.10, 1.60]]);
+    s.fade = fadeIn(4300);
+    return;
+  }
+
+  /* ---- 74:00 out on the street, all of them ---- */
+  if(t < 4640){
+    s.set = 5; setLight(L_STREET); s.keyC = [1.30,1.18,0.98];
+    const g = put(0, 'GERALD', 0.65, 0, 13.4, 3.14159);
+    const b = put(1, 'TRAVIS', 0.10, 0, 12.2, 0.4);
+    const a = put(2, 'ALINA', -1.05, 0, 12.6, 0.1);
+    act(0, t); act(1, t); act(2, t);
+    g.hyaw = -0.25; b.hyaw = 0.35; a.hyaw = -0.35;
+    if(t > 4520 && t < 4580){
+      const m = put(3, 'MANAGER', -2.05, 0, 13.2, 3.0);
+      m.gest = 0.6; act(3, t);
+    }
+    if(t > 4590){
+      const n = put(3, 'NOOR', 1.85, 0, 13.8, 3.2);
+      act(3, t);
+    }
+    shots(t, [[4500, -1.50, 1.58, 10.4, 0.30, 1.42, 12.9, 1.55],
+              [4520, 0.90, 1.52, 10.9, 0.20, 1.44, 12.6, 1.80],
+              [4580, -2.40, 1.55, 11.2, -1.40, 1.42, 12.9, 1.70],
+              [4640, 2.20, 1.60, 10.2, 0.20, 1.44, 13.2, 1.50]]);
+    s.fade = fadeIn(4440);
+    return;
+  }
+
+  /* ---- 77:20 nobody checked the box ---- */
+  if(t < 4703){
+    s.set = 12; setLight(L_LAB); s.clean = 1 - sstep(4676, 4694, t);
+    s.prop = [0, 0, 1, 0];
+    const k = sstep(4640, 4690, t);
+    cam(lerp(2.6,1.62,k), lerp(1.62,1.30,k), lerp(0.2,1.95,k), 1.35, 1.26, 2.72, lerp(1.5,2.3,k));
+    s.glitch = 0.02 + 0.55*sstep(4682, 4700, t);
+    s.red = 0.30*sstep(4686, 4700, t);
+    if(t > 4692) s.flash = 0.7*Math.abs(Math.sin((t - 4692)*9.0));
+    s.fade = fadeIn(4640) * (1 - sstep(4700.5, 4703.0, t));
+    return;
+  }
+
+  /* ---- credits ---- */
   s.set = 8; setLight(L_LIFT); s.sky1 = [0,0,0]; s.glow = 0;
   cam(0, 1.5, 0, 0, 1.5, 1);
   s.fade = 0;
@@ -2823,7 +3478,8 @@ function directAct5(t){
 for(const L of LINES3) L.dur = clamp(L.s.length*0.062 + 0.30, 0.7, 9.0);
 for(const L of LINES4) L.dur = clamp(L.s.length*0.062 + 0.30, 0.7, 9.0);
 for(const L of LINES5) L.dur = clamp(L.s.length*0.062 + 0.30, 0.7, 9.0);
-LINES.push(...LINES3, ...LINES4, ...LINES5);
+for(const L of LINES6) L.dur = clamp(L.s.length*0.062 + 0.30, 0.7, 9.0);
+LINES.push(...LINES3, ...LINES4, ...LINES5, ...LINES6);
 LINES.sort((a,b) => a.t - b.t);
 
 state.ch = [newChar(), newChar(), newChar(), newChar()];
@@ -2841,8 +3497,10 @@ function direct(t){
     directAct3(t);
   } else if(t < 1056.0){
     directAct4(t);
-  } else {
+  } else if(t < 1520.0){
     directAct5(t);
+  } else {
+    directFinal(t);
   }
 }
 
@@ -2866,9 +3524,6 @@ function cards(t){
   } else if(t > 136 && t < 140.4){
     html = '<div class="slug">FRIDAY &middot; 07:12 AM</div>';
     op = sstep(136.5, 137.3, t) * (1 - sstep(139.4, 140.2, t));
-  } else if(t > 1512.0){
-    html = '<div class="title small">TO BE CONTINUED</div>';
-    op = sstep(1512.6, 1513.6, t);
   }
   if(html !== cardKey){ cardEl.innerHTML = html; cardKey = html; }
   cardEl.style.opacity = op.toFixed(3);
@@ -2953,8 +3608,22 @@ function showCaption(i){
   el.style.opacity = '1';
 }
 
+let creditsOn = false;
+function rollCredits(t){
+  const el = $('credits');
+  if(t < CREDITS_AT - 0.5){
+    if(creditsOn){ el.classList.remove('on'); creditsOn = false; }
+    return;
+  }
+  if(!creditsOn){ el.classList.add('on'); creditsOn = true; }
+  const frameH = el.parentElement.clientHeight || 1;
+  const travel = 100 + (el.scrollHeight / frameH) * 100;
+  const k = clamp((t - CREDITS_AT) / (RUNTIME - CREDITS_AT - 4), 0, 1);
+  el.style.top = (100 - k*travel) + '%';
+}
+
 function render(t){
-  direct(t); cards(t);
+  direct(t); cards(t); rollCredits(t);
   showCaption(runDialogue(t, playing));
   drawScene(t, main);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -3020,13 +3689,21 @@ const DRONE_ENV = [[0,0.0001],[6,0.10],[40,0.13],[70,0.26],[71.5,0.30],[73.4,0.0
   [942,0.025],[972,0.03],[1020,0.04],[1032,0.14],[1044,0.10],[1056,0.03],
   [1090,0.05],[1112,0.26],[1119,0.30],[1120.5,0.01],           // someone in the doorway
   [1180,0.06],[1186,0.16],[1190,0.03],[1290,0.02],[1360,0.02],[1404,0.02],
-  [1440,0.04],[1500,0.05],[1505,0.28],[1512,0.24],[1520,0.0001]];
+  [1440,0.04],[1500,0.05],[1505,0.28],[1512,0.20],[1520,0.03],
+  [1650,0.04],[1700,0.10],[1730,0.05],[1770,0.12],[1830,0.06],[1900,0.10],[1975,0.30],[1981,0.02],
+  [2100,0.04],[2200,0.09],[2340,0.14],[2450,0.10],[2600,0.13],[2800,0.20],[2860,0.30],
+  [2920,0.34],[3200,0.36],[3400,0.16],[3500,0.10],[3780,0.14],[3860,0.30],
+  [3880,0.20],[4100,0.28],[4200,0.34],[4262,0.44],[4280,0.10],[4300,0.05],
+  [4440,0.04],[4640,0.05],[4686,0.34],[4700,0.30],[4703,0.06],[4760,0.10],[4818,0.0001]];
 const WIND_ENV  = [[0,0.0001],[5,0.045],[62,0.075],[83,0.010],[90,0.006],[99,0.014],
   [116,0.016],[136,0.05],[196,0.055],[204,0.05],[238,0.03],[241,0.022],[282,0.012],
   [303,0.014],[320,0.020],[368,0.030],[386,0.012],[456,0.020],[500,0.016],[534,0.010],
   [556,0.012],[626,0.014],[656,0.012],[698,0.020],[836,0.045],[866,0.014],
   [910,0.050],[942,0.020],[972,0.030],[1020,0.050],[1056,0.020],
-  [1090,0.024],[1120,0.012],[1180,0.022],[1290,0.055],[1440,0.030],[1520,0.0001]];
+  [1090,0.024],[1120,0.012],[1180,0.022],[1290,0.055],[1440,0.030],
+  [1520,0.040],[1650,0.014],[1730,0.045],[1900,0.020],[2100,0.050],[2340,0.030],
+  [2450,0.035],[2920,0.055],[3400,0.030],[3880,0.045],[4300,0.020],[4440,0.045],
+  [4703,0.012],[4823,0.0001]];
 
 function stopAudio(){
   if(!AC.ctx) return;
@@ -3405,6 +4082,88 @@ function startAudio(fromT){
   for(let i=0;i<34;i++) cue(1444 + i*1.9, a => burst(a, 0.09, 3600 + Math.random()*1800, 9, 0.020));  // pen
   cue(1504.5, at => { thump(at, 40, 0.55); stinger(at, 2400, 60, 2.4, 0.28); burst(at, 1.6, 1500, 0.6, 0.26); });
   cue(1509.0, at => stinger(at, 130, 38, 2.4, 0.16));
+
+  // ================= the last hour =================
+  for(let i=0;i<24;i++) cue(1521 + i*0.80, a => burst(a, 0.12, 250 + Math.random()*150, 2.0, 0.055));
+  cue(1567.0, at => hum(at, 160, 0.016));                       // the room tone of a cinema
+  for(let i=0;i<40;i++){                                        // the film they are watching
+    const at = 1652 + i*1.9;
+    if(at > 1728) break;
+    cue(at, a => { stinger(a, 200 + Math.random()*260, 90, 1.4, 0.030);
+                   if(i%5===0) thump(a, 46, 0.16); });
+  }
+  cue(1669.0, at => { stinger(at, 2400, 300, 1.2, 0.16); thump(at, 42, 0.30); });
+  cue(1770.5, at => { for(let i=0;i<3;i++){ note(at+i*1.6, 880, 0.18, 0.06, 'triangle');
+                                            note(at+i*1.6+0.24, 1174, 0.22, 0.055, 'triangle'); } });
+  cue(1822.0, at => burst(at, 0.5, 400, 1.6, 0.14));            // the door closing behind him
+
+  // the dream, sharper
+  cue(1902.0, at => { thump(at, 40, 0.55); stinger(at, 150, 46, 9.0, 0.16); });
+  let hb2 = 1904; while(hb2 < 1976){ const v = 0.18 + 0.24*clamp((hb2-1900)/76,0,1);
+    cue(hb2, a => { thump(a, 58, v); thump(a+0.21, 46, v*0.6); }); hb2 += 0.60; }
+  cue(1975.5, at => { burst(at, 0.6, 2600, 0.7, 0.32); thump(at, 44, 0.55); });
+
+  // morning, and a street with nobody on it
+  for(let i=0;i<10;i++) cue(2104 + i*5.0 + Math.random()*2.0, chirp);
+  cue(2152.0, at => stinger(at, 620, 480, 5.0, 0.05));          // something distant and official
+  for(let i=0;i<20;i++) cue(2102 + i*0.82, a => burst(a, 0.11, 260 + Math.random()*140, 2.1, 0.05));
+
+  // inside: the klaxon, and everything failing
+  for(let i=0;i<120;i++){
+    const at = 2345 + i*3.2;
+    if(at > 2920) break;
+    cue(at, a => { note(a, 392, 0.55, 0.045, 'square'); note(a + 0.62, 330, 0.55, 0.04, 'square'); });
+  }
+  cue(2346.0, at => hum(at, 570, 0.030));
+  cue(2860.5, at => { thump(at, 38, 0.62); stinger(at, 2600, 70, 3.0, 0.26); });
+
+  // the run
+  for(let i=0;i<330;i++){
+    const at = 2921 + i*0.29;
+    if(at > 3396) break;
+    cue(at, a => burst(a, 0.09, 300 + Math.random()*200, 2.4, 0.075));
+  }
+  for(let i=0;i<70;i++) cue(2924 + i*6.6, a => burst(a, 0.42, 700, 0.8, 0.055));   // breathing
+  cue(3286.0, at => stinger(at, 2200, 60, 3.2, 0.24));
+  cue(3392.0, at => { thump(at, 40, 0.5); burst(at, 0.9, 1400, 0.7, 0.20); });
+
+  // the plan, and going under
+  cue(3402.0, at => hum(at, 470, 0.022));
+  cue(3800.0, at => stinger(at, 240, 40, 14.0, 0.20));
+  let hb3 = 3802; while(hb3 < 3874){ const v = 0.22*(1 - (hb3-3800)/80);
+    cue(hb3, a => thump(a, 54, Math.max(v,0.05))); hb3 += 0.55 + (hb3-3800)*0.012; }
+
+  // the hallway, on his terms
+  cue(3882.0, at => { thump(at, 42, 0.5); stinger(at, 170, 50, 12.0, 0.20); });
+  for(let i=0;i<26;i++) cue(3890 + i*11.0, a => burst(a, 0.7, 1200 + Math.random()*2400, 5, 0.06));
+  cue(4150.0, at => stinger(at, 60, 420, 60.0, 0.14));          // the long rise
+  cue(4262.0, at => {                                           // lights on
+    thump(at, 36, 0.85); burst(at, 2.6, 900, 0.4, 0.42);
+    for(let i=0;i<7;i++) note(at + i*0.14, 262*Math.pow(2, i/7.0), 2.6, 0.05, 'triangle');
+  });
+  cue(4272.0, at => stinger(at, 900, 40, 5.0, 0.26));
+
+  // after
+  cue(4302.0, at => hum(at, 130, 0.018));
+  for(let i=0;i<18;i++) cue(4444 + i*9.0 + Math.random()*3.0, chirp);
+  cue(4686.0, at => { thump(at, 38, 0.7); stinger(at, 2800, 55, 2.6, 0.34); burst(at, 1.8, 1500, 0.6, 0.30); });
+  cue(4696.0, at => stinger(at, 140, 36, 3.0, 0.20));
+
+  // and the credits, which get a tune of their own
+  const CH1 = [[262,311,392],[233,294,349],[208,262,311],[196,247,311]];
+  for(let bar=0; bar<15; bar++){
+    const at = 4706 + bar*7.6;
+    if(at > 4800) break;
+    const ch = CH1[bar % 4];
+    cue(at, a => { for(const f of ch) note(a, f, 7.2, 0.032, 'triangle'); });
+    cue(at, a => note(a, ch[0]*0.5, 7.4, 0.045, 'sine'));
+    const MELO = [392,466,523,466,392,349,392,311];
+    for(let i=0;i<8;i++){
+      const nt = at + 0.95*i;
+      if(nt > 4802) break;
+      cue(nt, a => note(a, MELO[(bar*3 + i) % 8], 0.9, 0.026, 'triangle'));
+    }
+  }
 
   for(const [at, fn] of cues) fn(now + (at - fromT));
   AC.stale = false;
