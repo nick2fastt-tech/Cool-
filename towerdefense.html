@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Tower Defense V1.64 Beta</title>
+<title>Tower Defense V1.65 Beta</title>
 <style>
 :root{
   --void:#04050c;
@@ -245,6 +245,8 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
   border-radius:10px;padding:9px 2px;font-size:11px;font-weight:bold;letter-spacing:.04em}
 .mode.on{background:linear-gradient(180deg,#3846d6,#1b2170);border-color:#8b97ff}
 .mode.lock{opacity:.4}
+.mode .bonus{display:block;font-size:9px;letter-spacing:0;color:var(--gold);margin-top:1px}
+.mode.on .bonus{color:#ffe9a8}
 .logV{font-size:12px;font-weight:bold;letter-spacing:.14em;color:#8b97ff;margin:4px 0 4px}
 .logV span{font-size:9px;color:var(--good);letter-spacing:.1em;margin-left:6px}
 .logL{list-style:none;margin:0 0 10px}
@@ -253,8 +255,13 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 .eq{font-size:9px;color:var(--good)}
 .card.drag{cursor:grab}
 #shop.faded{opacity:.16}
-#party{position:absolute;top:112px;right:8px;display:none;flex-direction:column;gap:4px;align-items:flex-end}
+#party{position:absolute;top:112px;right:8px;display:none;flex-direction:column;gap:4px;align-items:flex-end;
+  max-height:calc(100vh - 300px);overflow-y:auto;scrollbar-width:none}
+#party::-webkit-scrollbar{display:none}
 #party.on{display:flex}
+/* a full party is eight rows deep — tighten them so the list clears the slot bar */
+#party.big{gap:2px}
+#party.big .pmem{padding:2px 7px;font-size:9px;border-radius:6px}
 .pmem{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:4px 8px;
   font-size:10px;display:flex;gap:7px;align-items:center;white-space:nowrap}
 .pmem b{color:var(--ink);font-weight:bold}
@@ -347,8 +354,10 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
       <button class="mode pe on" data-m="1">Solo</button>
       <button class="mode pe" data-m="2">Duo</button>
       <button class="mode pe" data-m="3">Trio</button>
-      <button class="mode pe lock" data-m="0">Party 🔒</button>
+      <button class="mode pe" data-m="party">Party <b class="bonus">+20%</b></button>
     </div>
+    <div class="hint" style="margin:10px 0 0">A <b>Party</b> is you and 4 to 7 others, rolled when you pick it.
+      Harder to hold the line with that many towers on the field, so every party run pays <b>+20% coins</b>.</div>
   </div>
 
   <div class="sheet pe" id="info">
@@ -425,7 +434,15 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 
   <div class="sheet pe" id="log">
     <div class="sheetHead"><h2>Update Log</h2><button class="btn sm pe" id="closeLog">Close</button></div>
-    <div class="logV">V1.64 <span>beta</span></div>
+    <div class="logV">V1.65 <span>beta</span></div>
+    <ul class="logL">
+      <li><b>Party mode is unlocked.</b> You and 4 to 7 others — the size is rolled when you pick it, so a party is 5 to 8 players</li>
+      <li>Every party run pays <b>+20% coins</b>, win or lose. The end screen breaks the bonus out so you can see it landed</li>
+      <li>Press Play after picking Party and matchmaking fills a whole lobby instead of a trio — and fills it faster, so seven players do not take twenty seconds</li>
+      <li>Teammates line up in rows of four in the lobby now rather than one long row that ran into the wall, and they spawn in a wider ring so a full party does not pile onto the same spot</li>
+      <li>The squad list on the right shrinks to fit when there are eight of you</li>
+    </ul>
+    <div class="logV">V1.64</div>
     <ul class="logL">
       <li><b>The music actually plays now.</b> There is a build with all twelve songs baked into the HTML itself — one file, nothing beside it, no folder to keep track of</li>
       <li>The other build hunts for the songs instead of giving up: a <b>music</b> folder, or loose in the same place as the game. Drop everything in Downloads together and it still works</li>
@@ -555,7 +572,7 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
   <div id="title" class="pe">
     <div class="sub">Beta Version</div>
     <h1>Tower<br>Defense</h1>
-    <div class="sub" style="letter-spacing:.5em">V 1.64</div>
+    <div class="sub" style="letter-spacing:.5em">V 1.65</div>
     <ul>
       <li>Clear a map to unlock the next: Grassy Field → The Forest → The Volcano</li>
       <li>Left side of the screen = move · right side = look</li>
@@ -1428,7 +1445,7 @@ const pIdle={g:0,play:-1,wait:3};
 const G={cash:500,hp:100,maxHp:100,wave:0,running:false,over:false,mode:'match',
   enemies:[],towers:[],fx:[],queue:[],spawnT:0,gap:1,waveActive:false,nextT:0,
   placing:null,sel:null,warned:false,padT:0,bots:[],partyT:0,kills:0,earned:0,hpMul:1,ending:false,
-  bossWave:false,bossName:'',coinsWon:0};
+  bossWave:false,bossName:'',coinsWon:0,partyRun:false,partyCut:0};
 
 /* ---------- enemies ---------- */
 const _bq=new THREE.Quaternion();   // scratch quaternion for billboarding
@@ -3732,6 +3749,13 @@ const BOT_NAMES=['Blox_Hunter22','xX_TowerKing_Xx','NoobSlayer99','Zeeky_Plays',
 const BOT_SKIN=[0xe0b088,0xc98f60,0x8d5a3b,0xf0c9a4,0xa8724a];
 const BOT_SHIRT=[0x2f4d84,0x7a2f2f,0x2f6b4a,0x5a3f7a,0x8a6a2f];
 let PARTY=0;                        // teammates alongside you
+/* Solo/Duo/Trio are exact sizes. Party is a band instead — you plus four to
+   seven others, rolled when you pick it. A full lobby is harder to keep alive
+   and splits the same map between more people, so it pays a coin bonus. */
+const PARTY_MIN=5,PARTY_MAX=8,PARTY_BONUS=.20;
+const isParty=n=>n>=PARTY_MIN;                 // n counts YOU as well
+const partyRoll=()=>PARTY_MIN+((Math.random()*(PARTY_MAX-PARTY_MIN+1))|0);
+const botName=i=>BOT_NAMES[i%BOT_NAMES.length];
 function tagTex(txt,col){
   const c=document.createElement('canvas');c.width=384;c.height=64;
   const x=c.getContext('2d');
@@ -3881,7 +3905,7 @@ const lobbyNPCs=[];
   // screen on the far wall
   boardMesh=new THREE.Mesh(new THREE.PlaneGeometry(12,6),
     new THREE.MeshBasicMaterial({map:signTex([
-      {t:'TOWER DEFENSE',b:1,s:54,y:100},{t:'BETA  ·  V1.64  ·  8 TOWERS  ·  3 MAPS',s:24,c:'#8b95cf',y:158}])}));
+      {t:'TOWER DEFENSE',b:1,s:54,y:100},{t:'BETA  ·  V1.65  ·  8 TOWERS  ·  3 MAPS',s:24,c:'#8b95cf',y:158}])}));
   // the bezel is .35 deep, so its front face sits at -D+.195 — the screen has
   // to clear that or the frame swallows it
   boardMesh.position.set(0,4.8,-D+.42);lobby.add(boardMesh);
@@ -4011,7 +4035,7 @@ const lobbyNPCs=[];
   {
     const st=stationAt('log'),g=new THREE.Group();
     const board=new THREE.Mesh(new THREE.PlaneGeometry(4.6,2.6),
-      new THREE.MeshBasicMaterial({map:signTex([{t:'UPDATE LOG',b:1,s:56,y:110},{t:'V1.64 BETA',s:36,c:'#5ef2a0',y:180}])}));
+      new THREE.MeshBasicMaterial({map:signTex([{t:'UPDATE LOG',b:1,s:56,y:110},{t:'V1.65 BETA',s:36,c:'#5ef2a0',y:180}])}));
     board.position.set(0,2.5,.13);g.add(board);
     const back=new THREE.Mesh(new THREE.BoxGeometry(5,3,.22),M(0x232a4e));
     back.position.set(0,2.5,0);back.castShadow=true;g.add(back);
@@ -4070,30 +4094,35 @@ function clearPals(){
 }
 function buildPals(){
   clearPals();
+  /* They stand off to your right, four to a row. Keep the first column clear of
+     x=-3, which is where you are standing, or a teammate spawns inside you. */
   for(let i=0;i<PARTY;i++){
-    const g=makeAvatar(i,BOT_NAMES[i]);
-    g.position.set(-1+ (i+1)*2,0,9);g.rotation.y=Math.PI;
+    const row=(i/4)|0, col=i%4;
+    const g=makeAvatar(i,botName(i));
+    g.position.set(1+col*2.2,0,9+row*2.4);g.rotation.y=Math.PI;
     lobby.add(g);lobbyPals.push(g);
   }
 }
+const modeLabel=m=>isParty(m)?'Party of '+m:(['Solo','Duo','Trio'][m-1]||m+' players');
 function setMode(m,quiet){
   PARTY=Math.max(0,m-1);
-  Array.prototype.forEach.call(document.querySelectorAll('#modes .mode'),b=>
-    b.classList.toggle('on',+b.getAttribute('data-m')===m));
+  Array.prototype.forEach.call(document.querySelectorAll('#modes .mode'),b=>{
+    const d=b.getAttribute('data-m');
+    b.classList.toggle('on',d==='party'?isParty(m):+d===m);
+  });
   buildPals();
   sfx('place');
   // picking a squad size IS the "play" button now — straight into the vote
   if(!quiet&&G.mode==='lobby'&&!voting){
     $('squad').classList.remove('on');
-    banner(['Solo','Duo','Trio'][m-1]+' \u2014 to the map vote');
+    banner(modeLabel(m)+(isParty(m)?' \u00b7 +20% coins':'')+' \u2014 to the map vote');
     setTimeout(()=>{if(G.mode==='lobby'&&!voting)startVote();},450);
   }
 }
 Array.prototype.forEach.call(document.querySelectorAll('#modes .mode'),b=>{
   b.onclick=()=>{
-    const m=+b.getAttribute('data-m');
-    if(!m){banner('Party mode is locked in the demo');sfx('no');return;}
-    setMode(m);
+    const d=b.getAttribute('data-m');
+    setMode(d==='party'?partyRoll():+d);
   };
 });
 $('closeLog').onclick=()=>$('log').classList.remove('on');
@@ -4134,14 +4163,16 @@ function enterLobby(won){
   // the wave totals used to be hardcoded to 10 and read wrong on the 20-wave map
   const total=MAP.waves;
   const coinLine=G.coinsWon?'+ '+G.coinsWon.toLocaleString()+' coins':'';
-  if(won===true)setBoard([{t:'FIELD SECURED',b:1,s:50,c:'#5ef2a0',y:80},
-      {t:total+' / '+total+' waves cleared',s:25,y:128},{t:runLine,s:22,c:'#8b95cf',y:168},
-      {t:coinLine,b:1,s:30,c:'#ffd166',y:212}]);
-  else if(won===false)setBoard([{t:'BASE LOST',b:1,s:50,c:'#ff5f6d',y:80},
-      {t:'made it to wave '+G.wave+' of '+total,s:25,y:128},{t:runLine,s:22,c:'#8b95cf',y:168},
-      {t:coinLine,b:1,s:30,c:'#ffd166',y:212}]);
+  // the party bonus gets its own line so you can see the 20% actually landed
+  const bonusLine=G.partyCut?'party of '+(PARTY+1)+'  ·  +'+G.partyCut.toLocaleString()+' bonus':'';
+  if(won===true)setBoard([{t:'FIELD SECURED',b:1,s:50,c:'#5ef2a0',y:76},
+      {t:total+' / '+total+' waves cleared',s:25,y:122},{t:runLine,s:22,c:'#8b95cf',y:160},
+      {t:coinLine,b:1,s:30,c:'#ffd166',y:202},{t:bonusLine,s:21,c:'#c9a24a',y:233}]);
+  else if(won===false)setBoard([{t:'BASE LOST',b:1,s:50,c:'#ff5f6d',y:76},
+      {t:'made it to wave '+G.wave+' of '+total,s:25,y:122},{t:runLine,s:22,c:'#8b95cf',y:160},
+      {t:coinLine,b:1,s:30,c:'#ffd166',y:202},{t:bonusLine,s:21,c:'#c9a24a',y:233}]);
   else setBoard([{t:'TOWER DEFENSE',b:1,s:54,y:100},
-      {t:'BETA V1.64  ·  PRESS PLAY OR WALK OVER',s:23,c:'#8b95cf',y:158}]);
+      {t:'BETA V1.65  ·  PRESS PLAY OR WALK OVER',s:23,c:'#8b95cf',y:158}]);
   buildPals();
 }
 function toLobby(won){
@@ -4161,6 +4192,7 @@ function resetMatch(){
   G.queue.length=0;G.warned=false;G.sel=null;G.kills=0;G.earned=0;
   G.ending=false;G.hpMul=1;G.bossWave=false;G.placing=null;
   G.spawnT=0;G.nextT=0;G.partyT=0;G.coinsWon=0;G.bossName='';
+  G.partyRun=false;G.partyCut=0;
   COMMANDERS.length=0;
   $('over').classList.remove('on');
   $('bossBar').classList.remove('on');
@@ -4168,13 +4200,14 @@ function resetMatch(){
 }
 function spawnTeammates(){
   for(let i=0;i<PARTY;i++){
-    const name=BOT_NAMES[i];
+    const name=botName(i);
     const g=makeAvatar(i,name);
     // spawn beside you and off the track — the old fixed coordinates dropped
     // teammates straight onto the path on the forest map
     let sx=MAP.spawn[0]+(i+1)*2.2,sz=MAP.spawn[1];
-    for(let k=0;k<30;k++){
-      const a=rnd(0,6.283),r=rnd(2,7);
+    // a full party needs a wider ring than a trio or they stack on the spawn
+    for(let k=0;k<40;k++){
+      const a=rnd(0,6.283),r=rnd(2,PARTY>3?10:7);
       const cx=MAP.spawn[0]+Math.cos(a)*r,cz=MAP.spawn[1]+Math.sin(a)*r;
       if(botValid(cx,cz)){sx=cx;sz=cz;break;}
     }
@@ -4648,6 +4681,7 @@ function toMatch(mapKey){
     $('match').classList.remove('on');$('event').classList.remove('on');mmOn=false;
     $('voter').classList.remove('on');
     $('party').classList.toggle('on',PARTY>0);
+    $('party').classList.toggle('big',PARTY>3);
     spawnTeammates();
     G.nextT=20;G.warned=false;
     syncHud();
@@ -4735,7 +4769,7 @@ function startVote(){
   for(let i=0;i<PARTY;i++){
     // they lean toward the newest thing they can play
     const pick=open.length>1&&Math.random()<.6?open[open.length-1-((Math.random()*2)|0)]:open[0];
-    botVotes.push({name:BOT_NAMES[i],t:rnd(1.5,11),k:pick||'grassy'});
+    botVotes.push({name:botName(i),t:rnd(1.5,11),k:pick||'grassy'});
   }
   voteRefresh();
 }
@@ -4768,13 +4802,16 @@ function voteStep(dt){
 /* ---------- matchmaking ----------
    The Play button runs a short fake queue — squad size is picked for you and
    teammates drop in one at a time — then hands straight over to the map vote. */
-let mmOn=false,mmT=0,mmTarget=0,mmFound=0,mmNames=[];
+let mmOn=false,mmT=0,mmTarget=0,mmFound=0,mmNames=[],mmStep=1.3;
 function openMatchmaking(){
   closeInfo();
   $('loadout').classList.remove('on');$('squad').classList.remove('on');
   $('log').classList.remove('on');
   mmOn=true;mmT=0;mmFound=0;
-  mmTarget=1+((Math.random()*3)|0);            // 1-3 other players
+  /* Queue for whatever you last picked at the Squad Desk: a party there means
+     Play looks for a full lobby, otherwise it is the usual 1-3 others. */
+  mmTarget=isParty(PARTY+1)?partyRoll()-1:1+((Math.random()*3)|0);
+  mmStep=mmTarget>3?.62:1.3;                   // don't crawl filling a big lobby
   mmNames=BOT_NAMES.slice().sort(()=>Math.random()-.5).slice(0,mmTarget);
   $('mmList').innerHTML='';
   $('mmState').textContent='Searching for players…';
@@ -4795,18 +4832,18 @@ function cancelMatchmaking(){
 function matchStep(dt){
   if(!mmOn)return;
   mmT+=dt;
-  if(mmFound<mmTarget&&mmT>1.1+mmFound*1.3){
+  if(mmFound<mmTarget&&mmT>1.1+mmFound*mmStep){
     mmRow(mmNames[mmFound],false);
     mmFound++;
     $('mmCount').textContent=(mmFound+1)+' / '+(mmTarget+1);
     sfx('cash');
     if(mmFound<mmTarget)$('mmState').textContent='Found '+mmFound+'…';
   }
-  if(mmFound>=mmTarget&&mmT>1.1+mmFound*1.3+1){
+  if(mmFound>=mmTarget&&mmT>1.1+mmFound*mmStep+1){
     mmOn=false;
     // the queue decides the squad size, then the vote takes over
     setMode(mmTarget+1,true);
-    $('mmState').textContent='Squad full — loading map vote';
+    $('mmState').textContent=(isParty(mmTarget+1)?'Party full · +20% coins':'Squad full')+' — loading map vote';
     setTimeout(()=>{$('match').classList.remove('on');if(G.mode==='lobby')startVote();},700);
   }
 }
@@ -5087,18 +5124,25 @@ function updateCamera(dt){
    with half of it, so a bad run is never wasted. */
 function payCoins(won){
   const full=MAP.coins||500;
-  G.coinsWon=won?full:Math.floor(full/2);
-  SAVE.coins+=G.coinsWon;
+  let c=won?full:Math.floor(full/2);
+  // a party run pays 20% on top, win or lose
+  G.partyRun=isParty(PARTY+1);
+  G.partyCut=G.partyRun?Math.round(c*PARTY_BONUS):0;
+  c+=G.partyCut;
+  G.coinsWon=c;
+  SAVE.coins+=c;
   writeSave();syncCoins();
-  return G.coinsWon;
+  return c;
 }
+// "+ 750 coins (incl. +125 party bonus)" for the end screen and banners
+const coinNote=()=>G.partyCut?' (incl. +'+G.partyCut.toLocaleString()+' party bonus)':'';
 function lose(){
   if(G.ending)return;
   G.ending=true;
   G.waveActive=false;G.nextT=0;G.queue.length=0;
   $('bossBar').classList.remove('on');
   const c=payCoins(false);
-  banner('Base lost on wave '+G.wave+' — +'+c.toLocaleString()+' coins');sfx('lose');
+  banner('Base lost on wave '+G.wave+' — +'+c.toLocaleString()+' coins'+coinNote());sfx('lose');
   setTimeout(()=>toLobby(false),2400);
 }
 function win(){
@@ -5115,7 +5159,7 @@ function win(){
     setTimeout(()=>banner('Unlocked: The Corpse \u2014 The Volcano, 25 waves'),3200);
   }
   const c=payCoins(true);
-  banner('Field secured — +'+c.toLocaleString()+' coins');sfx('win');
+  banner('Field secured — +'+c.toLocaleString()+' coins'+coinNote());sfx('win');
   setTimeout(()=>toLobby(true),2000);
 }
 $('againBtn').onclick=()=>{$('over').classList.remove('on');toLobby(false);};
