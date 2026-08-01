@@ -512,6 +512,8 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
       <li><b>Zombies are built differently from each other.</b> Six body types — lanky, stocky, hulking, gaunt, bloated — plus a dropped shoulder and a lean, so a wave stops looking like one model twenty times</li>
       <li>The Forest pays properly: $150 for wave 1 climbing to $2,000 for wave 20. Patient Zero no longer turns up on wave 10 — he belongs to the Grassy Field</li>
       <li>The songs shuffle, and reshuffle rather than looping the same order forever</li>
+      <li><b>Fixed:</b> the Slasher barely ever fought. His reach is 3 and the closest anything may stand to the track is 2.5, so 86% of placements left him swinging at air. Short-range towers now slide into range when you drop them — 16% of spots worked before, 96% now</li>
+      <li><b>Fixed:</b> teammates standing around. They were broke (60% kill share against your prices), capped at two towers, locked out of buying by a saving rule, and strolling to random points 40 units away between decisions. They also had a freeze: a teammate whose build spot went invalid retried it forever and never acted again for the rest of the match</li>
       <li><b>Big Wave</b> gets its own treatment — the title turns into a rolling wave with spray coming off it. Nick made that one on BandLab</li>
       <li>The Deploy Pad is gone; Play and the Squad Desk both start a match</li>
     </ul>
@@ -1941,7 +1943,11 @@ function kill(e,reward){
   if(e.bar)e.bar.visible=false;
   if(reward){
     addCash(e.d.cash);G.kills++;G.earned+=e.d.cash;
-    for(const b of G.bots)b.cash+=Math.floor(e.d.cash*.6);
+    /* Teammates pay the same prices you do, so they earn the same bounty.
+       At 60% they simply could not keep up: measured over a real match a
+       teammate sat at $50 for thirty seconds after buying one tower, unable
+       to afford anything at all — which is what "they just sit there" was. */
+    for(const b of G.bots)b.cash+=e.d.cash;
     popCash(e.g.position,e.d.cash);sfx('cash');
     if(e.d.split){for(let i=0;i<e.d.split[1];i++)spawnEnemy(e.d.split[0],e.dist-1.2*i);}
   }
@@ -3197,10 +3203,35 @@ $('closeLoad').onclick=()=>$('loadout').classList.remove('on');
 $('closeSquad').onclick=()=>$('squad').classList.remove('on');
 $('cancelPlace').onclick=()=>stopPlacing();
 $('deployBtn').onclick=()=>{if(ghost)commitPlace(ghost.position.x,ghost.position.z);};
+/* Short-range towers were nearly impossible to place usefully by hand. The
+   closest anything may legally stand to the middle of the track is 2.50, and
+   the Slasher only reaches 3.0 \u2014 so 86% of legal spots left him swinging at
+   air, which reads as "the Slasher doesn't work". Rather than quietly changing
+   the range he was specified with, slide a spot that cannot reach straight
+   toward the nearest stretch of path until it can. Still a legal spot, just
+   one that actually fights. */
+function snapToReach(key,x,z){
+  if(NO_ATTACK[key])return {x,z};
+  const rng=TOWERS[key].lv[0].rng;
+  const np=nearestPath(x,z);
+  if(!np||np.d<=rng-.15)return {x,z};
+  let ax=x-np.x,az=z-np.z;
+  const al=Math.hypot(ax,az);
+  if(al<.01)return {x,z};
+  ax/=al;az/=al;
+  const floor=PATH_W/2+.95;
+  for(let d=rng-.2;d>=floor;d-=.12){
+    const nx=np.x+ax*d,nz=np.z+az*d;
+    if(validSpot(nx,nz))return {x:nx,z:nz,moved:true};
+  }
+  return {x,z};
+}
 function commitPlace(x,z){
   if(!G.placing)return;
   if(capReached(G.placing)){banner(capMsg(G.placing));sfx('no');stopPlacing();return;}
   if(!validSpot(x,z)){banner('Can\u2019t deploy there');sfx('no');return;}
+  const sn=snapToReach(G.placing,x,z);
+  if(sn.moved){x=sn.x;z=sn.z;}
   const def=TOWERS[G.placing];
   if(G.cash<def.cost){banner('Not enough cash');sfx('no');return;}
   addCash(-def.cost);
@@ -4913,8 +4944,12 @@ function cornerBonus(x,z,rng){
   }
   return best;
 }
-function bestSpotFor(key,tries){
+/* `near` biases the search toward a point (a teammate's own position), so they
+   build where they are standing rather than hiking to the far end of the map
+   for a marginally better spot. The player's own placement ignores it. */
+function bestSpotFor(key,tries,near){
   const def=TOWERS[key],rng=def.lv[0].rng;
+  const walkPenalty=(x,z)=>near?Math.hypot(x-near.x,z-near.z)*3.2:0;
   /* A Mine has no range and never shoots, so scoring it on path coverage is
      nonsense — it wants a safe corner well back off the road instead. */
   if(NO_ATTACK[key]){
@@ -4923,7 +4958,7 @@ function bestSpotFor(key,tries){
       const pp=pathPos(rnd(3,PATH_LEN-3)),a=rnd(0,6.283);
       const x=pp.x+Math.cos(a)*rnd(7,13),z=pp.z+Math.sin(a)*rnd(7,13);
       if(!botValid(x,z))continue;
-      const sc=distToPath(x,z)*3-crowding(x,z)*30;
+      const sc=distToPath(x,z)*3-crowding(x,z)*30-walkPenalty(x,z);
       if(sc>bs){bs=sc;best={x,z};}
     }
     return best;
@@ -4937,12 +4972,17 @@ function bestSpotFor(key,tries){
     const r=rnd(lo,hi);
     const x=pp.x+Math.cos(a)*r,z=pp.z+Math.sin(a)*r;
     if(!botValid(x,z))continue;
+    // a spot it cannot shoot from is not a spot. The old soft penalty was
+    // useless for short reach: every legal spot was out of a Slasher's range,
+    // so they all scored the same and teammates parked him uselessly.
+    if(distToPath(x,z)>rng)continue;
     const sc=coverGain(x,z,rng)*220         // new ground is the main prize
             +pathCoverage(x,z,rng)*45       // ... but raw coverage still counts
             +cornerBonus(x,z,rng)*40        // corners hold zombies in range
             +lateBias(x,z)*20               // leaks happen at the far end
             -crowding(x,z)*22               // don't bunch up
-            -Math.max(0,distToPath(x,z)-rng*.65)*9;   // never stand out of reach
+            -Math.max(0,distToPath(x,z)-rng*.65)*9    // never stand out of reach
+            -walkPenalty(x,z);              // and don't hike across the map for it
     if(sc>bs){bs=sc;best={x,z};}
   }
   return best;
@@ -4962,7 +5002,15 @@ function botPick(b){
   const add=(k,score)=>{
     const d=TOWERS[k];
     if(!owned(k))return;                       // coin-locked or map-locked
-    if(b.cash>=d.cost&&c[k]<typeCap(k))opts.push([k,score-c[k]*9]);
+    if(b.cash<d.cost||c[k]>=typeCap(k))return;
+    /* Leaving yourself broke is a bad move a person would not make twice.
+       Spending $450 of an opening $500 on a Cop is why they then stood still
+       for half a minute, so an option that empties the bank is marked down. */
+    const after=b.cash-d.cost;
+    const squeeze=after<180?(180-after)*.14:0;
+    // and a real penalty for another copy of what is already out there — at -9
+    // a teammate would happily end the match with four identical Robbers
+    opts.push([k,score-c[k]*c[k]*11-c[k]*14-squeeze]);
   };
   /* Income first, the way a person plays it: a Mine bought on wave 2 has paid
      for itself several times over by wave 10, so they open with one or two and
@@ -4986,9 +5034,22 @@ function botPick(b){
 /* How many towers this bot should own by now. Without a cap they spent every
    coin on new bodies and never levelled anything — which is exactly the
    "they never upgrade" complaint. */
-const BOT_CAP=6;                       // per teammate, so a squad cannot flood the map
+/* How many towers a teammate should own by now.
+   This used to be 2 + wave/4 capped at 6 — which meant two towers until wave 8
+   and three until wave 12. Measured over five minutes of play they applied one
+   upgrade, ended on one or two towers and sat on $1,000 doing nothing, which
+   is exactly the "they just sit there" complaint. The field holds 25 units, so
+   there is room for them to actually build. */
+const BOT_CAP=8;
 function botTowerBudget(b){
-  return Math.min(BOT_CAP,2+Math.floor(G.wave/4));
+  return Math.min(BOT_CAP,3+Math.floor(G.wave*.7));
+}
+/* A teammate sitting on far more money than it needs should spend it, not
+   hoard. If the bank covers a new tower AND the cheapest upgrade with room to
+   spare, the budget stops applying. */
+function botRich(b){
+  const up=cheapestUpgrade(b);
+  return b.cash>=800+(up||0);
 }
 /* The cheapest level-up available to this bot, affordable or not. Without this
    they would spend every spare $150 on another level-1 body and never bank
@@ -5061,6 +5122,29 @@ function botStep(dt){
         b.tag.material.needsUpdate=true;
       }
     }
+    /* Spend the surplus, whatever else is going on.
+       Measured over six waves, teammates finished holding $1,870 with their
+       towers still on level 1 — the decision cadence simply did not come round
+       often enough to keep up with the income. This runs regardless of walking
+       or cooldowns: if a bot is sitting on real money and one of its towers can
+       be levelled, it levels it. Bounded per frame, and it always leaves a
+       working float so they can still react to a leak. */
+    if(!G.ending&&b.cash>=700){
+      let acts=0;
+      while(acts<2){
+        const u=botUpgradePick(b);
+        if(!u)break;
+        const c=upgradeCost(u);
+        if(c==null||b.cash-c<300)break;
+        b.cash-=c;u.spent+=c;
+        applyUpgrade(u,false);
+        acts++;
+      }
+      if(acts){
+        botSay(b,'levelling up');
+        if(b.cd<.5)b.cd=rnd(.5,1.2);
+      }
+    }
     // standing on the track is never right — step off it before anything else
     if(!b.dest&&distToPath(b.g.position.x,b.g.position.z)<PATH_W/2+1.2){
       const np=nearestPath(b.g.position.x,b.g.position.z);
@@ -5097,11 +5181,20 @@ function botStep(dt){
       // a boss is coming: level what is already standing rather than dropping a
       // fresh level-1 body that will not survive contact
       const bossPush=G.bossWave&&!!up;
-      const overBudget=bossPush||b.mine.length>=botTowerBudget(b);
+      const rich=botRich(b);
+      const overBudget=bossPush||(!rich&&b.mine.length>=botTowerBudget(b))||b.mine.length>=BOT_CAP;
       // once they own a couple of towers they bank toward the next level
-      // instead of dribbling the cash away on more level-1 bodies
+      // instead of dribbling the cash away on more level-1 bodies — but only
+      // while they are actually short of the money, not indefinitely
+      /* Bank toward a level-up only when it is genuinely within reach AND they
+         already have their quota of towers. The old rule ("2+ towers and can't
+         afford the cheapest upgrade") froze them solid: once their towers hit
+         Lv3 the next upgrade costs $1,400, so a teammate holding $335 would
+         refuse to buy anything ever again. Measured over 200 seconds that was
+         77 of 83 decisions spent wandering. */
       const nextUp=cheapestUpgrade(b);
-      const saving=!up&&nextUp!==null&&b.mine.length>=2&&b.cash<nextUp;
+      const closeToUp=nextUp!==null&&b.cash>=nextUp*.55;
+      const saving=!up&&!rich&&closeToUp&&b.mine.length>=botTowerBudget(b);
       const buy=(overBudget||saving)?null:botPick(b);
       const preferUp=!!up;
       if(saving&&b.sayT<=0&&Math.random()<.25)botSay(b,'saving for an upgrade');
@@ -5110,15 +5203,16 @@ function botStep(dt){
         b.cash-=c;up.spent+=c;
         applyUpgrade(up,false);
         botSay(b,bossPush?'levelling up, boss incoming':'upgraded '+SHORT[up.key]+' \u2192 Lv'+(up.lvl+1));
-        // they keep working through a wave instead of standing about after one move
-        b.cd=G.waveActive?rnd(2,4):rnd(4,7.5);
+        // straight on to the next decision \u2014 the old 4-7.5s pause is most of
+        // why they looked idle. If there is still money to spend, spend it.
+        b.cd=rnd(.5,1.4);
       }else if(buy){
-        const spot=bestSpotFor(buy,26);
+        const spot=bestSpotFor(buy,34,b.g.position);
         if(spot){
           b.dest={x:spot.x,z:spot.z,want:buy};
           botSay(b,buy==='mine'?'setting up a mine':'placing a '+SHORT[buy]);
-        }
-        b.cd=G.waveActive?rnd(1.6,3.4):rnd(2.5,5.5);
+          b.cd=rnd(.4,1);
+        }else b.cd=rnd(.6,1.4);       // no spot found: try again shortly, don't stall
       }else{
         // saving up — drift near the track so it's in position. The old version
         // never checked the spot, so teammates would happily park in the middle
@@ -5133,15 +5227,26 @@ function botStep(dt){
               const a=rnd(0,6.283),r=rnd(2.2,4);
               x=own.g.position.x+Math.cos(a)*r;z=own.g.position.z+Math.sin(a)*r;
             }else{
-              const pp=pathPos(rnd(PATH_LEN*.15,PATH_LEN*.95));
-              const a=rnd(0,6.283),r=rnd(3.5,8);
-              x=pp.x+Math.cos(a)*r;z=pp.z+Math.sin(a)*r;
+              /* Drift near where they already are. This used to pick a random
+                 point along the WHOLE path — often 40+ units away, a 15-second
+                 stroll at walking pace — so between one decision and the next
+                 they were crossing the map instead of playing. */
+              const a=rnd(0,6.283),r=rnd(3,9);
+              x=b.g.position.x+Math.cos(a)*r;z=b.g.position.z+Math.sin(a)*r;
             }
             if(botValid(x,z)){b.dest={x,z,want:null};break;}
           }
         }
-        b.cd=rnd(1.5,3.5);
+        // wandering is the only branch that should ever pause for long, and
+        // even then it re-checks quickly once they have money to spend
+        b.cd=(b.cash>400?rnd(.8,1.8):rnd(1.5,3));
       }
+    }
+    /* An aimless stroll is abandoned the moment there is something worth doing.
+       Without this they would finish a 10-second walk to nowhere before even
+       checking whether they could afford a tower. */
+    if(b.dest&&!b.dest.want&&b.cd<=0){
+      if(botUpgradePick(b)||botPick(b)){b.dest=null;b.stuck=0;}
     }
     let moving=false;
     if(b.dest){
@@ -5201,11 +5306,21 @@ function botStep(dt){
             // someone built here while we walked over. Re-target and walk to the
             // new spot — the old code dropped the tower at the replacement spot
             // instantly, so towers popped in across the map from their owner.
-            const alt=bestSpotFor(b.dest.want,18);
+            const alt=bestSpotFor(b.dest.want,22,b.g.position);
             if(alt&&Math.hypot(alt.x-b.g.position.x,alt.z-b.g.position.z)>2.5){
               b.dest={x:alt.x,z:alt.z,want:b.dest.want};skip=true;
             }else if(alt){x=alt.x;z=alt.z;}
-            else skip=true;
+            else{
+              /* Nowhere left to put it. Abandon the job outright.
+                 This used to just `skip` and fall through to the `continue`
+                 below WITHOUT clearing b.dest — and since the bot was already
+                 standing on its destination, it retried the same dead spot
+                 every frame forever. Observed: a teammate frozen for the whole
+                 match with no towers and its cooldown at -359. */
+              b.dest=null;b.cd=rnd(.8,1.8);b.stuck=0;
+              botWalkPose(b,false,dt);
+              continue;
+            }
           }
           // placedCount only counts the player's towers, so the old check let a
           // teammate stack unlimited copies — cap the squad the same way
@@ -5219,7 +5334,7 @@ function botStep(dt){
         }
         // a short breather after a stroll, a longer one after building
         const wasBuilding=!!b.dest.want;
-        b.dest=null;b.cd=wasBuilding?rnd(2.5,5):rnd(.8,2.4);
+        b.dest=null;b.cd=wasBuilding?rnd(.8,1.8):rnd(.4,1.2);
       }
     }
     /* Stood still with a wave running: watch the zombies, not the scenery.
