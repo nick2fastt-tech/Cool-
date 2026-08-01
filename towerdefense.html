@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Tower Defense V1.9 Beta</title>
+<title>Tower Defense V1.91 Beta</title>
 <style>
 :root{
   --void:#04050c;
@@ -578,7 +578,17 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 
   <div class="sheet pe" id="log">
     <div class="sheetHead"><h2>Update Log</h2><button class="btn sm pe" id="closeLog">Close</button></div>
-    <div class="logV">V1.9 <span>beta</span></div>
+    <div class="logV">V1.91 <span>beta</span></div>
+    <ul class="logL">
+      <li><b>The Burned Corpse, rebuilt.</b> An iron jaw bolted onto the skull on a real hinge with pistons either side, a bigger mouth, teeth top and bottom, burnt-through ribs with fire behind them, and a furnace door in its chest</li>
+      <li><b>It winds up now.</b> 1.5 seconds where both hands come up and physically haul its own jaw open while a ball of fire builds in its throat &mdash; then the flame. It only does damage while actually breathing</li>
+      <li><b>Idle is a stance, not a pose.</b> Hands in, weight on one hip, head cocked. It is waiting, not braced</li>
+      <li><b>Fire rate 0.70 &rarr; 0.50</b> across the four levels, instead of a flat 0.5</li>
+      <li><b>At max level the fire burns purple</b> &mdash; flame, core, eyes and the embers in its ribs</li>
+      <li><b>Once a minute it opens its chest and sends out five axemen.</b> 110 HP each, they sprint at the nearest zombie and swing until they burn out after 22 seconds. Axes count as blades, so they cut straight through the stone shields in The Mines</li>
+      <li>It stands on a proper plinth now: an iron-ringed slab with coals burning around the rim and chains running to its ankles</li>
+    </ul>
+    <div class="logV">V1.9</div>
     <ul class="logL">
       <li><b>New map: The Mines.</b> 30 waves underground &mdash; rock ceiling, pit props, rails with carts sat on them, strung lamps for light, and the track running straight, right, left, then hard right into a hole in the floor. Unlocked by clearing The Volcano</li>
       <li><b>13 enemies found only down there.</b> Waves 1&ndash;10 are the crew that went down: Miners, Drifters, Lamp Carriers, Cave Crawlers, Shaft Diggers, Stone Zombies, and The Foreman at wave 10. 70 to 1,500 HP</li>
@@ -778,7 +788,7 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
   <div id="title" class="pe">
     <div class="sub">Beta Version</div>
     <h1>Tower<br>Defense</h1>
-    <div class="sub" style="letter-spacing:.5em">V 1.90</div>
+    <div class="sub" style="letter-spacing:.5em">V 1.91</div>
     <ul>
       <li>Clear a map to unlock the next: Grassy Field → The Forest → The Volcano</li>
       <li>Left side of the screen = move · right side = look</li>
@@ -1204,14 +1214,19 @@ const MINE={
 /* The Burned Corpse — unlocked by clearing The Volcano. It does not fire shots;
    it opens its mouth and holds a cone of flame for three seconds, then rests
    for two. Anything caught keeps burning after it leaves the cone. */
+/* The Burned Corpse. It does not shoot — it winds up for a second and a half
+   with both hands hauling its own jaw open, then holds a cone of flame. At max
+   level the fire burns purple, and once a minute it opens its chest and sends
+   five axemen out of the plinth to meet the horde head on. */
 const CORPSE_T={
   key:'corpse',name:'Burned Corpse',cost:800,icon:'💀',unlock:'corpse',
-  breath:{on:3,off:2},
+  breath:{on:3,off:2},charge:1.5,
+  minion:{every:60,count:5,hp:110,dmg:14,cd:.8,spd:4.2,life:22},
   lv:[
-    {dmg:8, cd:.5,rng:6,  burn:4, up:700},
-    {dmg:13,cd:.5,rng:6.8,burn:6, up:1300},
-    {dmg:19,cd:.5,rng:7.6,burn:9, up:2200},
-    {dmg:25,cd:.5,rng:8.5,burn:12,up:null}
+    {dmg:8, cd:.70,rng:6,  burn:4, up:700},
+    {dmg:13,cd:.63,rng:6.8,burn:6, up:1300},
+    {dmg:19,cd:.56,rng:7.6,burn:9, up:2200},
+    {dmg:25,cd:.50,rng:8.5,burn:12,up:null}
   ]
 };
 /* The Toy Soldier — the Blocky Event reward. A green plastic army man on a
@@ -3651,12 +3666,17 @@ function buildMine(){
 }
 /* The Burned Corpse: charred, hunched, mouth hinged open ready to breathe.
    Standing pose deliberately off-kilter — head tipped back, one shoulder low. */
+/* The Burned Corpse.
+   Charred body, ribs burnt through with embers behind them, and a heavy iron
+   jaw bolted onto the skull on a visible hinge — it should read as something
+   that was rebuilt to do this. The mouth is deliberately oversized. */
 function buildCorpse(){
   const g=person({skin:0x3a2b24,hair:false,eye:0xff5a1e,shirt:0x241b16,pants:0x1d1613,shoe:0x120d0b,mouth:0x0d0605});
   const P=g.userData.P,T=P.torso,H=P.head;
   const char=M(0x2a201b),charD=M(0x181210),emberM=M(0xff5a1e),
-        ashM=M(0x6b6058),boneM=M(0x9a8f7e);
-  // burnt-through ribs with embers glowing in the gaps
+        ashM=M(0x6b6058),boneM=M(0x9a8f7e),iron=M(0x3f434a),ironD=M(0x2a2d33),
+        rivetM=M(0x6a6f78);
+  // ---- burnt-through ribs with fire behind them ----
   const cage=new THREE.Mesh(new THREE.CylinderGeometry(.168,.142,.3,8),char);
   cage.scale.set(1.28,1,.9);cage.position.y=.3;T.add(cage);
   const embers=[];
@@ -3666,28 +3686,62 @@ function buildCorpse(){
     const glow=new THREE.Mesh(new THREE.BoxGeometry(.14,.018,.02),emberM);
     glow.position.set(0,.216+i*.055,.128);T.add(glow);embers.push(glow);
   }
-  // ash falling off the shoulders
+  // a furnace door in the chest — this is where the axemen come out
+  const hatch=new THREE.Group();
+  const door=new THREE.Mesh(new THREE.BoxGeometry(.2,.22,.04),iron);
+  door.position.z=.02;hatch.add(door);
+  const grill=new THREE.Mesh(new THREE.BoxGeometry(.15,.03,.05),emberM);
+  grill.position.set(0,.05,.03);hatch.add(grill);
+  const grill2=grill.clone();grill2.position.y=-.03;hatch.add(grill2);
+  hatch.position.set(0,.30,.15);T.add(hatch);
   for(const sx of [-1,1]){
     const pad=new THREE.Mesh(new THREE.SphereGeometry(.078,8,6),ashM);
     pad.scale.set(1,.6,1);pad.position.set(sx*.17,.5,0);T.add(pad);
   }
   const spine=new THREE.Mesh(new THREE.CylinderGeometry(.03,.045,.34,6),charD);
   spine.position.set(0,.3,-.14);T.add(spine);
-  // skull: jaw hinged open, eyes lit
-  const skull=new THREE.Mesh(new THREE.SphereGeometry(.128,10,8),char);
-  skull.scale.set(.98,1.04,1);H.add(skull);
-  const jaw=new THREE.Mesh(new THREE.BoxGeometry(.13,.07,.11),charD);
-  jaw.position.set(0,-.09,.045);H.add(jaw);
-  const maw=new THREE.Mesh(new THREE.SphereGeometry(.062,8,6),M(0x140704));
-  maw.scale.set(1,.8,.7);maw.position.set(0,-.045,.085);H.add(maw);
+  // ---- skull with a big hinged iron jaw ----
+  const skull=new THREE.Mesh(new THREE.SphereGeometry(.132,10,8),char);
+  skull.scale.set(.98,1.02,1);H.add(skull);
+  const plate=new THREE.Mesh(new THREE.BoxGeometry(.19,.10,.16),iron);
+  plate.position.set(0,.07,.03);H.add(plate);
+  for(const sx of [-1,1])for(const sz of [-1,1]){
+    const r=new THREE.Mesh(new THREE.SphereGeometry(.016,6,5),rivetM);
+    r.position.set(sx*.08,.075,.03+sz*.07);H.add(r);
+  }
+  /* The jaw: its own group hung off a hinge below the skull, so opening it
+     rotates the whole lower half of the face rather than sliding a box. */
+  const jaw=new THREE.Group();
+  jaw.position.set(0,-.05,-.02);H.add(jaw);
+  const jawPlate=new THREE.Mesh(new THREE.BoxGeometry(.17,.09,.19),iron);
+  jawPlate.position.set(0,-.045,.075);jaw.add(jawPlate);
+  const jawLip=new THREE.Mesh(new THREE.BoxGeometry(.185,.03,.04),ironD);
+  jawLip.position.set(0,-.075,.16);jaw.add(jawLip);
+  const teeth=[];
+  for(let i=0;i<5;i++){
+    const t1=new THREE.Mesh(new THREE.ConeGeometry(.017,.05,4),boneM);
+    t1.position.set(-.06+i*.03,-.012,.155);t1.rotation.x=Math.PI;jaw.add(t1);teeth.push(t1);
+    const t2=new THREE.Mesh(new THREE.ConeGeometry(.017,.05,4),boneM);
+    t2.position.set(-.06+i*.03,.012,.155);H.add(t2);teeth.push(t2);
+  }
+  for(const sx of [-1,1]){
+    const hinge=new THREE.Mesh(new THREE.CylinderGeometry(.022,.022,.03,8),rivetM);
+    hinge.rotation.z=Math.PI/2;hinge.position.set(sx*.1,-.05,-.01);H.add(hinge);
+    const piston=new THREE.Mesh(new THREE.CylinderGeometry(.011,.011,.11,6),ironD);
+    piston.position.set(sx*.105,-.02,.02);piston.rotation.x=.3;H.add(piston);
+  }
+  const maw=new THREE.Mesh(new THREE.SphereGeometry(.085,9,7),M(0x140704));
+  maw.scale.set(1,.85,.7);maw.position.set(0,-.03,.075);H.add(maw);
+  const throat=new THREE.Mesh(new THREE.SphereGeometry(.05,8,6),emberM);
+  throat.position.set(0,-.03,.03);H.add(throat);
   const eyes=[];
   for(const sx of [-1,1]){
-    const eye=new THREE.Mesh(new THREE.SphereGeometry(.028,7,6),emberM);
-    eye.position.set(sx*.05,.03,.104);H.add(eye);eyes.push(eye);
+    const eye=new THREE.Mesh(new THREE.SphereGeometry(.03,7,6),emberM);
+    eye.position.set(sx*.052,.035,.108);H.add(eye);eyes.push(eye);
   }
   const eyeLight=new THREE.PointLight(0xff5a1e,.45,2.6);
   eyeLight.position.set(0,.05,.16);H.add(eyeLight);
-  // the flame cone, hidden until it breathes
+  // ---- the flame, hidden until it breathes ----
   const flame=new THREE.Mesh(new THREE.ConeGeometry(.42,1.5,12,1,true),
     new THREE.MeshBasicMaterial({color:0xff8a2a,transparent:true,opacity:.62,
       side:THREE.DoubleSide,depthWrite:false}));
@@ -3699,7 +3753,31 @@ function buildCorpse(){
   H.add(flame);H.add(core);
   const fireLight=new THREE.PointLight(0xff7a2a,0,7);
   fireLight.position.set(0,.1,.7);H.add(fireLight);
-  g.userData.corpse={jaw,maw,eyes,eyeLight,flame,core,fireLight,embers};
+  // the ball of fire that builds in the throat during the wind-up
+  const charge=new THREE.Mesh(new THREE.SphereGeometry(.07,8,6),
+    new THREE.MeshBasicMaterial({color:0xffd27a,transparent:true,opacity:.9,depthWrite:false}));
+  charge.position.set(0,-.02,.10);charge.visible=false;H.add(charge);
+  // ---- the plinth it is chained to ----
+  const base=new THREE.Group();
+  const slab=new THREE.Mesh(new THREE.CylinderGeometry(.62,.72,.14,12),M(0x33302c));
+  slab.position.y=.07;slab.castShadow=true;base.add(slab);
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(.6,.05,6,14),iron);
+  ring.rotation.x=Math.PI/2;ring.position.y=.15;base.add(ring);
+  for(let i=0;i<6;i++){
+    const a=i/6*6.283;
+    const coal=new THREE.Mesh(new THREE.BoxGeometry(.1,.07,.1),charD);
+    coal.position.set(Math.cos(a)*.44,.16,Math.sin(a)*.44);coal.rotation.y=a;base.add(coal);
+    const lit=new THREE.Mesh(new THREE.BoxGeometry(.06,.02,.06),emberM);
+    lit.position.set(Math.cos(a)*.44,.205,Math.sin(a)*.44);base.add(lit);
+  }
+  // chains from the plinth to the ankles
+  for(const sx of [-1,1]){
+    const chain=new THREE.Mesh(new THREE.CylinderGeometry(.016,.016,.5,5),iron);
+    chain.position.set(sx*.34,.3,.08);chain.rotation.z=sx*.5;base.add(chain);
+  }
+  g.add(base);
+  g.userData.corpse={jaw,maw,eyes,eyeLight,flame,core,fireLight,embers,charge,
+                     throat,hatch,teeth,base};
   shadowPass(g);
   return g;
 }
@@ -3875,7 +3953,8 @@ function placeTower(key,x,z){
     // animation state: alertness, recoil, idle gesture clock, turn tracking
     seed:rnd(0,6.283),alert:0,rec:0,gest:-1,gestT:rnd(2,7),prevY:0,turn:0,lastSeen:99,
     // Corpse breath cycle and Slasher rage clock
-    breathing:false,brT:0,rage:0,rageT:SLASH_RAGE,reload:0,clamp:0,clampMesh:null};
+    breathing:false,brT:0,phase:'rest',chargeU:0,minT:null,
+    rage:0,rageT:SLASH_RAGE,reload:0,clamp:0,clampMesh:null};
   if(key==='blitzer')blitzerCharge(t);
   // an income tower serves its first shift before it pays — otherwise dropping
   // one hands you $50 the instant it lands
@@ -3888,6 +3967,9 @@ function placeTower(key,x,z){
 const COMMANDERS=[];
 function refreshCommanders(){
   COMMANDERS.length=0;
+  // any axemen still out belong to the run that just ended
+  for(const m of MINIONS)removeFromWorld(m.g);
+  MINIONS.length=0;
   for(const t of G.towers)if(t.key==='commander')COMMANDERS.push(t);
 }
 function auraBuff(t){
@@ -4018,50 +4100,174 @@ function mineTick(t,dt){
    sets them burning, so they keep taking damage after they walk clear. */
 function corpseTick(t,dt,s,target){
   const ud=t.g.userData.corpse;
-  const br=t.def.breath;
+  const br=t.def.breath, maxLvl=t.lvl>=t.def.lv.length-1;
+  const HOT=maxLvl?0xb44aff:0xff8a2a, CORE=maxLvl?0xe9b6ff:0xffe07a;
+  /* Three phases on a loop: charging (1.5s hauling the jaw open with both
+     hands while fire builds in the throat), breathing, then shut. Only the
+     breathing phase does damage. */
   t.brT=(t.brT||0)-dt;
   if(t.brT<=0){
-    t.breathing=!t.breathing;
-    t.brT=t.breathing?br.on:br.off;
-    if(t.breathing)sfx('burn');
+    if(t.phase==='charge'){t.phase='breathe';t.brT=br.on;sfx('burn');}
+    else if(t.phase==='breathe'){t.phase='rest';t.brT=br.off;}
+    else{t.phase=target?'charge':'rest';t.brT=t.phase==='charge'?t.def.charge:.4;
+         if(t.phase==='charge')sfx('recharge');}
   }
-  const maxLvl=t.lvl>=t.def.lv.length-1;
+  t.breathing=(t.phase==='breathe');
+  const charging=(t.phase==='charge');
+  t.chargeU=charging?clamp(1-t.brT/t.def.charge,0,1):0;
   if(ud){
-    // jaw drops open while breathing
-    const want=t.breathing?-.42:-.02;
-    ud.jaw.rotation.x+=(want-ud.jaw.rotation.x)*Math.min(1,dt*11);
+    // the jaw: cracked open on the wind-up, hauled wide to breathe
+    const want=t.breathing?-.95:charging?(-.15-t.chargeU*.7):-.03;
+    ud.jaw.rotation.x+=(want-ud.jaw.rotation.x)*Math.min(1,dt*10);
     ud.flame.visible=ud.core.visible=t.breathing;
+    ud.charge.visible=charging;
+    if(charging){
+      const cu=t.chargeU;
+      ud.charge.scale.setScalar(.4+cu*1.5+Math.sin(performance.now()*.03)*.12);
+      ud.charge.material.color.setHex(CORE);
+      ud.charge.material.opacity=.55+cu*.45;
+      ud.fireLight.color.setHex(HOT);
+      ud.fireLight.intensity=cu*1.6;
+      ud.throat.material.color.setHex(CORE);
+    }
+    // colour is set every frame, not only mid-breath, so a maxed Corpse reads
+    // as purple the moment you look at it rather than only while it is firing
+    if(ud.flame.material.color.getHex()!==HOT){
+      ud.flame.material.color.setHex(HOT);ud.core.material.color.setHex(CORE);
+    }
     if(t.breathing){
       const fl=.8+Math.sin(performance.now()*.02)*.2;
       ud.flame.scale.set(fl,1+Math.sin(performance.now()*.017)*.13,fl);
       ud.core.scale.set(fl*.9,1,fl*.9);
+      ud.flame.material.color.setHex(HOT);
+      ud.core.material.color.setHex(CORE);
       ud.flame.material.opacity=.5+Math.random()*.2;
+      ud.fireLight.color.setHex(HOT);
       ud.fireLight.intensity=1.6+Math.random()*.7;
-    }else ud.fireLight.intensity=0;
-    // at max level the eyes burn yellow instead of ember orange
-    const eyeCol=maxLvl?0xffe23a:0xff5a1e;
+    }else if(!charging)ud.fireLight.intensity=0;
+    // at max level the eyes and embers go purple with the fire
+    const eyeCol=maxLvl?0xd08aff:0xff5a1e;
     for(const e of ud.eyes)if(e.material.color.getHex()!==eyeCol)e.material.color.setHex(eyeCol);
     ud.eyeLight.color.setHex(eyeCol);
     ud.eyeLight.intensity=maxLvl?(.7+Math.sin(performance.now()*.005)*.25):.45;
+    if(maxLvl)for(const em of ud.embers)em.material.color.setHex(0x9a4ade);
+  }
+  // ---- the minion call, once a minute ----
+  const mn=t.def.minion;
+  t.minT=(t.minT==null?mn.every:t.minT)-dt;
+  if(t.minT<=0){
+    t.minT=mn.every;
+    summonAxemen(t);
   }
   if(!t.breathing||!target)return;
   t.cd-=dt;
   if(t.cd>0)return;
   t.cd=s.cd;
-  // everything in a cone in front takes a tick and catches fire
   const dirx=Math.sin(t.g.rotation.y),dirz=Math.cos(t.g.rotation.y);
   for(const e of G.enemies.slice()){
     if(e.dead)continue;
     const vx=e.g.position.x-t.g.position.x,vz=e.g.position.z-t.g.position.z;
     const d=Math.hypot(vx,vz);
     if(d>s.rng)continue;
-    if((vx*dirx+vz*dirz)/(d||1)<.72)continue;      // a fairly tight cone
+    if((vx*dirx+vz*dirz)/(d||1)<.72)continue;
     hurt(e,s.dmg,0,'corpse');
     igniteEnemy(e,s.burn,t.owner);
     if(Math.random()<.5)
-      fxSpark(e.g.position.clone().add(V3(0,1.0*e.d.sc,0)),0xff8a2a);
+      fxSpark(e.g.position.clone().add(V3(0,1.0*e.d.sc,0)),maxLvl?0xb44aff:0xff8a2a);
   }
 }
+/* ---------- the axemen ----------
+   Five of them climb out of the plinth and run up the track swinging at the
+   first thing they reach. They are not towers: they do not count against the
+   unit cap, they cannot be upgraded or sold, and they burn out after a while.
+   Anything that kills them just makes room for the next call. */
+const MINIONS=[];
+function buildAxeman(){
+  const g=person({skin:0x6a5a4a,hair:false,eye:0xff7a3a,shirt:0x3a2a20,pants:0x2a2018,
+                  shoe:0x161210,mouth:0x140a06});
+  const P=g.userData.P;
+  const iron=M(0x4a4e56),wood=M(0x4a3826),emberM=M(0xff6a2a);
+  const hood=new THREE.Mesh(new THREE.SphereGeometry(.14,9,7,0,Math.PI*2,0,1.5),M(0x2e241c));
+  hood.position.y=.02;P.head.add(hood);
+  for(const sx of [-1,1]){
+    const eye=new THREE.Mesh(new THREE.BoxGeometry(.03,.014,.02),emberM);
+    eye.position.set(sx*.045,.01,.107);P.head.add(eye);
+  }
+  // the axe
+  const haft=new THREE.Mesh(new THREE.CylinderGeometry(.022,.026,.62,6),wood);
+  haft.position.y=-.3;P.foreR.add(haft);
+  const head=new THREE.Mesh(new THREE.BoxGeometry(.05,.2,.26),iron);
+  head.position.set(0,-.56,.06);P.foreR.add(head);
+  const edge=new THREE.Mesh(new THREE.BoxGeometry(.02,.22,.06),M(0x9aa0aa));
+  edge.position.set(0,-.56,.19);P.foreR.add(edge);
+  g.scale.setScalar(.82);
+  shadowPass(g);
+  return g;
+}
+function summonAxemen(t){
+  const mn=t.def.minion;
+  const maxLvl=t.lvl>=t.def.lv.length-1;
+  for(let i=0;i<mn.count;i++){
+    const g=buildAxeman();
+    const a=(i/mn.count)*6.283+rnd(-.3,.3);
+    g.position.set(t.g.position.x+Math.cos(a)*.7,0,t.g.position.z+Math.sin(a)*.7);
+    world.add(g);
+    MINIONS.push({g,P:g.userData.P,hp:mn.hp,max:mn.hp,dmg:mn.dmg,cd:0,
+                  spd:mn.spd,life:mn.life,ph:Math.random()*6,swing:0,
+                  owner:t.owner,purple:maxLvl});
+    fxSpark(g.position.clone().add(V3(0,.6,0)),maxLvl?0xb44aff:0xff7a2a);
+  }
+  const ud=t.g.userData.corpse;
+  if(ud&&ud.hatch)ud.hatch.rotation.x=-1.2;    // the chest door swings open
+  banner('The Corpse sent out '+mn.count+' axemen');
+  sfx('win');
+}
+/* Minions run up the path, swing at whatever they reach, and burn out. */
+function minionStep(dt){
+  for(let i=MINIONS.length-1;i>=0;i--){
+    const m=MINIONS[i];
+    m.life-=dt;
+    if(m.life<=0||m.hp<=0){
+      fxSpark(m.g.position.clone().add(V3(0,.7,0)),0x6a5a4a);
+      removeFromWorld(m.g);MINIONS.splice(i,1);continue;
+    }
+    // nearest live zombie
+    let best=null,bd=1e9;
+    for(const e of G.enemies){
+      if(e.dead)continue;
+      const d=Math.hypot(e.g.position.x-m.g.position.x,e.g.position.z-m.g.position.z);
+      if(d<bd){bd=d;best=e;}
+    }
+    m.cd-=dt;if(m.swing>0)m.swing-=dt;
+    if(best){
+      const ang=Math.atan2(best.g.position.x-m.g.position.x,best.g.position.z-m.g.position.z);
+      const df=((ang-m.g.rotation.y+Math.PI*3)%(Math.PI*2))-Math.PI;
+      m.g.rotation.y+=clamp(df*Math.min(1,dt*8),-5*dt,5*dt);
+      if(bd>1.2){
+        m.g.position.x+=Math.sin(m.g.rotation.y)*m.spd*dt;
+        m.g.position.z+=Math.cos(m.g.rotation.y)*m.spd*dt;
+        m.ph+=dt*m.spd*1.9;
+      }else if(m.cd<=0){
+        m.cd=t_corpseMinionCd;m.swing=.28;
+        hurt(best,m.dmg,0,'slasher');      // an axe is a blade: shields do not stop it
+        fxSlash(best.g.position.clone().add(V3(0,.9*best.d.sc,0)),m.g.rotation.y,
+                m.purple?0xb44aff:0xe6edff);
+        sfx('slash');
+      }
+    }else m.ph+=dt*.6;
+    // running / swinging
+    const P=m.P,S1=Math.sin(m.ph),sw=m.swing>0?Math.sin((1-m.swing/.28)*Math.PI):0;
+    P.legL.rotation.x=-S1*.85;P.legR.rotation.x=S1*.85;
+    P.shinL.rotation.x=.08+Math.max(0,-S1)*.8;P.shinR.rotation.x=.08+Math.max(0,S1)*.8;
+    P.armL.rotation.x=S1*.6-.3;
+    P.armR.rotation.x=-1.1-sw*1.6;
+    P.foreR.rotation.x=-.5+sw*.5;
+    P.torso.rotation.x=.14+sw*.2;
+    P.torso.rotation.y=-sw*.35;
+    m.g.position.y=Math.abs(S1)*.06;
+  }
+}
+const t_corpseMinionCd=.8;
 /* ---------- the Bloater's clamp ----------
    The event boss reaches out and snaps a tower's weapon shut — two brick
    clamps close over the gun and it cannot fire until it works them off.
@@ -5238,18 +5444,21 @@ function towerPose(t,dt,target,s){
        Everything comes off t.breathing / t.brT so the body matches the fire. */
     const br=t.def.breath;
     const bT=t.brT||0;
-    // winding up over the last third of a second before the mouth opens
-    const wind=(!t.breathing&&bT<.45)?clamp((.45-bT)/.45,0,1)*A:0;
+    // the wind-up now runs off the real charge phase, not a guess at the timing
+    const wind=(t.phase==='charge')?(t.chargeU||0):0;
     const blow=t.breathing?clamp((br.on-bT)/.35,0,1):0;   // ramps in as it starts
     const sag=Math.sin(now*.9+seed)*.05;
-    // arms hang heavy, swinging slightly, then splay back as it inhales
-    P.armL.rotation.x=mix(.12,-.15,A)+sag-wind*.55+blow*.25;
-    P.armR.rotation.x=mix(.10,-.18,A)-sag-wind*.55+blow*.25;
-    P.armL.rotation.z=mix(.24,.40,A)+wind*.38+blow*.16;
-    P.armR.rotation.z=mix(-.24,-.40,A)-wind*.38-blow*.16;
-    // fingers curled in, forearms slack — never a grip
-    P.foreL.rotation.x=mix(-.30,-.52,A)-wind*.35;
-    P.foreR.rotation.x=mix(-.28,-.50,A)-wind*.35;
+    /* Idle: hands in, weight on one hip, head cocked — it is not braced for
+       anything, it is waiting. Then on the wind-up both hands come UP to the
+       jaw and physically haul it open, which is where the fire comes from. */
+    const idle=1-Math.max(wind,blow);
+    P.armL.rotation.x=mix(.16,-.10,A)*idle+sag*idle-wind*2.35+blow*1.5;
+    P.armR.rotation.x=mix(.14,-.12,A)*idle-sag*idle-wind*2.35+blow*1.5;
+    P.armL.rotation.z=(mix(.30,.42,A))*idle+wind*.60+blow*.5;
+    P.armR.rotation.z=(-mix(.30,.42,A))*idle-wind*.60-blow*.5;
+    // forearms fold up so the hands land either side of the mouth
+    P.foreL.rotation.x=mix(-.34,-.55,A)*idle-wind*1.15-blow*.7;
+    P.foreR.rotation.x=mix(-.32,-.53,A)*idle-wind*1.15-blow*.7;
     // chest swells on the inhale and empties over the breath
     P.chest.scale.y=1+(breath*.5+.5)*.05+wind*.14-blow*.06;
     P.torso.rotation.x+=mix(.16,.05,A)-wind*.24+blow*.30;
@@ -6203,7 +6412,7 @@ const lobbyNPCs=[];
   // screen on the far wall
   boardMesh=new THREE.Mesh(new THREE.PlaneGeometry(12,6),
     new THREE.MeshBasicMaterial({map:signTex([
-      {t:'TOWER DEFENSE',b:1,s:54,y:100},{t:'BETA  ·  V1.9  ·  12 TOWERS  ·  5 MAPS',s:24,c:'#8b95cf',y:158}])}));
+      {t:'TOWER DEFENSE',b:1,s:54,y:100},{t:'BETA  ·  V1.91  ·  12 TOWERS  ·  5 MAPS',s:24,c:'#8b95cf',y:158}])}));
   // the bezel is .35 deep, so its front face sits at -D+.195 — the screen has
   // to clear that or the frame swallows it
   boardMesh.position.set(0,4.8,-D+.42);lobby.add(boardMesh);
@@ -6333,7 +6542,7 @@ const lobbyNPCs=[];
   {
     const st=stationAt('log'),g=new THREE.Group();
     const board=new THREE.Mesh(new THREE.PlaneGeometry(4.6,2.6),
-      new THREE.MeshBasicMaterial({map:signTex([{t:'UPDATE LOG',b:1,s:56,y:110},{t:'V1.9 BETA',s:36,c:'#5ef2a0',y:180}])}));
+      new THREE.MeshBasicMaterial({map:signTex([{t:'UPDATE LOG',b:1,s:56,y:110},{t:'V1.91 BETA',s:36,c:'#5ef2a0',y:180}])}));
     board.position.set(0,2.5,.13);g.add(board);
     const back=new THREE.Mesh(new THREE.BoxGeometry(5,3,.22),M(0x232a4e));
     back.position.set(0,2.5,0);back.castShadow=true;g.add(back);
@@ -6485,7 +6694,7 @@ function enterLobby(won){
       {t:'made it to wave '+G.wave+' of '+total,s:25,y:122},{t:runLine,s:22,c:'#8b95cf',y:160},
       {t:coinLine,b:1,s:30,c:'#ffd166',y:202},{t:bonusLine,s:21,c:'#c9a24a',y:233}]);
   else setBoard([{t:'TOWER DEFENSE',b:1,s:54,y:100},
-      {t:'BETA V1.9  ·  PRESS PLAY OR WALK OVER',s:23,c:'#8b95cf',y:158}]);
+      {t:'BETA V1.91  ·  PRESS PLAY OR WALK OVER',s:23,c:'#8b95cf',y:158}]);
   buildPals();
 }
 function toLobby(won){
@@ -7447,6 +7656,7 @@ function tick(){
   if(CUT.on)cutStep(dt);
   else if(started&&!G.over)step(dt);
   stepPortals(dt);
+  if(!CUT.on&&started&&!G.over)minionStep(dt);
   npTick(dt);
   detailStep(dt);
   updateCamera(dt);
