@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Tower Defense V1.85 Beta</title>
+<title>Tower Defense V1.9 Beta</title>
 <style>
 :root{
   --void:#04050c;
@@ -374,6 +374,9 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 .brickStat{flex:1;background:rgba(10,14,30,.82);border-radius:7px;padding:7px 6px;text-align:center}
 .brickStat .bv{font-size:15px;font-weight:bold;color:#ffd23f}
 .brickStat .bk{font-size:8px;letter-spacing:.13em;color:#8b95cf;text-transform:uppercase;margin-top:2px}
+.evTimeTag{display:block;font-size:8px;letter-spacing:.08em;color:var(--gold);
+  font-weight:normal;margin-top:1px}
+#event.evOver .brickPanel{filter:grayscale(.75) brightness(.75)}
 #evPlay{background:linear-gradient(180deg,#ffd23f,#e0a615);color:#1a1204;font-weight:bold;
   letter-spacing:.12em;box-shadow:inset 0 -4px 0 rgba(0,0,0,.25)}
 /* ---- playlist picker ---- */
@@ -516,7 +519,7 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 
   <div id="lobbyBtns">
     <button class="btn go pe" id="playNow">▶ Play</button>
-    <button class="btn sm pe" id="eventBtn">🧱 Event</button>
+    <button class="btn sm pe" id="eventBtn">🧱 Event <b id="evBtnTag" class="evTimeTag"></b></button>
     <button class="btn sm pe" id="musicBtn">♫ Music</button>
   </div>
 
@@ -575,7 +578,20 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 
   <div class="sheet pe" id="log">
     <div class="sheetHead"><h2>Update Log</h2><button class="btn sm pe" id="closeLog">Close</button></div>
-    <div class="logV">V1.85 <span>beta</span></div>
+    <div class="logV">V1.9 <span>beta</span></div>
+    <ul class="logL">
+      <li><b>New map: The Mines.</b> 30 waves underground &mdash; rock ceiling, pit props, rails with carts sat on them, strung lamps for light, and the track running straight, right, left, then hard right into a hole in the floor. Unlocked by clearing The Volcano</li>
+      <li><b>13 enemies found only down there.</b> Waves 1&ndash;10 are the crew that went down: Miners, Drifters, Lamp Carriers, Cave Crawlers, Shaft Diggers, Stone Zombies, and The Foreman at wave 10. 70 to 1,500 HP</li>
+      <li>Waves 11&ndash;30 are what the deep workings sent back: Pickaxe Zombie, Crack Source, Slow Pickaxe, Brute Stone, and the Fire Source and Zombie Tank as mini bosses. 400 to 3,500 HP. <b>The Gold Miner</b> is waiting at wave 30 with <b>10,000</b></li>
+      <li><b>Stone zombies carry shields that stop bullets dead.</b> Scout, Sniper, Blitzer, Robber, Survivor and Toy Soldier do nothing to them &mdash; bring blades, a baton or fire</li>
+      <li>The Mines pays $150 on wave 1 up to <b>$7,000</b> on wave 30. You will need it. Clear it once and you keep a <b>5,000 coin prize</b></li>
+      <li><b>The Volcano no longer lags.</b> It was carrying 66 lights &mdash; one per lava crack, pool and vent &mdash; and in a forward renderer every light is computed on every pixel of everything. Down to 15, with one shared light that jumps to whichever vent is erupting. Its frame render went from 166ms to <b>21ms</b></li>
+      <li><b>Fixed:</b> The Forest had a second Grave Digger on wave 15. It has exactly one boss now, at wave 20</li>
+      <li><b>The Sniper is locked</b> and costs $750 to deploy &mdash; bought once with coins, like the Commander</li>
+      <li><b>The Mine tower pays every wave too</b>, on top of its five-second trickle: $150 a wave at Lv1 up to $2,000 at Lv5</li>
+      <li><b>The Blocky Event runs for two weeks</b> from the first time you open this build, then it closes. The countdown is on the Event button</li>
+    </ul>
+    <div class="logV">V1.85</div>
     <ul class="logL">
       <li><b>The black flicker is gone.</b> It was mine: the frame-rate governor defended itself by lowering the render resolution, which reallocates the drawing buffer &mdash; and a reallocation shows as a black frame. It only ever happened in a crowd because that is exactly when the governor acted. It now buys the time by pulling detail distances in instead, and the buffer is only touched when <i>you</i> change quality</li>
       <li><b>Crowds cost far less.</b> Health bars and numbers were two extra see-through draws per zombie &mdash; about 180 of them with ninety on the field. They now only draw for things close enough to read, bosses, or anything actually hurt: 1,862 draw calls down to 1,422, and HP repaints from 123 a second to none</li>
@@ -762,7 +778,7 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
   <div id="title" class="pe">
     <div class="sub">Beta Version</div>
     <h1>Tower<br>Defense</h1>
-    <div class="sub" style="letter-spacing:.5em">V 1.85</div>
+    <div class="sub" style="letter-spacing:.5em">V 1.90</div>
     <ul>
       <li>Clear a map to unlock the next: Grassy Field → The Forest → The Volcano</li>
       <li>Left side of the screen = move · right side = look</li>
@@ -827,7 +843,18 @@ const MAPS={
        build with any reach and made the whole thing a corridor fight. Six
        waypoints, wide sweeps, plenty of open ground either side. */
     wp:[[-38,-14],[-6,-14],[-6,12],[22,12],[22,-10],[38,-10]],
-    spawn:[-30,-6]}
+    spawn:[-30,-6]},
+  /* The Mines. Underground: no sky, no sun to speak of, and the only light is
+     what the crew strung up. The run is deliberately simple — straight, a
+     right, a left, then a hard right into the hole — because everything else
+     about this map is trying to kill you. */
+  mines:{key:'mines',name:'The Mines',mode:'The Gold Miner',waves:30,hpScale:1,
+    diff:'Insane',icon:'\u26cf\ufe0f',coins:1600,cave:1,pay:[150,7000],
+    portalCol:0xffd23f,stoneCol:0x6b6259,stoneCol2:0x494239,stoneCol3:0x827868,scorchCol:0x2a231b,
+    blurb:'30 waves \u00b7 clear The Volcano to unlock',
+    fog:{col:0x08060a,near:14,far:52},sun:0xffd9a0,sunI:.28,hemi:[0x4a4256,0x1a1512,.42],
+    wp:[[-40,-20],[-4,-20],[-4,10],[26,10],[26,-16],[40,-16]],
+    spawn:[-34,-13]}
 };
 let MAP=MAPS.grassy;
 let WP=MAP.wp,SEG=[],PATH_LEN=0;
@@ -897,7 +924,30 @@ const ZT={
   tower2 :{n:'Stack Tower',   hp:340, spd:1.4,cash:95, leak:4,  sc:1.42,blkTall:1,skin:0xb452d0,shirt:0x8a2fa8,pants:0x5c1c70,blk:1},
   wheel  :{n:'Wheel Rider',   hp:150, spd:5.0,cash:70, leak:3,  sc:1,   skin:0x30323a,shirt:0xe33b3b,pants:0x1a1c22,blk:1},
   sharp  :{n:'Sharp Shard',   hp:70,  spd:3.0,cash:44, leak:3,  sc:.96, skin:0xff4f8b,shirt:0xff4f8b,pants:0xc02060,blk:1,split:['stud',2]},
-  bloater:{n:'Blocky Bloater',hp:500, spd:1.3,cash:320,leak:12, sc:1.9, skin:0x8be04a,shirt:0x5aa82c,pants:0x3d7a1c,blk:1,arm:2,boss:1,mini:1,shed:1}
+  bloater:{n:'Blocky Bloater',hp:500, spd:1.3,cash:320,leak:12, sc:1.9, skin:0x8be04a,shirt:0x5aa82c,pants:0x3d7a1c,blk:1,arm:2,boss:1,mini:1,shed:1},
+
+  /* ---------- The Mines ----------
+     Nothing here appears on any other map. Two families: the crew that went
+     down and never came back up (waves 1-10), and what the deep workings sent
+     back (waves 11-30). `shield` blocks projectiles outright — only melee and
+     fire get through — which is what the stone ones are for.
+     `mn:1` marks them as mine-dwellers for the model pass. */
+  // -- waves 1-10 --
+  cowboy :{n:'Miner',          hp:70,  spd:2.2,cash:14, leak:1, sc:1,   skin:0x9c7a55,shirt:0x8a4a2a,pants:0x3d4356,mn:1,hat:1},
+  drifter:{n:'Drifter',        hp:110, spd:3.0,cash:22, leak:1, sc:.97, skin:0x8f6f4c,shirt:0x5c4630,pants:0x33384a,mn:1,hat:1},
+  lamper :{n:'Lamp Carrier',   hp:150, spd:1.9,cash:28, leak:2, sc:1.03,skin:0xa07f58,shirt:0x4a5a3c,pants:0x2f3540,mn:1,hat:1,glow:0xffc65a,lamp:1},
+  stone  :{n:'Stone Zombie',   hp:260, spd:1.6,cash:55, leak:2, sc:1.14,skin:0x8d8a82,shirt:0x6b6862,pants:0x4e4c47,mn:1,rock:1,shield:1},
+  digger2:{n:'Shaft Digger',   hp:340, spd:2.0,cash:62, leak:3, sc:1.08,skin:0x8a6a48,shirt:0x4a3a28,pants:0x33302a,mn:1,hat:1,tool:'shovel'},
+  bat    :{n:'Cave Crawler',   hp:90,  spd:4.6,cash:40, leak:2, sc:.86, skin:0x6b5f70,shirt:0x4a4152,pants:0x3a3244,mn:1,crawl:1},
+  foreman:{n:'The Foreman',    hp:1500,spd:1.5,cash:260,leak:8, sc:1.55,skin:0x9c7040,shirt:0x7a3320,pants:0x342c22,mn:1,hat:1,arm:2,boss:1,mini:1},
+  // -- waves 11-30 --
+  pick   :{n:'Pickaxe Zombie', hp:400, spd:2.3,cash:70, leak:3, sc:1.06,skin:0x87684a,shirt:0x53412c,pants:0x2f3340,mn:1,hat:1,tool:'pick'},
+  crack  :{n:'Crack Source',   hp:520, spd:6.2,cash:120,leak:4, sc:.95, skin:0xd88a3a,shirt:0x6a2a12,pants:0x3a1c10,mn:1,glow:0xff8a2a,crackle:1},
+  slowpick:{n:'Slow Pickaxe',  hp:1400,spd:1.1,cash:150,leak:5, sc:1.26,skin:0x7a5c40,shirt:0x45351f,pants:0x2b2f3a,mn:1,hat:1,tool:'pick',arm:2},
+  brute  :{n:'Brute Stone',    hp:2200,spd:1.4,cash:230,leak:7, sc:1.5, skin:0x7e7b74,shirt:0x5e5b56,pants:0x46443f,mn:1,rock:1,shield:1,arm:4},
+  firesrc:{n:'Fire Source',    hp:3500,spd:1.7,cash:420,leak:10,sc:1.7, skin:0xe0682a,shirt:0x8a2a10,pants:0x4a1c0c,mn:1,glow:0xff5a1e,crackle:1,arm:3,boss:1,mini:1},
+  ztank  :{n:'Zombie Tank',    hp:3500,spd:.95,cash:480,leak:14,sc:1.95,skin:0x6f7a68,shirt:0x4a5244,pants:0x343a30,mn:1,rock:1,shield:1,arm:6,boss:1,mini:1},
+  goldman:{n:'The Gold Miner', hp:10000,spd:1.15,cash:2000,leak:100,sc:2.7,skin:0xd9b34a,shirt:0x8a6a1e,pants:0x4a3a12,mn:1,hat:1,glow:0xffd23f,arm:8,boss:1}
 };
 const WAVES=[
   {gap:1.15,mix:[['normal',8]]},
@@ -929,7 +979,9 @@ const GRAVE_MIX=[
   [['giant',8],['toxic',6],['quick',12]],
   [['necro',5],['armored',12],['runner',12]],
   [['giant',10],['heavy',10],['toxic',6]],
-  [['digger',1],['giant',8],['necro',4],['runner',12]],
+  // wave 15 used to drop a second Grave Digger. The forest has exactly one
+  // boss and it closes the map at wave 20 — this one was a bug.
+  [['giant',10],['necro',6],['runner',14],['armored',8]],
   [['toxic',10],['necro',6],['armored',14]],
   [['runner',18],['quick',16],['heavy',10]],
   [['giant',12],['toxic',8],['necro',6],['armored',10]],
@@ -996,7 +1048,48 @@ const BLOCKY_MIX=[
   [['bloater',2],['tower2',10],['sharp',14],['clamp',12],['wheel',12]]
 ];
 const WAVES_BLOCKY=BLOCKY_MIX.map((mix,i)=>({gap:Math.max(.28,1.05-i*.04),mix}));
-const WAVE_SETS={grassy:null,forest:WAVES20,volcanic:WAVES25,blocky:WAVES_BLOCKY};
+/* ---------- The Mines, 30 waves ----------
+   Waves 1-10 are the crew that went down: miners, drifters, lamp carriers,
+   crawlers, and the stone ones whose shields stop bullets outright. The
+   Foreman closes that half at wave 10.
+   Waves 11-30 are what the deep workings sent back, and they do not stop
+   coming. Fire Source and the Zombie Tank take turns as mini bosses, and The
+   Gold Miner is waiting at the bottom. */
+const MINES_MIX=[
+  [['cowboy',10]],
+  [['cowboy',12],['drifter',5]],
+  [['cowboy',10],['drifter',8],['bat',4]],
+  [['drifter',12],['lamper',5],['bat',6]],
+  [['stone',3],['cowboy',12],['drifter',8]],
+  [['lamper',8],['bat',10],['stone',4]],
+  [['digger2',6],['stone',5],['drifter',12]],
+  [['bat',14],['digger2',8],['lamper',8]],
+  [['stone',8],['digger2',10],['cowboy',14]],
+  [['foreman',1],['stone',6],['digger2',8],['bat',10]],
+  // ---- the deep workings ----
+  [['pick',10],['stone',5]],
+  [['pick',12],['crack',4],['bat',8]],
+  [['slowpick',4],['pick',12],['crack',5]],
+  [['brute',2],['pick',14],['crack',6]],
+  [['firesrc',1],['pick',12],['slowpick',5],['crack',6]],
+  [['brute',4],['slowpick',8],['pick',14]],
+  [['crack',14],['pick',16],['brute',3]],
+  [['ztank',1],['brute',5],['slowpick',8],['crack',8]],
+  [['brute',7],['pick',18],['crack',12]],
+  [['firesrc',1],['ztank',1],['brute',6],['slowpick',10]],
+  [['crack',18],['pick',20],['brute',6]],
+  [['slowpick',14],['brute',8],['crack',12]],
+  [['ztank',2],['brute',8],['pick',20]],
+  [['firesrc',2],['crack',18],['slowpick',12]],
+  [['ztank',2],['brute',10],['crack',16],['pick',18]],
+  [['brute',12],['slowpick',16],['crack',18]],
+  [['firesrc',2],['ztank',2],['brute',10],['pick',22]],
+  [['crack',24],['brute',12],['slowpick',16]],
+  [['ztank',3],['firesrc',2],['brute',12],['crack',20]],
+  [['goldman',1],['ztank',3],['firesrc',2],['brute',12],['crack',18],['slowpick',14]]
+];
+const WAVES_MINES=MINES_MIX.map((mix,i)=>({gap:Math.max(.24,1.0-i*.028),mix}));
+const WAVE_SETS={grassy:null,forest:WAVES20,volcanic:WAVES25,blocky:WAVES_BLOCKY,mines:WAVES_MINES};
 /* The Cop, rebalanced. He used to be the worst value in the game — 4 dmg on a
    1.2s swing for $500 is 3.3 dps, worse per dollar than a $200 Scout — and the
    taser he pulled when the baton broke actually out-damaged the baton, so
@@ -1100,11 +1193,12 @@ const COMMANDER={
 const MINE={
   key:'mine',name:'The Mine',cost:200,icon:'⛏️',cap:5,unlock:'mine',income:1,
   lv:[
-    {dmg:0,cd:5,rng:0,pay:50,  up:150},
-    {dmg:0,cd:5,rng:0,pay:110, up:350},
-    {dmg:0,cd:5,rng:0,pay:210, up:700},
-    {dmg:0,cd:5,rng:0,pay:330, up:2000},
-    {dmg:0,cd:5,rng:0,pay:500, up:null}
+    // pay: every 5 seconds.  wavePay: a lump sum when a wave is cleared.
+    {dmg:0,cd:5,rng:0,pay:50,  wavePay:150,  up:150},
+    {dmg:0,cd:5,rng:0,pay:110, wavePay:350,  up:350},
+    {dmg:0,cd:5,rng:0,pay:210, wavePay:700,  up:700},
+    {dmg:0,cd:5,rng:0,pay:330, wavePay:1200, up:2000},
+    {dmg:0,cd:5,rng:0,pay:500, wavePay:2000, up:null}
   ]
 };
 /* The Burned Corpse — unlocked by clearing The Volcano. It does not fire shots;
@@ -1136,8 +1230,10 @@ const TOYSOLDIER={
 /* The Sniper. Fires rarely and hits very hard, then spends two seconds working
    the bolt and feeding a fresh round — during which it cannot shoot at all, so
    the reload is a real cost rather than decoration. Stays crouched. */
+/* Locked: bought once with coins, then deployed with cash like the Commander.
+   $750 a placement — it is meant to be a considered pick, not spam. */
 const SNIPER={
-  key:'sniper',name:'The Sniper',cost:500,icon:'🎯',reload:2,
+  key:'sniper',name:'The Sniper',cost:750,icon:'🎯',reload:2,coin:3000,
   lv:[
     {dmg:7, cd:3.0,rng:16, up:400},
     {dmg:17,cd:2.4,rng:19, up:900},
@@ -1175,7 +1271,8 @@ const saveKeyFor=email=>SAVE_PREFIX+DEVICE+':'+(normEmail(email)||'guest');
 
 const SAVE_DEFAULTS={coins:0,commander:false,grave:false,volcano:false,mine:false,corpse:false,
                      vol:.7,music:.55,musicOn:true,email:'',wins:0,runs:0,
-                     sawVolcanoCut:false,loadout:null,blocky:false,playlist:null};
+                     sawVolcanoCut:false,loadout:null,blocky:false,playlist:null,
+                     eventStart:0,mines:false,minesPrize:false};
 const SAVE=Object.assign({},SAVE_DEFAULTS);
 let SAVE_KEY=SAVE_PREFIX+DEVICE+':guest';
 
@@ -1780,7 +1877,7 @@ function buildSpawn(map){
 }
 /* drives every portal: pulsing energy, spinning rings, drifting embers.
    Also breathes the lava pools and drifts the ash down on the volcano. */
-let _volT=0;
+let _volT=0,_ventClaim=0,_ventOwner=null;
 function stepPortals(dt){
   _volT+=dt;
   for(const set of LAVA_MATS)
@@ -1809,6 +1906,7 @@ function stepPortals(dt){
   /* Vents erupting. Idle most of the time, then a fire column punches up,
      the heat light floods, and lava bombs arc out on real ballistics and
      fall back down. */
+  _ventClaim=0;
   for(const v of ERUPT){
     if(!v.jet.parent||!v.jet.parent.visible){continue;}
     v.t+=dt;
@@ -1822,7 +1920,15 @@ function stepPortals(dt){
       v.core.scale.set(flick*.9,rise*(1.05-u*.2),flick*.9);
       v.jet.material.opacity=.72*fade;
       v.core.material.opacity=.85*fade;
-      v.light.intensity=.7+rise*fade*3.4;
+      /* One light between all the vents: whichever is furthest into its
+         eruption claims it and drags it over. Two going at once is rare, and
+         the brighter one winning looks right anyway. */
+      const claim=rise*fade;
+      if(claim>=(_ventClaim||0)){
+        _ventClaim=claim;_ventOwner=v;
+        v.light.position.set(v.x,2.4,v.z);
+        v.light.intensity=claim*4.2;
+      }
       v.mouth.color.setHSL(.06,1,.5+rise*fade*.35);
       // bombs: launched on the first frame, then simple gravity
       if(!v.vel){
@@ -1845,7 +1951,8 @@ function stepPortals(dt){
       v.bombs.material.opacity=.95*fade;
     }else if(v.jet.visible){
       v.jet.visible=v.core.visible=v.bombs.visible=false;
-      v.light.intensity=.7;v.vel=null;
+      if(_ventOwner===v){_ventOwner=null;v.light.intensity=0;}
+      v.vel=null;
     }
     if(v.t>v.period){v.t=0;v.vel=null;}
   }
@@ -1873,23 +1980,24 @@ function stepPortals(dt){
 const LAVA_MATS=[],ASH_FALL=[],EMBER_RISE=[],ERUPT=[];
 function buildTerrain(map){
   const g=new THREE.Group();
-  const forest=map.key==='forest',volc=map.key==='volcanic',segs=map.segs;
+  const forest=map.key==='forest',volc=map.key==='volcanic',cave=!!map.cave,segs=map.segs;
   const dp=(x,z)=>distOn(x,z,segs);
   // 94x84 stopped short of the fog on the bigger volcanic layout, so you could
   // see the edge of the world as a hard dark wedge. Run it past the fog instead.
   /* Ground, patches and path are the few big surfaces in the scene, so they
      are the ones worth spending a real textured PBR material on: grain,
      normal-mapped relief and a rough, non-plastic response to the sun. */
-  const groundTint=volc?0x6e4a38:forest?0x44662f:0x5d9648;
+  const groundTint=cave?0x4a443c:volc?0x6e4a38:forest?0x44662f:0x5d9648;
   const ground=new THREE.Mesh(new THREE.PlaneGeometry(150,140,1,1),
-    surfaceMat(volc?'rock':'grass',groundTint,[34,32],volc?.92:.98));
+    surfaceMat((cave||volc)?'rock':'grass',groundTint,[34,32],volc?.92:.98));
   ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;g.add(ground);
   // colour variation patches, same texture, tinted — keeps the grain unbroken
   for(let i=0;i<60;i++){
     const s=rnd(4,11);
     const p=new THREE.Mesh(new THREE.CircleGeometry(s,7),
-      surfaceMat(volc?'rock':'grass',
-        volc?(Math.random()<.5?0x7d5540:0x5b3c2c)
+      surfaceMat((cave||volc)?'rock':'grass',
+        cave?(Math.random()<.5?0x565046:0x3d382f)
+        :volc?(Math.random()<.5?0x7d5540:0x5b3c2c)
         :forest?(Math.random()<.5?0x4e7538:0x3a5628)
         :(Math.random()<.5?0x6aa554:0x538943),[s*.55,s*.55],.98));
     p.rotation.x=-Math.PI/2;p.position.set(rnd(-62,62),.01+i*0.0004,rnd(-56,56));
@@ -1899,12 +2007,12 @@ function buildTerrain(map){
   for(const s of segs){
     const len=s.len+PATH_W;
     const m=new THREE.Mesh(new THREE.PlaneGeometry(len,PATH_W),
-      surfaceMat('dirt',volc?0x70472e:forest?0x7d6748:0xa08a63,[len*.42,PATH_W*.42],.99));
+      surfaceMat('dirt',cave?0x5a4e3c:volc?0x70472e:forest?0x7d6748:0xa08a63,[len*.42,PATH_W*.42],.99));
     m.rotation.x=-Math.PI/2;m.rotation.z=-Math.atan2(s.dz,s.dx);
     m.position.set((s.ax+s.bx)/2,.06,(s.az+s.bz)/2);
     m.receiveShadow=true;g.add(m);
     const e=new THREE.Mesh(new THREE.PlaneGeometry(len+.7,PATH_W+.7),
-      surfaceMat('dirt',volc?0x452b1c:forest?0x554425:0x7a684a,[len*.4,PATH_W*.4],1));
+      surfaceMat('dirt',cave?0x3a3226:volc?0x452b1c:forest?0x554425:0x7a684a,[len*.4,PATH_W*.4],1));
     e.rotation.copy(m.rotation);e.position.set(m.position.x,.05,m.position.z);
     e.receiveShadow=true;g.add(e);
   }
@@ -1915,7 +2023,7 @@ function buildTerrain(map){
   // volcano was added (buffer 200, loop still 360) and setMatrixAt ran off the
   // end of the instance matrix — which draws as a huge stretched black wedge
   // across the map rather than failing loudly.
-  const TUFTS=volc?200:360;
+  const TUFTS=cave?0:volc?200:360;
   const im=new THREE.InstancedMesh(tuft,M(volc?0x4a3428:forest?0x3f7a44:0x59a044),TUFTS);
   const d=new THREE.Object3D();let n=0;
   for(let i=0;i<1100&&n<TUFTS;i++){
@@ -1926,7 +2034,7 @@ function buildTerrain(map){
   }
   im.count=Math.min(n,TUFTS);g.add(im);DECOR.push(im);
   // trees — burnt spars on the volcano, nothing with leaves left
-  const treeN=volc?34:forest?74:26;
+  const treeN=cave?0:volc?34:forest?74:26;
   for(let i=0;i<treeN;i++){
     const x=rnd(-43,43),z=rnd(-37,37);
     if(dp(x,z)<(forest?4.4:volc?5:6))continue;
@@ -1995,6 +2103,7 @@ function buildTerrain(map){
   }else if(volc){
     // lava pools, obsidian spires, ash drifts and a smoking cone on the horizon
     const lavaMats=[];
+    let lavaLights=0,ventLight=null;
     for(let i=0;i<14;i++){
       const x=rnd(-42,42),z=rnd(-36,36);
       if(dp(x,z)<5)continue;
@@ -2005,8 +2114,12 @@ function buildTerrain(map){
       const crust=new THREE.Mesh(new THREE.RingGeometry(1,1.25,9),M(0x1d1310));
       crust.rotation.x=-Math.PI/2;crust.position.set(x,.025,z);
       crust.scale.setScalar(pool.geometry.parameters.radius);g.add(crust);DECOR.push(crust);
-      const heat=new THREE.PointLight(0xff5a1e,.55,9);
-      heat.position.set(x,1,z);g.add(heat);DECOR.push(heat);
+      // only the larger pools actually cast light; the rest just glow
+      if(pool.geometry.parameters.radius>3.1&&lavaLights<4){
+        lavaLights++;
+        const heat=new THREE.PointLight(0xff5a1e,.7,10);
+        heat.position.set(x,1,z);g.add(heat);DECOR.push(heat);
+      }
     }
     LAVA_MATS.push(lavaMats);
     for(let i=0;i<18;i++){
@@ -2043,8 +2156,11 @@ function buildTerrain(map){
         flowMats.push(crack.material);
         const lip=new THREE.Mesh(new THREE.PlaneGeometry(len+.5,w+.55),M(0x1a100c));
         lip.rotation.copy(crack.rotation);lip.position.set(nx,.035,nz);g.add(lip);DECOR.push(lip);
-        const gl=new THREE.PointLight(0xff6a2a,.28,5.5);
-        gl.position.set(nx,.7,nz);g.add(gl);DECOR.push(gl);
+        /* No light per segment. A flow can be eleven segments long and there
+           are nine flows — that was up to ninety-nine PointLights on their
+           own, and in a forward renderer every light is evaluated on every
+           fragment of every object. The crack material is unlit and already
+           glows; it does not need to actually illuminate anything. */
         x+=Math.cos(a)*len;z+=Math.sin(a)*len;
       }
       if(flowMats.length)LAVA_MATS.push(flowMats);
@@ -2073,8 +2189,15 @@ function buildTerrain(map){
       const mouth=new THREE.Mesh(new THREE.CircleGeometry(1.4,10),
         new THREE.MeshBasicMaterial({color:0xff6a2a}));
       mouth.rotation.x=-Math.PI/2;mouth.position.set(x,1.75,z);g.add(mouth);
-      const heat2=new THREE.PointLight(0xff6a2a,.7,10);
-      heat2.position.set(x,2.4,z);g.add(heat2);DECOR.push(heat2);
+      /* Eleven vents used to carry eleven standing lights. There is now one
+         shared light for the whole map which jumps to whichever vent is
+         actually going off, so an eruption is still lit but the idle cost is
+         a single light instead of eleven. */
+      if(!ventLight){
+        ventLight=new THREE.PointLight(0xff6a2a,0,16);
+        ventLight.position.set(x,2.4,z);g.add(ventLight);DECOR.push(ventLight);
+      }
+      const heat2=ventLight;
       for(let j=0;j<2;j++){
         const puff=new THREE.Mesh(new THREE.SphereGeometry(rnd(.8,1.5),7,5),
           new THREE.MeshBasicMaterial({color:0x4a3a34,transparent:true,opacity:.3}));
@@ -2108,6 +2231,111 @@ function buildTerrain(map){
     ashG.setAttribute('position',new THREE.Float32BufferAttribute(pts,3));
     const ashP=new THREE.Points(ashG,new THREE.PointsMaterial({color:0xb8a89c,size:.16,transparent:true,opacity:.5}));
     g.add(ashP);DECOR.push(ashP);ASH_FALL.push(ashP);
+  }else if(map.key==='mines'){
+    /* ---------- underground ----------
+       A rock ceiling overhead so there is no sky, pit props holding it up,
+       rails running the length of the path with carts sat on them, and strung
+       lamps that are the only real light down here. */
+    const rockM=surfaceMat('rock',0x6b6259,[26,24],.95);
+    const ceil=new THREE.Mesh(new THREE.PlaneGeometry(150,140),rockM);
+    ceil.rotation.x=Math.PI/2;ceil.position.y=13;g.add(ceil);
+    // hanging rock, so the ceiling is not a flat lid
+    for(let i=0;i<40;i++){
+      const x=rnd(-46,46),z=rnd(-40,40);
+      const st=new THREE.Mesh(new THREE.ConeGeometry(rnd(.5,1.6),rnd(2,6),6),M(0x554c43));
+      st.position.set(x,13,z);st.rotation.x=Math.PI;g.add(st);DECOR.push(st);
+    }
+    // cavern walls closing the space in
+    for(const[wx,wz,rot,len] of [[0,-44,0,150],[0,44,0,150],[-52,0,Math.PI/2,140],[52,0,Math.PI/2,140]]){
+      const wall=new THREE.Mesh(new THREE.PlaneGeometry(len,17),rockM);
+      wall.position.set(wx,7,wz);wall.rotation.y=rot+(wz>0||wx>0?Math.PI:0);g.add(wall);
+    }
+    // rails: two lines of steel with sleepers, following the track
+    for(const sg of segs){
+      const ang=Math.atan2(sg.dz,sg.dx);
+      const n=Math.max(2,Math.floor(sg.len/1.15));
+      for(let i=0;i<n;i++){
+        const f=i/n,px=sg.ax+sg.dx*sg.len*f,pz=sg.az+sg.dz*sg.len*f;
+        const tie=new THREE.Mesh(new THREE.BoxGeometry(.3,.09,2.5),M(0x3d2f21));
+        tie.position.set(px,.10,pz);tie.rotation.y=-ang;g.add(tie);
+      }
+      for(const off of [-.62,.62]){
+        const rail=new THREE.Mesh(new THREE.BoxGeometry(sg.len+PATH_W,.10,.13),M(0x8a8f98));
+        rail.position.set((sg.ax+sg.bx)/2-Math.sin(-ang)*off,.19,(sg.az+sg.bz)/2-Math.cos(-ang)*off);
+        rail.rotation.y=-ang;g.add(rail);
+      }
+    }
+    // carts, tipped and upright, dotted around off the track
+    for(let i=0;i<16;i++){
+      const x=rnd(-44,44),z=rnd(-38,38);
+      if(dp(x,z)<3.2)continue;
+      const cart=new THREE.Group();
+      const tub=new THREE.Mesh(new THREE.BoxGeometry(1.5,.9,1.1),M(0x5a4a3a));
+      tub.position.y=.75;tub.castShadow=true;cart.add(tub);
+      const inner=new THREE.Mesh(new THREE.BoxGeometry(1.3,.1,.95),M(0x2a2018));
+      inner.position.y=1.16;cart.add(inner);
+      if(Math.random()<.55){
+        const ore=new THREE.Mesh(new THREE.SphereGeometry(.42,7,5),M(Math.random()<.4?0xd9b34a:0x6b6259));
+        ore.scale.set(1.3,.5,.9);ore.position.y=1.24;cart.add(ore);
+      }
+      for(const sx of [-1,1])for(const sz of [-1,1]){
+        const w=new THREE.Mesh(new THREE.CylinderGeometry(.26,.26,.1,10),M(0x25201a));
+        w.rotation.z=Math.PI/2;w.position.set(sx*.62,.28,sz*.4);cart.add(w);
+      }
+      cart.position.set(x,0,z);cart.rotation.y=rnd(0,6.283);
+      if(Math.random()<.3)cart.rotation.z=rnd(.5,1.2);   // tipped over
+      g.add(cart);DECOR.push(cart);
+    }
+    // pit props holding the roof up
+    for(let i=0;i<34;i++){
+      const x=rnd(-46,46),z=rnd(-40,40);
+      if(dp(x,z)<3.0)continue;
+      const post=new THREE.Mesh(new THREE.CylinderGeometry(.26,.3,13,7),M(0x4a3826));
+      post.position.set(x,6.5,z);post.castShadow=true;g.add(post);DECOR.push(post);
+      const cap=new THREE.Mesh(new THREE.BoxGeometry(1.5,.34,.5),M(0x3d2f21));
+      cap.position.set(x,12.7,z);cap.rotation.y=rnd(0,3);g.add(cap);DECOR.push(cap);
+    }
+    // strung lamps — the only light down here, and there are few of them
+    for(let i=0;i<7;i++){
+      const q=pathOn(segs,(i+.5)/7*segs.total);
+      const lamp=new THREE.Mesh(new THREE.SphereGeometry(.3,8,6),
+        new THREE.MeshBasicMaterial({color:0xffd08a}));
+      lamp.position.set(q.x,4.4,q.z);g.add(lamp);
+      const wire=new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,8.6,4),M(0x1a1a1e));
+      wire.position.set(q.x,8.7,q.z);g.add(wire);
+      const gl=new THREE.PointLight(0xffc46a,1.15,26);
+      gl.position.set(q.x,4.2,q.z);g.add(gl);DECOR.push(gl);
+    }
+    // scattered ore glinting in the rock
+    for(let i=0;i<26;i++){
+      const x=rnd(-46,46),z=rnd(-40,40);
+      if(dp(x,z)<2.6)continue;
+      const ore=new THREE.Mesh(new THREE.BoxGeometry(rnd(.2,.5),rnd(.2,.4),rnd(.2,.5)),
+        new THREE.MeshBasicMaterial({color:0xd9b34a}));
+      ore.position.set(x,rnd(.15,.5),z);ore.rotation.set(rnd(0,3),rnd(0,3),rnd(0,3));
+      g.add(ore);DECOR.push(ore);
+    }
+    // the hole the track disappears into at the end
+    {
+      const q=pathOn(segs,segs.total);
+      const mouth=new THREE.Mesh(new THREE.CircleGeometry(4.2,20),
+        new THREE.MeshBasicMaterial({color:0x000000}));
+      mouth.rotation.x=-Math.PI/2;mouth.position.set(q.x,.09,q.z);g.add(mouth);
+      const rim=new THREE.Mesh(new THREE.TorusGeometry(4.2,.5,7,20),M(0x3f382f));
+      rim.rotation.x=Math.PI/2;rim.position.set(q.x,.2,q.z);rim.castShadow=true;g.add(rim);DECOR.push(rim);
+      for(let i=0;i<3;i++){
+        const dark=new THREE.Mesh(new THREE.CircleGeometry(4.2-i*.9,16),
+          new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:.9}));
+        dark.rotation.x=-Math.PI/2;dark.position.set(q.x,.1+i*.01,q.z);g.add(dark);
+      }
+    }
+    // dust hanging in the lamp light
+    const dg=new THREE.BufferGeometry(),dpts=[];
+    for(let i=0;i<300;i++)dpts.push(rnd(-46,46),rnd(0,11),rnd(-40,40));
+    dg.setAttribute('position',new THREE.Float32BufferAttribute(dpts,3));
+    const dust=new THREE.Points(dg,new THREE.PointsMaterial({color:0xbdae96,size:.11,
+      transparent:true,opacity:.35,depthWrite:false}));
+    g.add(dust);DECOR.push(dust);ASH_FALL.push(dust);
   }else{
     const fm=M(0x59422c);
     for(let i=-44;i<=44;i+=4)[-38,38].forEach(z=>{
@@ -2366,6 +2594,78 @@ function brickPass(g,P,d,key){
   }
   return keep;
 }
+/* ---------- the crew that went down ----------
+   Hard hats with working lamps, stone hides that stop bullets, pickaxes,
+   shovels, and the ones that came back glowing. Applied on top of decayPass so
+   they still read as dead, just dressed for the job. */
+function minePass(g,P,d,key){
+  const T=P.torso,H=P.head;
+  const steel=M(0x7d838c),wood=M(0x4a3826),leather=M(0x4e3a26),rockM=M(0x8d8a82);
+  if(d.hat){
+    const hat=new THREE.Mesh(new THREE.CylinderGeometry(.145,.16,.10,10),M(0xd8a02a));
+    hat.position.y=.10;hat.castShadow=true;H.add(hat);
+    const dome=new THREE.Mesh(new THREE.SphereGeometry(.145,10,7,0,Math.PI*2,0,1.25),M(0xe0aa33));
+    dome.scale.y=.72;dome.position.y=.10;H.add(dome);
+    const brim=new THREE.Mesh(new THREE.CylinderGeometry(.2,.2,.02,12),M(0xc08f22));
+    brim.position.y=.05;H.add(brim);
+    // the lamp on the front, still burning on some of them
+    const lampBody=new THREE.Mesh(new THREE.CylinderGeometry(.04,.045,.05,8),steel);
+    lampBody.rotation.x=Math.PI/2;lampBody.position.set(0,.10,.15);H.add(lampBody);
+    if(d.lamp||Math.random()<.4){
+      const lens=new THREE.Mesh(new THREE.CircleGeometry(.036,8),
+        new THREE.MeshBasicMaterial({color:0xffd08a}));
+      lens.position.set(0,.10,.178);H.add(lens);
+    }
+  }
+  if(d.rock){
+    /* Stone hide: slabs bolted over everything, and a slab shield on the arm
+       that projectiles simply do not get through. */
+    for(const[px,py,pz,sx,sy,sz] of [[0,.34,.14,.30,.30,.09],[0,.34,-.14,.28,.28,.08],
+                                     [-.17,.36,0,.09,.26,.22],[.17,.36,0,.09,.26,.22]]){
+      const slab=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),rockM);
+      slab.position.set(px,py,pz);slab.rotation.set(rnd(-.1,.1),rnd(-.1,.1),rnd(-.1,.1));
+      slab.castShadow=true;T.add(slab);
+    }
+    const helm=new THREE.Mesh(new THREE.BoxGeometry(.26,.22,.26),rockM);
+    helm.position.y=.03;helm.castShadow=true;H.add(helm);
+    const shield=new THREE.Mesh(new THREE.BoxGeometry(.1,.72,.62),M(0x9a968c));
+    shield.position.set(0,-.3,.08);shield.castShadow=true;P.foreL.add(shield);
+    const boss=new THREE.Mesh(new THREE.SphereGeometry(.12,8,6),M(0x6e6a62));
+    boss.scale.set(.5,1,1);boss.position.set(.06,-.3,.08);P.foreL.add(boss);
+    P.armL.rotation.x=-1.25;P.foreL.rotation.x=-1.1;   // held up in front
+  }
+  if(d.tool){
+    const haft=new THREE.Mesh(new THREE.CylinderGeometry(.028,.032,.9,6),wood);
+    haft.position.y=-.4;P.foreR.add(haft);
+    if(d.tool==='pick'){
+      const head=new THREE.Mesh(new THREE.BoxGeometry(.62,.07,.07),steel);
+      head.position.y=-.82;head.rotation.z=.06;P.foreR.add(head);
+      for(const sx of [-1,1]){
+        const tip=new THREE.Mesh(new THREE.ConeGeometry(.05,.16,5),steel);
+        tip.rotation.z=sx*Math.PI/2;tip.position.set(sx*.38,-.82,0);P.foreR.add(tip);
+      }
+    }else{
+      const blade=new THREE.Mesh(new THREE.BoxGeometry(.30,.34,.03),steel);
+      blade.position.y=-.9;P.foreR.add(blade);
+    }
+  }
+  if(d.crackle){
+    // glowing seams, like something is burning inside it
+    for(let i=0;i<7;i++){
+      const seam=new THREE.Mesh(new THREE.BoxGeometry(rnd(.04,.09),rnd(.05,.20),.03),
+        new THREE.MeshBasicMaterial({color:d.glow||0xff8a2a}));
+      const a=Math.random()*6.283;
+      seam.position.set(Math.cos(a)*.16,.15+Math.random()*.36,Math.sin(a)*.13);
+      seam.rotation.y=a;T.add(seam);
+    }
+  }
+  if(d.crawl){
+    // low and long rather than upright
+    P.torso.rotation.x=.75;P.head.rotation.x=-.6;
+    P.armL.rotation.x=-2.2;P.armR.rotation.x=-2.1;
+    g.position.y=-.15;
+  }
+}
 function decayPass(g,P,d,key){
   const tr=!!d.op,shirt=P.mats.shirt,pants=P.mats.pants;
   // slack jaw, hollow stare, sunken skull
@@ -2515,9 +2815,9 @@ function spawnEnemy(key,dist){
   P.armL.rotation.x=-1.45;P.armR.rotation.x=-1.35;
   P.foreL.rotation.x=-.25;P.foreR.rotation.x=-.15;
   P.torso.rotation.x=.14;
-  // event enemies are rebricked instead of rotted
+  // event enemies are rebricked instead of rotted; mine dwellers get kitted out
   if(d.blk)brickPass(g,P,d,key);
-  else decayPass(g,P,d,key);
+  else{decayPass(g,P,d,key);if(d.mn)minePass(g,P,d,key);}
   applyBuild(g,P,d,key);
   /* Brick things do not shamble. Regular pieces waddle stiffly — no knee bend
      at all, rocking side to side off a straight leg, the way a minifig has to
@@ -2677,8 +2977,25 @@ function drawHp(e){
   x.fillText(txt,96,27);
   e.hpTex.needsUpdate=true;
 }
-function hurt(e,dmg,slowT){
+/* Which towers can get through a stone shield. Anything that throws a
+   projectile is stopped dead; blades, batons and fire are not. */
+const SHIELD_PIERCE={knife:1,slasher:1,police:1,corpse:1,mine:1};
+function shieldBlocks(e,src){
+  if(!e.d.shield)return false;
+  if(!src)return false;                 // burn ticks and leaks are not shots
+  return !SHIELD_PIERCE[src];
+}
+function hurt(e,dmg,slowT,src){
   if(e.dead)return;
+  if(shieldBlocks(e,src)){
+    // a visible clang so it is obvious why nothing is happening
+    if(Math.random()<.22){
+      fxSpark(e.g.position.clone().add(V3(0,1.05*e.d.sc,0)),0xcfd8e8);
+      if(Math.random()<.5)sfx('no');
+    }
+    e.flash=.08;
+    return;
+  }
   const arm=e.d.arm||0;
   e.hp-=Math.max(1,dmg-arm);
   e.flash=.12;
@@ -3639,7 +3956,7 @@ function throwKnife(t,target){
     if(!landed&&k>=1){
       landed=true;
       if(!target.dead){
-        hurt(target,SLASH_THROW_DMG);
+        hurt(target,SLASH_THROW_DMG,0,'slasher');
         igniteEnemy(target,6,t.owner);
       }
       fxSpark(to,0xff7a1e);fxSpark(to.clone().add(V3(0,.2,0)),0xffd27a);
@@ -3739,7 +4056,7 @@ function corpseTick(t,dt,s,target){
     const d=Math.hypot(vx,vz);
     if(d>s.rng)continue;
     if((vx*dirx+vz*dirz)/(d||1)<.72)continue;      // a fairly tight cone
-    hurt(e,s.dmg);
+    hurt(e,s.dmg,0,'corpse');
     igniteEnemy(e,s.burn,t.owner);
     if(Math.random()<.5)
       fxSpark(e.g.position.clone().add(V3(0,1.0*e.d.sc,0)),0xff8a2a);
@@ -4339,7 +4656,19 @@ function startWave(){
   if(G.waveActive||G.over||G.ending)return;
   if(G.wave>=MAP.waves)return;
   G.wave++;
-  G.hpMul=MAP.hpScale*(1+Math.max(0,G.wave-10)*.16);
+  /* The Mines scales on its own two-stage curve: 70 -> 1,500 across waves
+     1-10, then 400 -> 3,500 across 11-30. Everything in ZT is authored at the
+     TOP of its band, so the multiplier walks up to 1 across each stage. */
+  if(MAP.key==='mines'){
+    /* No ramp here. The two enemy families are already authored across the
+       stated bands — 70 (Miner) to 1,500 (Foreman) for waves 1-10, and 400
+       (Pickaxe) to 3,500 (Tank / Fire Source) for 11-30 — and the wave mixes
+       walk you up through them. Multiplying on top would only push the
+       numbers off the values they were specified with. */
+    G.hpMul=1;
+  }else{
+    G.hpMul=MAP.hpScale*(1+Math.max(0,G.wave-10)*.16);
+  }
   buildQueue(G.wave);
   G.waveActive=true;G.nextT=0;
   banner('Wave '+G.wave+(G.bossWave?' \u2014 '+G.bossName:''));sfx('wave');
@@ -4604,12 +4933,12 @@ function fire(t,dt){
       const from=t.g.position.clone().add(V3(0,1.35,0));
       const to=target.g.position.clone().add(V3(0,1.1*target.d.sc,0));
       if(t.key==='scout'){
-        fxTracer(from,to);fxSpark(to,0xffe07a);fxSpark(from,0xfff0b0);hurt(target,s.dmg);sfx('shot');
+        fxTracer(from,to);fxSpark(to,0xffe07a);fxSpark(from,0xfff0b0);hurt(target,s.dmg,0,'scout');sfx('shot');
       }else if(t.key==='sniper'){
         const muz=t.g.userData.muzzle?t.g.userData.muzzle.getWorldPosition(V3()):from;
         fxTracer(muz,to);fxSpark(muz,0xfff6cc);fxSpark(to,0xffd9a0);
         fxSpark(to.clone().add(V3(rnd(-.2,.2),rnd(0,.4),rnd(-.2,.2))),0xff8a5c);
-        hurt(target,s.dmg);sfx('rifle');
+        hurt(target,s.dmg,0,'sniper');sfx('rifle');
         // and now it is out of action for two seconds working the bolt
         t.reload=t.def.reload;
         if(t.g.userData.sniper)t.g.userData.sniper.shell.visible=true;
@@ -4619,12 +4948,12 @@ function fire(t,dt){
         // at 0.09s between shots a spark on every round is a strobe — thin them
         if(Math.random()<.45)fxSpark(to,0xbdf5a0);
         if(Math.random()<.3)fxSpark(muz,0xe6ffcf);
-        hurt(target,s.dmg);sfx('rifle');
+        hurt(target,s.dmg,0,'toy');sfx('rifle');
       }else if(t.key==='survivor'){
         const muz=t.g.userData.muzzle?t.g.userData.muzzle.getWorldPosition(V3()):from;
         fxTracer(muz,to);fxSpark(to,0xffd9a0);
         if(Math.random()<.6)fxSpark(muz,0xfff2c0);
-        hurt(target,s.dmg);sfx('rifle');
+        hurt(target,s.dmg,0,'survivor');sfx('rifle');
       }else if(t.key==='robber'){
         const dirx=Math.sin(t.g.rotation.y),dirz=Math.cos(t.g.rotation.y);
         const pel=s.pel||3;let hits=0;
@@ -4638,7 +4967,7 @@ function fire(t,dt){
           const dd=Math.hypot(vx,vz);
           if(dd>s.rng)continue;
           if((vx*dirx+vz*dirz)/(dd||1)<.58)continue;
-          hurt(e,s.dmg);hits++;
+          hurt(e,s.dmg,0,'robber');hits++;
           fxSpark(e.g.position.clone().add(V3(0,1.05*e.d.sc,0)),0xffc46b);
         }
         for(let i=0;i<6;i++){
@@ -4651,7 +4980,7 @@ function fire(t,dt){
         const muz=t.g.userData.muzzle?t.g.userData.muzzle.getWorldPosition(V3()):from;
         fxLaser(muz,to);fxSpark(to,0xffe23a);
         if(Math.random()<.35)fxSpark(muz,0xfff3a0);
-        hurt(target,s.dmg);sfx('laser');
+        hurt(target,s.dmg,0,'blitzer');sfx('laser');
         t.ammo--;blitzerCharge(t);
         if(t.ammo<=0){
           t.rech=s.rech;blitzerCharge(t);sfx('recharge');
@@ -4665,9 +4994,9 @@ function fire(t,dt){
         fxSlash(to,ang,hot?0xffa33a:0xe6edff);
         fxSpark(to,hot?0xff7a1e:0xdfe9ff);
         if(hot){fxSpark(to.clone().add(V3(rnd(-.3,.3),rnd(-.2,.4),rnd(-.3,.3))),0xffd27a);}
-        hurt(target,s.dmg);sfx(hot?'burn':'slash');
+        hurt(target,s.dmg,0,t.key);sfx(hot?'burn':'slash');
       }else if(t.weapon==='baton'){
-        fxSpark(to,0xbfd0ff);hurt(target,s.dmg);sfx('baton');
+        fxSpark(to,0xbfd0ff);hurt(target,s.dmg,0,'police');sfx('baton');
         t.batonHits--;
         if(t.batonHits<=0){
           t.weapon='taser';
@@ -4678,7 +5007,7 @@ function fire(t,dt){
         // only the cop has a per-shot stat (baton durability) worth redrawing
         if(G.sel===t)showInfo(t);
       }else{
-        fxBolt(from,to);fxSpark(to,0x9fe8ff);hurt(target,s.dmg,.6);sfx('zap');
+        fxBolt(from,to);fxSpark(to,0x9fe8ff);hurt(target,s.dmg,.6,t.key);sfx('zap');
       }
     }
   }
@@ -5298,6 +5627,26 @@ function musicTick(){
    ALL_TRACKS is everything the game knows about; SAVE.playlist is the subset
    you picked, by filename. Up to 30, which is a ceiling rather than a target —
    drop more files in beside the game and they show up here too. */
+/* ---------- the event runs for two weeks ----------
+   It opens the first time anyone loads this build and closes fourteen days
+   later. Stored per save, so the clock starts when YOU first see it rather
+   than on some date baked in at build time that might already have passed. */
+const EVENT_DAYS=14;
+function eventStart(){
+  if(!SAVE.eventStart){SAVE.eventStart=Date.now();writeSave();}
+  return SAVE.eventStart;
+}
+function eventEndsAt(){return eventStart()+EVENT_DAYS*864e5;}
+function eventLeftMs(){return eventEndsAt()-Date.now();}
+function eventLive(){return eventLeftMs()>0;}
+function eventLeftText(){
+  const ms=eventLeftMs();
+  if(ms<=0)return 'ended';
+  const d=Math.floor(ms/864e5),h=Math.floor(ms/36e5)%24,m=Math.floor(ms/6e4)%60;
+  if(d>0)return d+'d '+h+'h left';
+  if(h>0)return h+'h '+m+'m left';
+  return Math.max(1,m)+'m left';
+}
 const PLAYLIST_MAX=30;
 const ALL_TRACKS=CUSTOM_MUSIC.lobby;
 const fmtLen=s=>{
@@ -5854,7 +6203,7 @@ const lobbyNPCs=[];
   // screen on the far wall
   boardMesh=new THREE.Mesh(new THREE.PlaneGeometry(12,6),
     new THREE.MeshBasicMaterial({map:signTex([
-      {t:'TOWER DEFENSE',b:1,s:54,y:100},{t:'BETA  ·  V1.85  ·  12 TOWERS  ·  4 MAPS',s:24,c:'#8b95cf',y:158}])}));
+      {t:'TOWER DEFENSE',b:1,s:54,y:100},{t:'BETA  ·  V1.9  ·  12 TOWERS  ·  5 MAPS',s:24,c:'#8b95cf',y:158}])}));
   // the bezel is .35 deep, so its front face sits at -D+.195 — the screen has
   // to clear that or the frame swallows it
   boardMesh.position.set(0,4.8,-D+.42);lobby.add(boardMesh);
@@ -5984,7 +6333,7 @@ const lobbyNPCs=[];
   {
     const st=stationAt('log'),g=new THREE.Group();
     const board=new THREE.Mesh(new THREE.PlaneGeometry(4.6,2.6),
-      new THREE.MeshBasicMaterial({map:signTex([{t:'UPDATE LOG',b:1,s:56,y:110},{t:'V1.85 BETA',s:36,c:'#5ef2a0',y:180}])}));
+      new THREE.MeshBasicMaterial({map:signTex([{t:'UPDATE LOG',b:1,s:56,y:110},{t:'V1.9 BETA',s:36,c:'#5ef2a0',y:180}])}));
     board.position.set(0,2.5,.13);g.add(board);
     const back=new THREE.Mesh(new THREE.BoxGeometry(5,3,.22),M(0x232a4e));
     back.position.set(0,2.5,0);back.castShadow=true;g.add(back);
@@ -6050,6 +6399,25 @@ Array.prototype.forEach.call(document.querySelectorAll('#modes .mode'),b=>{
   };
 });
 $('closeLog').onclick=()=>$('log').classList.remove('on');
+/* Refresh the event card: countdown while it runs, closed once it is over. */
+function syncEvent(){
+  const live=eventLive(),note=$('evNote'),fill=$('evFill'),btn=$('evPlay');
+  if(!note)return;
+  if(live){
+    const frac=clamp(eventLeftMs()/(EVENT_DAYS*864e5),0,1);
+    if(fill)fill.style.width=(frac*100).toFixed(1)+'%';
+    note.textContent='\u23f3 '+eventLeftText()+' \u2014 bring something with reach';
+    if(btn){btn.disabled=false;btn.textContent='\u25b6 ENTER THE EVENT';btn.style.opacity='';}
+    $('event').classList.remove('evOver');
+  }else{
+    if(fill)fill.style.width='0%';
+    note.textContent='This event has ended. Thanks for playing it.';
+    if(btn){btn.disabled=true;btn.textContent='EVENT ENDED';btn.style.opacity='.45';}
+    $('event').classList.add('evOver');
+  }
+  const tag=$('evBtnTag');
+  if(tag)tag.textContent=live?eventLeftText():'ended';
+}
 $('musicBtn').onclick=()=>{
   initAudio();closeInfo();
   $('loadout').classList.remove('on');$('squad').classList.remove('on');
@@ -6060,6 +6428,7 @@ $('musicBtn').onclick=()=>{
 $('closePl').onclick=()=>$('playlist').classList.remove('on');
 $('evPlay').onclick=()=>{
   initAudio();
+  if(!eventLive()){banner('The Blocky Event has ended');sfx('no');syncEvent();return;}
   $('event').classList.remove('on');
   // the event is its own thing — no map vote, straight in
   if(G.mode==='lobby'&&!voting)toMatch('blocky');
@@ -6075,6 +6444,7 @@ $('eventBtn').onclick=()=>{
   initAudio();closeInfo();
   $('loadout').classList.remove('on');$('squad').classList.remove('on');
   $('log').classList.remove('on');$('match').classList.remove('on');mmOn=false;
+  syncEvent();
   $('event').classList.toggle('on');
 };
 $('closeEvent').onclick=()=>$('event').classList.remove('on');
@@ -6115,7 +6485,7 @@ function enterLobby(won){
       {t:'made it to wave '+G.wave+' of '+total,s:25,y:122},{t:runLine,s:22,c:'#8b95cf',y:160},
       {t:coinLine,b:1,s:30,c:'#ffd166',y:202},{t:bonusLine,s:21,c:'#c9a24a',y:233}]);
   else setBoard([{t:'TOWER DEFENSE',b:1,s:54,y:100},
-      {t:'BETA V1.85  ·  PRESS PLAY OR WALK OVER',s:23,c:'#8b95cf',y:158}]);
+      {t:'BETA V1.9  ·  PRESS PLAY OR WALK OVER',s:23,c:'#8b95cf',y:158}]);
   buildPals();
 }
 function toLobby(won){
@@ -6908,14 +7278,16 @@ function toMatch(mapKey,skipCut){
 /* ---------- map voter (15 seconds, TDS style) ---------- */
 /* Rebuilt data-driven: the rows are generated from MAPS, so adding a map is
    just adding an entry rather than hand-writing another block of markup. */
-const MAP_ORDER=['grassy','forest','volcanic'];
+const MAP_ORDER=['grassy','forest','volcanic','mines'];
 function mapUnlocked(k){
   if(k==='forest')return SAVE.grave;
   if(k==='volcanic')return SAVE.volcano;
+  if(k==='mines')return SAVE.mines;
   return true;
 }
 function unlockHint(k){
-  return k==='forest'?'clear the Demo Map first'
+  return k==='mines'?'clear The Volcano first'
+       : k==='forest'?'clear the Demo Map first'
        : k==='volcanic'?'clear The Forest first':'';
 }
 let GRAVE_UNLOCKED=SAVE.grave;
@@ -7215,7 +7587,19 @@ function step(dt){
       const bonus=waveBonus(G.wave);
       addCash(bonus);
       for(const b of G.bots)b.cash+=bonus;
-      banner('Wave '+G.wave+' cleared  +$'+bonus);
+      /* Every Mine on the field also pays a lump sum for surviving the wave,
+         on top of its five-second trickle. Yours goes to you; a teammate's
+         goes to them. */
+      let mined=0;
+      for(const t of G.towers){
+        if(t.key!=='mine')continue;
+        const wp=tStats(t).wavePay||0;
+        if(!wp)continue;
+        if(t.owner){const bb=G.bots.find(x=>x.name===t.owner);if(bb)bb.cash+=wp;}
+        else{addCash(wp);G.earned+=wp;mined+=wp;}
+        fxFloatText(t.g.position.clone().add(V3(0,1.7,0)),'+$'+wp.toLocaleString(),'#ffd166');
+      }
+      banner('Wave '+G.wave+' cleared  +$'+bonus+(mined?'   mines +$'+mined.toLocaleString():''));
       botChatter('clear',.5);
       G.nextT=15;G.warned=false;
     }
@@ -7465,9 +7849,22 @@ function win(){
     }
   }
   // and clearing the volcano hands you the Burned Corpse
-  if(MAP.key==='volcanic'&&!SAVE.corpse){
-    SAVE.corpse=true;writeSave();
-    setTimeout(()=>banner('Unlocked: Burned Corpse \u2014 $800, breathes fire'),3200);
+  if(MAP.key==='volcanic'){
+    if(!SAVE.corpse){
+      SAVE.corpse=true;writeSave();
+      setTimeout(()=>banner('Unlocked: Burned Corpse \u2014 $800, breathes fire'),3200);
+    }
+    if(!SAVE.mines){
+      SAVE.mines=true;writeSave();
+      setTimeout(()=>banner('Unlocked: The Mines \u2014 30 waves, and it is insane'),4600);
+    }
+  }
+  /* Clearing The Mines pays a one-off 5,000 coin prize on top of the map's
+     own payout. Once only — it is a reward for finishing the hardest map,
+     not an income stream. */
+  if(MAP.key==='mines'&&!SAVE.minesPrize){
+    SAVE.minesPrize=true;SAVE.coins+=5000;writeSave();syncCoins();
+    setTimeout(()=>banner('\u2b50 THE MINES CLEARED \u2014 5,000 coin prize'),4600);
   }
   // the event hands over the Toy Soldier
   if(MAP.key==='blocky'&&!SAVE.blocky){
