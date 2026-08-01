@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Tower Defense V1.80 Beta</title>
+<title>Tower Defense V1.85 Beta</title>
 <style>
 :root{
   --void:#04050c;
@@ -349,6 +349,33 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
   background:rgba(8,11,28,.75);border:1px solid var(--line);color:var(--ink);
   border-radius:999px;padding:9px 18px;font-size:11px;letter-spacing:.18em;font-family:inherit}
 #cutSkip.on{display:block}
+/* ---- the event, in bricks ----
+   Primary colours, chunky rounded plastic, and studs along the top of every
+   panel. It should look like it was clicked together, not designed. */
+#event.brickUI{background:linear-gradient(180deg,#1a2340,#0b1024);border-color:#e33b3b}
+.brickUI .sheetHead h2{color:#ffd23f;letter-spacing:.1em}
+.brickPanel{position:relative;background:#e33b3b;border-radius:10px;padding:16px 14px 14px;
+  margin-top:12px;box-shadow:inset 0 -5px 0 rgba(0,0,0,.28),0 3px 0 rgba(0,0,0,.35)}
+.brickPanel.blue{background:#2fa8e0}
+.brickPanel.green{background:#4fbf5a}
+.brickPanel.yellow{background:#f0c020}
+/* the studs along the top edge */
+.brickPanel::before{content:'';position:absolute;top:-7px;left:12px;right:12px;height:14px;
+  background-image:radial-gradient(circle at 10px 7px,currentColor 6px,transparent 6.5px);
+  background-size:26px 14px;background-repeat:repeat-x;opacity:.85}
+.brickPanel.red2::before{color:#e33b3b}
+.brickPanel.blue::before{color:#2fa8e0}
+.brickPanel.green::before{color:#4fbf5a}
+.brickPanel.yellow::before{color:#f0c020}
+.brickPanel h3{font-size:13px;letter-spacing:.09em;text-transform:uppercase;color:#0d1120;margin:0 0 6px}
+.brickPanel p{font-size:11.5px;line-height:1.55;color:rgba(10,14,30,.86);margin:0}
+.brickPanel b{color:#0a0e1e}
+.brickStats{display:flex;gap:7px;margin-top:10px}
+.brickStat{flex:1;background:rgba(10,14,30,.82);border-radius:7px;padding:7px 6px;text-align:center}
+.brickStat .bv{font-size:15px;font-weight:bold;color:#ffd23f}
+.brickStat .bk{font-size:8px;letter-spacing:.13em;color:#8b95cf;text-transform:uppercase;margin-top:2px}
+#evPlay{background:linear-gradient(180deg,#ffd23f,#e0a615);color:#1a1204;font-weight:bold;
+  letter-spacing:.12em;box-shadow:inset 0 -4px 0 rgba(0,0,0,.25)}
 /* ---- playlist picker ---- */
 .plBar{display:flex;gap:6px;margin-bottom:8px}
 #plList{max-height:46vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
@@ -503,21 +530,41 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
     <div id="plList"></div>
   </div>
 
-  <div class="sheet pe" id="event">
-    <div class="sheetHead"><h2>Events</h2><button class="btn sm pe" id="closeEvent">Close</button></div>
-    <div class="evCard">
-      <div class="evIcon">🧱</div>
-      <div class="evBody">
-        <div class="evName">The Blocky Event <span class="evSoon" id="evTag">live now</span></div>
-        <div class="evDesc">Somebody tipped out the toy box. 20 waves of bricks, loose pieces and
-          minifigs, and a <b>Blocky Bloater</b> every fifth wave — 500 HP the first time,
-          2,000 by the last. Clear it and the <b>Toy Soldier</b> is yours: $450, and at max
-          level the fastest gun in the game.</div>
-        <div class="evBar"><div class="evFill" id="evFill"></div></div>
-        <div class="evNote" id="evNote">11 brick types · 900 coins · bring something with range</div>
-        <button class="btn go pe" id="evPlay" style="margin-top:10px;width:100%">▶ Enter the Event</button>
+  <div class="sheet pe brickUI" id="event">
+    <div class="sheetHead"><h2>🧱 The Blocky Event</h2><button class="btn sm pe" id="closeEvent">Close</button></div>
+
+    <div class="brickPanel red2">
+      <h3>Somebody tipped out the toy box</h3>
+      <p>Twenty waves of bricks, loose pieces and minifigs across one long open run.
+        They do not shamble — they <b>waddle</b>, knees locked, rocking off each straight leg.</p>
+      <div class="brickStats">
+        <div class="brickStat"><div class="bv">20</div><div class="bk">waves</div></div>
+        <div class="brickStat"><div class="bv">11</div><div class="bk">brick types</div></div>
+        <div class="brickStat"><div class="bv">900</div><div class="bk">coins</div></div>
       </div>
     </div>
+
+    <div class="brickPanel green">
+      <h3>The Blocky Bloater</h3>
+      <p>Every fifth wave. It leans back over its belly and plants each foot hard — and it
+        <b>clamps your towers shut</b>: two brick jaws close over the gun and it cannot fire
+        until it shakes them off. Two or three at a time, every nine seconds, within 13 units.</p>
+      <div class="brickStats">
+        <div class="brickStat"><div class="bv">500</div><div class="bk">HP wave 5</div></div>
+        <div class="brickStat"><div class="bv">2,000</div><div class="bk">HP wave 20</div></div>
+        <div class="brickStat"><div class="bv">4.5s</div><div class="bk">clamped</div></div>
+      </div>
+    </div>
+
+    <div class="brickPanel yellow">
+      <h3>Clear it and keep the Toy Soldier</h3>
+      <p>$450. Starts feeble — 1 damage every half second — and ends up the fastest gun
+        in the game at <b>15 a shot every 0.09s</b>. Range 7 → 14.</p>
+    </div>
+
+    <div class="evBar" style="margin-top:12px"><div class="evFill" id="evFill"></div></div>
+    <div class="evNote" id="evNote">Bring something with reach — the Bloater punishes anything stood close</div>
+    <button class="btn go pe" id="evPlay" style="margin-top:10px;width:100%">▶ ENTER THE EVENT</button>
   </div>
 
   <div id="prompt">
@@ -528,7 +575,19 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 
   <div class="sheet pe" id="log">
     <div class="sheetHead"><h2>Update Log</h2><button class="btn sm pe" id="closeLog">Close</button></div>
-    <div class="logV">V1.80 <span>beta</span></div>
+    <div class="logV">V1.85 <span>beta</span></div>
+    <ul class="logL">
+      <li><b>The black flicker is gone.</b> It was mine: the frame-rate governor defended itself by lowering the render resolution, which reallocates the drawing buffer &mdash; and a reallocation shows as a black frame. It only ever happened in a crowd because that is exactly when the governor acted. It now buys the time by pulling detail distances in instead, and the buffer is only touched when <i>you</i> change quality</li>
+      <li><b>Crowds cost far less.</b> Health bars and numbers were two extra see-through draws per zombie &mdash; about 180 of them with ninety on the field. They now only draw for things close enough to read, bosses, or anything actually hurt: 1,862 draw calls down to 1,422, and HP repaints from 123 a second to none</li>
+      <li>Effects are capped, so twenty towers firing into a wave cannot flood the frame with sparks</li>
+      <li><b>New: The Sniper.</b> $500, stays crouched behind a scoped bolt-action with quad-tube night vision. 7 damage at Lv1 up to 50 at Lv4, one shot every 3s down to 1.5s, and a real 2-second bolt cycle after every shot where it cannot fire</li>
+      <li><b>The Burned Corpse has no weapon.</b> It was falling through to the default pose, which braces the arms as if holding a pistol. It has its own stance now &mdash; hunched and slack, rearing back to draw breath, thrown forward with the flame</li>
+      <li><b>The Volcano erupts.</b> Vents fire columns of flame on their own clocks and throw lava bombs that arc out and fall back. Lava runs in glowing cracks across the ground, and embers pour up off the hot rock</li>
+      <li><b>The Event, rebuilt.</b> One long open run &mdash; six waypoints instead of fourteen doubling back &mdash; so there is somewhere to build. The UI is bricks: studded red, green and yellow panels</li>
+      <li><b>Brick things move like bricks.</b> Knees locked, rocking off each straight leg, elbows fixed. The Bloater gets a heavier version, leaning back over its belly and planting each foot</li>
+      <li><b>The Bloater clamps your towers shut.</b> Two brick jaws close over the gun and it cannot fire for 4.5 seconds while it shakes them off. Two or three towers at a time, every nine seconds, within 13 units</li>
+    </ul>
+    <div class="logV">V1.80</div>
     <ul class="logL">
       <li><b>Real textures.</b> The ground, patches and path used to be single flat colours — that is why it looked like plastic. They now have painted grain: grass with individual blades, dirt with grit, pebbles and dragged ruts, rock with pitting and hairline cracks</li>
       <li><b>Normal-mapped relief.</b> Every texture carries a matching bump map derived from its own detail, so the pebbles in the path genuinely catch the light on the side the sun is on instead of being a flat picture</li>
@@ -703,7 +762,7 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
   <div id="title" class="pe">
     <div class="sub">Beta Version</div>
     <h1>Tower<br>Defense</h1>
-    <div class="sub" style="letter-spacing:.5em">V 1.80</div>
+    <div class="sub" style="letter-spacing:.5em">V 1.85</div>
     <ul>
       <li>Clear a map to unlock the next: Grassy Field → The Forest → The Volcano</li>
       <li>Left side of the screen = move · right side = look</li>
@@ -763,8 +822,12 @@ const MAPS={
     portalCol:0xffd23f,stoneCol:0xd8443c,stoneCol2:0x2fa8e0,stoneCol3:0x4fbf5a,scorchCol:0x2b2f3a,
     blurb:'20 waves · a Blocky Bloater every 5th wave',
     fog:{col:0x121a33,near:30,far:88},sun:0xffffff,sunI:1.05,hemi:[0x9fd8ff,0x4a5570,.85],
-    wp:[[-30,-18],[-8,-18],[-8,2],[-28,2],[-28,16],[-2,16],[-2,-2],[14,-2],[14,-18],[28,-18],[28,8],[10,8],[10,20],[-4,20]],
-    spawn:[-24,-10]}
+    /* A long, open run instead of a maze. The old layout had fourteen
+       waypoints doubling back on themselves, which left almost nowhere to
+       build with any reach and made the whole thing a corridor fight. Six
+       waypoints, wide sweeps, plenty of open ground either side. */
+    wp:[[-38,-14],[-6,-14],[-6,12],[22,12],[22,-10],[38,-10]],
+    spawn:[-30,-6]}
 };
 let MAP=MAPS.grassy;
 let WP=MAP.wp,SEG=[],PATH_LEN=0;
@@ -1070,9 +1133,21 @@ const TOYSOLDIER={
     {dmg:15,cd:.09,rng:14,  up:null}
   ]
 };
+/* The Sniper. Fires rarely and hits very hard, then spends two seconds working
+   the bolt and feeding a fresh round — during which it cannot shoot at all, so
+   the reload is a real cost rather than decoration. Stays crouched. */
+const SNIPER={
+  key:'sniper',name:'The Sniper',cost:500,icon:'🎯',reload:2,
+  lv:[
+    {dmg:7, cd:3.0,rng:16, up:400},
+    {dmg:17,cd:2.4,rng:19, up:900},
+    {dmg:31,cd:1.9,rng:22, up:1800},
+    {dmg:50,cd:1.5,rng:26, up:null}
+  ]
+};
 const TOWERS={police:POLICE,scout:SCOUT,robber:ROBBER,survivor:SURVIVOR,
               blitzer:BLITZER,knife:KNIFE,slasher:SLASHER,commander:COMMANDER,
-              mine:MINE,corpse:CORPSE_T,toy:TOYSOLDIER};
+              mine:MINE,corpse:CORPSE_T,toy:TOYSOLDIER,sniper:SNIPER};
 /* How many towers you can have standing at once, across every type. */
 const UNIT_CAP=25;
 
@@ -1488,6 +1563,9 @@ function shadowPass(root,minSize){
    the mid-sized trim goes too. Re-checked a few times a second, and only
    written when a character actually changes tier. */
 const DETAILED=[];
+/* Live detail budget. Set by the quality setting and pulled in further by the
+   governor when frames get expensive. */
+let LOD_NEAR=14,LOD_FAR=24,HP_LABEL_FAR=26,FX_BUDGET=90;
 let detailT=0;
 function detailStep(dt){
   detailT-=dt;
@@ -1495,7 +1573,7 @@ function detailStep(dt){
   detailT=.2;
   const cx=camera.position.x,cz=camera.position.z;
   const k=GFX==='low'?.55:GFX==='med'?.8:1;
-  const near=14*k,far=24*k;
+  const near=LOD_NEAR*k,far=LOD_FAR*k;
   for(let i=DETAILED.length-1;i>=0;i--){
     const g=DETAILED[i];
     if(!g.parent){DETAILED.splice(i,1);continue;}
@@ -1717,6 +1795,60 @@ function stepPortals(dt){
     }
     a.needsUpdate=true;
   }
+  // embers drifting up off the hot ground, curling as they rise
+  for(const ep of EMBER_RISE){
+    if(!ep.visible)continue;
+    const a=ep.geometry.attributes.position;
+    for(let i=0;i<a.count*3;i+=3){
+      a.array[i+1]+=dt*(1.1+((i*.37)%1)*1.6);
+      a.array[i]+=Math.sin(_volT*.7+i)*dt*.35;
+      if(a.array[i+1]>14){a.array[i+1]=0;a.array[i]=rnd(-44,44);a.array[i+2]=rnd(-38,38);}
+    }
+    a.needsUpdate=true;
+  }
+  /* Vents erupting. Idle most of the time, then a fire column punches up,
+     the heat light floods, and lava bombs arc out on real ballistics and
+     fall back down. */
+  for(const v of ERUPT){
+    if(!v.jet.parent||!v.jet.parent.visible){continue;}
+    v.t+=dt;
+    const firing=v.t<v.dur;
+    if(firing){
+      const u=v.t/v.dur;
+      const rise=Math.min(1,u/.18), fade=1-clamp((u-.4)/.6,0,1);
+      const flick=.85+Math.sin(_volT*38+v.x)*.15;
+      v.jet.visible=v.core.visible=true;
+      v.jet.scale.set(flick,rise*(1.1-u*.25),flick);
+      v.core.scale.set(flick*.9,rise*(1.05-u*.2),flick*.9);
+      v.jet.material.opacity=.72*fade;
+      v.core.material.opacity=.85*fade;
+      v.light.intensity=.7+rise*fade*3.4;
+      v.mouth.color.setHSL(.06,1,.5+rise*fade*.35);
+      // bombs: launched on the first frame, then simple gravity
+      if(!v.vel){
+        v.vel=[];
+        const a=v.bombs.geometry.attributes.position.array;
+        for(let k=0;k<a.length;k+=3){
+          a[k]=v.x;a[k+1]=1.8;a[k+2]=v.z;
+          const ang=Math.random()*6.283,sp=rnd(1.5,5.5);
+          v.vel.push(Math.cos(ang)*sp,rnd(7,13),Math.sin(ang)*sp);
+        }
+        v.bombs.visible=true;
+      }
+      const a=v.bombs.geometry.attributes.position.array;
+      for(let k=0;k<a.length;k+=3){
+        v.vel[k+1]-=19*dt;
+        a[k]+=v.vel[k]*dt;a[k+1]+=v.vel[k+1]*dt;a[k+2]+=v.vel[k+2]*dt;
+        if(a[k+1]<0){a[k+1]=0;v.vel[k]=v.vel[k+1]=v.vel[k+2]=0;}
+      }
+      v.bombs.geometry.attributes.position.needsUpdate=true;
+      v.bombs.material.opacity=.95*fade;
+    }else if(v.jet.visible){
+      v.jet.visible=v.core.visible=v.bombs.visible=false;
+      v.light.intensity=.7;v.vel=null;
+    }
+    if(v.t>v.period){v.t=0;v.vel=null;}
+  }
   for(const a of SPAWN_ANIM){
     a.t+=dt;
     const t=a.t;
@@ -1738,7 +1870,7 @@ function stepPortals(dt){
   }
 }
 
-const LAVA_MATS=[],ASH_FALL=[];
+const LAVA_MATS=[],ASH_FALL=[],EMBER_RISE=[],ERUPT=[];
 function buildTerrain(map){
   const g=new THREE.Group();
   const forest=map.key==='forest',volc=map.key==='volcanic',segs=map.segs;
@@ -1891,11 +2023,51 @@ function buildTerrain(map){
       const drift=new THREE.Mesh(new THREE.SphereGeometry(rnd(.8,2.2),7,5),M(0x4a3d34));
       drift.scale.set(1,.22,1);drift.position.set(x,.05,z);g.add(drift);DECOR.push(drift);
     }
+    /* ---- lava running through cracks in the ground ----
+       Thin glowing channels wandering across the plain, with a crust either
+       side. They read as the ground splitting open rather than as decals. */
+    for(let i=0;i<9;i++){
+      let x=rnd(-40,40),z=rnd(-34,34);
+      if(dp(x,z)<5)continue;
+      let a=rnd(0,6.283);
+      const flowMats=[];
+      for(let seg=0;seg<rnd(5,11);seg++){
+        a+=rnd(-.5,.5);
+        const len=rnd(2.2,5),w=rnd(.3,.9);
+        const nx=x+Math.cos(a)*len/2,nz=z+Math.sin(a)*len/2;
+        if(dp(nx,nz)<3.4)break;
+        const crack=new THREE.Mesh(new THREE.PlaneGeometry(len,w),
+          new THREE.MeshBasicMaterial({color:0xff7a2a}));
+        crack.rotation.x=-Math.PI/2;crack.rotation.z=-a;
+        crack.position.set(nx,.045,nz);g.add(crack);
+        flowMats.push(crack.material);
+        const lip=new THREE.Mesh(new THREE.PlaneGeometry(len+.5,w+.55),M(0x1a100c));
+        lip.rotation.copy(crack.rotation);lip.position.set(nx,.035,nz);g.add(lip);DECOR.push(lip);
+        const gl=new THREE.PointLight(0xff6a2a,.28,5.5);
+        gl.position.set(nx,.7,nz);g.add(gl);DECOR.push(gl);
+        x+=Math.cos(a)*len;z+=Math.sin(a)*len;
+      }
+      if(flowMats.length)LAVA_MATS.push(flowMats);
+    }
+    /* ---- embers pouring up off the hot ground ----
+       One Points cloud for the whole map rather than per-source, so the whole
+       effect is a single draw call however much of it you can see. */
+    {
+      const eg=new THREE.BufferGeometry(),ep=[];
+      for(let i=0;i<520;i++)ep.push(rnd(-44,44),rnd(0,14),rnd(-38,38));
+      eg.setAttribute('position',new THREE.Float32BufferAttribute(ep,3));
+      const em=new THREE.Points(eg,new THREE.PointsMaterial({
+        color:0xff9a4a,size:.19,transparent:true,opacity:.85,depthWrite:false,
+        blending:THREE.AdditiveBlending}));
+      g.add(em);DECOR.push(em);EMBER_RISE.push(em);
+    }
     // Vents rather than a mountain: a 26-unit cone on the horizon just read as
     // a black wedge across the sky once the fog got hold of it.
-    for(let i=0;i<5;i++){
-      const x=rnd(-40,40),z=rnd(-34,34);
-      if(dp(x,z)<6)continue;
+    // more vents than before, and less fussy about clearance, so an eruption is
+    // something you see often rather than a rumour
+    for(let i=0;i<11;i++){
+      const x=rnd(-42,42),z=rnd(-36,36);
+      if(dp(x,z)<4.6)continue;
       const vent=new THREE.Mesh(new THREE.CylinderGeometry(1.5,2.6,rnd(1.2,2.2),8),M(0x241812));
       vent.position.set(x,.6,z);vent.castShadow=true;g.add(vent);DECOR.push(vent);
       const mouth=new THREE.Mesh(new THREE.CircleGeometry(1.4,10),
@@ -1908,6 +2080,26 @@ function buildTerrain(map){
           new THREE.MeshBasicMaterial({color:0x4a3a34,transparent:true,opacity:.3}));
         puff.position.set(x+rnd(-.6,.6),2.6+j*1.5,z+rnd(-.6,.6));g.add(puff);DECOR.push(puff);
       }
+      /* ---- and every so often the vent actually goes off ----
+         A column of fire punches up out of the mouth, the light floods, and
+         a spray of lava bombs arcs out and falls back. Each vent runs on its
+         own clock so they never fire together. */
+      const jet=new THREE.Mesh(new THREE.ConeGeometry(1.15,7,10,1,true),
+        new THREE.MeshBasicMaterial({color:0xff8a2a,transparent:true,opacity:.75,
+          side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending}));
+      jet.position.set(x,5.2,z);jet.visible=false;g.add(jet);DECOR.push(jet);
+      const core=new THREE.Mesh(new THREE.ConeGeometry(.5,5.4,8,1,true),
+        new THREE.MeshBasicMaterial({color:0xffe6a0,transparent:true,opacity:.8,
+          side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending}));
+      core.position.set(x,4.3,z);core.visible=false;g.add(core);DECOR.push(core);
+      const bg=new THREE.BufferGeometry(),bp=[];
+      for(let k=0;k<26;k++)bp.push(x,1.8,z);
+      bg.setAttribute('position',new THREE.Float32BufferAttribute(bp,3));
+      const bombs=new THREE.Points(bg,new THREE.PointsMaterial({color:0xffb45a,size:.3,
+        transparent:true,opacity:.95,depthWrite:false,blending:THREE.AdditiveBlending}));
+      bombs.visible=false;g.add(bombs);DECOR.push(bombs);
+      ERUPT.push({x,z,jet,core,bombs,light:heat2,mouth:mouth.material,
+                  t:rnd(0,9),period:rnd(7,14),dur:1.9,vel:null});
     }
     // falling ash
     const ashG=new THREE.BufferGeometry();
@@ -2327,7 +2519,11 @@ function spawnEnemy(key,dist){
   if(d.blk)brickPass(g,P,d,key);
   else decayPass(g,P,d,key);
   applyBuild(g,P,d,key);
-  const style=(key==='quick'||key==='runner'||key==='ember')?'sprint'
+  /* Brick things do not shamble. Regular pieces waddle stiffly — no knee bend
+     at all, rocking side to side off a straight leg, the way a minifig has to
+     move. The Bloater gets its own heavier version of the same idea. */
+  const style=d.blk?(d.mini?'bloat':'waddle')
+            :(key==='quick'||key==='runner'||key==='ember')?'sprint'
             :(key==='giant'||key==='boss'||key==='digger'||key==='heavy'
               ||key==='magma'||key==='corpse')?'stomp':'shamble';
   const limp=Math.random()<.5?1:-1;
@@ -3244,9 +3440,91 @@ function buildToy(){
   shadowPass(g);
   return g;
 }
+/* The Sniper: down on one knee behind a long scoped rifle, in a ghillie-ish
+   wrap, with a quad-tube night vision rig flipped down over the eyes. The
+   crouch is baked into the rig's rest pose here and held by towerPose. */
+function buildSniper(){
+  const g=person({skin:0xc08a5e,hair:0x2a2118,eye:0x6fe8a0,shirt:0x2f3a2a,pants:0x28311f,
+                  shoe:0x1a1c16,mouth:0x2a1a14});
+  const P=g.userData.P,T=P.torso,H=P.head;
+  const cloth=M(0x33402c),clothD=M(0x232c1e),webbing=M(0x1d241a),
+        steel=M(0x2f333a),glassM=M(0x6fe8a0),rubber=M(0x16181c),brass=M(0xb08a3c);
+  // wrapped, broken-up outline
+  const wrap=new THREE.Mesh(new THREE.CylinderGeometry(.19,.16,.33,8),cloth);
+  wrap.scale.set(1.3,1,.95);wrap.position.y=.3;T.add(wrap);
+  for(let i=0;i<9;i++){
+    const tag=new THREE.Mesh(new THREE.BoxGeometry(.05,rnd(.07,.15),.02),
+      Math.random()<.5?clothD:webbing);
+    const a=Math.random()*6.283;
+    tag.position.set(Math.cos(a)*.19,.16+Math.random()*.3,Math.sin(a)*.14);
+    tag.rotation.set(rnd(-.3,.3),a,rnd(-.4,.4));T.add(tag);
+  }
+  const chest=new THREE.Mesh(new THREE.BoxGeometry(.26,.2,.06),webbing);
+  chest.position.set(0,.34,.14);T.add(chest);
+  for(const sx of [-1,1]){
+    const pouch=new THREE.Mesh(new THREE.BoxGeometry(.075,.1,.05),clothD);
+    pouch.position.set(sx*.08,.2,.15);T.add(pouch);
+  }
+  // hood + night vision: a four-tube rig on a bracket, lenses lit
+  const hood=new THREE.Mesh(new THREE.SphereGeometry(.145,10,8,0,Math.PI*2,0,1.55),cloth);
+  hood.scale.set(1.06,1.04,1.04);hood.position.y=.02;H.add(hood);
+  const mount=new THREE.Mesh(new THREE.BoxGeometry(.12,.045,.05),steel);
+  mount.position.set(0,.09,.1);H.add(mount);
+  const nvTubes=[];
+  for(const sx of [-1.55,-.52,.52,1.55]){
+    const tube=new THREE.Mesh(new THREE.CylinderGeometry(.026,.03,.11,10),rubber);
+    tube.rotation.x=Math.PI/2;tube.position.set(sx*.032,.035,.145);H.add(tube);
+    const lens=new THREE.Mesh(new THREE.CylinderGeometry(.024,.024,.012,10),glassM);
+    lens.rotation.x=Math.PI/2;lens.position.set(sx*.032,.035,.203);H.add(lens);
+    nvTubes.push(lens);
+  }
+  const nvGlow=new THREE.PointLight(0x6fe8a0,.5,2.2);
+  nvGlow.position.set(0,.04,.24);H.add(nvGlow);
+  const strap=new THREE.Mesh(new THREE.BoxGeometry(.02,.05,.24),webbing);
+  strap.position.set(.12,.02,0);H.add(strap);
+  // the rifle: long barrel, big scope, bipod, bolt
+  const gun=new THREE.Group();
+  const stock=new THREE.Mesh(new THREE.BoxGeometry(.05,.09,.30),clothD);
+  stock.position.z=-.14;gun.add(stock);
+  const cheek=new THREE.Mesh(new THREE.BoxGeometry(.052,.035,.14),webbing);
+  cheek.position.set(0,.055,-.1);gun.add(cheek);
+  const body=new THREE.Mesh(new THREE.BoxGeometry(.055,.07,.26),steel);
+  body.position.z=.1;gun.add(body);
+  const barrel=new THREE.Mesh(new THREE.CylinderGeometry(.015,.017,.62,8),steel);
+  barrel.rotation.x=Math.PI/2;barrel.position.z=.52;gun.add(barrel);
+  const brake=new THREE.Mesh(new THREE.CylinderGeometry(.026,.026,.07,8),steel);
+  brake.rotation.x=Math.PI/2;brake.position.z=.85;gun.add(brake);
+  const muzzle=new THREE.Mesh(new THREE.CylinderGeometry(.022,.022,.02,8),steel);
+  muzzle.rotation.x=Math.PI/2;muzzle.position.z=.89;gun.add(muzzle);
+  const scope=new THREE.Mesh(new THREE.CylinderGeometry(.03,.03,.30,10),rubber);
+  scope.rotation.x=Math.PI/2;scope.position.set(0,.075,.14);gun.add(scope);
+  const objective=new THREE.Mesh(new THREE.CylinderGeometry(.038,.038,.05,10),steel);
+  objective.rotation.x=Math.PI/2;objective.position.set(0,.075,.31);gun.add(objective);
+  const objGlass=new THREE.Mesh(new THREE.CircleGeometry(.032,10),glassM);
+  objGlass.position.set(0,.075,.337);gun.add(objGlass);
+  for(const sx of [-1,1]){
+    const leg=new THREE.Mesh(new THREE.CylinderGeometry(.008,.008,.26,6),steel);
+    leg.position.set(sx*.06,-.13,.55);leg.rotation.z=sx*.42;gun.add(leg);
+  }
+  // the bolt, thrown by the reload animation
+  const bolt=new THREE.Group();
+  const boltBody=new THREE.Mesh(new THREE.CylinderGeometry(.011,.011,.1,6),steel);
+  boltBody.rotation.z=Math.PI/2;bolt.add(boltBody);
+  const boltKnob=new THREE.Mesh(new THREE.SphereGeometry(.019,7,6),steel);
+  boltKnob.position.x=.06;bolt.add(boltKnob);
+  bolt.position.set(.035,.03,.03);gun.add(bolt);
+  const shell=new THREE.Mesh(new THREE.CylinderGeometry(.011,.011,.055,7),brass);
+  shell.rotation.z=Math.PI/2;shell.position.set(.05,.02,.02);shell.visible=false;gun.add(shell);
+  gun.position.set(0,-.1,.1);
+  P.foreR.add(gun);
+  g.userData.gun=gun;g.userData.muzzle=muzzle;
+  g.userData.sniper={bolt,shell,nvTubes,nvGlow,scope};
+  shadowPass(g);
+  return g;
+}
 const TOWER_BUILD={police:buildPolice,scout:buildScout,robber:buildRobber,survivor:buildSurvivor,
                    blitzer:buildBlitzer,knife:buildKnife,slasher:buildSlasher,commander:buildCommander,
-                   mine:buildMine,corpse:buildCorpse,toy:buildToy};
+                   mine:buildMine,corpse:buildCorpse,toy:buildToy,sniper:buildSniper};
 function placeTower(key,x,z){
   const def=TOWERS[key];
   const g=TOWER_BUILD[key]();
@@ -3280,7 +3558,7 @@ function placeTower(key,x,z){
     // animation state: alertness, recoil, idle gesture clock, turn tracking
     seed:rnd(0,6.283),alert:0,rec:0,gest:-1,gestT:rnd(2,7),prevY:0,turn:0,lastSeen:99,
     // Corpse breath cycle and Slasher rage clock
-    breathing:false,brT:0,rage:0,rageT:SLASH_RAGE};
+    breathing:false,brT:0,rage:0,rageT:SLASH_RAGE,reload:0,clamp:0,clampMesh:null};
   if(key==='blitzer')blitzerCharge(t);
   // an income tower serves its first shift before it pays — otherwise dropping
   // one hands you $50 the instant it lands
@@ -3323,7 +3601,13 @@ function tStats(t){
 function upgradeCost(t){const l=t.def.lv[t.lvl];return l.up;}
 
 /* ---------- effects ---------- */
+/* Twenty towers all firing into a crowd can queue hundreds of effects in a
+   second, and each one is a mesh, a material and a draw call. Past the budget
+   the cheap decorative ones are simply skipped — nobody can pick one spark out
+   of ninety, and the frame rate is worth more. */
+function fxBudgetFull(){return G.fx.length>=FX_BUDGET;}
 function fxSpark(pos,color){
+  if(fxBudgetFull())return;
   const m=new THREE.Mesh(new THREE.SphereGeometry(.17,7,6),
     new THREE.MeshBasicMaterial({color,transparent:true,opacity:.95}));
   m.position.copy(pos);world.add(m);
@@ -3461,6 +3745,67 @@ function corpseTick(t,dt,s,target){
       fxSpark(e.g.position.clone().add(V3(0,1.0*e.d.sc,0)),0xff8a2a);
   }
 }
+/* ---------- the Bloater's clamp ----------
+   The event boss reaches out and snaps a tower's weapon shut — two brick
+   clamps close over the gun and it cannot fire until it works them off.
+   Deliberately survivable: it hits a handful of towers near it, never all of
+   them, and never the same one twice in a row while it is still stuck. */
+const CLAMP_TIME=4.5, CLAMP_RANGE=13, CLAMP_EVERY=9;
+function clampTower(t,secs){
+  if(t.clamp>0)return false;
+  t.clamp=secs;
+  const g=new THREE.Group();
+  const brick=M(0xe33b3b),stud=M(0xc02a2a);
+  for(const sy of [-1,1]){
+    const jaw=new THREE.Mesh(new THREE.BoxGeometry(.30,.13,.30),brick);
+    jaw.position.y=sy*.13;g.add(jaw);
+    for(const sx of [-1,1])for(const sz of [-1,1]){
+      const s=new THREE.Mesh(new THREE.CylinderGeometry(.035,.035,.03,8),stud);
+      s.position.set(sx*.09,sy*.2,sz*.09);g.add(s);
+    }
+  }
+  g.position.set(0,1.35,.35);
+  t.g.add(g);
+  t.clampMesh=g;
+  fxSpark(t.g.position.clone().add(V3(0,1.4,0)),0xe33b3b);
+  return true;
+}
+function clampStep(t,dt){
+  if(!(t.clamp>0))return;
+  t.clamp-=dt;
+  if(t.clampMesh){
+    const g=t.clampMesh;
+    // the jaws shudder as the tower fights them, and fly off when they give
+    const sh=Math.sin(performance.now()*.03)*.05*Math.min(1,t.clamp);
+    g.rotation.z=sh;g.position.y=1.35+Math.abs(sh)*.2;
+  }
+  if(t.clamp<=0){
+    t.clamp=0;
+    if(t.clampMesh){
+      fxSpark(t.clampMesh.getWorldPosition(V3()),0xffd166);
+      t.g.remove(t.clampMesh);disposeTree(t.clampMesh);t.clampMesh=null;
+    }
+    sfx('charged');
+  }
+}
+/* The boss picks its moment: every few seconds it grabs the towers around it. */
+function bloaterClamp(e,dt){
+  e.clampT=(e.clampT==null?CLAMP_EVERY*.6:e.clampT)-dt;
+  if(e.clampT>0)return;
+  e.clampT=CLAMP_EVERY;
+  const near=[];
+  for(const t of G.towers){
+    if(t.clamp>0||NO_ATTACK[t.key])continue;
+    const d=Math.hypot(t.g.position.x-e.g.position.x,t.g.position.z-e.g.position.z);
+    if(d<=CLAMP_RANGE)near.push([t,d]);
+  }
+  if(!near.length)return;
+  near.sort((a,b)=>a[1]-b[1]);
+  const n=Math.min(near.length,2+((Math.random()*2)|0));   // two or three at a time
+  for(let i=0;i<n;i++)clampTower(near[i][0],CLAMP_TIME);
+  banner('The Bloater clamped ' + n + ' tower' + (n>1?'s':'') + ' shut!');
+  sfx('no');
+}
 /* Burning: a damage-over-time that refreshes rather than stacking, so standing
    in the flame longer keeps the burn topped up instead of multiplying it. */
 function igniteEnemy(e,dps,owner){
@@ -3470,6 +3815,7 @@ function igniteEnemy(e,dps,owner){
   e.burnBy=owner||null;
 }
 function fxBolt(a,b){
+  if(fxBudgetFull())return;
   const pts=[];const n=7;
   for(let i=0;i<=n;i++){
     const p=a.clone().lerp(b,i/n);
@@ -3482,6 +3828,7 @@ function fxBolt(a,b){
   G.fx.push({t:0,life:.16,fn:f=>{l.material.opacity=1-f.t/.16;},end:()=>removeFromWorld(l)});
 }
 function fxTracer(a,b){
+  if(fxBudgetFull())return;
   const l=new THREE.Line(new THREE.BufferGeometry().setFromPoints([a,b]),
     new THREE.LineBasicMaterial({color:0xffe07a,transparent:true,opacity:.9}));
   world.add(l);
@@ -3490,6 +3837,7 @@ function fxTracer(a,b){
 // Blitzer: a fat yellow bolt rather than a hairline tracer, since it fires 25
 // rounds a second and a thin line at that rate reads as flicker
 function fxLaser(a,b){
+  if(fxBudgetFull())return;
   const d=b.clone().sub(a),len=d.length()||.001;
   const m=new THREE.Mesh(new THREE.CylinderGeometry(.04,.028,len,6),
     new THREE.MeshBasicMaterial({color:0xffe23a,transparent:true,opacity:.95}));
@@ -3502,6 +3850,7 @@ function fxLaser(a,b){
 }
 // Knife Master: an arc sweeping through the target
 function fxSlash(pos,ang,col){
+  if(fxBudgetFull())return;
   const m=new THREE.Mesh(new THREE.TorusGeometry(.42,.03,4,12,1.7),
     new THREE.MeshBasicMaterial({color:col||0xe6edff,transparent:true,opacity:.9,side:THREE.DoubleSide}));
   m.position.copy(pos);
@@ -3554,7 +3903,7 @@ function syncHud(){
 const LOADOUT=['police','scout','robber','survivor',null];
 const SHORT={police:'Cop',scout:'Scout',robber:'Robber',survivor:'Survivor',
              blitzer:'Blitzer',knife:'Knife',slasher:'Slasher',commander:'Cmdr',
-             mine:'Mine',corpse:'Corpse',toy:'Toy'};
+             mine:'Mine',corpse:'Corpse',toy:'Toy',sniper:'Sniper'};
 const TOWER_DESC={
   police:'Baton: 9 dmg every 1.0s at Lv1 up to 40 at Lv5, range 10 → 12. It breaks after 30 hits and he falls back on the taser — weaker, but it stuns. Upgrading issues a fresh baton. 5 levels.',
   scout:'2 dmg · 0.9s · 8 range. Cheap, fast chip damage. 3 levels.',
@@ -3565,10 +3914,11 @@ const TOWER_DESC={
   slasher:'Twin blades kept in a furnace on his back: 10 dmg every 0.40s at Lv1 up to 25 every 0.30s at Lv4. Range 3 → 4, the shortest reach in the game, so placement matters more than for anything else. 4 levels.',
   commander:'Sidearm plus an aura: every friendly tower inside his ring hits +15% harder and reloads +10% faster at Lv1, up to +40% and +28% at Lv4. Auras do not stack. 4 levels.',
   mine:'Never fires a shot — it digs. Pays $50 every 5 seconds at Lv1, up to $500 at Lv5. Upgrades run $150 → $2,000, so it pays for itself and then some if you build it early. Limit of 5 on the field. Unlocked by clearing The Forest.',
+  sniper:'Stays crouched, sees further than anything else in the game, and hits like nothing else: 7 damage at Lv1 up to 50 at Lv4. Slow — one shot every 3s down to 1.5s — and after every shot it works the bolt for 2 full seconds and cannot fire. Range 16 → 26. Night vision, so it never loses a target. 4 levels.',
   toy:'A plastic army man on a moulded base. Starts almost useless — 1 damage every 0.5s — and ends up the fastest gun in the game: 15 a shot every 0.09s, which is 167 dps. Range 7 → 14. The last upgrade costs $2,500 and it is worth it. Unlocked by clearing The Blocky Event.',
   corpse:'Holds a cone of fire for 3 seconds, rests for 2, and repeats. 8 dmg per tick at Lv1 up to 25 at Lv4, every 0.5s, and anything caught keeps burning after it walks out of the flame. Range 6 → 8.5. Its eyes glow yellow at max. Unlocked by clearing The Volcano.'
 };
-const ALL_TOWERS=['police','scout','robber','survivor','blitzer','knife','slasher','commander','mine','corpse','toy'];
+const ALL_TOWERS=['police','scout','robber','survivor','blitzer','knife','slasher','commander','mine','corpse','toy','sniper'];
 /* Towers that never shoot are skipped by the targeting and the bot's damage
    maths — the Mine just sits there earning. */
 const NO_ATTACK={mine:1};
@@ -3639,6 +3989,15 @@ function showInfo(t){
     : t.key==='knife'   ? 'Twin blades — short reach, heavy hits'
     : t.key==='commander'? 'Sidearm + command aura — +'+Math.round(s.dmgB*100)+'% damage and +'
                            +Math.round(s.rateB*100)+'% fire rate to towers within '+s.aura
+    : t.key==='sniper'  ? (t.reload>0?'Bolt-action — cycling the bolt, '+t.reload.toFixed(1)+'s'
+                                     :'Bolt-action rifle — night vision, '+t.def.reload+'s to reload after every shot')
+    : t.key==='slasher' ? (t.lvl>=t.def.lv.length-1
+                            ? 'Twin hot blades — throws one every '+SLASH_RAGE+'s for '+SLASH_THROW_DMG
+                            : 'Twin blades kept in a furnace')
+    : t.key==='mine'    ? 'No weapon — pays $'+s.pay+' every '+s.cd+'s'
+    : t.key==='corpse'  ? (t.breathing?'Breathing fire — '+s.dmg+' a tick, sets them alight'
+                                      :'Mouth shut — breathes again in '+Math.max(0,t.brT).toFixed(1)+'s')
+    : t.key==='toy'     ? 'Plastic rifle — '+s.dmg+' a shot every '+s.cd+'s'
     : 'Service pistol';
   // a buffed tower shows the numbers it is actually shooting with
   if(t.buffed&&t.key!=='commander'){
@@ -4165,6 +4524,13 @@ function tapWorld(cx,cy){
 function fire(t,dt){
   // the Mine has no target and no weapon — it runs its own clock
   if(t.key==='mine'){mineTick(t,dt);return;}
+  // clamped shut by the event boss: it can still turn and look, but not shoot
+  if(t.clamp>0){
+    clampStep(t,dt);
+    const P0=t.g.userData.P;
+    if(P0)towerPose(t,dt,null,tStats(t));
+    return;
+  }
   t.cd-=dt;
   if(t.swing>0)t.swing=Math.max(0,t.swing-dt);
   const base=tStats(t);
@@ -4180,6 +4546,18 @@ function fire(t,dt){
     t.rech-=dt;
     if(t.rech<=0){t.rech=0;t.ammo=t.def.battery;blitzerCharge(t);sfx('charged');
       if(G.sel===t)showInfo(t);}
+  }
+  /* The Sniper's bolt cycle. Two seconds where it genuinely cannot fire, and
+     the animation is driven straight off this clock so what you see is what is
+     actually happening. */
+  if(t.reload>0){
+    t.reload-=dt;
+    if(t.reload<=0){
+      t.reload=0;
+      const sn=t.g.userData.sniper;
+      if(sn){sn.shell.visible=false;sn.bolt.position.x=.035;sn.bolt.rotation.z=0;}
+      sfx('place');
+    }
   }
   // aim at furthest-along enemy in range
   let target=null,bd=-1;
@@ -4216,7 +4594,7 @@ function fire(t,dt){
     const ang=Math.atan2(target.g.position.x-t.g.position.x,target.g.position.z-t.g.position.z);
     let cur=t.g.rotation.y,diff=((ang-cur+Math.PI*3)%(Math.PI*2))-Math.PI;
     t.g.rotation.y=cur+diff*Math.min(1,dt*9);
-    if(t.cd<=0&&t.rech<=0){
+    if(t.cd<=0&&t.rech<=0&&!(t.reload>0)){
       t.cd=s.cd;
       t.swDur=t.key==='scout'?.2
              :t.key==='survivor'?Math.min(.16,s.cd*.8)
@@ -4227,6 +4605,14 @@ function fire(t,dt){
       const to=target.g.position.clone().add(V3(0,1.1*target.d.sc,0));
       if(t.key==='scout'){
         fxTracer(from,to);fxSpark(to,0xffe07a);fxSpark(from,0xfff0b0);hurt(target,s.dmg);sfx('shot');
+      }else if(t.key==='sniper'){
+        const muz=t.g.userData.muzzle?t.g.userData.muzzle.getWorldPosition(V3()):from;
+        fxTracer(muz,to);fxSpark(muz,0xfff6cc);fxSpark(to,0xffd9a0);
+        fxSpark(to.clone().add(V3(rnd(-.2,.2),rnd(0,.4),rnd(-.2,.2))),0xff8a5c);
+        hurt(target,s.dmg);sfx('rifle');
+        // and now it is out of action for two seconds working the bolt
+        t.reload=t.def.reload;
+        if(t.g.userData.sniper)t.g.userData.sniper.shell.visible=true;
       }else if(t.key==='toy'){
         const muz=t.g.userData.muzzle?t.g.userData.muzzle.getWorldPosition(V3()):from;
         fxTracer(muz,to);
@@ -4316,7 +4702,7 @@ function fire(t,dt){
    ============================================================ */
 const mix=(a,b,k)=>a+(b-a)*k;
 const RECOIL_DECAY={scout:9,survivor:11,robber:4.5,blitzer:15,knife:6,slasher:7,police:7,commander:8,
-                    toy:16,corpse:8};   // the toy fires far too fast for a slow settle
+                    toy:16,corpse:8,sniper:3.2};   // a heavy rifle rocks back slowly   // the toy fires far too fast for a slow settle
 function towerPose(t,dt,target,s){
   const P=t.g.userData.P;
   const now=performance.now()*.001,seed=t.seed;
@@ -4476,6 +4862,76 @@ function towerPose(t,dt,target,s){
       P.torso.rotation.x+=-R*.05;
       P.head.rotation.x=mix(.02,-.03,A)-R*.03;
     }
+  }else if(key==='sniper'){
+    /* ---- crouched behind the rifle ----
+       Down on the right knee, left knee up as a brace, torso folded forward
+       over the scope. The whole stance is held rather than animated, so the
+       only movement is breathing, the recoil and the bolt cycle. */
+    P.legR.rotation.x=1.45;P.shinR.rotation.x=1.5;P.footR.rotation.x=-.55;
+    P.legR.rotation.z=.2;
+    P.legL.rotation.x=-1.15;P.shinL.rotation.x=1.35;P.footL.rotation.x=.1;
+    P.legL.rotation.z=-.26;
+    P.torso.position.y=.63+breath*.008;          // sunk right down
+    P.torso.rotation.x=.42-R*.1;
+    P.torso.rotation.z=shift*.3;
+    P.torso.rotation.y=lead*.5;
+    // both hands on the rifle, right on the grip, left under the fore-end
+    P.armR.rotation.x=-1.15+R*.5;P.armR.rotation.z=-.30;
+    P.foreR.rotation.x=-.62-R*.25;
+    P.armL.rotation.x=-1.05;P.armL.rotation.z=.42;
+    P.foreL.rotation.x=-.85;
+    P.head.rotation.x=.30-R*.12;                  // eye down to the scope
+    const sn=t.g.userData.sniper;
+    if(sn&&t.reload>0){
+      /* Two seconds, in four beats: lift the head off the scope, pull the bolt
+         back and eject, push it forward, settle back down onto the glass. */
+      const u2=1-t.reload/t.def.reload;
+      const back =clamp((u2-.08)/.22,0,1)*(1-clamp((u2-.55)/.25,0,1));
+      const forward=clamp((u2-.55)/.25,0,1);
+      sn.bolt.position.x=.035+back*.11;
+      sn.bolt.rotation.z=-back*1.1;
+      sn.shell.position.set(.05+back*.16,.02+back*.1-forward*.3,.02+back*.05);
+      sn.shell.rotation.x+=dt*9;
+      // the hand that works the bolt leaves the grip and comes back
+      P.armR.rotation.x+=-back*.55+forward*.1;
+      P.armR.rotation.z+=back*.5;
+      P.foreR.rotation.x+=-back*.7;
+      // head comes up off the scope while it is working, then back down
+      P.head.rotation.x-=back*.28;
+      P.torso.rotation.x-=back*.1;
+    }
+  }else if(key==='corpse'){
+    /* ---- no weapon at all ----
+       It had been falling through to the default pose, which braces the arms
+       as if holding a pistol — that is why it looked armed. It now has its own
+       stance: hunched and slack when there is nothing to burn, rearing up and
+       drawing breath before the flame, then thrown forward while it breathes.
+       Everything comes off t.breathing / t.brT so the body matches the fire. */
+    const br=t.def.breath;
+    const bT=t.brT||0;
+    // winding up over the last third of a second before the mouth opens
+    const wind=(!t.breathing&&bT<.45)?clamp((.45-bT)/.45,0,1)*A:0;
+    const blow=t.breathing?clamp((br.on-bT)/.35,0,1):0;   // ramps in as it starts
+    const sag=Math.sin(now*.9+seed)*.05;
+    // arms hang heavy, swinging slightly, then splay back as it inhales
+    P.armL.rotation.x=mix(.12,-.15,A)+sag-wind*.55+blow*.25;
+    P.armR.rotation.x=mix(.10,-.18,A)-sag-wind*.55+blow*.25;
+    P.armL.rotation.z=mix(.24,.40,A)+wind*.38+blow*.16;
+    P.armR.rotation.z=mix(-.24,-.40,A)-wind*.38-blow*.16;
+    // fingers curled in, forearms slack — never a grip
+    P.foreL.rotation.x=mix(-.30,-.52,A)-wind*.35;
+    P.foreR.rotation.x=mix(-.28,-.50,A)-wind*.35;
+    // chest swells on the inhale and empties over the breath
+    P.chest.scale.y=1+(breath*.5+.5)*.05+wind*.14-blow*.06;
+    P.torso.rotation.x+=mix(.16,.05,A)-wind*.24+blow*.30;
+    P.torso.rotation.y+=lead*.4;
+    P.torso.position.y+=wind*.03-blow*.02;
+    // head tips back to draw breath, then drives forward with the flame
+    P.head.rotation.x+=mix(.10,-.02,A)-wind*.46+blow*.42;
+    P.head.rotation.z+=sag*.7;
+    // legs braced wider the more worked up it is
+    P.legL.rotation.z+=-.06-blow*.05;P.legR.rotation.z+=.06+blow*.05;
+    P.shinL.rotation.x+=blow*.10;P.shinR.rotation.x+=blow*.10;
   }else if(key==='knife'||key==='slasher'){
     // ---- blades: low guard when relaxed, high guard ready, alternating slash ----
     const sw=t.hand,off=sw==='R'?'L':'R',sg=sw==='R'?1:-1;
@@ -5111,22 +5567,44 @@ function applyPixelRatio(){
   renderer.setPixelRatio(pr);
   renderer.setSize(innerWidth,innerHeight);
 }
+/* The governor used to defend the frame rate by lowering the render
+   resolution. That meant calling setSize mid-game, which reallocates the
+   drawing buffer — and on a phone a reallocation shows up as a black frame.
+   That is the flicker: it only happened when a lot of enemies were on screen,
+   because that is exactly when the governor decided to act.
+
+   It now leaves the buffer alone and buys the time somewhere cheaper. In a
+   crowd the cost is draw calls, not pixels, so pulling the detail distances in
+   and dropping the HP labels further out is both more effective and invisible.
+   Resolution only ever changes when YOU change the quality setting. */
+const LOAD={level:0,max:3};
+function applyLoadLevel(){
+  // 0 = everything, 3 = the leanest the game will get on its own
+  const L=LOAD.level;
+  LOD_NEAR=[14,10,7,5][L];
+  LOD_FAR =[24,18,13,9][L];
+  HP_LABEL_FAR=[26,20,15,11][L];
+  FX_BUDGET=[90,60,38,22][L];
+}
 function perfStep(ms){
   PERF.acc+=ms;PERF.frames++;
   if(PERF.cool>0)PERF.cool--;
-  if(PERF.frames<45)return;
+  if(PERF.frames<40)return;
   const avg=PERF.acc/PERF.frames;
   PERF.acc=0;PERF.frames=0;
   if(PERF.cool>0)return;
-  // slipping under ~55fps: give up a little resolution
-  if(avg>18.2&&PERF.scale>.6){PERF.scale=Math.max(.6,PERF.scale-.1);applyPixelRatio();PERF.cool=90;}
-  // comfortably clear of the budget: take some back
-  else if(avg<12.5&&PERF.scale<1){PERF.scale=Math.min(1,PERF.scale+.05);applyPixelRatio();PERF.cool=140;}
+  // slipping under ~55fps: shed detail, not resolution
+  if(avg>18.2&&LOAD.level<LOAD.max){LOAD.level++;applyLoadLevel();PERF.cool=100;}
+  // comfortably inside the budget: take some back
+  else if(avg<12.0&&LOAD.level>0){LOAD.level--;applyLoadLevel();PERF.cool=180;}
 }
 function applyGfx(q){
   GFX=q;
   PERF.scale=1;PERF.acc=0;PERF.frames=0;PERF.cool=60;
+  // a deliberate quality change is the one time the buffer may be reallocated
   applyPixelRatio();
+  // and it resets whatever the governor had shed, so the new setting is honest
+  LOAD.level=0;applyLoadLevel();
   const sh=q!=='low',shadowsChanged=renderer.shadowMap.enabled!==sh;
   renderer.shadowMap.enabled=sh;sun.castShadow=sh;
   const ms=q==='high'?2048:1024;
@@ -5363,7 +5841,7 @@ const lobbyNPCs=[];
   // screen on the far wall
   boardMesh=new THREE.Mesh(new THREE.PlaneGeometry(12,6),
     new THREE.MeshBasicMaterial({map:signTex([
-      {t:'TOWER DEFENSE',b:1,s:54,y:100},{t:'BETA  ·  V1.80  ·  11 TOWERS  ·  4 MAPS',s:24,c:'#8b95cf',y:158}])}));
+      {t:'TOWER DEFENSE',b:1,s:54,y:100},{t:'BETA  ·  V1.85  ·  12 TOWERS  ·  4 MAPS',s:24,c:'#8b95cf',y:158}])}));
   // the bezel is .35 deep, so its front face sits at -D+.195 — the screen has
   // to clear that or the frame swallows it
   boardMesh.position.set(0,4.8,-D+.42);lobby.add(boardMesh);
@@ -5493,7 +5971,7 @@ const lobbyNPCs=[];
   {
     const st=stationAt('log'),g=new THREE.Group();
     const board=new THREE.Mesh(new THREE.PlaneGeometry(4.6,2.6),
-      new THREE.MeshBasicMaterial({map:signTex([{t:'UPDATE LOG',b:1,s:56,y:110},{t:'V1.80 BETA',s:36,c:'#5ef2a0',y:180}])}));
+      new THREE.MeshBasicMaterial({map:signTex([{t:'UPDATE LOG',b:1,s:56,y:110},{t:'V1.85 BETA',s:36,c:'#5ef2a0',y:180}])}));
     board.position.set(0,2.5,.13);g.add(board);
     const back=new THREE.Mesh(new THREE.BoxGeometry(5,3,.22),M(0x232a4e));
     back.position.set(0,2.5,0);back.castShadow=true;g.add(back);
@@ -5624,7 +6102,7 @@ function enterLobby(won){
       {t:'made it to wave '+G.wave+' of '+total,s:25,y:122},{t:runLine,s:22,c:'#8b95cf',y:160},
       {t:coinLine,b:1,s:30,c:'#ffd166',y:202},{t:bonusLine,s:21,c:'#c9a24a',y:233}]);
   else setBoard([{t:'TOWER DEFENSE',b:1,s:54,y:100},
-      {t:'BETA V1.80  ·  PRESS PLAY OR WALK OVER',s:23,c:'#8b95cf',y:158}]);
+      {t:'BETA V1.85  ·  PRESS PLAY OR WALK OVER',s:23,c:'#8b95cf',y:158}]);
   buildPals();
 }
 function toLobby(won){
@@ -6743,6 +7221,7 @@ function step(dt){
       continue;
     }
     if(e.slow>0)e.slow-=dt;
+    if(e.d.mini)bloaterClamp(e,dt);       // the event boss grabs nearby towers
     // still burning from a Corpse's flame — keeps ticking after it walks clear
     if(e.burnT>0){
       e.burnT-=dt;
@@ -6757,7 +7236,8 @@ function step(dt){
     const p=pathPos(e.dist);
     e.g.position.x=p.x;e.g.position.z=p.z;
     e.g.rotation.y=Math.atan2(p.dx,p.dz);
-    e.ph+=dt*sp*(e.style==='sprint'?2.2:e.style==='stomp'?1.05:1.5);
+    e.ph+=dt*sp*(e.style==='sprint'?2.2:e.style==='stomp'?1.05
+                :e.style==='waddle'?1.75:e.style==='bloat'?.85:1.5);
     const P=e.g.userData.P,ph=e.ph,S1=Math.sin(ph),C1=Math.cos(ph);
     if(e.style==='sprint'){
       // full sprint: long stride, heel kicks up hard behind on the swing
@@ -6781,6 +7261,42 @@ function step(dt){
       P.torso.rotation.x=.14;P.torso.rotation.z=S1*.1;P.torso.rotation.y=S1*.12;
       P.head.rotation.x=.06;P.head.rotation.y=-S1*.2;P.head.rotation.z=0;
       e.g.position.y=Math.max(0,-C1)*.07;e.g.rotation.z=-S1*.03;
+    }else if(e.style==='waddle'){
+      /* Minifig walk: the legs do not bend at all. The whole body tips onto
+         one straight leg, swings the other through, and drops onto it —
+         so it rocks side to side rather than striding. Arms swing from the
+         shoulder in one piece, elbows locked. */
+      P.legL.rotation.x=-S1*.62;P.legR.rotation.x=S1*.62;
+      P.shinL.rotation.x=0;P.shinR.rotation.x=0;      // knees never bend
+      P.footL.rotation.x=0;P.footR.rotation.x=0;
+      P.armL.rotation.x=S1*.55;P.armR.rotation.x=-S1*.55;
+      P.foreL.rotation.x=0;P.foreR.rotation.x=0;      // elbows locked
+      P.armL.rotation.z=.18;P.armR.rotation.z=-.18;
+      P.torso.rotation.x=0;
+      P.torso.rotation.z=C1*.16;                      // the rock
+      P.torso.rotation.y=S1*.10;
+      P.head.rotation.y=S1*.16;P.head.rotation.x=0;P.head.rotation.z=-C1*.1;
+      // lifted clear of the ground on the swing, planted flat on the step
+      e.g.position.y=Math.abs(C1)*.075;
+      e.g.rotation.z=C1*.09;
+    }else if(e.style==='bloat'){
+      /* The Bloater: same locked-knee idea, but heavy and slow. It leans back
+         over its belly, plants each foot hard, and the whole body shudders on
+         the landing. Arms held wide and low, ready to grab. */
+      const land=Math.max(0,-Math.cos(ph*2));
+      P.legL.rotation.x=-S1*.46;P.legR.rotation.x=S1*.46;
+      P.shinL.rotation.x=0;P.shinR.rotation.x=0;
+      P.footL.rotation.x=0;P.footR.rotation.x=0;
+      P.legL.rotation.z=-.16;P.legR.rotation.z=.16;   // wide stance
+      P.armL.rotation.x=-.35+S1*.2;P.armR.rotation.x=-.35-S1*.2;
+      P.armL.rotation.z=.62;P.armR.rotation.z=-.62;   // held out wide
+      P.foreL.rotation.x=-.5;P.foreR.rotation.x=-.5;
+      P.torso.rotation.x=-.16-land*.05;               // leaning back
+      P.torso.rotation.z=C1*.11;
+      P.torso.rotation.y=S1*.07;
+      P.head.rotation.x=.12+land*.08;P.head.rotation.y=S1*.1;P.head.rotation.z=-C1*.06;
+      e.g.position.y=Math.abs(C1)*.05-land*.03;
+      e.g.rotation.z=C1*.05;
     }else{
       // shamble: one leg drags, the good leg does the work
       const lp=e.limp;
@@ -6803,15 +7319,31 @@ function step(dt){
       P.torso.rotation.z+=bd.tz;P.torso.rotation.y+=bd.ty;
       P.head.rotation.z+=bd.hz;
     }
-    // health bar — the bar is parented to the zombie, so cancel out the
-    // zombie's own rotation or the bar turns edge-on as it walks
-    e.bar.quaternion.copy(_bq.copy(e.g.quaternion).invert()).multiply(camera.quaternion);
-    const r=clamp(e.hp/e.max,0,1);
-    e.fg.scale.x=r;e.fg.position.x=-(1-r)/2;
-    e.fg.material.color.setHex(r>.5?0x5ef2a0:r>.22?0xffd166:0xff5f6d);
-    // numeric HP, repainted at most ~16x a second and only when it changed
-    e.hpT-=dt;
-    if(e.hpT<=0){e.hpT=.06;drawHp(e);}
+    /* Health readouts are two extra draw calls per zombie plus a canvas
+       repaint, and with ninety on the field that was ~180 transparent,
+       depth-tested-off draws every frame — a big slice of the cost in exactly
+       the crowd that made the game struggle. They are now only drawn for
+       zombies close enough to read, or bosses, or anything actually hurt. */
+    const edx=e.g.position.x-camera.position.x,edz=e.g.position.z-camera.position.z;
+    const eDist2=edx*edx+edz*edz;
+    const hurtOrBoss=e.hp<e.max||e.d.boss;
+    const showBar=hurtOrBoss&&eDist2<HP_LABEL_FAR*HP_LABEL_FAR*1.4;
+    const showNum=hurtOrBoss&&eDist2<HP_LABEL_FAR*HP_LABEL_FAR;
+    if(e.bar.visible!==showBar)e.bar.visible=showBar;
+    if(e.hpSprite&&e.hpSprite.visible!==showNum)e.hpSprite.visible=showNum;
+    if(showBar){
+      // the bar is parented to the zombie, so cancel out the zombie's own
+      // rotation or it turns edge-on as it walks
+      e.bar.quaternion.copy(_bq.copy(e.g.quaternion).invert()).multiply(camera.quaternion);
+      const r=clamp(e.hp/e.max,0,1);
+      e.fg.scale.x=r;e.fg.position.x=-(1-r)/2;
+      e.fg.material.color.setHex(r>.5?0x5ef2a0:r>.22?0xffd166:0xff5f6d);
+    }
+    // numeric HP, repainted at most ~16x a second, and never while hidden
+    if(showNum){
+      e.hpT-=dt;
+      if(e.hpT<=0){e.hpT=.06;drawHp(e);}
+    }
     if(e.flash>0){
       e.flash-=dt;
       const c=e.flash>0?0x6b2222:0x000000;
