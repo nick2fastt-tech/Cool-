@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Tower Defense V1.70 Beta</title>
+<title>Tower Defense V1.75 Beta</title>
 <style>
 :root{
   --void:#04050c;
@@ -349,6 +349,20 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
   background:rgba(8,11,28,.75);border:1px solid var(--line);color:var(--ink);
   border-radius:999px;padding:9px 18px;font-size:11px;letter-spacing:.18em;font-family:inherit}
 #cutSkip.on{display:block}
+/* ---- playlist picker ---- */
+.plBar{display:flex;gap:6px;margin-bottom:8px}
+#plList{max-height:46vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.plRow{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;
+  border:1px solid var(--line);background:rgba(20,24,54,.5);margin-bottom:5px}
+.plRow .tick{flex:0 0 20px;height:20px;border-radius:6px;border:1.5px solid var(--line);
+  display:flex;align-items:center;justify-content:center;font-size:12px;color:#04060f}
+.plRow.on{border-color:#8b97ff;background:rgba(58,70,214,.28)}
+.plRow.on .tick{background:#5ef2a0;border-color:#5ef2a0}
+.plRow .pnm{flex:1;font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plRow .plen{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
+.plRow.mineTrk .pnm{color:#bff0ff}
+.plRow .badge{font-size:8px;letter-spacing:.1em;padding:1px 5px;border-radius:999px;
+  background:rgba(63,208,255,.2);border:1px solid rgba(126,225,255,.5);color:#bff0ff}
 #signin{width:100%;max-width:300px;margin-top:4px}
 #signin label{display:block;font-size:10px;letter-spacing:.06em;color:var(--dim);margin-bottom:5px}
 #emailIn{width:100%;background:rgba(10,13,28,.9);border:1px solid var(--line);color:var(--ink);
@@ -476,6 +490,17 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
   <div id="lobbyBtns">
     <button class="btn go pe" id="playNow">▶ Play</button>
     <button class="btn sm pe" id="eventBtn">🧱 Event</button>
+    <button class="btn sm pe" id="musicBtn">♫ Music</button>
+  </div>
+
+  <div class="sheet pe" id="playlist">
+    <div class="sheetHead"><h2>Playlist <span id="plCount" class="coinTag">0 / 30</span></h2>
+      <button class="btn sm pe" id="closePl">Close</button></div>
+    <div class="hint" style="margin:0 0 8px">Tap a song to add or remove it. Up to 30 in the playlist —
+      they shuffle, and carry on into a match. <b id="plTotal">total 0:00</b></div>
+    <div class="plBar"><button class="btn sm pe" id="plAll">Select all</button>
+      <button class="btn sm pe" id="plNone">Clear</button></div>
+    <div id="plList"></div>
   </div>
 
   <div class="sheet pe" id="event">
@@ -483,11 +508,14 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
     <div class="evCard">
       <div class="evIcon">🧱</div>
       <div class="evBody">
-        <div class="evName">The Blocky Event <span class="evSoon">coming soon</span></div>
-        <div class="evDesc">A blocked-out world with blocky zombies, blocky towers and a limited-time boss.
-          Event coins, an exclusive tower and a lobby trophy for clearing it.</div>
-        <div class="evBar"><div class="evFill"></div></div>
-        <div class="evNote">Not available yet — it will show up here the moment it opens.</div>
+        <div class="evName">The Blocky Event <span class="evSoon" id="evTag">live now</span></div>
+        <div class="evDesc">Somebody tipped out the toy box. 20 waves of bricks, loose pieces and
+          minifigs, and a <b>Blocky Bloater</b> every fifth wave — 500 HP the first time,
+          2,000 by the last. Clear it and the <b>Toy Soldier</b> is yours: $450, and at max
+          level the fastest gun in the game.</div>
+        <div class="evBar"><div class="evFill" id="evFill"></div></div>
+        <div class="evNote" id="evNote">11 brick types · 900 coins · bring something with range</div>
+        <button class="btn go pe" id="evPlay" style="margin-top:10px;width:100%">▶ Enter the Event</button>
       </div>
     </div>
   </div>
@@ -500,7 +528,16 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 
   <div class="sheet pe" id="log">
     <div class="sheetHead"><h2>Update Log</h2><button class="btn sm pe" id="closeLog">Close</button></div>
-    <div class="logV">V1.70 <span>beta</span></div>
+    <div class="logV">V1.75 <span>beta</span></div>
+    <ul class="logL">
+      <li><b>The Blocky Event is live.</b> 20 waves of bricks and loose pieces — 11 types, from Stud Runners to Stack Towers — and a <b>Blocky Bloater</b> every fifth wave: 500 HP on wave 5, 1,000 on 10, 1,500 on 15, 2,000 on 20</li>
+      <li><b>New: Toy Soldier</b>, the event reward. $450. Starts almost useless at 1 damage every 0.5s and ends up the fastest gun in the game — 15 a shot every 0.09s, 167 dps. Range 7 → 14. Upgrades $200 → $700 → $2,500</li>
+      <li><b>Runs a lot faster.</b> Identical shapes now share one geometry instead of allocating their own: a busy scene went from 4,931 geometries to 554. Tiny parts stop drawing at distance, and only meshes big enough to see cast shadows. Draw calls down 37%, triangles down 44%</li>
+      <li><b>It holds its frame rate.</b> The renderer quietly trades a little resolution when a scene gets heavy and takes it back when it clears, so High stays High and stops stuttering</li>
+      <li><b>Tower animations rebuilt.</b> Weight rolls from foot to foot with the loaded hip lifting and the light heel coming up, the head leads the turn and tips down onto anything close, and recoil now travels through the hips and knees instead of only moving the arms</li>
+      <li><b>Playlist picker in the lobby.</b> ♫ Music lists every song with its length, you pick up to 30, and it shows the total running time. Your choice is saved</li>
+    </ul>
+    <div class="logV">V1.70</div>
     <ul class="logL">
       <li><b>Your progress saves against your email.</b> Sign in on the title screen and your coins, unlocks and loadout come back. Different email on the same device = a different save</li>
       <li><b>25 units on the field</b>, shared across every tower. The old limit of 5 per type is gone, and the count lives in the HUD instead of on every slot</li>
@@ -655,7 +692,7 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
   <div id="title" class="pe">
     <div class="sub">Beta Version</div>
     <h1>Tower<br>Defense</h1>
-    <div class="sub" style="letter-spacing:.5em">V 1.70</div>
+    <div class="sub" style="letter-spacing:.5em">V 1.75</div>
     <ul>
       <li>Clear a map to unlock the next: Grassy Field → The Forest → The Volcano</li>
       <li>Left side of the screen = move · right side = look</li>
@@ -707,7 +744,16 @@ const MAPS={
     blurb:'25 waves · clear The Forest to unlock',
     fog:{col:0x3a1408,near:26,far:78},sun:0xffc294,sunI:.95,hemi:[0xff9a5a,0x3a1810,.8],
     wp:[[-32,-16],[-12,-16],[-12,4],[-30,4],[-30,18],[-4,18],[-4,-4],[12,-4],[12,-20],[28,-20],[28,6],[16,6],[16,20],[2,20],[2,26]],
-    spawn:[-20,-6]}
+    spawn:[-20,-6]},
+  /* The Blocky Event. Bright, flat, primary-coloured — a tipped-out toy box
+     rather than a place. Pays event coins and hands over the Toy Soldier. */
+  blocky:{key:'blocky',name:'The Blocky Event',mode:'Blocky Bloater',waves:20,hpScale:1.25,
+    diff:'Event',icon:'🧱',coins:900,event:1,
+    portalCol:0xffd23f,stoneCol:0xd8443c,stoneCol2:0x2fa8e0,stoneCol3:0x4fbf5a,scorchCol:0x2b2f3a,
+    blurb:'20 waves · a Blocky Bloater every 5th wave',
+    fog:{col:0x121a33,near:30,far:88},sun:0xffffff,sunI:1.05,hemi:[0x9fd8ff,0x4a5570,.85],
+    wp:[[-30,-18],[-8,-18],[-8,2],[-28,2],[-28,16],[-2,16],[-2,-2],[14,-2],[14,-18],[28,-18],[28,8],[10,8],[10,20],[-4,20]],
+    spawn:[-24,-10]}
 };
 let MAP=MAPS.grassy;
 let WP=MAP.wp,SEG=[],PATH_LEN=0;
@@ -761,7 +807,23 @@ const ZT={
   ember  :{n:'Ember Runner', hp:130, spd:5.8,cash:60, leak:2,  sc:.96, skin:0xc4663a,shirt:0x6b2a14,pants:0x2f1c14,glow:0xff9a3a},
   magma  :{n:'Magma Brute',  hp:520, spd:1.55,cash:130,leak:4, sc:1.6, skin:0x7a3a22,shirt:0x3a1a10,pants:0x281410,glow:0xff5a1e,arm:3},
   cinder :{n:'Cinder Priest',hp:760, spd:2.0,cash:230,leak:6,  sc:1.24,skin:0x9c8878,shirt:0x2a140e,pants:0x1e0f0a,glow:0xffb347,split:['ember',3]},
-  corpse :{n:'The Corpse',   hp:3000,spd:1.15,cash:900,leak:100,sc:2.9,skin:0x5c2a18,shirt:0x2a1008,pants:0x1c0b06,glow:0xff4a12,arm:5,boss:1}
+  corpse :{n:'The Corpse',   hp:3000,spd:1.15,cash:900,leak:100,sc:2.9,skin:0x5c2a18,shirt:0x2a1008,pants:0x1c0b06,glow:0xff4a12,arm:5,boss:1},
+
+  /* ---------- The Blocky Event ----------
+     Eleven of them, all `blk:1` so they are built out of studded bricks and
+     loose pieces instead of flesh. Bright toy-box colours on purpose — the
+     event is meant to look like someone tipped out a box of bricks. */
+  brick  :{n:'Brick Walker',  hp:26,  spd:2.2,cash:12, leak:1,  sc:1,   skin:0xe33b3b,shirt:0xe33b3b,pants:0xf0c020,blk:1},
+  stud   :{n:'Stud Runner',   hp:20,  spd:4.6,cash:22, leak:1,  sc:.92, skin:0x2fa8e0,shirt:0x2fa8e0,pants:0x1a6fa0,blk:1},
+  plate  :{n:'Flat Plate',    hp:60,  spd:1.5,cash:18, leak:1,  sc:1.02,skin:0x4fbf5a,shirt:0x4fbf5a,pants:0x2f7a38,blk:1},
+  chunk  :{n:'Broken Chunk',  hp:140, spd:1.9,cash:48, leak:2,  sc:1.2, skin:0x9aa3ad,shirt:0x777f89,pants:0x555c66,blk:1,shed:1},
+  clamp  :{n:'Clamp Brute',   hp:220, spd:2.0,cash:66, leak:3,  sc:1.12,skin:0xf07a1e,shirt:0xc85c10,pants:0x8f4008,blk:1,arm:1},
+  glassy :{n:'Glass Piece',   hp:44,  spd:3.3,cash:34, leak:2,  sc:1,   skin:0xbfe9ff,shirt:0xbfe9ff,pants:0xbfe9ff,op:.42,blk:1},
+  minif  :{n:'Minifig',       hp:90,  spd:3.6,cash:40, leak:2,  sc:.88, skin:0xf5d020,shirt:0x2b46c8,pants:0x1a1f2e,blk:1},
+  tower2 :{n:'Stack Tower',   hp:340, spd:1.4,cash:95, leak:4,  sc:1.42,blkTall:1,skin:0xb452d0,shirt:0x8a2fa8,pants:0x5c1c70,blk:1},
+  wheel  :{n:'Wheel Rider',   hp:150, spd:5.0,cash:70, leak:3,  sc:1,   skin:0x30323a,shirt:0xe33b3b,pants:0x1a1c22,blk:1},
+  sharp  :{n:'Sharp Shard',   hp:70,  spd:3.0,cash:44, leak:3,  sc:.96, skin:0xff4f8b,shirt:0xff4f8b,pants:0xc02060,blk:1,split:['stud',2]},
+  bloater:{n:'Blocky Bloater',hp:500, spd:1.3,cash:320,leak:12, sc:1.9, skin:0x8be04a,shirt:0x5aa82c,pants:0x3d7a1c,blk:1,arm:2,boss:1,mini:1,shed:1}
 };
 const WAVES=[
   {gap:1.15,mix:[['normal',8]]},
@@ -833,7 +895,34 @@ const VOLCANO_MIX=[
 ];
 const WAVES25=VOLCANO_MIX.map((mix,i)=>({gap:Math.max(.26,1.05-i*.032),mix}));
 // each map names the wave table it runs on
-const WAVE_SETS={grassy:null,forest:WAVES20,volcanic:WAVES25};
+/* ---------- The Blocky Event, 20 waves ----------
+   The eleven brick types, and a Blocky Bloater every fifth wave. The Bloater
+   scales with the wave it turns up on: 500 HP the first time, 2,000 by the
+   last, which is the range the event was specified with. */
+const BLOCKY_MIX=[
+  [['brick',10]],
+  [['brick',12],['stud',6]],
+  [['brick',10],['plate',6],['stud',8]],
+  [['stud',12],['glassy',5],['plate',6]],
+  [['bloater',1],['brick',12],['stud',8]],
+  [['chunk',5],['plate',8],['stud',10]],
+  [['minif',7],['chunk',6],['brick',12]],
+  [['clamp',5],['minif',8],['glassy',7]],
+  [['wheel',8],['chunk',8],['stud',12]],
+  [['bloater',1],['clamp',7],['minif',10],['wheel',6]],
+  [['sharp',8],['chunk',10],['plate',10]],
+  [['tower2',4],['clamp',9],['stud',14]],
+  [['wheel',12],['sharp',10],['minif',10]],
+  [['tower2',6],['chunk',12],['glassy',10]],
+  [['bloater',1],['tower2',5],['clamp',12],['wheel',10]],
+  [['sharp',14],['minif',14],['chunk',12]],
+  [['tower2',8],['clamp',14],['wheel',12]],
+  [['sharp',16],['glassy',14],['stud',18]],
+  [['tower2',10],['chunk',16],['clamp',14]],
+  [['bloater',2],['tower2',10],['sharp',14],['clamp',12],['wheel',12]]
+];
+const WAVES_BLOCKY=BLOCKY_MIX.map((mix,i)=>({gap:Math.max(.28,1.05-i*.04),mix}));
+const WAVE_SETS={grassy:null,forest:WAVES20,volcanic:WAVES25,blocky:WAVES_BLOCKY};
 /* The Cop, rebalanced. He used to be the worst value in the game — 4 dmg on a
    1.2s swing for $500 is 3.3 dps, worse per dollar than a $200 Scout — and the
    taser he pulled when the baton broke actually out-damaged the baton, so
@@ -957,9 +1046,22 @@ const CORPSE_T={
     {dmg:25,cd:.5,rng:8.5,burn:12,up:null}
   ]
 };
+/* The Toy Soldier — the Blocky Event reward. A green plastic army man on a
+   moulded base. Starts almost useless (1 damage on a half-second trigger) and
+   ends up the fastest gun in the game at 15 a shot every 0.09s, which is why
+   the last upgrade costs $2,500. */
+const TOYSOLDIER={
+  key:'toy',name:'Toy Soldier',cost:450,icon:'🪖',unlock:'blocky',
+  lv:[
+    {dmg:1, cd:.50,rng:7,   up:200},
+    {dmg:4, cd:.30,rng:9.5, up:700},
+    {dmg:9, cd:.18,rng:12,  up:2500},
+    {dmg:15,cd:.09,rng:14,  up:null}
+  ]
+};
 const TOWERS={police:POLICE,scout:SCOUT,robber:ROBBER,survivor:SURVIVOR,
               blitzer:BLITZER,knife:KNIFE,slasher:SLASHER,commander:COMMANDER,
-              mine:MINE,corpse:CORPSE_T};
+              mine:MINE,corpse:CORPSE_T,toy:TOYSOLDIER};
 /* How many towers you can have standing at once, across every type. */
 const UNIT_CAP=25;
 
@@ -987,7 +1089,7 @@ const saveKeyFor=email=>SAVE_PREFIX+DEVICE+':'+(normEmail(email)||'guest');
 
 const SAVE_DEFAULTS={coins:0,commander:false,grave:false,volcano:false,mine:false,corpse:false,
                      vol:.7,music:.55,musicOn:true,email:'',wins:0,runs:0,
-                     sawVolcanoCut:false,loadout:null};
+                     sawVolcanoCut:false,loadout:null,blocky:false,playlist:null};
 const SAVE=Object.assign({},SAVE_DEFAULTS);
 let SAVE_KEY=SAVE_PREFIX+DEVICE+':guest';
 
@@ -1058,6 +1160,86 @@ const M=(c,o={})=>new THREE.MeshLambertMaterial(Object.assign({color:c},o));
 /* assets flagged shared are reused by many objects and must never be disposed */
 function shareAsset(a){a.userData=a.userData||{};a.userData.shared=1;return a;}
 function isShared(a){return !!(a&&a.userData&&a.userData.shared);}
+
+/* ---------- shared geometry ----------
+   Every zombie and every tower is assembled from dozens of small primitives,
+   and each `new THREE.BoxGeometry(...)` used to allocate its own BufferGeometry
+   with its own GPU buffers. A late-game scene held 5,442 of them for 31,903
+   triangles — the same handful of shapes, over and over.
+   Identical shapes now hand back one shared geometry. Cached ones are flagged
+   shared so disposeTree never frees a geometry something else is still using.
+   RAW_GEO keeps the originals for the rare spot that mutates a geometry in
+   place (which would corrupt every other user of a shared one). */
+const RAW_GEO={};
+(function shareGeometry(){
+  const cache=new Map();
+  ['BoxGeometry','SphereGeometry','CylinderGeometry','ConeGeometry',
+   'PlaneGeometry','RingGeometry','CircleGeometry','TorusGeometry'].forEach(name=>{
+    const Orig=THREE[name];
+    if(!Orig)return;
+    RAW_GEO[name]=Orig;
+    const F=function(){
+      const a=Array.prototype.slice.call(arguments);
+      const key=name+'|'+a.join(',');
+      let g=cache.get(key);
+      if(!g){g=new Orig(...a);shareAsset(g);cache.set(key,g);}
+      return g;
+    };
+    F.prototype=Orig.prototype;
+    THREE[name]=F;
+  });
+})();
+
+/* Only meshes big enough to throw a shadow anyone can actually see cast one.
+   Flagging every rivet, eyeball and button doubled the object count in the
+   shadow pass to draw shadows a couple of pixels across. */
+/* Sets shadow casting AND sorts a character's meshes into detail tiers.
+   A zombie is 73 separate meshes and a tower 101 — one draw call each, which
+   is what actually costs the frame. Measured across a zombie: 18 meshes are
+   under 0.075 units, another 17 under 0.12, another 15 under 0.22. At twenty
+   metres those cover a fraction of a pixel, so they get switched off. */
+function shadowPass(root,minSize){
+  const m=minSize||.13;
+  const fine=[],mid=[];
+  root.traverse(o=>{
+    if(!o.isMesh)return;
+    const p=o.geometry&&o.geometry.parameters;
+    if(!p){o.castShadow=true;return;}
+    const s=Math.max(p.width||0,p.height||0,p.depth||0,(p.radius||0)*2,
+                     (p.radiusTop||0)*2,(p.radiusBottom||0)*2);
+    o.castShadow=s>=m;
+    if(s<.12)fine.push(o);
+    else if(s<.22)mid.push(o);
+  });
+  if(fine.length||mid.length){root.userData.lod={fine,mid,tier:-1};DETAILED.push(root);}
+  return root;
+}
+/* Three tiers by distance: everything, then the rivets and buttons go, then
+   the mid-sized trim goes too. Re-checked a few times a second, and only
+   written when a character actually changes tier. */
+const DETAILED=[];
+let detailT=0;
+function detailStep(dt){
+  detailT-=dt;
+  if(detailT>0)return;
+  detailT=.2;
+  const cx=camera.position.x,cz=camera.position.z;
+  const k=GFX==='low'?.55:GFX==='med'?.8:1;
+  const near=14*k,far=24*k;
+  for(let i=DETAILED.length-1;i>=0;i--){
+    const g=DETAILED[i];
+    if(!g.parent){DETAILED.splice(i,1);continue;}
+    const L=g.userData.lod;
+    if(!L)continue;
+    const d=Math.hypot(g.position.x-cx,g.position.z-cz);
+    const tier=d<near?0:d<far?1:2;
+    if(L.tier===tier)continue;
+    L.tier=tier;
+    const showFine=tier===0,showMid=tier<2;
+    for(let n=0;n<L.fine.length;n++)L.fine[n].visible=showFine;
+    for(let n=0;n<L.mid.length;n++)L.mid[n].visible=showMid;
+  }
+}
 /* frees the GPU memory of anything removed from the scene — without this the
    game leaks a few hundred geometries and materials per wave */
 function disposeTree(root){
@@ -1419,7 +1601,7 @@ function buildTerrain(map){
     for(let i=0;i<18;i++){
       const x=rnd(-43,43),z=rnd(-37,37);
       if(dp(x,z)<4)continue;
-      const sp=new THREE.Mesh(new THREE.ConeGeometry(rnd(.5,1.3),rnd(2,5.5),5),M(0x211712));
+      const sp=new THREE.Mesh(new RAW_GEO.ConeGeometry(rnd(.5,1.3),rnd(2,5.5),5),M(0x211712));
       sp.position.set(x,0,z);sp.rotation.y=rnd(0,3);sp.rotation.z=rnd(-.14,.14);
       sp.geometry.translate(0,sp.geometry.parameters.height/2,0);
       sp.castShadow=true;g.add(sp);DECOR.push(sp);
@@ -1603,7 +1785,7 @@ function blobShadow(r){
 /* ---------- player ---------- */
 const player=person({skin:0xe0b088,hair:0x120e0c,eye:0x4a2c17,shirt:0x1f2d5e,pants:0x2f4d84,shoe:0x1b1b22});
 player.add(blobShadow(.4));
-player.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+shadowPass(player);
 player.position.set(-14,0,-4);scene.add(player);
 const pS={vel:new THREE.Vector3(),walk:0};
 const pIdle={g:0,play:-1,wait:3};
@@ -1626,6 +1808,79 @@ const GORE={
    flagged shared — disposing them with a corpse would blank out the next wave */
 ['mBlood','mWound','mBone','mDirt','mRot','wound','smear','bone'].forEach(k=>shareAsset(GORE[k]));
 
+/* ---------- the blocky pass ----------
+   Event enemies are the same rig, rebricked: rounded flesh is swapped for hard
+   boxes, studs go on top of every surface a stud belongs on, and some of them
+   carry loose pieces that look about to fall off. Reuses person()'s joints so
+   every existing walk cycle, gait and death still works unchanged. */
+function brickPass(g,P,d,key){
+  const tr=!!d.op;
+  const mk=c=>{const q={color:c};if(tr){q.transparent=true;q.opacity=d.op;}return new THREE.MeshLambertMaterial(q);};
+  const body=mk(d.shirt),limb=mk(d.pants),skin=mk(d.skin);
+  const stud=(parent,x,y,z,r)=>{
+    const s=new THREE.Mesh(new THREE.CylinderGeometry(r||.03,r||.03,.022,8),body);
+    s.position.set(x,y,z);parent.add(s);return s;
+  };
+  // hide the organic shapes, keep the joints they hang off
+  const keep={};
+  ['torso','head','armL','armR','foreL','foreR','legL','legR','shinL','shinR','footL','footR'].forEach(n=>keep[n]=P[n]);
+  P.torso.children.slice().forEach(c=>{if(c.isMesh)c.visible=false;});
+  P.head.children.slice().forEach(c=>{if(c.isMesh)c.visible=false;});
+  // chest brick with studs on the shoulders
+  const chest=new THREE.Mesh(new THREE.BoxGeometry(.34,.36,.22),body);
+  chest.position.y=.3;chest.castShadow=true;P.torso.add(chest);
+  stud(P.torso,-.09,.5,0);stud(P.torso,.09,.5,0);
+  const hips=new THREE.Mesh(new THREE.BoxGeometry(.30,.14,.20),limb);
+  hips.position.y=.03;P.torso.add(hips);
+  // head: a cube with a printed face
+  const hd=new THREE.Mesh(new THREE.BoxGeometry(.24,.24,.24),skin);
+  hd.castShadow=true;P.head.add(hd);
+  stud(P.head,0,.13,0,.045);
+  for(const sx of [-1,1]){
+    const eye=new THREE.Mesh(new THREE.BoxGeometry(.035,.05,.012),new THREE.MeshBasicMaterial({color:0x101018}));
+    eye.position.set(sx*.055,.03,.122);P.head.add(eye);
+  }
+  const grin=new THREE.Mesh(new THREE.BoxGeometry(.10,.022,.012),new THREE.MeshBasicMaterial({color:0x101018}));
+  grin.position.set(0,-.05,.122);P.head.add(grin);
+  // square limbs
+  [['armL',-1],['armR',1]].forEach(([n,sx])=>{
+    P[n].children.slice().forEach(c=>{if(c.isMesh)c.visible=false;});
+    const a=new THREE.Mesh(new THREE.BoxGeometry(.10,.26,.10),body);
+    a.position.y=-.13;a.castShadow=true;P[n].add(a);
+    const fn=n==='armL'?'foreL':'foreR';
+    P[fn].children.slice().forEach(c=>{if(c.isMesh)c.visible=false;});
+    const f=new THREE.Mesh(new THREE.BoxGeometry(.095,.24,.095),skin);
+    f.position.y=-.12;P[fn].add(f);
+    // the classic C-shaped hand
+    const h=new THREE.Mesh(new THREE.CylinderGeometry(.055,.055,.05,10,1,true),skin);
+    h.position.y=-.26;P[fn].add(h);
+  });
+  [['legL','shinL','footL'],['legR','shinR','footR']].forEach(([hip,shin,foot])=>{
+    [hip,shin,foot].forEach(n=>P[n].children.slice().forEach(c=>{if(c.isMesh)c.visible=false;}));
+    const th=new THREE.Mesh(new THREE.BoxGeometry(.13,.40,.14),limb);
+    th.position.y=-.2;th.castShadow=true;P[hip].add(th);
+    const sh=new THREE.Mesh(new THREE.BoxGeometry(.125,.38,.135),limb);
+    sh.position.y=-.19;P[shin].add(sh);
+    const bt=new THREE.Mesh(new THREE.BoxGeometry(.14,.08,.20),mk(0x1b1d24));
+    bt.position.set(0,-.04,.03);P[foot].add(bt);
+  });
+  // tall types get an extra brick stacked on the chest
+  if(d.blkTall){
+    const ex=new THREE.Mesh(new THREE.BoxGeometry(.30,.22,.20),limb);
+    ex.position.y=.60;ex.castShadow=true;P.torso.add(ex);
+    stud(P.torso,-.08,.72,0);stud(P.torso,.08,.72,0);
+  }
+  // damaged ones trail loose pieces
+  if(d.shed){
+    for(let i=0;i<5;i++){
+      const p=new THREE.Mesh(new THREE.BoxGeometry(rnd(.05,.10),rnd(.04,.08),rnd(.05,.10)),body);
+      p.position.set(rnd(-.26,.26),rnd(.12,.62),rnd(-.18,.18));
+      p.rotation.set(rnd(0,3),rnd(0,3),rnd(0,3));
+      P.torso.add(p);
+    }
+  }
+  return keep;
+}
 function decayPass(g,P,d,key){
   const tr=!!d.op,shirt=P.mats.shirt,pants=P.mats.pants;
   // slack jaw, hollow stare, sunken skull
@@ -1770,12 +2025,14 @@ function spawnEnemy(key,dist){
   const d=ZT[key];
   const g=person({skin:d.skin,shirt:d.shirt,pants:d.pants,hair:0x241c14,eye:0xd8d4c2,
     mouth:0x2a0d0d,op:d.op,shoe:0x241f26});
-  g.traverse(o=>{if(o.isMesh&&!d.op)o.castShadow=true;});
+  if(!d.op)shadowPass(g);
   const P=g.userData.P;
   P.armL.rotation.x=-1.45;P.armR.rotation.x=-1.35;
   P.foreL.rotation.x=-.25;P.foreR.rotation.x=-.15;
   P.torso.rotation.x=.14;
-  decayPass(g,P,d,key);
+  // event enemies are rebricked instead of rotted
+  if(d.blk)brickPass(g,P,d,key);
+  else decayPass(g,P,d,key);
   applyBuild(g,P,d,key);
   const style=(key==='quick'||key==='runner'||key==='ember')?'sprint'
             :(key==='giant'||key==='boss'||key==='digger'||key==='heavy'
@@ -1900,7 +2157,10 @@ function spawnEnemy(key,dist){
   g.traverse(o=>{if(o.isMesh&&o.material&&o.material.emissive&&!o.material.userData.shared
     &&mats.indexOf(o.material)<0)mats.push(o.material);});
 
-  const hpM=Math.round(d.hp*(G.hpMul||1));
+  // the event's mini boss is pinned to its own 500->2,000 curve rather than
+  // riding the map's general HP ramp, so it lands on the numbers it was given
+  const hpM=d.mini?Math.round(d.hp*bloaterScale())
+                  :Math.round(d.hp*(G.hpMul||1));
   const e={key,d,g,bar,fg,mats,style,limp,hp:hpM,max:hpM,dist:dist||0,spd:d.spd,
     slow:0,flash:0,dead:false,ph:Math.random()*6,twitch:rnd(1,3),
     burn:0,burnT:0,burnBy:null,
@@ -2035,7 +2295,7 @@ function buildPolice(){
   prong1.rotation.x=Math.PI/2;prong1.position.set(-.014,-.075,.175);taser.add(prong1);
   const prong2=prong1.clone();prong2.position.x=.014;taser.add(prong2);
   taser.visible=false;taser.position.set(0,-.05,.02);taser.rotation.x=-1.35;P.handR.add(taser);
-  g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+  shadowPass(g);
   g.userData.baton=baton;g.userData.taser=taser;
   return g;
 }
@@ -2099,7 +2359,7 @@ function buildScout(){
   grip.position.set(0,.045,-.055);grip.rotation.x=.25;gun.add(grip);
   gun.position.set(0,-.05,.02);P.handR.add(gun);
   g.userData.gun=gun;
-  g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+  shadowPass(g);
   return g;
 }
 function buildRobber(){
@@ -2156,7 +2416,7 @@ function buildRobber(){
   shell.rotation.z=Math.PI/2;shell.position.set(.04,-.02,0);gun.add(shell);
   gun.position.set(0,-.05,.02);P.handR.add(gun);
   g.userData.gun=gun;g.userData.muzzleLocal=V3(0,-.34,.02);
-  g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+  shadowPass(g);
   return g;
 }
 function buildSurvivor(){
@@ -2224,7 +2484,7 @@ function buildSurvivor(){
   }
   r.position.set(0,-.06,.02);P.handR.add(r);
   g.userData.rifle=r;g.userData.muzzle=brake;
-  g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+  shadowPass(g);
   return g;
 }
 function buildBlitzer(){
@@ -2288,7 +2548,7 @@ function buildBlitzer(){
   gun.position.set(0,-.05,.02);P.handR.add(gun);
   g.userData.gun=gun;g.userData.muzzle=emitter;
   g.userData.cells=cells;g.userData.chargeRing=ringA;
-  g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+  shadowPass(g);
   return g;
 }
 function buildKnife(){
@@ -2350,7 +2610,7 @@ function buildKnife(){
   const kR=mkBlade();kR.position.set(0,-.05,.02);kR.rotation.x=-.2;P.handR.add(kR);
   const kL=mkBlade();kL.position.set(0,-.05,.02);kL.rotation.x=-.2;P.handL.add(kL);
   g.userData.bladeR=kR;g.userData.bladeL=kL;
-  g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+  shadowPass(g);
   return g;
 }
 function buildSlasher(){
@@ -2436,7 +2696,7 @@ function buildSlasher(){
   const kR=mkBlade();kR.position.set(0,-.05,.02);kR.rotation.x=-.2;P.handR.add(kR);
   const kL=mkBlade();kL.position.set(0,-.05,.02);kL.rotation.x=-.2;P.handL.add(kL);
   g.userData.bladeR=kR;g.userData.bladeL=kL;g.userData.flames=flames;
-  g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+  shadowPass(g);
   return g;
 }
 function buildCommander(){
@@ -2521,7 +2781,7 @@ function buildCommander(){
   ferrule.position.y=-.46;stick.add(ferrule);
   stick.position.set(0,-.05,.02);stick.rotation.x=-.15;P.handL.add(stick);
   g.userData.gun=gun;g.userData.muzzle=barrelC;g.userData.stick=stick;
-  g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+  shadowPass(g);
   return g;
 }
 /* The Mine: no person at all. A timber head-frame over a shaft, a winch, a
@@ -2580,7 +2840,7 @@ function buildMine(){
   const lampLight=new THREE.PointLight(0xffc65a,.5,3.2);
   lampLight.position.copy(lamp.position);g.add(lampLight);
   g.userData.mine={drum,cart,load,lamp,lampLight,flecks,rope};
-  g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+  shadowPass(g);
   return g;
 }
 /* The Burned Corpse: charred, hunched, mouth hinged open ready to breathe.
@@ -2634,12 +2894,66 @@ function buildCorpse(){
   const fireLight=new THREE.PointLight(0xff7a2a,0,7);
   fireLight.position.set(0,.1,.7);H.add(fireLight);
   g.userData.corpse={jaw,maw,eyes,eyeLight,flame,core,fireLight,embers};
-  g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+  shadowPass(g);
+  return g;
+}
+/* The Toy Soldier: one colour of plastic, moulded seams, and the flat oval
+   base they all come stuck to. Deliberately a shade too shiny and a shade too
+   green — it should read as a toy standing among real people. */
+function buildToy(){
+  const g=person({skin:0x4f8f3a,hair:false,eye:0x2f5c22,shirt:0x4f8f3a,pants:0x4f8f3a,
+                  shoe:0x3d7029,mouth:0x2f5c22});
+  const P=g.userData.P,T=P.torso,H=P.head;
+  const plastic=M(0x4f8f3a),dark=M(0x3d7029),light=M(0x67ab4c),metal=M(0x33383f);
+  // the base disc it is moulded onto
+  const base=new THREE.Mesh(new THREE.CylinderGeometry(.46,.5,.06,20),plastic);
+  base.position.y=.03;base.castShadow=true;g.add(base);
+  const lip=new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,.02,20),dark);
+  lip.position.y=.065;g.add(lip);
+  // webbing and pouches, all in the same plastic
+  const vest=new THREE.Mesh(new THREE.BoxGeometry(.30,.26,.20),light);
+  vest.position.y=.32;vest.castShadow=true;T.add(vest);
+  for(const sx of [-1,1]){
+    const pouch=new THREE.Mesh(new THREE.BoxGeometry(.08,.09,.05),dark);
+    pouch.position.set(sx*.09,.20,.115);T.add(pouch);
+  }
+  const strap=new THREE.Mesh(new THREE.BoxGeometry(.06,.30,.03),dark);
+  strap.position.set(-.06,.33,.115);strap.rotation.z=.22;T.add(strap);
+  // moulding seam down the side, the giveaway that it came out of a mould
+  for(const sx of [-1,1]){
+    const seam=new THREE.Mesh(new THREE.BoxGeometry(.008,.44,.012),light);
+    seam.position.set(sx*.155,.30,0);T.add(seam);
+  }
+  // helmet
+  const helm=new THREE.Mesh(new THREE.SphereGeometry(.135,10,7,0,Math.PI*2,0,1.35),plastic);
+  helm.scale.set(1.05,.92,1.08);helm.position.y=.03;helm.castShadow=true;H.add(helm);
+  const brim=new THREE.Mesh(new THREE.CylinderGeometry(.15,.15,.022,14),dark);
+  brim.position.y=-.03;H.add(brim);
+  const chin=new THREE.Mesh(new THREE.BoxGeometry(.02,.09,.02),dark);
+  chin.position.set(.1,-.07,.02);H.add(chin);
+  // rifle, held across the body
+  const gun=new THREE.Group();
+  const stock=new THREE.Mesh(new THREE.BoxGeometry(.045,.075,.30),dark);
+  stock.position.z=-.06;gun.add(stock);
+  const body=new THREE.Mesh(new THREE.BoxGeometry(.05,.062,.20),metal);
+  body.position.z=.13;gun.add(body);
+  const barrel=new THREE.Mesh(new THREE.CylinderGeometry(.014,.014,.30,8),metal);
+  barrel.rotation.x=Math.PI/2;barrel.position.z=.36;gun.add(barrel);
+  const sight=new THREE.Mesh(new THREE.BoxGeometry(.012,.04,.02),metal);
+  sight.position.set(0,.05,.2);gun.add(sight);
+  const mag=new THREE.Mesh(new THREE.BoxGeometry(.03,.11,.05),dark);
+  mag.position.set(0,-.07,.1);mag.rotation.x=-.14;gun.add(mag);
+  const muzzle=new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,.03,8),metal);
+  muzzle.rotation.x=Math.PI/2;muzzle.position.z=.51;gun.add(muzzle);
+  gun.position.set(0,-.07,.06);gun.rotation.x=.06;
+  P.foreR.add(gun);
+  g.userData.gun=gun;g.userData.muzzle=muzzle;
+  shadowPass(g);
   return g;
 }
 const TOWER_BUILD={police:buildPolice,scout:buildScout,robber:buildRobber,survivor:buildSurvivor,
                    blitzer:buildBlitzer,knife:buildKnife,slasher:buildSlasher,commander:buildCommander,
-                   mine:buildMine,corpse:buildCorpse};
+                   mine:buildMine,corpse:buildCorpse,toy:buildToy};
 function placeTower(key,x,z){
   const def=TOWERS[key];
   const g=TOWER_BUILD[key]();
@@ -2947,7 +3261,7 @@ function syncHud(){
 const LOADOUT=['police','scout','robber','survivor',null];
 const SHORT={police:'Cop',scout:'Scout',robber:'Robber',survivor:'Survivor',
              blitzer:'Blitzer',knife:'Knife',slasher:'Slasher',commander:'Cmdr',
-             mine:'Mine',corpse:'Corpse'};
+             mine:'Mine',corpse:'Corpse',toy:'Toy'};
 const TOWER_DESC={
   police:'Baton: 9 dmg every 1.0s at Lv1 up to 40 at Lv5, range 10 → 12. It breaks after 30 hits and he falls back on the taser — weaker, but it stuns. Upgrading issues a fresh baton. 5 levels.',
   scout:'2 dmg · 0.9s · 8 range. Cheap, fast chip damage. 3 levels.',
@@ -2958,9 +3272,10 @@ const TOWER_DESC={
   slasher:'Twin blades kept in a furnace on his back: 10 dmg every 0.40s at Lv1 up to 25 every 0.30s at Lv4. Range 3 → 4, the shortest reach in the game, so placement matters more than for anything else. 4 levels.',
   commander:'Sidearm plus an aura: every friendly tower inside his ring hits +15% harder and reloads +10% faster at Lv1, up to +40% and +28% at Lv4. Auras do not stack. 4 levels.',
   mine:'Never fires a shot — it digs. Pays $50 every 5 seconds at Lv1, up to $500 at Lv5. Upgrades run $150 → $2,000, so it pays for itself and then some if you build it early. Limit of 5 on the field. Unlocked by clearing The Forest.',
+  toy:'A plastic army man on a moulded base. Starts almost useless — 1 damage every 0.5s — and ends up the fastest gun in the game: 15 a shot every 0.09s, which is 167 dps. Range 7 → 14. The last upgrade costs $2,500 and it is worth it. Unlocked by clearing The Blocky Event.',
   corpse:'Holds a cone of fire for 3 seconds, rests for 2, and repeats. 8 dmg per tick at Lv1 up to 25 at Lv4, every 0.5s, and anything caught keeps burning after it walks out of the flame. Range 6 → 8.5. Its eyes glow yellow at max. Unlocked by clearing The Volcano.'
 };
-const ALL_TOWERS=['police','scout','robber','survivor','blitzer','knife','slasher','commander','mine','corpse'];
+const ALL_TOWERS=['police','scout','robber','survivor','blitzer','knife','slasher','commander','mine','corpse','toy'];
 /* Towers that never shoot are skipped by the targeting and the bot's damage
    maths — the Mine just sits there earning. */
 const NO_ATTACK={mine:1};
@@ -3065,7 +3380,7 @@ function closeInfo(){
 /* keep #ui.sheeted in step with whichever sheet is open, wherever it was
    toggled from — there are a dozen call sites and they used to fight the
    Inventory button for the bottom of the screen */
-const SHEETS=['shop','info','settings','log','loadout','squad','match','event'].map($);
+const SHEETS=['shop','info','settings','log','loadout','squad','match','event','playlist'].map($);
 function syncSheetState(){
   $('ui').classList.toggle('sheeted',SHEETS.some(s=>s.classList.contains('on')));
 }
@@ -3127,6 +3442,7 @@ function unlockHintFor(k){
   const d=TOWERS[k];
   if(d.unlock==='mine')return 'clear The Forest to unlock';
   if(d.unlock==='corpse')return 'clear The Volcano to unlock';
+  if(d.unlock==='blocky')return 'clear The Blocky Event to unlock';
   return d.coin?'costs '+d.coin.toLocaleString()+' coins':'';
 }
 function toggleEquip(k){
@@ -3332,6 +3648,15 @@ function validSpot(x,z){
 }
 
 /* ---------- waves ---------- */
+/* The Blocky Bloater turns up every fifth wave and gets meaner each time:
+   500 HP on wave 5, 2,000 by wave 20 — the range the event was asked for.
+   Applied as a multiplier because spawnEnemy reads its HP from ZT. */
+function bloaterScale(){
+  if(MAP.key!=='blocky')return 1;
+  const at=[5,10,15,20].indexOf(Math.min(20,Math.ceil(G.wave/5)*5));
+  const hp=[500,1000,1500,2000][at<0?0:at];
+  return hp/ZT.bloater.hp;
+}
 function buildQueue(w){
   const set=WAVE_SETS[MAP.key]||WAVES;
   const cfg=set[Math.min(w,set.length)-1],pool=[];
@@ -3609,6 +3934,13 @@ function fire(t,dt){
       const to=target.g.position.clone().add(V3(0,1.1*target.d.sc,0));
       if(t.key==='scout'){
         fxTracer(from,to);fxSpark(to,0xffe07a);fxSpark(from,0xfff0b0);hurt(target,s.dmg);sfx('shot');
+      }else if(t.key==='toy'){
+        const muz=t.g.userData.muzzle?t.g.userData.muzzle.getWorldPosition(V3()):from;
+        fxTracer(muz,to);
+        // at 0.09s between shots a spark on every round is a strobe — thin them
+        if(Math.random()<.45)fxSpark(to,0xbdf5a0);
+        if(Math.random()<.3)fxSpark(muz,0xe6ffcf);
+        hurt(target,s.dmg);sfx('rifle');
       }else if(t.key==='survivor'){
         const muz=t.g.userData.muzzle?t.g.userData.muzzle.getWorldPosition(V3()):from;
         fxTracer(muz,to);fxSpark(to,0xffd9a0);
@@ -3690,7 +4022,8 @@ function fire(t,dt){
    the pose continuous when the swing ends.
    ============================================================ */
 const mix=(a,b,k)=>a+(b-a)*k;
-const RECOIL_DECAY={scout:9,survivor:11,robber:4.5,blitzer:15,knife:6,slasher:7,police:7,commander:8};
+const RECOIL_DECAY={scout:9,survivor:11,robber:4.5,blitzer:15,knife:6,slasher:7,police:7,commander:8,
+                    toy:16,corpse:8};   // the toy fires far too fast for a slow settle
 function towerPose(t,dt,target,s){
   const P=t.g.userData.P;
   const now=performance.now()*.001,seed=t.seed;
@@ -3731,6 +4064,30 @@ function towerPose(t,dt,target,s){
   P.torso.rotation.x=mix(.02,-.05,A);
   P.torso.rotation.y=lead;
   P.head.rotation.z=0;
+
+  /* ---- weight transfer -------------------------------------------------
+     People do not stand evenly on both feet. Weight rolls slowly from one to
+     the other, the loaded hip lifts, the shoulders counter-rotate, and the
+     unloaded heel comes off the ground. Slow enough to read as standing
+     rather than swaying. */
+  const w=Math.sin(now*.41+seed*1.7);
+  const load=w*(1-A*.55);
+  P.torso.position.x=load*.028;
+  P.torso.rotation.z+=load*.035;
+  P.legL.rotation.z+=Math.max(0,load)*.05;
+  P.legR.rotation.z+=Math.min(0,load)*.05;
+  P.footL.rotation.x-=Math.max(0,-load)*.10;      // heel lifts off the light foot
+  P.footR.rotation.x-=Math.max(0, load)*.10;
+  P.shinL.rotation.x+=Math.max(0,-load)*.06;
+  P.shinR.rotation.x+=Math.max(0, load)*.06;
+
+  /* ---- recoil travels through the whole body --------------------------
+     A shot pushes the shoulder back, rocks the hips, and settles. Previously
+     recoil only moved the arms, which is why firing looked like a puppet. */
+  P.torso.position.y-=R*.012;
+  P.torso.rotation.x-=R*.05;
+  P.legL.rotation.x+=R*.03;P.legR.rotation.x+=R*.03;
+  P.shinL.rotation.x+=R*.05;P.shinR.rotation.x+=R*.05;
 
   // --- idle gestures ---------------------------------------------------
   // only while genuinely relaxed; each returns to neutral through a sine
@@ -3905,10 +4262,24 @@ function towerPose(t,dt,target,s){
     });
   }
 
-  // --- head: locked on the target, or sweeping the field when idle ------
+  /* --- head: locked on the target, or sweeping the field when idle ------
+     The head leads and the body follows, instead of the whole figure pivoting
+     as one piece. On a target it holds the aim inside a neck's worth of travel
+     and tips down onto anything standing close; with nothing to shoot it
+     sweeps. */
   const scan=Math.sin(now*.62+seed)*.6+(gK===0?gA*.7:0);
   const tilt=gK===1?gA*.3:0;
-  P.head.rotation.y=mix(scan,-lead*.5,A);
+  if(target){
+    const wa=Math.atan2(target.g.position.x-t.g.position.x,target.g.position.z-t.g.position.z);
+    const off=((wa-t.g.rotation.y+Math.PI*3)%(Math.PI*2))-Math.PI;
+    t.headY=(t.headY||0)+(clamp(off,-.8,.8)-(t.headY||0))*Math.min(1,dt*8);
+    P.head.rotation.y=t.headY;
+    const td=Math.hypot(target.g.position.x-t.g.position.x,target.g.position.z-t.g.position.z);
+    P.head.rotation.x+=clamp((6-td)*.022,0,.14);
+  }else{
+    t.headY=(t.headY||0)*Math.max(0,1-dt*3);
+    P.head.rotation.y=mix(scan,-lead*.5,A);
+  }
   P.head.rotation.z+=mix(tilt,0,A)+lead*.12;
 }
 
@@ -4161,6 +4532,76 @@ function musicTick(){
     MUSIC.next+=stepDur;MUSIC.step++;
   }
 }
+/* ---------- the playlist you choose ----------
+   ALL_TRACKS is everything the game knows about; SAVE.playlist is the subset
+   you picked, by filename. Up to 30, which is a ceiling rather than a target —
+   drop more files in beside the game and they show up here too. */
+const PLAYLIST_MAX=30;
+const ALL_TRACKS=CUSTOM_MUSIC.lobby;
+const fmtLen=s=>{
+  if(!s||!isFinite(s))return '--:--';
+  const m=Math.floor(s/60),x=Math.round(s%60);
+  return (x===60?m+1:m)+':'+String(x===60?0:x).padStart(2,'0');
+};
+function chosenTracks(){
+  const pick=SAVE.playlist;
+  if(!Array.isArray(pick)||!pick.length)return ALL_TRACKS;   // nothing chosen = everything
+  const set={};pick.forEach(f=>set[f]=1);
+  const out=ALL_TRACKS.filter(t=>set[t.file]);
+  return out.length?out:ALL_TRACKS;
+}
+function trackChosen(f){
+  const p=SAVE.playlist;
+  return !Array.isArray(p)||!p.length?true:p.indexOf(f)>=0;
+}
+function togglePlTrack(f){
+  let p=Array.isArray(SAVE.playlist)&&SAVE.playlist.length?SAVE.playlist.slice()
+        :ALL_TRACKS.map(t=>t.file);              // first tap starts from "all on"
+  const i=p.indexOf(f);
+  if(i>=0){
+    if(p.length<=1){banner('Keep at least one song in the playlist');sfx('no');return;}
+    p.splice(i,1);sfx('no');
+  }else{
+    if(p.length>=PLAYLIST_MAX){banner('That is the limit — '+PLAYLIST_MAX+' songs');sfx('no');return;}
+    p.push(f);sfx('up');
+  }
+  SAVE.playlist=p;writeSave();
+  renderPlaylist();
+  refreshPlaylist();
+}
+/* Rebuild the running queue from the new selection without cutting off the
+   song that is playing, if it survived the edit. */
+function refreshPlaylist(){
+  const list=chosenTracks();
+  const cur=MUSIC.el&&MUSIC.list&&MUSIC.list[MUSIC.idx];
+  MUSIC.lastSrc=ALL_TRACKS;
+  MUSIC.list=shuffled(list);
+  if(cur){
+    const at=MUSIC.list.findIndex(t=>t.file===cur.file);
+    if(at>=0){MUSIC.idx=at;npSync();return;}      // still in the list: leave it alone
+  }
+  playTrack(0,0);
+}
+function renderPlaylist(){
+  const box=$('plList');
+  if(!box)return;
+  const chosen=ALL_TRACKS.filter(t=>trackChosen(t.file));
+  const secs=chosen.reduce((n,t)=>n+(t.secs||0),0);
+  $('plCount').textContent=chosen.length+' / '+PLAYLIST_MAX;
+  $('plTotal').textContent='total '+fmtLen(secs);
+  box.innerHTML=ALL_TRACKS.map(t=>{
+    const on=trackChosen(t.file);
+    return '<div class="plRow'+(on?' on':'')+(t.wave?' mineTrk':'')+'" data-f="'+t.file+'">'+
+      '<div class="tick">'+(on?'✓':'')+'</div>'+
+      '<div class="pnm">'+t.title+'</div>'+
+      (t.wave?'<span class="badge">YOURS</span>':'')+
+      '<div class="plen">'+fmtLen(t.secs)+'</div></div>';
+  }).join('');
+  Array.prototype.forEach.call(box.children,el=>{
+    const f=el.getAttribute('data-f');
+    if(f)el.onclick=()=>togglePlTrack(f);
+  });
+}
 /* Fisher-Yates, with one extra rule: never open on the track that just closed
    the previous shuffle, or a reshuffle can play the same song twice in a row. */
 function shuffled(list){
@@ -4193,7 +4634,7 @@ function setMusic(key){
     MUSIC.single=false;
     // shuffle once per playlist, not on every screen change, or walking into a
     // match would reorder the queue out from under the song that is playing
-    if(!same||!MUSIC.list)MUSIC.list=shuffled(src);
+    if(!same||!MUSIC.list)MUSIC.list=shuffled(src===ALL_TRACKS?chosenTracks():src);
   }else{
     MUSIC.single=!!src;
     MUSIC.list=src?[{file:src,title:'',secs:0}]:null;
@@ -4236,7 +4677,7 @@ function playTrack(i,at,srcIdx){
     // the same twelve in the same sequence forever
     if(MUSIC.idx>=MUSIC.list.length-1&&Array.isArray(MUSIC.lastSrc)){
       MUSIC.lastPlayed=tr.file;
-      MUSIC.list=shuffled(MUSIC.lastSrc);
+      MUSIC.list=shuffled(MUSIC.lastSrc===ALL_TRACKS?chosenTracks():MUSIC.lastSrc);
       playTrack(0,0);
       return;
     }
@@ -4357,10 +4798,42 @@ document.addEventListener('visibilitychange',()=>{
 });
 
 /* ---------- settings ---------- */
+/* ---------- holding 60fps ----------
+   Quality is what you ask for; this is what keeps it playable. The renderer
+   draws at a fraction of the display resolution and that fraction moves with
+   the measured frame time, so a scene that gets heavy loses a little sharpness
+   instead of dropping frames. It only ever scales within the quality you
+   picked — High still looks like High, it just stops stuttering.
+   Nudged in small steps with a long cooldown so it cannot oscillate visibly. */
+const PERF={scale:1,acc:0,frames:0,cool:0,lastW:0,lastH:0,lastPR:0};
+function basePixelRatio(){
+  return GFX==='low'?1:GFX==='med'?Math.min(devicePixelRatio,1.5):Math.min(devicePixelRatio,2);
+}
+function applyPixelRatio(){
+  const pr=Math.max(.55,basePixelRatio()*PERF.scale);
+  // setSize/setPixelRatio reallocate the drawing buffer — only touch them when
+  // something actually changed, or this becomes its own performance problem
+  if(Math.abs(pr-PERF.lastPR)<.02&&PERF.lastW===innerWidth&&PERF.lastH===innerHeight)return;
+  PERF.lastPR=pr;PERF.lastW=innerWidth;PERF.lastH=innerHeight;
+  renderer.setPixelRatio(pr);
+  renderer.setSize(innerWidth,innerHeight);
+}
+function perfStep(ms){
+  PERF.acc+=ms;PERF.frames++;
+  if(PERF.cool>0)PERF.cool--;
+  if(PERF.frames<45)return;
+  const avg=PERF.acc/PERF.frames;
+  PERF.acc=0;PERF.frames=0;
+  if(PERF.cool>0)return;
+  // slipping under ~55fps: give up a little resolution
+  if(avg>18.2&&PERF.scale>.6){PERF.scale=Math.max(.6,PERF.scale-.1);applyPixelRatio();PERF.cool=90;}
+  // comfortably clear of the budget: take some back
+  else if(avg<12.5&&PERF.scale<1){PERF.scale=Math.min(1,PERF.scale+.05);applyPixelRatio();PERF.cool=140;}
+}
 function applyGfx(q){
   GFX=q;
-  const pr=q==='low'?1:q==='med'?Math.min(devicePixelRatio,1.5):Math.min(devicePixelRatio,2);
-  renderer.setPixelRatio(pr);renderer.setSize(innerWidth,innerHeight);
+  PERF.scale=1;PERF.acc=0;PERF.frames=0;PERF.cool=60;
+  applyPixelRatio();
   const sh=q!=='low',shadowsChanged=renderer.shadowMap.enabled!==sh;
   renderer.shadowMap.enabled=sh;sun.castShadow=sh;
   const ms=q==='high'?2048:1024;
@@ -4455,7 +4928,7 @@ function makeAvatar(i,name){
     shirt:BOT_SHIRT[i%5],pants:0x2f3a52,shoe:0x1b1b22});
   const tag=nameTag(name);
   g.add(blobShadow(.4));g.add(tag);g.userData.tag=tag;
-  g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+  shadowPass(g);
   return g;
 }
 /* Every joint the walk cycle touches has to be driven or decayed on BOTH
@@ -4585,7 +5058,7 @@ const lobbyNPCs=[];
   // screen on the far wall
   boardMesh=new THREE.Mesh(new THREE.PlaneGeometry(12,6),
     new THREE.MeshBasicMaterial({map:signTex([
-      {t:'TOWER DEFENSE',b:1,s:54,y:100},{t:'BETA  ·  V1.70  ·  10 TOWERS  ·  3 MAPS',s:24,c:'#8b95cf',y:158}])}));
+      {t:'TOWER DEFENSE',b:1,s:54,y:100},{t:'BETA  ·  V1.75  ·  11 TOWERS  ·  4 MAPS',s:24,c:'#8b95cf',y:158}])}));
   // the bezel is .35 deep, so its front face sits at -D+.195 — the screen has
   // to clear that or the frame swallows it
   boardMesh.position.set(0,4.8,-D+.42);lobby.add(boardMesh);
@@ -4677,7 +5150,7 @@ const lobbyNPCs=[];
     const keep=person({skin:0xc98f60,hair:0x2b1f16,eye:0x3f5a7b,shirt:0x39427a,pants:0x232a4e,shoe:0x171a2c});
     const apron=new THREE.Mesh(new THREE.BoxGeometry(.32,.42,.06),M(0x2b3358));
     apron.position.set(0,.16,.14);keep.userData.P.torso.add(apron);
-    keep.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+    shadowPass(keep);
     keep.add(blobShadow(.4));
     // in the gap between the counter (1.2 deep) and the back shelf (at 1.5)
     keep.position.set(st.pos[0]-Math.sin(st.face)*1.0,0,st.pos[2]-Math.cos(st.face)*1.0);
@@ -4715,7 +5188,7 @@ const lobbyNPCs=[];
   {
     const st=stationAt('log'),g=new THREE.Group();
     const board=new THREE.Mesh(new THREE.PlaneGeometry(4.6,2.6),
-      new THREE.MeshBasicMaterial({map:signTex([{t:'UPDATE LOG',b:1,s:56,y:110},{t:'V1.70 BETA',s:36,c:'#5ef2a0',y:180}])}));
+      new THREE.MeshBasicMaterial({map:signTex([{t:'UPDATE LOG',b:1,s:56,y:110},{t:'V1.75 BETA',s:36,c:'#5ef2a0',y:180}])}));
     board.position.set(0,2.5,.13);g.add(board);
     const back=new THREE.Mesh(new THREE.BoxGeometry(5,3,.22),M(0x232a4e));
     back.position.set(0,2.5,0);back.castShadow=true;g.add(back);
@@ -4781,6 +5254,25 @@ Array.prototype.forEach.call(document.querySelectorAll('#modes .mode'),b=>{
   };
 });
 $('closeLog').onclick=()=>$('log').classList.remove('on');
+$('musicBtn').onclick=()=>{
+  initAudio();closeInfo();
+  $('loadout').classList.remove('on');$('squad').classList.remove('on');
+  $('log').classList.remove('on');$('event').classList.remove('on');
+  $('match').classList.remove('on');mmOn=false;
+  renderPlaylist();$('playlist').classList.add('on');
+};
+$('closePl').onclick=()=>$('playlist').classList.remove('on');
+$('evPlay').onclick=()=>{
+  initAudio();
+  $('event').classList.remove('on');
+  // the event is its own thing — no map vote, straight in
+  if(G.mode==='lobby'&&!voting)toMatch('blocky');
+};
+$('plAll').onclick=()=>{SAVE.playlist=ALL_TRACKS.slice(0,PLAYLIST_MAX).map(t=>t.file);
+  writeSave();renderPlaylist();refreshPlaylist();sfx('up');};
+$('plNone').onclick=()=>{
+  // "clear" leaves one song rather than nothing, so the lobby is never silent
+  SAVE.playlist=[ALL_TRACKS[0].file];writeSave();renderPlaylist();refreshPlaylist();sfx('no');};
 $('playNow').onclick=()=>{initAudio();openMatchmaking();};
 $('mmCancel').onclick=()=>cancelMatchmaking();
 $('eventBtn').onclick=()=>{
@@ -4827,7 +5319,7 @@ function enterLobby(won){
       {t:'made it to wave '+G.wave+' of '+total,s:25,y:122},{t:runLine,s:22,c:'#8b95cf',y:160},
       {t:coinLine,b:1,s:30,c:'#ffd166',y:202},{t:bonusLine,s:21,c:'#c9a24a',y:233}]);
   else setBoard([{t:'TOWER DEFENSE',b:1,s:54,y:100},
-      {t:'BETA V1.70  ·  PRESS PLAY OR WALK OVER',s:23,c:'#8b95cf',y:158}]);
+      {t:'BETA V1.75  ·  PRESS PLAY OR WALK OVER',s:23,c:'#8b95cf',y:158}]);
   buildPals();
 }
 function toLobby(won){
@@ -5781,12 +6273,14 @@ const clock=new THREE.Clock();
 let started=false;
 function tick(){
   requestAnimationFrame(tick);
+  const frameT0=performance.now();
   const dt=Math.min(.05,clock.getDelta());
   // the intro drives everything itself; gameplay stays frozen underneath it
   if(CUT.on)cutStep(dt);
   else if(started&&!G.over)step(dt);
   stepPortals(dt);
   npTick(dt);
+  detailStep(dt);
   updateCamera(dt);
   // camera shake, applied after the camera has been positioned for the frame
   if(CUT.on&&CUT.shake>0){
@@ -5797,6 +6291,7 @@ function tick(){
     camera.rotation.z=rnd(-s,s)*.09;
   }
   renderer.render(scene,camera);
+  perfStep(performance.now()-frameT0);
 }
 function step(dt){
   // player movement
@@ -6124,6 +6619,11 @@ function win(){
     SAVE.corpse=true;writeSave();
     setTimeout(()=>banner('Unlocked: Burned Corpse \u2014 $800, breathes fire'),3200);
   }
+  // the event hands over the Toy Soldier
+  if(MAP.key==='blocky'&&!SAVE.blocky){
+    SAVE.blocky=true;writeSave();
+    setTimeout(()=>banner('Unlocked: Toy Soldier \u2014 $450, and it gets very fast'),3200);
+  }
   const c=payCoins(true);
   banner('Field secured — +'+c.toLocaleString()+' coins'+coinNote());sfx('win');
   setTimeout(()=>toLobby(true),2000);
@@ -6162,7 +6662,7 @@ $('startBtn').onclick=()=>{
 
 addEventListener('resize',()=>{
   camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth,innerHeight);
+  applyPixelRatio();
 });
 syncHud();syncCoins();renderLoadout();tick();
 </script>
