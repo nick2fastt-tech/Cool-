@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Tower Defense V1.65 Beta</title>
+<title>Tower Defense V1.70 Beta</title>
 <style>
 :root{
   --void:#04050c;
@@ -222,6 +222,33 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 #ui.matchmode #party{top:186px}
 #ui.sheeted #nowPlaying{opacity:.25}
 #npTitle{color:#cfd8ff}
+/* ---- Big Wave: Nick's own song, so the pill becomes an actual wave ---- */
+#nowPlaying.bigwave{
+  border-color:#3fd0ff;
+  background:linear-gradient(100deg,#06243f 0%,#0a3d63 35%,#0e5c8a 55%,#06243f 100%);
+  background-size:260% 100%;
+  animation:npSwell 3.4s ease-in-out infinite;
+  box-shadow:0 0 16px rgba(63,208,255,.35),inset 0 -6px 12px rgba(63,208,255,.18)}
+@keyframes npSwell{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+/* the crest that rolls along the bottom edge of the pill */
+#nowPlaying.bigwave::after{
+  content:'';position:absolute;left:-50%;right:-50%;bottom:0;height:12px;
+  background:radial-gradient(ellipse 22px 9px at 20px 0,rgba(120,225,255,.85) 40%,transparent 70%),
+             radial-gradient(ellipse 26px 10px at 90px 2px,rgba(120,225,255,.6) 40%,transparent 70%),
+             radial-gradient(ellipse 20px 8px at 160px 1px,rgba(120,225,255,.75) 40%,transparent 70%);
+  animation:npRoll 2.6s linear infinite;pointer-events:none}
+@keyframes npRoll{from{transform:translateX(0)}to{transform:translateX(-180px)}}
+#nowPlaying.bigwave #npTitle{color:#dff6ff}
+#nowPlaying.bigwave #npTitle::before{content:'\1f30a\00a0';color:#7ee1ff}
+/* each letter rides the swell, one after the next */
+#nowPlaying.bigwave .wch{display:inline-block;animation:npBob 1.5s ease-in-out infinite;
+  animation-delay:calc(var(--i) * 70ms)}
+@keyframes npBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+#nowPlaying.bigwave .mnote{color:#8fe8ff;text-shadow:0 0 8px rgba(63,208,255,.7)}
+/* the "this one is mine" badge */
+#npMine{display:none;margin-left:7px;padding:1px 6px;border-radius:999px;font-size:8.5px;
+  letter-spacing:.12em;background:rgba(63,208,255,.22);border:1px solid rgba(126,225,255,.55);color:#bff0ff}
+#nowPlaying.bigwave #npMine{display:inline-block}
 /* music glyphs live in symbol fonts, so name a few fallbacks explicitly */
 #npTitle::before{content:'\266b\00a0';color:var(--gold);
   font-family:'Segoe UI Symbol','Apple Symbols','Noto Music','Noto Sans Symbols 2',sans-serif}
@@ -300,6 +327,35 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
   text-shadow:0 0 24px rgba(61,75,181,.9)}
 #title .sub{font-size:11px;letter-spacing:.4em;color:var(--dim);text-transform:uppercase}
 #title ul{list-style:none;font-size:11.5px;color:var(--dim);line-height:1.9;margin:6px 0 2px}
+/* ---- volcano intro ---- */
+#cut{position:absolute;inset:0;display:none;pointer-events:none;z-index:40}
+#cut.on{display:block}
+.cutBar{position:absolute;left:0;right:0;height:11vh;background:#000;
+  animation:cutBars .8s ease-out both}
+.cutBar.top{top:0}.cutBar.bot{bottom:0}
+@keyframes cutBars{from{height:0}to{height:11vh}}
+/* heat haze creeping in from the bottom of the frame */
+#cutGlow{position:absolute;inset:0;
+  background:radial-gradient(ellipse 140% 60% at 50% 118%,rgba(255,90,30,.85),rgba(255,140,40,.28) 45%,transparent 72%);
+  animation:cutPulse 2.4s ease-in-out infinite}
+@keyframes cutPulse{0%,100%{opacity:.55}50%{opacity:.95}}
+#cutText{position:absolute;left:0;right:0;bottom:15vh;text-align:center;padding:0 24px;
+  opacity:0;transition:opacity .5s}
+#cutText.show{opacity:1}
+#cutT{font-size:26px;font-weight:bold;letter-spacing:.16em;text-transform:uppercase;
+  color:#fff;text-shadow:0 2px 18px rgba(255,90,30,.9),0 0 3px #000}
+#cutS{font-size:12px;letter-spacing:.3em;text-transform:uppercase;color:#ffb98a;margin-top:7px}
+#cutSkip{position:absolute;right:14px;bottom:calc(11vh + 16px);display:none;z-index:41;
+  background:rgba(8,11,28,.75);border:1px solid var(--line);color:var(--ink);
+  border-radius:999px;padding:9px 18px;font-size:11px;letter-spacing:.18em;font-family:inherit}
+#cutSkip.on{display:block}
+#signin{width:100%;max-width:300px;margin-top:4px}
+#signin label{display:block;font-size:10px;letter-spacing:.06em;color:var(--dim);margin-bottom:5px}
+#emailIn{width:100%;background:rgba(10,13,28,.9);border:1px solid var(--line);color:var(--ink);
+  border-radius:10px;padding:11px 12px;font-size:14px;font-family:inherit;text-align:center}
+#emailIn:focus{outline:none;border-color:#8b97ff;background:#0d1226}
+#signWho{font-size:10.5px;color:#5ef2a0;margin-top:6px;min-height:14px;letter-spacing:.04em}
+#signWho.new{color:var(--gold)}
 </style>
 </head>
 <body>
@@ -310,6 +366,7 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
     <div class="stat"><span class="k">Cash</span><span class="v" id="cashV">$0</span></div>
     <div class="stat"><span class="k">Wave</span><span class="v" id="waveV">0 / 10</span><span class="k" id="nextV" style="color:var(--gold);letter-spacing:.06em">starting…</span></div>
     <div class="stat"><span class="k">Base</span><span class="v" id="hpV">100</span><div id="hpBarOut"><div id="hpBar"></div></div></div>
+    <div class="stat"><span class="k">Units</span><span class="v" id="unitV">0 / 25</span></div>
   </div>
 
   <div id="banner"></div>
@@ -398,7 +455,16 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 
   <div id="coins">🪙 <b id="coinV">0</b></div>
 
-  <div id="nowPlaying"><span id="npTitle"></span></div>
+  <div id="nowPlaying"><span id="npTitle"></span><span id="npMine">YOUR TRACK</span></div>
+
+  <!-- volcano intro: a full-screen overlay for the letterbox, glow and captions -->
+  <div id="cut">
+    <div class="cutBar top"></div>
+    <div class="cutBar bot"></div>
+    <div id="cutGlow"></div>
+    <div id="cutText"><div id="cutT"></div><div id="cutS"></div></div>
+  </div>
+  <button class="pe" id="cutSkip">SKIP</button>
 
   <div class="sheet pe" id="match">
     <div class="sheetHead"><h2>Matchmaking</h2><button class="btn sm pe" id="mmCancel">Cancel</button></div>
@@ -434,7 +500,22 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 
   <div class="sheet pe" id="log">
     <div class="sheetHead"><h2>Update Log</h2><button class="btn sm pe" id="closeLog">Close</button></div>
-    <div class="logV">V1.65 <span>beta</span></div>
+    <div class="logV">V1.70 <span>beta</span></div>
+    <ul class="logL">
+      <li><b>Your progress saves against your email.</b> Sign in on the title screen and your coins, unlocks and loadout come back. Different email on the same device = a different save</li>
+      <li><b>25 units on the field</b>, shared across every tower. The old limit of 5 per type is gone, and the count lives in the HUD instead of on every slot</li>
+      <li><b>New: The Mine</b> — $200, never fires a shot, pays $50 every 5 seconds at Lv1 up to $500 at Lv5. Upgrades $150 → $2,000. Max 5 out. Unlocked by clearing The Forest</li>
+      <li><b>New: Burned Corpse</b> — $800, breathes fire for 3 seconds then rests for 2. 8 → 25 damage a tick and anything caught keeps burning after it walks clear. Eyes glow yellow at max. Unlocked by clearing The Volcano</li>
+      <li><b>The Slasher goes berserk.</b> At max level, every 30 seconds he winds up shaking, hurls a blade for 70 damage, then pulls a fresh one and carries on</li>
+      <li><b>The Volcano opens with a cutscene.</b> You are still standing in the forest when the lava comes up through the ground and takes you down with it</li>
+      <li><b>Teammates play the whole match now</b> — they buy Mines early, level up instead of sprawling when a boss is coming, watch the zombies instead of the scenery, and talk to each other about what is happening</li>
+      <li><b>Zombies are built differently from each other.</b> Six body types — lanky, stocky, hulking, gaunt, bloated — plus a dropped shoulder and a lean, so a wave stops looking like one model twenty times</li>
+      <li>The Forest pays properly: $150 for wave 1 climbing to $2,000 for wave 20. Patient Zero no longer turns up on wave 10 — he belongs to the Grassy Field</li>
+      <li>The songs shuffle, and reshuffle rather than looping the same order forever</li>
+      <li><b>Big Wave</b> gets its own treatment — the title turns into a rolling wave with spray coming off it. Nick made that one on BandLab</li>
+      <li>The Deploy Pad is gone; Play and the Squad Desk both start a match</li>
+    </ul>
+    <div class="logV">V1.65</div>
     <ul class="logL">
       <li><b>Party mode is unlocked.</b> You and 4 to 7 others — the size is rolled when you pick it, so a party is 5 to 8 players</li>
       <li>Every party run pays <b>+20% coins</b>, win or lose. The end screen breaks the bonus out so you can see it landed</li>
@@ -572,13 +653,19 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
   <div id="title" class="pe">
     <div class="sub">Beta Version</div>
     <h1>Tower<br>Defense</h1>
-    <div class="sub" style="letter-spacing:.5em">V 1.65</div>
+    <div class="sub" style="letter-spacing:.5em">V 1.70</div>
     <ul>
       <li>Clear a map to unlock the next: Grassy Field → The Forest → The Volcano</li>
       <li>Left side of the screen = move · right side = look</li>
-      <li>Walk around the lobby — shop, squad desk and deploy pad</li>
-      <li>8 towers, 5 slots · 3 maps · press Play to matchmake</li>
+      <li>Walk around the lobby — shop, squad desk and notice board</li>
+      <li>10 towers, 5 slots · 3 maps · 25 units on the field</li>
     </ul>
+    <div id="signin">
+      <label for="emailIn">Your email — keeps your coins and unlocks on this device</label>
+      <input id="emailIn" class="pe" type="email" inputmode="email" autocomplete="email"
+             placeholder="you@example.com" spellcheck="false">
+      <div id="signWho"></div>
+    </div>
     <button class="btn go pe" id="startBtn" style="margin-top:8px">Enter Lobby</button>
   </div>
 </div>
@@ -609,6 +696,7 @@ const MAPS={
     spawn:[-14,-4]},
   forest:{key:'forest',name:'The Forest',mode:'The Grave Digger',waves:20,hpScale:1.4,diff:'Medium',icon:'\ud83c\udf32',coins:700,portalCol:0xb07cff,stoneCol:0x585c56,stoneCol2:0x3d4440,stoneCol3:0x6b7168,scorchCol:0x2e2a20,
     blurb:'20 waves \u00b7 clear the Demo Map to unlock',
+    pay:[150,2000],                       // wave-clear payout, wave 1 -> wave 20
     fog:{col:0x0b1a16,near:24,far:74},sun:0xbfd6c0,sunI:.72,hemi:[0x6f8fa8,0x1c2e18,.6],
     wp:[[-30,12],[-14,12],[-14,-6],[-28,-6],[-28,-20],[-6,-20],[-6,-2],[10,-2],[10,-16],[24,-16],[24,10],[4,10],[4,17]],
     spawn:[-2,5]},
@@ -695,7 +783,10 @@ const GRAVE_MIX=[
   [['armored',9],['runner',7],['heavy',5]],
   [['runner',10],['armored',7],['giant',4]],
   [['giant',6],['toxic',4],['necro',2],['runner',8]],
-  [['boss',1],['toxic',5],['necro',3],['runner',10]],
+  // wave 10 used to drop Patient Zero here. He belongs to the Grassy Field —
+  // the forest's own boss is the Grave Digger at wave 20. Extra regulars carry
+  // the difficulty instead.
+  [['toxic',8],['necro',5],['runner',14],['giant',5]],
   [['armored',12],['runner',10],['heavy',8]],
   [['giant',8],['toxic',6],['quick',12]],
   [['necro',5],['armored',12],['runner',12]],
@@ -705,7 +796,7 @@ const GRAVE_MIX=[
   [['runner',18],['quick',16],['heavy',10]],
   [['giant',12],['toxic',8],['necro',6],['armored',10]],
   [['necro',8],['giant',10],['armored',16],['runner',12]],
-  [['digger',1],['boss',1],['necro',8],['giant',10],['toxic',10],['runner',14]]
+  [['digger',1],['necro',8],['giant',10],['toxic',10],['runner',14]]
 ];
 const WAVES20=GRAVE_MIX.map((mix,i)=>({gap:Math.max(.3,1.1-i*.042),mix}));
 /* The Volcano, 25 waves. Ash Walkers and Ember Runners carry the early game,
@@ -838,23 +929,97 @@ const COMMANDER={
     {dmg:18,cd:0.7,rng:14,aura:12.5,dmgB:.40,rateB:.28,up:null}
   ]
 };
+/* The Mine — the one tower that never shoots. It digs, and every 5 seconds it
+   pays out. Clearing The Forest unlocks it. Capped at 5 on the field, because
+   an uncapped money printer just removes the game's economy. */
+const MINE={
+  key:'mine',name:'The Mine',cost:200,icon:'⛏️',cap:5,unlock:'mine',income:1,
+  lv:[
+    {dmg:0,cd:5,rng:0,pay:50,  up:150},
+    {dmg:0,cd:5,rng:0,pay:110, up:350},
+    {dmg:0,cd:5,rng:0,pay:210, up:700},
+    {dmg:0,cd:5,rng:0,pay:330, up:2000},
+    {dmg:0,cd:5,rng:0,pay:500, up:null}
+  ]
+};
+/* The Burned Corpse — unlocked by clearing The Volcano. It does not fire shots;
+   it opens its mouth and holds a cone of flame for three seconds, then rests
+   for two. Anything caught keeps burning after it leaves the cone. */
+const CORPSE_T={
+  key:'corpse',name:'Burned Corpse',cost:800,icon:'💀',unlock:'corpse',
+  breath:{on:3,off:2},
+  lv:[
+    {dmg:8, cd:.5,rng:6,  burn:4, up:700},
+    {dmg:13,cd:.5,rng:6.8,burn:6, up:1300},
+    {dmg:19,cd:.5,rng:7.6,burn:9, up:2200},
+    {dmg:25,cd:.5,rng:8.5,burn:12,up:null}
+  ]
+};
 const TOWERS={police:POLICE,scout:SCOUT,robber:ROBBER,survivor:SURVIVOR,
-              blitzer:BLITZER,knife:KNIFE,slasher:SLASHER,commander:COMMANDER};
-const TOWER_CAP=5;
+              blitzer:BLITZER,knife:KNIFE,slasher:SLASHER,commander:COMMANDER,
+              mine:MINE,corpse:CORPSE_T};
+/* How many towers you can have standing at once, across every type. */
+const UNIT_CAP=25;
 
-/* ---------- coins: the only thing that survives a run ---------- */
-const SAVE_KEY='towerDefenseSave1';
-const SAVE={coins:0,commander:false,grave:false,volcano:false,vol:.7,music:.55,musicOn:true};
-function loadSave(){
+/* ---------- saving: one slot per email, per device ----------
+   There is no server behind this game, so a save lives in this device's own
+   browser storage. What the email does is split that storage into separate
+   slots: sign in as you and you get your towers and coins, sign in as someone
+   else on the same phone and they get theirs. It does NOT follow you to
+   another phone — nothing here can do that without a server to sync to. */
+const DEVICE_KEY='towerDefenseDevice';
+const SAVE_PREFIX='towerDefenseSave:';
+function deviceId(){
+  let d=null;
+  try{d=localStorage.getItem(DEVICE_KEY);}catch(e){}
+  if(!d){
+    d='d'+Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4);
+    try{localStorage.setItem(DEVICE_KEY,d);}catch(e){}
+  }
+  return d;
+}
+const DEVICE=deviceId();
+// emails are matched case-insensitively so "Nick@" and "nick@" are one player
+const normEmail=e=>String(e||'').trim().toLowerCase();
+const saveKeyFor=email=>SAVE_PREFIX+DEVICE+':'+(normEmail(email)||'guest');
+
+const SAVE_DEFAULTS={coins:0,commander:false,grave:false,volcano:false,mine:false,corpse:false,
+                     vol:.7,music:.55,musicOn:true,email:'',wins:0,runs:0,
+                     sawVolcanoCut:false,loadout:null};
+const SAVE=Object.assign({},SAVE_DEFAULTS);
+let SAVE_KEY=SAVE_PREFIX+DEVICE+':guest';
+
+function loadSave(email){
+  SAVE_KEY=saveKeyFor(email);
+  Object.assign(SAVE,SAVE_DEFAULTS);
   try{
     const raw=localStorage.getItem(SAVE_KEY);
     if(raw)Object.assign(SAVE,JSON.parse(raw));
-  }catch(e){/* private mode or file:// with storage off — play unsaved */}
+  }catch(e){/* private mode or storage switched off — play unsaved */}
+  SAVE.email=normEmail(email);
+  return SAVE;
 }
 function writeSave(){
   try{localStorage.setItem(SAVE_KEY,JSON.stringify(SAVE));}catch(e){}
 }
-loadSave();
+/* Remember who signed in last so the game comes back to your slot on its own
+   instead of asking every time. */
+const LAST_EMAIL='towerDefenseLast:';
+function rememberEmail(email){try{localStorage.setItem(LAST_EMAIL+DEVICE,normEmail(email));}catch(e){}}
+function lastEmail(){try{return localStorage.getItem(LAST_EMAIL+DEVICE)||'';}catch(e){return '';}}
+function signIn(email){
+  loadSave(email);
+  rememberEmail(email);
+  writeSave();
+  // the slot carries its own audio settings and loadout, so pull those through
+  if(typeof restoreAudioPrefs==='function')restoreAudioPrefs();
+  if(typeof restoreLoadout==='function')restoreLoadout();
+  if(typeof syncCoins==='function')syncCoins();
+  if(typeof renderLoadout==='function')renderLoadout();
+  if(typeof renderSlots==='function')renderSlots();
+  return SAVE;
+}
+loadSave(lastEmail());
 
 /* ---------- three setup ---------- */
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
@@ -1531,17 +1696,85 @@ function decayPass(g,P,d,key){
   }
 }
 
+/* ---------- how a zombie is put together ----------
+   Every zombie used to be the same body at the same scale, so a wave read as
+   one model copy-pasted twenty times. Each one now gets a build: a height, a
+   width, a torso and head size and a limb length, plus a bit of asymmetry so
+   no two hang exactly the same way.
+   Feet sit at y=0 in the rig's local space, so scaling the group vertically
+   about its origin keeps them on the ground however tall the zombie gets. */
+const BUILDS={
+  lanky  :{h:[1.05,1.15],w:[.84,.93], torso:[.88,1.00],head:[.90,1.00],arm:[1.06,1.16],leg:[1.05,1.13]},
+  stocky :{h:[.86,.94],  w:[1.10,1.24],torso:[1.10,1.24],head:[1.04,1.14],arm:[.88,.97], leg:[.88,.95]},
+  hulking:{h:[1.00,1.10],w:[1.14,1.30],torso:[1.18,1.36],head:[.94,1.04],arm:[1.06,1.18],leg:[.98,1.06]},
+  gaunt  :{h:[.97,1.07], w:[.78,.88], torso:[.80,.92], head:[1.00,1.12],arm:[1.00,1.10],leg:[1.00,1.09]},
+  bloated:{h:[.90,.99],  w:[1.06,1.18],torso:[1.28,1.52],head:[.88,.98], arm:[.90,1.00],leg:[.86,.94]},
+  plain  :{h:[.95,1.05], w:[.94,1.06],torso:[.94,1.08], head:[.96,1.06],arm:[.96,1.06],leg:[.96,1.05]}
+};
+/* Which builds a given type tends to turn up in. First entries are commoner —
+   a Giant is usually hulking, occasionally bloated, never lanky. */
+const BUILD_POOL={
+  quick  :['lanky','lanky','gaunt','plain'],
+  runner :['lanky','lanky','gaunt','plain'],
+  ember  :['lanky','gaunt','plain'],
+  heavy  :['stocky','hulking','bloated','stocky'],
+  giant  :['hulking','hulking','bloated'],
+  magma  :['hulking','stocky','bloated'],
+  boss   :['hulking','hulking','stocky'],
+  digger :['hulking','stocky'],
+  corpse :['hulking','gaunt','hulking'],
+  armored:['stocky','hulking','plain'],
+  toxic  :['bloated','gaunt','plain'],
+  necro  :['gaunt','gaunt','lanky'],
+  cinder :['gaunt','lanky','plain'],
+  slow   :['bloated','stocky','plain'],
+  hidden :['gaunt','lanky','plain'],
+  ash    :['plain','stocky','gaunt'],
+  normal :['plain','plain','stocky','lanky','gaunt','bloated']
+};
+function applyBuild(g,P,d,key){
+  const pool=BUILD_POOL[key]||BUILD_POOL.normal;
+  const b=BUILDS[pool[(Math.random()*pool.length)|0]]||BUILDS.plain;
+  const pick=r=>rnd(r[0],r[1]);
+  const h=pick(b.h),w=pick(b.w);
+  g.scale.set(d.sc*w,d.sc*h,d.sc*w);
+  // torso and head carry most of the silhouette
+  const ts=pick(b.torso);
+  P.torso.scale.set(ts,rnd(.96,1.05),ts*rnd(.92,1.05));
+  const hs=pick(b.head);
+  P.head.scale.setScalar(hs);
+  // limbs: length down the bone, thickness across it
+  const as=pick(b.arm),ls=pick(b.leg);
+  for(const sd of ['L','R']){
+    const at=rnd(.9,1.12);
+    P['arm'+sd].scale.set(at,as,at);
+    P['leg'+sd].scale.set(rnd(.92,1.1),ls,rnd(.92,1.1));
+  }
+  /* Asymmetry — the part that actually stops them reading as clones. One
+     shoulder rides lower, the spine leans, the head sits off-centre.
+     The walk cycle assigns torso and head rotation absolutely every frame, so
+     these have to be stashed and added back on top of the gait rather than
+     set once here, or the first step wipes them. */
+  const sgn=Math.random()<.5?1:-1;
+  g.userData.build={tz:sgn*rnd(.02,.10),ty:sgn*rnd(0,.14),hz:-sgn*rnd(.03,.16),name:b};
+  P.head.position.x=sgn*rnd(0,.02);
+  P['arm'+(sgn>0?'L':'R')].position.y-=rnd(.01,.045);   // dropped shoulder
+  P['arm'+(sgn>0?'L':'R')].rotation.z+=sgn*rnd(.05,.2);
+  // one leg a touch shorter feeds the limp the walk cycle already has
+  P['leg'+(Math.random()<.5?'L':'R')].scale.y*=rnd(.94,.99);
+  return b;
+}
 function spawnEnemy(key,dist){
   const d=ZT[key];
   const g=person({skin:d.skin,shirt:d.shirt,pants:d.pants,hair:0x241c14,eye:0xd8d4c2,
     mouth:0x2a0d0d,op:d.op,shoe:0x241f26});
-  g.scale.setScalar(d.sc*rnd(.95,1.06));
   g.traverse(o=>{if(o.isMesh&&!d.op)o.castShadow=true;});
   const P=g.userData.P;
   P.armL.rotation.x=-1.45;P.armR.rotation.x=-1.35;
   P.foreL.rotation.x=-.25;P.foreR.rotation.x=-.15;
   P.torso.rotation.x=.14;
   decayPass(g,P,d,key);
+  applyBuild(g,P,d,key);
   const style=(key==='quick'||key==='runner'||key==='ember')?'sprint'
             :(key==='giant'||key==='boss'||key==='digger'||key==='heavy'
               ||key==='magma'||key==='corpse')?'stomp':'shamble';
@@ -1668,6 +1901,7 @@ function spawnEnemy(key,dist){
   const hpM=Math.round(d.hp*(G.hpMul||1));
   const e={key,d,g,bar,fg,mats,style,limp,hp:hpM,max:hpM,dist:dist||0,spd:d.spd,
     slow:0,flash:0,dead:false,ph:Math.random()*6,twitch:rnd(1,3),
+    burn:0,burnT:0,burnBy:null,
     hpShown:-1,hpT:0};
   // the HP readout: one canvas per zombie, redrawn only when the number moves
   const c=document.createElement('canvas');c.width=192;c.height=52;
@@ -2284,8 +2518,122 @@ function buildCommander(){
   g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
   return g;
 }
+/* The Mine: no person at all. A timber head-frame over a shaft, a winch, a
+   pile of spoil and an ore cart that fills up as the payout gets close. */
+function buildMine(){
+  const g=new THREE.Group();
+  const timber=M(0x6b4a2f),timberD=M(0x4a331f),iron=M(0x4d5460),
+        rock=M(0x555a63),gold=M(0xf0b23c),dark=M(0x201812);
+  // the shaft mouth
+  const rim=new THREE.Mesh(new THREE.CylinderGeometry(.34,.38,.1,14),timberD);
+  rim.position.y=.16;g.add(rim);
+  const hole=new THREE.Mesh(new THREE.CircleGeometry(.28,14),M(0x0a0806));
+  hole.rotation.x=-Math.PI/2;hole.position.y=.215;g.add(hole);
+  // four legs leaning in to a head-frame
+  for(let i=0;i<4;i++){
+    const a=Math.PI/4+i*Math.PI/2;
+    const leg=new THREE.Mesh(new THREE.BoxGeometry(.055,.95,.055),timber);
+    leg.position.set(Math.cos(a)*.3,.62,Math.sin(a)*.3);
+    leg.rotation.z=-Math.cos(a)*.28;leg.rotation.x=Math.sin(a)*.28;
+    leg.castShadow=true;g.add(leg);
+  }
+  const head=new THREE.Mesh(new THREE.BoxGeometry(.34,.07,.34),timberD);
+  head.position.y=1.09;head.castShadow=true;g.add(head);
+  // winch drum + the rope going down the shaft
+  const drum=new THREE.Mesh(new THREE.CylinderGeometry(.075,.075,.26,10),iron);
+  drum.rotation.z=Math.PI/2;drum.position.set(0,1.0,0);g.add(drum);
+  const rope=new THREE.Mesh(new THREE.CylinderGeometry(.011,.011,.86,6),M(0x9a8c6a));
+  rope.position.y=.56;g.add(rope);
+  // spoil heap with a few flecks showing
+  const heap=new THREE.Mesh(new THREE.SphereGeometry(.24,9,7),rock);
+  heap.scale.set(1.25,.42,1.1);heap.position.set(.44,.1,.2);heap.castShadow=true;g.add(heap);
+  const flecks=[];
+  for(let i=0;i<4;i++){
+    const f=new THREE.Mesh(new THREE.BoxGeometry(.035,.03,.035),gold);
+    f.position.set(.32+Math.random()*.26,.17+Math.random()*.05,.06+Math.random()*.3);
+    f.rotation.y=Math.random()*3;g.add(f);flecks.push(f);
+  }
+  // ore cart on a short length of rail
+  const cart=new THREE.Group();
+  const tub=new THREE.Mesh(new THREE.BoxGeometry(.28,.17,.2),iron);
+  tub.position.y=.16;tub.castShadow=true;cart.add(tub);
+  const load=new THREE.Mesh(new THREE.BoxGeometry(.24,.07,.16),gold);
+  load.position.y=.25;cart.add(load);
+  for(const sx of [-1,1])for(const sz of [-1,1]){
+    const w=new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,.02,8),dark);
+    w.rotation.z=Math.PI/2;w.position.set(sx*.11,.06,sz*.09);cart.add(w);
+  }
+  cart.position.set(-.46,0,.24);cart.rotation.y=.3;g.add(cart);
+  for(const sz of [-1,1]){
+    const rail=new THREE.Mesh(new THREE.BoxGeometry(.86,.022,.024),M(0x6d747f));
+    rail.position.set(-.42,.04,.24+sz*.09);rail.rotation.y=.3;g.add(rail);
+  }
+  // lantern hung off the frame — brightens as the payout lands
+  const lamp=new THREE.Mesh(new THREE.SphereGeometry(.055,8,6),M(0xffd27a));
+  lamp.position.set(.19,.92,.19);g.add(lamp);
+  const lampLight=new THREE.PointLight(0xffc65a,.5,3.2);
+  lampLight.position.copy(lamp.position);g.add(lampLight);
+  g.userData.mine={drum,cart,load,lamp,lampLight,flecks,rope};
+  g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+  return g;
+}
+/* The Burned Corpse: charred, hunched, mouth hinged open ready to breathe.
+   Standing pose deliberately off-kilter — head tipped back, one shoulder low. */
+function buildCorpse(){
+  const g=person({skin:0x3a2b24,hair:false,eye:0xff5a1e,shirt:0x241b16,pants:0x1d1613,shoe:0x120d0b,mouth:0x0d0605});
+  const P=g.userData.P,T=P.torso,H=P.head;
+  const char=M(0x2a201b),charD=M(0x181210),emberM=M(0xff5a1e),
+        ashM=M(0x6b6058),boneM=M(0x9a8f7e);
+  // burnt-through ribs with embers glowing in the gaps
+  const cage=new THREE.Mesh(new THREE.CylinderGeometry(.168,.142,.3,8),char);
+  cage.scale.set(1.28,1,.9);cage.position.y=.3;T.add(cage);
+  const embers=[];
+  for(let i=0;i<5;i++){
+    const rib=new THREE.Mesh(new THREE.BoxGeometry(.23,.022,.03),boneM);
+    rib.position.set(0,.19+i*.055,.132);rib.rotation.z=(i%2?1:-1)*.05;T.add(rib);
+    const glow=new THREE.Mesh(new THREE.BoxGeometry(.14,.018,.02),emberM);
+    glow.position.set(0,.216+i*.055,.128);T.add(glow);embers.push(glow);
+  }
+  // ash falling off the shoulders
+  for(const sx of [-1,1]){
+    const pad=new THREE.Mesh(new THREE.SphereGeometry(.078,8,6),ashM);
+    pad.scale.set(1,.6,1);pad.position.set(sx*.17,.5,0);T.add(pad);
+  }
+  const spine=new THREE.Mesh(new THREE.CylinderGeometry(.03,.045,.34,6),charD);
+  spine.position.set(0,.3,-.14);T.add(spine);
+  // skull: jaw hinged open, eyes lit
+  const skull=new THREE.Mesh(new THREE.SphereGeometry(.128,10,8),char);
+  skull.scale.set(.98,1.04,1);H.add(skull);
+  const jaw=new THREE.Mesh(new THREE.BoxGeometry(.13,.07,.11),charD);
+  jaw.position.set(0,-.09,.045);H.add(jaw);
+  const maw=new THREE.Mesh(new THREE.SphereGeometry(.062,8,6),M(0x140704));
+  maw.scale.set(1,.8,.7);maw.position.set(0,-.045,.085);H.add(maw);
+  const eyes=[];
+  for(const sx of [-1,1]){
+    const eye=new THREE.Mesh(new THREE.SphereGeometry(.028,7,6),emberM);
+    eye.position.set(sx*.05,.03,.104);H.add(eye);eyes.push(eye);
+  }
+  const eyeLight=new THREE.PointLight(0xff5a1e,.45,2.6);
+  eyeLight.position.set(0,.05,.16);H.add(eyeLight);
+  // the flame cone, hidden until it breathes
+  const flame=new THREE.Mesh(new THREE.ConeGeometry(.42,1.5,12,1,true),
+    new THREE.MeshBasicMaterial({color:0xff8a2a,transparent:true,opacity:.62,
+      side:THREE.DoubleSide,depthWrite:false}));
+  flame.rotation.x=-Math.PI/2;flame.position.set(0,-.05,.9);flame.visible=false;
+  const core=new THREE.Mesh(new THREE.ConeGeometry(.2,1.15,10,1,true),
+    new THREE.MeshBasicMaterial({color:0xffe07a,transparent:true,opacity:.7,
+      side:THREE.DoubleSide,depthWrite:false}));
+  core.rotation.x=-Math.PI/2;core.position.set(0,-.05,.72);core.visible=false;
+  H.add(flame);H.add(core);
+  const fireLight=new THREE.PointLight(0xff7a2a,0,7);
+  fireLight.position.set(0,.1,.7);H.add(fireLight);
+  g.userData.corpse={jaw,maw,eyes,eyeLight,flame,core,fireLight,embers};
+  g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+  return g;
+}
 const TOWER_BUILD={police:buildPolice,scout:buildScout,robber:buildRobber,survivor:buildSurvivor,
-                   blitzer:buildBlitzer,knife:buildKnife,slasher:buildSlasher,commander:buildCommander};
+                   blitzer:buildBlitzer,knife:buildKnife,slasher:buildSlasher,commander:buildCommander,
+                   mine:buildMine,corpse:buildCorpse};
 function placeTower(key,x,z){
   const def=TOWERS[key];
   const g=TOWER_BUILD[key]();
@@ -2307,15 +2655,23 @@ function placeTower(key,x,z){
     auraRing.scale.setScalar(def.lv[0].aura);g.add(auraRing);
   }
   world.add(g);
+  // the Mine is a structure, not a person — it has no rig to set a stance on
   const PP=g.userData.P;
-  PP.legL.rotation.z=.05;PP.legR.rotation.z=-.05;
-  PP.footL.rotation.y=-.12;PP.footR.rotation.y=.12;
+  if(PP){
+    PP.legL.rotation.z=.05;PP.legR.rotation.z=-.05;
+    PP.footL.rotation.y=-.12;PP.footR.rotation.y=.12;
+  }
   const t={key,def,g,rngMesh:rng,auraRing,lvl:0,cd:0,swing:0,swDur:.34,spent:def.cost,
     weapon:key==='police'?'baton':'gun',batonHits:key==='police'?def.lv[0].dur:0,
     ammo:key==='blitzer'?def.battery:0,rech:0,hand:'R',
     // animation state: alertness, recoil, idle gesture clock, turn tracking
-    seed:rnd(0,6.283),alert:0,rec:0,gest:-1,gestT:rnd(2,7),prevY:0,turn:0,lastSeen:99};
+    seed:rnd(0,6.283),alert:0,rec:0,gest:-1,gestT:rnd(2,7),prevY:0,turn:0,lastSeen:99,
+    // Corpse breath cycle and Slasher rage clock
+    breathing:false,brT:0,rage:0,rageT:SLASH_RAGE};
   if(key==='blitzer')blitzerCharge(t);
+  // an income tower serves its first shift before it pays — otherwise dropping
+  // one hands you $50 the instant it lands
+  if(NO_ATTACK[key])t.cd=def.lv[0].cd;
   G.towers.push(t);
   return t;
 }
@@ -2359,6 +2715,146 @@ function fxSpark(pos,color){
     new THREE.MeshBasicMaterial({color,transparent:true,opacity:.95}));
   m.position.copy(pos);world.add(m);
   G.fx.push({t:0,life:.22,fn:f=>{m.scale.setScalar(1+f.t*7);m.material.opacity=.95*(1-f.t/.22);},end:()=>removeFromWorld(m)});
+}
+/* At max level the Slasher works himself up every 30 seconds, hurls a blade
+   for a single heavy hit, then pulls a fresh one and goes back to stabbing. */
+const SLASH_RAGE=30, SLASH_THROW_DMG=70;
+function throwKnife(t,target){
+  const from=t.g.position.clone().add(V3(0,1.35,0));
+  const to=target.g.position.clone().add(V3(0,1.05*target.d.sc,0));
+  const blade=new THREE.Group();
+  const steel=new THREE.Mesh(new THREE.BoxGeometry(.045,.30,.012),M(0xe8eef8));
+  blade.add(steel);
+  const grip=new THREE.Mesh(new THREE.BoxGeometry(.036,.10,.026),M(0x2a1c14));
+  grip.position.y=-.19;blade.add(grip);
+  const glow=new THREE.Mesh(new THREE.BoxGeometry(.06,.32,.004),
+    new THREE.MeshBasicMaterial({color:0xff8a2a,transparent:true,opacity:.75,depthWrite:false}));
+  blade.add(glow);
+  blade.position.copy(from);world.add(blade);
+  const dist=from.distanceTo(to),life=Math.max(.16,Math.min(.42,dist*.05));
+  let landed=false;
+  G.fx.push({t:0,life,fn:f=>{
+    const k=Math.min(1,f.t/life);
+    blade.position.lerpVectors(from,to,k);
+    blade.position.y+=Math.sin(k*Math.PI)*.35;      // slight arc
+    blade.rotation.z+=.75;                          // end over end
+    blade.rotation.y=Math.atan2(to.x-from.x,to.z-from.z);
+    if(!landed&&k>=1){
+      landed=true;
+      if(!target.dead){
+        hurt(target,SLASH_THROW_DMG);
+        igniteEnemy(target,6,t.owner);
+      }
+      fxSpark(to,0xff7a1e);fxSpark(to.clone().add(V3(0,.2,0)),0xffd27a);
+      fxSlash(to,blade.rotation.y,0xffa33a);
+      sfx('burn');
+    }
+  },end:()=>removeFromWorld(blade)});
+  fxFloatText(from.clone().add(V3(0,.5,0)),'RAGE','#ff8a2a');
+  sfx('slash');
+}
+/* A bit of text that floats up off a tower and fades — used for mine payouts,
+   where a banner every five seconds would be unbearable. */
+function fxFloatText(pos,txt,col){
+  const c=document.createElement('canvas');c.width=256;c.height=64;
+  const x=c.getContext('2d');
+  x.font='bold 40px Verdana,sans-serif';x.textAlign='center';x.textBaseline='middle';
+  x.lineWidth=7;x.strokeStyle='rgba(4,6,16,.85)';x.strokeText(txt,128,32);
+  x.fillStyle=col||'#5ef2a0';x.fillText(txt,128,32);
+  const tex=new THREE.CanvasTexture(c);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false}));
+  sp.scale.set(1.5,.38,1);sp.position.copy(pos);world.add(sp);
+  G.fx.push({t:0,life:1.1,fn:f=>{
+    sp.position.y=pos.y+f.t*1.5;
+    sp.material.opacity=f.t<.15?1:1-(f.t-.15)/.95;
+  },end:()=>{removeFromWorld(sp);tex.dispose();}});
+}
+/* The Mine's whole life: turn the winch, fill the cart, pay out, repeat.
+   Never targets anything, so it skips the aiming code entirely. */
+function mineTick(t,dt){
+  const s=tStats(t);
+  t.cd-=dt;
+  const ud=t.g.userData.mine;
+  const frac=clamp(1-Math.max(0,t.cd)/s.cd,0,1);
+  if(ud){
+    ud.drum.rotation.x+=dt*(1.6+frac*2.4);
+    ud.load.scale.set(1,.25+frac*1.5,1);
+    ud.load.position.y=.21+ud.load.scale.y*.035;
+    ud.lampLight.intensity=.35+frac*.8;
+    ud.cart.position.x=-.46+Math.sin(performance.now()*.0016)*.05;
+    for(let i=0;i<ud.flecks.length;i++)
+      ud.flecks[i].rotation.y+=dt*(.6+i*.2);
+  }
+  if(t.cd>0)return;
+  t.cd=s.cd;
+  const pay=s.pay;
+  // a teammate's mine pays that teammate, not you
+  if(t.owner){
+    const b=G.bots.find(b=>b.name===t.owner);
+    if(b)b.cash+=pay;
+  }else{
+    addCash(pay);G.earned+=pay;
+  }
+  fxFloatText(t.g.position.clone().add(V3(0,1.5,0)),'+$'+pay.toLocaleString(),'#ffd166');
+  fxSpark(t.g.position.clone().add(V3(0,.3,0)),0xf0b23c);
+  sfx('cash');
+}
+/* The Burned Corpse breathes in cycles: 3 seconds of flame, 2 seconds shut.
+   While the flame is out it ticks damage into everything inside the cone and
+   sets them burning, so they keep taking damage after they walk clear. */
+function corpseTick(t,dt,s,target){
+  const ud=t.g.userData.corpse;
+  const br=t.def.breath;
+  t.brT=(t.brT||0)-dt;
+  if(t.brT<=0){
+    t.breathing=!t.breathing;
+    t.brT=t.breathing?br.on:br.off;
+    if(t.breathing)sfx('burn');
+  }
+  const maxLvl=t.lvl>=t.def.lv.length-1;
+  if(ud){
+    // jaw drops open while breathing
+    const want=t.breathing?-.42:-.02;
+    ud.jaw.rotation.x+=(want-ud.jaw.rotation.x)*Math.min(1,dt*11);
+    ud.flame.visible=ud.core.visible=t.breathing;
+    if(t.breathing){
+      const fl=.8+Math.sin(performance.now()*.02)*.2;
+      ud.flame.scale.set(fl,1+Math.sin(performance.now()*.017)*.13,fl);
+      ud.core.scale.set(fl*.9,1,fl*.9);
+      ud.flame.material.opacity=.5+Math.random()*.2;
+      ud.fireLight.intensity=1.6+Math.random()*.7;
+    }else ud.fireLight.intensity=0;
+    // at max level the eyes burn yellow instead of ember orange
+    const eyeCol=maxLvl?0xffe23a:0xff5a1e;
+    for(const e of ud.eyes)if(e.material.color.getHex()!==eyeCol)e.material.color.setHex(eyeCol);
+    ud.eyeLight.color.setHex(eyeCol);
+    ud.eyeLight.intensity=maxLvl?(.7+Math.sin(performance.now()*.005)*.25):.45;
+  }
+  if(!t.breathing||!target)return;
+  t.cd-=dt;
+  if(t.cd>0)return;
+  t.cd=s.cd;
+  // everything in a cone in front takes a tick and catches fire
+  const dirx=Math.sin(t.g.rotation.y),dirz=Math.cos(t.g.rotation.y);
+  for(const e of G.enemies.slice()){
+    if(e.dead)continue;
+    const vx=e.g.position.x-t.g.position.x,vz=e.g.position.z-t.g.position.z;
+    const d=Math.hypot(vx,vz);
+    if(d>s.rng)continue;
+    if((vx*dirx+vz*dirz)/(d||1)<.72)continue;      // a fairly tight cone
+    hurt(e,s.dmg);
+    igniteEnemy(e,s.burn,t.owner);
+    if(Math.random()<.5)
+      fxSpark(e.g.position.clone().add(V3(0,1.0*e.d.sc,0)),0xff8a2a);
+  }
+}
+/* Burning: a damage-over-time that refreshes rather than stacking, so standing
+   in the flame longer keeps the burn topped up instead of multiplying it. */
+function igniteEnemy(e,dps,owner){
+  if(!dps)return;
+  e.burn=Math.max(e.burn||0,dps);
+  e.burnT=3;
+  e.burnBy=owner||null;
 }
 function fxBolt(a,b){
   const pts=[];const n=7;
@@ -2428,6 +2924,11 @@ function syncHud(){
   $('hpV').textContent=Math.max(0,Math.ceil(G.hp));
   $('hpBar').style.width=clamp(G.hp/G.maxHp*100,0,100)+'%';
   $('hpBar').style.background=G.hp<35?'linear-gradient(90deg,#ff5f6d,#ffb36b)':'linear-gradient(90deg,#5ef2a0,#2bd3ff)';
+  const uv=$('unitV');
+  if(uv){
+    uv.textContent=unitCount()+' / '+UNIT_CAP;
+    uv.style.color=unitsLeft()<=0?'#ff6b6b':unitsLeft()<=3?'#ffd166':'';
+  }
   Array.prototype.forEach.call($('shopList').children,el=>{
     const k=el.getAttribute&&el.getAttribute('data-k');
     if(k)el.classList.toggle('locked',G.cash<TOWERS[k].cost);
@@ -2439,7 +2940,8 @@ function syncHud(){
    so every reference stays live. */
 const LOADOUT=['police','scout','robber','survivor',null];
 const SHORT={police:'Cop',scout:'Scout',robber:'Robber',survivor:'Survivor',
-             blitzer:'Blitzer',knife:'Knife',slasher:'Slasher',commander:'Cmdr'};
+             blitzer:'Blitzer',knife:'Knife',slasher:'Slasher',commander:'Cmdr',
+             mine:'Mine',corpse:'Corpse'};
 const TOWER_DESC={
   police:'Baton: 9 dmg every 1.0s at Lv1 up to 40 at Lv5, range 10 → 12. It breaks after 30 hits and he falls back on the taser — weaker, but it stuns. Upgrading issues a fresh baton. 5 levels.',
   scout:'2 dmg · 0.9s · 8 range. Cheap, fast chip damage. 3 levels.',
@@ -2448,10 +2950,26 @@ const TOWER_DESC={
   blitzer:'Battery gun: 20 yellow laser rounds at one every 0.04s, then it has to recharge. 5 dmg → 15, range 8 → 12. 4 levels.',
   knife:'Twin blades: 8 dmg → 22, no gun at all. Range 5 → 7, the shortest reach in the game, so put him on a corner. 4 levels.',
   slasher:'Twin blades kept in a furnace on his back: 10 dmg every 0.40s at Lv1 up to 25 every 0.30s at Lv4. Range 3 → 4, the shortest reach in the game, so placement matters more than for anything else. 4 levels.',
-  commander:'Sidearm plus an aura: every friendly tower inside his ring hits +15% harder and reloads +10% faster at Lv1, up to +40% and +28% at Lv4. Auras do not stack. 4 levels.'
+  commander:'Sidearm plus an aura: every friendly tower inside his ring hits +15% harder and reloads +10% faster at Lv1, up to +40% and +28% at Lv4. Auras do not stack. 4 levels.',
+  mine:'Never fires a shot — it digs. Pays $50 every 5 seconds at Lv1, up to $500 at Lv5. Upgrades run $150 → $2,000, so it pays for itself and then some if you build it early. Limit of 5 on the field. Unlocked by clearing The Forest.',
+  corpse:'Holds a cone of fire for 3 seconds, rests for 2, and repeats. 8 dmg per tick at Lv1 up to 25 at Lv4, every 0.5s, and anything caught keeps burning after it walks out of the flame. Range 6 → 8.5. Its eyes glow yellow at max. Unlocked by clearing The Volcano.'
 };
-const ALL_TOWERS=['police','scout','robber','survivor','blitzer','knife','slasher','commander'];
+const ALL_TOWERS=['police','scout','robber','survivor','blitzer','knife','slasher','commander','mine','corpse'];
+/* Towers that never shoot are skipped by the targeting and the bot's damage
+   maths — the Mine just sits there earning. */
+const NO_ATTACK={mine:1};
 function placedCount(key){let n=0;for(const t of G.towers)if(t.key===key&&!t.owner)n++;return n;}
+/* One shared budget across every tower type — 25 units on the field. A few
+   towers still carry their own cap on top (the Mine, so income cannot be
+   farmed without limit); everything else just draws from the 25. */
+function unitCount(){let n=0;for(const t of G.towers)if(!t.owner)n++;return n;}
+function unitsLeft(){return UNIT_CAP-unitCount();}
+function typeCap(k){const d=TOWERS[k];return d&&d.cap?d.cap:UNIT_CAP;}
+function capReached(k){return unitCount()>=UNIT_CAP||placedCount(k)>=typeCap(k);}
+function capMsg(k){
+  if(unitCount()>=UNIT_CAP)return 'Field full — '+UNIT_CAP+' units placed';
+  return TOWERS[k].name+' — limit of '+typeCap(k)+' on the field';
+}
 let slotsSig='';
 function renderSlots(){
   const box=$('slots');
@@ -2465,7 +2983,7 @@ function renderSlots(){
     LOADOUT.forEach((k,i)=>{
       if(!k){h+='<button class="slot empty pe" disabled><i>'+(i+1)+'</i><b>+</b><span class="nmz">empty</span></button>';return;}
       const d=TOWERS[k];
-      h+='<button class="slot pe" data-k="'+k+'"><i>'+(i+1)+'</i><em>0/'+TOWER_CAP+'</em>'+
+      h+='<button class="slot pe" data-k="'+k+'"><i>'+(i+1)+'</i><em></em>'+
          '<b>'+d.icon+'</b><span>$'+d.cost+'</span><span class="nmz">'+SHORT[k]+'</span></button>';
     });
     box.innerHTML=h;
@@ -2482,11 +3000,14 @@ function renderSlots(){
   Array.prototype.forEach.call(box.children,el=>{
     const k=el.getAttribute('data-k');
     if(!k)return;
-    const d=TOWERS[k],n=placedCount(k),txt=n+'/'+TOWER_CAP,cnt=el.querySelector('em');
+    const d=TOWERS[k],n=placedCount(k),full=capReached(k);
+    // no more x/5 on every slot — just how many of this one you have out, and
+    // the shared 25-unit budget lives up in the HUD
+    const txt=d.cap?n+'/'+d.cap:(n?String(n):''),cnt=el.querySelector('em');
     if(cnt.textContent!==txt)cnt.textContent=txt;
     el.classList.toggle('sel',G.placing===k);
-    el.classList.toggle('full',n>=TOWER_CAP);
-    el.classList.toggle('poor',n<TOWER_CAP&&G.cash<d.cost);
+    el.classList.toggle('full',full);
+    el.classList.toggle('poor',!full&&G.cash<d.cost);
   });
 }
 let banT=0;
@@ -2588,9 +3109,23 @@ renderShop();
 
 /* ---------- loadout shop (lobby) ---------- */
 function equippedAt(k){return LOADOUT.indexOf(k);}
-function owned(k){return !TOWERS[k].coin||SAVE.commander;}
+/* A tower is yours if it costs no coins and has no map behind it, or if you
+   have already paid/cleared for it. SAVE.grave is set by beating The Forest,
+   SAVE.volcano by beating The Volcano. */
+function owned(k){
+  const d=TOWERS[k];
+  if(d.unlock)return !!SAVE[d.unlock];
+  return !d.coin||SAVE.commander;
+}
+function unlockHintFor(k){
+  const d=TOWERS[k];
+  if(d.unlock==='mine')return 'clear The Forest to unlock';
+  if(d.unlock==='corpse')return 'clear The Volcano to unlock';
+  return d.coin?'costs '+d.coin.toLocaleString()+' coins':'';
+}
 function toggleEquip(k){
   const d=TOWERS[k];
+  if(d.unlock&&!owned(k)){banner(d.name+' — '+unlockHintFor(k));sfx('no');return;}
   if(!owned(k)){
     // coin-locked: tapping it buys it, if you can afford it
     if(SAVE.coins<d.coin){
@@ -2608,7 +3143,19 @@ function toggleEquip(k){
     if(free<0){banner('All five slots are full — drop one first');sfx('no');return;}
     LOADOUT[free]=k;sfx('up');
   }
+  saveLoadout();
   renderLoadout();renderSlots();renderShop();
+}
+/* The five equipped slots ride along with the save slot, so signing back in
+   puts your own bar back rather than the default four. */
+function saveLoadout(){SAVE.loadout=LOADOUT.slice();writeSave();}
+function restoreLoadout(){
+  const l=SAVE.loadout;
+  if(!Array.isArray(l))return;
+  for(let i=0;i<LOADOUT.length;i++){
+    const k=l[i];
+    LOADOUT[i]=(k&&TOWERS[k]&&owned(k))?k:null;
+  }
 }
 function syncCoins(){
   const el=$('coinV');
@@ -2623,9 +3170,11 @@ function renderLoadout(){
   const list=$('loadList');
   list.innerHTML=ALL_TOWERS.map(k=>{
     const d=TOWERS[k],on=equippedAt(k)>=0,have=owned(k);
-    const tag=!have?(SAVE.coins>=d.coin?'tap to buy':'not enough coins')
-             :on?'equipped':'tap to equip';
-    const price=have?'$'+d.cost:'🪙 '+d.coin.toLocaleString();
+    // three kinds of locked now: coin-priced, map-locked, or already yours
+    const tag=have?(on?'equipped':'tap to equip')
+             :d.unlock?unlockHintFor(k)
+             :(SAVE.coins>=d.coin?'tap to buy':'not enough coins');
+    const price=have?'$'+d.cost:d.unlock?'$'+d.cost:'🪙 '+d.coin.toLocaleString();
     return '<div class="card'+(on?' eqOn':'')+(have?'':' coinLock')+'" data-k="'+k+'">'+
       '<div class="avi">'+d.icon+'</div>'+
       '<div class="info"><div class="nm">'+d.name+(have?'':' <span class="lockTag">locked</span>')+'</div>'+
@@ -2650,7 +3199,7 @@ $('cancelPlace').onclick=()=>stopPlacing();
 $('deployBtn').onclick=()=>{if(ghost)commitPlace(ghost.position.x,ghost.position.z);};
 function commitPlace(x,z){
   if(!G.placing)return;
-  if(placedCount(G.placing)>=TOWER_CAP){banner('Limit of '+TOWER_CAP+' reached');sfx('no');stopPlacing();return;}
+  if(capReached(G.placing)){banner(capMsg(G.placing));sfx('no');stopPlacing();return;}
   if(!validSpot(x,z)){banner('Can\u2019t deploy there');sfx('no');return;}
   const def=TOWERS[G.placing];
   if(G.cash<def.cost){banner('Not enough cash');sfx('no');return;}
@@ -2658,6 +3207,7 @@ function commitPlace(x,z){
   const t=placeTower(G.placing,x,z);
   fxSpark(V3(x,1,z),0x7f8dff);sfx('place');
   stopPlacing();showInfo(t);
+  syncHud();          // addCash ran before the tower existed, so the unit count was a frame stale
 }
 /* everything a tower gets handed along with the new level, shared by the
    player's Upgrade button and the teammate AI */
@@ -2694,7 +3244,7 @@ let ghost=null;
 function startPlacing(key,fromCard){
   if(G.mode!=='match'||G.over||G.ending)return false;
   const def=TOWERS[key];
-  if(placedCount(key)>=TOWER_CAP){banner(def.name+' \u2014 limit of '+TOWER_CAP+' reached');sfx('no');return false;}
+  if(capReached(key)){banner(capMsg(key));sfx('no');return false;}
   if(G.cash<def.cost){banner('Not enough cash');sfx('no');return false;}
   // a drag that started on a card keeps the sheet open but faded, the way the
   // hint text promises; a slot-bar tap closes it outright
@@ -2766,6 +3316,17 @@ function buildQueue(w){
   G.bossName=bosses.length?ZT[bosses[0]].n:'';
   G.queue=pool;G.gap=cfg.gap;G.spawnT=2.5;
 }
+/* What clearing a wave pays. The forest runs its own curve: $150 for wave 1
+   climbing to $2,000 for wave 20, so the back half can actually afford the
+   towers it needs. Other maps keep the flat ramp. */
+function waveBonus(w){
+  const m=MAP.pay;
+  if(!m)return 60+w*20;
+  const span=Math.max(1,MAP.waves-1);
+  const t=clamp((w-1)/span,0,1);
+  // ease upward so the money arrives when the waves get expensive, not before
+  return Math.round(m[0]+(m[1]-m[0])*Math.pow(t,1.45));
+}
 function startWave(){
   if(G.waveActive||G.over||G.ending)return;
   if(G.wave>=MAP.waves)return;
@@ -2774,6 +3335,7 @@ function startWave(){
   buildQueue(G.wave);
   G.waveActive=true;G.nextT=0;
   banner('Wave '+G.wave+(G.bossWave?' \u2014 '+G.bossName:''));sfx('wave');
+  setTimeout(()=>botChatter(G.bossWave?'boss':'wave',G.bossWave?1:.55),700);
   $('nextV').textContent='in progress';
   $('slots').classList.add('on');
   syncHud();
@@ -2952,6 +3514,8 @@ function tapWorld(cx,cy){
 
 /* ---------- combat ---------- */
 function fire(t,dt){
+  // the Mine has no target and no weapon — it runs its own clock
+  if(t.key==='mine'){mineTick(t,dt);return;}
   t.cd-=dt;
   if(t.swing>0)t.swing=Math.max(0,t.swing-dt);
   const base=tStats(t);
@@ -2976,6 +3540,29 @@ function fire(t,dt){
     if(d<=s.rng&&e.dist>bd){bd=e.dist;target=e;}
   }
   const P=t.g.userData.P;
+  // the Corpse turns to face its target but breathes on its own cycle rather
+  // than firing discrete shots, so it takes its own path out of here
+  if(t.key==='corpse'){
+    if(target){
+      const a=Math.atan2(target.g.position.x-t.g.position.x,target.g.position.z-t.g.position.z);
+      const c=t.g.rotation.y,df=((a-c+Math.PI*3)%(Math.PI*2))-Math.PI;
+      t.g.rotation.y=c+df*Math.min(1,dt*7);
+    }
+    corpseTick(t,dt,s,target);
+    if(P)towerPose(t,dt,target,s);
+    return;
+  }
+  // a maxed Slasher builds to a rage on his own clock, independent of swings
+  if(t.key==='slasher'&&t.lvl>=t.def.lv.length-1){
+    t.rageT-=dt;
+    if(t.rageT<=.9)t.rage=Math.max(t.rage,clamp((.9-t.rageT)/.9,0,1));  // wind-up
+    if(t.rageT<=0){
+      t.rageT=SLASH_RAGE;
+      if(target){throwKnife(t,target);t.rage=1;t.cd=Math.max(t.cd,.45);}
+      else t.rage=0;
+    }
+  }
+  if(t.rage>0&&t.rageT>1)t.rage=Math.max(0,t.rage-dt*1.6);
   if(target){
     const ang=Math.atan2(target.g.position.x-t.g.position.x,target.g.position.z-t.g.position.z);
     let cur=t.g.rotation.y,diff=((ang-cur+Math.PI*3)%(Math.PI*2))-Math.PI;
@@ -3226,6 +3813,20 @@ function towerPose(t,dt,target,s){
     P.torso.rotation.y+=sg*-arc*.36-sg*A*.14;
     P.torso.rotation.x+=Math.max(0,arc)*.26;
     P.head.rotation.x=mix(.02,-.08,A)+Math.max(0,arc)*.13;
+    /* Rage, max-level Slasher only. Winds up hunched with both arms cocked
+       back and shaking, then snaps forward on the throw. */
+    if(t.rage>0){
+      const G_=t.rage, shake=Math.sin(now*46)*G_*.12;
+      const wind=t.rageT>SLASH_RAGE*.5?0:G_;          // cocked while building
+      P.armR.rotation.x-=wind*1.5;P.armL.rotation.x-=wind*1.1;
+      P.armR.rotation.z+=shake;P.armL.rotation.z-=shake;
+      P.torso.rotation.x+=-G_*.30+shake*.5;
+      P.torso.rotation.y+=shake*.8;
+      P.head.rotation.x+=-G_*.34;
+      P.head.rotation.z=shake*1.4;
+      // shoulders drawn up and body swelling with it
+      t.g.scale.setScalar(1+G_*.07);
+    }else if(t.g.scale.x!==1)t.g.scale.setScalar(1+(t.g.scale.x-1)*Math.max(0,1-dt*6));
   }else if(key==='robber'){
     // ---- sawn-off: heavy roll-through recoil, then works the pump ----
     const pump=clamp((u-.35)/.30,0,1)*(1-clamp((u-.70)/.30,0,1))*A;
@@ -3362,7 +3963,9 @@ const CUSTOM_MUSIC={
     {file:'04-for-all-time.mp3',             title:'For All Time',              secs:244},
     {file:'05-someone-put-your-hand-out.mp3',title:'Someone Put Your Hand Out', secs:326},
     {file:'06-will-you-be-there.mp3',        title:'Will You Be There',         secs:351},
-    {file:'07-big-wave.mp3',                 title:'Big Wave \u2014 Nick',           secs:141},
+    // Nick's own track, made on BandLab. The pill turns into a rolling wave
+    // whenever this one comes on \u2014 see npSync/.bigwave.
+    {file:'07-big-wave.mp3',                 title:'Big Wave \u2014 Nick',           secs:141, wave:true},
     {file:'08-ddg-yea-i-kno.mp3',            title:'Yea I Kno \u2014 DDG',           secs:133},
     {file:'09-ddg-i-hate-moo.mp3',           title:'I Hate Moo \u2014 DDG',          secs:150},
     {file:'10-raud-no.mp3',                  title:'No \u2014 RAUD',                 secs:117},
@@ -3398,7 +4001,7 @@ function trackSources(name){
 const NOTE=n=>440*Math.pow(2,(n-69)/12);
 const MUSIC={on:true,vol:.55,key:null,step:0,next:0,timer:null,boss:false,
              el:null,list:null,single:false,idx:0,resume:null,lastSrc:null,warned:false,fails:0,
-             found:null};
+             found:null,lastPlayed:null,wave:0};
 
 /* Four original pieces. Chords are one bar each; the sequencer walks 16 steps
    per bar. Everything here is written for this game — none of it is anyone
@@ -3527,6 +4130,14 @@ function musicTick(){
     MUSIC.next+=stepDur;MUSIC.step++;
   }
 }
+/* Fisher-Yates, with one extra rule: never open on the track that just closed
+   the previous shuffle, or a reshuffle can play the same song twice in a row. */
+function shuffled(list){
+  const a=list.slice();
+  for(let i=a.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;const t=a[i];a[i]=a[j];a[j]=t;}
+  if(a.length>1&&MUSIC.lastPlayed&&a[0].file===MUSIC.lastPlayed){const t=a[0];a[0]=a[a.length-1];a[a.length-1]=t;}
+  return a;
+}
 function musicStart(){
   if(MUSIC.timer)clearInterval(MUSIC.timer);
   MUSIC.timer=setInterval(musicTick,60);
@@ -3547,8 +4158,15 @@ function setMusic(key){
   const src=CUSTOM_MUSIC[key]||CUSTOM_MUSIC.lobby;
   const same=MUSIC.lastSrc===src;
   MUSIC.lastSrc=src;
-  MUSIC.list=Array.isArray(src)?src:(src?[{file:src,title:'',secs:0}]:null);
-  MUSIC.single=!Array.isArray(src)&&!!src;
+  if(Array.isArray(src)){
+    MUSIC.single=false;
+    // shuffle once per playlist, not on every screen change, or walking into a
+    // match would reorder the queue out from under the song that is playing
+    if(!same||!MUSIC.list)MUSIC.list=shuffled(src);
+  }else{
+    MUSIC.single=!!src;
+    MUSIC.list=src?[{file:src,title:'',secs:0}]:null;
+  }
   if(!MUSIC.list){MUSIC.idx=0;npSync();return;}
   const r=(same&&MUSIC.resume)||{idx:0,at:0};
   MUSIC.idx=Math.min(r.idx,MUSIC.list.length-1);
@@ -3583,6 +4201,14 @@ function playTrack(i,at,srcIdx){
   });
   el.addEventListener('ended',()=>{
     if(MUSIC.el!==el||MUSIC.single)return;
+    // reached the end of the shuffle — deal a fresh order rather than looping
+    // the same twelve in the same sequence forever
+    if(MUSIC.idx>=MUSIC.list.length-1&&Array.isArray(MUSIC.lastSrc)){
+      MUSIC.lastPlayed=tr.file;
+      MUSIC.list=shuffled(MUSIC.lastSrc);
+      playTrack(0,0);
+      return;
+    }
     playTrack(MUSIC.idx+1,0);
   });
   el.addEventListener('error',()=>{
@@ -3632,7 +4258,24 @@ function npSync(){
   if(!on){npLast='';return;}
   const tr=MUSIC.list[MUSIC.idx];
   const label=tr.title||tr.file;
-  if(label!==npLast){npLast=label;$('npTitle').textContent=label;}
+  const isWave=!!tr.wave;
+  if(label!==npLast){
+    npLast=label;
+    const t=$('npTitle');
+    if(isWave){
+      /* Nick's own track. Every letter gets its own element so they can ride
+         the swell one after the next instead of the whole line bobbing. */
+      t.textContent='';
+      label.split('').forEach((ch,i)=>{
+        const s=document.createElement('span');
+        s.className='wch';s.style.setProperty('--i',i);
+        s.textContent=ch===' '?' ':ch;
+        t.appendChild(s);
+      });
+    }else t.textContent=label;
+  }
+  box.classList.toggle('bigwave',isWave);
+  MUSIC.wave=isWave;
 }
 function npTick(dt){
   const box=$('nowPlaying');
@@ -3640,10 +4283,13 @@ function npTick(dt){
   // a note pops off the pill every so often and drifts up and away
   noteT-=dt;
   if(noteT<=0){
-    noteT=rnd(.5,1.05);
+    // Big Wave throws off spray and waves instead of quavers, and more of them
+    noteT=MUSIC.wave?rnd(.22,.5):rnd(.5,1.05);
     const n=document.createElement('span');
     n.className='mnote';
-    n.textContent=['♪','♫','♬','♩'][(Math.random()*4)|0];
+    n.textContent=MUSIC.wave
+      ? ['🌊','≈','〜','🌊','∿'][(Math.random()*5)|0]
+      : ['♪','♫','♬','♩'][(Math.random()*4)|0];
     n.style.left=rnd(6,88)+'%';
     n.style.top='2px';
     n.style.setProperty('--dx',rnd(-26,26).toFixed(0)+'px');
@@ -3720,14 +4366,18 @@ $('mus').addEventListener('input',e=>{
   $('musV').textContent=e.target.value+'%';
   SAVE.music=MUSIC.vol;writeSave();
 });
-/* volume, music level and the music switch all survive a reload */
-(function restoreAudioPrefs(){
+/* Volume, music level and the music switch all survive a reload — and they are
+   per save slot, so signing in as someone else brings their settings too. */
+function restoreAudioPrefs(){
   VOL=SAVE.vol;MUSIC.vol=SAVE.music;MUSIC.on=SAVE.musicOn!==false;
   $('vol').value=Math.round(VOL*100);$('volV').textContent=Math.round(VOL*100)+'%';
   $('mus').value=Math.round(MUSIC.vol*100);$('musV').textContent=Math.round(MUSIC.vol*100)+'%';
   Array.prototype.forEach.call(document.querySelectorAll('#musToggle .btn'),b=>
     b.classList.toggle('on',(b.getAttribute('data-m')==='1')===MUSIC.on));
-})();
+  if(musicBus)musicBus.gain.value=MUSIC.on?MUSIC.vol:0;
+  if(MUSIC.el)MUSIC.el.volume=clamp(MUSIC.vol,0,1);
+}
+restoreAudioPrefs();
 Array.prototype.forEach.call(document.querySelectorAll('#musToggle .btn'),b=>{
   b.onclick=()=>{
     initAudio();
@@ -3833,9 +4483,8 @@ function signTex(lines){
 // positions are lobby-local; the room group sits at x = LOBBY_X
 const STATIONS=[
   {id:'shop', pos:[-11,0,0],  r:3.4,face:Math.PI/2, label:'Loadout Shop', hint:'Equip your five towers',   btn:'Open Shop'},
-  {id:'squad',pos:[11,0,0],   r:3.4,face:-Math.PI/2,label:'Squad Desk',   hint:'Solo, Duo or Trio',        btn:'Open Desk'},
-  {id:'log',  pos:[-11,0,-14],r:3.2,face:.35,       label:'Notice Board', hint:'Read the update log',      btn:'Read'},
-  {id:'pad',  pos:[-16,0,10], r:3.0,face:Math.PI/2, label:'Deploy Pad',   hint:'Start the map vote',       btn:'Deploy'}
+  {id:'squad',pos:[11,0,0],   r:3.4,face:-Math.PI/2,label:'Squad Desk',   hint:'Solo, Duo, Trio or Party', btn:'Open Desk'},
+  {id:'log',  pos:[-11,0,-14],r:3.2,face:.35,       label:'Notice Board', hint:'Read the update log',      btn:'Read'}
 ];
 function stationAt(id){return STATIONS.find(s=>s.id===id);}
 function stationClear(x,z,pad){
@@ -3905,7 +4554,7 @@ const lobbyNPCs=[];
   // screen on the far wall
   boardMesh=new THREE.Mesh(new THREE.PlaneGeometry(12,6),
     new THREE.MeshBasicMaterial({map:signTex([
-      {t:'TOWER DEFENSE',b:1,s:54,y:100},{t:'BETA  ·  V1.65  ·  8 TOWERS  ·  3 MAPS',s:24,c:'#8b95cf',y:158}])}));
+      {t:'TOWER DEFENSE',b:1,s:54,y:100},{t:'BETA  ·  V1.70  ·  10 TOWERS  ·  3 MAPS',s:24,c:'#8b95cf',y:158}])}));
   // the bezel is .35 deep, so its front face sits at -D+.195 — the screen has
   // to clear that or the frame swallows it
   boardMesh.position.set(0,4.8,-D+.42);lobby.add(boardMesh);
@@ -4035,7 +4684,7 @@ const lobbyNPCs=[];
   {
     const st=stationAt('log'),g=new THREE.Group();
     const board=new THREE.Mesh(new THREE.PlaneGeometry(4.6,2.6),
-      new THREE.MeshBasicMaterial({map:signTex([{t:'UPDATE LOG',b:1,s:56,y:110},{t:'V1.65 BETA',s:36,c:'#5ef2a0',y:180}])}));
+      new THREE.MeshBasicMaterial({map:signTex([{t:'UPDATE LOG',b:1,s:56,y:110},{t:'V1.70 BETA',s:36,c:'#5ef2a0',y:180}])}));
     board.position.set(0,2.5,.13);g.add(board);
     const back=new THREE.Mesh(new THREE.BoxGeometry(5,3,.22),M(0x232a4e));
     back.position.set(0,2.5,0);back.castShadow=true;g.add(back);
@@ -4051,31 +4700,6 @@ const lobbyNPCs=[];
     mkFloorMark(st,0x8b97ff);
   }
 
-  // --- deploy pad in front of the exit door ---
-  {
-    const st=stationAt('pad'),g=new THREE.Group();
-    const disc=new THREE.Mesh(new THREE.CylinderGeometry(2.3,2.5,.18,28),M(0x1c4a33));
-    disc.position.y=.09;g.add(disc);
-    const ring=new THREE.Mesh(new THREE.RingGeometry(1.5,2.1,32),
-      new THREE.MeshBasicMaterial({color:0x5ef2a0,transparent:true,opacity:.75,side:THREE.DoubleSide}));
-    ring.rotation.x=-Math.PI/2;ring.position.y=.2;g.add(ring);
-    const inner=new THREE.Mesh(new THREE.CircleGeometry(1.4,28),
-      new THREE.MeshBasicMaterial({color:0x0d3222}));
-    inner.rotation.x=-Math.PI/2;inner.position.y=.19;g.add(inner);
-    for(const sx of [-1,1]){
-      const pil=new THREE.Mesh(new THREE.BoxGeometry(.3,3.4,.3),M(0x2b3358));
-      pil.position.set(sx*2.2,1.7,0);pil.castShadow=true;g.add(pil);
-      const cap=new THREE.Mesh(new THREE.BoxGeometry(.44,.22,.44),M(0x5ef2a0));
-      cap.position.set(sx*2.2,3.5,0);g.add(cap);
-    }
-    const arch=new THREE.Mesh(new THREE.BoxGeometry(4.7,.34,.4),M(0x39427a));
-    arch.position.set(0,3.6,0);g.add(arch);
-    const padLight=new THREE.PointLight(0x5ef2a0,.8,9);padLight.position.set(0,1.6,0);g.add(padLight);
-    const lab=labelSprite('DEPLOY PAD','start the map vote');
-    lab.position.set(0,4.6,0);g.add(lab);
-    g.position.set(st.pos[0],0,st.pos[2]);g.rotation.y=st.face;lobby.add(g);
-    st.ring=ring;
-  }
 })();
 function setBoard(lines){
   if(!boardMesh)return;
@@ -4172,7 +4796,7 @@ function enterLobby(won){
       {t:'made it to wave '+G.wave+' of '+total,s:25,y:122},{t:runLine,s:22,c:'#8b95cf',y:160},
       {t:coinLine,b:1,s:30,c:'#ffd166',y:202},{t:bonusLine,s:21,c:'#c9a24a',y:233}]);
   else setBoard([{t:'TOWER DEFENSE',b:1,s:54,y:100},
-      {t:'BETA V1.65  ·  PRESS PLAY OR WALK OVER',s:23,c:'#8b95cf',y:158}]);
+      {t:'BETA V1.70  ·  PRESS PLAY OR WALK OVER',s:23,c:'#8b95cf',y:158}]);
   buildPals();
 }
 function toLobby(won){
@@ -4291,6 +4915,19 @@ function cornerBonus(x,z,rng){
 }
 function bestSpotFor(key,tries){
   const def=TOWERS[key],rng=def.lv[0].rng;
+  /* A Mine has no range and never shoots, so scoring it on path coverage is
+     nonsense — it wants a safe corner well back off the road instead. */
+  if(NO_ATTACK[key]){
+    let best=null,bs=-1e9;
+    for(let k=0;k<(tries||30);k++){
+      const pp=pathPos(rnd(3,PATH_LEN-3)),a=rnd(0,6.283);
+      const x=pp.x+Math.cos(a)*rnd(7,13),z=pp.z+Math.sin(a)*rnd(7,13);
+      if(!botValid(x,z))continue;
+      const sc=distToPath(x,z)*3-crowding(x,z)*30;
+      if(sc>bs){bs=sc;best={x,z};}
+    }
+    return best;
+  }
   let best=null,bs=-1e9;
   const n=tries||30;
   for(let k=0;k<n;k++){
@@ -4321,13 +4958,20 @@ function botPick(b){
   const c=teamComp(),total=G.towers.length;
   const wave=G.wave;
   const opts=[];
+  const boss=G.bossWave;
   const add=(k,score)=>{
     const d=TOWERS[k];
-    if(d.coin&&!SAVE[d.key==='commander'?'commander':'_'])return;   // coin-locked
-    if(b.cash>=d.cost&&c[k]<TOWER_CAP)opts.push([k,score-c[k]*9]);
+    if(!owned(k))return;                       // coin-locked or map-locked
+    if(b.cash>=d.cost&&c[k]<typeCap(k))opts.push([k,score-c[k]*9]);
   };
+  /* Income first, the way a person plays it: a Mine bought on wave 2 has paid
+     for itself several times over by wave 10, so they open with one or two and
+     stop caring about them once the waves get dangerous. */
+  if(wave<=7)add('mine',(wave<=4?96:52)+(c.mine===0?46:0)-c.mine*20);
+  // the Corpse is a heavy area answer — worth it once the crowds turn up
+  add('corpse',(wave>=5?74:26)+(c.corpse===0?38:0)+(boss?26:0));
   // early: cheap coverage. mid: damage. late: range and dps
-  add('survivor',(wave>=3?70:26)+(c.survivor===0?45:0));
+  add('survivor',(wave>=3?70:26)+(c.survivor===0?45:0)+(boss?20:0));
   add('blitzer', (wave>=4?66:24)+(c.blitzer===0?40:0));
   add('slasher', (wave>=3?60:30)+(c.slasher===0?32:0));
   add('police',  48+(c.police===0?30:0));
@@ -4342,8 +4986,9 @@ function botPick(b){
 /* How many towers this bot should own by now. Without a cap they spent every
    coin on new bodies and never levelled anything — which is exactly the
    "they never upgrade" complaint. */
+const BOT_CAP=6;                       // per teammate, so a squad cannot flood the map
 function botTowerBudget(b){
-  return Math.min(TOWER_CAP,2+Math.floor(G.wave/4));
+  return Math.min(BOT_CAP,2+Math.floor(G.wave/4));
 }
 /* The cheapest level-up available to this bot, affordable or not. Without this
    they would spend every spare $150 on another level-1 body and never bank
@@ -4373,6 +5018,26 @@ function botUpgradePick(b){
     if(boost>bs){bs=boost;best=t;}
   }
   return best;
+}
+/* Squad chatter, triggered by what is actually happening rather than on a
+   timer — one of them speaks up, not all four at once. */
+const BOT_LINES={
+  wave    :['here we go','wave {w}','stay on the corners','watch the front','lined up'],
+  boss    :['BOSS. everyone focus','big one incoming','hit it hard','oh that thing is huge'],
+  leak    :['one’s getting through!','cover the end!','it’s past us','stop that one'],
+  hurt    :['we’re losing the base','careful, base is low','tighten up'],
+  clear   :['nice','clean wave','easy','that’ll do','money'],
+  rich    :['banking this one','saving up','got cash to spend']
+};
+function botChatter(kind,chance){
+  if(!G.bots||!G.bots.length||G.mode!=='match'||G.ending)return;
+  if(Math.random()>(chance==null?1:chance))return;
+  const free=G.bots.filter(b=>b.sayT<=0);
+  if(!free.length)return;
+  const b=free[(Math.random()*free.length)|0];
+  const pool=BOT_LINES[kind];
+  if(!pool)return;
+  botSay(b,pool[(Math.random()*pool.length)|0].replace('{w}',G.wave));
 }
 function botSay(b,txt){
   b.say=txt;b.sayT=2.2;
@@ -4429,7 +5094,10 @@ function botStep(dt){
       //    has a tower budget for the wave and levels up what it already owns
       //    once it hits it.
       const up=botUpgradePick(b);
-      const overBudget=b.mine.length>=botTowerBudget(b);
+      // a boss is coming: level what is already standing rather than dropping a
+      // fresh level-1 body that will not survive contact
+      const bossPush=G.bossWave&&!!up;
+      const overBudget=bossPush||b.mine.length>=botTowerBudget(b);
       // once they own a couple of towers they bank toward the next level
       // instead of dribbling the cash away on more level-1 bodies
       const nextUp=cheapestUpgrade(b);
@@ -4441,12 +5109,16 @@ function botStep(dt){
         const c=upgradeCost(up);
         b.cash-=c;up.spent+=c;
         applyUpgrade(up,false);
-        botSay(b,'upgraded '+SHORT[up.key]+' \u2192 Lv'+(up.lvl+1));
-        b.cd=rnd(4,7.5);
+        botSay(b,bossPush?'levelling up, boss incoming':'upgraded '+SHORT[up.key]+' \u2192 Lv'+(up.lvl+1));
+        // they keep working through a wave instead of standing about after one move
+        b.cd=G.waveActive?rnd(2,4):rnd(4,7.5);
       }else if(buy){
         const spot=bestSpotFor(buy,26);
-        if(spot){b.dest={x:spot.x,z:spot.z,want:buy};botSay(b,'placing a '+SHORT[buy]);}
-        b.cd=rnd(2.5,5.5);
+        if(spot){
+          b.dest={x:spot.x,z:spot.z,want:buy};
+          botSay(b,buy==='mine'?'setting up a mine':'placing a '+SHORT[buy]);
+        }
+        b.cd=G.waveActive?rnd(1.6,3.4):rnd(2.5,5.5);
       }else{
         // saving up — drift near the track so it's in position. The old version
         // never checked the spot, so teammates would happily park in the middle
@@ -4538,7 +5210,7 @@ function botStep(dt){
           // placedCount only counts the player's towers, so the old check let a
           // teammate stack unlimited copies — cap the squad the same way
           if(!skip&&b.cash>=def.cost&&botValid(x,z)&&
-             teamComp()[b.dest.want]<TOWER_CAP&&b.mine.length<TOWER_CAP){
+             teamComp()[b.dest.want]<typeCap(b.dest.want)&&b.mine.length<BOT_CAP){
             const t=placeTower(b.dest.want,x,z);
             t.owner=b.name;b.mine.push(t);b.cash-=def.cost;
             fxSpark(V3(x,1,z),0x7f8dff);
@@ -4550,8 +5222,28 @@ function botStep(dt){
         b.dest=null;b.cd=wasBuilding?rnd(2.5,5):rnd(.8,2.4);
       }
     }
-    if(!moving&&b.mine.length){
-      // stood still: turn and watch their nearest tower
+    /* Stood still with a wave running: watch the zombies, not the scenery.
+       People track the thing that is about to kill them, so the nearest live
+       enemy wins over their own towers whenever one is close enough to see. */
+    let watched=false;
+    if(!moving&&G.waveActive){
+      let ne=null,ned=1e9;
+      for(const e of G.enemies){
+        if(e.dead)continue;
+        const d2=Math.hypot(e.g.position.x-b.g.position.x,e.g.position.z-b.g.position.z);
+        if(d2<ned){ned=d2;ne=e;}
+      }
+      if(ne&&ned<24){
+        const want=Math.atan2(ne.g.position.x-b.g.position.x,ne.g.position.z-b.g.position.z);
+        const diff=((want-b.g.rotation.y+Math.PI*3)%(Math.PI*2))-Math.PI;
+        // snap round faster when something is right on top of them
+        const rate=ned<7?4.2:2.2;
+        b.g.rotation.y+=clamp(diff*Math.min(1,dt*rate),-2.6*dt,2.6*dt);
+        watched=true;
+      }
+    }
+    if(!moving&&!watched&&b.mine.length){
+      // nothing to watch: turn and admire their nearest tower instead
       let near=null,nd=1e9;
       for(const t of b.mine){
         const d2=Math.hypot(t.g.position.x-b.g.position.x,t.g.position.z-b.g.position.z);
@@ -4593,8 +5285,7 @@ const STATION_ACT={
   squad:()=>{closeInfo();$('loadout').classList.remove('on');$('log').classList.remove('on');
              $('squad').classList.add('on');},
   log:()=>{closeInfo();$('loadout').classList.remove('on');$('squad').classList.remove('on');
-           $('log').classList.add('on');},
-  pad:()=>startVote()
+           $('log').classList.add('on');}
 };
 function clearStation(){
   nearStation=null;$('prompt').classList.remove('on');
@@ -4619,11 +5310,6 @@ function stationStep(dt){
       $('ui').classList.add('prompting');
       sfx('place');
     }else{$('prompt').classList.remove('on');$('ui').classList.remove('prompting');}
-  }
-  const pad=stationAt('pad');
-  if(pad.ring){
-    const p=.55+Math.sin(performance.now()*.003)*.2;
-    pad.ring.material.opacity=nearStation===pad?.95:p;
   }
 }
 $('promptBtn').onclick=()=>{
@@ -4661,7 +5347,134 @@ function lobbyStep(dt){
     if(f.t>=f.life){f.end&&f.end();G.fx.splice(i,1);}
   }
 }
-function toMatch(mapKey){
+/* ============================================================
+   The volcano intro.
+
+   You do not simply arrive at The Volcano — you are standing in the forest
+   when the ground gives out. The forest map loads as normal, then lava rises
+   through it, the whole world shakes itself apart, the player goes down, and
+   the real match fades up on the volcano.
+
+   It runs on its own clock with gameplay suspended: CUT.on gates step(), so
+   nothing spawns, nothing can be built and the sticks do nothing until it is
+   over. Skippable with a tap, because nobody wants to sit through it twice.
+   ============================================================ */
+/* CUT.t is taken from the wall clock, not from accumulated frame deltas. The
+   frame dt is capped at 0.05 so physics stays sane, which means on a phone
+   dropping to 15fps a "9 second" cinematic would actually run for 12+ — the
+   whole thing would crawl. A cinematic should take the same time on every
+   device, however many frames it manages to draw. */
+const CUT={on:false,t:0,t0:0,dur:9.2,next:null,lava:null,shake:0,fell:false};
+function cutLavaPlane(){
+  const geo=new THREE.PlaneGeometry(190,190,1,1);
+  const mat=new THREE.MeshBasicMaterial({color:0xff5a1e,transparent:true,opacity:.94});
+  const m=new THREE.Mesh(geo,mat);
+  m.rotation.x=-Math.PI/2;m.position.y=-14;
+  return m;
+}
+function startVolcanoCut(nextKey){
+  resetMatch();
+  setMap('forest');                       // you are still in the forest
+  G.mode='match';
+  world.visible=true;lobby.visible=false;setLighting(false);
+  clearPals();
+  player.position.set(MAP.spawn[0],0,MAP.spawn[1]);player.rotation.y=0;
+  camYaw=.6;camPitch=.42;camDist=11;
+  $('hud').style.display='none';$('right').style.display='none';
+  $('stick').style.display='none';           // no controls during the cinematic
+  $('nowPlaying').classList.remove('on');
+  $('slots').classList.remove('on');
+  $('coins').classList.remove('on');$('lobbyBtns').classList.remove('on');
+  $('voter').classList.remove('on');$('match').classList.remove('on');
+  $('party').classList.remove('on');
+  $('ui').classList.add('matchmode');
+  $('cut').classList.add('on');
+  $('cutSkip').classList.add('on');
+  CUT.on=true;CUT.t=0;CUT.t0=performance.now();CUT.next=nextKey;CUT.shake=0;CUT.fell=false;
+  CUT.lava=cutLavaPlane();world.add(CUT.lava);
+  cutLine('The Forest');
+  setMusic(null);
+  sfx('wave');
+}
+function cutLine(txt,sub){
+  $('cutT').textContent=txt;
+  $('cutS').textContent=sub||'';
+  $('cutText').classList.remove('show');
+  // restart the fade by forcing a reflow between the two class changes
+  void $('cutText').offsetWidth;
+  $('cutText').classList.add('show');
+}
+function endVolcanoCut(){
+  if(!CUT.on)return;
+  CUT.on=false;
+  if(CUT.lava){removeFromWorld(CUT.lava);CUT.lava=null;}
+  $('cut').classList.remove('on');
+  $('cutSkip').classList.remove('on');
+  $('cutText').classList.remove('show');
+  $('hud').style.display='';$('right').style.display='';
+  $('stick').style.display='';
+  $('cut').style.background='';
+  camera.rotation.z=0;
+  player.rotation.x=0;player.rotation.z=0;player.position.y=0;
+  toMatch(CUT.next||'volcanic',true);
+}
+function cutStep(dt){
+  const prev=CUT.t;
+  CUT.t=(performance.now()-CUT.t0)/1000;
+  const t=CUT.t;
+  // captions fire on a crossing, so they cannot be skipped by a long frame
+  const crossed=(mark)=>prev<mark&&t>=mark;
+  // lava climbs the whole time, slowly at first then fast
+  if(CUT.lava){
+    const k=clamp(t/CUT.dur,0,1);
+    CUT.lava.position.y=-14+Math.pow(k,1.7)*15.5;
+    CUT.lava.material.opacity=.72+Math.sin(t*7)*.06;
+  }
+  // the world turns red and closes in
+  if(scene.fog){
+    const k=clamp((t-1)/5,0,1);
+    scene.fog.color.setRGB(.04+k*.42,.10-k*.07,.09-k*.06);
+    scene.fog.near=24-k*18;scene.fog.far=74-k*44;
+  }
+  // shake builds, with a hard jolt at 3.2s
+  CUT.shake=clamp((t-1.4)/4.2,0,1)*.5+(t>3.2&&t<3.7?.35:0);
+  // the player loses their footing, then goes down
+  const P=player.userData.P;
+  if(t>5.6&&!CUT.fell){
+    CUT.fell=true;cutLine('The ground gives out','');
+    sfx('leak');
+  }
+  if(CUT.fell){
+    const f=clamp((t-5.6)/1.5,0,1);
+    player.rotation.x=f*1.45;              // pitching forward onto the ground
+    player.position.y=-f*f*2.4;            // and dropping through it
+    if(P){
+      P.armL.rotation.x=-2.1*f;P.armR.rotation.x=-2.0*f;
+      P.legL.rotation.x=.8*f;P.legR.rotation.x=.55*f;
+    }
+    camPitch=.42+f*.5;camDist=11-f*4;
+  }else if(P&&t>2){
+    // staggering: knees bending, arms out for balance
+    const s=Math.sin(t*9)*clamp((t-2)/3,0,1);
+    P.torso.rotation.z=s*.16;
+    P.armL.rotation.z=.2+s*.5;P.armR.rotation.z=-.2-s*.5;
+    P.legL.rotation.x=s*.22;P.legR.rotation.x=-s*.22;
+  }
+  if(crossed(2.2))cutLine('Something is coming up through the ground','');
+  if(crossed(4.2))cutLine('Lava','get out');
+  // fade to black over the last stretch, then hand over to the match
+  const fade=clamp((t-(CUT.dur-1.6))/1.6,0,1);
+  $('cut').style.background='rgba(6,2,1,'+fade.toFixed(3)+')';
+  if(t>=CUT.dur)endVolcanoCut();
+}
+function toMatch(mapKey,skipCut){
+  // The Volcano is entered through the cutscene, once per save
+  if(mapKey==='volcanic'&&!skipCut&&!SAVE.sawVolcanoCut){
+    SAVE.sawVolcanoCut=true;writeSave();
+    flash();
+    setTimeout(()=>startVolcanoCut(mapKey),420);
+    return;
+  }
   flash();sfx('place');
   setTimeout(()=>{
     resetMatch();
@@ -4854,10 +5667,20 @@ let started=false;
 function tick(){
   requestAnimationFrame(tick);
   const dt=Math.min(.05,clock.getDelta());
-  if(started&&!G.over)step(dt);
+  // the intro drives everything itself; gameplay stays frozen underneath it
+  if(CUT.on)cutStep(dt);
+  else if(started&&!G.over)step(dt);
   stepPortals(dt);
   npTick(dt);
   updateCamera(dt);
+  // camera shake, applied after the camera has been positioned for the frame
+  if(CUT.on&&CUT.shake>0){
+    const s=CUT.shake;
+    camera.position.x+=rnd(-s,s);
+    camera.position.y+=rnd(-s,s)*.7;
+    camera.position.z+=rnd(-s,s);
+    camera.rotation.z=rnd(-s,s)*.09;
+  }
   renderer.render(scene,camera);
 }
 function step(dt){
@@ -4983,10 +5806,11 @@ function step(dt){
     if(!G.queue.length&&!G.enemies.some(e=>!e.dead)){
       G.waveActive=false;
       if(G.wave>=MAP.waves){win();return;}
-      const bonus=60+G.wave*20;
+      const bonus=waveBonus(G.wave);
       addCash(bonus);
       for(const b of G.bots)b.cash+=bonus;
       banner('Wave '+G.wave+' cleared  +$'+bonus);
+      botChatter('clear',.5);
       G.nextT=15;G.warned=false;
     }
   }else if(G.nextT>0){
@@ -5004,6 +5828,15 @@ function step(dt){
       continue;
     }
     if(e.slow>0)e.slow-=dt;
+    // still burning from a Corpse's flame — keeps ticking after it walks clear
+    if(e.burnT>0){
+      e.burnT-=dt;
+      hurt(e,e.burn*dt);
+      if(e.dead)continue;
+      if(Math.random()<dt*7)
+        fxSpark(e.g.position.clone().add(V3(rnd(-.2,.2),.9*e.d.sc,rnd(-.2,.2))),0xff8a2a);
+      if(e.burnT<=0)e.burn=0;
+    }
     const sp=e.spd*(e.slow>0?.55:1);
     e.dist+=sp*dt;
     const p=pathPos(e.dist);
@@ -5049,6 +5882,12 @@ function step(dt){
       P.head.rotation.y=Math.sin(ph*.37+e.twitch)*.3;
       e.g.position.y=Math.abs(S1)*.06;e.g.rotation.z=S1*.055;
     }
+    // this zombie's own lean, added on top of whichever gait just ran
+    const bd=e.g.userData.build;
+    if(bd){
+      P.torso.rotation.z+=bd.tz;P.torso.rotation.y+=bd.ty;
+      P.head.rotation.z+=bd.hz;
+    }
     // health bar — the bar is parented to the zombie, so cancel out the
     // zombie's own rotation or the bar turns edge-on as it walks
     e.bar.quaternion.copy(_bq.copy(e.g.quaternion).invert()).multiply(camera.quaternion);
@@ -5069,6 +5908,7 @@ function step(dt){
       fxSpark(V3(BASE.x,1.6,BASE.z),0xff5f6d);sfx('leak');
       kill(e,false);
       syncHud();
+      botChatter(G.hp<35?'hurt':'leak',.6);
       if(G.hp<=0){lose();return;}
     }
   }
@@ -5153,22 +5993,56 @@ function win(){
     GRAVE_UNLOCKED=true;SAVE.grave=true;writeSave();
     setTimeout(()=>banner('Unlocked: The Grave Digger \u2014 The Forest, 20 waves'),3200);
   }
-  // clearing the graveyard boss opens the volcano
-  if(MAP.key==='forest'&&!SAVE.volcano){
-    SAVE.volcano=true;writeSave();
-    setTimeout(()=>banner('Unlocked: The Corpse \u2014 The Volcano, 25 waves'),3200);
+  // clearing the graveyard boss opens the volcano \u2014 and hands you the Mine
+  if(MAP.key==='forest'){
+    if(!SAVE.volcano){
+      SAVE.volcano=true;writeSave();
+      setTimeout(()=>banner('Unlocked: The Corpse \u2014 The Volcano, 25 waves'),3200);
+    }
+    if(!SAVE.mine){
+      SAVE.mine=true;writeSave();
+      setTimeout(()=>banner('Unlocked: The Mine \u2014 $200, pays you every 5 seconds'),4600);
+    }
+  }
+  // and clearing the volcano hands you the Burned Corpse
+  if(MAP.key==='volcanic'&&!SAVE.corpse){
+    SAVE.corpse=true;writeSave();
+    setTimeout(()=>banner('Unlocked: Burned Corpse \u2014 $800, breathes fire'),3200);
   }
   const c=payCoins(true);
   banner('Field secured — +'+c.toLocaleString()+' coins'+coinNote());sfx('win');
   setTimeout(()=>toLobby(true),2000);
 }
 $('againBtn').onclick=()=>{$('over').classList.remove('on');toLobby(false);};
+/* ---------- sign-in on the title screen ----------
+   The email picks which save slot on this device you play from. Leave it blank
+   and you get the shared guest slot, which still saves — it just is not yours
+   in particular. */
+const emailOK=e=>/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(normEmail(e));
+function signWhoText(){
+  const box=$('signWho'),v=$('emailIn').value;
+  if(!v.trim()){box.className='';box.textContent=SAVE.coins?'Guest slot · '+SAVE.coins.toLocaleString()+' coins':'Playing as guest on this device';return;}
+  if(!emailOK(v)){box.className='new';box.textContent='That does not look like an email yet';return;}
+  // peek at the slot without switching to it, so the label is honest
+  let peek=null;
+  try{peek=JSON.parse(localStorage.getItem(saveKeyFor(v))||'null');}catch(e){}
+  if(peek){box.className='';box.textContent='Welcome back — '+(peek.coins||0).toLocaleString()+' coins saved';}
+  else{box.className='new';box.textContent='New player — a fresh save will be made';}
+}
+$('emailIn').value=SAVE.email||lastEmail()||'';
+$('emailIn').addEventListener('input',signWhoText);
+signWhoText();
+
+$('cutSkip').onclick=()=>{initAudio();endVolcanoCut();};
 $('startBtn').onclick=()=>{
   initAudio();applyGfx('med');
+  const em=$('emailIn').value;
+  if(em.trim()&&!emailOK(em)){signWhoText();$('emailIn').focus();return;}
+  signIn(em);
   $('title').style.display='none';
   started=true;
   enterLobby(null);
-  banner('Press Play to matchmake, or walk over to a station');
+  banner(SAVE.email?'Signed in as '+SAVE.email:'Press Play to matchmake, or walk over to a station');
 };
 
 addEventListener('resize',()=>{
