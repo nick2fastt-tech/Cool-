@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Tower Defense V1.91 Beta</title>
+<title>Tower Defense V2.00</title>
 <style>
 :root{
   --void:#04050c;
@@ -393,6 +393,15 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 .plRow.mineTrk .pnm{color:#bff0ff}
 .plRow .badge{font-size:8px;letter-spacing:.1em;padding:1px 5px;border-radius:999px;
   background:rgba(63,208,255,.2);border:1px solid rgba(126,225,255,.5);color:#bff0ff}
+/* ---- skip the intermission ---- */
+#skipWave{position:absolute;top:108px;left:50%;transform:translateX(-50%);display:none;
+  background:linear-gradient(180deg,#2f8f4a,#1c6130);border:1px solid #5ef2a0;color:#eafff2;
+  border-radius:999px;padding:9px 20px;font-size:12px;letter-spacing:.14em;font-family:inherit;
+  font-weight:bold;box-shadow:inset 0 -3px 0 rgba(0,0,0,.28),0 0 14px rgba(94,242,160,.3)}
+#skipWave.on{display:block}
+#skipWave b{color:var(--gold);letter-spacing:.06em}
+#ui.matchmode #skipWave{top:150px}
+#ui.sheeted #skipWave{display:none}
 #signin{width:100%;max-width:300px;margin-top:4px}
 #signin label{display:block;font-size:10px;letter-spacing:.06em;color:var(--dim);margin-bottom:5px}
 #emailIn{width:100%;background:rgba(10,13,28,.9);border:1px solid var(--line);color:var(--ink);
@@ -412,6 +421,8 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
     <div class="stat"><span class="k">Base</span><span class="v" id="hpV">100</span><div id="hpBarOut"><div id="hpBar"></div></div></div>
     <div class="stat"><span class="k">Units</span><span class="v" id="unitV">0 / 25</span></div>
   </div>
+
+  <button class="pe" id="skipWave">⏭ SKIP · <b id="skipBonus">+$0</b></button>
 
   <div id="banner"></div>
 
@@ -578,8 +589,15 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
 
   <div class="sheet pe" id="log">
     <div class="sheetHead"><h2>Update Log</h2><button class="btn sm pe" id="closeLog">Close</button></div>
-    <div class="logV">V1.91 <span>beta</span></div>
+    <div class="logV">V2.00 <span>release</span></div>
     <ul class="logL">
+      <li><b>Full release.</b> No more beta</li>
+      <li><b>Fixed: the axemen never appeared.</b> Two separate bugs of mine. The cleanup that clears them at the end of a run had been attached to a function that runs <i>every frame</i>, so they were deleted the instant they spawned. And the once-a-minute timer ran on accumulated frame time, which is capped &mdash; at 9fps it counted 6.9 seconds in 20, so "every minute" was really every three. Both fixed; the ability clocks are on the wall clock now, as is the Slasher&rsquo;s rage and the Bloater&rsquo;s clamp</li>
+      <li><b>Fixed: the Burned Corpse&rsquo;s head span.</b> It was tracking with its neck on top of the whole body turning to aim. Its head is locked now</li>
+      <li><b>New: The Minigunner.</b> $2,000. Six barrels on a spinning hub that have to get up to speed before anything comes out &mdash; about a second of spin-up, then it does not stop. 2 damage every 0.15s at Lv1 up to 10 every 0.05s at Lv5. Range 8 &rarr; 16. 5 levels</li>
+      <li><b>New: The Military Base.</b> $2,500. Never fires a shot &mdash; it sends wrecked cars out of its garage to ram whatever is coming, 50 HP at Lv1 up to 2,000 at Lv5, one at a time rising to three. At Lv5 it also parks <b>two rail gun tanks</b> that hold position and hit for 20. Limit of 3 bases. 5 levels</li>
+      <li><b>Skip the wait.</b> Thirty seconds into an intermission a Skip button appears, and you are paid for the seconds you give up</li>
+    </ul>
       <li><b>The Burned Corpse, rebuilt.</b> An iron jaw bolted onto the skull on a real hinge with pistons either side, a bigger mouth, teeth top and bottom, burnt-through ribs with fire behind them, and a furnace door in its chest</li>
       <li><b>It winds up now.</b> 1.5 seconds where both hands come up and physically haul its own jaw open while a ball of fire builds in its throat &mdash; then the flame. It only does damage while actually breathing</li>
       <li><b>Idle is a stance, not a pose.</b> Hands in, weight on one hip, head cocked. It is waiting, not braced</li>
@@ -786,9 +804,9 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
   </div>
 
   <div id="title" class="pe">
-    <div class="sub">Beta Version</div>
+    <div class="sub">Full Release</div>
     <h1>Tower<br>Defense</h1>
-    <div class="sub" style="letter-spacing:.5em">V 1.91</div>
+    <div class="sub" style="letter-spacing:.5em">V 2.00</div>
     <ul>
       <li>Clear a map to unlock the next: Grassy Field → The Forest → The Volcano</li>
       <li>Left side of the screen = move · right side = look</li>
@@ -1256,9 +1274,37 @@ const SNIPER={
     {dmg:50,cd:1.5,rng:26, up:null}
   ]
 };
+/* The Minigunner. Six barrels, and they have to be spinning before anything
+   comes out — so there is a spin-up before the first round and a spin-down
+   after the last. At Lv5 it is 200 rounds a second on paper. */
+const MINIGUN={
+  key:'minigun',name:'The Minigunner',cost:2000,icon:'\ud83d\udd2b',spin:1.1,
+  lv:[
+    {dmg:2, cd:.15,rng:8,  up:900},
+    {dmg:4, cd:.12,rng:10, up:1800},
+    {dmg:6, cd:.09,rng:12, up:3200},
+    {dmg:8, cd:.07,rng:14, up:5500},
+    {dmg:10,cd:.05,rng:16, up:null}
+  ]
+};
+/* The Military Base. It does not shoot at all — it sends things out. Wrecked
+   cars that ram straight down the track, and at max level two rail gun tanks
+   that hold position and fire. */
+const MILBASE={
+  key:'milbase',name:'Military Base',cost:2500,icon:'\ud83c\udfd7\ufe0f',cap:3,
+  lv:[
+    {dmg:0,cd:14,rng:0,carHp:50,  cars:1,tanks:0,up:1200},
+    {dmg:0,cd:12,rng:0,carHp:220, cars:1,tanks:0,up:2400},
+    {dmg:0,cd:11,rng:0,carHp:650, cars:2,tanks:0,up:4200},
+    {dmg:0,cd:10,rng:0,carHp:1200,cars:2,tanks:0,up:7000},
+    {dmg:0,cd:9, rng:0,carHp:2000,cars:3,tanks:2,up:null}
+  ],
+  tank:{dmg:20,cd:1.6,rng:18,hp:2500,life:45}
+};
 const TOWERS={police:POLICE,scout:SCOUT,robber:ROBBER,survivor:SURVIVOR,
               blitzer:BLITZER,knife:KNIFE,slasher:SLASHER,commander:COMMANDER,
-              mine:MINE,corpse:CORPSE_T,toy:TOYSOLDIER,sniper:SNIPER};
+              mine:MINE,corpse:CORPSE_T,toy:TOYSOLDIER,sniper:SNIPER,
+              minigun:MINIGUN,milbase:MILBASE};
 /* How many towers you can have standing at once, across every type. */
 const UNIT_CAP=25;
 
@@ -2522,7 +2568,8 @@ const pIdle={g:0,play:-1,wait:3};
 const G={cash:500,hp:100,maxHp:100,wave:0,running:false,over:false,mode:'match',
   enemies:[],towers:[],fx:[],queue:[],spawnT:0,gap:1,waveActive:false,nextT:0,
   placing:null,sel:null,warned:false,padT:0,bots:[],partyT:0,kills:0,earned:0,hpMul:1,ending:false,
-  bossWave:false,bossName:'',coinsWon:0,partyRun:false,partyCut:0};
+  bossWave:false,bossName:'',coinsWon:0,partyRun:false,partyCut:0,
+  interT:20,canSkip:false};
 
 /* ---------- enemies ---------- */
 const _bq=new THREE.Quaternion();   // scratch quaternion for billboarding
@@ -3917,9 +3964,119 @@ function buildSniper(){
   shadowPass(g);
   return g;
 }
+/* The Minigunner: a big man behind a six-barrel gun on a chest harness, with
+   an ammo box on his back feeding a belt into the receiver. */
+function buildMinigun(){
+  const g=person({skin:0xc08a5e,hair:0x241a12,eye:0xd8e0f0,shirt:0x33402c,pants:0x2a3122,
+                  shoe:0x1a1c18,mouth:0x2a1a14});
+  const P=g.userData.P,T=P.torso,H=P.head;
+  const steel=M(0x40454e),steelD=M(0x272b32),brass=M(0xb08a3c),
+        cloth=M(0x39452f),strapM=M(0x22281c);
+  const vest=new THREE.Mesh(new THREE.BoxGeometry(.34,.30,.20),cloth);
+  vest.position.y=.32;vest.castShadow=true;T.add(vest);
+  const harness=new THREE.Mesh(new THREE.BoxGeometry(.08,.34,.05),strapM);
+  harness.position.set(-.08,.34,.13);harness.rotation.z=.2;T.add(harness);
+  // the ammo box on his back and the belt running round to the gun
+  const box=new THREE.Mesh(new THREE.BoxGeometry(.28,.26,.16),steelD);
+  box.position.set(0,.34,-.18);box.castShadow=true;T.add(box);
+  const belt=[];
+  for(let i=0;i<9;i++){
+    const link=new THREE.Mesh(new THREE.BoxGeometry(.035,.05,.03),brass);
+    const u=i/8;
+    link.position.set(.05+u*.16,.30-Math.sin(u*Math.PI)*.10,-.10+u*.26);
+    link.rotation.z=u*.6;T.add(link);belt.push(link);
+  }
+  const bandana=new THREE.Mesh(new THREE.SphereGeometry(.135,10,7,0,Math.PI*2,0,1.1),M(0x7a2f2f));
+  bandana.scale.set(1.05,.6,1.05);bandana.position.y=.06;H.add(bandana);
+  const goggles=new THREE.Mesh(new THREE.BoxGeometry(.24,.05,.03),steelD);
+  goggles.position.set(0,.045,.11);H.add(goggles);
+  // the gun: receiver, six barrels on a spinning hub, foregrip
+  const gun=new THREE.Group();
+  const recv=new THREE.Mesh(new THREE.BoxGeometry(.13,.13,.30),steel);
+  recv.position.z=.02;gun.add(recv);
+  const feed=new THREE.Mesh(new THREE.BoxGeometry(.09,.10,.10),steelD);
+  feed.position.set(-.09,-.01,-.02);gun.add(feed);
+  const hub=new THREE.Group();
+  hub.position.z=.30;gun.add(hub);
+  const plate=new THREE.Mesh(new THREE.CylinderGeometry(.075,.075,.05,10),steelD);
+  plate.rotation.x=Math.PI/2;hub.add(plate);
+  for(let i=0;i<6;i++){
+    const a=i/6*6.283;
+    const bar=new THREE.Mesh(new THREE.CylinderGeometry(.017,.017,.46,6),steel);
+    bar.rotation.x=Math.PI/2;
+    bar.position.set(Math.cos(a)*.048,Math.sin(a)*.048,.24);hub.add(bar);
+  }
+  const shroud=new THREE.Mesh(new THREE.CylinderGeometry(.085,.085,.12,10,1,true),steelD);
+  shroud.rotation.x=Math.PI/2;shroud.position.z=.10;hub.add(shroud);
+  const muzzle=new THREE.Mesh(new THREE.CylinderGeometry(.03,.03,.03,8),steel);
+  muzzle.rotation.x=Math.PI/2;muzzle.position.z=.48;hub.add(muzzle);
+  const grip=new THREE.Mesh(new THREE.BoxGeometry(.04,.13,.05),steelD);
+  grip.position.set(0,-.11,-.06);gun.add(grip);
+  gun.position.set(0,-.16,.14);
+  P.foreR.add(gun);
+  g.userData.gun=gun;g.userData.muzzle=muzzle;
+  g.userData.mini={hub,belt,shroud};
+  shadowPass(g);
+  return g;
+}
+/* The Military Base: a sandbagged compound with a vehicle ramp, a radio mast
+   and a lit garage the cars roll out of. */
+function buildMilBase(){
+  const g=new THREE.Group();
+  const conc=M(0x6b6a60),concD=M(0x4a4a43),sand=M(0x8a7a52),
+        steel=M(0x4a5048),green=M(0x3f5233),light=M(0xffd08a);
+  const pad=new THREE.Mesh(new THREE.BoxGeometry(1.7,.12,1.7),conc);
+  pad.position.y=.06;pad.castShadow=true;g.add(pad);
+  // sandbag wall round three sides
+  for(let i=0;i<9;i++){
+    const a=Math.PI*.35+ (i/8)*Math.PI*1.3;
+    const bag=new THREE.Mesh(new THREE.SphereGeometry(.15,7,5),sand);
+    bag.scale.set(1.3,.62,.9);
+    bag.position.set(Math.cos(a)*.78,.2,Math.sin(a)*.78);bag.rotation.y=a;
+    bag.castShadow=true;g.add(bag);
+    const bag2=bag.clone();bag2.position.y=.36;bag2.rotation.y=a+.4;g.add(bag2);
+  }
+  // the garage the cars come out of
+  const hut=new THREE.Mesh(new THREE.BoxGeometry(.95,.62,.75),green);
+  hut.position.set(-.15,.42,-.35);hut.castShadow=true;g.add(hut);
+  const roof=new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,.98,10,1,false,0,Math.PI),green);
+  roof.rotation.z=Math.PI/2;roof.position.set(-.15,.72,-.35);g.add(roof);
+  const doorway=new THREE.Mesh(new THREE.BoxGeometry(.62,.46,.05),M(0x14160f));
+  doorway.position.set(-.15,.32,.03);g.add(doorway);
+  const bulb=new THREE.Mesh(new THREE.SphereGeometry(.05,7,6),light);
+  bulb.position.set(-.15,.62,.05);g.add(bulb);
+  const glow=new THREE.PointLight(0xffc46a,.8,5);
+  glow.position.set(-.15,.6,.2);g.add(glow);
+  // ramp out to the road
+  const ramp=new THREE.Mesh(new THREE.BoxGeometry(.55,.05,.9),concD);
+  ramp.position.set(-.15,.12,.62);ramp.rotation.x=-.1;g.add(ramp);
+  // radio mast
+  const mast=new THREE.Mesh(new THREE.CylinderGeometry(.025,.035,1.5,6),steel);
+  mast.position.set(.6,.85,-.5);mast.castShadow=true;g.add(mast);
+  const dish=new THREE.Mesh(new THREE.SphereGeometry(.16,9,6,0,Math.PI*2,0,1.1),M(0x8d9288));
+  dish.scale.y=.5;dish.position.set(.6,1.6,-.5);dish.rotation.x=-.7;g.add(dish);
+  const beacon=new THREE.Mesh(new THREE.SphereGeometry(.04,6,5),
+    new THREE.MeshBasicMaterial({color:0xff4a3a}));
+  beacon.position.set(.6,1.65,-.5);g.add(beacon);
+  // crates and a fuel drum
+  for(let i=0;i<3;i++){
+    const crate=new THREE.Mesh(new THREE.BoxGeometry(.24,.22,.24),M(0x5a4a30));
+    crate.position.set(.5+ (i%2)*.1,.19+((i/2)|0)*.22,.45-i*.12);
+    crate.rotation.y=rnd(0,1);crate.castShadow=true;g.add(crate);
+  }
+  const drum=new THREE.Mesh(new THREE.CylinderGeometry(.14,.14,.34,10),M(0x7a4a2a));
+  drum.position.set(-.72,.29,.35);drum.castShadow=true;g.add(drum);
+  const flag=new THREE.Mesh(new THREE.PlaneGeometry(.4,.24),
+    new THREE.MeshLambertMaterial({color:0x3f5233,side:THREE.DoubleSide}));
+  flag.position.set(.78,1.25,-.5);g.add(flag);
+  g.userData.milbase={beacon,glow,doorway};
+  shadowPass(g);
+  return g;
+}
 const TOWER_BUILD={police:buildPolice,scout:buildScout,robber:buildRobber,survivor:buildSurvivor,
                    blitzer:buildBlitzer,knife:buildKnife,slasher:buildSlasher,commander:buildCommander,
-                   mine:buildMine,corpse:buildCorpse,toy:buildToy,sniper:buildSniper};
+                   mine:buildMine,corpse:buildCorpse,toy:buildToy,sniper:buildSniper,
+                   minigun:buildMinigun,milbase:buildMilBase};
 function placeTower(key,x,z){
   const def=TOWERS[key];
   const g=TOWER_BUILD[key]();
@@ -3953,7 +4110,7 @@ function placeTower(key,x,z){
     // animation state: alertness, recoil, idle gesture clock, turn tracking
     seed:rnd(0,6.283),alert:0,rec:0,gest:-1,gestT:rnd(2,7),prevY:0,turn:0,lastSeen:99,
     // Corpse breath cycle and Slasher rage clock
-    breathing:false,brT:0,phase:'rest',chargeU:0,minT:null,
+    breathing:false,brT:0,phase:'rest',chargeU:0,minT:null,spin:0,carDue:0,
     rage:0,rageT:SLASH_RAGE,reload:0,clamp:0,clampMesh:null};
   if(key==='blitzer')blitzerCharge(t);
   // an income tower serves its first shift before it pays — otherwise dropping
@@ -3967,9 +4124,6 @@ function placeTower(key,x,z){
 const COMMANDERS=[];
 function refreshCommanders(){
   COMMANDERS.length=0;
-  // any axemen still out belong to the run that just ended
-  for(const m of MINIONS)removeFromWorld(m.g);
-  MINIONS.length=0;
   for(const t of G.towers)if(t.key==='commander')COMMANDERS.push(t);
 }
 function auraBuff(t){
@@ -4152,11 +4306,19 @@ function corpseTick(t,dt,s,target){
     ud.eyeLight.intensity=maxLvl?(.7+Math.sin(performance.now()*.005)*.25):.45;
     if(maxLvl)for(const em of ud.embers)em.material.color.setHex(0x9a4ade);
   }
-  // ---- the minion call, once a minute ----
+  /* ---- the minion call, once a minute ----
+     On the wall clock, not on accumulated dt. Frame delta is capped at 0.05s
+     so that a stutter cannot fling the simulation forward — which means on a
+     phone running at 20fps the game only advances 0.4s per real second, and a
+     "60 second" ability quietly became a three minute one. Measured at 9fps it
+     counted 6.9 seconds in 20. Abilities you promise in seconds have to be
+     measured in seconds. */
   const mn=t.def.minion;
-  t.minT=(t.minT==null?mn.every:t.minT)-dt;
-  if(t.minT<=0){
-    t.minT=mn.every;
+  const now2=performance.now();
+  if(!t.minDue)t.minDue=now2+mn.every*1000;
+  t.minT=Math.max(0,(t.minDue-now2)/1000);
+  if(now2>=t.minDue){
+    t.minDue=now2+mn.every*1000;
     summonAxemen(t);
   }
   if(!t.breathing||!target)return;
@@ -4174,6 +4336,107 @@ function corpseTick(t,dt,s,target){
     igniteEnemy(e,s.burn,t.owner);
     if(Math.random()<.5)
       fxSpark(e.g.position.clone().add(V3(0,1.0*e.d.sc,0)),maxLvl?0xb44aff:0xff8a2a);
+  }
+}
+/* ---------- the Military Base's vehicles ----------
+   Cars roll out of the garage and drive up the track. They do not shoot: they
+   ram, taking damage from whatever they hit until one of them gives out. Rail
+   gun tanks appear at max level, park up and shell things at range.
+   They share the MINIONS list so they are cleaned up and stepped with it. */
+function buildWreckCar(){
+  const g=new THREE.Group();
+  const body=M(0x6a4a32),rust=M(0x8a5a34),glass=M(0x2a3a44),tyre=M(0x1c1c20),steel=M(0x555a62);
+  const chassis=new THREE.Mesh(new THREE.BoxGeometry(1.05,.42,2.1),body);
+  chassis.position.y=.5;chassis.castShadow=true;g.add(chassis);
+  const cab=new THREE.Mesh(new THREE.BoxGeometry(.9,.36,.95),rust);
+  cab.position.set(0,.85,-.1);cab.castShadow=true;g.add(cab);
+  const wind=new THREE.Mesh(new THREE.BoxGeometry(.78,.26,.05),glass);
+  wind.position.set(0,.86,.36);wind.rotation.x=.25;g.add(wind);
+  // ram plate welded to the front
+  const ram=new THREE.Mesh(new THREE.BoxGeometry(1.2,.34,.12),steel);
+  ram.position.set(0,.44,1.08);g.add(ram);
+  for(const sx of [-1,1]){
+    const spike=new THREE.Mesh(new THREE.ConeGeometry(.09,.36,5),steel);
+    spike.rotation.x=Math.PI/2;spike.position.set(sx*.34,.44,1.28);g.add(spike);
+  }
+  for(const sx of [-1,1])for(const sz of [-1,1]){
+    const w=new THREE.Mesh(new THREE.CylinderGeometry(.28,.28,.18,10),tyre);
+    w.rotation.z=Math.PI/2;w.position.set(sx*.56,.28,sz*.68);g.add(w);
+  }
+  const exh=new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,.4,6),steel);
+  exh.position.set(.3,1.15,-.3);g.add(exh);
+  shadowPass(g);
+  return g;
+}
+function buildRailTank(){
+  const g=new THREE.Group();
+  const hull=M(0x3f4a33),dark=M(0x2a3122),steel=M(0x585e66),glow=M(0x6fd8ff);
+  const body=new THREE.Mesh(new THREE.BoxGeometry(1.5,.5,2.3),hull);
+  body.position.y=.6;body.castShadow=true;g.add(body);
+  const skirt=new THREE.Mesh(new THREE.BoxGeometry(1.7,.3,2.2),dark);
+  skirt.position.y=.34;g.add(skirt);
+  for(const sx of [-1,1])for(let i=0;i<4;i++){
+    const w=new THREE.Mesh(new THREE.CylinderGeometry(.22,.22,.2,9),M(0x1c1c20));
+    w.rotation.z=Math.PI/2;w.position.set(sx*.78,.26,-.85+i*.56);g.add(w);
+  }
+  const turret=new THREE.Group();
+  const tb=new THREE.Mesh(new THREE.CylinderGeometry(.5,.58,.36,10),hull);
+  tb.position.y=1.02;turret.add(tb);
+  // the rail gun: twin rails with a charge coil between
+  const railA=new THREE.Mesh(new THREE.BoxGeometry(.07,.07,1.9),steel);
+  railA.position.set(-.11,1.06,1.0);turret.add(railA);
+  const railB=railA.clone();railB.position.x=.11;turret.add(railB);
+  const coil=new THREE.Mesh(new THREE.CylinderGeometry(.13,.13,.3,10),glow);
+  coil.rotation.x=Math.PI/2;coil.position.set(0,1.06,.5);turret.add(coil);
+  const tip=new THREE.Mesh(new THREE.BoxGeometry(.3,.12,.12),steel);
+  tip.position.set(0,1.06,1.92);turret.add(tip);
+  g.add(turret);
+  shadowPass(g);
+  g.userData.tank={turret,coil,muzzleZ:1.95};
+  return g;
+}
+function despatchVehicle(t,kind){
+  const s=tStats(t);
+  const g=kind==='tank'?buildRailTank():buildWreckCar();
+  // roll out of the garage onto the nearest bit of track
+  const np=nearestPath(t.g.position.x,t.g.position.z);
+  const start=np?{x:np.x,z:np.z}:{x:t.g.position.x,z:t.g.position.z};
+  g.position.set(start.x,0,start.z);
+  world.add(g);
+  const def=t.def;
+  if(kind==='tank'){
+    MINIONS.push({g,tank:1,P:null,hp:def.tank.hp,max:def.tank.hp,dmg:def.tank.dmg,
+                  cd:0,rate:def.tank.cd,rng:def.tank.rng,spd:0,life:def.tank.life,
+                  owner:t.owner,ud:g.userData.tank});
+  }else{
+    MINIONS.push({g,car:1,P:null,hp:s.carHp,max:s.carHp,dmg:0,cd:0,
+                  spd:7.5,life:26,owner:t.owner,dist:0});
+  }
+  fxSpark(g.position.clone().add(V3(0,.8,0)),0xffc46a);
+}
+/* Base clock: send a car every few seconds, and keep two tanks alive at max. */
+function milbaseTick(t,dt){
+  const s=tStats(t);
+  const ud=t.g.userData.milbase;
+  if(ud){
+    ud.beacon.material.color.setHex(Math.sin(performance.now()*.004)>0?0xff4a3a:0x5a1a14);
+    ud.glow.intensity=.6+Math.sin(performance.now()*.002)*.25;
+  }
+  const mine=MINIONS.filter(m=>m.owner===t.owner&&(m.car||m.tank));
+  const cars=mine.filter(m=>m.car).length, tanks=mine.filter(m=>m.tank).length;
+  // tanks are kept topped up rather than queued
+  if(s.tanks&&tanks<s.tanks){
+    t.tankDue=t.tankDue||0;
+    if(performance.now()>=t.tankDue){
+      t.tankDue=performance.now()+6000;
+      despatchVehicle(t,'tank');
+      banner('Rail gun tank deployed');
+    }
+  }
+  if(!t.carDue)t.carDue=performance.now()+s.cd*1000;
+  if(performance.now()>=t.carDue){
+    t.carDue=performance.now()+s.cd*1000;
+    if(cars<s.cars){despatchVehicle(t,'car');sfx('place');}
   }
 }
 /* ---------- the axemen ----------
@@ -4237,6 +4500,47 @@ function minionStep(dt){
       if(e.dead)continue;
       const d=Math.hypot(e.g.position.x-m.g.position.x,e.g.position.z-m.g.position.z);
       if(d<bd){bd=d;best=e;}
+    }
+    /* ---- rail gun tank: holds position, shells at range ---- */
+    if(m.tank){
+      m.cd-=dt;
+      if(best){
+        const ang=Math.atan2(best.g.position.x-m.g.position.x,best.g.position.z-m.g.position.z);
+        const df=((ang-m.ud.turret.rotation.y-m.g.rotation.y+Math.PI*3)%(Math.PI*2))-Math.PI;
+        m.ud.turret.rotation.y+=clamp(df*Math.min(1,dt*3),-1.6*dt,1.6*dt);
+        const charged=clamp(1-Math.max(0,m.cd)/m.rate,0,1);
+        m.ud.coil.material.color.setHSL(.53,1,.35+charged*.4);
+        if(bd<=m.rng&&m.cd<=0){
+          m.cd=m.rate;
+          const from=m.g.position.clone().add(V3(0,1.1,0));
+          const to=best.g.position.clone().add(V3(0,1.0*best.d.sc,0));
+          fxLaser(from,to);fxSpark(to,0x6fd8ff);fxSpark(from,0xbff0ff);
+          hurt(best,m.dmg,0,'sniper');    // a slug: shields stop it
+          sfx('laser');
+        }
+      }
+      continue;
+    }
+    /* ---- wrecked car: drives up the track and rams ---- */
+    if(m.car){
+      if(best){
+        const ang=Math.atan2(best.g.position.x-m.g.position.x,best.g.position.z-m.g.position.z);
+        const df=((ang-m.g.rotation.y+Math.PI*3)%(Math.PI*2))-Math.PI;
+        m.g.rotation.y+=clamp(df*Math.min(1,dt*4),-3*dt,3*dt);
+      }
+      m.g.position.x+=Math.sin(m.g.rotation.y)*m.spd*dt;
+      m.g.position.z+=Math.cos(m.g.rotation.y)*m.spd*dt;
+      m.g.rotation.z=Math.sin(performance.now()*.012)*.03;   // rattling along
+      // ram anything it touches: both sides take it
+      for(const e of G.enemies){
+        if(e.dead)continue;
+        const d=Math.hypot(e.g.position.x-m.g.position.x,e.g.position.z-m.g.position.z);
+        if(d>1.5)continue;
+        hurt(e,Math.max(20,m.max*.12)*dt*6,0,'slasher');   // a ton of steel, not a bullet
+        m.hp-=e.d.hp*dt*1.6;
+        if(Math.random()<dt*8)fxSpark(e.g.position.clone().add(V3(0,.9*e.d.sc,0)),0xffb45a);
+      }
+      continue;
     }
     m.cd-=dt;if(m.swing>0)m.swing-=dt;
     if(best){
@@ -4313,9 +4617,10 @@ function clampStep(t,dt){
 }
 /* The boss picks its moment: every few seconds it grabs the towers around it. */
 function bloaterClamp(e,dt){
-  e.clampT=(e.clampT==null?CLAMP_EVERY*.6:e.clampT)-dt;
-  if(e.clampT>0)return;
-  e.clampT=CLAMP_EVERY;
+  const nw=performance.now();
+  if(!e.clampDue)e.clampDue=nw+CLAMP_EVERY*600;   // first one comes a bit sooner
+  if(nw<e.clampDue)return;
+  e.clampDue=nw+CLAMP_EVERY*1000;
   const near=[];
   for(const t of G.towers){
     if(t.clamp>0||NO_ATTACK[t.key])continue;
@@ -4426,7 +4731,8 @@ function syncHud(){
 const LOADOUT=['police','scout','robber','survivor',null];
 const SHORT={police:'Cop',scout:'Scout',robber:'Robber',survivor:'Survivor',
              blitzer:'Blitzer',knife:'Knife',slasher:'Slasher',commander:'Cmdr',
-             mine:'Mine',corpse:'Corpse',toy:'Toy',sniper:'Sniper'};
+             mine:'Mine',corpse:'Corpse',toy:'Toy',sniper:'Sniper',
+             minigun:'Minigun',milbase:'Base'};
 const TOWER_DESC={
   police:'Baton: 9 dmg every 1.0s at Lv1 up to 40 at Lv5, range 10 → 12. It breaks after 30 hits and he falls back on the taser — weaker, but it stuns. Upgrading issues a fresh baton. 5 levels.',
   scout:'2 dmg · 0.9s · 8 range. Cheap, fast chip damage. 3 levels.',
@@ -4437,14 +4743,16 @@ const TOWER_DESC={
   slasher:'Twin blades kept in a furnace on his back: 10 dmg every 0.40s at Lv1 up to 25 every 0.30s at Lv4. Range 3 → 4, the shortest reach in the game, so placement matters more than for anything else. 4 levels.',
   commander:'Sidearm plus an aura: every friendly tower inside his ring hits +15% harder and reloads +10% faster at Lv1, up to +40% and +28% at Lv4. Auras do not stack. 4 levels.',
   mine:'Never fires a shot — it digs. Pays $50 every 5 seconds at Lv1, up to $500 at Lv5. Upgrades run $150 → $2,000, so it pays for itself and then some if you build it early. Limit of 5 on the field. Unlocked by clearing The Forest.',
+  minigun:'Six barrels that have to be spinning before anything comes out \u2014 about a second of spin-up, then it does not stop. 2 damage a round every 0.15s at Lv1 up to 10 every 0.05s at Lv5, which is 200 a second. Range 8 \u2192 16. 5 levels.',
+  milbase:'Never fires a shot itself. It sends wrecked cars down the track to ram whatever is coming \u2014 50 HP at Lv1 up to 2,000 at Lv5, one at a time rising to three. At Lv5 it also parks two rail gun tanks that hold position and hit for 20. Limit of 3 on the field. 5 levels.',
   sniper:'Stays crouched, sees further than anything else in the game, and hits like nothing else: 7 damage at Lv1 up to 50 at Lv4. Slow — one shot every 3s down to 1.5s — and after every shot it works the bolt for 2 full seconds and cannot fire. Range 16 → 26. Night vision, so it never loses a target. 4 levels.',
   toy:'A plastic army man on a moulded base. Starts almost useless — 1 damage every 0.5s — and ends up the fastest gun in the game: 15 a shot every 0.09s, which is 167 dps. Range 7 → 14. The last upgrade costs $2,500 and it is worth it. Unlocked by clearing The Blocky Event.',
   corpse:'Holds a cone of fire for 3 seconds, rests for 2, and repeats. 8 dmg per tick at Lv1 up to 25 at Lv4, every 0.5s, and anything caught keeps burning after it walks out of the flame. Range 6 → 8.5. Its eyes glow yellow at max. Unlocked by clearing The Volcano.'
 };
-const ALL_TOWERS=['police','scout','robber','survivor','blitzer','knife','slasher','commander','mine','corpse','toy','sniper'];
+const ALL_TOWERS=['police','scout','robber','survivor','blitzer','knife','slasher','commander','mine','corpse','toy','sniper','minigun','milbase'];
 /* Towers that never shoot are skipped by the targeting and the bot's damage
    maths — the Mine just sits there earning. */
-const NO_ATTACK={mine:1};
+const NO_ATTACK={mine:1,milbase:1};
 function placedCount(key){let n=0;for(const t of G.towers)if(t.key===key&&!t.owner)n++;return n;}
 /* One shared budget across every tower type — 25 units on the field. A few
    towers still carry their own cap on top (the Mine, so income cannot be
@@ -4877,6 +5185,7 @@ function startWave(){
   }
   buildQueue(G.wave);
   G.waveActive=true;G.nextT=0;
+  G.canSkip=false;$('skipWave').classList.remove('on');
   banner('Wave '+G.wave+(G.bossWave?' \u2014 '+G.bossName:''));sfx('wave');
   setTimeout(()=>botChatter(G.bossWave?'boss':'wave',G.bossWave?1:.55),700);
   $('nextV').textContent='in progress';
@@ -5059,6 +5368,8 @@ function tapWorld(cx,cy){
 function fire(t,dt){
   // the Mine has no target and no weapon — it runs its own clock
   if(t.key==='mine'){mineTick(t,dt);return;}
+  // and the Military Base sends vehicles out instead of shooting
+  if(t.key==='milbase'){milbaseTick(t,dt);return;}
   // clamped shut by the event boss: it can still turn and look, but not shoot
   if(t.clamp>0){
     clampStep(t,dt);
@@ -5102,6 +5413,21 @@ function fire(t,dt){
     if(d<=s.rng&&e.dist>bd){bd=e.dist;target=e;}
   }
   const P=t.g.userData.P;
+  /* The Minigunner's barrels have to be up to speed before anything comes out,
+     and they wind back down when there is nothing to shoot. `spin` is 0..1 and
+     gates firing as well as driving the animation. */
+  if(t.key==='minigun'){
+    const want=target?1:0;
+    const rate=want?(1/t.def.spin):1.4;
+    t.spin=clamp((t.spin||0)+(want?dt*rate:-dt*rate),0,1);
+    const ud=t.g.userData.mini;
+    if(ud)ud.hub.rotation.z+=dt*t.spin*34;
+    if(t.spin<.999){
+      if(t.spin>.05&&Math.random()<dt*3)sfx('recharge');
+      if(P)towerPose(t,dt,target,s);
+      return;
+    }
+  }
   // the Corpse turns to face its target but breathes on its own cycle rather
   // than firing discrete shots, so it takes its own path out of here
   if(t.key==='corpse'){
@@ -5116,10 +5442,13 @@ function fire(t,dt){
   }
   // a maxed Slasher builds to a rage on his own clock, independent of swings
   if(t.key==='slasher'&&t.lvl>=t.def.lv.length-1){
-    t.rageT-=dt;
+    // wall clock, for the same reason the Corpse's minute is
+    const nw=performance.now();
+    if(!t.rageDue)t.rageDue=nw+SLASH_RAGE*1000;
+    t.rageT=Math.max(0,(t.rageDue-nw)/1000);
     if(t.rageT<=.9)t.rage=Math.max(t.rage,clamp((.9-t.rageT)/.9,0,1));  // wind-up
-    if(t.rageT<=0){
-      t.rageT=SLASH_RAGE;
+    if(nw>=t.rageDue){
+      t.rageDue=nw+SLASH_RAGE*1000;
       if(target){throwKnife(t,target);t.rage=1;t.cd=Math.max(t.cd,.45);}
       else t.rage=0;
     }
@@ -5148,6 +5477,13 @@ function fire(t,dt){
         // and now it is out of action for two seconds working the bolt
         t.reload=t.def.reload;
         if(t.g.userData.sniper)t.g.userData.sniper.shell.visible=true;
+      }else if(t.key==='minigun'){
+        const muz=t.g.userData.muzzle?t.g.userData.muzzle.getWorldPosition(V3()):from;
+        fxTracer(muz,to);
+        if(Math.random()<.3)fxSpark(muz,0xfff0b0);
+        if(Math.random()<.25)fxSpark(to,0xffd9a0);
+        hurt(target,s.dmg,0,'minigun');
+        if(Math.random()<.35)sfx('rifle');
       }else if(t.key==='toy'){
         const muz=t.g.userData.muzzle?t.g.userData.muzzle.getWorldPosition(V3()):from;
         fxTracer(muz,to);
@@ -5237,7 +5573,7 @@ function fire(t,dt){
    ============================================================ */
 const mix=(a,b,k)=>a+(b-a)*k;
 const RECOIL_DECAY={scout:9,survivor:11,robber:4.5,blitzer:15,knife:6,slasher:7,police:7,commander:8,
-                    toy:16,corpse:8,sniper:3.2};   // a heavy rifle rocks back slowly   // the toy fires far too fast for a slow settle
+                    toy:16,corpse:8,sniper:3.2,minigun:22,milbase:6};   // a heavy rifle rocks back slowly   // the toy fires far too fast for a slow settle
 function towerPose(t,dt,target,s){
   const P=t.g.userData.P;
   const now=performance.now()*.001,seed=t.seed;
@@ -5556,7 +5892,13 @@ function towerPose(t,dt,target,s){
      sweeps. */
   const scan=Math.sin(now*.62+seed)*.6+(gK===0?gA*.7:0);
   const tilt=gK===1?gA*.3:0;
-  if(target){
+  /* The Burned Corpse keeps its head still. Its jaw is the weapon and the
+     whole body turns to aim, so letting the neck sweep and track on top of
+     that read as the head spinning on its shoulders. */
+  if(key==='corpse'){
+    t.headY=(t.headY||0)*Math.max(0,1-dt*6);
+    P.head.rotation.y=t.headY*.15;
+  }else if(target){
     const wa=Math.atan2(target.g.position.x-t.g.position.x,target.g.position.z-t.g.position.z);
     const off=((wa-t.g.rotation.y+Math.PI*3)%(Math.PI*2))-Math.PI;
     t.headY=(t.headY||0)+(clamp(off,-.8,.8)-(t.headY||0))*Math.min(1,dt*8);
@@ -6412,7 +6754,7 @@ const lobbyNPCs=[];
   // screen on the far wall
   boardMesh=new THREE.Mesh(new THREE.PlaneGeometry(12,6),
     new THREE.MeshBasicMaterial({map:signTex([
-      {t:'TOWER DEFENSE',b:1,s:54,y:100},{t:'BETA  ·  V1.91  ·  12 TOWERS  ·  5 MAPS',s:24,c:'#8b95cf',y:158}])}));
+      {t:'TOWER DEFENSE',b:1,s:54,y:100},{t:'V2.00  ·  12 TOWERS  ·  5 MAPS',s:24,c:'#8b95cf',y:158}])}));
   // the bezel is .35 deep, so its front face sits at -D+.195 — the screen has
   // to clear that or the frame swallows it
   boardMesh.position.set(0,4.8,-D+.42);lobby.add(boardMesh);
@@ -6542,7 +6884,7 @@ const lobbyNPCs=[];
   {
     const st=stationAt('log'),g=new THREE.Group();
     const board=new THREE.Mesh(new THREE.PlaneGeometry(4.6,2.6),
-      new THREE.MeshBasicMaterial({map:signTex([{t:'UPDATE LOG',b:1,s:56,y:110},{t:'V1.91 BETA',s:36,c:'#5ef2a0',y:180}])}));
+      new THREE.MeshBasicMaterial({map:signTex([{t:'UPDATE LOG',b:1,s:56,y:110},{t:'V2.00',s:36,c:'#5ef2a0',y:180}])}));
     board.position.set(0,2.5,.13);g.add(board);
     const back=new THREE.Mesh(new THREE.BoxGeometry(5,3,.22),M(0x232a4e));
     back.position.set(0,2.5,0);back.castShadow=true;g.add(back);
@@ -6607,6 +6949,18 @@ Array.prototype.forEach.call(document.querySelectorAll('#modes .mode'),b=>{
     setMode(d==='party'?partyRoll():+d);
   };
 });
+$('skipWave').onclick=()=>{
+  initAudio();
+  if(!G.canSkip||G.mode!=='match'||G.waveActive)return;
+  // paid for the seconds you skipped, so calling it early is a real choice
+  const bonus=Math.round(G.nextT*12);
+  if(bonus>0){addCash(bonus);G.earned+=bonus;for(const b of G.bots)b.cash+=bonus;}
+  G.nextT=0;G.canSkip=false;
+  $('skipWave').classList.remove('on');
+  banner('Wave called in early  +$'+bonus.toLocaleString());
+  sfx('up');
+  startWave();
+};
 $('closeLog').onclick=()=>$('log').classList.remove('on');
 /* Refresh the event card: countdown while it runs, closed once it is over. */
 function syncEvent(){
@@ -6694,7 +7048,7 @@ function enterLobby(won){
       {t:'made it to wave '+G.wave+' of '+total,s:25,y:122},{t:runLine,s:22,c:'#8b95cf',y:160},
       {t:coinLine,b:1,s:30,c:'#ffd166',y:202},{t:bonusLine,s:21,c:'#c9a24a',y:233}]);
   else setBoard([{t:'TOWER DEFENSE',b:1,s:54,y:100},
-      {t:'BETA V1.91  ·  PRESS PLAY OR WALK OVER',s:23,c:'#8b95cf',y:158}]);
+      {t:'V2.00  ·  PRESS PLAY OR WALK OVER',s:23,c:'#8b95cf',y:158}]);
   buildPals();
 }
 function toLobby(won){
@@ -6708,12 +7062,15 @@ function resetMatch(){
   G.fx.length=0;
   for(const t of G.towers)removeFromWorld(t.g);G.towers.length=0;
   for(const e of G.enemies)removeFromWorld(e.g);G.enemies.length=0;
+  // any axemen still out belong to the run that just ended
+  for(const m of MINIONS)removeFromWorld(m.g);MINIONS.length=0;
   for(const b of G.bots)removeFromWorld(b.g);G.bots.length=0;
   stopPlacing();closeInfo();
   G.cash=500;G.hp=G.maxHp;G.wave=0;G.over=false;G.waveActive=false;
   G.queue.length=0;G.warned=false;G.sel=null;G.kills=0;G.earned=0;
   G.ending=false;G.hpMul=1;G.bossWave=false;G.placing=null;
   G.spawnT=0;G.nextT=0;G.partyT=0;G.coinsWon=0;G.bossName='';
+  G.interT=20;G.canSkip=false;if($('skipWave'))$('skipWave').classList.remove('on');
   G.partyRun=false;G.partyCut=0;
   COMMANDERS.length=0;
   $('over').classList.remove('on');
@@ -7478,7 +7835,7 @@ function toMatch(mapKey,skipCut){
     $('party').classList.toggle('on',PARTY>0);
     $('party').classList.toggle('big',PARTY>3);
     spawnTeammates();
-    G.nextT=20;G.warned=false;
+    G.nextT=20;G.interT=20;G.warned=false;
     syncHud();
     banner(MAP.mode+' \u00b7 '+MAP.name+' \u2014 wave 1 in 20s');
   },420);
@@ -7811,11 +8168,20 @@ function step(dt){
       }
       banner('Wave '+G.wave+' cleared  +$'+bonus+(mined?'   mines +$'+mined.toLocaleString():''));
       botChatter('clear',.5);
-      G.nextT=15;G.warned=false;
+      G.nextT=15;G.interT=15;G.warned=false;
     }
   }else if(G.nextT>0){
     G.nextT-=dt;
     $('nextV').textContent='wave '+(G.wave+1)+' in '+Math.ceil(G.nextT)+'s';
+    /* Once thirty seconds of the intermission have gone by you can call the
+       next wave in early, and you are paid for the time you gave up. */
+    const waited=G.interT-G.nextT;
+    const canSkip=waited>=30&&!G.ending&&!G.over;
+    if(canSkip!==G.canSkip){
+      G.canSkip=canSkip;
+      $('skipWave').classList.toggle('on',canSkip);
+    }
+    if(canSkip)$('skipBonus').textContent='+$'+Math.round(G.nextT*12).toLocaleString();
     if(G.nextT<=5&&!G.warned){G.warned=true;banner('Wave '+(G.wave+1)+' in 5 seconds');}
     if(G.nextT<=0)startWave();
   }
