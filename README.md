@@ -13,8 +13,8 @@ document — no build step, no bundler, no external assets. Open the file and pl
 ## 🧟 Zombie Attack
 
 An endless-wave zombie survival shooter for phones, inspired by the Roblox game
-of the same name. Blocky characters, a third-person camera, 34 weapons, and a
-horde that never stops getting worse.
+of the same name. Blocky characters, a first-person camera (third-person is a
+toggle away), 34 weapons, and a horde that never stops getting worse.
 
 **Play it:** open `zombie-attack.html` in a mobile browser. That's the whole
 install. Solo works completely offline.
