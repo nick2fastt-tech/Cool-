@@ -61,6 +61,9 @@ when the horde finally gets you — then you spend what you earned and go again.
 - Auto-save after every completed wave
 
 **Feel**
+- **First-person view** by default, with a weapon viewmodel that sways as you
+  walk, kicks with recoil and dips on reload — switch to a third-person camera
+  any time in Settings
 - Custom WebGL2 renderer: instanced geometry, dynamic sun shadows, point lights
   from muzzle flashes and explosions, fog, and a procedural sky
 - 5 maps (Suburbia, Military Outpost, Frozen Depot, Desert Ruins, Factory
@@ -74,7 +77,8 @@ when the horde finally gets you — then you spend what you earned and go again.
 - Quality presets plus an auto mode that adapts to your frame rate
 
 **Accessibility & options**
-Look sensitivity, invert Y, joystick deadzone, left-handed layout, aim assist,
+First-person / third-person camera, look sensitivity, invert Y, joystick
+deadzone, left-handed layout, aim assist,
 auto-fire, auto-reload, haptics, shadow and particle levels, frame-rate cap,
 FPS counter, reduced flashing, high-contrast crosshair, damage-number toggle,
 HUD scale, and separate music/SFX volume.
@@ -83,8 +87,8 @@ HUD scale, and separate music/SFX volume.
 
 | Action | Touch | Keyboard |
 |---|---|---|
-| Move | Drag the left half of the screen | `WASD` / arrows |
-| Look | Drag the right half | drag mouse |
+| Move | Drag the left side of the screen | `WASD` / arrows |
+| Look | Drag the right side | drag mouse |
 | Fire | 🔫 button | `Space` |
 | Reload | 🔄 button | `R` |
 | Swap weapon | 🔁 button | `Q` |

@@ -603,6 +603,7 @@ const DEFAULT_SAVE = () => ({
   tutorialDone: false,
   settings: {
     sensitivity: 1.0, invertY: false, aimAssist: true, autoFire: true, autoReload: true,
+    firstPerson: true,
     quality: 'auto', shadows: true, particles: 1, fpsCap: 60, showFps: false,
     music: 0.5, sfx: 0.8, haptics: true, leftHanded: false, joyDeadzone: 0.12,
     hudScale: 1, colorblind: false, reduceFlash: false, damageNumbers: true, relay: ''
@@ -1386,7 +1387,7 @@ const R = {
   shadowFbo:null, shadowTex:null, shadowSize:1024, shadowOn:true,
   proj:M4.create(), view:M4.create(), viewProj:M4.create(), invViewProj:M4.create(),
   lightVP:M4.create(), tmpA:M4.create(), tmpB:M4.create(),
-  lights:[], detailTex:null, quality:'high', fovDeg:68,
+  lights:[], detailTex:null, quality:'high', fovDeg:68, noShadowFrom:-1,
 
   init(canvas){
     this.canvas = canvas;
@@ -1748,7 +1749,11 @@ const R = {
   },
 
   /* ---- instance submission ---- */
-  begin(){ this.boxCount = 0; this.partCount = 0; this.lights.length = 0; },
+  begin(){ this.boxCount = 0; this.partCount = 0; this.lights.length = 0; this.noShadowFrom = -1; },
+  // Everything submitted after this call is skipped by the shadow pass — the
+  // first-person weapon sits centimetres from the eye and would otherwise
+  // smear a huge shadow across the ground.
+  beginNoShadow(){ this.noShadowFrom = this.boxCount; },
   box(px,py,pz, sx,sy,sz, quat, r,g,b,a, glow){
     if (this.boxCount >= MAX_BOXES) return;
     const d = this.boxData, o = this.boxCount*BOX_STRIDE;
@@ -1820,7 +1825,8 @@ const R = {
       gl.bindBuffer(gl.ARRAY_BUFFER, this.boxInst);
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.boxData, 0, this.boxCount*BOX_STRIDE);
       gl.bindVertexArray(this.boxVao);
-      if (this.boxCount) gl.drawElementsInstanced(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0, this.boxCount);
+      const shadowCount = this.noShadowFrom >= 0 ? this.noShadowFrom : this.boxCount;
+      if (shadowCount) gl.drawElementsInstanced(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0, shadowCount);
       gl.cullFace(gl.BACK);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     } else {
@@ -2883,6 +2889,17 @@ class Player {
 
   draw(){
     if (this.dead) return;
+    // In first person you are inside your own head — draw a weapon viewmodel
+    // instead of the character rig (which would fill the screen).
+    if (this.local && Game.isFirstPerson()){
+      // the viewmodel itself is drawn last, from Game.draw()
+      if (this.petDef) this.drawPet();
+      if (this.fx.burn) Particles.burst('fire', this.pos[0], this.pos[1]+1, this.pos[2], { count:2 });
+      if (this.fx.poison) Particles.burst('poison', this.pos[0], this.pos[1]+1, this.pos[2], { count:1 });
+      if (this.fx.shock) Particles.burst('electric', this.pos[0], this.pos[1]+1.4, this.pos[2], { count:2 });
+      if (this.downed) R.light(this.pos[0], this.pos[1]+1.5, this.pos[2], 1, 0.15, 0.1, 6);
+      return;
+    }
     const style = this.style || {};
     const outfit = COSMETICS.outfit.find(o => o.id === (style.outfit || 'outfit_default')) || COSMETICS.outfit[0];
     const hat = style.hat ? COSMETICS.hat.find(h => h.id === style.hat) : null;
@@ -2908,6 +2925,70 @@ class Player {
       R.box(this.pos[0], this.pos[1]+2.4, this.pos[2], 0.22,0.22,0.22, Q.yaw(Game.time*2),
             1, 0.2, 0.15, 1, p);
       R.light(this.pos[0], this.pos[1]+1.5, this.pos[2], 1,0.15,0.1, 6);
+    }
+  }
+  // First-person weapon. Offsets are derived from the actual view frustum so
+  // the gun sits in the same screen corner on any aspect ratio — a fixed metre
+  // offset falls outside the frustum on a narrow portrait phone.
+  drawViewModel(){
+    const w = this.weapon;
+    const skinId = SAVE.equippedSkins ? SAVE.equippedSkins[w.id] : null;
+    const skin = skinId ? COSMETICS.skin.find(s => s.id === skinId) : null;
+    const col = (skin && skin.tint) ? skin.tint : w.col;
+    const glow = skin && skin.glow ? 0.5 : 0;
+    const cam = Game.cam.pos;
+    // canted a few degrees inward so we see the weapon's side, not its back
+    const q = Q.mul(Q.mul(Q.yaw(this.yaw + Math.PI), Q.axis(1,0,0, -this.pitch)),
+                    Q.axis(0,1,0, 0.16));
+    const fwd = Q.rot(q, [0,0,-1]), right = Q.rot(q, [1,0,0]), up = Q.rot(q, [0,1,0]);
+    const len = { pistol:0.17, smg:0.24, ar:0.31, shotgun:0.32, sniper:0.37, lmg:0.35,
+                  explosive:0.33, laser:0.29, futuristic:0.30 }[w.cat] || 0.26;
+
+    const depth = 0.55;                                   // how far in front of the eye
+    const aspect = R.W / Math.max(1, R.H);
+    const halfH = depth * Math.tan((R.fovDeg * Math.PI/180) / 2);
+    const halfW = halfH * aspect;
+    const restX = halfW * 0.44, restY = -halfH * 0.50;    // lower-right of the frame
+
+    // recoil pushes it back, reloading dips it out of frame, sprinting tucks it
+    const kick = this.recoilKick * 0.06;
+    const rl = w.reload * (1 - Math.min(0.45, this.bonus.reload));
+    const reloadDip = this.reloading
+      ? Math.sin(clamp(1 - this.reloadT/Math.max(0.2, rl), 0, 1) * Math.PI) * halfH * 0.9 : 0;
+    const tuck = this.sprinting ? halfH * 0.35 : 0;
+    const spd = Math.min(1, (this.speedNow || 0) / 6.2);
+    const swayX = Math.sin(this.walkPhase) * halfW * 0.05 * spd;
+    const swayY = Math.cos(this.walkPhase * 2) * halfH * 0.05 * spd;
+
+    const place = (rx, ry, fz) => {
+      const x = restX + rx + swayX;
+      const y = restY + ry + swayY - reloadDip - tuck;
+      const z = depth + fz - kick;
+      return [ cam[0] + fwd[0]*z + right[0]*x + up[0]*y,
+               cam[1] + fwd[1]*z + right[1]*x + up[1]*y,
+               cam[2] + fwd[2]*z + right[2]*x + up[2]*y ];
+    };
+    const S = depth * 0.085;  // scale factor so the gun reads at a constant size
+
+    let p = place(0, 0, len*0.5);
+    R.box(p[0], p[1], p[2], S*0.30, S*0.36, len*0.5, q, col[0], col[1], col[2], 1, glow);
+    p = place(0, -S*0.06, -len*0.10);
+    R.box(p[0], p[1], p[2], S*0.26, S*0.46, len*0.22, q, col[0]*0.7, col[1]*0.7, col[2]*0.7, 1, glow);
+    p = place(0, -S*0.70, len*0.10);
+    R.box(p[0], p[1], p[2], S*0.22, S*0.50, S*0.36, q, col[0]*0.55, col[1]*0.55, col[2]*0.55, 1, 0);
+    // hands
+    p = place(0, -S*0.55, len*0.85);
+    R.box(p[0], p[1], p[2], S*0.34, S*0.40, S*0.46, q, 0.82, 0.64, 0.48, 1, 0);
+    p = place(-S*0.08, -S*0.62, -len*0.16);
+    R.box(p[0], p[1], p[2], S*0.34, S*0.42, S*0.46, q, 0.82, 0.64, 0.48, 1, 0);
+    if (w.cat === 'sniper' || w.cat === 'ar' || w.cat === 'laser'){
+      p = place(0, S*0.52, len*0.30);
+      R.box(p[0], p[1], p[2], S*0.14, S*0.16, len*0.20, q, 0.12, 0.12, 0.14, 1, 0);
+    }
+    if (this.fireTimer > (60/w.rpm) - 0.05){
+      const m = place(0, 0, len*1.05);
+      R.box(m[0], m[1], m[2], S*0.6, S*0.6, S*0.7, q, 1, 0.85, 0.4, 1, 1);
+      R.light(m[0], m[1], m[2], 1.0, 0.8, 0.35, 7);
     }
   }
   drawWeapon(){
@@ -3521,7 +3602,10 @@ const Input = {
   init(){
     this.joyEl = $('joy'); this.knobEl = $('joyKnob');
     const joyZone = document.createElement('div');
-    joyZone.style.cssText = 'position:absolute;left:0;bottom:0;width:52%;height:70%;z-index:12;';
+    // #hud is pointer-events:none, so this zone MUST opt back in or the stick
+    // never sees a touch. Width stops short of #lookZone so they never overlap.
+    joyZone.style.cssText = 'position:absolute;left:0;bottom:0;width:45%;height:78%;' +
+                            'z-index:12;pointer-events:auto;touch-action:none;';
     $('hud').appendChild(joyZone);
     this.joyZone = joyZone;
 
@@ -3685,6 +3769,7 @@ const Game = {
   prompt:null, reviveTarget:null, running:false, lastT:0, accum:0,
 
   me(){ return this.players.find(p => p.local); },
+  isFirstPerson(){ return SAVE.settings.firstPerson !== false; },
   isMulti(){ return this.mode !== 'solo' && this.players.length > 1; },
   camYawForBillboard(){ return this.cam.yaw; },
 
@@ -3831,6 +3916,11 @@ const Game = {
     this.cam.shakeT = Math.max(this.cam.shakeT, dur);
   },
   muzzlePos(p){
+    if (p.local && this.isFirstPerson()){
+      const d = this.rawAimDir(p);
+      const c = this.cam.pos;
+      return [ c[0] + d[0]*0.35, c[1] + d[1]*0.35, c[2] + d[2]*0.35 ];
+    }
     const yaw = p.yaw + Math.PI;
     const q = Q.mul(Q.yaw(yaw), Q.axis(1,0,0, -p.pitch*0.5));
     const fwd = Q.rot(q, [0,0,-1]);
@@ -4166,10 +4256,15 @@ const Game = {
     this.cam.pitch += (s.invertY ? -1 : 1) * Input.lookDy * sens;
     // desktop arrow-key look
     if (Input.keys['arrowleft'] && !Input.keys['a']) this.cam.yaw += dt*2;
-    this.cam.pitch = clamp(this.cam.pitch, -0.75, 1.05);
+    // first person can look nearly straight up/down; the third-person orbit
+    // needs a tighter range or the camera swings under the floor
+    const pLim = this.isFirstPerson() ? 1.35 : 1.05, pLimUp = this.isFirstPerson() ? 1.35 : 0.75;
+    this.cam.pitch = clamp(this.cam.pitch, -pLimUp, pLim);
     Input.lookDx = 0; Input.lookDy = 0;
     p.yaw = this.cam.yaw;
     p.pitch = this.cam.pitch;
+
+    if (this.isFirstPerson()){ this.updateCameraFP(p, dt); return; }
 
     const headY = p.pos[1] + p.height*0.78;
     const cy = Math.cos(this.cam.yaw), sy = Math.sin(this.cam.yaw);
@@ -4198,6 +4293,31 @@ const Game = {
     this.cam.pos = camPos;
     this.cam.target = target;
   },
+
+  // Eye-level camera. No collision pull-in is needed because the camera sits
+  // inside the player, which also means shots leave exactly from the crosshair.
+  updateCameraFP(p, dt){
+    const eyeH = p.downed ? p.height*0.32 : p.height*0.86;
+    // gentle head bob while moving, so walking reads without being nauseating
+    const speed = p.speedNow || 0;
+    const bobAmt = Math.min(1, speed/6.2) * (SAVE.settings.reduceFlash ? 0.3 : 1);
+    const bob = Math.sin(p.walkPhase*2) * 0.035 * bobAmt;
+    const sway = Math.cos(p.walkPhase) * 0.022 * bobAmt;
+    const right = this.rightVec(p.yaw);
+    let camPos = [ p.pos[0] + right[0]*sway, p.pos[1] + eyeH + bob, p.pos[2] + right[2]*sway ];
+    if (this.cam.shakeT > 0){
+      this.cam.shakeT -= dt;
+      const a = this.cam.shake * clamp(this.cam.shakeT*3, 0, 1) * (SAVE.settings.reduceFlash ? 0.4 : 1);
+      camPos[0] += rand(-a,a); camPos[1] += rand(-a,a); camPos[2] += rand(-a,a);
+      if (this.cam.shakeT <= 0) this.cam.shake = 0;
+    }
+    const d = this.rawAimDir(p);
+    // recoil kicks the view up briefly
+    const rc = p.recoilKick * 0.35;
+    this.cam.pos = camPos;
+    this.cam.target = [ camPos[0] + d[0]*10, camPos[1] + d[1]*10 + rc, camPos[2] + d[2]*10 ];
+  },
+  rightVec(yaw){ return [-Math.cos(yaw), 0, Math.sin(yaw)]; },
 
   /* ---------- aim assist ---------- */
   updateAimAssist(){
@@ -4410,6 +4530,12 @@ const Game = {
     for (const pk of this.pickups) pk.draw();
     this.drawWorldObjects();
     Particles.draw();
+    // last: the first-person weapon, excluded from the shadow pass
+    const me = this.me();
+    if (me && !me.dead && this.isFirstPerson() && (this.state === 'playing' || this.state === 'lobby' || this.state === 'paused')){
+      R.beginNoShadow();
+      me.drawViewModel();
+    }
     const env = World.env || WEATHERS.day;
     R.render(this.cam.pos, this.cam.target, env, this.time);
   },
@@ -5584,7 +5710,7 @@ const Leaderboard = {
 const Tutorial = {
   steps:[
     { t:'MOVEMENT', b:'Drag anywhere on the <b>left half</b> of the screen to move. A virtual joystick appears wherever your thumb lands.' },
-    { t:'CAMERA', b:'Drag on the <b>right half</b> to look around. The camera follows over your shoulder — adjust sensitivity any time in Settings.' },
+    { t:'CAMERA', b:'Drag on the <b>right half</b> to look around. You play in first person by default — switch to a third-person view, and tune sensitivity, in Settings.' },
     { t:'SHOOTING', b:'Hold the big <b>🔫 button</b> to fire. Aim assist gently pulls your shots onto nearby zombies — <b>headshots deal bonus damage</b>.' },
     { t:'RELOADING', b:'Tap <b>🔄</b> to reload and <b>🔁</b> to switch between your two weapons. Reloading happens automatically when you run dry.' },
     { t:'SURVIVING', b:'Health does <b>not</b> regenerate. Grab ❤ medkits and 🛡 armor plates dropped by zombies, and use barricades as cover.' },
@@ -6287,6 +6413,8 @@ const UI = {
     rows.push('<h3>Profile</h3>');
     rows.push(`<div class="setRow"><div style="flex:1"><label>Display name</label>
       <input type="text" id="set_name" maxlength="16" style="margin-top:6px"></div></div>`);
+    rows.push('<h3>Camera</h3>');
+    toggle('First-person view', 'firstPerson', 'Off puts the camera behind your survivor');
     rows.push('<h3>Controls</h3>');
     slider('Look sensitivity', 'sensitivity', 0.3, 3, 0.05);
     slider('Joystick deadzone', 'joyDeadzone', 0, 0.4, 0.01);
@@ -6343,7 +6471,7 @@ const UI = {
     bindSlider('sfx', () => { Audio2.setVolumes(); Audio2.ui('tap'); });
     bindSlider('hudScale', () => this.applyHudScale());
     ['invertY','aimAssist','autoFire','autoReload','leftHanded','haptics','shadows',
-     'showFps','reduceFlash','colorblind','damageNumbers'].forEach(key => {
+     'showFps','reduceFlash','colorblind','damageNumbers','firstPerson'].forEach(key => {
       const el = $('set_'+key);
       if (!el) return;
       el.addEventListener('click', () => {
@@ -6403,7 +6531,7 @@ const UI = {
       const el = $('set_'+k); if (el){ el.value = s[k]; this.updateSettingLabel(k); }
     });
     ['invertY','aimAssist','autoFire','autoReload','leftHanded','haptics','shadows',
-     'showFps','reduceFlash','colorblind','damageNumbers'].forEach(k => {
+     'showFps','reduceFlash','colorblind','damageNumbers','firstPerson'].forEach(k => {
       const el = $('set_'+k); if (el) el.classList.toggle('on', !!s[k]);
     });
     [['quality',s.quality],['particles',String(s.particles)],['fpsCap',String(s.fpsCap)]].forEach(([k,v]) => {
