@@ -98,10 +98,15 @@ HUD scale, and separate music/SFX volume.
 ## 🌐 Co-op multiplayer
 
 Co-op is host-authoritative: one player's browser simulates the zombies, waves
-and damage, and streams snapshots to everyone else. Clients predict their own
-movement and report hits, which the host re-validates — the host enforces fire
-rate, damage ceilings, weapon ownership, range and movement-speed limits, and
-kicks peers that keep failing those checks.
+and damage, and streams snapshots to everyone else. Clients send their inputs
+and predict their own movement; the host simulates their weapons from those
+inputs, so damage is decided in exactly one place. The host sanitises every
+input it receives — movement vectors are clamped, position updates are accepted
+only within a small drift budget, and peers that keep exceeding it are dropped.
+
+Each browser tab gets its own network identity, separate from the profile id
+used for cloud saves, so two tabs on one device can play together even though
+they share the same saved profile.
 
 There are two ways to play together.
 

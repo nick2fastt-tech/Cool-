@@ -489,7 +489,8 @@
     <div class="tagline" id="resSub">The horde overwhelmed you</div>
     <div class="card" style="margin-top:18px">
       <div class="row" style="justify-content:space-around;text-align:center">
-        <div><div class="sub2">WAVE</div><div style="font-size:30px;font-weight:900" id="resWave">0</div></div>
+        <div><div class="sub2">WAVE</div><div style="font-size:30px;font-weight:900" id="resWave">0</div>
+          <div class="sub2" id="resWaveLabel"></div></div>
         <div><div class="sub2">KILLS</div><div style="font-size:30px;font-weight:900" id="resKills">0</div></div>
         <div><div class="sub2">TIME</div><div style="font-size:30px;font-weight:900" id="resTime">0:00</div></div>
       </div>
@@ -611,6 +612,12 @@ const DEFAULT_SAVE = () => ({
 });
 let SAVE = DEFAULT_SAVE();
 
+// Network identity is per TAB, not per account: two tabs on one device share
+// localStorage (and therefore playerId), and the host drops messages from its
+// own id — which made same-device co-op impossible. playerId still identifies
+// the *account* for cloud saves and leaderboards.
+const SESSION_ID = 'S' + uid(9);
+
 function deepMerge(base, over){
   if (over === null || over === undefined) return base;
   if (typeof base !== 'object' || Array.isArray(base) || base === null) return over;
@@ -699,6 +706,7 @@ const Audio2 = {
     this.lastPlay[key] = t; return true;
   },
   noise(dur, filterType, freq, gain, dest){
+    if (!this.ready) return null;
     const src = this.ctx.createBufferSource(); src.buffer = this.noiseBuf; src.loop = true;
     const f = this.ctx.createBiquadFilter(); f.type = filterType; f.frequency.value = freq;
     const g = this.ctx.createGain();
@@ -710,6 +718,7 @@ const Audio2 = {
     return { src, f, g };
   },
   tone(freq, dur, type, gain, slideTo, dest){
+    if (!this.ready) return null;
     const o = this.ctx.createOscillator(); o.type = type || 'sine';
     const g = this.ctx.createGain(); const t = this.ctx.currentTime;
     o.frequency.setValueAtTime(freq, t);
@@ -2055,8 +2064,10 @@ const World = {
   addBarricade(x, z, rot){
     const w = rot === 0 ? 3.2 : 1.0, d = rot === 0 ? 1.0 : 3.2;
     const b = { x, z, w, d, h:1.35, hp:400, maxHp:400, rot, alive:true };
+    const col = { x0:x-w/2, x1:x+w/2, z0:z-d/2, z1:z+d/2, y1:b.h, barricade:b };
+    b.collider = col;
     this.barricades.push(b);
-    this.colliders.push({ x0:x-w/2, x1:x+w/2, z0:z-d/2, z1:z+d/2, y1:b.h, barricade:b });
+    this.colliders.push(col);
     return b;
   },
   addBarrel(x, z){
@@ -2395,11 +2406,10 @@ const Particles = {
   draw(){
     for (const q of this.pool){
       const t = q.life / q.max;
-      const s = q.size * (q.shrink < 1 ? t*q.shrink + (1-q.shrink) : Math.pow(1/t, q.shrink-1) * 0.6 + q.size*0);
+      // grow-and-fade for smoke/explosions, shrink-and-fade for sparks
       const size = q.shrink >= 1 ? q.size * (1 + (1-t)*(q.shrink-1)) : q.size * (0.3 + t*0.7);
       R.particle(q.x, q.y, q.z, size, size, q.r, q.g, q.b, q.a * Math.min(1, t*2.2));
     }
-    const qy = Q.ident();
     for (const s of this.casings){
       const rq = Q.mul(Q.yaw(s.a), Q.axis(1,0,0, s.a*1.7));
       R.box(s.x, s.y, s.z, 0.045, 0.11, 0.045, rq, 0.85, 0.7, 0.25, 1, 0.25);
@@ -2424,10 +2434,8 @@ function drawCharacter(o){
   if (o.deadT !== undefined && o.deadT > 0) tilt = Math.min(Math.PI/2, o.deadT*3.2);
   else if (o.crawl) tilt = 1.15;
   const bodyQ = Q.mul(Q.yaw(o.yaw), Q.axis(1,0,0, tilt));
-  // when the body tips over, the whole rig pivots about the feet
-  const lift = tilt > 0.01 ? Math.cos(tilt) : 1;
   const base = [px, py, pz];
-  const place = (lx, ly, lz, q) => {
+  const place = (lx, ly, lz) => {
     const v = Q.rot(bodyQ, [lx, ly, lz]);
     return [base[0]+v[0], base[1]+v[1], base[2]+v[2]];
   };
@@ -2439,7 +2447,6 @@ function drawCharacter(o){
   const bob = Math.abs(Math.sin(walk)) * H * 0.012;
 
   // ---- legs ----
-  const legY = legLen/2 + bob;
   for (const side of [-1, 1]){
     const ang = side < 0 ? swing : swing2;
     const q = Q.mul(bodyQ, Q.axis(1,0,0, ang));
@@ -2529,11 +2536,11 @@ function drawCharacter(o){
   return { headY: py + headY, torsoY: py + legLen + torsoH/2, headS };
 }
 /* ============================== EFFECTS ============================== */
-function applyEffect(ent, kind, data){
+function applyEffect(ent, kind, data, source){
   ent.fx = ent.fx || {};
   const cur = ent.fx[kind];
-  if (!cur || data.t > cur.t) ent.fx[kind] = Object.assign({}, data);
-  else if (cur) cur.t = Math.max(cur.t, data.t);
+  if (!cur || data.t > cur.t) ent.fx[kind] = Object.assign({}, data, { src: source || (cur && cur.src) || null });
+  else if (cur){ cur.t = Math.max(cur.t, data.t); if (source) cur.src = source; }
 }
 function updateEffects(ent, dt, onDamage){
   if (!ent.fx) return;
@@ -2543,7 +2550,7 @@ function updateEffects(ent, dt, onDamage){
     if (f.t <= 0){ delete ent.fx[k]; continue; }
     if ((k === 'burn' || k === 'poison') && f.dps){
       f.acc = (f.acc || 0) + f.dps*dt;
-      if (f.acc >= 1){ onDamage(f.acc, k); f.acc = 0; }
+      if (f.acc >= 1){ onDamage(f.acc, k, f.src || null); f.acc = 0; }
     }
   }
 }
@@ -2813,6 +2820,13 @@ class Player {
     Game.feed(`${by.name} revived ${this.name}`);
     if (by.local){ by.revives++; SAVE.stats.revives++; Missions.bump('revives', 1); }
   }
+  // Picked up by the wave break rather than by a teammate — no revive credit.
+  reviveFromWaveBreak(){
+    this.downed = false; this.dead = false;
+    this.hp = Math.round(this.maxHp * 0.5);
+    this.reviveProg = 0;
+    if (this.local) UI.showDowned(false);
+  }
   heal(n){
     const before = this.hp;
     this.hp = Math.min(this.maxHp, this.hp + n);
@@ -2993,7 +3007,8 @@ class Zombie {
       this.deadT += dt;
       return;
     }
-    updateEffects(this, dt, (d, kind) => Game.damageZombie(this, d, this.fxSource || null, false, kind, true));
+    // burn/poison ticks credit whoever applied the effect, so those kills pay out
+    updateEffects(this, dt, (d, kind, src) => Game.damageZombie(this, d, src, false, kind, true));
     if (this.spawnT > 0){ this.spawnT -= dt; }
     this.groanT -= dt;
     if (this.groanT <= 0){ this.groanT = rand(4, 12); Audio2.zombie(this.isBoss ? 'boss' : this.typeId, this.pos); }
@@ -3681,7 +3696,7 @@ const Game = {
     this.hazards.length = 0; this.pickups.length = 0;
     Particles.reset();
     World.build('suburbia', 'sunset', 12345, true);
-    const p = new Player(SAVE.playerId, {
+    const p = new Player(SESSION_ID, {
       local:true, name:SAVE.name, loadout:SAVE.loadout,
       pet: SAVE.activePet ? SAVE.ownedPets.find(x => x.uid === SAVE.activePet) : null,
       style: SAVE.equipped
@@ -3715,7 +3730,7 @@ const Game = {
     this.matchTime = 0; this.waveDeaths = 0;
 
     // local player
-    const local = new Player(SAVE.playerId, {
+    const local = new Player(SESSION_ID, {
       local:true, name:SAVE.name, loadout:SAVE.loadout,
       pet: SAVE.activePet ? SAVE.ownedPets.find(x => x.uid === SAVE.activePet) : null,
       style: SAVE.equipped
@@ -3758,11 +3773,13 @@ const Game = {
       : '';
   },
   resume(){
+    UI.cameFromPause = false;
     $('modalPause').classList.add('hidden');
     if (this.state === 'paused') this.state = 'playing';
     Input.enabled = true;
   },
   quitMatch(){
+    UI.cameFromPause = false;
     $('modalPause').classList.add('hidden');
     this.endMatch(true);
   },
@@ -3778,27 +3795,29 @@ const Game = {
     $('hud').classList.add('hidden');
     $('crosshair').classList.add('hidden');
     const me = this.me();
+    // "wave" is the wave you reached — dying on wave 1 should not read as 0
     const wave = Waves.wave;
+    const cleared = Math.max(0, Waves.wave - 1);
     // ---- roll up rewards ----
-    const survivalCoins = Math.round(wave * 25 * DIFFICULTIES[this.difficulty].reward);
-    const survivalXp = Math.round(wave * 18 * DIFFICULTIES[this.difficulty].reward);
+    const survivalCoins = Math.round(cleared * 25 * DIFFICULTIES[this.difficulty].reward);
+    const survivalXp = Math.round(cleared * 18 * DIFFICULTIES[this.difficulty].reward);
     const coins = (me ? me.coinsRun : 0) + survivalCoins;
     const xp = (me ? me.xpRun : 0) + survivalXp;
     const before = levelFromXp(SAVE.xp);
     SAVE.coins += coins; SAVE.xp += xp;
     SAVE.stats.coinsEarned += coins;
     SAVE.stats.playTime += this.matchTime;
-    if (wave - 1 > SAVE.stats.bestWave) SAVE.stats.bestWave = wave - 1;
+    if (wave > SAVE.stats.bestWave) SAVE.stats.bestWave = wave;
     const after = levelFromXp(SAVE.xp);
     SAVE.level = after.level;
     Missions.bump('coinsEarned', coins);
-    Missions.bump('waveReach', wave - 1, true);
+    Missions.bump('waveReach', wave, true);
     Achievements.check();
     SAVE.lastPlayed = new Date().toISOString();
     persist(true);
-    if (this.mode === 'host' || this.mode === 'client') Net.reportMatchEnd(wave - 1);
+    if (this.mode === 'host' || this.mode === 'client') Net.reportMatchEnd(wave);
     UI.showResults({
-      quit, wave: wave - 1, kills: me ? me.kills : 0, time: this.matchTime,
+      quit, wave, cleared, kills: me ? me.kills : 0, time: this.matchTime,
       coins, xp, survivalCoins, survivalXp,
       levelUp: after.level > before.level ? after.level : 0
     });
@@ -3908,8 +3927,8 @@ const Game = {
       dmg *= Math.pow(0.78, count);
       this.damageZombie(h.z, dmg, shooter, h.head, w.cat);
       // status riders
-      if (w.burn) applyEffect(h.z, 'burn', { t:w.burn.dur, dps:w.burn.dps });
-      if (w.slow) applyEffect(h.z, 'slow', { t:w.slow.dur, mult:w.slow.mult });
+      if (w.burn) applyEffect(h.z, 'burn', { t:w.burn.dur, dps:w.burn.dps }, shooter);
+      if (w.slow) applyEffect(h.z, 'slow', { t:w.slow.dur, mult:w.slow.mult }, shooter);
       if (w.chain) this.chainLightning(h.z, w, shooter, dmg);
       Particles.burst('goo', h.point[0], h.point[1], h.point[2], { count: h.head ? 12 : 7 });
       Audio2.hit(h.head, h.point);
@@ -3968,7 +3987,6 @@ const Game = {
     Particles.burst('impact', c.barricade.x, 0.8, c.barricade.z, { count:22, col:[.55,.42,.3] });
     Audio2.explode([c.barricade.x, 0.8, c.barricade.z], false);
     World.refreshNavAround(c.barricade.x, c.barricade.z);
-    this.rebuildStatic();
   },
   chainLightning(from, w, shooter, baseDmg){
     let src = from, dmg = baseDmg * w.chain.falloff;
@@ -4014,8 +4032,14 @@ const Game = {
       const d = Math.hypot(p.pos[0]-pos[0], p.pos[2]-pos[2]);
       if (d > radius) continue;
       const f = 1 - d/radius;
-      const self = source === p;
-      p.takeDamage(dmg*f*(self ? 0.22 : kind === 'explosive' && source && source.local !== undefined ? 0.0 : 0.5), kind, source);
+      // Your own blasts hurt you a little; they never hurt teammates. Blasts
+      // from zombies (bombers, bosses, barrels they triggered) hurt everyone.
+      const fromPlayer = !!(source && source.local !== undefined);
+      let mult;
+      if (source === p) mult = 0.22;
+      else if (fromPlayer) mult = 0;
+      else mult = 1;
+      if (mult > 0) p.takeDamage(dmg*f*mult, kind, source);
     }
     // chain-detonate barrels
     for (const b of World.barrels){
@@ -4068,6 +4092,9 @@ const Game = {
   },
   damageZombie(z, dmg, source, headshot, kind, isDot){
     if (!z || !z.alive) return;
+    // Clients never mutate zombie health — the host decides, and its snapshots
+    // would overwrite any local guess anyway (which used to make HP flicker).
+    if (this.mode === 'client'){ z.hurtT = 0.12; return; }
     const armor = z.def.armor || z.base.armor || 0;
     if (armor && kind !== 'explosive') dmg *= (1 - armor);
     z.hp -= dmg;
@@ -4127,13 +4154,6 @@ const Game = {
   awardCoins(p, amount){
     p.coinsRun += amount;
     if (p.local) UI.updateHudCounters();
-  },
-  rebuildStatic(){
-    // barricade destruction changes the static mesh; rebuild the instance list
-    const out = [];
-    const src = World.staticBoxes;
-    for (let i=0;i<src.length;i+=BOX_STRIDE) for (let k=0;k<BOX_STRIDE;k++) out.push(src[i+k]);
-    R.uploadStatic(out);
   },
 
   /* ---------- camera ---------- */
@@ -4349,7 +4369,8 @@ const Game = {
     // zombies attacking barricades that block their path
     this.updateBarricadeAttacks(dt);
 
-    Waves.update(dt);
+    // The host owns wave progression; clients mirror it from snapshots.
+    if (this.mode !== 'client') Waves.update(dt);
     Particles.update(dt);
     World.updateWeather(dt);
     Audio2.ambient(this.cam.pos);
@@ -4361,9 +4382,11 @@ const Game = {
     Input.consumePulses();
   },
   updateBarricadeAttacks(dt){
-    for (const c of World.colliders){
-      if (!c.barricade || c.dead) continue;
-      const b = c.barricade;
+    // walk the barricade list, not every collider in the map
+    for (const b of World.barricades){
+      if (!b.alive) continue;
+      const c = b.collider;
+      if (!c || c.dead) continue;
       for (const z of this.zombies){
         if (!z.alive) continue;
         const cx = clamp(z.pos[0], c.x0, c.x1), cz = clamp(z.pos[2], c.z0, c.z1);
@@ -4519,7 +4542,8 @@ const Waves = {
         for (let i=0;i<burst;i++) this.spawnOne();
         this.spawnTimer = Math.max(0.25, 1.5 - this.wave*0.03) * rand(0.7, 1.3);
       }
-      const aliveCount = Game.zombies.filter(z => z.alive).length;
+      let aliveCount = 0;
+      for (const z of Game.zombies) if (z.alive) aliveCount++;
       this.alive = aliveCount;
       UI.setWaveLabel();
       if (this.spawnedThisWave >= this.toSpawn && aliveCount === 0) this.completeWave();
@@ -4611,7 +4635,8 @@ const Waves = {
       // partial heal + ammo between waves keeps the loop moving
       Game.players.forEach(p => {
         if (p.dead) return;
-        if (p.downed){ p.revive(p); }
+        // getting picked up by the wave break is not a teammate revive
+        if (p.downed) p.reviveFromWaveBreak();
         p.heal(Math.round(p.maxHp*0.25));
         p.addAmmo(0.35);
       });
@@ -4626,8 +4651,8 @@ const Waves = {
     }
     this.wave++;
     this.countdown = 12;
-    Missions.bump('waveReach', this.wave-1, true);
-    if (this.wave-1 > SAVE.stats.bestWave) SAVE.stats.bestWave = this.wave-1;
+    Missions.bump('waveReach', this.wave, true);
+    if (this.wave > SAVE.stats.bestWave) SAVE.stats.bestWave = this.wave;
     Achievements.check();
     persist();      // auto-save after every completed wave
     UI.setWaveLabel();
@@ -4637,8 +4662,9 @@ const Waves = {
 /* ============================== NETWORKING ==============================
    Host-authoritative co-op.
      • The host simulates zombies, waves and damage, and broadcasts snapshots.
-     • Clients predict their own movement and send inputs; everything else is
-       interpolated from snapshots.
+     • Clients predict their own movement and send inputs; the host simulates
+       their weapons from those inputs, so damage is decided in exactly one
+       place. Everything else is interpolated from snapshots.
    Two transports share one interface:
      • WsTransport    — a relay server (set its URL in Settings) for real
                         online play across devices, with a public server browser.
@@ -4735,7 +4761,8 @@ const Net = {
     try {
       await this.transport.connect();
       this.connected = true;
-      this.send({ t:'hello', v:PROTOCOL, id:SAVE.playerId, name:SAVE.name, level:SAVE.level });
+      this.send({ t:'hello', v:PROTOCOL, id:SESSION_ID, account:SAVE.playerId,
+                  name:SAVE.name, level:SAVE.level });
       CloudSave.pull();
       return true;
     } catch(e){
@@ -4745,7 +4772,7 @@ const Net = {
   },
   send(obj){
     if (!this.transport) return;
-    obj.from = SAVE.playerId;
+    obj.from = SESSION_ID;
     if (this.code) obj.room = this.code;
     this.transport.send(obj);
   },
@@ -4812,7 +4839,7 @@ const Net = {
     if (!m || typeof m !== 'object') return;
     // ignore traffic for other rooms on the shared local channel
     if (m.room && this.code && m.room !== this.code && m.t !== 'roomList') return;
-    if (m.from === SAVE.playerId && m.t !== 'roomList' && m.t !== 'cloudData') return;
+    if (m.from === SESSION_ID && m.t !== 'roomList' && m.t !== 'cloudData') return;
     switch(m.t){
       case 'join':
         if (this.role !== 'host') return;
@@ -4821,11 +4848,11 @@ const Net = {
         if (this.role !== 'client') return;
         this.joining = false;
         this.peers.clear();
-        (m.players || []).forEach(p => { if (p.id !== SAVE.playerId) this.peers.set(p.id, p); });
+        (m.players || []).forEach(p => { if (p.id !== SESSION_ID) this.peers.set(p.id, p); });
         this._joinResolve && this._joinResolve({ ok:true, info:m });
         break;
       case 'joinReject':
-        if (m.to !== SAVE.playerId) return;
+        if (m.to !== SESSION_ID) return;
         this._joinResolve && this._joinResolve({ ok:false, error:m.reason || 'Room unavailable' });
         this.role = 'none'; this.code = null;
         break;
@@ -4849,9 +4876,6 @@ const Net = {
         Game.startMatch({ mode:'client', mapId:m.mapId, weatherId:m.weatherId,
                           difficulty:m.difficulty, seed:m.seed });
         break;
-      case 'hitClaim':
-        if (this.role !== 'host') return;
-        this.onHitClaim(m); break;
       case 'event':
         this.onEvent(m); break;
       case 'roomList':
@@ -4861,7 +4885,7 @@ const Net = {
       case 'ping':
         this.send({ t:'pong', to:m.from, ts:m.ts }); break;
       case 'pong':
-        if (m.to === SAVE.playerId) this.ping = Math.round(performance.now() - m.ts);
+        if (m.to === SESSION_ID) this.ping = Math.round(performance.now() - m.ts);
         break;
       case 'cloudData':
         if (m.id === SAVE.playerId) CloudSave.apply(m.data);
@@ -4887,7 +4911,7 @@ const Net = {
     this.peers.set(peer.id, peer);
     Game.feed(`${peer.name} joined`);
     toast(`👤 ${peer.name} joined`);
-    const roster = [{ id:SAVE.playerId, name:SAVE.name, level:SAVE.level, style:SAVE.equipped, loadout:SAVE.loadout }]
+    const roster = [{ id:SESSION_ID, name:SAVE.name, level:SAVE.level, style:SAVE.equipped, loadout:SAVE.loadout }]
       .concat(Array.from(this.peers.values()).map(p => ({ id:p.id, name:p.name, level:p.level, style:p.style, loadout:p.loadout })));
     this.send({ t:'joinAck', to:peer.id, players:roster, code:this.code,
                 inMatch: Game.state === 'playing',
@@ -4939,31 +4963,6 @@ const Net = {
       else AntiCheat.flag(peer, 'position drift ' + drift.toFixed(1));
     }
   },
-  onHitClaim(m){
-    // Clients report their own shots; the host re-validates and applies damage.
-    const peer = this.peers.get(m.from);
-    if (!peer) return;
-    const gp = Game.players.find(x => x.id === m.from);
-    if (!gp) return;
-    const t = now();
-    if (t - peer.ac.claimWindow > 1){ peer.ac.claimWindow = t; peer.ac.claims = 0; }
-    peer.ac.claims++;
-    const w = WEAPON_BY_ID[m.w];
-    if (!w || !gp.loadout.includes(m.w)){ AntiCheat.flag(peer, 'unowned weapon'); return; }
-    // fire-rate ceiling with a little headroom for jitter
-    const maxPerSec = (w.rpm/60) * (w.pellets || 1) * 1.6 + 4;
-    if (peer.ac.claims > maxPerSec){ AntiCheat.flag(peer, 'fire rate'); return; }
-    const z = Game.zombies.find(x => x.netId === m.z);
-    if (!z || !z.alive) return;
-    // damage ceiling: the best this weapon could legitimately do
-    const maxDmg = w.dmg * w.crit * 2.2 * (1 + 0.35);
-    const dmg = clamp(Number(m.d) || 0, 0, maxDmg);
-    if ((Number(m.d) || 0) > maxDmg){ AntiCheat.flag(peer, 'damage ' + m.d); }
-    // range sanity
-    const dist = Math.hypot(z.pos[0]-gp.pos[0], z.pos[2]-gp.pos[2]);
-    if (dist > w.range*2.6 + 6){ AntiCheat.flag(peer, 'range'); return; }
-    Game.damageZombie(z, dmg, gp, !!m.h, w.cat);
-  },
   hostTick(dt){
     // prune peers that stopped talking
     const t = now();
@@ -5001,7 +5000,9 @@ const Net = {
       id:p.id, p:[Math.round(p.pos[0]*20)/20, Math.round(p.pos[1]*20)/20, Math.round(p.pos[2]*20)/20],
       y:Math.round(p.yaw*100)/100, pi:Math.round(p.pitch*100)/100,
       hp:Math.round(p.hp), ar:Math.round(p.armor), d:p.downed?1:0, dd:p.dead?1:0,
-      k:p.kills, s:p.slot, w:p.walkPhase % TAU
+      k:p.kills, s:p.slot, w:p.walkPhase % TAU,
+      // per-player run totals so joiners actually bank what they earn
+      c:Math.round(p.coinsRun), x:Math.round(p.xpRun)
     }));
     this.send({ t:'snapshot', ts:performance.now(), z:zs, p:ps,
                 wv:Waves.wave, ws:Waves.state, wc:Math.round(Waves.countdown*10)/10,
@@ -5034,15 +5035,19 @@ const Net = {
     // ---- players
     for (const pd of (m.p || [])){
       let gp = Game.players.find(x => x.id === pd.id);
-      if (!gp && pd.id !== SAVE.playerId){
+      if (!gp && pd.id !== SESSION_ID){
         const peer = this.peers.get(pd.id) || { id:pd.id, name:'Survivor', loadout:['pistol'], style:{} };
         gp = this.makeRemotePlayer(peer);
         Game.players.push(gp);
       }
       if (!gp) continue;
       if (gp.local){
-        // trust the host for our own vitals, keep our own predicted position
+        // trust the host for our own vitals and earnings, keep our own position
         gp.hp = pd.hp; gp.armor = pd.ar;
+        gp.kills = pd.k;
+        if (typeof pd.c === 'number') gp.coinsRun = pd.c;
+        if (typeof pd.x === 'number') gp.xpRun = pd.x;
+        UI.updateHudCounters();
         if (pd.d && !gp.downed) gp.goDown();
         if (!pd.d && gp.downed){ gp.downed = false; UI.showDowned(false); }
         if (pd.dd && !gp.dead) gp.dead = true;
@@ -5103,11 +5108,6 @@ const Net = {
       this.lastPingSent = performance.now();
       this.send({ t:'ping', ts:performance.now() });
     }
-  },
-  // Clients tell the host what they hit; the host decides if it counts.
-  reportHit(zombie, dmg, headshot, weaponId){
-    if (this.role !== 'client') return;
-    this.send({ t:'hitClaim', z:zombie.netId, d:Math.round(dmg), h:headshot?1:0, w:weaponId });
   },
   broadcastEvent(kind, data){
     this.send(Object.assign({ t:'event', k:kind }, data));
@@ -5667,7 +5667,13 @@ const UI = {
     // pause modal
     $('btnPause').addEventListener('click', () => Game.pause());
     $('btnResume').addEventListener('click', () => Game.resume());
-    $('btnPauseSettings').addEventListener('click', () => { $('modalPause').classList.add('hidden'); this.openScreen('settings'); });
+    $('btnPauseSettings').addEventListener('click', () => {
+      // remember we came from the pause menu so Back returns there, not to the
+      // main menu (which used to silently abandon the paused match)
+      this.cameFromPause = true;
+      $('modalPause').classList.add('hidden');
+      this.openScreen('settings');
+    });
     $('btnPauseTutorial').addEventListener('click', () => Tutorial.start(true));
     $('btnQuitMatch').addEventListener('click', () => Game.quitMatch());
     // results
@@ -5750,9 +5756,16 @@ const UI = {
     this.refreshCurrency();
   },
   back(){
+    if (this.cameFromPause && !this.stack.length){
+      this.cameFromPause = false;
+      this.setScreen(null);
+      $('modalPause').classList.remove('hidden');
+      Audio2.ui('tap');
+      return;
+    }
     const prev = this.stack.pop();
     if (prev) this.setScreen(prev);
-    else if (Game.state === 'lobby' || Game.state === 'playing') this.setScreen(null);
+    else if (Game.state === 'lobby' || Game.state === 'playing' || Game.state === 'paused') this.setScreen(null);
     else this.setScreen('scrMenu');
     if (this.screen === 'scrMenu') this.renderMenu();
     Audio2.ui('tap');
@@ -5825,7 +5838,7 @@ const UI = {
     list.forEach(r => {
       const d = document.createElement('div');
       d.className = 'card tap';
-      const diff = DIFFICULTIES[r.difficulty || 1];
+      const diff = DIFFICULTIES[typeof r.difficulty === 'number' ? r.difficulty : 1];
       d.innerHTML = `<div class="row">
         <div class="swatch" style="background:#17508f">🌐</div>
         <div class="grow"><div class="name">${this.esc(r.name || 'Squad')}</div>
@@ -6261,7 +6274,7 @@ const UI = {
     const s = SAVE.settings;
     const body = $('settingsBody');
     const rows = [];
-    const slider = (label, key, min, max, step, fmtFn, onChange) => rows.push(
+    const slider = (label, key, min, max, step) => rows.push(
       `<div class="setRow"><div><label>${label}</label><div class="muted" id="lbl_${key}"></div></div>
        <input type="range" id="set_${key}" min="${min}" max="${max}" step="${step}"></div>`);
     const toggle = (label, key, desc) => rows.push(
@@ -6628,6 +6641,7 @@ const UI = {
     $('resSub').textContent = r.quit ? 'You left the match'
       : r.wave >= 20 ? 'A legendary stand' : r.wave >= 10 ? 'You held the line' : 'The horde overwhelmed you';
     $('resWave').textContent = r.wave;
+    $('resWaveLabel').textContent = r.cleared === 1 ? '1 CLEARED' : `${r.cleared} CLEARED`;
     $('resKills').textContent = r.kills;
     $('resTime').textContent = timeStr(r.time);
     $('resRewards').innerHTML = `
