@@ -603,6 +603,7 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
       <li><b>They shoulder their guns instead of holding them out at arm&rsquo;s length.</b> Which is why no hand could reach the fore-end in the first place</li>
       <li><b>The lobby is a proper base now.</b> Steelwork holding the roof up with the services run along it, a ceiling fan, ductwork and cable trays. Painted walkways on the floor out of the spawn pads to each station, drains, a house emblem. Lockers, sandbags, ammo crates, planters, a rug and a table with mugs on it, a whiteboard, a hose cabinet, clerestory windows, banners, and a wall clock that tells the actual time</li>
       <li><b>A planning table in the middle</b> with a slowly turning hologram, and <b>a trophy shelf</b> along the back wall &mdash; one plinth per map, and the cup lights up in that map&rsquo;s colour once you have cleared it</li>
+      <li><b>Fixed: the Mine was paying you short.</b> Its five-second payout ran on accumulated frame time, which is capped &mdash; so below 20fps the game clock falls behind real time and "every five seconds" quietly became every eight, or ten. Measured at 8fps: twelve real seconds paid <b>$0</b> at Lv1 where it owed $100, and $500 at Lv5 where it owed $1,000. It was cutting your income exactly when the field was busy and you needed it most. On the wall clock now, and measured back to the penny. Firing rates deliberately stay on frame time &mdash; those should slow down with everything else rather than get harder under load</li>
       <li>Three hundred extra props for <b>five extra draw calls</b>: the room is frozen once it is built and everything sharing a material is baked into a single mesh, so none of it costs anything per frame</li>
     </ul>
     <div class="logV">V1.91</div>
@@ -4260,9 +4261,21 @@ function fxFloatText(pos,txt,col){
    Never targets anything, so it skips the aiming code entirely. */
 function mineTick(t,dt){
   const s=tStats(t);
-  t.cd-=dt;
+  /* The payout is on the wall clock, not on accumulated frame time.
+     Frame delta is capped at 0.05s so a stutter cannot fling the simulation
+     forward, which means below 20fps the game clock runs slower than real
+     time — measured at 7fps, eleven real seconds advanced it three and a half.
+     The Mine was quietly paying half rate exactly when the field is busiest
+     and you need the money most. "Every five seconds" has to mean five
+     seconds. Combat rates stay on dt on purpose: those should slow down with
+     everything else rather than getting harder under load. */
+  const now2=performance.now();
+  if(!t.mineDue)t.mineDue=now2+s.cd*1000;
+  // upgrading shortens the interval, so never let an old wait outlive it
+  if(t.mineDue-now2>s.cd*1000)t.mineDue=now2+s.cd*1000;
+  t.cd=Math.max(0,(t.mineDue-now2)/1000);   // the readout and the fill still read this
   const ud=t.g.userData.mine;
-  const frac=clamp(1-Math.max(0,t.cd)/s.cd,0,1);
+  const frac=clamp(1-t.cd/s.cd,0,1);
   if(ud){
     ud.drum.rotation.x+=dt*(1.6+frac*2.4);
     ud.load.scale.set(1,.25+frac*1.5,1);
@@ -4272,7 +4285,8 @@ function mineTick(t,dt){
     for(let i=0;i<ud.flecks.length;i++)
       ud.flecks[i].rotation.y+=dt*(.6+i*.2);
   }
-  if(t.cd>0)return;
+  if(now2<t.mineDue)return;
+  t.mineDue=now2+s.cd*1000;
   t.cd=s.cd;
   const pay=s.pay;
   // a teammate's mine pays that teammate, not you
