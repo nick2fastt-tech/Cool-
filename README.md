@@ -15,45 +15,85 @@ A mobile-first 2D side-scrolling action RPG. A secret organisation ran experimen
 the city fell, and one stickman is walking back in.
 
 **Play:** open `anger-of-stick.html` in a mobile browser, hold it in landscape, tap ENTER.
-Everything (art, sound, save data) lives in that one file — no build step, no network.
+Everything — art, sound, music, save data — lives in that one file. No build step, no network,
+works fully offline.
 
 ### Controls
 
-Touch buttons, or keyboard on desktop.
+Touch buttons, keyboard, or a connected gamepad.
 
 | Action | Touch | Keys |
 |---|---|---|
 | Move | ◀ ▶ | A / D |
-| Jump | JUMP | W or Space |
-| Melee combo | HIT | J |
+| Jump (double jump / wall jump once trained) | JUMP | W or Space |
+| Melee — tap combos, **hold** for a heavy launcher | HIT | J |
 | Shoot (hold) | FIRE | K |
-| Dodge roll (i-frames) | ROLL | L / Shift |
-| Grenade | ✚ | I |
+| Roll · air dash · **parry** (roll into an attack) | ROLL | L / Shift |
+| Throwable (frag / sticky / molotov) | ✚ | I |
 | Active skill (needs full MP) | SP | U |
 | Swap firearm | ⟳ | Q |
+| **Antidote** — cure yourself or a squadmate | ⚕ | E |
+| Squad stance: engage / fall back (emote when solo) | ⚑ | R |
 
-Three melee hits chain into a launcher kick. The MP bar fills as you deal damage.
+Three light hits chain into a launcher kick; hits in the air juggle. Attack out of a roll for a
+slide, at a sprint for a dash attack, and at a staggered enemy under 18% HP for an instant finisher.
+
+### The infection
+
+Every zombie bite can transmit the virus. An infection meter appears above your health and fills on
+its own — different strains fill it at different speeds, and toxic zombies are the worst of them.
+Screen edges creep green, your stickman turns pale, and you take more damage the sicker you get.
+At 100% you turn, a short cinematic plays, and the mission is lost.
+
+- **Antidotes** are the only cure. They drop from elites, appear in missions, are bought in the
+  Armory, crafted in the Workshop, and carried between runs — but each difficulty caps how many
+  you can take in with you (Nightmare: 2).
+- **Squadmates get infected too.** Their portrait turns green and fills; leave them and they turn
+  hostile. If the whole squad turns, the mission ends.
+- **Doc, the medic**, slows infection for everyone near her, heals the squad and revives faster.
+- **Difficulty** sets the pace: Easy spreads at half speed with plentiful antidotes; Nightmare
+  spreads at triple speed with almost none.
 
 ### What's in it
 
-- **Combat** — 3-hit melee chains, launchers, juggling, dodge rolls, knockback, crits, hit-stop,
-  screen shake, blood, sparks, fire, explosions, additive light flashes and floating damage numbers.
-- **13 weapons** — fists, bat, fire axe, katana, war hammer, pistol, SMG, shotgun, assault rifle,
-  flamethrower, minigun, RPG, rail cannon. Each upgrades to Lv10 (damage + ammo).
-- **Squad** — recruit and rank up Rex, Nina, Bolt and Iron; deploy two at a time. They fight,
-  go down, and get back up on their own.
-- **Progression** — levels and EXP, skill points, 4 attributes, an 8-branch passive tree,
-  7 unlockable active skills (Shockwave, Berserk, Field Medic, Air Strike, Adrenaline,
-  Auto Turret, Mech Suit), 6 armour tiers, 20 achievements, hidden caches, daily login rewards.
-- **10 enemy types** — zombies, fast zombies, heavies, crawlers, infected soldiers, militia gunners,
-  riot soldiers (front shields), mutants, giant brutes, combat robots.
-- **10 bosses** with phases, summons, slams, volleys, charges and an airborne gunship.
-- **10 maps** — Downtown, Subway, Hospital, Mall, Factory, Military Base, Laboratory, Rooftops,
-  Sewers, Final Research Facility — each with parallax layers, props and lighting.
-- **Modes** — Story Campaign (10 chapters × 3 stages, told through mission briefings),
-  Zombie Survival, Boss Rush, Endless, and a seeded Daily Challenge.
-- **3 difficulties** — Normal, Hard (Chapter 3), Nightmare (Chapter 6) with reward multipliers.
-- Rescue caged civilians, smash crates and barrels for ammo and grenades, and find the
-  hidden `?` cache in every story stage.
+- **Combat** — light combos, charged heavies, air juggling, slide and dash attacks, parry-counters,
+  finishers, Rage Mode, hit-stop, screen shake, and slow motion on crits and boss kills.
+- **21 weapons** — fists, bat, axe, spear, katana, hammer, chainsaw, energy sword, pistol, dual
+  pistols, revolver, SMG, shotgun, rifle, sniper, flamethrower, minigun, laser, RPG, plasma, rail
+  cannon — each with 10 upgrade levels — plus three throwables and 7 armour tiers.
+- **20 enemy types** — walkers, runners, crawlers, zombie dogs, heavies, armored, spitters, toxic,
+  electric, exploders, mutants, brutes, infected soldiers, gunners, flame troopers, riot shields,
+  drones, robots, mechs and elite commanders.
+- **15 bosses** — The Butcher, Tunnel Widow, Zombie King, Doctor Vex, Mall King, Giant Mutant,
+  Military Tank, Colonel Kane, Bio-Experiment α, Sky Reaper, Spider Robot, Sewer Leviathan,
+  Furnace Titan, The Mad Scientist and the Final Mutation.
+- **15 maps** — Streets, Apartments, School, Hospital, Mall, Subway, Sewers, Bridge, Harbor,
+  Airport, Desert Base, Snow Station, Underground Lab, Nuclear Facility, Final Fortress.
+- **Weather and time of day** — rain, thunderstorms with lightning, fog, snow, night missions,
+  dynamic lighting, plus spike traps, electric floors, sawblades and explosive barrels.
+- **10 allies with roles** — assault, medic, sniper, heavy gunner, engineer (deploys turrets),
+  shield, drone operator, robot (immune to infection) and an attack dog. Deploy three.
+- **6 vehicles** — motorcycle, jeep, APC, tank and helicopter found in the field, plus the Mech Suit
+  skill. Ram, gun down, and bail out when the hull gives.
+- **11 active skills** — Shockwave Slam, Rage Mode, Healing Aura, Fire Punch, Lightning Strike,
+  Air Strike, Missile Barrage, Bullet Time, Auto Turret, Drone Support, Mech Suit — plus passives
+  including Double Jump, Air Dash, Wall Jump and Counter.
+- **10 modes** — Story (15 chapters × 3 stages), Zombie Survival, Boss Rush, Endless, Defense,
+  Horde, Time Attack, Daily Challenge, Weekly Challenge, and a hidden level found through caches.
+  Hardcore (one life, no revives, double loot) and New Game+ layer on top.
+- **Progression** — level 100, prestige for permanent power, skill tree, weapon and armour levels,
+  crafting with materials and blueprints, supply crates, weekly missions, a seasonal event track,
+  30 achievements, daily login rewards, checkpoints, and a full statistics page.
+- **Customisation** — hair, headgear, outfits, gloves, boots, body colour, weapon skins, emotes and
+  victory poses, all drawn on the stickman.
+- **Audio** — procedural rock soundtrack that shifts for boss fights, plus combat and ambient SFX.
+- **Options** — frame rate cap (30/60/120/uncapped), three graphics levels, screen shake and blood
+  toggles, music toggle, gamepad support, autosave, and save export/import codes.
 
-Progress saves to `localStorage`. Settings → *Erase save data* wipes it.
+Progress saves to `localStorage` automatically. Settings → *Erase save data* wipes it.
+
+### Not included
+
+Online multiplayer — co-op, PvP arena, clans, friend lists, chat, live tournaments — is not here.
+It needs game servers and accounts, which a single offline HTML file cannot provide. Leaderboards
+are local personal bests instead.
