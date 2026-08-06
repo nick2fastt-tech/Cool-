@@ -43,13 +43,16 @@ slide, at a sprint for a dash attack, and at a staggered enemy under 18% HP for 
 Every zombie bite can transmit the virus. An infection meter appears above your health and fills on
 its own — different strains fill it at different speeds, and toxic zombies are the worst of them.
 Screen edges creep green, your stickman turns pale, and you take more damage the sicker you get.
-At 100% you turn, a short cinematic plays, and the mission is lost.
+At 100% you turn: you convulse, drop to all fours, and get back up green-skinned and red-eyed —
+then shamble around the battlefield with your turned squad while the screen fades to Mission Failed.
 
 - **Antidotes** are the only cure. They drop from elites, appear in missions, are bought in the
   Armory, crafted in the Workshop, and carried between runs — but each difficulty caps how many
   you can take in with you (Nightmare: 2).
-- **Squadmates get infected too.** Their portrait turns green and fills; leave them and they turn
-  hostile. If the whole squad turns, the mission ends.
+- **Squadmates have infinite lives.** Shot down, they get back up on their own — even in Hardcore,
+  and faster with a medic nearby. Nothing kills a squadmate permanently except the virus.
+- **Squadmates get infected too.** Their portrait turns green and fills; let it top out and they
+  turn hostile and join the horde for good. If the whole squad turns, the mission ends.
 - **Doc, the medic**, slows infection for everyone near her, heals the squad and revives faster.
 - **Difficulty** sets the pace: Easy spreads at half speed with plentiful antidotes; Nightmare
   spreads at triple speed with almost none.
@@ -80,7 +83,7 @@ At 100% you turn, a short cinematic plays, and the mission is lost.
   including Double Jump, Air Dash, Wall Jump and Counter.
 - **10 modes** — Story (15 chapters × 3 stages), Zombie Survival, Boss Rush, Endless, Defense,
   Horde, Time Attack, Daily Challenge, Weekly Challenge, and a hidden level found through caches.
-  Hardcore (one life, no revives, double loot) and New Game+ layer on top.
+  Hardcore (your one life, no checkpoints, double loot) and New Game+ layer on top.
 - **Progression** — level 100, prestige for permanent power, skill tree, weapon and armour levels,
   crafting with materials and blueprints, supply crates, weekly missions, a seasonal event track,
   30 achievements, daily login rewards, checkpoints, and a full statistics page.

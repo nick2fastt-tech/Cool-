@@ -1230,6 +1230,15 @@ function drawStick(e){
     case 'crawl':
       lean = 1.15; aL = HALF + .9; kL = .6; aR = HALF + .3; kR = .8;
       sL = HALF + 1.3; eL = .8; sR = HALF + .6; eR = .9; break;
+    case 'zombie': {                       // arms out, dragging shuffle
+      const w = t * 3.4;
+      aL = HALF + Math.sin(w) * .38; kL = Math.max(0, Math.cos(w)) * .35;
+      aR = HALF + Math.sin(w + Math.PI) * .34; kR = Math.max(0, Math.cos(w + Math.PI)) * .3;
+      sL = .12 + Math.sin(w * .7) * .12; eL = .18;
+      sR = -.02 + Math.sin(w * .7 + 1) * .12; eR = .1;
+      lean = .16 + Math.sin(w * .5) * .05;
+      bob = Math.abs(Math.sin(w)) * -1.6;
+      break; }
     case 'block':
       sL = HALF - 1.35; eL = 1.5; sR = HALF - 1.1; eR = 1.6; lean = .16;
       aL = HALF + .35; aR = HALF - .3; break;
@@ -2152,9 +2161,12 @@ function updateAlly(a, dt){
     // medics get their squadmates back on their feet faster
     const medic = Game.allies.some(m => !m.dead && m.role === 'medic' && Math.abs(m.x - a.x) < 320);
     if (medic) a.downT -= dt * 2;
-    if (a.downT <= 0 && !S.hardcore){
+    if (a.downT <= 0){
       a.dead = false; a.deadT = 0; a.hp = a.maxHp * .6; a.x = p.x - p.face * 60; a.y = GY;
+      a.pose = 'idle'; a.iframe = 1.2;
       toast(ALLIES[a.allyId].name + ' is back up');
+      for (let i = 0; i < 12; i++)
+        part(a.x + rnd(-12, 12), a.y - rnd(10, 60), rnd(-30, 30), -rnd(40, 120), .6, ALLIES[a.allyId].col, 3, 'dot');
     }
     physics(a, dt); return;
   }
@@ -3101,7 +3113,7 @@ function step(dt){
   cam.x = clamp(lerp(cam.x, clamp(want, 0, camMax), 1 - Math.pow(.001, dt)), 0, camMax);
 
   if (Game.squadWiped && Game.startedWithAllies && !Game.allies.length && !Game.over){
-    Game.over = true; Game.wipeFail = 1;
+    Game.over = true; Game.wipeFail = 1;      // every squadmate turned — nobody is coming back
   }
   if (Game.over && !Game.overT) Game.overT = 1.6;
   if (Game.overT){ Game.overT -= dt; if (Game.overT <= 0){ Game.overT = 0; finishMission(false); } }
@@ -3854,7 +3866,7 @@ const UI = {
       '<div class="spacer"></div><h2 class="title">Difficulty</h2>' + this.diffRow() +
       '<div class="spacer"></div><div class="row">' +
       '<button class="btn ' + (S.hardcore ? 'warn' : 'ghost') + '" data-act="hardcore">Hardcore: ' + (S.hardcore ? 'ON' : 'OFF') +
-      '<small>one life · no ally revives · ×2 loot</small></button>' +
+      '<small>your one life · no checkpoints · ×2 loot</small></button>' +
       (ngPlusReady() ? '<button class="btn ' + (S.ngplus ? 'go' : 'ghost') + '" data-act="ngplus">New Game+: ' + (S.ngplus ? 'ON' : 'OFF') +
         '<small>tougher enemies · ×1.8 loot</small></button>' : '') +
       '</div>' +
@@ -4695,25 +4707,73 @@ function startCinematic(){
   const p = Game.player;
   p.pose = 'hurt'; p.vx = 0;
   for (const a of Game.allies) a.pose = 'hurt';
+  Game.combo = 0; Game.comboT = 0;
+  $('comboTag').style.opacity = 0;
   $('pad').classList.add('hidden');
+  $('hud').classList.add('hidden');      // let the moment play without UI on top
+}
+const CINE_CONVULSE = 1.9, CINE_FALL = 3.2, CINE_END = 9.2;
+function cineShamble(e, c, dt){
+  // wander the battlefield, turning around at random
+  if (e.turnT === undefined){ e.turnT = rnd(.8, 2.4); e.wdir = Math.random() < .5 ? -1 : 1; }
+  e.turnT -= dt;
+  if (e.turnT <= 0){ e.turnT = rnd(1.6, 3.2); e.wdir *= -1; }
+  if (e.x < 180) e.wdir = 1;                        // keep the shamble on screen
+  else if (e.x > Game.len - 180) e.wdir = -1;
+  e.face = e.wdir;
+  e.vx = lerp(e.vx, e.wdir * rnd(38, 52), 1 - Math.pow(.02, dt));
+  e.pose = 'zombie';
 }
 function cineStep(dt){
   const c = Game.cine, p = Game.player;
   c.t += dt;
-  cam.x = lerp(cam.x, clamp(p.x - viewW * .5, 0, Math.max(0, Game.len - viewW)), 1 - Math.pow(.02, dt));
   p.anim += dt;
-  // hunch over, colour drains to the virus green
-  p.pose = c.t < 1.6 ? 'hurt' : c.t < 3 ? 'block' : 'crawl';
-  p.col = mixCol('#111318', '#6ad6a0', clamp(c.t / 3, 0, .85));
-  if (Math.random() < dt * 14) part(p.x + rnd(-14, 14), p.y - rnd(0, 76), rnd(-30, 30), -rnd(20, 90), .9, '#6ad6a0', rnd(2, 5), 'dot');
-  for (const a of Game.allies){
-    a.anim += dt; a.pose = c.t < 2 ? 'hurt' : 'crawl';
-    a.col = mixCol('#1a1a1a', '#6ad6a0', clamp((c.t - .8) / 3, 0, .8));
+
+  if (c.t < CINE_CONVULSE){
+    // the virus takes the body: shaking, then buckling
+    p.pose = c.t < .9 ? 'hurt' : 'block';
+    p.vx *= Math.pow(.02, dt);
+    if (Math.random() < dt * 5) shake(2);
+  } else if (c.t < CINE_FALL){
+    p.pose = 'crawl';                                   // down on all fours
+    p.vx *= Math.pow(.02, dt);
+    if (!c.fell){ c.fell = 1; Snd.hurt(); shake(6); blood(p.x, p.y - 30, 1, 8); }
+  } else {
+    if (!c.risen){
+      c.risen = 1; Snd.infect(); shake(4);
+      toast('☣ YOU ARE ONE OF THEM NOW', 3000);
+      for (let i = 0; i < 26; i++)
+        part(p.x + rnd(-16, 16), p.y - rnd(0, 80), rnd(-50, 50), -rnd(40, 160), 1.1, '#6ad6a0', rnd(2, 5), 'dot');
+    }
+    cineShamble(p, c, dt);                              // up again, and walking
   }
-  for (const e of Game.enemies){ e.anim += dt; e.vx *= .9; }
-  updateParts(dt);
-  $('infVig').style.opacity = clamp(.5 + c.t * .12, 0, .95);
-  if (c.t > 4.6 && !c.done){ c.done = 1; finishMission(false, 'infected'); }
+  p.col = mixCol('#111318', '#6ad6a0', clamp(c.t / CINE_FALL, 0, 1) * .88);
+  p.eyes = c.t > CINE_FALL ? '#ff5a5a' : '#fff';
+  if (Math.random() < dt * (c.risen ? 5 : 14))
+    part(p.x + rnd(-14, 14), p.y - rnd(0, 76), rnd(-30, 30), -rnd(20, 90), .9, '#6ad6a0', rnd(2, 5), 'dot');
+  physics(p, dt);
+
+  // the squad goes the same way, a beat behind
+  for (const a of Game.allies){
+    a.anim += dt;
+    if (c.t < CINE_CONVULSE + .6){ a.pose = 'hurt'; a.vx *= Math.pow(.05, dt); }
+    else if (c.t < CINE_FALL + .7){ a.pose = 'crawl'; a.vx *= Math.pow(.05, dt); }
+    else cineShamble(a, c, dt);
+    a.col = mixCol('#1a1a1a', '#6ad6a0', clamp((c.t - .8) / CINE_FALL, 0, 1) * .82);
+    a.eyes = c.t > CINE_FALL + .7 ? '#ff5a5a' : '#fff';
+    physics(a, dt);
+  }
+  // the horde keeps milling around you — you are no longer worth eating
+  for (const e of Game.enemies){
+    if (e.dead){ e.deadT += dt; physics(e, dt); continue; }
+    e.anim += dt;
+    cineShamble(e, c, dt);
+    physics(e, dt);
+  }
+  updateParts(dt); updateWeather(dt);
+  cam.x = clamp(lerp(cam.x, p.x - viewW * .5, 1 - Math.pow(.06, dt)), 0, Math.max(0, Game.len - viewW));
+  $('infVig').style.opacity = clamp(.45 + c.t * .06, 0, .9);
+  if (c.t > CINE_END && !c.done){ c.done = 1; finishMission(false, 'infected'); }
 }
 function mixCol(a, b, t){
   const pa = [parseInt(a.slice(1, 3), 16), parseInt(a.slice(3, 5), 16), parseInt(a.slice(5, 7), 16)];
@@ -4724,18 +4784,26 @@ function cineRender(){
   render();
   const c = Game.cine;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  const a = clamp((c.t - 2.4) / 2.2, 0, 1);
-  ctx.fillStyle = 'rgba(6,18,12,' + a * .92 + ')';
-  ctx.fillRect(0, 0, cv.width, cv.height);
-  if (c.t > 3.1){
-    ctx.globalAlpha = clamp((c.t - 3.1) / 1, 0, 1);
+  // desaturate slowly while you shamble, then fade out at the end
+  const grey = clamp((c.t - CINE_FALL) / 3, 0, 1);
+  if (grey > 0){
+    ctx.fillStyle = 'rgba(20,40,30,' + grey * .30 + ')';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+  }
+  const fade = clamp((c.t - (CINE_END - 2.4)) / 2.4, 0, 1);
+  if (fade > 0){
+    ctx.fillStyle = 'rgba(4,12,8,' + fade * .96 + ')';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+  }
+  if (c.t > CINE_FALL + .4){
+    ctx.globalAlpha = clamp((c.t - CINE_FALL - .4) / 1.2, 0, 1) * (1 - fade * .2);
     ctx.fillStyle = '#8fd8a0';
-    ctx.font = 'bold ' + Math.round(cv.width / 22) + 'px Impact, sans-serif';
+    ctx.font = 'bold ' + Math.round(cv.width / 24) + 'px Impact, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('THE VIRUS TAKES HOLD', cv.width / 2, cv.height * .48);
-    ctx.font = Math.round(cv.width / 52) + 'px Trebuchet MS';
-    ctx.fillStyle = '#4a8a68';
-    ctx.fillText('the city keeps walking without you', cv.width / 2, cv.height * .58);
+    ctx.fillText('THE VIRUS TAKES HOLD', cv.width / 2, cv.height * .30);
+    ctx.font = Math.round(cv.width / 54) + 'px Trebuchet MS';
+    ctx.fillStyle = '#5a9a78';
+    ctx.fillText('the city keeps walking — and so do you', cv.width / 2, cv.height * .38);
     ctx.textAlign = 'left'; ctx.globalAlpha = 1;
   }
 }
