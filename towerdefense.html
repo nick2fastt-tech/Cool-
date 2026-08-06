@@ -439,9 +439,9 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
     <button class="btn go pe" id="shopBtn">Inventory</button>
   </div>
 
-  <div id="place">Tap the ground, or drag the slot<em>Off the path, inside your blue ring</em>
+  <div id="place">Drag it where you want it<em>Off the path, inside your blue ring</em>
     <div class="row" style="margin-top:8px">
-      <button class="btn go sm pe" id="deployBtn">Deploy Here</button>
+      <button class="btn go sm pe" id="deployBtn">Place</button>
       <button class="btn sm pe" id="cancelPlace">Cancel</button>
     </div>
   </div>
@@ -597,7 +597,13 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;bac
       <li><b>New: The Minigunner.</b> $2,000. Six barrels on a spinning hub that have to get up to speed before anything comes out &mdash; about a second of spin-up, then it does not stop. 2 damage every 0.15s at Lv1 up to 10 every 0.05s at Lv5. Range 8 &rarr; 16. 5 levels</li>
       <li><b>New: The Military Base.</b> $2,500. Never fires a shot &mdash; it sends wrecked cars out of its garage to ram whatever is coming, 50 HP at Lv1 up to 2,000 at Lv5, one at a time rising to three. At Lv5 it also parks <b>two rail gun tanks</b> that hold position and hit for 20. Limit of 3 bases. 5 levels</li>
       <li><b>Skip the wait.</b> Thirty seconds into an intermission a Skip button appears, and you are paid for the seconds you give up</li>
+      <li><b>Placing works like TDS now.</b> Pick a tower and it drops in front of you straight away as a ghost. Drag it anywhere on the field &mdash; the camera stays put while you do &mdash; then hit <b>Place</b>, or <b>Cancel</b> to back out. Letting go never commits it, and Place greys out over ground you cannot build on. Dragging a card straight out of the Inventory still works the old way</li>
+      <li><b>Every tower actually points its gun at what it is shooting.</b> The barrel was the end of a chain of hand-set joint angles, so it only ever pointed roughly the right way &mdash; and three of them were mounted sideways on the arm. The Sniper&rsquo;s rifle pointed <i>backwards over its shoulder</i> (130&deg; off), the Minigunner&rsquo;s six barrels pointed at the sky (82&deg;), the Toy Soldier&rsquo;s the same, and the Blitzer was 44&deg; wide. All nine are now within 2&deg;, and the aim is solved at the elbow first and the wrist last so the pose still drives the look</li>
+      <li><b>Both hands are on the weapon.</b> The off hand used to float somewhere near the gun because nothing told it where the gun was. Each weapon now carries a marked hold &mdash; the pump, the fore-end, the front handle &mdash; and the arm is solved onto it every frame. The Robber&rsquo;s hand rides the pump as he racks it. Measured gap across the six two-handed towers: under 2cm, from as much as 60cm</li>
+      <li><b>They shoulder their guns instead of holding them out at arm&rsquo;s length.</b> Which is why no hand could reach the fore-end in the first place</li>
     </ul>
+    <div class="logV">V1.91</div>
+    <ul class="logL">
       <li><b>The Burned Corpse, rebuilt.</b> An iron jaw bolted onto the skull on a real hinge with pistons either side, a bigger mouth, teeth top and bottom, burnt-through ribs with fire behind them, and a furnace door in its chest</li>
       <li><b>It winds up now.</b> 1.5 seconds where both hands come up and physically haul its own jaw open while a ball of fire builds in its throat &mdash; then the flame. It only does damage while actually breathing</li>
       <li><b>Idle is a stance, not a pose.</b> Hands in, weight on one hip, head cocked. It is waiting, not braced</li>
@@ -3095,7 +3101,22 @@ function kill(e,reward){
   },end:()=>removeFromWorld(e.g)});
 }
 
-/* ---------- towers ---------- */
+/* ---------- towers ----------
+   Two-handed weapons carry an invisible marker at the spot the support hand
+   belongs on — the pump, the fore-end, the front handle. The animation solves
+   the off arm onto it every frame, so the hand actually holds the gun instead
+   of hovering somewhere near it. */
+function gripAt(gun,x,y,z){
+  const m=new THREE.Object3D();m.position.set(x,y,z);gun.add(m);return m;
+}
+/* Long guns get two marks: the furthest forward hold the pose wants, and the
+   nearest one that still looks right (the magwell, the receiver). The animation
+   slides the support hand between them so it lands on the gun instead of
+   grabbing at air a foot past the fore-end. */
+function gripSpan(u,gun,near,far){
+  u.grip=gripAt(gun,far[0],far[1],far[2]);
+  u.gripNear=gripAt(gun,near[0],near[1],near[2]);
+}
 function buildPolice(){
   const g=person({skin:0xdcae86,hair:0x14100e,eye:0x4a2c17,shirt:0x1b2765,pants:0x121736,shoe:0x0c0c11});
   const P=g.userData.P,T=P.torso,H=P.head;
@@ -3227,6 +3248,8 @@ function buildScout(){
   grip.position.set(0,.045,-.055);grip.rotation.x=.25;gun.add(grip);
   gun.position.set(0,-.05,.02);P.handR.add(gun);
   g.userData.gun=gun;
+  // support hand wraps the firing hand, a touch low and behind the frame
+  g.userData.grip=gripAt(gun,-.02,.02,-.05);
   shadowPass(g);
   return g;
 }
@@ -3284,6 +3307,8 @@ function buildRobber(){
   shell.rotation.z=Math.PI/2;shell.position.set(.04,-.02,0);gun.add(shell);
   gun.position.set(0,-.05,.02);P.handR.add(gun);
   g.userData.gun=gun;g.userData.muzzleLocal=V3(0,-.34,.02);
+  gripSpan(g.userData,gun,[0,-.02,0],[0,-.16,.01]);  // receiver -> pump
+  g.userData.pump=pump;
   shadowPass(g);
   return g;
 }
@@ -3352,6 +3377,7 @@ function buildSurvivor(){
   }
   r.position.set(0,-.06,.02);P.handR.add(r);
   g.userData.rifle=r;g.userData.muzzle=brake;
+  gripSpan(g.userData,r,[0,-.06,0],[0,-.32,.01]);   // magwell -> fore-end
   shadowPass(g);
   return g;
 }
@@ -3415,6 +3441,7 @@ function buildBlitzer(){
   sight.position.set(0,-.16,.07);gun.add(sight);
   gun.position.set(0,-.05,.02);P.handR.add(gun);
   g.userData.gun=gun;g.userData.muzzle=emitter;
+  gripSpan(g.userData,gun,[0,-.06,0],[0,-.21,0]);   // receiver -> ahead of the mag
   g.userData.cells=cells;g.userData.chargeRing=ringA;
   shadowPass(g);
   return g;
@@ -3876,9 +3903,11 @@ function buildToy(){
   mag.position.set(0,-.07,.1);mag.rotation.x=-.14;gun.add(mag);
   const muzzle=new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,.03,8),metal);
   muzzle.rotation.x=Math.PI/2;muzzle.position.z=.51;gun.add(muzzle);
-  gun.position.set(0,-.07,.06);gun.rotation.x=.06;
+  /* The barrel runs down the arm like every other rifle here, not out of the
+     side of the forearm — mounted the old way it pointed at the sky. */
+  gun.position.set(0,-.24,.03);gun.rotation.x=Math.PI/2+.06;
   P.foreR.add(gun);
-  g.userData.gun=gun;g.userData.muzzle=muzzle;
+  g.userData.gun=gun;g.userData.muzzle=muzzle;g.userData.gunAxis=V3(0,0,1);
   shadowPass(g);
   return g;
 }
@@ -3957,9 +3986,10 @@ function buildSniper(){
   bolt.position.set(.035,.03,.03);gun.add(bolt);
   const shell=new THREE.Mesh(new THREE.CylinderGeometry(.011,.011,.055,7),brass);
   shell.rotation.z=Math.PI/2;shell.position.set(.05,.02,.02);shell.visible=false;gun.add(shell);
-  gun.position.set(0,-.1,.1);
+  gun.position.set(0,-.26,.03);gun.rotation.x=Math.PI/2;   // down the arm
   P.foreR.add(gun);
-  g.userData.gun=gun;g.userData.muzzle=muzzle;
+  g.userData.gun=gun;g.userData.muzzle=muzzle;g.userData.gunAxis=V3(0,0,1);
+  gripSpan(g.userData,gun,[0,-.07,.08],[0,-.07,.24]); // receiver -> fore-end
   g.userData.sniper={bolt,shell,nvTubes,nvGlow,scope};
   shadowPass(g);
   return g;
@@ -4012,9 +4042,13 @@ function buildMinigun(){
   muzzle.rotation.x=Math.PI/2;muzzle.position.z=.48;hub.add(muzzle);
   const grip=new THREE.Mesh(new THREE.BoxGeometry(.04,.13,.05),steelD);
   grip.position.set(0,-.11,-.06);gun.add(grip);
-  gun.position.set(0,-.16,.14);
+  // forward handle for the off hand, so he steers the gun with both arms
+  const fgrip=new THREE.Mesh(new THREE.BoxGeometry(.04,.14,.05),steelD);
+  fgrip.position.set(0,-.11,.14);fgrip.rotation.x=-.18;gun.add(fgrip);
+  gun.position.set(0,-.30,.02);gun.rotation.x=Math.PI/2;   // down the arm
   P.foreR.add(gun);
-  g.userData.gun=gun;g.userData.muzzle=muzzle;
+  g.userData.gun=gun;g.userData.muzzle=muzzle;g.userData.gunAxis=V3(0,0,1);
+  gripSpan(g.userData,gun,[0,-.06,-.08],[0,-.10,.15]);
   g.userData.mini={hub,belt,shroud};
   shadowPass(g);
   return g;
@@ -5087,10 +5121,27 @@ function startPlacing(key,fromCard){
     new THREE.MeshBasicMaterial({color:0x7f8dff,transparent:true,opacity:.5,side:THREE.DoubleSide}));
   r.rotation.x=-Math.PI/2;r.position.y=.14;r.scale.setScalar(def.lv[0].rng);ghost.add(r);
   ghost.visible=false;world.add(ghost);
+  /* Put it down in front of you immediately rather than waiting for a tap on
+     the ground. From here you drag it where you want it and confirm — the way
+     Tower Defense Simulator does it. */
+  const fx=player.position.x+Math.sin(player.rotation.y)*3.2;
+  const fz=player.position.z+Math.cos(player.rotation.y)*3.2;
+  ghostPos={x:fx,z:fz};
   reachRing.visible=true;
   return true;
 }
 let dragPlace=false,ghostPos=null;
+/* movePlace: a tower is already down as a ghost and you are sliding it around.
+   Distinct from dragPlace, which is the drag-straight-out-of-the-shop gesture
+   and commits when you let go. This one never commits on release — you confirm
+   with Place, or back out with Cancel. */
+let movePlace=false,moveId=null,lastGhostOk=null;
+function placeMoveStart(x,y){
+  if(!G.placing||dragPlace||G.mode!=='match')return false;
+  movePlace=true;
+  ghostFromScreen(x,y);
+  return true;
+}
 function ghostFromScreen(x,y){
   const q=screenToGround(x,y);
   if(q)ghostPos={x:q.x,z:q.z};
@@ -5113,7 +5164,8 @@ function finishDragPlace(){
 function stopPlacing(){
   G.placing=null;$('place').classList.remove('on');$('ui').classList.remove('placing');
   if(ghost){removeFromWorld(ghost);ghost=null;}
-  dragPlace=false;ghostPos=null;$('shop').classList.remove('faded');
+  dragPlace=false;movePlace=false;moveId=null;ghostPos=null;$('shop').classList.remove('faded');
+  lastGhostOk=null;$('deployBtn').disabled=false;$('deployBtn').style.opacity='';
   reachRing.visible=false;
   renderSlots();
 }
@@ -5244,6 +5296,9 @@ document.addEventListener('touchstart',e=>{
     const t=e.changedTouches[i];
     if(isUI(t.target))continue;
     e.preventDefault();
+    // while a tower is waiting to be placed, touching the field grabs the ghost
+    // instead of walking or swinging the camera around
+    if(placeMoveStart(t.clientX,t.clientY)){moveId=t.identifier;continue;}
     act[t.identifier]={x:t.clientX,y:t.clientY};
     // left half drives the floating stick, right half aims the camera
     if(t.clientX<innerWidth*.5&&stickId===null){
@@ -5263,6 +5318,7 @@ document.addEventListener('touchmove',e=>{
   }
   for(let i=0;i<e.changedTouches.length;i++){
     const t=e.changedTouches[i];
+    if(movePlace&&t.identifier===moveId){e.preventDefault();ghostFromScreen(t.clientX,t.clientY);continue;}
     if(act[t.identifier])act[t.identifier]={x:t.clientX,y:t.clientY};
     if(t.identifier===stickId)stickSet(t.clientX,t.clientY);
     else if(t.identifier===dragId&&!pinching){
@@ -5279,6 +5335,8 @@ document.addEventListener('touchmove',e=>{
 },{passive:false});
 
 function endTouch(t){
+  // letting go never commits the tower — Place and Cancel do that
+  if(movePlace&&t.identifier===moveId){movePlace=false;moveId=null;return;}
   delete act[t.identifier];
   if(t.identifier===stickId){stickId=null;stickHome();}
   if(t.identifier===dragId){
@@ -5299,7 +5357,7 @@ document.addEventListener('touchcancel',e=>{
 // losing focus mid-drag left the joystick held down and the player walking
 addEventListener('blur',()=>{
   for(const k in act)delete act[k];
-  stickId=null;dragId=null;pinching=false;mStick=false;mDrag=false;
+  stickId=null;dragId=null;pinching=false;mStick=false;mDrag=false;movePlace=false;moveId=null;
   stickHome();
   for(const k in keys)keys[k]=false;
   if(dragPlace)stopPlacing();
@@ -5309,11 +5367,13 @@ addEventListener('blur',()=>{
 let mStick=false,mDrag=false,mMoved=false,mx=0,my=0;
 document.addEventListener('mousedown',e=>{
   if(isUI(e.target))return;
+  if(placeMoveStart(e.clientX,e.clientY))return;
   if(e.clientX<innerWidth*.5){mStick=true;stickShow(e.clientX,e.clientY);stickSet(e.clientX,e.clientY);}
   else{mDrag=true;mMoved=false;mx=e.clientX;my=e.clientY;}
 });
 addEventListener('mousemove',e=>{
   if(dragPlace){ghostFromScreen(e.clientX,e.clientY);return;}
+  if(movePlace){ghostFromScreen(e.clientX,e.clientY);return;}
   if(mStick)stickSet(e.clientX,e.clientY);
   else if(mDrag){
     camYaw-=(e.clientX-mx)*.006;
@@ -5324,6 +5384,7 @@ addEventListener('mousemove',e=>{
 });
 addEventListener('mouseup',e=>{
   if(dragPlace){finishDragPlace();return;}
+  if(movePlace){movePlace=false;return;}
   if(mStick){mStick=false;stickHome();}
   if(mDrag){mDrag=false;if(!mMoved)tapWorld(e.clientX,e.clientY);}
 });
@@ -5355,7 +5416,8 @@ function screenToGround(cx,cy){
 function tapWorld(cx,cy){
   if(G.over||G.mode!=='match')return;
   const p=screenToGround(cx,cy);if(!p)return;
-  if(G.placing){commitPlace(p.x,p.z);return;}
+  // a tap while placing just slides the ghost over — you still have to confirm
+  if(G.placing){ghostPos={x:p.x,z:p.z};return;}
   let best=null,bd=2.2;
   for(const t of G.towers){
     const d=Math.hypot(p.x-t.g.position.x,p.z-t.g.position.z);
@@ -5572,6 +5634,144 @@ function fire(t,dt){
    the pose continuous when the swing ends.
    ============================================================ */
 const mix=(a,b,k)=>a+(b-a)*k;
+
+/* ---- support-hand IK -------------------------------------------------
+   The authored poses decide how a tower carries its weapon; they cannot
+   decide where the off hand ends up, because that depends on where the
+   firing arm happens to be pointing this frame. So the off hand used to
+   float beside the gun instead of holding it.
+
+   This walks the weapon's grip marker back up the right arm into the
+   torso's space (local matrices only — no world-matrix rebuild), then
+   solves the two bones of the left arm onto it: the elbow bend comes from
+   the law of cosines, and the whole arm is then swung so the hand lands on
+   the mark. The authored carry angle is used as the starting orientation,
+   so the elbow still points where the pose intended. */
+const IK_L1=.28,IK_L2=.32;                       // shoulder->elbow, elbow->palm
+const _ikT=new THREE.Vector3(),_ikA=new THREE.Vector3(),_ikB=new THREE.Vector3(),
+      _ikN=new THREE.Vector3(),_ikD=new THREE.Vector3(),
+      _ikQ=new THREE.Quaternion(),_ikS=new THREE.Quaternion();
+function nodeToRoot(node,root,out){
+  let o=node;
+  while(o&&o!==root){o.updateMatrix();out.applyMatrix4(o.matrix);o=o.parent;}
+  return o===root;
+}
+function chainQuat(node,root,q){
+  q.identity();
+  const st=[];let o=node;
+  while(o&&o!==root){st.push(o);o=o.parent;}
+  if(o!==root)return false;
+  for(let i=st.length-1;i>=0;i--)q.multiply(st[i].quaternion);
+  return true;
+}
+function gripToTorso(P,mark,out){
+  out.set(0,0,0);
+  return nodeToRoot(mark,P.torso,out)?out:null;  // marker not under this torso
+}
+
+/* ---- point the weapon at what it is shooting -------------------------
+   The body turns toward the target, but the barrel is the end of a chain of
+   hand-authored joint angles, so it only ever pointed *roughly* the right way
+   — and on the three rifles that hang off the forearm it pointed at the sky or
+   over the shoulder. This measures where the barrel actually ends up and rolls
+   the last joint until it lines up, capped at what a wrist could plausibly do
+   so the pose still drives the look. */
+const _wq=new THREE.Quaternion(),_wq2=new THREE.Quaternion(),_wqI=new THREE.Quaternion(),
+      _wv=new THREE.Vector3(),_wv2=new THREE.Vector3(),_wd=new THREE.Vector3(),
+      _AIM_DOWN=new THREE.Vector3(0,-1,0);
+/* Swing one joint so the barrel lines up, but no further than `cap` — the
+   correction is then handed on down the arm, the way a real shooter adjusts
+   at the elbow first and the wrist last. */
+function aimJoint(t,joint,w,axis,cap){
+  if(!chainQuat(joint.parent,t.g,_wq))return;
+  _wv2.copy(_wd).applyQuaternion(_wq.invert());   // wanted, in the joint's space
+  if(!chainQuat(w,joint.parent,_wq))return;
+  _wv.copy(axis).applyQuaternion(_wq).normalize();// where it points right now
+  _wq2.setFromUnitVectors(_wv,_wv2);
+  const ang=2*Math.acos(clamp(Math.abs(_wq2.w),0,1));
+  if(ang>cap)_wq2.slerp(_wqI,1-cap/ang);
+  joint.quaternion.premultiply(_wq2);
+}
+function aimWeapon(t,P,target,dt){
+  const u=t.g.userData,w=u.gun||u.rifle;
+  if(!w)return;
+  if(!u.gunRest)u.gunRest=w.quaternion.clone();
+  w.quaternion.copy(u.gunRest);                   // rebuilt from scratch each frame
+  const axis=u.gunAxis||_AIM_DOWN;
+  if(target){
+    _wv.set(0,0,0);
+    if(!nodeToRoot(w,t.g,_wv))return;             // weapon origin, in tower space
+    // the tower group only ever yaws, so undoing that puts the target locally
+    const dx=target.g.position.x-t.g.position.x,dz=target.g.position.z-t.g.position.z;
+    const yw=-t.g.rotation.y,cy=Math.cos(yw),sy=Math.sin(yw);
+    _wv2.set(dx*cy+dz*sy,target.g.position.y+.75-t.g.position.y,-dx*sy+dz*cy).sub(_wv);
+    if(_wv2.lengthSq()<1e-6)return;
+    if(!t.aimDir)t.aimDir=new THREE.Vector3(0,0,1);
+    t.aimDir.copy(_wv2.normalize());
+    t.aimW=Math.min(1,(t.aimW||0)+dt*6);
+  }else{
+    t.aimW=Math.max(0,(t.aimW||0)-dt*2.5);        // eases off, never snaps
+  }
+  if(!(t.aimW>.002)||!t.aimDir)return;
+  _wd.copy(t.aimDir);
+  aimJoint(t,P.foreR,w,axis,.34*t.aimW);          // elbow takes the coarse swing
+  aimJoint(t,w,w,axis,.45*t.aimW);                // wrist finishes it off
+}
+/* Every gun pose was authored with the firing arm straight out, which pushes
+   the weapon a full arm's length in front of the chest — far past anything the
+   other hand can reach, and it reads as a toy being held out rather than a gun
+   being aimed. Raising the shoulder by k while bending the elbow by the same k
+   leaves the hand's *orientation* untouched (both are rotations about x), so
+   the barrel keeps pointing exactly where the pose aimed it, but the hand
+   itself comes back in toward the body. Pick the smallest tuck that brings the
+   grip inside the off arm's reach, and ease into it so it never snaps. */
+const IK_REACH=(IK_L1+IK_L2)*.94;
+function tuckForReach(t,P,mark,dt){
+  const a0=P.armR.rotation.x,f0=P.foreR.rotation.x;
+  let want=.9,found=false,bestD=1e9,bestK=0;
+  for(let i=0;i<=4;i++){
+    const k=i*.225;
+    P.armR.rotation.x=a0+k;P.foreR.rotation.x=f0-k;
+    if(!gripToTorso(P,mark,_ikT)){P.armR.rotation.x=a0;P.foreR.rotation.x=f0;return false;}
+    const d=_ikT.distanceTo(P.armL.position);
+    if(d<bestD){bestD=d;bestK=k;}
+    if(d<=IK_REACH){want=k;found=true;break;}
+  }
+  if(!found)want=bestK;
+  t.tuck=(t.tuck||0)+(want-(t.tuck||0))*Math.min(1,dt*6);
+  P.armR.rotation.x=a0+t.tuck;P.foreR.rotation.x=f0-t.tuck;
+  return true;
+}
+/* Slide the support hand back along the weapon until it is somewhere the arm
+   can actually reach — furthest forward first, since that is the hold the pose
+   was drawn for. */
+function resolveGrip(P,u,out){
+  if(!gripToTorso(P,u.grip,out))return false;
+  if(!u.gripNear||!gripToTorso(P,u.gripNear,_ikN))return true;
+  const sh=P.armL.position;
+  if(out.distanceTo(sh)<=IK_REACH)return true;
+  _ikD.copy(_ikN).sub(out);                        // far -> near
+  for(let i=1;i<=6;i++){
+    _ikB.copy(out).addScaledVector(_ikD,i/6);
+    if(_ikB.distanceTo(sh)<=IK_REACH){out.copy(_ikB);return true;}
+  }
+  out.copy(_ikN);                                  // nothing reaches: nearest hold
+  return true;
+}
+function ikArm(P,side,tLocal){
+  const arm=P['arm'+side],fore=P['fore'+side];
+  _ikT.copy(tLocal).sub(arm.position);
+  const d=clamp(_ikT.length(),Math.abs(IK_L1-IK_L2)+.03,IK_L1+IK_L2-.02);
+  const cosE=clamp((IK_L1*IK_L1+IK_L2*IK_L2-d*d)/(2*IK_L1*IK_L2),-1,1);
+  const bend=Math.PI-Math.acos(cosE);            // 0 = straight arm
+  fore.rotation.set(-bend,0,0);
+  // where the authored carry angle puts the hand, versus where it needs to be
+  _ikA.set(0,-IK_L1-IK_L2*Math.cos(bend),IK_L2*Math.sin(bend)).normalize()
+      .applyQuaternion(arm.quaternion);
+  _ikB.copy(_ikT).normalize();
+  _ikQ.setFromUnitVectors(_ikA,_ikB);
+  arm.quaternion.premultiply(_ikQ);
+}
 const RECOIL_DECAY={scout:9,survivor:11,robber:4.5,blitzer:15,knife:6,slasher:7,police:7,commander:8,
                     toy:16,corpse:8,sniper:3.2,minigun:22,milbase:6};   // a heavy rifle rocks back slowly   // the toy fires far too fast for a slow settle
 function towerPose(t,dt,target,s){
@@ -5698,9 +5898,12 @@ function towerPose(t,dt,target,s){
     P.head.rotation.x=mix(.02,-.07,A)-R*.06+bino*.1;
   }else if(key==='survivor'){
     // ---- marksman rifle: cheek welded to the stock, small fast recoil ----
-    P.armR.rotation.x=mix(-.14,-1.34,A)+R*.30;
-    P.armR.rotation.z=mix(-.12,-.20,A);
-    P.foreR.rotation.x=mix(-.24,-.26,A)-R*.16;
+    /* Shouldered, not held out at arm's length: the upper arm stays down, the
+       elbow swings out and the forearm comes up to the stock. That is what
+       puts the gun close enough for the other hand to actually hold it. */
+    P.armR.rotation.x=mix(-.14,-.30,A)+R*.30;
+    P.armR.rotation.z=mix(-.12,-.62,A);
+    P.foreR.rotation.x=mix(-.24,-1.30,A)-R*.16;
     P.armL.rotation.x=mix(-.10,-1.50,A)+gA*(gK===1?-.5:0);
     P.armL.rotation.z=mix(.12,.60,A);
     P.foreL.rotation.x=mix(-.22,-.80,A);
@@ -5723,9 +5926,9 @@ function towerPose(t,dt,target,s){
     }else{
       // ---- carbine: shouldered, tiny high-frequency shudder while firing ----
       const buzz=R*Math.sin(now*70)*.05;
-      P.armR.rotation.x=mix(-.14,-1.40,A)+R*.18+buzz;
-      P.armR.rotation.z=mix(-.12,-.16,A);
-      P.foreR.rotation.x=mix(-.24,-.20,A)-R*.10;
+      P.armR.rotation.x=mix(-.14,-.32,A)+R*.18+buzz;
+      P.armR.rotation.z=mix(-.12,-.60,A);
+      P.foreR.rotation.x=mix(-.24,-1.28,A)-R*.10;
       P.armL.rotation.x=mix(-.10,-1.46,A)+buzz*.6;
       P.armL.rotation.z=mix(.12,.52,A);
       P.foreL.rotation.x=mix(-.22,-.72,A);
@@ -5841,12 +6044,18 @@ function towerPose(t,dt,target,s){
   }else if(key==='robber'){
     // ---- sawn-off: heavy roll-through recoil, then works the pump ----
     const pump=clamp((u-.35)/.30,0,1)*(1-clamp((u-.70)/.30,0,1))*A;
-    P.armR.rotation.x=mix(-.14,-1.34,A)+R*.80;
-    P.armR.rotation.z=mix(-.12,-.14,A);
-    P.foreR.rotation.x=mix(-.24,-.12,A)-R*.34;
+    P.armR.rotation.x=mix(-.14,-.34,A)+R*.80;
+    P.armR.rotation.z=mix(-.12,-.58,A);
+    P.foreR.rotation.x=mix(-.24,-1.22,A)-R*.34;
     P.armL.rotation.x=mix(-.10,-1.16,A)-pump*.40+R*.15;
     P.armL.rotation.z=mix(.12,.46,A);
     P.foreL.rotation.x=mix(-.22,-.66,A)+pump*.55;
+    /* Racking the slide moves the pump itself, and the grip mark rides with
+       it — so the hand is dragged back along the barrel by the IK rather than
+       being animated separately and sliding off the gun. */
+    const pm=t.g.userData.pump,gm=t.g.userData.grip;
+    if(pm)pm.position.y=-.15+pump*.11;
+    if(gm)gm.position.y=-.16+pump*.11;
     P.torso.rotation.y+=-A*.30+R*.18;
     P.torso.rotation.x+=-R*.24;
     P.head.rotation.x=mix(.02,-.04,A)-R*.14;
@@ -5873,6 +6082,26 @@ function towerPose(t,dt,target,s){
     P.foreL.rotation.x=mix(-.20,-.40,A);
     P.torso.rotation.y+=-A*.10;
     P.head.rotation.x=mix(.02,-.06,A);
+  }
+
+  /* --- put the off hand on the weapon ---------------------------------
+     Runs last so it sees the finished right-arm pose. Some idle gestures
+     deliberately take the hand off the gun (binoculars, a battery swap), so
+     those blend the authored arm back in instead of fighting the solver. */
+  const mark=t.g.userData.grip;
+  if(mark)tuckForReach(t,P,t.g.userData.gripNear||mark,dt);
+  aimWeapon(t,P,target,dt);
+  if(mark){
+    let ikOff=0;
+    if(key==='scout')ikOff=gK===0?gA:0;
+    else if(key==='survivor')ikOff=gK===1?gA:0;
+    else if(key==='blitzer'&&t.rech>0)ikOff=1;
+    if(ikOff<.999&&resolveGrip(P,t.g.userData,_ikT)){
+      const saveQ=ikOff>.001?_ikS.copy(P.armL.quaternion):null;
+      const saveF=P.foreL.rotation.x;
+      ikArm(P,'L',_ikT);
+      if(saveQ){P.armL.quaternion.slerp(saveQ,ikOff);P.foreL.rotation.x=mix(P.foreL.rotation.x,saveF,ikOff);}
+    }
   }
 
   // --- flaming blades flicker, and flare when he swings ---------------
@@ -8138,6 +8367,13 @@ function step(dt){
     ghost.visible=true;ghost.position.set(fx,0,fz);ghost.rotation.y=player.rotation.y+Math.PI;
     const ok=validSpot(fx,fz);
     ghost.traverse(o=>{if(o.isMesh&&o.material)o.material.opacity=ok?.55:.2;});
+    // grey the Place button out on a bad spot so you can see it won't take
+    if(ok!==lastGhostOk){
+      lastGhostOk=ok;
+      const b=$('deployBtn');
+      b.disabled=!ok;b.style.opacity=ok?'':'.4';
+      $('place').firstChild.nodeValue=ok?'Drag it where you want it':'Can’t build there';
+    }
   }
 
   // spawning
