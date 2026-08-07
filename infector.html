@@ -361,7 +361,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
   <div id="menuTop">
     <div class="title">INFECTOR</div>
     <div class="subtitle">Run. Hide. Survive the outbreak.</div>
-    <div style="font-size:10px;letter-spacing:3px;color:#7fd4a0;margin-top:5px">V1.11 · REALISM &amp; CHARACTER OVERHAUL</div>
+    <div style="font-size:10px;letter-spacing:3px;color:#7fd4a0;margin-top:5px">V1.12 · THE CRAWLER</div>
   </div>
   <div id="menuBtns">
     <button class="btn green wide" data-nav="quickplay">▶ Play</button>
@@ -373,7 +373,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
     <button class="btn ghost" data-nav="settings">⚙ Settings</button>
     <button class="btn ghost" data-nav="credits" style="grid-column:1/-1">★ Credits</button>
   </div>
-  <div class="footNote" id="verNote">V1.11 · 7–10 players · 10 servers</div>
+  <div class="footNote" id="verNote">V1.12 · 7–10 players · 10 servers</div>
 </div>
 
 <!-- ================= SERVERS ================= -->
@@ -488,6 +488,17 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
         <div class="opt"><div><div class="optL">Audio</div><div class="optD">Fully synthesized via Web Audio: wind, birds, growls, footsteps, adaptive score</div></div></div>
         <div class="opt"><div><div class="optL">Netcode</div><div class="optD">Authoritative round simulation with snapshot interpolation &amp; client prediction</div></div></div>
         <div class="opt"><div><div class="optL">Maps</div><div class="optD">Playground &amp; Neighborhood — procedurally assembled, bright sunny lighting</div></div></div>
+      </div>
+      <h3 style="margin:18px 0 6px;font-size:15px;letter-spacing:2px;color:#8ef07a">V1.12 — THE CRAWLER</h3>
+      <div class="muted" style="line-height:1.75">
+        A third zombie class that never gets up. The <b>Crawler</b> drags itself along the ground at 3.6 m/s — half
+        the speed of anything else out there — so it has to ambush. Instead of going for your throat it snaps at your
+        <b>ankles</b>, and if it connects your legs go out from under you and you land on your back.<br><br>
+        Then it climbs on top and feeds. Blood pools and spreads under the body, wounds open on the shoulder and
+        stomach, and it tears at you in a rhythm for about seven seconds before moving on. Other zombies drift over
+        and join in.<br><br>
+        You are on the floor for <b>thirty seconds</b>. You fight it at first, then weaken, then go still while the
+        infection takes hold — and at the end you roll over, push yourself up and roar as one of them.
       </div>
       <h3 style="margin:18px 0 6px;font-size:15px;letter-spacing:2px;color:#8ef07a">V1.11 — REALISM &amp; CHARACTER OVERHAUL</h3>
       <div class="muted" style="line-height:1.75">
@@ -1016,6 +1027,22 @@ const Audio_={
   },
   eat(){
     for(let i=0;i<3;i++)this.burst({filter:'bandpass',fc:600+i*220,fc1:180,dur:.2,gain:.13,delay:i*.24,q:1.6});
+  },
+  /* wet tearing for the feeding sequence */
+  tear(heavy){
+    this.burst({filter:'bandpass',fc:heavy?420:620,fc1:140,dur:heavy?.42:.26,
+      gain:heavy?.3:.18,q:1.3,rate:.6+Math.random()*.5});
+    this.tone({f0:heavy?150:210,f1:52,dur:heavy?.36:.22,gain:heavy?.2:.12,
+      type:'sawtooth',filter:'lowpass',fc:520});
+    if(heavy)this.burst({filter:'lowpass',fc:900,fc1:200,dur:.5,gain:.16,delay:.05,q:.7});
+  },
+  crunch(){
+    this.burst({filter:'bandpass',fc:1800,fc1:500,dur:.14,gain:.24,q:2.2});
+    this.tone({f0:260,f1:70,dur:.2,gain:.16,type:'square',filter:'lowpass',fc:700});
+  },
+  gurgle(){
+    this.burst({filter:'bandpass',fc:340,fc1:180,dur:.75,gain:.15,q:1.6,rate:.7});
+    this.tone({f0:110,f1:64,dur:.7,gain:.1,type:'sawtooth',filter:'lowpass',fc:400});
   },
   growl(delay,pitch){
     if(!this.ctx)return;
@@ -2681,8 +2708,9 @@ const J={bob:0,lean:1,side:2,twist:3,spine:4,spineSide:5,
   rShP:13,rShY:14,rShR:15,rElb:16,
   lHipP:17,lHipR:18,lKnee:19,lAnk:20,
   rHipP:21,rHipR:22,rKnee:23,rAnk:24,
-  crouch:25,yawOff:26,mouth:27,brow:28,eye:29,armR:30,shrug:31,handGrip:32};
-const NJ=33;
+  crouch:25,yawOff:26,mouth:27,brow:28,eye:29,armR:30,shrug:31,handGrip:32,
+  rootZ:33,rootY:34};
+const NJ=35;
 const _poseB=new Float32Array(NJ);
 
 /* Each clip writes absolute channel values; the blender mixes them by weight. */
@@ -2998,6 +3026,169 @@ const CLIP={
    o[J.headP]=-.4+Math.abs(Math.sin(p))*.12;     // natural head bob
    o[J.headR]=Math.sin(t*8)*.07;
    o[J.shrug]=1.15;o[J.handGrip]=.9;o[J.eye]=1.15;o[J.mouth]=.6;
+ },
+ /* ================= Crawler =================
+    Belly to the floor. The whole body pitches forward almost flat, so the root
+    is pulled back and down to keep the model over its own collider. */
+ cIdle(o,t,c){
+   const sd=c.seed||0;
+   const br=Math.sin(t*1.9+sd);
+   const tw=c.twitch||0;
+   o[J.lean]=1.24;o[J.rootZ]=-.76;o[J.rootY]=-.093;
+   o[J.spine]=-.42+br*.05;                 // head lifted to look ahead
+   o[J.headP]=-.78-br*.06+tw*.2;
+   o[J.headY]=Math.sin(t*.7+sd)*.55+tw*.5;
+   o[J.headR]=Math.sin(t*1.1+sd)*.16;
+   // forearms planted, elbows out
+   o[J.lShP]=-1.05+br*.05;o[J.rShP]=-1.0-br*.05;
+   o[J.lShR]=.72;o[J.rShR]=.68;o[J.lShY]=.3;o[J.rShY]=-.3;
+   o[J.lElb]=1.15;o[J.rElb]=1.2;o[J.handGrip]=.55;
+   // legs trail behind, knees splayed
+   o[J.lHipP]=.18;o[J.rHipP]=.14;o[J.lHipR]=.42;o[J.rHipR]=-.38;
+   o[J.lKnee]=.95;o[J.rKnee]=1.05;o[J.lAnk]=-.5;o[J.rAnk]=-.45;
+   o[J.side]=Math.sin(t*.9+sd)*.05+tw*.06;
+   o[J.shrug]=.9+Math.abs(br)*.4;
+   o[J.eye]=1.0;o[J.mouth]=.35+Math.abs(br)*.25;o[J.brow]=-.6;
+ },
+ cMove(o,t,c){
+   const p=c.phase,s=Math.sin(p),cs=Math.cos(p);
+   o[J.lean]=1.26;o[J.rootZ]=-.80;o[J.rootY]=-.01;
+   o[J.spine]=-.4+Math.abs(s)*.07;
+   o[J.headP]=-.75-Math.abs(cs)*.07;
+   o[J.headR]=cs*.18;o[J.headY]=-cs*.1;
+   // arms haul the body forward one at a time
+   o[J.lShP]=-1.05-s*.62;o[J.rShP]=-1.0+s*.62;
+   o[J.lShR]=.7+Math.max(0,s)*.16;o[J.rShR]=.66+Math.max(0,-s)*.16;
+   o[J.lShY]=.28;o[J.rShY]=-.28;
+   o[J.lElb]=1.0+Math.max(0,-s)*.6;o[J.rElb]=1.05+Math.max(0,s)*.6;
+   o[J.handGrip]=.5+Math.abs(s)*.4;
+   // legs push and drag
+   o[J.lHipP]=.2-s*.34;o[J.rHipP]=.16+s*.34;
+   o[J.lHipR]=.44;o[J.rHipR]=-.4;
+   o[J.lKnee]=.9+Math.max(0,s)*.55;o[J.rKnee]=1.0+Math.max(0,-s)*.55;
+   o[J.lAnk]=-.45;o[J.rAnk]=-.4;
+   o[J.side]=-cs*.09;o[J.twist]=cs*.14;
+   o[J.bob]=Math.abs(s)*.028;
+   o[J.shrug]=1.0;o[J.eye]=1.05;o[J.mouth]=.45;o[J.brow]=-.62;
+ },
+ /* snaps at the ankles from the floor */
+ ankleBite(o,t,c){
+   const a=clamp(c.actT/(ACT_DUR.ankleBite||.78),0,1);
+   const coil=clamp(a/.32,0,1);
+   const snap=Math.sin(Math.min(PI,clamp((a-.28)/.42,0,1)*PI));
+   CLIP.cIdle(o,t,c);
+   o[J.rootZ]=-.76+snap*.5;                // lunges bodily forward
+   o[J.lean]=1.24+coil*.06;
+   o[J.spine]=-.42-coil*.18+snap*.3;
+   o[J.headP]=-.78-coil*.2+snap*.55;
+   o[J.lShP]=-1.05-coil*.35+snap*.9;o[J.rShP]=-1.0-coil*.35+snap*.9;
+   o[J.lShR]=.72+snap*.4;o[J.rShR]=.68+snap*.4;
+   o[J.lElb]=1.15-snap*.7;o[J.rElb]=1.2-snap*.7;
+   o[J.lHipP]=.18+coil*.5-snap*.3;o[J.rHipP]=.14+coil*.5-snap*.3;
+   o[J.lKnee]=.95+coil*.7;o[J.rKnee]=1.05+coil*.7;
+   o[J.mouth]=.4+snap*1.0;o[J.eye]=1.25;o[J.brow]=-.75;
+ },
+ /* climbing onto the body */
+ mount(o,t,c){
+   const a=clamp(c.actT/(ACT_DUR.mount||.95),0,1);
+   const k=smooth(a);
+   o[J.lean]=lerp(1.26,.62,k);
+   o[J.rootZ]=lerp(-.80,-.68,k);o[J.rootY]=lerp(-.01,-.12,k);
+   o[J.spine]=lerp(-.4,.1,k);
+   o[J.headP]=lerp(-.75,-.1,k);
+   o[J.lShP]=lerp(-1.05,-1.5,k);o[J.rShP]=lerp(-1.0,-1.45,k);
+   o[J.lShR]=lerp(.7,.5,k);o[J.rShR]=lerp(.66,.48,k);
+   o[J.lElb]=lerp(1.0,.85,k);o[J.rElb]=lerp(1.05,.9,k);
+   o[J.lHipP]=lerp(.2,-1.25,k);o[J.rHipP]=lerp(.16,-1.2,k);
+   o[J.lKnee]=lerp(.9,1.85,k);o[J.rKnee]=lerp(1.0,1.8,k);
+   o[J.lHipR]=lerp(.44,.55,k);o[J.rHipR]=lerp(-.4,-.5,k);
+   o[J.handGrip]=.9;o[J.shrug]=1.1;
+   o[J.mouth]=.5;o[J.eye]=1.2;o[J.brow]=-.7;
+ },
+ /* crouched over the body, tearing downward in a rhythm */
+ devour(o,t,c){
+   const T=c.actT;
+   const bite=Math.sin(T*5.2);
+   const tug=Math.max(0,Math.sin(T*5.2-.6));
+   o[J.lean]=.62-tug*.3;
+   o[J.rootZ]=-.68;o[J.rootY]=-.12;
+   o[J.spine]=.1+bite*.16-tug*.26;
+   o[J.headP]=-.1+Math.max(0,bite)*.5-tug*.75;   // dives in, wrenches back
+   o[J.headR]=Math.sin(T*2.6)*.22+tug*.18;
+   o[J.headY]=Math.sin(T*.9)*.25;
+   o[J.lShP]=-1.5+bite*.1;o[J.rShP]=-1.45-bite*.1;
+   o[J.lShR]=.5;o[J.rShR]=.48;
+   o[J.lElb]=.85+Math.max(0,-bite)*.4;o[J.rElb]=.9+Math.max(0,bite)*.4;
+   o[J.lHipP]=-1.25;o[J.rHipP]=-1.2;
+   o[J.lKnee]=1.85;o[J.rKnee]=1.8;
+   o[J.lHipR]=.55;o[J.rHipR]=-.5;
+   o[J.handGrip]=1;o[J.shrug]=1.2;o[J.twist]=Math.sin(T*2.6)*.14;
+   o[J.mouth]=.45+Math.max(0,bite)*.85;o[J.eye]=1.15;o[J.brow]=-.8;
+ },
+ /* ================= the victim ================= */
+ /* legs taken away: pitches backward and lands flat */
+ tripFall(o,t,c){
+   const a=clamp(c.actT/(ACT_DUR.tripFall||1.1),0,1);
+   const k=smooth(a);
+   const flail=Math.sin(a*PI*2.4)*(1-k)*.5;
+   o[J.rootY]=.40*k;o[J.rootZ]=.86*k;
+   o[J.lean]=-1.42*k;                       // onto the back
+   o[J.crouch]=.1*k;
+   o[J.spine]=-.2*k;
+   o[J.lHipP]=-.35*k+flail*.5;o[J.rHipP]=-.3*k-flail*.5;
+   o[J.lKnee]=.55*k+Math.abs(flail)*.5;o[J.rKnee]=.5*k;
+   o[J.lShP]=-1.35*k+flail;o[J.rShP]=-1.3*k-flail;
+   o[J.lShR]=1.1*k;o[J.rShR]=1.05*k;
+   o[J.lElb]=.7*k;o[J.rElb]=.75*k;
+   o[J.headP]=-.5*k;o[J.headR]=flail*.4;
+   o[J.eye]=1.5;o[J.mouth]=.9;o[J.brow]=.6;
+ },
+ /* flat on your back while it works: fighting, then failing, then still */
+ pinned(o,t,c){
+   const p=clamp((c.downT||0)/DOWN.dur,0,1);
+   const fight=1-clamp(p/.35,0,1);
+   const life=1-clamp((p-.25)/.5,0,1);
+   const th=Math.sin(t*11)*fight+Math.sin(t*4.2)*life*.5;
+   const br=Math.sin(t*2.4)*life;
+   o[J.rootY]=.40;o[J.rootZ]=.89;
+   o[J.lean]=-1.42;o[J.crouch]=.1;
+   o[J.spine]=-.2+th*.12+br*.04;
+   o[J.side]=th*.09;
+   o[J.lHipP]=-.35+th*.34;o[J.rHipP]=-.3-th*.3;
+   o[J.lKnee]=.55+Math.abs(th)*.7;o[J.rKnee]=.5+Math.abs(th)*.5;
+   o[J.lHipR]=.2;o[J.rHipR]=-.18;
+   o[J.lShP]=-1.35+th*.7;o[J.rShP]=-1.3-th*.6;
+   o[J.lShR]=1.1+th*.3;o[J.rShR]=1.05-th*.25;
+   o[J.lElb]=.7+Math.abs(th)*.6;o[J.rElb]=.75+Math.abs(th)*.5;
+   o[J.headP]=-.5+th*.25;o[J.headR]=th*.5;
+   o[J.handGrip]=.4+fight*.6;
+   o[J.eye]=Math.max(0,1.5*fight+.5*life);
+   o[J.mouth]=.35+Math.abs(th)*.6;o[J.brow]=.55*life;
+ },
+ /* rolling over and standing up as one of them */
+ turnUp(o,t,c){
+   const a=clamp(c.actT/(ACT_DUR.turnUp||1.9),0,1);
+   const still=1-clamp(a/.2,0,1);
+   const roll=clamp((a-.18)/.3,0,1);
+   const rise=clamp((a-.44)/.4,0,1);
+   const roar=clamp((a-.8)/.2,0,1);
+   const lie=1-smooth(clamp((a-.18)/.66,0,1));
+   o[J.rootY]=.40*lie;o[J.rootZ]=.89*lie;
+   o[J.lean]=-1.42*lie+.9*roll*(1-rise)+.34*(1-lie)-.28*roar;
+   o[J.crouch]=.1*lie+1.1*roll*(1-rise);
+   o[J.twist]=roll*.8*(1-rise);
+   o[J.spine]=-.2*lie+.5*roll-.2*roar;
+   o[J.lHipP]=-.35*lie-1.4*roll*(1-rise);
+   o[J.rHipP]=-.3*lie-1.3*roll*(1-rise);
+   o[J.lKnee]=.55*lie+2.1*roll*(1-rise);o[J.rKnee]=.5*lie+2.0*roll*(1-rise);
+   o[J.lShP]=-1.35*lie-1.2*roll*(1-rise)-.75*(1-lie)-.45*roar;
+   o[J.rShP]=-1.3*lie-1.15*roll*(1-rise)-.7*(1-lie)-.45*roar;
+   o[J.lShR]=1.1*lie+.5*roll+.85*roar;o[J.rShR]=1.05*lie+.45*roll+.85*roar;
+   o[J.lElb]=.7*lie+1.4*roll;o[J.rElb]=.75*lie+1.45*roll;
+   o[J.headP]=-.5*lie+.5*roll-.55*roar;
+   o[J.headR]=Math.sin(t*22)*still*.1;
+   o[J.shrug]=.9;o[J.eye]=Math.min(1.1,still*.1+a*1.2);
+   o[J.mouth]=.3+roar*.9;o[J.brow]=-.6*a;
  },
  /* Sprinter mistimes a corner and wears the obstacle */
  crash(o,t,c){
@@ -3680,7 +3871,7 @@ function drawChar(d,ch,camDist){
   const swayX=ch.clothX||0, swayZ=ch.clothZ||0;
   st.translate(ch.x,ch.y,ch.z).rotY(ch.yaw+p[J.yawOff]);
   if(sc!==1)st.scale(sc,sc,sc);
-  st.translate(0,p[J.bob]-p[J.crouch]*.42,0);
+  st.translate(0,p[J.bob]-p[J.crouch]*.42+p[J.rootY],p[J.rootZ]);
   st.rotZ(p[J.side]).rotX(p[J.lean]);
   st.translate(0,BD.hipY,0);
   const vt=ch.variantTint?hex(ch.variantTint):null;
@@ -3781,6 +3972,21 @@ function drawChar(d,ch,camDist){
     st.push();st.translate(0,-.02,torsoD*.42);st.rotX(swayZ*.6);
     _bx(d,st,0,.08,0,torsoW*.4,tall*.85,.03,shade(top,.86),0);st.pop();
   }
+  // V1.12: a body being fed on wears the damage — shoulder, stomach, throat
+  if(ch.downed&&lod<2){
+    const g=clamp((ch.downT||0)/6,0,1);
+    const wound=[.42,.03,.04], deep=[.24,.01,.02];
+    _bx(d,st,-torsoW*.34,BD.spineL*.72,torsoD*.52,.13*g+.05,.11*g+.04,.02,wound,0);
+    _bx(d,st,-torsoW*.34,BD.spineL*.72,torsoD*.53,.08*g+.03,.06*g+.02,.02,deep,0);
+    if(g>.35){
+      _bx(d,st,torsoW*.16,.12,torsoD*.52,.15*g,.13*g,.02,wound,0);
+      _bx(d,st,torsoW*.16,.12,torsoD*.53,.09*g,.07*g,.02,deep,0);
+    }
+    // blood running down the torso
+    for(let i=0;i<3;i++)
+      _bx(d,st,-torsoW*.3+i*torsoW*.24,BD.spineL*.4-i*.05,torsoD*.52,
+        .025,.2*g+.05,.02,shade(wound,.8),0);
+  }
   if(zA>.55&&lod<2){   // scratches on skin only — the outfit is untouched
     _bxr(d,st,-torsoW*.3,.3,torsoD*.52,0,0,.5,.13,.028,.02,[.45,.09,.08],0);
     _bxr(d,st,torsoW*.2,.2,torsoD*.52,0,0,-.7,.11,.024,.02,[.45,.09,.08],0);
@@ -3855,7 +4061,7 @@ function drawChar(d,ch,camDist){
     const st2=_stack.reset();
     st2.translate(ch.x,ch.y,ch.z).rotY(ch.yaw+p[J.yawOff]);
     if(sc!==1)st2.scale(sc,sc,sc);
-    st2.translate(0,p[J.bob]-p[J.crouch]*.42,0);
+    st2.translate(0,p[J.bob]-p[J.crouch]*.42+p[J.rootY],p[J.rootZ]);
     st2.rotZ(p[J.side]).rotX(p[J.lean]);
     st2.translate(0,BD.hipY,0);
     st2.rotX(p[J.spine]).rotZ(p[J.spineSide]).rotY(p[J.twist]);
@@ -3916,6 +4122,23 @@ const PART={
         rnd(.5,1.0),rnd(.045,.1),[rnd(.3,.55),1,rnd(.4,.7)],'glow');
     }
   },
+  /* heavy arterial spray for a feeding kill */
+  gore(x,y,z,n,force){
+    const f=force||1;
+    for(let i=0;i<(n||18);i++){
+      const a=rnd(TAU),up=rnd(.6,1);
+      this.spawn(x+rnd(-.14,.14),y+rnd(-.05,.35),z+rnd(-.14,.14),
+        Math.cos(a)*rnd(.5,3.4)*f,rnd(1.2,4.6)*up*f,Math.sin(a)*rnd(.5,3.4)*f,
+        rnd(.5,1.2),rnd(.04,.115),
+        [rnd(.42,.72),rnd(.01,.06),rnd(.02,.06)],'blood');
+    }
+    // fine mist that hangs a moment
+    for(let i=0;i<(n||18)>>1;i++){
+      const a=rnd(TAU);
+      this.spawn(x,y+rnd(.1,.5),z,Math.cos(a)*rnd(.2,1),rnd(.2,1.1),Math.sin(a)*rnd(.2,1),
+        rnd(.5,1.0),rnd(.05,.13),[rnd(.5,.7),.05,.05],'glow');
+    }
+  },
   vomit(x,y,z,p){
     for(let i=0;i<5;i++){
       const a=rnd(TAU);
@@ -3964,7 +4187,32 @@ const PART={
       fx.quad(p.x,p.y,p.z,s,p.c[0],p.c[1],p.c[2],a,rx,ry,rz,ux,uy,uz);
     }
   },
-  clear(){this.list.length=0;}
+  clear(){this.list.length=0;GORE.clear();}
+};
+/* Blood that stays on the ground under a body and spreads while it is fed on. */
+const GORE={
+  pools:[],cap:14,
+  add(x,z,y){
+    for(const p of this.pools)
+      if(dist2(p.x,p.z,x,z)<1.4*1.4){p.grow=Math.min(1.55,p.grow+.16);return p;}
+    if(this.pools.length>=this.cap)this.pools.shift();
+    const p={x,z,y:(y||0)+.02,r:.2,grow:.6,a:0};
+    this.pools.push(p);
+    return p;
+  },
+  update(dt){
+    for(const p of this.pools){
+      p.r=damp(p.r,p.grow,1.6,dt);
+      p.a=damp(p.a,.82,2.4,dt);
+    }
+  },
+  render(fx){
+    for(const p of this.pools){
+      fx.ground(p.x,p.y,p.z,p.r,.34,.02,.03,p.a);
+      fx.ground(p.x,p.y+.004,p.z,p.r*.6,.5,.03,.04,p.a*.9);
+    }
+  },
+  clear(){this.pools.length=0;}
 };
 
 /* ============================================================================
@@ -3979,8 +4227,13 @@ const VARIANTS={
   walker  :{name:'Walker',ico:'🧟',spd:.88,sta:1.35,act:.92,scale:1.02,bulk:1.06,
     tint:0x93b57e,burst:0,track:1,blurb:'Slow, relentless, never loses your trail'},
   sprinter:{name:'Sprinter',ico:'⚡',spd:1.06,sta:.7,act:1.3,scale:.97,bulk:.92,
-    tint:0xd3e878,burst:1,track:.72,blurb:'Explosive bursts — and runs into things'}
+    tint:0xd3e878,burst:1,track:.72,blurb:'Explosive bursts — and runs into things'},
+  crawler :{name:'Crawler',ico:'🕷',spd:.52,sta:1.6,act:1.1,scale:1.0,bulk:1.0,
+    tint:0x7f9a5e,burst:0,track:1,crawl:1,
+    blurb:'Drags itself along the ground and takes your legs out from under you'}
 };
+/* A crawler take-down pins you for half a minute while it feeds. */
+const DOWN={dur:30, feed:7.5};
 function variantOf(e){return VARIANTS[e&&e.variant||'walker']||VARIANTS.walker;}
 const BURST={speed:1.5,dur:2.6,cool:3.4};
 /* V1.11: one infection system for every attack. Exactly one minute from the
@@ -4011,6 +4264,7 @@ function makeEntity(id,name,avatar,isBot){
     blink:0,blinkT:rnd(1,4),zAmt:0,scale:1,
     act:null,actT:0,actTarget:null,backSyringe:false,syringeGlow:1,
     infected:false,infT:0,sitting:false,stumbleCool:0,vomitT:0,
+    downed:false,downT:0,pinnedBy:null,feedT:0,goreT:0,
     burstT:0,burstCool:0,crashCool:0,
     infections:0,points:0,alive:true,transforming:false,
     look:null,avatar,blendRate:11,
@@ -4071,6 +4325,7 @@ class Simulation{
       e.vx=e.vy=e.vz=0;e.yaw=Math.atan2(-e.x,-e.z);
       e.team=TEAM.HUMAN;e.zAmt=0;e.transforming=false;e.backSyringe=false;
       e.infected=false;e.infT=0;e.sitting=false;e.stumbleCool=0;e.vomitT=0;
+      e.downed=false;e.downT=0;e.pinnedBy=null;e.feedT=0;e.goreT=0;
       e.burstT=0;e.burstCool=0;e.crashCool=0;
       e.act=null;e.actT=0;e.stamina=1;e.infections=0;e.points=0;
       e.airT=0;e.landT=0;e.turnRate=0;e.turnLean=0;e.lastVictim=null;
@@ -4125,12 +4380,15 @@ class Simulation{
     const V=VARIANTS[v]||VARIANTS.walker;
     e.variant=v;e.scale=V.scale;e.bulk=V.bulk;e.variantTint=V.tint;
   }
-  rollVariant(){return Math.random()<.55?'walker':'sprinter';}
+  rollVariant(){
+    const r=Math.random();
+    return r<.42?'walker':(r<.76?'sprinter':'crawler');
+  }
   makeZombie(e,by,instant){
     if(e.team===TEAM.ZOMBIE)return;
     e.team=TEAM.ZOMBIE;
     this.setVariant(e,this.rollVariant());
-    e.infected=false;e.infT=0;e.sitting=false;
+    e.infected=false;e.infT=0;e.sitting=false;e.downed=false;e.downT=0;e.pinnedBy=null;
     e.stamina=1;e.burstT=0;e.burstCool=0;
     e.vx=e.vz=0;
     if(instant){
@@ -4162,6 +4420,24 @@ class Simulation{
       kind:kind||'bite',x:e.x,y:e.y,z:e.z});
     return true;
   }
+  /* Crawler special: the ankle bite drops you, then it climbs on and feeds.
+     You are out of the round for thirty seconds while you turn. */
+  takedown(e,by){
+    if(e.team!==TEAM.HUMAN||e.downed||e.transforming)return false;
+    e.infected=true;e.downed=true;e.downT=0;e.sitting=false;
+    e.pinnedBy=by?by.id:null;
+    e.act='tripFall';e.actT=0;
+    e.vx=e.vz=0;e.vy=0;
+    if(by){
+      by.infections++;by.points+=140;
+      by.lastVictim=e;by.lastVictimT=this.time;
+      by.feedTarget=e;by.feedT=DOWN.feed;
+      by.act='mount';by.actT=0;
+    }
+    this.emit('takedown',{by:by?by.id:null,byName:by?by.name:'',id:e.id,name:e.name,
+      x:e.x,y:e.y,z:e.z});
+    return true;
+  }
   /* attempt an infection from `z` — returns true if the strike lands */
   tryAttack(z){
     if(z.team!==TEAM.ZOMBIE||z.act||this.phase!=='live')return false;
@@ -4169,7 +4445,7 @@ class Simulation{
     // of the attacker, so a lunge no longer picks someone off to the side.
     let best=null,bd=1e9,behind=false;
     for(const s of this.survivors){
-      if(s.transforming||infStage(s)>=2)continue;
+      if(s.transforming||s.downed||infStage(s)>=2)continue;
       const dx=s.x-z.x,dz=s.z-z.z;
       const d=dx*dx+dz*dz;
       if(d>3.2*3.2)continue;
@@ -4181,14 +4457,17 @@ class Simulation{
     if(best)bd=dist2(z.x,z.z,best.x,best.z);
     const range=2.5;
     if(!best||bd>range*range){
-      z.act='bite';z.actT=0;z.actTarget=null;z.actHit=false;   // a whiffed lunge
+      z.act=variantOf(z).crawl?'ankleBite':'bite';
+      z.actT=0;z.actTarget=null;z.actHit=false;   // a whiffed lunge
       return false;
     }
     // behind check: is the zombie in the survivor's back arc?
     const ang=Math.atan2(z.x-best.x,z.z-best.z);
     const rel=Math.abs(angDiff(best.yaw,ang));
     behind=rel>PI*.5;
-    z.act='bite';z.actT=0;z.actTarget=best;z.actHit=false;z.actBehind=behind;
+    // the crawler goes for the ankles instead of the throat
+    z.act=variantOf(z).crawl?'ankleBite':'bite';
+    z.actT=0;z.actTarget=best;z.actHit=false;z.actBehind=behind;
     return true;
   }
   /* ------------------------------------------------------------------ climb
@@ -4251,6 +4530,20 @@ class Simulation{
   physics(e,dt,ctrl){
     if(e.climbCool>0)e.climbCool-=dt;
     if(e.climb){this.stepClimb(e,dt);return;}
+    if(e.downed){                        // pinned to the spot where you fell
+      e.vx=e.vz=0;e.speed=0;
+      const r=resolveCollision(e.x,e.z,e.y,.33,_col);
+      e.x=r.x;e.z=r.z;e.y=r.ground;e.vy=0;e.grounded=true;e.airT=0;
+      return;
+    }
+    if((e.act==='mount'||e.act==='devour')&&e.feedTarget){
+      // straddle the body, facing along it
+      const t=e.feedTarget;
+      e.x=damp(e.x,t.x,14,dt);e.z=damp(e.z,t.z,14,dt);
+      e.yaw=angLerp(e.yaw,t.yaw,1-Math.exp(-10*dt));
+      e.vx=e.vz=0;e.speed=0;e.y=t.y;e.grounded=true;
+      return;
+    }
     if(e.sitting){                       // sat on the ground: pinned, not falling
       e.vx=e.vz=0;e.speed=0;
       const r=resolveCollision(e.x,e.z,e.y,.33,_col);
@@ -4258,7 +4551,7 @@ class Simulation{
     }
     // ctrl: {mx,mz,jump,sprint} in world space
     const zombie=e.team===TEAM.ZOMBIE;
-    const busy=e.transforming||e.sitting||(e.act&&e.act!=='bite')||this.phase==='over'||this.phase==='cutscene';
+    const busy=e.transforming||e.sitting||e.downed||(e.act&&e.act!=='bite'&&e.act!=='ankleBite')||this.phase==='over'||this.phase==='cutscene';
     let mx=0,mz=0;
     if(ctrl&&!busy){mx=ctrl.mx;mz=ctrl.mz;}
     const mag=Math.hypot(mx,mz);
@@ -4398,7 +4691,10 @@ class Simulation{
     if(e.jumpPrep>0)return 'jumpPrep';
     if(!e.grounded)return e.vy>1?'jump':'fall';
     if(e.landT>0)return 'land';
+    const cw=z&&variantOf(e).crawl;
+    if(e.downed)return 'pinned';
     const sp=z&&variantOf(e).burst;
+    if(cw)return e.speed>0.35?'cMove':'cIdle';
     if(e.speed>0.35){
       if(z)return e.speed>4.5?(sp?'sRun':'zrun'):(sp?'sWalk':'wWalk');
       if(e.infected)return e.speed>4.2?'sickRun':'sickWalk';
@@ -4422,8 +4718,24 @@ class Simulation{
     e.phase+=(e.speed*dt)*(PI/stride);
     if(e.scaredT>0)e.scaredT-=dt;
     if(e.zStumble>0)e.zStumble-=dt;
+    // ---- pinned on the ground by a crawler: thirty seconds, then you rise
+    if(e.downed&&e.team===TEAM.HUMAN&&!e.transforming){
+      e.downT+=dt;
+      const p=clamp(e.downT/DOWN.dur,0,1);
+      e.zAmt=clamp(p*1.15,0,1);
+      e.goreT-=dt;
+      const beingFed=this.ents.some(z=>z.act==='devour'&&z.feedTarget===e);
+      if(e.goreT<=0&&(beingFed||p<.3)){
+        e.goreT=beingFed?rnd(.28,.55):rnd(.9,1.8);
+        this.emit('gore',{id:e.id,x:e.x,y:e.y,z:e.z,heavy:beingFed,p});
+      }
+      if(e.downT>=DOWN.dur){
+        e.transforming=true;e.act='turnUp';e.actT=0;
+        this.emit('collapse',{id:e.id,x:e.x,y:e.y,z:e.z});
+      }
+    }
     // ---- the one-minute infection, in three stages
-    if(e.infected&&e.team===TEAM.HUMAN&&!e.transforming){
+    if(e.infected&&!e.downed&&e.team===TEAM.HUMAN&&!e.transforming){
       const prevStage=infStage(e);
       e.infT+=dt;
       const p=clamp(e.infT/INF.dur,0,1);
@@ -4456,15 +4768,17 @@ class Simulation{
     }
     if(e.act){
       // sprinters wind up and strike faster, walkers slower
-      const fast=(e.act==='bite'||e.act==='zroar');
+      const fast=(e.act==='bite'||e.act==='ankleBite'||e.act==='zroar');
       e.actT+=dt*(fast?variantOf(e).act:1);
       const dur=ACT_DUR[e.act]!==undefined?ACT_DUR[e.act]:1;
       // landing the hit — earlier and with a forgiving re-check
-      if(e.act==='bite'&&!e.actHit&&e.actT>.26){
+      if((e.act==='bite'||e.act==='ankleBite')&&!e.actHit&&e.actT>(e.act==='ankleBite'?.3:.26)){
         e.actHit=true;
         const t=e.actTarget;
         if(t&&t.team===TEAM.HUMAN&&!t.transforming&&!t.infected&&
            dist2(e.x,e.z,t.x,t.z)<3.1*3.1){
+          if(e.act==='ankleBite'){this.takedown(t,e);}
+          else{
           // bite or scratch — both start the same one-minute infection
           const kind=e.actBehind?'bite':'scratch';
           this.infect(t,e,kind);
@@ -4472,6 +4786,7 @@ class Simulation{
           t.vx+=dx/d*4.2;t.vz+=dz/d*4.2;        // recoils away from the attacker
           e.eatQueue=true;
           this.emit('bite',{id:e.id,tid:t.id,kind,x:t.x,y:t.y,z:t.z});
+          }
         }else this.emit('miss',{id:e.id});
       }
       if(e.actT>=dur){
@@ -4479,6 +4794,21 @@ class Simulation{
         e.act=null;e.actT=0;e.actHit=false;
         if(prev==='infecting'){e.act='rise';e.actT=0;e.zAmt=1;}
         else if(prev==='sitDown'){e.sitting=true;}
+        else if(prev==='tripFall'){/* stays prone until the timer runs out */}
+        else if(prev==='mount'){
+          e.act='devour';e.actT=0;
+          this.emit('devour',{id:e.id,tid:e.feedTarget?e.feedTarget.id:null,
+            x:e.x,y:e.y,z:e.z});
+        }
+        else if(prev==='devour'){
+          e.feedTarget=null;e.feedT=0;
+        }
+        else if(prev==='turnUp'){
+          e.infected=false;e.downed=false;e.pinnedBy=null;
+          this.makeZombie(e,null,true);
+          e.transforming=false;e.act='zroar';e.actT=0;
+          this.emit('rose',{id:e.id,x:e.x,y:e.y,z:e.z});
+        }
         else if(prev==='twitch'){e.act='pushUp';e.actT=0;e.zAmt=1;
           this.emit('eyes-open',{id:e.id,x:e.x,y:e.y,z:e.z});}
         else if(prev==='pushUp'){
@@ -4603,16 +4933,18 @@ class Simulation{
       const V=variantOf(e);
       for(const s of this.survivors){
         // stage 2 onward they are visibly turning — zombies lose interest
-        if(s.transforming||infStage(s)>=2)continue;
+        if(s.transforming||s.downed||infStage(s)>=2)continue;
         const d=dist2(e.x,e.z,s.x,s.z);
         if(d<bd){bd=d;best=s;}
       }
       ai.target=best;
+      // busy feeding
+      if(e.act==='devour'||e.act==='mount')return ctrl;
       // nothing left to chase? drift toward a downed survivor and feed
       if(!best){
         let downed=null,dd=1e9;
         for(const s of this.ents){
-          if(s.team!==TEAM.HUMAN||!s.sitting)continue;
+          if(s.team!==TEAM.HUMAN||(!s.sitting&&!s.downed))continue;
           const q=dist2(e.x,e.z,s.x,s.z);
           if(q<dd){dd=q;downed=s;}
         }
@@ -4620,8 +4952,8 @@ class Simulation{
           const dist=Math.sqrt(dd);
           if(dist>1.9)return this.seek(e,ctrl,downed.x,downed.z,.8);
           if(!e.act&&Math.random()<dt*.9){
-            e.act='eat';e.actT=0;
-            this.emit('eat',{id:e.id,x:e.x,y:e.y,z:e.z});
+            if(downed.downed){e.feedTarget=downed;e.act='mount';e.actT=0;}
+            else{e.act='eat';e.actT=0;this.emit('eat',{id:e.id,x:e.x,y:e.y,z:e.z});}
           }
           return ctrl;
         }
@@ -4632,8 +4964,9 @@ class Simulation{
         const lead=Math.min(1.1,d*.25);
         const tx=best.x-Math.sin(best.yaw)*lead*.5+best.vx*.22;
         const tz=best.z-Math.cos(best.yaw)*lead*.5+best.vz*.22;
-        this.seek(e,ctrl,tx,tz,1);
-        ctrl.sprint=d>2.2&&e.stamina>.18;
+        this.seek(e,ctrl,tx,tz,V.crawl?.8:1);
+        ctrl.sprint=!V.crawl&&d>2.2&&e.stamina>.18;
+        if(V.crawl&&d<2.0&&!e.act&&Math.random()<dt*4.2)this.tryAttack(e);
         // Sprinters commit to explosive charges once they are in range
         if(V.burst&&e.burstT<=0&&e.burstCool<=0&&d<14&&d>2.6&&Math.random()<dt*1.4){
           e.burstT=BURST.dur;e.burstCool=BURST.cool+BURST.dur;
@@ -4716,7 +5049,7 @@ class Simulation{
     }else if(this.phase==='live'){
       this.phaseT-=dt;
       // the round is decided the moment nobody clean is left
-      const healthy=this.ents.filter(e=>e.team===TEAM.HUMAN&&!e.infected&&!e.transforming).length;
+      const healthy=this.ents.filter(e=>e.team===TEAM.HUMAN&&!e.infected&&!e.downed&&!e.transforming).length;
       if(healthy<=0){this.endRound(false);}
       else if(this.phaseT<=0){this.endRound(true);}
     }
@@ -4758,6 +5091,7 @@ class Simulation{
 }
 const ACT_DUR={stab:.62,bite:.72,infecting:2.55,rise:.9,eat:2.4,zroar:1.1,vic_roar:6.0,
   crash:1.05,stumble:.95,recoil:.85,react:.9,sitDown:1.7,twitch:1.8,pushUp:1.5,
+  ankleBite:.78,tripFall:1.1,mount:.95,devour:7.5,turnUp:1.9,
   emote:3.0,victory:6.0,emote_wave:2.6,emote_dance:4.2,emote_clap:2.4,emote_point:2.2,
   emote_sit:4.5,emote_facepalm:2.4,emote_flex:2.6,emote_taunt:2.8};
 const _col={x:0,z:0,ground:0},_col2={x:0,z:0,ground:0},_col3={x:0,z:0,ground:0};
@@ -4970,7 +5304,8 @@ const Cam={
       return;
     }
     const climbing=!!e.climb;
-    const headY=e.y+1.45-(e.pose[J.crouch]||0)*.4+(climbing?.34:0);
+    const prone=e.downed||e.sitting;
+    const headY=e.y+(prone?.55:1.45)-(e.pose[J.crouch]||0)*.4+(climbing?.34:0);
     this.tx=damp(this.tx,e.x,17,dt);
     this.ty=damp(this.ty,headY,13,dt);
     this.tz=damp(this.tz,e.z,17,dt);
@@ -5335,7 +5670,7 @@ const Game={
       }
       if(near<7)this.me.scaredT=.4;
     }
-    const vig=this.me.team===TEAM.ZOMBIE?0:clamp((7-near)/7,0,1)*.85;
+    const vig=this.me.downed?.95:(this.me.team===TEAM.ZOMBIE?0:clamp((7-near)/7,0,1)*.85);
     $('#vignette').style.opacity=vig.toFixed(2);
     // syringe pulse
     for(const e of this.sim.ents)
@@ -5433,6 +5768,37 @@ const Game={
           const d=Math.hypot(e.x-Cam.x,e.z-Cam.z);
           if(d<24){Audio_.bite();PART.blood(e.x,e.y+1.15,e.z,0,0,10);}
           if(e.tid===Client.localId){Cam.addShake(.6);UI.flash(.45);haptic([25,40,25]);}
+          break;
+        }
+        case 'takedown':{
+          const d=Math.hypot(e.x-Cam.x,e.z-Cam.z);
+          GORE.add(e.x,e.z,e.y);
+          PART.gore(e.x,e.y+.35,e.z,26,1.1);
+          if(d<30){Audio_.crunch();Audio_.scream();}
+          UI.kill('🕷 '+e.byName+' dragged down '+e.name);
+          if(e.id===Client.localId){
+            UI.big('DRAGGED DOWN','It has you — 30 seconds');
+            UI.flash(.9);Cam.addShake(1);haptic([90,60,120]);
+            $('#roleBadge').className='roleS';
+          }else if(d<12)Cam.addShake(.3);
+          if(e.by===Client.localId){this.xpEarned+=8;UI.toast('+8 XP — take-down!');}
+          break;
+        }
+        case 'devour':{
+          const d=Math.hypot(e.x-Cam.x,e.z-Cam.z);
+          if(d<26)Audio_.gurgle();
+          break;
+        }
+        case 'gore':{
+          const d=Math.hypot(e.x-Cam.x,e.z-Cam.z);
+          const pool=GORE.add(e.x,e.z,e.y);
+          if(e.heavy&&pool)pool.grow=Math.min(1.55,pool.grow+.06);
+          PART.gore(e.x,e.y+(e.heavy?.5:.25),e.z,e.heavy?14:5,e.heavy?1:.55);
+          if(d<22&&e.heavy){
+            Audio_.tear(Math.random()<.4);
+            if(Math.random()<.3)Audio_.crunch();
+          }
+          if(e.id===Client.localId&&e.heavy){Cam.addShake(.22);haptic(18);}
           break;
         }
         case 'inf-stage':{
@@ -5679,8 +6045,10 @@ const TUTORIAL=[
    x:'Zombies attack with the <b>BITE</b> button (<span class="kbd">E</span> or left click). Bites and scratches both do the same thing: they start a <b>one minute</b> infection. Land one on every survivor before the clock runs out and the zombies win.'},
   {ico:'🩸',t:'The one-minute turn',
    x:'<b>0–20s</b> — you react and breathe hard, but you can still run at nearly full speed.<br><b>20–40s</b> — you slow down, stumble, and start dripping green. Zombies lose interest and go after clean survivors instead.<br><b>40–60s</b> — your legs give out, you sit down and cannot stand again. Then you turn.<br>Use those first twenty seconds: get away from the pack, and stay alive to the buzzer if you can.'},
-  {ico:'🧟',t:'Walkers and Sprinters',
-   x:'Every zombie is one of two classes. A <b>Walker</b> is slow but relentless and tracks you across the whole map. A <b>Sprinter</b> covers ground in explosive bursts — but a charging Sprinter that misjudges a corner slams shoulder-first into the scenery and loses a second recovering. Use that.'},
+  {ico:'🧟',t:'The three classes',
+   x:'A <b>Walker</b> is slow but relentless and tracks you across the whole map. A <b>Sprinter</b> covers ground in explosive bursts — but one that misjudges a corner slams shoulder-first into the scenery and loses a second recovering. A <b>Crawler</b> drags itself along the floor at half everyone else\'s speed, so it has to ambush — and it goes for your ankles.'},
+  {ico:'🕷',t:'Getting dragged down',
+   x:'If a Crawler bites your ankles you go down on your back and it climbs on top of you. You are on the floor for <b>thirty seconds</b> — you struggle at first, then weaken, then go still while it feeds and the infection takes hold. At the end you push yourself up as one of them. Keep your distance and watch the ground.'},
   {ico:'🏃',t:'How to survive',
    x:'Keep your distance, use props to juke, and never sprint yourself dry. Groups are risky: one infection in a crowd usually turns into three. Listen for growls — they get louder as zombies close in.'},
   {ico:'☣',t:'Patient Zero',
@@ -6298,6 +6666,10 @@ const UI={
     const zombie=me.team===TEAM.ZOMBIE;
     const badge=$('#roleBadge');
     if(me.transforming){badge.className='roleZ';badge.textContent='Turning…';}
+    else if(me.downed){
+      badge.className='roleS';
+      badge.textContent='Down · '+Math.max(0,Math.ceil(DOWN.dur-me.downT))+'s';
+    }
     else if(me.infected){
       badge.className='roleS';
       badge.textContent='Infected · Stage '+infStage(me);
@@ -6307,7 +6679,12 @@ const UI={
       badge.textContent=zombie?(variantOf(me).name):'Survivor';
     }
     const sb=$('#sickBar');
-    if(me.infected&&!me.transforming){
+    if(me.downed&&!me.transforming){
+      sb.classList.add('on');
+      $('#sickFill').style.width=(clamp(1-me.downT/DOWN.dur,0,1)*100)+'%';
+      $('#sickFill').style.background='linear-gradient(90deg,#e05a4a,#7a1010)';
+    }
+    else if(me.infected&&!me.transforming){
       sb.classList.add('on');
       const left=clamp(1-me.infT/INF.dur,0,1);
       $('#sickFill').style.width=(left*100)+'%';
@@ -6426,7 +6803,12 @@ function renderScene(t,dt){
   for(const m of World.meshes)m.draw(R.progMain);
   dyn.draw(R.progMain);
   R.drawSky(t);
-  // ---- particles
+  // ---- ground blood, then particles
+  if(GORE.pools.length){
+    R.fx.reset();
+    GORE.render(R.fx);
+    R.fx.flush(false);
+  }
   if(PART.list.length){
     R.fx.reset();
     PART.render(R.fx,Cam);
@@ -6483,6 +6865,7 @@ function frame(now){
     Cam.update(Preview.ent,dt,true);
   }
   PART.update(dt);
+  GORE.update(dt);
   UI.updateHUD(dt);
   Game.updateTags();
   try{renderScene(t,dt);}catch(e){console.error(e);}
@@ -6528,7 +6911,7 @@ function boot(){
       Game.state='menu';
       if(!Save.seenTutorial){UI.tutStep=0;UI.buildTutorial();UI.show('tutorialScreen');}
       else UI.show('menu');
-      $('#verNote').textContent='V1.11 · '+Servers.length+' servers · 7–10 players per round';
+      $('#verNote').textContent='V1.12 · '+Servers.length+' servers · 7–10 players per round';
     },260);
   },140);
   addEventListener('resize',()=>{R.resize();});
