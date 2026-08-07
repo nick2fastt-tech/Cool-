@@ -19,6 +19,20 @@ is the outbreak: the horde, rescue events, and a virus that turns anyone it bite
 Everything — art, sound, music, save data — lives in that one file. No build step, no network,
 works fully offline.
 
+### ☀ Summer Event
+
+A limited-time track running 30 days from first launch. Every mode pays **Sun Tokens**: +10 for a
+campaign mission, +10 for a zombie mission, +10 per survival or defense wave, +10 for every boss you
+put down, and larger payouts from daily and weekly runs. Five stages:
+
+| Stage | Reward |
+|---|---|
+| 1 | 50,000 coins |
+| 2 | 80,000 coins |
+| 3 | 120,000 coins |
+| 4 | **Summer Outfit** — sunglasses, tropical shirt, shorts, sandals and a beach pack |
+| 5 | **Trident** — 212 damage, fast, longest reach in the game, heavy knockback. Hold HIT for a **Water Blast** that hoses enemies backwards and knocks lighter zombies flat |
+
 ### Controls
 
 Touch buttons, keyboard, or a connected gamepad.
@@ -62,6 +76,10 @@ different strains fill it at different speeds, toxic zombies worst of all — an
 | Failing | guns are unusable — melee only — and health drains |
 | Turning | stumble, twitch, cough and vomit, collapse, then rise as a zombie |
 
+Stage one has the carrier clutching the bite. Stage two brings coughing fits that make them stumble
+and drop a magazine. Stage three is loss of balance, uncontrollable twitching and vomiting. Then they
+fall, keep twitching, and stand back up as a zombie that can only claw and bite.
+
 Screen edges creep green, the carrier turns pale, and they take more damage the sicker they get.
 When *you* turn, the mission is lost — you get up green-skinned and red-eyed and shamble the
 battlefield with your turned squad while the screen fades to Mission Failed.
@@ -95,10 +113,17 @@ turning hostile and joining the horde. Every one you fail to protect is one more
 - **Throwables** — frag, sticky, molotov, flashbang (blinds and staggers) and smoke (breaks line of
   sight so nothing can shoot you through it).
 - **29 enemy types** split across the two modes, plus turned survivors that used to be on your side.
-- **21 bosses** — fifteen human ones through the Campaign (The Butcher, Chop Shop King, The Warden,
+- **Zombie animation set** — idle, slow shamble, run, sprint, stumble, climb, crawl, jump, swipe,
+  bite, whiffed attack, hit reaction, knockback, knocked down, getting up, death, burning,
+  electrocuted, frozen, and boss roar / charge / slam. Every zombie is dressed differently: torn
+  shirts and trousers, mud and blood stains, dented plating, and glowing eyes on the special infected.
+- **26 bosses** — fifteen human ones through the Campaign (The Butcher, Chop Shop King, The Warden,
   Doctor Vex, Mall King, Merc Captain, Military Tank, Colonel Kane, Spec-Ops Reaper, Sky Reaper,
   Spider Robot, The Arms Dealer, Furnace Titan, The Mad Scientist, Director Vulture) and six for the
-  horde (Zombie King, Tunnel Widow, Giant Mutant, Bio-Experiment α, Sewer Leviathan, Final Mutation).
+  horde (Zombie King, Tunnel Widow, Giant Mutant, Bio-Experiment α, Sewer Leviathan, Final Mutation),
+  plus five summer arrivals: **Brute** (charges through barricades), **Toxic Brute** (leaves pools and
+  vents gas when killed), **Crusher** (armoured, immune to knockback), **Screamer Queen** (sonic scream
+  that stuns, and she calls for company) and the three-phase **Mutant Titan**.
 - **15 maps** — Streets, Apartments, School, Hospital, Mall, Subway, Sewers, Bridge, Harbor,
   Airport, Desert Base, Snow Station, Underground Lab, Nuclear Facility, Final Fortress.
 - **Weather and time of day** — rain, thunderstorms with lightning, fog, snow, night missions,
@@ -109,9 +134,12 @@ turning hostile and joining the horde. Every one you fail to protect is one more
   dog. Deploy three. Each has its own kit, weapon, reload animation and grunts.
 - **6 vehicles** — motorcycle, jeep, APC, tank and helicopter found in the field, plus the Mech Suit
   skill. Ram, gun down, and bail out when the hull gives.
-- **11 active skills** — Shockwave Slam, Rage Mode, Healing Aura, Fire Punch, Lightning Strike,
-  Air Strike, Missile Barrage, Bullet Time, Auto Turret, Drone Support, Mech Suit — plus passives
-  including Double Jump, Air Dash, Wall Jump and Counter.
+- **12 active skills** — Shockwave Slam, Rage Mode, Healing Aura, Fire Punch, Lightning Strike,
+  Air Strike, Missile Barrage, Bullet Time, Auto Turret, Drone Support, Mech Suit and the level 50
+  **Brute Mutation** — plus passives including Double Jump, Air Dash, Wall Jump and Counter.
+- **Brute Mutation (level 50)** — become a giant Brute for 18 seconds on a 45-second cooldown:
+  +1,600 health, triple melee damage, a ground slam that flattens crowds, a charge that smashes
+  through barricades and bodies, thrown wreckage, and full immunity to infection while it lasts.
 - **10 modes** — Story (15 chapters × 3 stages), Zombie Survival, Boss Rush, Endless, Defense,
   Horde, Time Attack, Daily Challenge, Weekly Challenge, and a hidden level found through caches.
   Hardcore (your one life, no checkpoints, double loot) and New Game+ layer on top.
