@@ -69,11 +69,25 @@ h2.hd{font-size:clamp(19px,5.2vw,28px);letter-spacing:3px;font-weight:800;text-t
 .wrap{display:flex;flex-wrap:wrap;gap:9px}
 .topbar{position:absolute;top:max(10px,env(safe-area-inset-top));left:12px;right:12px;
   display:flex;align-items:center;justify-content:space-between;gap:10px;z-index:5}
-.coinPill{display:flex;align-items:center;gap:7px;background:rgba(8,14,26,.72);
-  border:1px solid rgba(255,214,102,.5);padding:7px 14px;border-radius:999px;
-  font-weight:800;font-size:clamp(12px,3.2vw,15px);color:#ffd966;backdrop-filter:blur(6px)}
-.coin{width:17px;height:17px;border-radius:50%;background:radial-gradient(circle at 34% 30%,#fff3b0,#ffc61a 55%,#c98b06);
-  box-shadow:0 0 8px rgba(255,200,40,.65);flex:none}
+.lvlPill{display:flex;align-items:center;gap:9px;background:rgba(8,14,26,.74);
+  border:1px solid rgba(120,220,160,.45);padding:6px 14px 6px 8px;border-radius:999px;
+  font-weight:800;font-size:clamp(11px,3vw,14px);color:#bff5d2;backdrop-filter:blur(6px)}
+.lvlBadge{min-width:34px;height:26px;padding:0 7px;border-radius:999px;display:flex;align-items:center;
+  justify-content:center;font-size:12px;font-weight:900;color:#06210f;
+  background:linear-gradient(180deg,#a9f5b8,#42c46b);box-shadow:0 0 10px rgba(80,230,130,.5)}
+.xpTrack{width:clamp(60px,18vw,110px);height:7px;border-radius:4px;background:rgba(255,255,255,.15);overflow:hidden}
+.xpFill{height:100%;width:0%;background:linear-gradient(90deg,#7ce89a,#38d6ff);transition:width .35s}
+.xpTxt{font-size:10px;color:#9fd8bb;letter-spacing:.4px}
+.reqRow{display:flex;flex-direction:column;gap:3px;margin-top:4px}
+.reqTxt{font-size:9.5px;line-height:1.25;color:#ffcf7a;font-weight:700}
+.reqBar{height:4px;border-radius:3px;background:rgba(255,255,255,.14);overflow:hidden}
+.reqBar i{display:block;height:100%;background:linear-gradient(90deg,#ffc860,#ff8f5e)}
+.prof{display:flex;align-items:center;gap:11px;padding:11px 13px;border-radius:14px;
+  background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.09);margin-bottom:8px}
+.prof.cur{border-color:#5ce07a;background:rgba(92,224,122,.14)}
+.codeBox{width:100%;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;
+  background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.2);color:#cfe6ff;
+  border-radius:10px;padding:9px;resize:none;height:74px;word-break:break-all}
 
 /* ---------- main menu ---------- */
 #menu{justify-content:space-between;padding-bottom:max(18px,env(safe-area-inset-bottom))}
@@ -318,24 +332,29 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 <!-- ================= MAIN MENU ================= -->
 <div id="menu" class="screen hidden">
   <div class="topbar">
-    <div class="coinPill"><div class="coin"></div><span id="coinsMenu">0</span></div>
+    <div class="lvlPill">
+      <div class="lvlBadge">LV<span id="lvlMenu">1</span></div>
+      <div><div class="xpTrack"><div class="xpFill" id="lvlBarMenu"></div></div>
+        <div class="xpTxt" id="xpMenu">0 / 60 XP</div></div>
+    </div>
     <div class="chip" style="pointer-events:none"><span id="onlineCount">—</span> playing now</div>
   </div>
   <div id="menuTop">
     <div class="title">INFECTOR</div>
     <div class="subtitle">Run. Hide. Survive the outbreak.</div>
-    <div style="font-size:10px;letter-spacing:3px;color:#7fd4a0;margin-top:5px">V1.01 · HUMAN DETAIL &amp; ZOMBIE TRANSFORMATION</div>
+    <div style="font-size:10px;letter-spacing:3px;color:#7fd4a0;margin-top:5px">V1.02 · MOVEMENT &amp; MOBILITY</div>
   </div>
   <div id="menuBtns">
     <button class="btn green wide" data-nav="quickplay">▶ Play</button>
     <button class="btn" data-nav="servers">🌐 Servers</button>
     <button class="btn orange" data-nav="tutorial">🎓 Tutorial</button>
-    <button class="btn purple" data-nav="shop">🛒 Shop</button>
+    <button class="btn purple" data-nav="shop">🎁 Unlocks</button>
     <button class="btn" data-nav="avatar">🧍 Avatar</button>
+    <button class="btn ghost" data-nav="profile">👤 Profile</button>
     <button class="btn ghost" data-nav="settings">⚙ Settings</button>
-    <button class="btn ghost" data-nav="credits">★ Credits</button>
+    <button class="btn ghost" data-nav="credits" style="grid-column:1/-1">★ Credits</button>
   </div>
-  <div class="footNote" id="verNote">V1.01 · 7–10 players · 10 servers</div>
+  <div class="footNote" id="verNote">V1.02 · 7–10 players · 10 servers</div>
 </div>
 
 <!-- ================= SERVERS ================= -->
@@ -378,15 +397,17 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 <div id="shopScreen" class="screen hidden">
   <div class="card panel">
     <div class="panelHead">
-      <h2 class="hd">Shop</h2>
+      <h2 class="hd">Unlocks</h2>
       <div class="row">
-        <div class="coinPill"><div class="coin"></div><span id="coinsShop">0</span></div>
+        <div class="lvlPill"><div class="lvlBadge">LV<span id="lvlShop">1</span></div>
+          <div class="xpTrack"><div class="xpFill" id="lvlBarShop"></div></div></div>
         <button class="btn sm ghost" data-nav="menu">Back</button>
       </div>
     </div>
     <div class="tabs" id="shopTabs"></div>
     <div class="panelBody scroll"><div class="grid" id="shopGrid"></div></div>
-    <div class="muted" style="flex:none">Earn coins by playing: +5 per infection, +25 survivor win, +15 zombie win.</div>
+    <div class="muted" style="flex:none">Everything is earned by playing — level up for most items, or clear a
+      milestone for the rare ones. Nothing is bought.</div>
   </div>
 </div>
 
@@ -403,6 +424,22 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
   <div class="card" id="avPanel">
     <div class="tabs" id="avTabs"></div>
     <div class="scroll" id="avGrid" style="flex:1"><div class="grid" id="avItems"></div></div>
+  </div>
+</div>
+
+<!-- ================= PROFILE ================= -->
+<div id="profileScreen" class="screen hidden">
+  <div class="card panel" style="width:min(600px,95vw)">
+    <div class="panelHead">
+      <h2 class="hd">Profile</h2>
+      <button class="btn sm ghost" data-nav="menu">Back</button>
+    </div>
+    <div class="panelBody scroll" id="profBody"></div>
+    <div class="row" style="flex:none;flex-wrap:wrap">
+      <button class="btn sm green" id="btnNewProfile">+ New profile</button>
+      <button class="btn sm" id="btnTransfer">↗ Transfer code</button>
+      <button class="btn sm orange" id="btnRestore">↘ Restore</button>
+    </div>
   </div>
 </div>
 
@@ -432,6 +469,24 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
         <div class="opt"><div><div class="optL">Audio</div><div class="optD">Fully synthesized via Web Audio: wind, birds, growls, footsteps, adaptive score</div></div></div>
         <div class="opt"><div><div class="optL">Netcode</div><div class="optD">Authoritative round simulation with snapshot interpolation &amp; client prediction</div></div></div>
         <div class="opt"><div><div class="optL">Maps</div><div class="optD">Playground &amp; Neighborhood — procedurally assembled, bright sunny lighting</div></div></div>
+      </div>
+      <h3 style="margin:18px 0 6px;font-size:15px;letter-spacing:2px;color:#8ef07a">V1.02 — MOVEMENT &amp; MOBILITY</h3>
+      <div class="muted" style="line-height:1.75">
+        <b style="color:#cfe6ff">Joystick</b> — rebuilt for true 360° control with a rescaled dead zone, snappier
+        acceleration, extra bite when you reverse, rate-limited turning so the character always faces where it is
+        going, and sprint on a full forward push. Touches that begin on a HUD button no longer steer you.<br><br>
+        <b style="color:#cfe6ff">Jumping</b> — a standing jump loads with a knee bend and an arm swing, legs tuck in
+        the air, longer jumps lean into the arc, and landings absorb through the knees before blending straight back
+        into a walk or run. Dust kicks up on every landing.<br><br>
+        <b style="color:#cfe6ff">Auto climb</b> — walk into a fence, porch, bonnet or car roof and your stickman
+        vaults or mantles it automatically. Hands reach the lip first, a knee drives up onto the edge, the trailing
+        leg follows and the body stands up, blending back into movement. Destinations are checked for footing and
+        headroom, so nobody climbs into a wall or through a roof.<br><br>
+        <b style="color:#cfe6ff">Infected variants</b> — the first infected of a round may be a Runner (faster, quick
+        strikes, long sprint) or a Brute (bigger, slower, with a swing that knocks everyone nearby off their feet, heavy
+        footsteps and a much deeper roar). Everyone infected afterwards becomes a Regular.<br><br>
+        <b style="color:#cfe6ff">Progression</b> — coins are gone. Cosmetics unlock by levelling up and by clearing
+        milestones, and everything lives on a profile you sign in to.
       </div>
       <h3 style="margin:18px 0 6px;font-size:15px;letter-spacing:2px;color:#8ef07a">V1.01 — HUMAN DETAIL &amp; ZOMBIE TRANSFORMATION</h3>
       <div class="muted" style="line-height:1.75">
@@ -465,7 +520,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
     <div class="tally"><div class="tallyN zom" id="cntZombies">0</div><div class="tallyL">Zombies</div></div>
   </div>
   <div id="hudTL">
-    <div class="chip"><div class="coin"></div><span id="coinsHud">0</span></div>
+    <div class="chip">⭐ LV <span id="lvlHud">1</span></div>
     <div class="chip">👥 <span id="cntPlayers">0</span>/10</div>
   </div>
   <div id="hudTR">
@@ -511,7 +566,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
 <div id="result" class="screen hidden">
   <div id="resTitle">SURVIVORS WIN</div>
   <div id="resSub"></div>
-  <div id="resReward"><div class="coin"></div><span id="resCoins">+0</span></div>
+  <div id="resReward">⭐ <span id="resCoins">+0 XP</span></div>
+  <div id="resUnlocks" style="max-width:min(430px,92vw);margin-bottom:6px"></div>
   <div class="scroll" id="scoreTable"></div>
   <div class="row">
     <button class="btn green" id="btnAgain">Play again</button>
@@ -620,39 +676,178 @@ function css(c){return 'rgb('+(c[0]*255|0)+','+(c[1]*255|0)+','+(c[2]*255|0)+')'
 /* ============================================================================
    1. PERSISTENT STORAGE
    ========================================================================== */
-const SAVE_KEY='infector_save_v1';
+const SAVE_KEY='infector_save_v1';          // legacy single-slot save (migrated)
+const STORE_KEY='infector_profiles_v1';
 const DefaultSave={
-  coins:250, name:'', owned:['face_default','emote_wave','emote_dance','vic_flex'],
-  equipped:{face:'face_default', victory:'vic_flex'},
+  xp:0, name:'', owned:[],
   avatar:null, seenTutorial:false,
-  stats:{played:0,wins:0,infections:0,survivals:0},
+  stats:{played:0,wins:0,infections:0,survivals:0,survivorWins:0,zombieWins:0,
+         jumps:0,climbs:0,patientZero:0,minutes:0},
   settings:{quality:'auto',shadows:true,music:.55,sfx:.8,sens:1,invertY:false,fps:false,
             particles:true,motionBlurFov:true,hapt:true,cameraShake:true,stickMode:'fixed'}
 };
-let Save=null;
+let Save=null, Store=null;
+
+/* ---- levels ------------------------------------------------------------- */
+function xpToReach(l){return 60*(l-1)+10*(l-1)*(l-2);}     // cumulative XP for level l
+function levelFor(xp){let l=1;while(xpToReach(l+1)<=xp)l++;return l;}
+function levelProgress(){
+  const l=levelFor(Save.xp),a=xpToReach(l),b=xpToReach(l+1);
+  return {level:l,into:Save.xp-a,need:b-a,pct:clamp((Save.xp-a)/Math.max(1,b-a),0,1)};
+}
+
+/* ---- profiles ------------------------------------------------------------
+   Each profile is a separate account with its own unlocks, avatar and stats.
+   Sign in as someone else and you start clean; sign back in and everything is
+   exactly where you left it. A transfer code moves a profile between devices,
+   and a sync endpoint (?sync=https://…) can carry it automatically.        */
+function blankSave(name){
+  const s=JSON.parse(JSON.stringify(DefaultSave));
+  s.name=name||('Player'+rndi(1000,9999));
+  return s;
+}
+function newProfileId(){return 'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+function loadStore(force){
+  if(Store&&!force)return Store;            // never clobber in-memory state
+  try{Store=JSON.parse(localStorage.getItem(STORE_KEY)||'null');}catch(e){Store=null;}
+  if(!Store||typeof Store!=='object'||!Store.saves){
+    Store={current:null,saves:{}};
+    // migrate a pre-V1.02 single save into the first profile
+    try{
+      const old=JSON.parse(localStorage.getItem(SAVE_KEY)||'null');
+      if(old&&typeof old==='object'){
+        const id=newProfileId();
+        old.xp=Math.round((old.coins||0)*1.2);
+        delete old.coins;delete old.equipped;
+        Store.saves[id]=old;Store.current=id;
+      }
+    }catch(e){}
+  }
+  if(!Store.current||!Store.saves[Store.current]){
+    const id=newProfileId();
+    Store.saves[id]=blankSave();
+    Store.current=id;
+  }
+  return Store;
+}
 function loadSave(){
-  try{
-    const raw=localStorage.getItem(SAVE_KEY);
-    Save=raw?JSON.parse(raw):null;
-  }catch(e){Save=null;}
-  if(!Save||typeof Save!=='object')Save=JSON.parse(JSON.stringify(DefaultSave));
-  // migrate / fill gaps
+  loadStore();
+  Save=Store.saves[Store.current];
   const d=DefaultSave;
   for(const k in d){if(Save[k]===undefined)Save[k]=JSON.parse(JSON.stringify(d[k]));}
   for(const k in d.settings){if(Save.settings[k]===undefined)Save.settings[k]=d.settings[k];}
   for(const k in d.stats){if(Save.stats[k]===undefined)Save.stats[k]=d.stats[k];}
   if(!Save.name)Save.name='Player'+rndi(1000,9999);
+  if(!Array.isArray(Save.owned))Save.owned=[];
+  Save.level=levelFor(Save.xp);
   return Save;
 }
 let saveTimer=0;
 function persist(){
+  if(Store&&Store.current)Store.saves[Store.current]=Save;   // in memory, now
   clearTimeout(saveTimer);
-  saveTimer=setTimeout(()=>{try{localStorage.setItem(SAVE_KEY,JSON.stringify(Save));}catch(e){}},150);
+  saveTimer=setTimeout(()=>{
+    try{localStorage.setItem(STORE_KEY,JSON.stringify(Store));}catch(e){}
+    Cloud.push();
+  },150);
 }
-function addCoins(n){Save.coins=Math.max(0,Save.coins+n);refreshCoins();persist();}
+function flushStore(){
+  if(Store&&Store.current)Store.saves[Store.current]=Save;
+  try{localStorage.setItem(STORE_KEY,JSON.stringify(Store));}catch(e){}
+}
+function profileList(){
+  return Object.keys(Store.saves).map(id=>({id,name:Store.saves[id].name||'Player',
+    lvl:levelFor(Store.saves[id].xp||0),played:(Store.saves[id].stats||{}).played||0,
+    current:id===Store.current}))
+    .sort((a,b)=>(b.current-a.current)||(b.lvl-a.lvl));
+}
+function switchProfile(id){
+  if(!Store.saves[id])return false;
+  if(Store.current&&Store.saves[Store.current]&&Save)Store.saves[Store.current]=Save;
+  Store.current=id;
+  loadSave();
+  Save.avatar=sanitizeAvatar(Save.avatar||defaultAvatar());
+  checkUnlocks();
+  flushStore();
+  return true;
+}
+function createProfile(name){
+  if(Store.current&&Save)Store.saves[Store.current]=Save;
+  const id=newProfileId();
+  Store.saves[id]=blankSave(name);
+  switchProfile(id);
+  return id;
+}
+function deleteProfile(id){
+  if(Object.keys(Store.saves).length<=1)return false;
+  const wasCurrent=Store.current===id;
+  delete Store.saves[id];
+  if(wasCurrent){Store.current=Object.keys(Store.saves)[0];loadSave();}
+  flushStore();
+  return true;
+}
+function exportCode(){
+  try{
+    const packed={n:Save.name,x:Save.xp,o:Save.owned,a:Save.avatar,s:Save.stats};
+    return btoa(unescape(encodeURIComponent(JSON.stringify(packed)))).replace(/=+$/,'');
+  }catch(e){return '';}
+}
+function importCode(code){
+  try{
+    const raw=decodeURIComponent(escape(atob(code.trim().replace(/\s+/g,''))));
+    const p=JSON.parse(raw);
+    if(!p||typeof p!=='object'||p.x===undefined)return false;
+    const id=newProfileId();
+    let nm=p.n||'Restored';
+    if(Object.keys(Store.saves).some(k=>(Store.saves[k].name||'')===nm))nm=nm+' (restored)';
+    const sv=blankSave(nm);
+    sv.xp=Math.max(0,p.x|0);sv.owned=Array.isArray(p.o)?p.o:[];
+    sv.avatar=p.a||null;sv.stats=Object.assign(blankSave().stats,p.s||{});
+    sv.seenTutorial=true;
+    if(Store.current&&Save)Store.saves[Store.current]=Save;
+    Store.saves[id]=sv;
+    switchProfile(id);
+    return true;
+  }catch(e){return false;}
+}
+/* Optional server-backed sync. With ?sync=https://host configured the profile is
+   mirrored to that endpoint and pulled back on any device signed in with the
+   same profile key; without it everything stays on this device. */
+const Cloud={
+  url(){const q=new URLSearchParams(location.search);return q.get('sync')||window.INFECTOR_SYNC||null;},
+  key(){return Store&&Store.current;},
+  busy:false,lastPush:0,
+  push(){
+    const u=this.url();if(!u||this.busy)return;
+    const now=Date.now();if(now-this.lastPush<4000)return;
+    this.lastPush=now;this.busy=true;
+    fetch(u.replace(/\/$/,'')+'/profile/'+encodeURIComponent(this.key()),
+      {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(Save)})
+      .catch(()=>{}).finally(()=>{this.busy=false;});
+  },
+  pull(cb){
+    const u=this.url();if(!u){cb&&cb(false);return;}
+    fetch(u.replace(/\/$/,'')+'/profile/'+encodeURIComponent(this.key()))
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{
+        if(d&&typeof d==='object'&&(d.xp||0)>=(Save.xp||0)){
+          Store.saves[Store.current]=d;loadSave();cb&&cb(true);
+        }else cb&&cb(false);
+      }).catch(()=>cb&&cb(false));
+  }
+};
+function addXP(n){
+  Save.xp=Math.max(0,Save.xp+n);
+  Save.level=levelFor(Save.xp);
+  refreshCoins();persist();
+}
 function refreshCoins(){
-  const t=String(Save.coins);
-  ['coinsMenu','coinsShop','coinsHud'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=t;});
+  const p=levelProgress();
+  ['lvlMenu','lvlShop','lvlHud'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=p.level;});
+  const bars=['lvlBarMenu','lvlBarShop'];
+  bars.forEach(id=>{const e=document.getElementById(id);if(e)e.style.width=(p.pct*100)+'%';});
+  const xt=document.getElementById('xpMenu');
+  if(xt)xt.textContent=p.into+' / '+p.need+' XP';
 }
 function owns(id){return Save.owned.indexOf(id)>=0;}
 
@@ -729,9 +924,22 @@ const Audio_={
     else if(kind==='deny')this.tone({f0:220,f1:150,dur:.18,gain:.2,type:'sawtooth'});
     else if(kind==='equip')this.tone({f0:880,f1:1320,dur:.12,gain:.16,type:'sine'});
   },
-  step(run,zombie){
+  step(run,zombie,heavy){
+    if(heavy){
+      this.burst({filter:'lowpass',fc:260,fc1:70,dur:.26,gain:.34,q:1.1,rate:.5+Math.random()*.2});
+      this.tone({f0:70,f1:36,dur:.24,gain:.24,type:'sine'});
+      return;
+    }
     this.burst({filter:'lowpass',fc:zombie?420:900,fc1:zombie?150:260,dur:run?.1:.14,
       gain:(run?.16:.1)*(zombie?1.15:1),q:.9,rate:.8+Math.random()*.5});
+  },
+  slam(){
+    this.tone({f0:110,f1:32,dur:.55,gain:.4,type:'sine'});
+    this.burst({filter:'lowpass',fc:700,fc1:90,dur:.5,gain:.32,q:.8});
+  },
+  climb(){
+    this.burst({filter:'bandpass',fc:1400,fc1:500,dur:.2,gain:.13,q:1.2});
+    this.burst({filter:'lowpass',fc:500,fc1:160,dur:.26,gain:.14,delay:.16});
   },
   jump(){this.tone({f0:340,f1:620,dur:.16,gain:.13,type:'triangle'});},
   land(hard){this.burst({filter:'lowpass',fc:520,fc1:110,dur:hard?.24:.14,gain:hard?.28:.14});},
@@ -768,7 +976,13 @@ const Audio_={
     osc.start(t);o2.start(t);lfo.start(t);
     osc.stop(t+.9);o2.stop(t+.9);lfo.stop(t+.9);
   },
-  roar(){
+  roar(big){
+    if(big){
+      this.growl(0,.5);this.growl(.1,.72);this.growl(.2,.42);
+      this.burst({filter:'lowpass',fc:600,fc1:120,dur:.9,gain:.3,q:.8});
+      this.tone({f0:80,f1:34,dur:.9,gain:.3,type:'sawtooth',filter:'lowpass',fc:400});
+      return;
+    }
     this.growl(0,.8);this.growl(.12,1.35);
     this.burst({filter:'bandpass',fc:900,fc1:2400,dur:.55,gain:.16,q:.6});
   },
@@ -2099,11 +2313,56 @@ const VICTORY=[
 ];
 const ALL_ITEMS={};
 function regItems(list,cat){list.forEach(it=>{it.cat=cat;ALL_ITEMS[it.id]=it;});}
+/* V1.02: nothing is bought. Most items open up as you level, and the standout
+   pieces are milestone rewards for doing something specific in a match. */
+const MILESTONES={
+  hat_crown   :{stat:'wins',       n:15, label:'Win 15 rounds'},
+  bk_wings    :{stat:'survivals',  n:20, label:'Survive 20 rounds'},
+  top_lab     :{stat:'infections', n:40, label:'Land 40 infections'},
+  face_cyclops:{stat:'played',     n:30, label:'Play 30 matches'},
+  shoe_cleat  :{stat:'climbs',     n:50, label:'Climb 50 ledges'},
+  hat_helm    :{stat:'jumps',      n:100,label:'Jump 100 times'},
+  emote_taunt :{stat:'zombieWins', n:10, label:'Win 10 rounds as a zombie'},
+  bk_jet      :{stat:'patientZero',n:5,  label:'Be Patient Zero 5 times'},
+  vic_floss   :{stat:'minutes',    n:60, label:'Play for 60 minutes'},
+  hair_mohawk :{stat:'survivorWins',n:8, label:'Win 8 rounds as a survivor'}
+};
+function assignRequirements(){
+  for(const id in ALL_ITEMS){
+    const it=ALL_ITEMS[id];
+    if(MILESTONES[id]){it.req=MILESTONES[id];continue;}
+    it.req=it.cost>0?{lvl:Math.max(2,Math.round(it.cost/28))}:null;
+  }
+}
+function reqProgress(it){
+  if(!it||!it.req)return {have:1,need:1,done:true,pct:1};
+  if(it.req.lvl){
+    const have=Save.level||1;
+    return {have,need:it.req.lvl,done:have>=it.req.lvl,pct:clamp(have/it.req.lvl,0,1)};
+  }
+  const have=Math.floor(Save.stats[it.req.stat]||0);
+  return {have,need:it.req.n,done:have>=it.req.n,pct:clamp(have/it.req.n,0,1)};
+}
+function reqText(it){
+  if(!it||!it.req)return 'Free';
+  if(it.req.lvl)return 'Reach level '+it.req.lvl;
+  return it.req.label;
+}
+/* returns any items that just became available */
+function checkUnlocks(){
+  const gained=[];
+  for(const id in ALL_ITEMS){
+    const it=ALL_ITEMS[id];
+    if(!it.req)continue;
+    if(reqProgress(it).done&&!owns(id)){Save.owned.push(id);gained.push(it);}
+  }
+  return gained;
+}
 regItems(HAIR_STYLES,'hair');regItems(TOPS,'top');regItems(BOTTOMS,'bottom');
 regItems(SHOES,'shoes');regItems(HATS,'hat');regItems(GLASSES,'glasses');
 regItems(BACKS,'back');regItems(FACES,'face');regItems(BODYC,'body');
 regItems(EMOTES,'emote');regItems(VICTORY,'victory');
-function unlocked(id){const it=ALL_ITEMS[id];return !it||it.cost===0||owns(id);}
+function unlocked(id){const it=ALL_ITEMS[id];return !it||reqProgress(it).done;}
 
 /* Facial expressions. Channels blend continuously, so a face never snaps
    between moods — it eases from smile to nervous to scared to shocked. */
@@ -2130,7 +2389,7 @@ function defaultAvatar(){
 }
 function randomAvatar(free){
   const p=(list)=>{
-    const ok=list.filter(i=>!free||i.cost===0||owns(i.id));
+    const ok=list.filter(i=>!free||unlocked(i.id));
     return pick(ok.length?ok:list).id;
   };
   return {gender:Math.random()<.5?'male':'female',skin:rndi(0,SKIN.length-1),
@@ -2146,7 +2405,7 @@ function sanitizeAvatar(a){
   if(!a||typeof a!=='object')return d;
   for(const k in d)if(a[k]===undefined)a[k]=d[k];
   // fall back to a free item if something is equipped but not owned
-  const chk=(k,list)=>{if(!unlocked(a[k]))a[k]=list.find(i=>i.cost===0).id;};
+  const chk=(k,list)=>{if(!unlocked(a[k]))a[k]=(list.find(i=>!i.req)||list[0]).id;};
   chk('hair',HAIR_STYLES);chk('top',TOPS);chk('bottom',BOTTOMS);chk('shoes',SHOES);
   chk('hat',HATS);chk('glasses',GLASSES);chk('back',BACKS);chk('face',FACES);
   chk('body',BODYC);chk('emote',EMOTES);chk('victory',VICTORY);
@@ -2254,6 +2513,57 @@ const CLIP={
    o[J.lean]=.35;o[J.side]=-cs*.06;o[J.twist]=cs*.28;
    o[J.shrug]=.5;o[J.headP]=-.22;o[J.mouth]=.2;o[J.eye]=1;
  },
+ /* mantle: reach the lip, pull up, plant a foot, stand */
+ mantle(o,t,c){
+   const cl=c.climb;if(!cl)return;
+   const p=clamp(cl.t/cl.dur,0,1);
+   const reach=clamp(p/.3,0,1);
+   const pull=clamp((p-.22)/.36,0,1);
+   const plant=clamp((p-.46)/.34,0,1);
+   const stand=clamp((p-.74)/.26,0,1);
+   // arms go up to the edge, then bend as the body comes up
+   o[J.lShP]=-2.55*reach+1.35*pull+.55*stand;
+   o[J.rShP]=-2.5*reach+1.3*pull+.5*stand;
+   o[J.lShR]=.34*reach;o[J.rShR]=.34*reach;
+   o[J.lElb]=.2*reach+1.75*pull-1.5*stand;
+   o[J.rElb]=.22*reach+1.8*pull-1.55*stand;
+   o[J.shrug]=1.3*reach-.5*stand;
+   // one knee drives up onto the lip, the other trails and follows
+   o[J.lHipP]=-.5*reach-1.55*plant+1.3*stand;
+   o[J.lKnee]=.7*reach+2.05*plant-1.75*stand;
+   o[J.lAnk]=-.4*plant+.3*stand;
+   o[J.rHipP]=-.3*reach-.5*plant-.7*stand*0;
+   o[J.rKnee]=.5*reach+.85*plant+.5*stand;
+   o[J.lHipR]=.22*plant;o[J.rHipR]=-.1*plant;
+   o[J.lean]=.28*reach+.5*pull-.62*stand;
+   o[J.spine]=.2*reach+.35*pull-.45*stand;
+   o[J.headP]=-.4*reach+.35*pull;
+   o[J.crouch]=.45*plant*(1-stand);
+   o[J.eye]=1.1;o[J.mouth]=.25+pull*.3;
+ },
+ /* vault: a quick hand-plant over something low */
+ vault(o,t,c){
+   const cl=c.climb;if(!cl)return;
+   const p=clamp(cl.t/cl.dur,0,1);
+   const k=Math.sin(Math.min(PI,p*PI));
+   o[J.lShP]=-1.5*k;o[J.rShP]=-2.3*k;
+   o[J.rShR]=.4*k;o[J.lShR]=.5*k;
+   o[J.lElb]=.9*k;o[J.rElb]=.25*k;
+   o[J.lHipP]=-1.25*k;o[J.rHipP]=-.85*k;
+   o[J.lKnee]=1.7*k;o[J.rKnee]=1.15*k;
+   o[J.lHipR]=.3*k;o[J.rHipR]=-.18*k;
+   o[J.lean]=.42*k;o[J.spine]=.3*k;o[J.headP]=-.2*k;
+   o[J.crouch]=.3*k;o[J.shrug]=.9*k;o[J.eye]=1.05;
+ },
+ /* wind-up: knees bend and the arms drop back before the launch */
+ jumpPrep(o,t,c){
+   const k=clamp(1-c.jumpPrep/.075,0,1);
+   o[J.crouch]=.42*k;o[J.lKnee]=1.1*k;o[J.rKnee]=1.1*k;
+   o[J.lHipP]=.5*k;o[J.rHipP]=.5*k;o[J.lAnk]=-.3*k;o[J.rAnk]=-.3*k;
+   o[J.lShP]=.95*k;o[J.rShP]=.95*k;o[J.lShR]=.28*k;o[J.rShR]=.28*k;
+   o[J.lElb]=.35*k;o[J.rElb]=.35*k;
+   o[J.spine]=.34*k;o[J.headP]=.12*k;o[J.shrug]=-.4*k;o[J.eye]=1;
+ },
  /* jump: push off, tuck, then reach for the ground */
  jump(o,t,c){
    const a=clamp(c.airT/.55,0,1);
@@ -2264,7 +2574,9 @@ const CLIP={
    o[J.lAnk]=-.35*push;o[J.rAnk]=-.35*push;
    o[J.lShP]=-2.35+push*.9;o[J.rShP]=-2.35+push*.9;
    o[J.lShR]=.4;o[J.rShR]=.4;o[J.lElb]=.3;o[J.rElb]=.32;
-   o[J.lean]=-.12+push*.16;o[J.spine]=-.06;o[J.headP]=-.18;
+   // longer, faster jumps lean into the arc
+   o[J.lean]=-.12+push*.16+clamp((c.speed||0)*.048,0,.36)*tuck;
+   o[J.spine]=-.06;o[J.headP]=-.18;
    o[J.shrug]=.8;o[J.eye]=1.12;o[J.mouth]=.22;
  },
  fall(o,t,c){
@@ -2277,7 +2589,8 @@ const CLIP={
  },
  land(o,t,c){
    const k=1-clamp(c.landT>0?1-c.landT/(c.landHard?.34:.2):1,0,1);
-   o[J.crouch]=.44*k;o[J.lKnee]=1.05*k+.1;o[J.rKnee]=1.05*k+.1;
+   o[J.crouch]=(c.landHard?.55:.4)*k;
+   o[J.lKnee]=(c.landHard?1.3:1.0)*k+.1;o[J.rKnee]=(c.landHard?1.3:1.0)*k+.1;
    o[J.lHipP]=.45*k;o[J.rHipP]=.45*k;o[J.lAnk]=-.3*k;o[J.rAnk]=-.3*k;
    o[J.lShP]=-.75*k;o[J.rShP]=-.75*k;o[J.lElb]=.95*k;o[J.rElb]=.95*k;
    o[J.lShR]=.3*k;o[J.rShR]=.3*k;
@@ -2827,19 +3140,21 @@ function drawChar(d,ch,camDist){
   st.translate(0,p[J.bob]-p[J.crouch]*.42,0);
   st.rotZ(p[J.side]).rotX(p[J.lean]);
   st.translate(0,BD.hipY,0);
-  const skinTorso=infectedSkin(L,zA,0),
-        skinHead=infectedSkin(L,zA,.24),
-        skinArm=infectedSkin(L,zA,.46),
-        skinHand=infectedSkin(L,zA,.66),
-        skinLeg=infectedSkin(L,zA,.74),
-        skinFoot=infectedSkin(L,zA,.92);
+  const vt=ch.variantTint?hex(ch.variantTint):null;
+  const skinTorso=infectedSkin(L,zA,0,vt),
+        skinHead=infectedSkin(L,zA,.24,vt),
+        skinArm=infectedSkin(L,zA,.46,vt),
+        skinHand=infectedSkin(L,zA,.66,vt),
+        skinLeg=infectedSkin(L,zA,.74,vt),
+        skinFoot=infectedSkin(L,zA,.92,vt);
   const top=L.top,bot=L.bot,shoe=L.shoe;
   const longLeg=!!LONG_BOTTOMS[av.bottom];
   const skirt=av.bottom==='bot_skirt';
-  const legR=BD.legR*(fem?.93:1);
-  const armR=BD.armR*(fem?.92:1);
-  const hipX=BD.hipX*(fem?1.14:1);
-  const shX=BD.shX*(fem?.88:1);
+  const bulk=ch.bulk||1;
+  const legR=BD.legR*(fem?.93:1)*bulk;
+  const armR=BD.armR*(fem?.92:1)*bulk;
+  const hipX=BD.hipX*(fem?1.14:1)*(1+(bulk-1)*.6);
+  const shX=BD.shX*(fem?.88:1)*(1+(bulk-1)*.8);
   // ---------------- pelvis + legs
   _bx(d,st,0,-.045,0,.245*(fem?1.1:1),.15,.185,bot,0);
   if(skirt){
@@ -2892,8 +3207,8 @@ function drawChar(d,ch,camDist){
   // ---------------- spine / torso
   st.rotX(p[J.spine]).rotZ(p[J.spineSide]).rotY(p[J.twist]);
   _seg(d,st,CYL,-BD.spineL,.058,skinTorso,0);
-  const torsoW=(fem?.255:.29)*(av.top==='top_puffer'?1.2:1);
-  const torsoD=(av.top==='top_puffer'?.24:.195);
+  const torsoW=(fem?.255:.29)*(av.top==='top_puffer'?1.2:1)*bulk;
+  const torsoD=(av.top==='top_puffer'?.24:.195)*(1+(bulk-1)*.8);
   const tall=BD.spineL+.15;
   _bx(d,st,0,BD.spineL*.5-.045,0,torsoW,tall,torsoD,top,0);
   // shirt hem swings a little with the body
@@ -2980,11 +3295,12 @@ function drawChar(d,ch,camDist){
 /* The infection spreads outward from the wound, so each body region turns at a
    different moment. `region` is how far along the body the part sits (0 = the
    stab site between the shoulders, 1 = fingertips and feet). */
-function infectedSkin(L,zAmt,region){
+function infectedSkin(L,zAmt,region,tint){
+  const zs=tint?mixc(L.zSkin||L.skin,tint,.55):(L.zSkin||L.skin);
   if(zAmt<=0)return L.humanSkin||L.skin;
-  if(zAmt>=1)return L.zSkin||L.skin;
+  if(zAmt>=1)return zs;
   const t=clamp((zAmt*1.55-region*.62)/.5,0,1);
-  return mixc(L.humanSkin,L.zSkin,smooth(t));
+  return mixc(L.humanSkin,zs,smooth(t));
 }
 
 /* ============================================================================
@@ -3077,6 +3393,17 @@ const PART={
    ========================================================================== */
 const TEAM={HUMAN:0,ZOMBIE:1};
 const SPD={walk:3.5,run:5.7,sprint:7.1,zwalk:3.2,zrun:5.9,zsprint:6.9};
+/* Only the first infected of a round can roll a special variant. Anyone infected
+   afterwards always becomes a Regular, so the outbreak stays predictable. */
+const VARIANTS={
+  regular:{name:'Regular Infected',ico:'☣',spd:1,sta:1,act:1,scale:1,bulk:1,
+    tint:null,knock:0,blurb:'Standard zombie'},
+  runner :{name:'Runner',ico:'⚡',spd:1.2,sta:.55,act:1.45,scale:.97,bulk:.9,
+    tint:0xd8e86a,knock:0,blurb:'Fast, quick attacks, long sprint'},
+  brute  :{name:'Brute',ico:'💥',spd:.8,sta:.8,act:.8,scale:1.3,bulk:1.28,
+    tint:0x8aa36a,knock:1,blurb:'Huge, slow, heavy knockback'}
+};
+function variantOf(e){return VARIANTS[e&&e.variant||'regular']||VARIANTS.regular;}
 const BOT_NAMES=['Riley','Max','Zoe','Kai','Luna','Milo','Ivy','Finn','Nova','Ash','Pip','Juno',
   'Rex','Sage','Theo','Wren','Dex','Remy','Skye','Cleo','Bolt','Echo','Ziggy','Poppy','Odin','Vale'];
 
@@ -3091,6 +3418,7 @@ function makeEntity(id,name,avatar,isBot){
     expr:Float32Array.from(EXPR.neutral),exprName:'neutral',threat:99,
     clothX:0,clothZ:0,airT:0,landT:0,landHard:false,turnRate:0,turnLean:0,twitch:0,twitchT:rnd(1,4),
     ikHipL:0,ikHipR:0,ikKneeL:0,ikKneeR:0,ikAnkL:0,ikAnkR:0,
+    climb:null,climbCool:0,blockT:0,jumpPrep:0,jumpCool:0,variant:'regular',bulk:1,
     headLook:0,headPitchLook:0,stuckT:0,lastX:0,lastZ:0,unstick:0,
     blink:0,blinkT:rnd(1,4),zAmt:0,scale:1,
     act:null,actT:0,actTarget:null,holdSyringe:false,syringeGlow:1,
@@ -3153,6 +3481,8 @@ class Simulation{
       e.team=TEAM.HUMAN;e.zAmt=0;e.transforming=false;e.holdSyringe=false;
       e.act=null;e.actT=0;e.stamina=1;e.infections=0;e.points=0;
       e.airT=0;e.landT=0;e.turnRate=0;e.turnLean=0;e.lastVictim=null;
+      e.climb=null;e.climbCool=0;e.blockT=0;e.jumpPrep=0;e.jumpCool=0;
+      e.variant='regular';e.bulk=1;e.scale=1;
       e.ikKneeL=e.ikKneeR=e.ikHipL=e.ikHipR=e.ikAnkL=e.ikAnkR=0;
       e.expr.set(EXPR.neutral);e.exprName='neutral';
       e.look=resolveLook(e.avatar,false);
@@ -3173,11 +3503,19 @@ class Simulation{
     const list=this.ents;
     const e=list[(this.rng()*list.length)|0];
     this.makeZombie(e,null,true);
-    this.emit('patient-zero',{id:e.id,name:e.name});
+    const roll=Math.random();
+    const v=roll<.24?'runner':(roll<.44?'brute':'regular');
+    this.setVariant(e,v);
+    this.emit('patient-zero',{id:e.id,name:e.name,variant:v,x:e.x,y:e.y,z:e.z});
+  }
+  setVariant(e,v){
+    const V=VARIANTS[v]||VARIANTS.regular;
+    e.variant=v;e.scale=V.scale;e.bulk=V.bulk;e.variantTint=V.tint;
   }
   makeZombie(e,by,instant){
     if(e.team===TEAM.ZOMBIE)return;
     e.team=TEAM.ZOMBIE;
+    this.setVariant(e,'regular');    // infected players are always Regular
     e.holdSyringe=true;
     e.stamina=1;
     e.vx=e.vz=0;
@@ -3225,7 +3563,64 @@ class Simulation{
     z.actT=0;z.actTarget=best;z.actHit=false;
     return true;
   }
+  /* ------------------------------------------------------------------ climb
+     Walk into a fence, bonnet, porch or car roof and the character reaches up,
+     plants a foot on the edge and pulls itself over — no button, no getting
+     wedged against the geometry.                                             */
+  tryClimb(e,ctrl){
+    if(!e.grounded||e.climb||e.act||e.transforming||e.climbCool>0)return false;
+    if(!ctrl)return false;
+    const mag=Math.hypot(ctrl.mx,ctrl.mz);
+    if(mag<.35)return false;                       // must be pushing into it
+    const fx=ctrl.mx/mag, fz=ctrl.mz/mag;
+    const maxUp=e.variant==='brute'?2.25:2.05;
+    for(let i=0;i<4;i++){
+      const reach=.62+i*.36;
+      const px=e.x+fx*reach, pz=e.z+fz*reach;
+      // surface height at that point, sampled from above
+      const top=resolveCollision(px,pz,e.y+3.2,.28,_col2).ground;
+      const rise=top-e.y;
+      if(rise<.34||rise>maxUp)continue;
+      // is there somewhere to actually stand up there?
+      const land=resolveCollision(px,pz,top+.12,.3,_col3);
+      if(Math.abs(land.x-px)>.06||Math.abs(land.z-pz)>.06)continue;
+      if(Math.abs(land.ground-top)>.06)continue;
+      // headroom for the character once it is up
+      const head=resolveCollision(px,pz,top+1.7,.24,_col3);
+      if(head.ground>top+.2)continue;
+      const vault=rise<1.06;
+      e.climb={t:0,dur:vault?.42:(.62+rise*.2),vault,
+        x0:e.x,y0:e.y,z0:e.z,x1:px,y1:top,z1:pz,rise,
+        fx,fz};
+      e.vx=e.vy=e.vz=0;
+      e.yaw=Math.atan2(fx,fz);
+      this.emit('climb',{id:e.id,x:e.x,y:e.y,z:e.z,rise,vault});
+      return true;
+    }
+    return false;
+  }
+  stepClimb(e,dt){
+    const c=e.climb;
+    c.t+=dt;
+    const p=clamp(c.t/c.dur,0,1);
+    // vertical first so the hands clear the lip, then travel over the edge
+    const up=smooth(clamp(p/(c.vault?.55:.6),0,1));
+    const fwd=smooth(clamp((p-(c.vault?.25:.34))/(c.vault?.75:.66),0,1));
+    e.y=lerp(c.y0,c.y1+(c.vault?.05:.1),up);
+    if(p>.86)e.y=lerp(e.y,c.y1,(p-.86)/.14);
+    e.x=lerp(c.x0,c.x1,fwd);
+    e.z=lerp(c.z0,c.z1,fwd);
+    e.speed=0;e.vx=e.vy=e.vz=0;e.grounded=true;
+    if(p>=1){
+      // settle out of the geometry so nobody ends a mantle inside a wall
+      const r=resolveCollision(c.x1,c.z1,c.y1+.05,.33,_col2);
+      e.x=r.x;e.z=r.z;e.y=Math.max(c.y1,r.ground);
+      e.climb=null;e.climbCool=.22;e.landT=.12;e.landHard=false;
+    }
+  }
   physics(e,dt,ctrl){
+    if(e.climbCool>0)e.climbCool-=dt;
+    if(e.climb){this.stepClimb(e,dt);return;}
     // ctrl: {mx,mz,jump,sprint} in world space
     const zombie=e.team===TEAM.ZOMBIE;
     const busy=e.transforming||(e.act&&e.act!=='bite'&&e.act!=='stab')||this.phase==='over';
@@ -3236,10 +3631,11 @@ class Simulation{
     if(mag>.02){
       const sprint=ctrl.sprint&&e.stamina>.02;
       e.sprinting=sprint;
-      const base=zombie?(sprint?SPD.zsprint:SPD.zrun):(sprint?SPD.sprint:SPD.run);
+      const V=zombie?variantOf(e):VARIANTS.regular;
+      const base=(zombie?(sprint?SPD.zsprint:SPD.zrun):(sprint?SPD.sprint:SPD.run))*(zombie?V.spd:1);
       want=base*Math.min(1,mag);
-      if(mag<.55)want=(zombie?SPD.zwalk:SPD.walk)*Math.min(1,mag/.55);
-      if(sprint)e.stamina=Math.max(0,e.stamina-dt*(zombie?.34:.28));
+      if(mag<.55)want=(zombie?SPD.zwalk*V.spd:SPD.walk)*Math.min(1,mag/.55);
+      if(sprint)e.stamina=Math.max(0,e.stamina-dt*(zombie?.34*V.sta:.28));
       else e.stamina=Math.min(1,e.stamina+dt*.16);
     }else{
       e.sprinting=false;
@@ -3247,14 +3643,25 @@ class Simulation{
     }
     if(e.act==='stab'||e.act==='bite')want*=.35;
     const ax=mag>.02?mx/mag:0,az=mag>.02?mz/mag:0;
-    const accel=e.grounded?15:5.5;
+    // snappier off the mark, and snappier still when reversing direction
+    let accel=e.grounded?21:6.5;
+    if(e.grounded&&mag>.02){
+      const spd=Math.hypot(e.vx,e.vz);
+      if(spd>.6&&(ax*e.vx+az*e.vz)/spd<.35)accel*=1.9;
+    }
     e.vx=damp(e.vx,ax*want,accel,dt);
     e.vz=damp(e.vz,az*want,accel,dt);
     e.speed=Math.hypot(e.vx,e.vz);
     if(mag>.02&&!busy){
       const targetYaw=Math.atan2(ax,az);
       const prevYaw=e.yaw;
-      e.yaw=angLerp(e.yaw,targetYaw,1-Math.exp(-13*dt));
+      // face the way you're heading, but cap the rate so fast flicks still arc
+      const rate=e.speed>4?11:16;
+      let ny=angLerp(e.yaw,targetYaw,1-Math.exp(-rate*dt));
+      const maxStep=(e.speed>1.5?9:14)*dt;
+      const step=angDiff(prevYaw,ny);
+      if(Math.abs(step)>maxStep)ny=prevYaw+Math.sign(step)*maxStep;
+      e.yaw=ny;
       e.turnRate=damp(e.turnRate,angDiff(prevYaw,e.yaw)/Math.max(dt,.001),8,dt);
     }else e.turnRate=damp(e.turnRate,0,7,dt);
     e.turnLean=clamp(e.turnRate*.055,-.2,.2)*clamp(e.speed/3,0,1);
@@ -3265,24 +3672,43 @@ class Simulation{
     const localZ=-(accX*sid+accZ*fwd), localX=-(accX*fwd-accZ*sid);
     e.clothZ=damp(e.clothZ,clamp(localZ*.012,-.3,.3)+clamp(e.speed*.012,0,.14),9,dt);
     e.clothX=damp(e.clothX,clamp(localX*.01,-.25,.25),9,dt);
-    // gravity & jump
-    if(ctrl&&ctrl.jump&&e.grounded&&!busy){
-      e.vy=7.3;e.grounded=false;e.jumped=true;
-      this.emit('jump',{id:e.id,x:e.x,y:e.y,z:e.z});
+    // gravity & jump — a short crouch loads the jump when standing still, while
+    // a running jump launches immediately so chases stay responsive
+    if(e.jumpCool>0)e.jumpCool-=dt;
+    if(ctrl&&ctrl.jump&&e.grounded&&!busy&&!e.climb&&!e.jumpPrep&&e.jumpCool<=0){
+      e.jumpCool=.3;
+      if(e.speed<2.2){e.jumpPrep=.075;}
+      else{e.vy=7.35;e.grounded=false;e.airT=0;this.emit('jump',{id:e.id,x:e.x,y:e.y,z:e.z});}
+    }
+    if(e.jumpPrep>0){
+      e.jumpPrep-=dt;
+      if(e.jumpPrep<=0){
+        e.jumpPrep=0;e.vy=7.55;e.grounded=false;e.airT=0;
+        this.emit('jump',{id:e.id,x:e.x,y:e.y,z:e.z});
+      }
     }
     e.vy-=22*dt;
     e.y+=e.vy*dt;
     const nx=e.x+e.vx*dt,nz=e.z+e.vz*dt;
     const res=resolveCollision(nx,nz,e.y,.33,_col);
+    // blocked while pushing forward? see if it can be climbed instead
+    if(e.grounded&&mag>.35){
+      const blocked=Math.hypot(res.x-nx,res.z-nz);
+      if(blocked>.006){
+        e.blockT=(e.blockT||0)+dt;
+        if(e.blockT>.09&&this.tryClimb(e,ctrl)){e.blockT=0;return;}
+      }else e.blockT=0;
+    }else e.blockT=0;
     e.x=res.x;e.z=res.z;
     const gy=res.ground;
     if(e.y<=gy+.001){
       if(!e.grounded){
         const hard=e.vy<-8;
         this.emit('land',{id:e.id,x:e.x,y:gy,z:e.z,hard});
-        e.landT=hard?.34:.2;e.landHard=hard;
+        e.landT=(hard?.34:.2)*(e.speed>2.4?.55:1);e.landHard=hard;
+        e.jumpPrep=0;              // only on the touchdown, never mid wind-up
       }
-      e.y=gy;e.vy=0;e.grounded=true;e.airT=0;   // reset so the jump clip restarts cleanly
+      e.y=gy;e.vy=0;e.grounded=true;e.airT=0;
     }else{e.grounded=false;e.airT+=dt;}
     e.ground=gy;
     if(e.landT>0)e.landT=Math.max(0,e.landT-dt);
@@ -3291,7 +3717,7 @@ class Simulation{
       e.stepPhase+=e.speed*dt*(zombie?1.5:1.9);
       if(e.stepPhase>PI){
         e.stepPhase-=PI;
-        this.emit('step',{id:e.id,x:e.x,y:e.y,z:e.z,run:e.speed>4.6,zombie});
+        this.emit('step',{id:e.id,x:e.x,y:e.y,z:e.z,run:e.speed>4.6,zombie,heavy:e.variant==='brute'});
       }
     }else e.stepPhase=PI*.5;
   }
@@ -3307,6 +3733,8 @@ class Simulation{
       if(e.won)return z?(e.victoryId||'vic_roar'):(e.victoryId||'celebrate');
       return 'lose';
     }
+    if(e.climb)return e.climb.vault?'vault':'mantle';
+    if(e.jumpPrep>0)return 'jumpPrep';
     if(!e.grounded)return e.vy>1?'jump':'fall';
     if(e.landT>0)return 'land';
     if(e.speed>0.35){
@@ -3331,7 +3759,9 @@ class Simulation{
     if(e.scaredT>0)e.scaredT-=dt;
     if(e.zStumble>0)e.zStumble-=dt;
     if(e.act){
-      e.actT+=dt;
+      // runners wind up and strike faster, brutes slower
+      const fast=(e.act==='stab'||e.act==='bite'||e.act==='zroar');
+      e.actT+=dt*(fast?variantOf(e).act:1);
       const dur=ACT_DUR[e.act]!==undefined?ACT_DUR[e.act]:1;
       // landing the hit — earlier and with a forgiving re-check
       if((e.act==='stab'||e.act==='bite')&&!e.actHit&&e.actT>(e.act==='stab'?.26:.24)){
@@ -3341,6 +3771,18 @@ class Simulation{
           this.makeZombie(t,e,false);
           e.eatQueue=true;
         }else this.emit('miss',{id:e.id});
+        // a brute's swing shoves everyone nearby off their feet
+        if(variantOf(e).knock){
+          for(const s of this.ents){
+            if(s===e||s.transforming||s.climb)continue;
+            const dx=s.x-e.x,dz=s.z-e.z,d=Math.hypot(dx,dz);
+            if(d>3.6||d<.001)continue;
+            const f=(1-d/3.6)*9.5;
+            s.vx+=dx/d*f;s.vz+=dz/d*f;
+            if(s.grounded){s.vy=3.1;s.grounded=false;}
+          }
+          this.emit('slam',{id:e.id,x:e.x,y:e.y,z:e.z});
+        }
       }
       if(e.actT>=dur){
         const prev=e.act;
@@ -3586,7 +4028,7 @@ class Simulation{
 const ACT_DUR={stab:.62,bite:.68,infecting:2.55,rise:.9,eat:3.2,zroar:1.1,vic_roar:6.0,
   emote:3.0,victory:6.0,emote_wave:2.6,emote_dance:4.2,emote_clap:2.4,emote_point:2.2,
   emote_sit:4.5,emote_facepalm:2.4,emote_flex:2.6,emote_taunt:2.8};
-const _col={x:0,z:0,ground:0},_col2={x:0,z:0,ground:0};
+const _col={x:0,z:0,ground:0},_col2={x:0,z:0,ground:0},_col3={x:0,z:0,ground:0};
 
 /* ============================================================================
    11. NETWORK LAYER
@@ -3698,8 +4140,12 @@ class WSTransport{
   update(dt,ctrl){
     if(!this.ready)return;
     const sim=this.sim;
-    // interpolate networked entities 100 ms in the past for smooth motion
-    const now=performance.now()-100;
+    // Interpolate remote players slightly in the past. The window tracks the
+    // measured round trip, so a slow connection buys enough buffer to stay
+    // smooth while a fast one stays responsive.
+    this.interp=damp(this.interp===undefined?110:this.interp,
+      clamp(this.ping*1.35+45,70,240),3,dt);
+    const now=performance.now()-this.interp;
     for(const e of sim.ents){
       if(e.id===Client.localId){this.sim.physics(e,dt,ctrl);this.sim.stepEntityAnim(e,dt);continue;}
       const b=e.net;
@@ -3764,7 +4210,8 @@ const Cam={
       this.applyBasis();
       return;
     }
-    const headY=e.y+1.45-(e.pose[J.crouch]||0)*.4;
+    const climbing=!!e.climb;
+    const headY=e.y+1.45-(e.pose[J.crouch]||0)*.4+(climbing?.34:0);
     this.tx=damp(this.tx,e.x,17,dt);
     this.ty=damp(this.ty,headY,13,dt);
     this.tz=damp(this.tz,e.z,17,dt);
@@ -3778,7 +4225,7 @@ const Cam={
       const px=this.tx-dirx*k,pz=this.tz-dirz*k,py=this.ty+diry*k;
       // probe with a fat radius so the near plane never pokes through a wall
       const r=resolveCollision(px,pz,py-1.55,.62,_col2);
-      if(Math.abs(r.x-px)>.02||Math.abs(r.z-pz)>.02){d=Math.max(1.5,k-.42);break;}
+      if(Math.abs(r.x-px)>.02||Math.abs(r.z-pz)>.02){d=Math.max(climbing?2.05:1.5,k-.42);break;}
     }
     this.dist=damp(this.dist,d,d<this.dist?26:7,dt);
     if(this.dist<1.9)this.ty+=(1.9-this.dist)*.16;
@@ -3885,7 +4332,8 @@ const In={
       knob.style.transform='translate('+dx.toFixed(1)+'px,'+dy.toFixed(1)+'px)';
       this.jx=dx/max;this.jz=dy/max;
       const mag=Math.hypot(this.jx,this.jz);
-      stick.classList.toggle('sprint',mag>.94||this.sprintTouch);
+      const fwd=mag>.001?(-this.jz/mag):0;
+      stick.classList.toggle('sprint',(mag>.92&&fwd>.55)||this.sprintTouch);
     };
     const onStickEnd=()=>{
       this.stickId=-1;this.jx=0;this.jz=0;
@@ -3894,7 +4342,9 @@ const In={
       stick.classList.remove('on');
       stick.classList.toggle('sprint',!!this.sprintTouch);
     };
-    this.resetStick=onStickEnd;
+    // used on spawn / pause / leaving: clears leftover deflection, but never
+    // yanks the stick out from under a thumb that is currently holding it
+    this.resetStick=force=>{if(this.stickId>=0&&!force)return;onStickEnd();};
     const handler=(el,startCb,moveCb,endCb)=>{
       el.addEventListener('touchstart',e=>{e.preventDefault();
         for(const t of e.changedTouches)startCb(t.identifier,t.clientX,t.clientY);},{passive:false});
@@ -3903,7 +4353,11 @@ const In={
       const end=e=>{for(const t of e.changedTouches)endCb(t.identifier);};
       el.addEventListener('touchend',end);el.addEventListener('touchcancel',end);
     };
-    handler(stickZone,(id,x,y)=>{if(this.stickId<0)onStickStart(id,x,y);},
+    const onButton=(x,y)=>{
+      const el=document.elementFromPoint(x,y);
+      return !!(el&&el.closest&&el.closest('.tbtn,.chip,#emoteWheel,.btn'));
+    };
+    handler(stickZone,(id,x,y)=>{if(this.stickId<0&&!onButton(x,y))onStickStart(id,x,y);},
       (id,x,y)=>{if(id===this.stickId)onStickMove(x,y);},
       id=>{if(id===this.stickId)onStickEnd();});
     // pointer/mouse fallback so the stick also works on touch laptops
@@ -3915,7 +4369,7 @@ const In={
     addEventListener('mouseup',()=>{if(this.stickId===-2)onStickEnd();});
     addEventListener('resize',()=>this.layoutStick());
     addEventListener('orientationchange',()=>setTimeout(()=>this.layoutStick(),280));
-    handler(lookZone,(id,x,y)=>{if(this.lookId<0){this.touch=true;this.lookId=id;this.lookLX=x;this.lookLY=y;}},
+    handler(lookZone,(id,x,y)=>{if(this.lookId<0&&!onButton(x,y)){this.touch=true;this.lookId=id;this.lookLX=x;this.lookLY=y;}},
       (id,x,y)=>{
         if(id!==this.lookId)return;
         const s=Save.settings.sens*.0055;
@@ -3985,14 +4439,20 @@ const In={
     if(k['a']||k['arrowleft'])kx-=1;
     if(k['d']||k['arrowright'])kx+=1;
     const stickMag=Math.hypot(this.jx,this.jz);
-    if(stickMag>.06){kx+=this.jx;kz-=this.jz;}
+    if(stickMag>.035){
+      // rescale past the dead zone so the full 0..1 range stays reachable in
+      // every direction — no flat spots, no snapping to eight ways
+      const k=(stickMag-.035)/(1-.035)/stickMag;
+      kx+=this.jx*k;kz-=this.jz*k;
+    }
     const mag=Math.hypot(kx,kz);
     if(mag>1){kx/=mag;kz/=mag;}
     const s=Math.sin(Cam.yaw),c=Math.cos(Cam.yaw);
     mx=kx*c+kz*s;
     mz=-kx*s+kz*c;
-    // push the stick all the way to the rim to sprint, or latch the RUN button
-    const sprint=!!(k['shift']||this.sprintTouch||stickMag>.94);
+    // sprint by pushing the stick fully *forward* (or latch the RUN button)
+    const fwd=stickMag>.001?(-this.jz/stickMag):0;
+    const sprint=!!(k['shift']||this.sprintTouch||(stickMag>.92&&fwd>.55));
     const jump=this.jumpEdge||!!k[' '];
     this.jumpEdge=false;
     const action=this.actionEdge;
@@ -4020,7 +4480,7 @@ const Client={
 const Game={
   state:'boot',       // boot | menu | connecting | playing | ended
   sim:null,transport:null,server:null,me:null,
-  coinsEarned:0,survivedT:0,lastCoinTick:0,
+  xpEarned:0,survivedT:0,lastXpTick:0,newUnlocks:[],
   tags:[],tagPool:[],
   init(){
     this.tagLayer=document.createElement('div');
@@ -4063,7 +4523,8 @@ const Game={
     this.me.name=Save.name;
     this.me.look=resolveLook(Save.avatar,this.me.team===TEAM.ZOMBIE);
     UI.loadProgress(1,'Entering the map…');
-    this.coinsEarned=0;this.survivedT=0;this.lastCoinTick=0;
+    this.xpEarned=0;this.survivedT=0;this.lastXpTick=0;this.newUnlocks=[];
+    if(In.resetStick)In.resetStick();
     Cam.reset(this.me);
     setTimeout(()=>{
       this.state='playing';
@@ -4078,7 +4539,7 @@ const Game={
     },340);
   },
   leave(){
-    if(In.resetStick)In.resetStick();
+    if(In.resetStick)In.resetStick(true);
     if(this.transport){this.transport.close();this.transport=null;}
     this.sim=null;this.me=null;this.state='menu';
     PART.clear();
@@ -4098,10 +4559,10 @@ const Game={
     if(ctrl.action)this.doAction();
     this.transport.update(dt,ctrl);
     this.handleEvents();
-    // survival coins
+    // XP ticks up while you stay clean
     if(this.sim.phase==='live'&&this.me.team===TEAM.HUMAN){
       this.survivedT+=dt;
-      if(this.survivedT-this.lastCoinTick>10){this.lastCoinTick=this.survivedT;this.coinsEarned+=1;}
+      if(this.survivedT-this.lastXpTick>10){this.lastXpTick=this.survivedT;this.xpEarned+=1;}
     }
     // tension for the adaptive score
     const tot=this.sim.ents.length||1;
@@ -4158,16 +4619,20 @@ const Game={
         case 'step':{
           const d=Math.hypot(e.x-Cam.x,e.z-Cam.z);
           if(d<26){
-            if(d<12)Audio_.step(e.run,e.zombie);
+            if(d<(e.heavy?20:12))Audio_.step(e.run,e.zombie,e.heavy);
+            if(e.heavy&&d<18){PART.dust(e.x,e.y,e.z,4,1.5);if(d<7)Cam.addShake(.12);}
             if(e.run&&Save.settings.particles)PART.dust(e.x,e.y,e.z,d<14?3:1,1);
             else if(Save.settings.particles&&d<14)PART.dust(e.x,e.y,e.z,1,.6);
           }
           break;
         }
-        case 'jump':if(Math.hypot(e.x-Cam.x,e.z-Cam.z)<16)Audio_.jump();break;
+        case 'jump':
+          if(Math.hypot(e.x-Cam.x,e.z-Cam.z)<16)Audio_.jump();
+          if(e.id===Client.localId)Save.stats.jumps=(Save.stats.jumps||0)+1;
+          break;
         case 'land':{
           const d=Math.hypot(e.x-Cam.x,e.z-Cam.z);
-          if(d<20){Audio_.land(e.hard);PART.dust(e.x,e.y,e.z,e.hard?9:4,e.hard?1.3:.8);}
+          if(d<24){Audio_.land(e.hard);PART.dust(e.x,e.y,e.z,e.hard?11:6,e.hard?1.35:.9);}
           if(e.id===Client.localId&&e.hard){Cam.addShake(.4);haptic(14);}
           break;
         }
@@ -4187,10 +4652,15 @@ const Game={
         case 'patient-zero':{
           const p=this.sim.ents.find(x=>x.id===e.id);
           const mine=e.id===Client.localId;
-          UI.big(mine?'YOU ARE PATIENT ZERO':'OUTBREAK!',
-            mine?'Sneak up and stab survivors in the back':e.name+' is infected — run!');
-          UI.kill('☣ '+e.name+' became the first infected');
-          Audio_.infect();Audio_.roar();
+          const V=VARIANTS[e.variant]||VARIANTS.regular;
+          const special=e.variant!=='regular';
+          UI.big(mine?(special?'YOU ARE THE '+V.name.toUpperCase():'YOU ARE PATIENT ZERO'):
+                      (special?V.name.toUpperCase()+' OUTBREAK!':'OUTBREAK!'),
+            mine?(special?V.blurb:'Sneak up and stab survivors in the back')
+                :e.name+' is a '+V.name+' — run!');
+          UI.kill(V.ico+' '+e.name+' became the first infected'+(special?' ('+V.name+')':''));
+          if(mine)Save.stats.patientZero=(Save.stats.patientZero||0)+1;
+          Audio_.infect();Audio_.roar(e.variant==='brute');
           if(p)PART.infection(p.x,p.y+1,p.z,40);
           Cam.addShake(mine?.7:.35);
           UI.flash(.55);
@@ -4208,7 +4678,7 @@ const Game={
           if(d<30&&!busy){Audio_.syringe();Audio_.infect();}
           if(d<20&&!busy)Audio_.scream();
           UI.kill('💉 '+e.byName+' infected '+e.name);
-          if(e.by===Client.localId){this.coinsEarned+=5;UI.toast('+5 coins — infection!');Cam.addShake(.6);haptic(35);}
+          if(e.by===Client.localId){this.xpEarned+=5;UI.toast('+5 XP — infection!');Cam.addShake(.6);haptic(35);}
           if(e.id===Client.localId){
             UI.big('INFECTED','You are turning…');
             $('#roleBadge').className='roleZ';
@@ -4229,7 +4699,25 @@ const Game={
         }
         case 'roar':{
           const d=Math.hypot(e.x-Cam.x,e.z-Cam.z);
-          if(d<34)Audio_.roar();
+          const src=this.sim.ents.find(x=>x.id===e.id);
+          const big=src&&src.variant==='brute';
+          if(d<(big?48:34))Audio_.roar(big);
+          if(big&&d<16)Cam.addShake(.45*(1-d/16));
+          break;
+        }
+        case 'slam':{
+          const d=Math.hypot(e.x-Cam.x,e.z-Cam.z);
+          if(d<26){Audio_.slam();PART.dust(e.x,e.y,e.z,16,2.1);}
+          if(d<9)Cam.addShake(.75*(1-d/9));
+          if(this.me&&Math.hypot(this.me.x-e.x,this.me.z-e.z)<3.6)haptic(45);
+          break;
+        }
+        case 'climb':{
+          const d=Math.hypot(e.x-Cam.x,e.z-Cam.z);
+          if(d<18)Audio_.climb();
+          if(e.id===Client.localId){Cam.addShake(.12);haptic(10);
+            Save.stats.climbs=(Save.stats.climbs||0)+1;}
+          PART.dust(e.x,e.y+e.rise,e.z,3,.7);
           break;
         }
         case 'eat':{
@@ -4238,7 +4726,10 @@ const Game={
           break;
         }
         case 'miss':if(e.id===Client.localId)Audio_.bite();break;
-        case 'go':UI.big('RUN!','Survive until the timer hits zero');break;
+        case 'go':
+          UI.big('RUN!','Survive until the timer hits zero');
+          if(In.resetStick)In.resetStick();
+          break;
         case 'round-over':this.finish(e.survivorsWin);break;
       }
     }
@@ -4247,12 +4738,17 @@ const Game={
   finish(survivorsWin){
     const me=this.me;
     const won=survivorsWin?me.team===TEAM.HUMAN:me.team===TEAM.ZOMBIE;
-    this.coinsEarned+=won?(survivorsWin?25:15):3;
-    Save.stats.played++;
-    if(won)Save.stats.wins++;
-    if(survivorsWin&&me.team===TEAM.HUMAN)Save.stats.survivals++;
-    Save.stats.infections+=me.infections;
-    addCoins(this.coinsEarned);
+    this.xpEarned+=10;                                  // showing up counts
+    this.xpEarned+=won?(survivorsWin?25:15):3;
+    const st=Save.stats;
+    st.played++;
+    if(won){st.wins++;survivorsWin?st.survivorWins++:st.zombieWins++;}
+    if(survivorsWin&&me.team===TEAM.HUMAN)st.survivals++;
+    st.infections+=me.infections;
+    st.minutes+=Math.round(this.survivedT/60*10)/10;
+    addXP(this.xpEarned);
+    this.newUnlocks=checkUnlocks();
+    persist();
     Audio_.stopMusic();
     setTimeout(()=>{won?Audio_.victory():Audio_.defeat();},220);
     if(won)PART.confetti(me.x,me.y,me.z,60);
@@ -4293,7 +4789,8 @@ const Game={
         this.tags[n]=tag;
       }
       const zom=e.team===TEAM.ZOMBIE;
-      tag.textContent=(zom?'☣ ':'')+e.name;
+      const V=zom?variantOf(e):null;
+      tag.textContent=(zom?V.ico+' ':'')+e.name;
       tag.style.color=zom?'#9cf07a':'#bfe6ff';
       tag.style.borderColor=zom?'rgba(140,240,110,.5)':'rgba(150,215,255,.35)';
       const sc=clamp(1.15-d/44,.62,1.1);
@@ -4348,7 +4845,7 @@ const Preview={
    15. UI
    ========================================================================== */
 const SCREENS=['load','menu','serversScreen','tutorialScreen','shopScreen','avatarScreen',
-  'settingsScreen','creditsScreen','pauseScreen','result'];
+  'profileScreen','settingsScreen','creditsScreen','pauseScreen','result'];
 const TUTORIAL=[
   {ico:'🎓',t:'Welcome to Infector',
    x:'Every round starts with all players human. Seconds later, one of you is chosen as <b>Patient Zero</b>. From then on it is a chase: zombies spread the infection, survivors stay alive until the clock runs out.'},
@@ -4369,9 +4866,13 @@ const TUTORIAL=[
   {ico:'🎯',t:'Survivor objective',
    x:'Stay uninfected until the timer reaches zero. If even one survivor is alive at the end, the survivors win the round together.'},
   {ico:'🏆',t:'Win conditions',
-   x:'<b>Survivors win</b> if at least one is alive when time expires.<br><b>Zombies win</b> if every survivor is infected before the clock ends.<br>Coins are paid out either way — more for winning, plus 5 per infection.'},
-  {ico:'🛒',t:'Coins & the Shop',
-   x:'Coins buy hairstyles, hoodies, jackets, hats, glasses, backpacks, faces, character colours, emotes and victory animations. Everything you equip shows up on your stickman in-game.'}
+   x:'<b>Survivors win</b> if at least one is alive when time expires.<br><b>Zombies win</b> if every survivor is infected before the clock ends.<br>You earn XP either way — more for winning, plus 5 per infection.'},
+  {ico:'🧗',t:'Climbing &amp; jumping',
+   x:'Run into a fence, a porch step or the bonnet of a parked car and your stickman <b>automatically vaults or mantles</b> over it — no extra button. Low obstacles get a quick hand-plant vault, higher ledges get a full climb. Jumping loads with a knee bend and lands with a knee absorb, so time your jumps and use the rooftops to escape.'},
+  {ico:'🧟',t:'Infected variants',
+   x:'The first infected of a round can be a <b>Runner</b> (faster, quicker strikes, longer sprint) or a <b>Brute</b> (bigger, slower, and its swing knocks everyone nearby off their feet). Anyone infected afterwards always becomes a <b>Regular</b>, so the outbreak never snowballs out of control.'},
+  {ico:'🎁',t:'Unlocks &amp; your profile',
+   x:'Nothing is bought. Most cosmetics open up as you <b>level up</b>, and the rare pieces are <b>milestones</b> — win 15 rounds, climb 50 ledges, be Patient Zero five times. Your level, unlocks and avatar live on your <b>profile</b>; sign in as someone else and they start clean.'}
 ];
 const UI={
   paused:false,tutStep:0,shopTab:'hair',avTab:'body',srvFilter:'all',
@@ -4385,6 +4886,7 @@ const UI={
       else if(n==='tutorial'){UI.tutStep=0;UI.buildTutorial();UI.show('tutorialScreen');}
       else if(n==='shop'){UI.buildShop();UI.show('shopScreen');}
       else if(n==='avatar'){UI.buildAvatar();UI.show('avatarScreen');}
+      else if(n==='profile'){UI.buildProfile();UI.show('profileScreen');}
       else if(n==='settings'){UI.buildSettings();UI.show('settingsScreen');}
       else if(n==='credits')UI.show('creditsScreen');
     }));
@@ -4403,6 +4905,51 @@ const UI={
     $('#btnSaveAv').addEventListener('click',()=>{
       Audio_.ui('buy');persist();UI.toast('Avatar saved');UI.show('menu');Preview.place();
     });
+    $('#btnNewProfile').addEventListener('click',()=>{
+      UI.askName('Name for the new profile:','', n=>{
+        Audio_.ui('buy');
+        createProfile(n);
+        Save.avatar=sanitizeAvatar(Save.avatar||defaultAvatar());
+        Preview.refresh();Preview.place();refreshCoins();
+        UI.buildProfile();UI.toast('Signed in as '+n);
+      });
+    });
+    $('#btnTransfer').addEventListener('click',()=>{
+      const code=exportCode();
+      const box=document.createElement('div');
+      box.className='card';
+      box.style.cssText='position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:40;'+
+        'padding:16px;width:min(430px,92vw)';
+      box.innerHTML='<h2 class="hd" style="margin-bottom:8px">Transfer code</h2>'+
+        '<div class="muted" style="margin-bottom:9px">Copy this and paste it into <b>Restore</b> on your other '+
+        'device to bring this profile across.</div>'+
+        '<textarea class="codeBox" readonly>'+esc(code)+'</textarea>';
+      const row=document.createElement('div');
+      row.className='row';row.style.marginTop='11px';
+      const cp=document.createElement('button');
+      cp.className='btn sm green';cp.textContent='Copy';
+      cp.addEventListener('click',()=>{
+        const ta=box.querySelector('textarea');
+        ta.select();
+        try{navigator.clipboard?navigator.clipboard.writeText(code):document.execCommand('copy');
+          UI.toast('Copied');}catch(e){UI.toast('Select and copy manually');}
+      });
+      const cl=document.createElement('button');
+      cl.className='btn sm ghost';cl.textContent='Close';
+      cl.addEventListener('click',()=>box.remove());
+      row.appendChild(cp);row.appendChild(cl);box.appendChild(row);
+      document.body.appendChild(box);
+      Audio_.ui('click');
+    });
+    $('#btnRestore').addEventListener('click',()=>{
+      const code=prompt('Paste a transfer code:');
+      if(code===null)return;
+      if(importCode(code)){
+        Save.avatar=sanitizeAvatar(Save.avatar||defaultAvatar());
+        Preview.refresh();Preview.place();refreshCoins();
+        Audio_.ui('buy');UI.buildProfile();UI.toast('Profile restored — signed in as '+Save.name);
+      }else{Audio_.ui('deny');UI.toast('That code could not be read');}
+    });
     $('#btnResume').addEventListener('click',()=>UI.togglePause());
     $('#btnPauseSettings').addEventListener('click',()=>{UI.buildSettings();UI.show('settingsScreen');});
     $('#btnLeave').addEventListener('click',()=>{UI.paused=false;Game.leave();});
@@ -4414,8 +4961,10 @@ const UI={
     });
     $('#btnToMenu').addEventListener('click',()=>{Audio_.ui('back');Game.leave();});
     $('#btnReset').addEventListener('click',()=>{
-      if(!confirm('Reset all coins, unlocks and settings?'))return;
-      localStorage.removeItem(SAVE_KEY);location.reload();
+      if(!confirm('Reset this profile\'s level, unlocks and settings?'))return;
+      Store.saves[Store.current]=blankSave(Save.name);
+      try{localStorage.setItem(STORE_KEY,JSON.stringify(Store));}catch(e){}
+      location.reload();
     });
     $$('#srvFilter .tab').forEach(t=>t.addEventListener('click',()=>{
       $$('#srvFilter .tab').forEach(x=>x.classList.remove('on'));
@@ -4478,7 +5027,7 @@ const UI={
     if(Game.state!=='playing')return;
     this.paused=!this.paused;
     if(this.paused){
-      if(In.resetStick)In.resetStick();
+      if(In.resetStick)In.resetStick(true);
       $('#pauseScreen').classList.remove('hidden');
       $('#pauseInfo').innerHTML=Game.server.name+' · '+MapDefs[Game.server.map].label+
         ' · '+(Game.sim?Game.sim.ents.length:0)+' players';
@@ -4538,7 +5087,15 @@ const UI={
     $('#resTitle').textContent=survivorsWin?'SURVIVORS WIN':'ZOMBIES WIN';
     $('#resTitle').style.color=survivorsWin?'#7fd4ff':'#8ef07a';
     $('#resSub').textContent=won?'You made it onto the winning side!':'Better luck next round.';
-    $('#resCoins').textContent='+'+Game.coinsEarned;
+    $('#resCoins').textContent='+'+Game.xpEarned+' XP';
+    const un=$('#resUnlocks');
+    if(Game.newUnlocks&&Game.newUnlocks.length){
+      un.innerHTML='<div style="font-size:12px;letter-spacing:2px;color:#8ef07a;font-weight:800;'+
+        'margin-bottom:6px">NEW UNLOCKS</div>'+
+        Game.newUnlocks.map(it=>'<div class="srow"><span class="dot" style="background:#7ee060"></span>'+
+          '<span class="nm">'+esc(it.name)+'</span><span class="muted" style="font-size:10.5px">'+
+          esc(it.cat)+'</span></div>').join('');
+    }else un.innerHTML='';
     $('#scoreTable').innerHTML=this.scoreRows();
     $('#hud').classList.remove('on');
     Game.clearTags();
@@ -4614,13 +5171,16 @@ const UI={
     cat[2].forEach(it=>{
       const own=unlocked(it.id);
       const eq=this.isEquipped(cat[0],it.id);
+      const pr=reqProgress(it);
       const d=document.createElement('div');
       d.className='item'+(eq?' sel':'')+(own?'':' locked');
       d.innerHTML='<div class="itemSw" style="'+this.swatchStyle(cat[0],it)+'">'+
           this.swatchInner(cat[0],it)+'</div>'+
         '<div class="itemName">'+esc(it.name)+'</div>'+
-        (own?('<div class="owned">'+(eq?'EQUIPPED':'OWNED')+'</div>')
-           :('<div class="itemCost"><span class="coin" style="width:12px;height:12px"></span>'+it.cost+'</div>'))+
+        (own?('<div class="owned">'+(eq?'EQUIPPED':'UNLOCKED')+'</div>')
+           :('<div class="reqRow"><div class="reqTxt">'+esc(reqText(it))+'</div>'+
+             '<div class="reqBar"><i style="width:'+(pr.pct*100).toFixed(0)+'%"></i></div>'+
+             '<div class="xpTxt" style="font-size:9px">'+pr.have+' / '+pr.need+'</div></div>'))+
         (own?'':'<div class="lockIco">🔒</div>');
       d.addEventListener('click',()=>this.shopClick(cat[0],it));
       grid.appendChild(d);
@@ -4647,12 +5207,12 @@ const UI={
   },
   shopClick(cat,it){
     if(!unlocked(it.id)){
-      if(Save.coins<it.cost){Audio_.ui('deny');this.toast('Not enough coins — play a round to earn more');return;}
-      Save.coins-=it.cost;
-      Save.owned.push(it.id);
-      Audio_.ui('buy');
-      this.toast('Unlocked '+it.name+'!');
-    }else Audio_.ui('equip');
+      const pr=reqProgress(it);
+      Audio_.ui('deny');
+      this.toast(it.name+' — '+reqText(it)+'  ('+pr.have+'/'+pr.need+')');
+      return;
+    }
+    Audio_.ui('equip');
     Save.avatar[cat]=it.id;
     sanitizeAvatar(Save.avatar);
     persist();
@@ -4683,7 +5243,7 @@ const UI={
       const d=document.createElement('div');
       d.className='item'+(sel?' sel':'');
       d.innerHTML=html+(locked?'<div class="lockIco">🔒</div>'+
-        '<div class="itemCost"><span class="coin" style="width:12px;height:12px"></span>'+cost+'</div>':'');
+        '<div class="reqTxt" style="margin-top:3px">'+esc(cost)+'</div>':'');
       d.addEventListener('click',onClick);
       grid.appendChild(d);
     };
@@ -4692,11 +5252,11 @@ const UI={
         const own=unlocked(it.id);
         addItem('<div class="itemSw" style="'+this.swatchStyle(key,it)+'">'+this.swatchInner(key,it)+'</div>'+
           '<div class="itemName">'+esc(it.name)+'</div>',a[key]===it.id,()=>{
-            if(!own){this.toast('Buy '+it.name+' in the Shop for '+it.cost+' coins');Audio_.ui('deny');return;}
+            if(!own){this.toast(it.name+' — '+reqText(it));Audio_.ui('deny');return;}
             Audio_.ui('equip');a[key]=it.id;persist();Preview.refresh();
             if(key==='emote'||key==='victory')Preview.playEmote(it.id);
             this.buildAvatar();
-          },!own,it.cost);
+          },!own,reqText(it));
       });
     };
     const listColors=(arr,key)=>{
@@ -4732,6 +5292,70 @@ const UI={
       case 'emote':listCat(EMOTES,'emote');break;
       case 'victory':listCat(VICTORY,'victory');break;
     }
+  },
+  /* ---------------- profile ---------------- */
+  buildProfile(){
+    const body=$('#profBody');
+    const p=levelProgress();
+    const st=Save.stats;
+    const syncOn=!!Cloud.url();
+    body.innerHTML=
+      '<div class="card" style="padding:13px;margin-bottom:12px;background:rgba(255,255,255,.05)">'+
+        '<div style="display:flex;align-items:center;gap:12px">'+
+          '<div class="lvlBadge" style="width:46px;height:46px;font-size:15px;border-radius:14px">LV'+p.level+'</div>'+
+          '<div style="flex:1;min-width:0">'+
+            '<div style="font-weight:800;font-size:15px;overflow:hidden;text-overflow:ellipsis">'+esc(Save.name)+'</div>'+
+            '<div class="xpTrack" style="width:100%;margin-top:5px"><div class="xpFill" style="width:'+
+              (p.pct*100).toFixed(0)+'%"></div></div>'+
+            '<div class="xpTxt">'+p.into+' / '+p.need+' XP toward level '+(p.level+1)+'</div>'+
+          '</div>'+
+        '</div>'+
+      '</div>'+
+      '<div class="muted" style="line-height:1.9;margin-bottom:12px">'+
+        '<b style="color:#cfe6ff">Career</b><br>'+
+        'Matches played: '+st.played+' &nbsp;·&nbsp; Wins: '+st.wins+'<br>'+
+        'Rounds survived: '+st.survivals+' &nbsp;·&nbsp; Infections landed: '+st.infections+'<br>'+
+        'Ledges climbed: '+(st.climbs||0)+' &nbsp;·&nbsp; Jumps: '+(st.jumps||0)+'<br>'+
+        'Patient Zero: '+(st.patientZero||0)+' &nbsp;·&nbsp; Unlocked: '+Save.owned.length+' items'+
+      '</div>'+
+      '<div style="font-size:12px;letter-spacing:2px;color:#9fd8bb;font-weight:800;margin-bottom:7px">PROFILES</div>'+
+      '<div id="profListWrap"></div>'+
+      '<div class="muted" style="margin-top:10px;line-height:1.7">'+
+        (syncOn
+          ? 'Cloud sync is <b style="color:#8ef07a">on</b> — this profile is mirrored to the configured server and restored automatically when you sign in on another device.'
+          : 'Progress is stored on this device, per profile. To move a profile to another device, use <b>Transfer code</b> here and <b>Restore</b> there. Signing in as a different profile always starts clean.')+
+      '</div>';
+    const wrap=$('#profListWrap');
+    profileList().forEach(pf=>{
+      const d=document.createElement('div');
+      d.className='prof'+(pf.current?' cur':'');
+      d.innerHTML='<div style="flex:1;min-width:0">'+
+        '<div class="srvName">'+esc(pf.name)+(pf.current?' <span style="color:#7ee060;font-size:10px">· SIGNED IN</span>':'')+'</div>'+
+        '<div class="srvSub">Level '+pf.lvl+' · '+pf.played+' matches</div></div>';
+      if(!pf.current){
+        const b1=document.createElement('button');
+        b1.className='btn sm green';b1.textContent='Sign in';
+        b1.addEventListener('click',()=>{
+          Audio_.ui('click');switchProfile(pf.id);
+          Preview.refresh();Preview.place();refreshCoins();
+          this.buildProfile();this.toast('Signed in as '+Save.name);
+        });
+        d.appendChild(b1);
+        const b2=document.createElement('button');
+        b2.className='btn sm red';b2.textContent='✕';
+        b2.addEventListener('click',()=>{
+          if(!confirm('Delete profile "'+pf.name+'" and all of its progress?'))return;
+          deleteProfile(pf.id);this.buildProfile();
+        });
+        d.appendChild(b2);
+      }
+      wrap.appendChild(d);
+    });
+  },
+  askName(title,initial,cb){
+    const v=prompt(title,initial||'');
+    if(v===null)return;
+    cb(v.trim().slice(0,14)||('Player'+rndi(1000,9999)));
   },
   /* ---------------- settings ---------------- */
   buildSettings(){
@@ -4784,6 +5408,9 @@ const UI={
       Save.name=(nameWrap.value||'Player').slice(0,14);persist();
       if(Game.me)Game.me.name=Save.name;
     });
+    row('Signed in as','Level '+(Save.level||1)+' · manage accounts in Profile',
+      (()=>{const b=document.createElement('button');b.className='btn sm';b.textContent='Profile';
+        b.addEventListener('click',()=>{UI.buildProfile();UI.show('profileScreen');});return b;})());
     row('Display name','Shown above your stickman in matches',nameWrap);
     row('Graphics quality','Higher looks sharper, lower runs faster',
       seg('quality',[['low','Low'],['med','Medium'],['high','High'],['auto','Auto']],v=>applyQuality(v)));
@@ -4800,13 +5427,7 @@ const UI={
     row('Look sensitivity','Mouse and touch camera speed',slider('sens',.3,2.5,.05));
     row('Music volume','Ambience and adaptive score',slider('music',0,1,.02,()=>Audio_.vol()));
     row('Effects volume','Footsteps, growls and UI',slider('sfx',0,1,.02,()=>Audio_.vol()));
-    const st=document.createElement('div');
-    st.className='muted';
-    st.style.cssText='padding-top:10px;line-height:1.8';
-    st.innerHTML='<b style="color:#cfe6ff">Career</b><br>Rounds played: '+Save.stats.played+
-      '<br>Wins: '+Save.stats.wins+'<br>Infections landed: '+Save.stats.infections+
-      '<br>Rounds survived: '+Save.stats.survivals;
-    list.appendChild(st);
+
   },
   /* ---------------- HUD ---------------- */
   hudT:0,
@@ -4827,7 +5448,7 @@ const UI={
     $('#cntHumans').textContent=hum;
     $('#cntZombies').textContent=zom;
     $('#cntPlayers').textContent=sim.ents.length;
-    $('#coinsHud').textContent=Save.coins+Game.coinsEarned;
+    $('#lvlHud').textContent=Save.level||1;
     const ping=Math.round(Game.transport?Game.transport.ping:0);
     $('#pingVal').textContent=ping+' ms';
     $('#pingDot').style.background=ping<70?'#5ce07a':(ping<140?'#ffd24d':'#ff6b5e');
@@ -5007,9 +5628,15 @@ function frame(now){
   try{renderScene(t,dt);}catch(e){console.error(e);}
 }
 function boot(){
+  assignRequirements();
   loadSave();
   Save.avatar=sanitizeAvatar(Save.avatar||defaultAvatar());
+  checkUnlocks();
   refreshCoins();
+  Cloud.pull(ok=>{
+    if(ok){Save.avatar=sanitizeAvatar(Save.avatar||defaultAvatar());
+      checkUnlocks();refreshCoins();Preview&&Preview.ent&&Preview.refresh();}
+  });
   const canvas=document.getElementById('gl');
   buildPrims();
   if(!R.init(canvas)){
@@ -5041,7 +5668,7 @@ function boot(){
       Game.state='menu';
       if(!Save.seenTutorial){UI.tutStep=0;UI.buildTutorial();UI.show('tutorialScreen');}
       else UI.show('menu');
-      $('#verNote').textContent='V1.01 · '+Servers.length+' servers · 7–10 players per round';
+      $('#verNote').textContent='V1.02 · '+Servers.length+' servers · 7–10 players per round';
     },260);
   },140);
   addEventListener('resize',()=>{R.resize();});
