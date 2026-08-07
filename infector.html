@@ -361,7 +361,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
   <div id="menuTop">
     <div class="title">INFECTOR</div>
     <div class="subtitle">Run. Hide. Survive the outbreak.</div>
-    <div style="font-size:10px;letter-spacing:3px;color:#7fd4a0;margin-top:5px">V1.10 · THE INFECTION EVOLUTION</div>
+    <div style="font-size:10px;letter-spacing:3px;color:#7fd4a0;margin-top:5px">V1.11 · REALISM &amp; CHARACTER OVERHAUL</div>
   </div>
   <div id="menuBtns">
     <button class="btn green wide" data-nav="quickplay">▶ Play</button>
@@ -373,7 +373,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
     <button class="btn ghost" data-nav="settings">⚙ Settings</button>
     <button class="btn ghost" data-nav="credits" style="grid-column:1/-1">★ Credits</button>
   </div>
-  <div class="footNote" id="verNote">V1.10 · 7–10 players · 10 servers</div>
+  <div class="footNote" id="verNote">V1.11 · 7–10 players · 10 servers</div>
 </div>
 
 <!-- ================= SERVERS ================= -->
@@ -488,6 +488,24 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
         <div class="opt"><div><div class="optL">Audio</div><div class="optD">Fully synthesized via Web Audio: wind, birds, growls, footsteps, adaptive score</div></div></div>
         <div class="opt"><div><div class="optL">Netcode</div><div class="optD">Authoritative round simulation with snapshot interpolation &amp; client prediction</div></div></div>
         <div class="opt"><div><div class="optL">Maps</div><div class="optD">Playground &amp; Neighborhood — procedurally assembled, bright sunny lighting</div></div></div>
+      </div>
+      <h3 style="margin:18px 0 6px;font-size:15px;letter-spacing:2px;color:#8ef07a">V1.11 — REALISM &amp; CHARACTER OVERHAUL</h3>
+      <div class="muted" style="line-height:1.75">
+        <b style="color:#cfe6ff">One infection system</b> — bites and scratches now run the same clock, exactly one
+        minute, in three stages. <b>0–20s</b>: you react, breathe hard and hold the wound, but you can still run.
+        <b>20–40s</b>: you slow down, stumble, drip green, and the zombies lose interest in you. <b>40–60s</b>: your
+        legs go, you lower yourself to the ground and cannot stand, your breathing goes shallow and your eyes close.
+        Then you go still, twitch, open them changed, push yourself up and roar onto the infected team.<br><br>
+        <b style="color:#cfe6ff">Faces</b> — real eyelids that sweep over the eyeball instead of scaling it, a brow
+        ridge, nose bridge and tip, cheekbones and a chin, plus separate upper and lower lips that shape with the
+        expression.<br><br>
+        <b style="color:#cfe6ff">Bodies</b> — deltoid caps instead of ball shoulders, hands with four fingers and a
+        thumb that curl into a fist when you run or strike, and fabric folds across the chest and waist that shift
+        with the body.<br><br>
+        <b style="color:#cfe6ff">Movement</b> — the idle shifts weight onto one leg and back with the hips tipping
+        and the loaded knee locking, and the walk rolls heel-strike to toe-off instead of holding a flat foot.<br><br>
+        <b style="color:#cfe6ff">Feeding</b> — with nobody left to chase, zombies drift toward a downed survivor and
+        gather to feed.
       </div>
       <h3 style="margin:18px 0 6px;font-size:15px;letter-spacing:2px;color:#8ef07a">V1.10 — THE INFECTION EVOLUTION</h3>
       <div class="muted" style="line-height:1.75">
@@ -1071,11 +1089,27 @@ const Audio_={
     src.connect(f);f.connect(g);g.connect(this.musicBus);
     src.start();lfo.start();
     this.ambient={src,g,lfo,f};
+    // second, higher-frequency layer so the wind has texture rather than hiss
+    const src2=c.createBufferSource();src2.buffer=this.noiseBuf;src2.loop=true;
+    src2.playbackRate.value=1.7;
+    const f2=c.createBiquadFilter();f2.type='bandpass';f2.frequency.value=1150;f2.Q.value=.5;
+    const g2=c.createGain();g2.gain.value=.022;
+    const lfo2=c.createOscillator();lfo2.type='sine';lfo2.frequency.value=.041;
+    const lg2=c.createGain();lg2.gain.value=.018;
+    lfo2.connect(lg2);lg2.connect(g2.gain);
+    src2.connect(f2);f2.connect(g2);g2.connect(this.musicBus);
+    src2.start();lfo2.start();
+    this.ambient2={src:src2,lfo:lfo2};
     this.birdTimer=setInterval(()=>{if(Math.random()<.55)this.bird();},2600);
+    this.rustleTimer=setInterval(()=>{
+      if(Math.random()<.4)this.burst({filter:'bandpass',fc:900+Math.random()*900,
+        fc1:400,dur:.7+Math.random()*.6,gain:.035,q:.6,bus:this.musicBus});
+    },5200);
   },
   stopAmbient(){
     if(this.ambient){try{this.ambient.src.stop();this.ambient.lfo.stop();}catch(e){}this.ambient=null;}
-    clearInterval(this.birdTimer);
+    if(this.ambient2){try{this.ambient2.src.stop();this.ambient2.lfo.stop();}catch(e){}this.ambient2=null;}
+    clearInterval(this.birdTimer);clearInterval(this.rustleTimer);
     this.stopMusic();
   },
   /* layered score: pad + pulse; tension raises filter, tempo & adds a minor layer */
@@ -1186,6 +1220,7 @@ const FS_MAIN=[
 '      sh+=shadowAt(p.xy+vec2(-1.7*t,0.0),p.z);',
 '      sh+=shadowAt(p.xy+vec2( 1.7*t,0.0),p.z);',
 '      sh/=9.0;',
+'      sh=sh*sh*(3.0-2.0*sh);',
 '      float fade=smoothstep(0.42,0.5,max(abs(p.x-0.5),abs(p.y-0.5)));',
 '      sh=mix(sh,1.0,fade);',
 '    }',
@@ -2646,8 +2681,8 @@ const J={bob:0,lean:1,side:2,twist:3,spine:4,spineSide:5,
   rShP:13,rShY:14,rShR:15,rElb:16,
   lHipP:17,lHipR:18,lKnee:19,lAnk:20,
   rHipP:21,rHipR:22,rKnee:23,rAnk:24,
-  crouch:25,yawOff:26,mouth:27,brow:28,eye:29,armR:30,shrug:31};
-const NJ=32;
+  crouch:25,yawOff:26,mouth:27,brow:28,eye:29,armR:30,shrug:31,handGrip:32};
+const NJ=33;
 const _poseB=new Float32Array(NJ);
 
 /* Each clip writes absolute channel values; the blender mixes them by weight. */
@@ -2664,9 +2699,13 @@ const CLIP={
    o[J.lShP]=.05+br*.065;o[J.rShP]=.05-br*.055;
    o[J.lShR]=.14+br2*.025;o[J.rShR]=.14+br2*.025;
    o[J.lElb]=.19+br*.04;o[J.rElb]=.17-br*.04;
-   o[J.side]=Math.sin(t*.37+sd)*.022;        // slow weight shift between feet
+   // weight shifts onto one leg and back: hips tip, the loaded knee locks
+   const w=Math.sin(t*.37+sd);
+   o[J.side]=w*.03;
    o[J.twist]=Math.sin(t*.31+sd)*.035;
-   o[J.lHipP]=.02;o[J.rHipP]=-.02;o[J.lKnee]=.07;o[J.rKnee]=.07;
+   o[J.lHipR]=w*.05;o[J.rHipR]=w*.05;
+   o[J.lHipP]=.02-w*.03;o[J.rHipP]=-.02+w*.03;
+   o[J.lKnee]=.07+Math.max(0,w)*.12;o[J.rKnee]=.07+Math.max(0,-w)*.12;
    o[J.eye]=1;
  },
  walk(o,t,c){
@@ -2674,8 +2713,11 @@ const CLIP={
    o[J.lHipP]=s*.58;o[J.rHipP]=-s*.58;
    o[J.lKnee]=Math.max(0,-s)*.95+.08+Math.max(0,cs)*.16;
    o[J.rKnee]=Math.max(0,s)*.95+.08+Math.max(0,-cs)*.16;
-   o[J.lAnk]=-s*.24+Math.max(0,cs)*.12;      // heel strike / toe off
-   o[J.rAnk]=s*.24+Math.max(0,-cs)*.12;
+   // heel strike at the front of the stride, toe-off at the back
+   const heelL=Math.max(0,s), toeL=Math.max(0,-s);
+   const heelR=Math.max(0,-s), toeR=Math.max(0,s);
+   o[J.lAnk]=heelL*.34-toeL*.42;
+   o[J.rAnk]=heelR*.34-toeR*.42;
    o[J.lShP]=-s*.55;o[J.rShP]=s*.55;
    o[J.lElb]=.3+Math.max(0,s)*.4;o[J.rElb]=.3+Math.max(0,-s)*.4;
    o[J.lShR]=.12;o[J.rShR]=.12;
@@ -2696,7 +2738,7 @@ const CLIP={
    o[J.lShR]=.15;o[J.rShR]=.15;
    o[J.bob]=Math.abs(Math.sin(p))*.07;
    o[J.lean]=.2;o[J.side]=-cs*.05;o[J.twist]=cs*.22;o[J.spine]=.05;
-   o[J.shrug]=.3+Math.abs(s)*.3;
+   o[J.shrug]=.3+Math.abs(s)*.3;o[J.handGrip]=.65;
    o[J.headP]=-.13;o[J.headY]=-cs*.05;o[J.eye]=1;
  },
  sprint(o,t,c){
@@ -2710,7 +2752,7 @@ const CLIP={
    o[J.lShR]=.19;o[J.rShR]=.19;
    o[J.bob]=Math.abs(Math.sin(p))*.085;
    o[J.lean]=.35;o[J.side]=-cs*.06;o[J.twist]=cs*.28;
-   o[J.shrug]=.5;o[J.headP]=-.22;o[J.mouth]=.2;o[J.eye]=1;
+   o[J.shrug]=.5;o[J.handGrip]=.85;o[J.headP]=-.22;o[J.mouth]=.2;o[J.eye]=1;
  },
  /* mantle: reach the lip, pull up, plant a foot, stand */
  mantle(o,t,c){
@@ -2955,7 +2997,7 @@ const CLIP={
    o[J.side]=-cs*.07;o[J.twist]=cs*.2;
    o[J.headP]=-.4+Math.abs(Math.sin(p))*.12;     // natural head bob
    o[J.headR]=Math.sin(t*8)*.07;
-   o[J.shrug]=1.15;o[J.eye]=1.15;o[J.mouth]=.6;
+   o[J.shrug]=1.15;o[J.handGrip]=.9;o[J.eye]=1.15;o[J.mouth]=.6;
  },
  /* Sprinter mistimes a corner and wears the obstacle */
  crash(o,t,c){
@@ -2981,35 +3023,124 @@ const CLIP={
    o[J.crouch]=.3*fold;o[J.shrug]=1.2*fold;
    o[J.mouth]=.55;o[J.eye]=1.2;
  },
- /* ---- scratched survivor: sickening, not yet turned ---- */
+ /* ---- infected survivor, stages one to three ---- */
  sickIdle(o,t,c){
-   const k=clamp(c.scratchT/Math.max(1,c.scratchDur),0,1);
-   const br=Math.sin(t*2.2+(c.seed||0));
-   o[J.spine]=.12+k*.3;
-   o[J.side]=Math.sin(t*.8)*(.02+k*.07);
-   o[J.bob]=br*.016;
-   o[J.headP]=.1+k*.34+br*.05;
-   o[J.headR]=Math.sin(t*.6)*(.05+k*.16);
-   o[J.rShP]=-.55-k*.75;o[J.rElb]=1.0+k*.9;o[J.rShY]=-.28*k;  // clutching the wound
-   o[J.lShP]=.1;o[J.lElb]=.3+k*.35;o[J.lShR]=.14;
-   o[J.crouch]=k*.16;o[J.lKnee]=.12+k*.3;o[J.rKnee]=.12+k*.26;
-   o[J.shrug]=.2+k*.6;
-   o[J.eye]=1-k*.35;o[J.mouth]=.15+k*.35;
+   const k=clamp((c.infT||0)/INF.dur,0,1);
+   const st=infStage(c);
+   // breathing goes fast and heavy early, then shallow and quick at the end
+   const rate=st===1?3.4:(st===2?2.6:4.4);
+   const depth=st===1?.05:(st===2?.045:.018);
+   const br=Math.sin(t*rate+(c.seed||0));
+   o[J.spine]=.1+k*.34+br*depth;
+   o[J.side]=Math.sin(t*.8)*(.02+k*.08);
+   o[J.bob]=br*(.02-k*.01);
+   o[J.headP]=.08+k*.4+br*.05;
+   o[J.headR]=Math.sin(t*.55)*(.05+k*.18);
+   o[J.handGrip]=.5+k*.4;
+   o[J.rShP]=-.6-k*.8;o[J.rElb]=1.05+k*.95;o[J.rShY]=-.3*k;   // hand on the wound
+   o[J.lShP]=.1-k*.15;o[J.lElb]=.3+k*.4;o[J.lShR]=.14;
+   o[J.crouch]=k*.22;o[J.lKnee]=.12+k*.4;o[J.rKnee]=.12+k*.34;
+   o[J.shrug]=.3+br*.5+k*.5;
+   o[J.eye]=1-k*.45;o[J.mouth]=.16+k*.4;o[J.brow]=.2+k*.3;
  },
  sickWalk(o,t,c){
-   const k=clamp(c.scratchT/Math.max(1,c.scratchDur),0,1);
+   const k=clamp((c.infT||0)/INF.dur,0,1);
    const p=c.phase,s=Math.sin(p),cs=Math.cos(p);
-   o[J.lHipP]=s*(.5-k*.12);o[J.rHipP]=-s*(.5-k*.12);
-   o[J.lKnee]=Math.max(0,-s)*.85+.12+k*.22;o[J.rKnee]=Math.max(0,s)*.85+.12+k*.22;
+   o[J.lHipP]=s*(.5-k*.14);o[J.rHipP]=-s*(.5-k*.14);
+   o[J.lKnee]=Math.max(0,-s)*.85+.12+k*.3;o[J.rKnee]=Math.max(0,s)*.85+.12+k*.3;
    o[J.lAnk]=-s*.18;o[J.rAnk]=s*.18;
-   o[J.lShP]=-s*.34;o[J.rShP]=-.5-k*.7;          // one arm stays on the wound
-   o[J.rElb]=.9+k*.8;o[J.lElb]=.35;
+   o[J.lShP]=-s*.34;o[J.rShP]=-.55-k*.75;
+   o[J.rElb]=.95+k*.85;o[J.lElb]=.35;
    o[J.bob]=Math.abs(Math.sin(p))*.038;
-   o[J.side]=-cs*.05;o[J.spine]=.16+k*.3;
-   o[J.headP]=.1+k*.3;o[J.shrug]=.3+k*.5;
-   o[J.eye]=1-k*.35;o[J.mouth]=.18+k*.3;
+   o[J.side]=-cs*.05;o[J.spine]=.14+k*.34;
+   o[J.headP]=.1+k*.34;o[J.shrug]=.3+k*.55;
+   o[J.eye]=1-k*.45;o[J.mouth]=.18+k*.35;o[J.brow]=.2+k*.25;
  },
  sickRun(o,t,c){CLIP.sickWalk(o,t,c);o[J.lean]=.16;o[J.bob]*=1.5;},
+ /* the first moment: a jolt, then both hands to the wound */
+ react(o,t,c){
+   const T=c.actT,k=Math.sin(Math.min(PI,T*3.6));
+   o[J.lean]=-.42*k;o[J.spine]=-.2*k;
+   o[J.rShP]=-1.9*k;o[J.rElb]=2.0*k;o[J.rShY]=-.55*k;
+   o[J.lShP]=-1.0*k;o[J.lElb]=1.2*k;o[J.lShR]=.7*k;
+   o[J.headP]=-.45*k;o[J.headR]=Math.sin(T*16)*.16*k;
+   o[J.lHipP]=-.25*k;o[J.rHipP]=.3*k;o[J.lKnee]=.5*k;o[J.rKnee]=.4*k;
+   o[J.crouch]=.18*k;o[J.shrug]=1.1*k;
+   o[J.eye]=1.5;o[J.mouth]=.75;o[J.brow]=.55;
+ },
+ /* legs go: they lower themselves down rather than fall */
+ sitDown(o,t,c){
+   const a=clamp(c.actT/(ACT_DUR.sitDown||1.7),0,1);
+   const k=smooth(a);
+   const wob=Math.sin(c.actT*11)*(1-a)*.07;
+   // knees buckle first, then the hips reach the ground and the legs go out
+   const buckle=Math.sin(Math.min(PI,a*PI*1.5))*(1-k);
+   o[J.crouch]=1.45*k+.35*buckle;
+   o[J.lHipP]=-1.5*k-.5*buckle;o[J.rHipP]=-1.46*k-.45*buckle;
+   o[J.lKnee]=.3*k+1.5*buckle;o[J.rKnee]=.34*k+1.45*buckle;
+   o[J.lHipR]=.16*k;o[J.rHipR]=-.14*k;
+   o[J.lAnk]=.35*k;o[J.rAnk]=.32*k;
+   o[J.spine]=.18+.16*k+.2*buckle;o[J.lean]=.05*k;
+   o[J.lShP]=.5*k+ -.6*buckle;o[J.rShP]=.46*k+ -.8*buckle;   // hands reach back
+   o[J.lShR]=.46*k+.5*buckle;o[J.rShR]=.42*k+.4*buckle;
+   o[J.lElb]=.28*k+.9*buckle;o[J.rElb]=.32*k+1.1*buckle;
+   o[J.headP]=.2*k+.25*buckle;o[J.side]=wob;o[J.headR]=wob*2;
+   o[J.shrug]=.45;o[J.eye]=.9-a*.28;o[J.mouth]=.4;o[J.handGrip]=.3;
+ },
+ /* sat on the ground, breathing shallow, eyes closing */
+ seated(o,t,c){
+   const k=clamp(((c.infT||0)-INF.sit)/Math.max(1,INF.dur-INF.sit),0,1);
+   const br=Math.sin(t*4.6+(c.seed||0));     // shallow, quick breathing
+   o[J.crouch]=1.45;
+   o[J.lHipP]=-1.5;o[J.rHipP]=-1.46;
+   o[J.lKnee]=.3+k*.22;o[J.rKnee]=.34+k*.2;
+   o[J.lHipR]=.16;o[J.rHipR]=-.14;
+   o[J.lAnk]=.35;o[J.rAnk]=.32;
+   o[J.spine]=.18+k*.34+br*.03;              // torso sags forward as it goes
+   o[J.lean]=.05+k*.12;
+   o[J.lShP]=.5-k*.1;o[J.rShP]=.46-k*.08;    // arms braced behind, slowly giving
+   o[J.lShR]=.46-k*.1;o[J.rShR]=.42-k*.08;
+   o[J.lElb]=.28+k*.3;o[J.rElb]=.32+k*.34;
+   o[J.headP]=.2+k*.45+br*.04;
+   o[J.headR]=Math.sin(t*.7)*.1+k*.18;
+   o[J.side]=Math.sin(t*.5)*.035;
+   o[J.shrug]=.35+br*.3;o[J.handGrip]=.3;
+   o[J.eye]=Math.max(0,.72-k*.74);           // eyes slowly close
+   o[J.mouth]=.28+Math.abs(br)*.2;o[J.brow]=.15;
+ },
+ /* motionless, then a twitch, then the eyes open changed */
+ twitch(o,t,c){
+   const T=c.actT,dur=ACT_DUR.twitch||1.8;
+   const still=clamp(T/.5,0,1);
+   const jolt=clamp((T-.5)/.5,0,1)*(1-clamp((T-1.25)/.3,0,1));
+   const wake=clamp((T-1.3)/(dur-1.3),0,1);
+   const jit=Math.sin(T*30)*jolt*.1+Math.sin(T*47)*jolt*.05;
+   CLIP.seated(o,t,c);
+   o[J.side]+=jit;o[J.headR]+=jit*2.6;
+   o[J.spine]+=jolt*.12-wake*.24;
+   o[J.headP]+=jolt*.1-wake*.5;
+   o[J.lShR]+=jolt*.2;o[J.rShR]+=jolt*.18;
+   o[J.eye]=wake*1.25;                      // they open, and they are not yours
+   o[J.mouth]=.25+wake*.4;o[J.brow]=-.5*wake;
+ },
+ /* pushing up off the ground into a zombie stance */
+ pushUp(o,t,c){
+   const a=clamp(c.actT/(ACT_DUR.pushUp||1.5),0,1);
+   const k=1-smooth(a);
+   const roar=clamp((a-.75)/.25,0,1);
+   const tuck=Math.sin(Math.min(PI,a*PI))*.7;   // knees come under the body first
+   o[J.crouch]=1.45*k;
+   o[J.lHipP]=-1.5*k;o[J.rHipP]=-1.46*k;
+   o[J.lKnee]=.3*k+2.0*tuck;o[J.rKnee]=.34*k+1.9*tuck;
+   o[J.lHipR]=.16*k;o[J.rHipR]=-.14*k;
+   o[J.spine]=.5*k+.34*(1-k)-.3*roar;
+   o[J.lean]=.14*k-.2*roar;
+   o[J.lShP]=-.5*k-.75*(1-k)-.4*roar;o[J.rShP]=-.85*k-.6*(1-k)-.4*roar;
+   o[J.lShR]=.6*k+.28*(1-k)+.8*roar;o[J.rShR]=.3*k+.24*(1-k)+.8*roar;
+   o[J.lElb]=.6*k+1.05*(1-k);o[J.rElb]=1.35*k+1.2*(1-k);
+   o[J.headP]=.3*k-.45*roar;o[J.shrug]=.9;
+   o[J.eye]=1.05;o[J.mouth]=.3+roar*.85;o[J.brow]=-.55;
+ },
  stumble(o,t,c){
    const T=c.actT,k=Math.sin(Math.min(PI,T*3.4));
    o[J.lean]=.5*k;o[J.side]=Math.sin(T*7)*.22*k;
@@ -3087,7 +3218,7 @@ const CLIP={
    o[J.lShR]=.78+lunge*.52;o[J.rShR]=.78+lunge*.52;
    o[J.lElb]=.35;o[J.rElb]=.35;
    o[J.lHipP]=.36*lunge;o[J.rHipP]=-.36*lunge;
-   o[J.lKnee]=.4;o[J.rKnee]=.4;o[J.shrug]=1.2*lunge;
+   o[J.lKnee]=.4;o[J.rKnee]=.4;o[J.shrug]=1.2*lunge;o[J.handGrip]=.8*lunge;
    o[J.mouth]=.35+lunge*.9;o[J.eye]=1.2;
  },
  eat(o,t,c){
@@ -3296,7 +3427,7 @@ function drawSyringe(d,st,glow){
   _pr(d,st,P.cyl,0,-.03,.215,PI/2,0,0,.012,.11,.012,[.92,.95,1],.3);
   _ball(d,st,P.sphLo,0,-.03,.265,.016,[.5,1,.6],1.0*glow);
 }
-function drawFace(d,st,L,p,lod,ex,zAmt){
+function drawFace(d,st,L,p,lod,ex,zAmt,skinC){
   const style=L.faceStyle||FACES[0];
   const cyclops=style.eye==='cyclops';
   // expression channels, modulated by whatever the current animation adds
@@ -3309,12 +3440,12 @@ function drawFace(d,st,L,p,lod,ex,zAmt){
   const curve=ex[EX.curve];
   const mWide=ex[EX.wide];
   const asym=ex[EX.asym];
-  let ew=.072,eh=.084,ez=.121;
-  if(style.eye==='wide'){ew=.085;eh=.098;}
-  else if(style.eye==='sleepy'){eh=.05;}
-  else if(style.eye==='bean'){ew=.055;eh=.1;}
-  else if(style.eye==='star'){ew=.082;eh=.09;}
-  if(cyclops){ew=.115;eh=.125;}
+  let ew=.062,eh=.074,ez=.12;
+  if(style.eye==='wide'){ew=.074;eh=.088;}
+  else if(style.eye==='sleepy'){eh=.045;}
+  else if(style.eye==='bean'){ew=.048;eh=.09;}
+  else if(style.eye==='star'){ew=.072;eh=.08;}
+  if(cyclops){ew=.1;eh=.112;}
   ew*=1+wideE*.16;eh*=1+wideE*.2;
   const eyeC=mixc(L.eyeHuman||L.eye,L.eyeZ||L.eye,clamp(zAmt*1.6-.25,0,1));
   const pupC=L.pupil;
@@ -3327,23 +3458,43 @@ function drawFace(d,st,L,p,lod,ex,zAmt){
     if(zAmt>.15)
       _pr(d,st,P.sphLo,sx,.026,ez-.032,0,0,0,ew*2.2,eh*1.95,.06,
         mixc(L.humanSkin||L.skin,[.17,.13,.11],clamp(zAmt*1.3,0,.85)),0);
+    // the eyeball keeps its shape; lids come down over it
+    _pr(d,st,style.eye==='star'?P.cone:P.sphLo,sx,.028,ez,0,0,0,ew,eh,.042,eyeC,glow*.9);
     const lidH=Math.max(.011,eh*open);
-    _pr(d,st,style.eye==='star'?P.cone:P.sphLo,sx,.028,ez,0,0,0,ew,lidH,.055,eyeC,glow*.9);
+    if(open<.985&&lod<2){
+      const lidSkin=skinC||L.humanSkin||L.skin;
+      const drop=(eh-lidH)*.5;
+      // upper lid sweeps down, lower lid rises to meet it
+      _pr(d,st,P.sphLo,sx,.028+lidH*.5+drop*.5,ez+.004,-.12,0,0,
+        ew*1.1,drop*1.05+.011,.046,lidSkin,0);
+      _pr(d,st,P.sphLo,sx,.028-lidH*.5-drop*.35,ez+.004,.1,0,0,
+        ew*1.08,drop*.72+.009,.044,lidSkin,0);
+    }
     if(open>.16){
       const lx=clamp(p[J.headY]*-.05,-.016,.016);
-      _pr(d,st,P.sphLo,sx+lx,.028,ez+.031,0,0,0,
-        ew*(zAmt>.55?.42:.58),Math.max(.01,lidH*.66),.034,pupC,0);
+      _pr(d,st,P.sphLo,sx+lx,.028,ez+.024,0,0,0,
+        ew*(zAmt>.55?.44:.6),Math.max(.01,lidH*.66),.028,pupC,0);
       if(lod===0&&glow<.4)
-        _pr(d,st,P.sphLo,sx+lx+.013,.05,ez+.043,0,0,0,.017,.017,.013,[1,1,1],.32);
+        _pr(d,st,P.sphLo,sx+lx+.011,.047,ez+.034,0,0,0,.014,.014,.011,[1,1,1],.32);
       if(glow>.05)   // eerie inner light
-        _pr(d,st,P.sphLo,sx+lx,.028,ez+.027,0,0,0,ew*.92,lidH*.95,.032,
+        _pr(d,st,P.sphLo,sx+lx,.028,ez+.021,0,0,0,ew*.92,lidH*.95,.026,
           [.66,1,.42],glow*1.9);
     }
     if(lod<2){
       const by=.09+browUp*.05+Math.max(0,browIn)*.024+(i===0?asym*.022:-asym*.012);
-      _bxr(d,st,sx,by,ez+.016,0,0,side*(browIn*1.05+(i===0?asym*.18:0)),
-        .088,.02+Math.abs(browIn)*.006,.026,L.hair,0);
+      _bxr(d,st,sx*1.08,by,ez+.006,0,0,side*(browIn*1.05+(i===0?asym*.18:0)),
+        .066,.017+Math.abs(browIn)*.005,.022,L.hair,0);
     }
+  }
+  // ---- brow ridge, nose, cheekbones and chin give the face some structure
+  if(lod<2){
+    const faceSkin=skinC||L.humanSkin||L.skin;
+    _pr(d,st,P.sphLo,0,.086,ez-.03,0,0,0,.17,.038,.04,shade(faceSkin,.97),0);   // brow ridge
+    _pr(d,st,P.sphLo,0,-.004,ez+.004,0,0,0,.04,.062,.042,shade(faceSkin,1.03),0); // nose bridge
+    _pr(d,st,P.sphLo,0,-.028,ez+.016,0,0,0,.034,.03,.036,shade(faceSkin,1.05),0); // nose tip
+    for(let i=-1;i<=1;i+=2)
+      _pr(d,st,P.sphLo,i*.078,-.014,ez-.042,0,0,0,.07,.062,.04,shade(faceSkin,1.02),0); // cheeks
+    _pr(d,st,P.sphLo,0,-.1,ez-.03,0,0,0,.09,.05,.055,shade(faceSkin,1.01),0);  // chin
   }
   // ---- mouth
   const my=-.058,mz=ez+.004;
@@ -3362,9 +3513,15 @@ function drawFace(d,st,L,p,lod,ex,zAmt){
     }
   }else{
     const c=curve;
-    for(let i=-1;i<=1;i++)
-      _bxr(d,st,i*(.031+mWide*.008),my+Math.abs(i)*c*.019,mz,0,0,-i*c*.55,
-        .036+mWide*.006,.017+Math.abs(c)*.005,.024,mouthC,0);
+    const lipC=mixc(mouthC,[.86,.55,.5],.35);
+    for(let i=-1;i<=1;i++){
+      const xo=i*(.031+mWide*.008), yo=my+Math.abs(i)*c*.019;
+      _bxr(d,st,xo,yo,mz,0,0,-i*c*.55,.036+mWide*.006,.016+Math.abs(c)*.005,.024,mouthC,0);
+      if(lod===0){   // upper and lower lip
+        _bxr(d,st,xo,yo+.014,mz-.002,0,0,-i*c*.55,.034,.012,.02,lipC,0);
+        _bxr(d,st,xo,yo-.014,mz-.002,0,0,-i*c*.55,.036,.013,.02,shade(lipC,.94),0);
+      }
+    }
   }
   if(zAmt>.55){
     _bx(d,st,.014,my-.055,mz-.005,.016,.055,.02,[.42,.05,.05],0);
@@ -3387,9 +3544,10 @@ function drawHair(d,st,L,style,lod){
         _pr(d,st,P.cone,Math.sin(a)*.09,.14,Math.cos(a)*.05-.01,-.25,a,0,.06,.14,.06,c,0);
       }break;
     case 'hair_long':
-      cap(1.05,1.1);
-      _pr(d,st,lod?P.sphLo:P.sph,0,-.06,-.075,0,0,0,.3,.36,.2,c,0);
-      for(let s=-1;s<=1;s+=2)_pr(d,st,P.box,s*.14,-.03,.02,0,0,0,.07,.28,.16,c,0);
+      cap(1.02,1.06);
+      _pr(d,st,lod?P.sphLo:P.sph,0,-.06,-.085,0,0,0,.3,.38,.22,c,0);
+      for(let s=-1;s<=1;s+=2)
+        _pr(d,st,lod?P.sphLo:P.sph,s*.152,-.04,-.035,0,0,s*.09,.085,.30,.18,c,0);
       break;
     case 'hair_pony':
       cap(1.0,1.06);
@@ -3602,6 +3760,17 @@ function drawChar(d,ch,camDist){
   if(fem&&lod<2)_bx(d,st,0,BD.spineL*.62,torsoD*.16,torsoW*.94,.14,torsoD*.92,shade(top,1.03),0);
   if(av.top==='top_stripe'&&lod<2)
     for(let i=0;i<3;i++)_bx(d,st,0,.08+i*.13,0,torsoW*1.02,.055,torsoD*1.02,[.97,.97,.98],0);
+  // fabric folds: creases at the waist and across the chest that shift with the body
+  if(lod<2){
+    const fold=shade(top,.9), foldL=shade(top,1.07);
+    for(let i=0;i<3;i++){
+      const fy=.02+i*.14+Math.abs(swayZ)*.01;
+      _bxr(d,st,(i%2?1:-1)*torsoW*.16,fy,torsoD*.5,0,0,(i%2?-1:1)*(.22+swayX*.5),
+        torsoW*.5,.022,.012,i%2?fold:foldL,0);
+    }
+    _bxr(d,st,0,-.02+swayZ*.02,torsoD*.5,0,0,swayX*.4,torsoW*.9,.02,.012,fold,0);
+    _bxr(d,st,0,BD.spineL*.78,torsoD*.5,0,0,0,torsoW*.72,.02,.012,foldL,0);
+  }
   if(av.top==='top_vest')_bx(d,st,0,BD.spineL*.5,0,torsoW*1.06,tall*.8,torsoD*1.08,hex(0xe8f04a),.12);
   if(av.top==='top_varsity'&&lod<2)_bx(d,st,.0,.26,torsoD*.52,.11,.13,.02,[.95,.95,.96],0);
   if(av.top==='top_lab'){
@@ -3638,7 +3807,8 @@ function drawChar(d,ch,camDist){
           sr=i?p[J.rShR]:p[J.lShR],el=i?p[J.rElb]:p[J.lElb];
     st.push();
     st.translate(s*shX,.03+p[J.shrug]*.02,0);
-    _ball(d,st,SPH,0,0,0,armR*1.26,sleeve>0?top:skinArm,0);
+    // deltoid cap rather than a bare ball joint
+    _pr(d,st,SPH,0,.008,0,0,0,-s*.2,armR*2.5,armR*2.9,armR*2.35,sleeve>0?top:skinArm,0);
     st.rotY(sy).rotZ(s*(sr+p[J.shrug]*.09)).rotX(sp);
     _seg(d,st,CYL,BD.uArm,armR,sleeve>=1?top:skinArm,0);
     if(sleeve>0&&sleeve<1)_pr(d,st,CYL,0,-BD.uArm*.24,0,0,0,0,armR*2.16,BD.uArm*.52,armR*2.16,top,0);
@@ -3650,9 +3820,18 @@ function drawChar(d,ch,camDist){
     if(sleeve>=1)_pr(d,st,CYL,0,-BD.lArm*.35,0,0,0,0,armR*2.04,BD.lArm*.7,armR*2.04,top,0);
     if(zA>.55&&lod<2)_bxr(d,st,armR*.9,-BD.lArm*.5,0,0,0,.4,.02,.09,.04,[.45,.1,.09],0);
     st.translate(0,-BD.lArm,0);
-    // ---- rounded hand with a thumb
-    _pr(d,st,SPH,0,-.018,0,0,0,0,armR*2.5,armR*3.0,armR*2.3,skinHand,0);
-    if(lod<2)_ball(d,st,P.sphLo,-s*armR*1.05,-.008,.012,armR*.72,skinHand,0);
+    // ---- hand: palm, four finger pads and a thumb
+    _pr(d,st,SPH,0,-.02,0,0,0,0,armR*2.3,armR*2.5,armR*2.0,skinHand,0);
+    if(lod<2){
+      const grip=clamp(p[J.handGrip]||0,0,1);
+      for(let f=0;f<4;f++){
+        const fo=(f-1.5)*armR*.62;
+        _pr(d,st,P.sphLo,fo,-.052-grip*.012,armR*.5*(1-grip*.6),grip*1.2,0,0,
+          armR*.5,armR*1.5,armR*.62,skinHand,0);
+      }
+      _pr(d,st,P.sphLo,-s*armR*1.15,-.024,.014,0,0,-s*.6,
+        armR*.72,armR*1.15,armR*.66,skinHand,0);
+    }
     st.pop();
   }
   // ---------------- neck & head
@@ -3663,7 +3842,7 @@ function drawChar(d,ch,camDist){
   st.translate(0,BD.headR*1.02,0);
   _pr(d,st,SPH,0,0,0,0,0,0,BD.headR*(fem?1.95:2.0),BD.headR*2.1,BD.headR*(fem?1.9:1.95),skinHead,0);
   _pr(d,st,SPH,0,-.072,.012,0,0,0,BD.headR*1.62,BD.headR*.92,BD.headR*1.5,skinHead,0);  // jaw
-  drawFace(d,st,L,p,lod,ch.expr,zA);
+  drawFace(d,st,L,p,lod,ch.expr,zA,skinHead);
   if(lod<2){
     drawHair(d,st,L,av.hair,lod);
     drawHat(d,st,L,av.hat,lod);
@@ -3804,6 +3983,15 @@ const VARIANTS={
 };
 function variantOf(e){return VARIANTS[e&&e.variant||'walker']||VARIANTS.walker;}
 const BURST={speed:1.5,dur:2.6,cool:3.4};
+/* V1.11: one infection system for every attack. Exactly one minute from the
+   wound to standing up as a zombie, in three readable stages. */
+const INF={dur:60, s2:20, s3:40, sit:45};
+function infStage(e){
+  if(!e||!e.infected)return 0;
+  if(e.infT<INF.s2)return 1;
+  if(e.infT<INF.s3)return 2;
+  return 3;
+}
 const BOT_NAMES=['Riley','Max','Zoe','Kai','Luna','Milo','Ivy','Finn','Nova','Ash','Pip','Juno',
   'Rex','Sage','Theo','Wren','Dex','Remy','Skye','Cleo','Bolt','Echo','Ziggy','Poppy','Odin','Vale'];
 
@@ -3822,7 +4010,7 @@ function makeEntity(id,name,avatar,isBot){
     headLook:0,headPitchLook:0,stuckT:0,lastX:0,lastZ:0,unstick:0,
     blink:0,blinkT:rnd(1,4),zAmt:0,scale:1,
     act:null,actT:0,actTarget:null,backSyringe:false,syringeGlow:1,
-    scratched:false,scratchT:0,scratchDur:0,stumbleCool:0,vomitT:0,
+    infected:false,infT:0,sitting:false,stumbleCool:0,vomitT:0,
     burstT:0,burstCool:0,crashCool:0,
     infections:0,points:0,alive:true,transforming:false,
     look:null,avatar,blendRate:11,
@@ -3882,7 +4070,7 @@ class Simulation{
       placed.push({x:e.x,z:e.z});
       e.vx=e.vy=e.vz=0;e.yaw=Math.atan2(-e.x,-e.z);
       e.team=TEAM.HUMAN;e.zAmt=0;e.transforming=false;e.backSyringe=false;
-      e.scratched=false;e.scratchT=0;e.stumbleCool=0;e.vomitT=0;
+      e.infected=false;e.infT=0;e.sitting=false;e.stumbleCool=0;e.vomitT=0;
       e.burstT=0;e.burstCool=0;e.crashCool=0;
       e.act=null;e.actT=0;e.stamina=1;e.infections=0;e.points=0;
       e.airT=0;e.landT=0;e.turnRate=0;e.turnLean=0;e.lastVictim=null;
@@ -3942,7 +4130,7 @@ class Simulation{
     if(e.team===TEAM.ZOMBIE)return;
     e.team=TEAM.ZOMBIE;
     this.setVariant(e,this.rollVariant());
-    e.scratched=false;e.scratchT=0;
+    e.infected=false;e.infT=0;e.sitting=false;
     e.stamina=1;e.burstT=0;e.burstCool=0;
     e.vx=e.vz=0;
     if(instant){
@@ -3958,15 +4146,21 @@ class Simulation{
       this.emit('infect',{by:by.id,byName:by.name,id:e.id,name:e.name,x:e.x,y:e.y,z:e.z});
     }
   }
-  /* A scratch does not turn anyone straight away: the survivor keeps playing,
-     slows down, sickens visibly and turns about a minute later. */
-  scratch(e,by){
-    if(e.team!==TEAM.HUMAN||e.scratched||e.transforming)return;
-    e.scratched=true;e.scratchT=0;
-    e.scratchDur=55+Math.random()*12;
-    e.stumbleCool=rnd(3,7);
-    if(by){by.points+=40;this.emit('scratch',{by:by.id,byName:by.name,id:e.id,name:e.name,
-      x:e.x,y:e.y,z:e.z});}
+  /* Every landed attack starts the same one-minute clock. The survivor keeps
+     playing through stages one and two, is sat down by stage three, and rises
+     as a zombie at the end. */
+  infect(e,by,kind){
+    if(e.team!==TEAM.HUMAN||e.infected||e.transforming)return false;
+    e.infected=true;e.infT=0;e.sitting=false;
+    e.stumbleCool=rnd(4,8);e.vomitT=rnd(1,3);
+    e.act='react';e.actT=0;
+    if(by){
+      by.infections++;by.points+=100;
+      by.lastVictim=e;by.lastVictimT=this.time;
+    }
+    this.emit('infect',{by:by?by.id:null,byName:by?by.name:'',id:e.id,name:e.name,
+      kind:kind||'bite',x:e.x,y:e.y,z:e.z});
+    return true;
   }
   /* attempt an infection from `z` — returns true if the strike lands */
   tryAttack(z){
@@ -3975,7 +4169,7 @@ class Simulation{
     // of the attacker, so a lunge no longer picks someone off to the side.
     let best=null,bd=1e9,behind=false;
     for(const s of this.survivors){
-      if(s.transforming||s.scratched)continue;
+      if(s.transforming||infStage(s)>=2)continue;
       const dx=s.x-z.x,dz=s.z-z.z;
       const d=dx*dx+dz*dz;
       if(d>3.2*3.2)continue;
@@ -4057,9 +4251,14 @@ class Simulation{
   physics(e,dt,ctrl){
     if(e.climbCool>0)e.climbCool-=dt;
     if(e.climb){this.stepClimb(e,dt);return;}
+    if(e.sitting){                       // sat on the ground: pinned, not falling
+      e.vx=e.vz=0;e.speed=0;
+      const r=resolveCollision(e.x,e.z,e.y,.33,_col);
+      e.x=r.x;e.z=r.z;e.y=r.ground;e.vy=0;e.grounded=true;e.airT=0;
+    }
     // ctrl: {mx,mz,jump,sprint} in world space
     const zombie=e.team===TEAM.ZOMBIE;
-    const busy=e.transforming||(e.act&&e.act!=='bite')||this.phase==='over'||this.phase==='cutscene';
+    const busy=e.transforming||e.sitting||(e.act&&e.act!=='bite')||this.phase==='over'||this.phase==='cutscene';
     let mx=0,mz=0;
     if(ctrl&&!busy){mx=ctrl.mx;mz=ctrl.mz;}
     const mag=Math.hypot(mx,mz);
@@ -4070,7 +4269,12 @@ class Simulation{
       const V=zombie?variantOf(e):VARIANTS.walker;
       let mul=zombie?V.spd:1;
       if(zombie&&e.burstT>0)mul*=BURST.speed;              // sprinter burst
-      if(e.scratched)mul*=lerp(.94,.72,clamp(e.scratchT/Math.max(1,e.scratchDur),0,1));
+      if(e.infected){
+        const st=infStage(e);
+        mul*=st<=1?lerp(1,.94,clamp(e.infT/INF.s2,0,1))
+                  :(st===2?lerp(.86,.7,clamp((e.infT-INF.s2)/(INF.s3-INF.s2),0,1))
+                          :lerp(.55,.22,clamp((e.infT-INF.s3)/(INF.sit-INF.s3),0,1)));
+      }
       const base=(zombie?(sprint?SPD.zsprint:SPD.zrun):(sprint?SPD.sprint:SPD.run))*mul;
       want=base*Math.min(1,mag);
       if(mag<.55)want=(zombie?SPD.zwalk*mul:SPD.walk*mul)*Math.min(1,mag/.55);
@@ -4189,6 +4393,7 @@ class Simulation{
       if(e.won)return z?(e.victoryId||'vic_roar'):(e.victoryId||'celebrate');
       return 'lose';
     }
+    if(e.sitting)return 'seated';
     if(e.climb)return e.climb.vault?'vault':'mantle';
     if(e.jumpPrep>0)return 'jumpPrep';
     if(!e.grounded)return e.vy>1?'jump':'fall';
@@ -4196,7 +4401,7 @@ class Simulation{
     const sp=z&&variantOf(e).burst;
     if(e.speed>0.35){
       if(z)return e.speed>4.5?(sp?'sRun':'zrun'):(sp?'sWalk':'wWalk');
-      if(e.scratched)return e.speed>4.2?'sickRun':'sickWalk';
+      if(e.infected)return e.speed>4.2?'sickRun':'sickWalk';
       return e.speed>6.1?'sprint':(e.speed>4.2?'run':'walk');
     }
     if(z){
@@ -4204,7 +4409,7 @@ class Simulation{
       if(Math.abs(e.turnRate)>1.1)return 'zturn';
       return sp?'sIdle':'wIdle';
     }
-    if(e.scratched)return 'sickIdle';
+    if(e.infected)return 'sickIdle';
     return e.scaredT>0?'scared':'idle';
   }
   stepEntityAnim(e,dt){
@@ -4217,24 +4422,34 @@ class Simulation{
     e.phase+=(e.speed*dt)*(PI/stride);
     if(e.scaredT>0)e.scaredT-=dt;
     if(e.zStumble>0)e.zStumble-=dt;
-    // ---- scratch sickness: slow decline, then collapse and rise
-    if(e.scratched&&e.team===TEAM.HUMAN&&!e.transforming){
-      e.scratchT+=dt;
-      const p=clamp(e.scratchT/e.scratchDur,0,1);
-      e.zAmt=p*.5;                       // skin pales, eyes drain, gradually
-      e.vomitT-=dt;
-      if(e.vomitT<=0&&p>.18){
-        e.vomitT=rnd(1.6,4.2)*(1.3-p);
-        this.emit('vomit',{id:e.id,x:e.x,y:e.y,z:e.z,p});
+    // ---- the one-minute infection, in three stages
+    if(e.infected&&e.team===TEAM.HUMAN&&!e.transforming){
+      const prevStage=infStage(e);
+      e.infT+=dt;
+      const p=clamp(e.infT/INF.dur,0,1);
+      const stage=infStage(e);
+      if(stage!==prevStage)this.emit('inf-stage',{id:e.id,stage});
+      e.zAmt=p*.55;                          // skin pales and eyes drain
+      if(stage>=2){
+        e.vomitT-=dt;
+        if(e.vomitT<=0){
+          e.vomitT=rnd(1.4,3.6)*(1.4-p);
+          this.emit('vomit',{id:e.id,x:e.x,y:e.y,z:e.z,p});
+        }
+        e.stumbleCool-=dt;
+        if(e.stumbleCool<=0&&!e.act&&e.grounded&&!e.sitting){
+          e.stumbleCool=rnd(3.5,8)*(1.3-p);
+          e.act='stumble';e.actT=0;
+          this.emit('stumble',{id:e.id,x:e.x,y:e.y,z:e.z});
+        }
       }
-      e.stumbleCool-=dt;
-      if(e.stumbleCool<=0&&!e.act&&e.grounded&&p>.25){
-        e.stumbleCool=rnd(4,9)*(1.2-p);
-        e.act='stumble';e.actT=0;
-        this.emit('stumble',{id:e.id,x:e.x,y:e.y,z:e.z});
+      // stage 3: the legs give out and they sit down for good
+      if(e.infT>=INF.sit&&!e.sitting&&e.act!=='sitDown'){
+        e.act='sitDown';e.actT=0;e.vx=e.vz=0;
+        this.emit('sitdown',{id:e.id,x:e.x,y:e.y,z:e.z});
       }
-      if(p>=1&&!e.act){
-        e.transforming=true;e.act='collapse';e.actT=0;
+      if(e.infT>=INF.dur){
+        e.transforming=true;e.act='twitch';e.actT=0;
         e.vx=e.vz=0;
         this.emit('collapse',{id:e.id,x:e.x,y:e.y,z:e.z});
       }
@@ -4248,28 +4463,26 @@ class Simulation{
       if(e.act==='bite'&&!e.actHit&&e.actT>.26){
         e.actHit=true;
         const t=e.actTarget;
-        if(t&&t.team===TEAM.HUMAN&&!t.transforming&&!t.scratched&&
+        if(t&&t.team===TEAM.HUMAN&&!t.transforming&&!t.infected&&
            dist2(e.x,e.z,t.x,t.z)<3.1*3.1){
-          // caught from behind and they go down; caught face-on and they twist
-          // away with a scratch that will take them later
-          const clean=e.actBehind||Math.random()<.45;
-          if(clean){this.makeZombie(t,e,false);e.eatQueue=true;}
-          else{
-            this.scratch(t,e);
-            t.act='recoil';t.actT=0;
-            const dx=t.x-e.x,dz=t.z-e.z,d=Math.hypot(dx,dz)||1;
-            t.vx+=dx/d*4.6;t.vz+=dz/d*4.6;      // stumbles backward
-            this.emit('bite',{id:e.id,tid:t.id,x:t.x,y:t.y,z:t.z});
-          }
+          // bite or scratch — both start the same one-minute infection
+          const kind=e.actBehind?'bite':'scratch';
+          this.infect(t,e,kind);
+          const dx=t.x-e.x,dz=t.z-e.z,d=Math.hypot(dx,dz)||1;
+          t.vx+=dx/d*4.2;t.vz+=dz/d*4.2;        // recoils away from the attacker
+          e.eatQueue=true;
+          this.emit('bite',{id:e.id,tid:t.id,kind,x:t.x,y:t.y,z:t.z});
         }else this.emit('miss',{id:e.id});
       }
       if(e.actT>=dur){
         const prev=e.act;
         e.act=null;e.actT=0;e.actHit=false;
         if(prev==='infecting'){e.act='rise';e.actT=0;e.zAmt=1;}
-        else if(prev==='collapse'){e.act='getup';e.actT=0;e.zAmt=1;}
-        else if(prev==='getup'){
-          e.scratched=false;
+        else if(prev==='sitDown'){e.sitting=true;}
+        else if(prev==='twitch'){e.act='pushUp';e.actT=0;e.zAmt=1;
+          this.emit('eyes-open',{id:e.id,x:e.x,y:e.y,z:e.z});}
+        else if(prev==='pushUp'){
+          e.infected=false;e.sitting=false;
           this.makeZombie(e,null,true);
           e.transforming=false;e.act='zroar';e.actT=0;
           this.emit('rose',{id:e.id,x:e.x,y:e.y,z:e.z});
@@ -4389,11 +4602,30 @@ class Simulation{
       let best=null,bd=1e9;
       const V=variantOf(e);
       for(const s of this.survivors){
-        if(s.transforming||s.scratched)continue;   // already turning — leave them
+        // stage 2 onward they are visibly turning — zombies lose interest
+        if(s.transforming||infStage(s)>=2)continue;
         const d=dist2(e.x,e.z,s.x,s.z);
         if(d<bd){bd=d;best=s;}
       }
       ai.target=best;
+      // nothing left to chase? drift toward a downed survivor and feed
+      if(!best){
+        let downed=null,dd=1e9;
+        for(const s of this.ents){
+          if(s.team!==TEAM.HUMAN||!s.sitting)continue;
+          const q=dist2(e.x,e.z,s.x,s.z);
+          if(q<dd){dd=q;downed=s;}
+        }
+        if(downed&&dd<28*28){
+          const dist=Math.sqrt(dd);
+          if(dist>1.9)return this.seek(e,ctrl,downed.x,downed.z,.8);
+          if(!e.act&&Math.random()<dt*.9){
+            e.act='eat';e.actT=0;
+            this.emit('eat',{id:e.id,x:e.x,y:e.y,z:e.z});
+          }
+          return ctrl;
+        }
+      }
       if(best){
         const d=Math.sqrt(bd);
         // aim slightly behind the survivor to line up a back-stab
@@ -4417,13 +4649,13 @@ class Simulation{
       }
     }else{
       let best=null,bd=1e9;
-      if(e.scratched){e.scaredT=0;}
+      if(infStage(e)>=2){e.scaredT=0;}
       for(const z of this.zombies){
         if(z.transforming)continue;
         const d=dist2(e.x,e.z,z.x,z.z);
         if(d<bd){bd=d;best=z;}
       }
-      const d=(best&&!e.scratched)?Math.sqrt(bd):99;
+      const d=(best&&infStage(e)<2)?Math.sqrt(bd):99;
       if(d<13){
         e.scaredT=.6;
         ai.panic=Math.min(1,ai.panic+dt*2);
@@ -4483,8 +4715,9 @@ class Simulation{
       }
     }else if(this.phase==='live'){
       this.phaseT-=dt;
-      const surv=this.survivors.filter(e=>!e.transforming).length;
-      if(surv<=0){this.endRound(false);}
+      // the round is decided the moment nobody clean is left
+      const healthy=this.ents.filter(e=>e.team===TEAM.HUMAN&&!e.infected&&!e.transforming).length;
+      if(healthy<=0){this.endRound(false);}
       else if(this.phaseT<=0){this.endRound(true);}
     }
     // nearest-threat pass drives both facial expression and head tracking
@@ -4499,7 +4732,7 @@ class Simulation{
       }
       e.threat=nearE?Math.sqrt(near):99;
       e.lookAt=(nearE&&e.threat<16)?nearE:null;
-      if(!hunting&&e.threat<9)e.scaredT=.4;
+      if(!hunting&&e.threat<9&&infStage(e)<2)e.scaredT=.4;
     }
     for(const e of this.ents){
       let ctrl;
@@ -4524,7 +4757,7 @@ class Simulation{
   }
 }
 const ACT_DUR={stab:.62,bite:.72,infecting:2.55,rise:.9,eat:2.4,zroar:1.1,vic_roar:6.0,
-  crash:1.05,stumble:.95,recoil:.85,collapse:1.75,getup:1.0,
+  crash:1.05,stumble:.95,recoil:.85,react:.9,sitDown:1.7,twitch:1.8,pushUp:1.5,
   emote:3.0,victory:6.0,emote_wave:2.6,emote_dance:4.2,emote_clap:2.4,emote_point:2.2,
   emote_sit:4.5,emote_facepalm:2.4,emote_flex:2.6,emote_taunt:2.8};
 const _col={x:0,z:0,ground:0},_col2={x:0,z:0,ground:0},_col3={x:0,z:0,ground:0};
@@ -5095,7 +5328,7 @@ const Game={
     if(this.sim.phase==='live'&&this.sim.phaseT<20)Audio_.tension=Math.min(1,Audio_.tension+.25);
     // scare vignette when a zombie closes in
     let near=99;
-    if(this.me.team===TEAM.HUMAN){
+    if(this.me.team===TEAM.HUMAN&&infStage(this.me)<2){
       for(const z of this.sim.zombies){
         if(z.transforming)continue;
         near=Math.min(near,Math.hypot(z.x-this.me.x,z.z-this.me.z));
@@ -5202,15 +5435,21 @@ const Game={
           if(e.tid===Client.localId){Cam.addShake(.6);UI.flash(.45);haptic([25,40,25]);}
           break;
         }
-        case 'scratch':{
-          UI.kill('🩸 '+e.byName+' scratched '+e.name);
-          PART.blood(e.x,e.y+1.1,e.z,0,0,12);
-          if(e.id===Client.localId){
-            UI.big('SCRATCHED','The infection is in you — about a minute left');
-            $('#roleBadge').className='roleS';
-            haptic([40,60,40]);
-          }
-          if(e.by===Client.localId){this.xpEarned+=3;UI.toast('+3 XP — scratched!');}
+        case 'inf-stage':{
+          if(e.id!==Client.localId)break;
+          if(e.stage===2)UI.big('STAGE 2','You are slowing down — zombies are losing interest');
+          else if(e.stage===3)UI.big('STAGE 3','Your legs are giving out');
+          break;
+        }
+        case 'sitdown':{
+          if(e.id===Client.localId){UI.big('YOU CANNOT STAND','');haptic(60);}
+          break;
+        }
+        case 'eyes-open':{
+          const d=Math.hypot(e.x-Cam.x,e.z-Cam.z);
+          if(d<26)Audio_.growl(0,.75);
+          PART.infection(e.x,e.y+1,e.z,16);
+          if(e.id===Client.localId)UI.flash(.55);
           break;
         }
         case 'vomit':{
@@ -5224,10 +5463,9 @@ const Game={
           break;
         case 'collapse':{
           const d=Math.hypot(e.x-Cam.x,e.z-Cam.z);
-          if(d<28)Audio_.scream();
-          PART.infection(e.x,e.y+.9,e.z,26);
-          if(e.id===Client.localId){Cam.addShake(.8);UI.flash(.7);
-            UI.big('YOU ARE TURNING','');}
+          if(d<28)Audio_.growl(.2,.85);
+          PART.infection(e.x,e.y+.7,e.z,22);
+          if(e.id===Client.localId){Cam.addShake(.5);UI.big('YOU ARE TURNING','');}
           break;
         }
         case 'patient-zero':{
@@ -5247,6 +5485,7 @@ const Game={
           break;
         }
         case 'infect':{
+          const kindTxt=e.kind==='bite'?'bit':'scratched';
           const d=Math.hypot(e.x-Cam.x,e.z-Cam.z);
           // chain infections can fire several at once — cap the burst so a big
           // outbreak never stalls the frame or turns into noise
@@ -5257,13 +5496,13 @@ const Game={
           if(!busy)PART.blood(e.x,e.y+1.1,e.z,0,0,8);
           if(d<30&&!busy){Audio_.syringe();Audio_.infect();}
           if(d<20&&!busy)Audio_.scream();
-          UI.kill('💉 '+e.byName+' infected '+e.name);
+          UI.kill((e.kind==='bite'?'😬 ':'🩸 ')+e.byName+' '+kindTxt+' '+e.name);
           if(e.by===Client.localId){this.xpEarned+=5;UI.toast('+5 XP — infection!');Cam.addShake(.6);haptic(35);}
           if(e.id===Client.localId){
-            UI.big('INFECTED','You are turning…');
-            $('#roleBadge').className='roleZ';
-            $('#roleBadge').textContent='Turning';
-            $('#actionLbl').textContent='INFECT';
+            UI.big('INFECTED','One minute until you turn — keep moving');
+            $('#roleBadge').className='roleS';
+            $('#roleBadge').textContent='Infected · Stage 1';
+            haptic([40,60,40]);
           }
           break;
         }
@@ -5437,9 +5676,9 @@ const TUTORIAL=[
   {ico:'🎥',t:'Looking around',
    x:'<b>PC:</b> click once to lock the mouse, then move to look. Scroll to zoom the camera in and out.<br><b>Mobile:</b> drag on the right half of the screen.<br>Look behind you often — that is where the syringe comes from.'},
   {ico:'😬',t:'How infection works',
-   x:'Zombies attack with the <b>BITE</b> button (<span class="kbd">E</span> or left click). Catch someone <b>from behind</b> and they go down immediately. Catch them face-on and they usually twist away with a <b>scratch</b> — which is slower, but just as fatal.'},
-  {ico:'🩸',t:'Scratched',
-   x:'A scratch does not turn you straight away. You keep playing for about a minute, but you move slower, stumble, bring up green and slowly lose your colour. Other zombies ignore you while it runs its course — then you collapse and get back up on their team. Survive to the buzzer and you still count for your side.'},
+   x:'Zombies attack with the <b>BITE</b> button (<span class="kbd">E</span> or left click). Bites and scratches both do the same thing: they start a <b>one minute</b> infection. Land one on every survivor before the clock runs out and the zombies win.'},
+  {ico:'🩸',t:'The one-minute turn',
+   x:'<b>0–20s</b> — you react and breathe hard, but you can still run at nearly full speed.<br><b>20–40s</b> — you slow down, stumble, and start dripping green. Zombies lose interest and go after clean survivors instead.<br><b>40–60s</b> — your legs give out, you sit down and cannot stand again. Then you turn.<br>Use those first twenty seconds: get away from the pack, and stay alive to the buzzer if you can.'},
   {ico:'🧟',t:'Walkers and Sprinters',
    x:'Every zombie is one of two classes. A <b>Walker</b> is slow but relentless and tracks you across the whole map. A <b>Sprinter</b> covers ground in explosive bursts — but a charging Sprinter that misjudges a corner slams shoulder-first into the scenery and loses a second recovering. Use that.'},
   {ico:'🏃',t:'How to survive',
@@ -6048,7 +6287,7 @@ const UI={
       (sim.phase==='live'?'Outbreak':'Round over');
     const hum=sim.ents.filter(e=>e.team===TEAM.HUMAN).length;
     const zom=sim.ents.length-hum;
-    const sick=sim.ents.filter(e=>e.scratched&&e.team===TEAM.HUMAN).length;
+    const sick=sim.ents.filter(e=>e.infected&&e.team===TEAM.HUMAN).length;
     $('#cntHumans').textContent=hum+(sick?' ('+sick+'🩸)':'');
     $('#cntZombies').textContent=zom;
     $('#cntPlayers').textContent=sim.ents.length;
@@ -6059,15 +6298,21 @@ const UI={
     const zombie=me.team===TEAM.ZOMBIE;
     const badge=$('#roleBadge');
     if(me.transforming){badge.className='roleZ';badge.textContent='Turning…';}
-    else if(me.scratched){badge.className='roleS';badge.textContent='Infected';}
+    else if(me.infected){
+      badge.className='roleS';
+      badge.textContent='Infected · Stage '+infStage(me);
+    }
     else{
       badge.className=zombie?'roleZ':'roleH';
       badge.textContent=zombie?(variantOf(me).name):'Survivor';
     }
     const sb=$('#sickBar');
-    if(me.scratched&&!me.transforming){
+    if(me.infected&&!me.transforming){
       sb.classList.add('on');
-      $('#sickFill').style.width=(100-clamp(me.scratchT/Math.max(1,me.scratchDur),0,1)*100)+'%';
+      const left=clamp(1-me.infT/INF.dur,0,1);
+      $('#sickFill').style.width=(left*100)+'%';
+      $('#sickFill').style.background=infStage(me)>=3?'linear-gradient(90deg,#e08a6a,#a03a2a)':
+        (infStage(me)===2?'linear-gradient(90deg,#d8e06a,#8a9a2a)':'linear-gradient(90deg,#b8e06a,#4c9a2a)');
     }else sb.classList.remove('on');
     $('#staminaFill').style.width=(me.stamina*100)+'%';
     $('#staminaFill').style.background=me.stamina<.25?'linear-gradient(90deg,#ff9a7a,#e0503a)'
@@ -6076,7 +6321,7 @@ const UI={
     if(zombie){
       let close=false;
       for(const s of sim.survivors)
-        if(!s.transforming&&!s.scratched&&dist2(me.x,me.z,s.x,s.z)<2.6*2.6){close=true;break;}
+        if(!s.transforming&&!s.infected&&dist2(me.x,me.z,s.x,s.z)<2.6*2.6){close=true;break;}
       const feed=!close&&Game.canFeed();
       lbl.textContent=feed?'FEED':'BITE';
       ab.querySelector('.ico').textContent=feed?'🦷':'😬';
@@ -6283,7 +6528,7 @@ function boot(){
       Game.state='menu';
       if(!Save.seenTutorial){UI.tutStep=0;UI.buildTutorial();UI.show('tutorialScreen');}
       else UI.show('menu');
-      $('#verNote').textContent='V1.10 · '+Servers.length+' servers · 7–10 players per round';
+      $('#verNote').textContent='V1.11 · '+Servers.length+' servers · 7–10 players per round';
     },260);
   },140);
   addEventListener('resize',()=>{R.resize();});

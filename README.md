@@ -1,6 +1,6 @@
 # Cool-
 
-## Infector — V1.10
+## Infector — V1.11
 
 An online 3D multiplayer infection-survival game that runs from a **single HTML file** —
 no build step, no engine, no downloads. Open `infector.html` in any browser (desktop or
