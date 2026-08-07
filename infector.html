@@ -2480,7 +2480,7 @@ const CLIP={
    o[J.lShP]=-s*.55;o[J.rShP]=s*.55;
    o[J.lElb]=.3+Math.max(0,s)*.4;o[J.rElb]=.3+Math.max(0,-s)*.4;
    o[J.lShR]=.12;o[J.rShR]=.12;
-   o[J.bob]=Math.abs(Math.sin(p))*.042-.016;  // body bounce on every step
+   o[J.bob]=Math.abs(Math.sin(p))*.042;  // body bounce on every step
    o[J.side]=-cs*.038;o[J.twist]=cs*.14;o[J.spine]=.085;
    o[J.shrug]=Math.abs(s)*.25;
    o[J.headY]=-cs*.07;o[J.headP]=-.02;o[J.eye]=1;
@@ -2495,7 +2495,7 @@ const CLIP={
    o[J.lShY]=-.16-Math.max(0,-s)*.3;o[J.rShY]=.16+Math.max(0,s)*.3;
    o[J.lElb]=1.0+Math.max(0,s)*.62;o[J.rElb]=1.0+Math.max(0,-s)*.62;
    o[J.lShR]=.15;o[J.rShR]=.15;
-   o[J.bob]=Math.abs(Math.sin(p))*.072-.032;
+   o[J.bob]=Math.abs(Math.sin(p))*.07;
    o[J.lean]=.2;o[J.side]=-cs*.05;o[J.twist]=cs*.22;o[J.spine]=.05;
    o[J.shrug]=.3+Math.abs(s)*.3;
    o[J.headP]=-.13;o[J.headY]=-cs*.05;o[J.eye]=1;
@@ -2509,14 +2509,13 @@ const CLIP={
    o[J.lShY]=-.24-Math.max(0,-s)*.34;o[J.rShY]=.24+Math.max(0,s)*.34;
    o[J.lElb]=1.4+Math.max(0,s)*.6;o[J.rElb]=1.4+Math.max(0,-s)*.6;
    o[J.lShR]=.19;o[J.rShR]=.19;
-   o[J.bob]=Math.abs(Math.sin(p))*.088-.042;
+   o[J.bob]=Math.abs(Math.sin(p))*.085;
    o[J.lean]=.35;o[J.side]=-cs*.06;o[J.twist]=cs*.28;
    o[J.shrug]=.5;o[J.headP]=-.22;o[J.mouth]=.2;o[J.eye]=1;
  },
  /* mantle: reach the lip, pull up, plant a foot, stand */
  mantle(o,t,c){
-   const cl=c.climb;if(!cl)return;
-   const p=clamp(cl.t/cl.dur,0,1);
+   const p=clamp(c.climbP===undefined?1:c.climbP,0,1);
    const reach=clamp(p/.3,0,1);
    const pull=clamp((p-.22)/.36,0,1);
    const plant=clamp((p-.46)/.34,0,1);
@@ -2543,8 +2542,7 @@ const CLIP={
  },
  /* vault: a quick hand-plant over something low */
  vault(o,t,c){
-   const cl=c.climb;if(!cl)return;
-   const p=clamp(cl.t/cl.dur,0,1);
+   const p=clamp(c.climbP===undefined?1:c.climbP,0,1);
    const k=Math.sin(Math.min(PI,p*PI));
    o[J.lShP]=-1.5*k;o[J.rShP]=-2.3*k;
    o[J.rShR]=.4*k;o[J.lShR]=.5*k;
@@ -2588,7 +2586,7 @@ const CLIP={
    o[J.lean]=.06;o[J.eye]=1.25;o[J.mouth]=.35;o[J.brow]=.28;
  },
  land(o,t,c){
-   const k=1-clamp(c.landT>0?1-c.landT/(c.landHard?.34:.2):1,0,1);
+   const k=clamp(c.landT/(c.landDur||.2),0,1);
    o[J.crouch]=(c.landHard?.55:.4)*k;
    o[J.lKnee]=(c.landHard?1.3:1.0)*k+.1;o[J.rKnee]=(c.landHard?1.3:1.0)*k+.1;
    o[J.lHipP]=.45*k;o[J.rHipP]=.45*k;o[J.lAnk]=-.3*k;o[J.rAnk]=-.3*k;
@@ -2643,7 +2641,7 @@ const CLIP={
    o[J.lAnk]=-s*.16;o[J.rAnk]=s*.1;
    o[J.lShP]=-1.0-s*.16;o[J.rShP]=-.88+s*.16;
    o[J.lElb]=.78;o[J.rElb]=.98;o[J.lShR]=.3;o[J.rShR]=.24;
-   o[J.bob]=Math.abs(Math.sin(p))*.048-.02;
+   o[J.bob]=Math.abs(Math.sin(p))*.048;
    o[J.side]=-cs*.12;o[J.spine]=.36;o[J.twist]=cs*.12;
    o[J.headR]=Math.sin(t*1.3)*.22;o[J.headP]=.14;o[J.shrug]=.7;
    o[J.eye]=.92;o[J.mouth]=.22;
@@ -2655,7 +2653,7 @@ const CLIP={
    o[J.lShP]=1.3-s*.36;o[J.rShP]=1.3+s*.36;   // arms trailing, lunging forward
    o[J.lElb]=.48;o[J.rElb]=.48;o[J.lShR]=.46;o[J.rShR]=.46;
    o[J.lShY]=.2;o[J.rShY]=-.2;
-   o[J.bob]=Math.abs(Math.sin(p))*.08-.034;
+   o[J.bob]=Math.abs(Math.sin(p))*.078;
    o[J.lean]=.5;o[J.side]=-cs*.08;o[J.twist]=cs*.18;
    o[J.headP]=-.34;o[J.headR]=Math.sin(t*7)*.1;o[J.shrug]=1.1;
    o[J.eye]=1.1;o[J.mouth]=.55;
@@ -2839,19 +2837,21 @@ const CLIP={
    hot path never allocates or iterates object keys. */
 function updatePose(ch,t,dt){
   const act=ch.act_,names=ch.animN;
-  let sum=0;
   for(let i=0;i<names.length;i++){
     const target=(names[i]===ch.anim)?1:0;
     act[i]=damp(act[i],target,ch.blendRate||11,dt);
     if(act[i]<.004&&names[i]!==ch.anim){act[i]=0;names[i]=null;}
-    else sum+=act[i];
   }
-  let cur=names.indexOf(ch.anim);
-  if(cur<0){
-    cur=names.indexOf(null);
-    if(cur<0){cur=0;}
-    names[cur]=ch.anim;act[cur]=Math.max(act[cur],.001);sum+=act[cur];
+  if(names.indexOf(ch.anim)<0){
+    let slot=names.indexOf(null);
+    if(slot<0){                       // recycle the faintest clip, not slot 0
+      slot=0;
+      for(let i=1;i<names.length;i++)if(act[i]<act[slot])slot=i;
+    }
+    names[slot]=ch.anim;act[slot]=.001;   // start silent so nothing pops in
   }
+  let sum=0;
+  for(let i=0;i<names.length;i++)if(names[i])sum+=act[i];
   if(sum<=0)sum=1;
   const out=ch.pose,tmp=_poseB;
   for(let i=0;i<NJ;i++)out[i]=0;
@@ -2878,8 +2878,11 @@ function updatePose(ch,t,dt){
 /* ============================================================================
    8. CHARACTER RENDERING
    ========================================================================== */
-const BD={hipY:.88,spineL:.45,neckL:.105,headR:.146,shX:.19,hipX:.10,
-  uArm:.305,lArm:.275,uLeg:.45,lLeg:.43,armR:.057,legR:.069};
+/* Leg lengths are chosen so the soles rest exactly on y = 0 while standing:
+   legRoot (hipY - legDrop) - (uLeg + lLeg) - soleDrop == 0.                */
+const BD={hipY:.90,spineL:.42,neckL:.105,headR:.146,shX:.19,hipX:.10,
+  uArm:.305,lArm:.275,uLeg:.36,lLeg:.332,armR:.057,legR:.069,
+  legDrop:.06,soleDrop:.148};
 
 function _seg(d,st,prim,len,r,col,em){
   st.push();st.translate(0,-len*.5,0);st.scale(r*2,len,r*2);d.push(prim,st.top,col,em);st.pop();
@@ -3413,7 +3416,7 @@ function makeEntity(id,name,avatar,isBot){
     x:0,y:0,z:0,vx:0,vy:0,vz:0,yaw:0,
     team:TEAM.HUMAN,grounded:true,ground:0,
     speed:0,stamina:1,sprinting:false,
-    anim:'idle',animN:[null,null,null,null],act_:new Float32Array(4),
+    anim:'idle',animN:[null,null,null,null,null],act_:new Float32Array(5),
     pose:new Float32Array(NJ),phase:0,
     expr:Float32Array.from(EXPR.neutral),exprName:'neutral',threat:99,
     clothX:0,clothZ:0,airT:0,landT:0,landHard:false,turnRate:0,turnLean:0,twitch:0,twitchT:rnd(1,4),
@@ -3486,7 +3489,7 @@ class Simulation{
       e.ikKneeL=e.ikKneeR=e.ikHipL=e.ikHipR=e.ikAnkL=e.ikAnkR=0;
       e.expr.set(EXPR.neutral);e.exprName='neutral';
       e.look=resolveLook(e.avatar,false);
-      e.anim='idle';e.animN=[null,null,null,null];e.act_=new Float32Array(4);
+      e.anim='idle';e.animN=[null,null,null,null,null];e.act_=new Float32Array(5);
     });
   }
   get survivors(){return this.ents.filter(e=>e.team===TEAM.HUMAN);}
@@ -3589,6 +3592,7 @@ class Simulation{
       const head=resolveCollision(px,pz,top+1.7,.24,_col3);
       if(head.ground>top+.2)continue;
       const vault=rise<1.06;
+      e.climbP=0;e.climbVault=vault;
       e.climb={t:0,dur:vault?.42:(.62+rise*.2),vault,
         x0:e.x,y0:e.y,z0:e.z,x1:px,y1:top,z1:pz,rise,
         fx,fz};
@@ -3603,6 +3607,7 @@ class Simulation{
     const c=e.climb;
     c.t+=dt;
     const p=clamp(c.t/c.dur,0,1);
+    e.climbP=p;                       // kept so the clip can hold its last pose
     // vertical first so the hands clear the lip, then travel over the edge
     const up=smooth(clamp(p/(c.vault?.55:.6),0,1));
     const fwd=smooth(clamp((p-(c.vault?.25:.34))/(c.vault?.75:.66),0,1));
@@ -3705,7 +3710,8 @@ class Simulation{
       if(!e.grounded){
         const hard=e.vy<-8;
         this.emit('land',{id:e.id,x:e.x,y:gy,z:e.z,hard});
-        e.landT=(hard?.34:.2)*(e.speed>2.4?.55:1);e.landHard=hard;
+        e.landDur=(hard?.34:.2)*(e.speed>2.4?.55:1);
+        e.landT=e.landDur;e.landHard=hard;
         e.jumpPrep=0;              // only on the touchdown, never mid wind-up
       }
       e.y=gy;e.vy=0;e.grounded=true;e.airT=0;
@@ -3846,8 +3852,9 @@ class Simulation{
   /* Two-bone leg solve so a foot resting on a bench, kerb or car roof plants on
      the surface instead of hanging in the air. Only while near-stationary. */
   footIK(e,dt){
-    const w=(e.grounded&&!e.act&&!e.transforming)?clamp((1.3-e.speed)/.7,0,1):0;
-    const L1=BD.uLeg,L2=BD.lLeg,Lmax=L1+L2-.012;
+    const w=(e.grounded&&!e.act&&!e.climb&&!e.transforming)?clamp((1.3-e.speed)/.7,0,1):0;
+    const L1=BD.uLeg,L2=BD.lLeg,Lmax=L1+L2;
+    const rootY=BD.hipY-BD.legDrop;
     const c=Math.cos(e.yaw),s=Math.sin(e.yaw);
     for(let i=0;i<2;i++){
       const side=i?1:-1;
@@ -3855,7 +3862,8 @@ class Simulation{
       if(w>.01){
         const fx=e.x+c*side*BD.hipX, fz=e.z-s*side*BD.hipX;
         const g=resolveCollision(fx,fz,e.y+.35,.1,_col2).ground;
-        const d=clamp(BD.hipY-(g-e.y),.42,Lmax);
+        // distance the leg must span for the sole to meet that surface
+        const d=clamp(rootY-(g-e.y)-BD.soleDrop,.26,Lmax);
         const cosK=clamp((L1*L1+L2*L2-d*d)/(2*L1*L2),-1,1);
         bend=(PI-Math.acos(cosK))*w;
       }
@@ -4250,10 +4258,8 @@ const Cam={
   applyBasis(){
     let fx=this.tx-this.x,fy=this.ty-this.y,fz=this.tz-this.z;
     const l=Math.hypot(fx,fy,fz)||1;fx/=l;fy/=l;fz/=l;
-    let rx=fz*0-fy*0,ry=0,rz=0;
-    rx=fy*0-fz*(-1)*0;
-    // right = normalize(cross(forward, up))
-    rx=fz;ry=0;rz=-fx;
+    // screen-right = normalize(cross(up, eye-target)), matching M4.lookAt
+    let rx=-fz,ry=0,rz=fx;
     const rl=Math.hypot(rx,rz)||1;rx/=rl;rz/=rl;
     this.rx=rx;this.ry=0;this.rz=rz;
     this.ux=ry*fz-rz*fy;this.uy=rz*fx-rx*fz;this.uz=rx*fy-ry*fx;
@@ -4447,9 +4453,10 @@ const In={
     }
     const mag=Math.hypot(kx,kz);
     if(mag>1){kx/=mag;kz/=mag;}
+    // camera forward is (sin yaw, cos yaw); screen-right is (-cos yaw, sin yaw)
     const s=Math.sin(Cam.yaw),c=Math.cos(Cam.yaw);
-    mx=kx*c+kz*s;
-    mz=-kx*s+kz*c;
+    mx=kz*s-kx*c;
+    mz=kz*c+kx*s;
     // sprint by pushing the stick fully *forward* (or latch the RUN button)
     const fwd=stickMag>.001?(-this.jz/stickMag):0;
     const sprint=!!(k['shift']||this.sprintTouch||(stickMag>.92&&fwd>.55));
@@ -4819,7 +4826,7 @@ const Preview={
     e.look=resolveLook(Save.avatar,false);
     e.x=0;e.z=0;e.y=0;e.yaw=PI;
     if(World&&World.key==='playground'){e.x=0;e.z=6;e.y=0;}
-    e.anim='idle';e.animN=[null,null,null,null];e.act_=new Float32Array(4);
+    e.anim='idle';e.animN=[null,null,null,null,null];e.act_=new Float32Array(5);
   },
   refresh(){this.ent.avatar=Save.avatar;this.ent.look=resolveLook(Save.avatar,false);},
   playEmote(id){
