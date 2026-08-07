@@ -470,7 +470,13 @@ const Snd = {
   infect(){ this.tone(150, .5, 'sawtooth', .18, 62); setTimeout(() => this.tone(120, .55, 'square', .12, 48), 130); },
   cure() { [660, 880, 1180, 1560].forEach((f, i) => setTimeout(() => this.tone(f, .14, 'triangle', .11), i * 70)); },
   zap()  { this.tone(1200, .12, 'square', .12, 260); this.noise(.1, .12, 2400); },
-  parry(){ this.tone(1400, .1, 'triangle', .16, 700); this.noise(.06, .1, 3000); }
+  parry(){ this.tone(1400, .1, 'triangle', .16, 700); this.noise(.06, .1, 3000); },
+  cough(){ this.noise(.22, .2, 700); this.tone(180, .18, 'sawtooth', .12, 90);
+           setTimeout(() => { this.noise(.26, .18, 520); this.tone(150, .22, 'sawtooth', .1, 70); }, 240); },
+  reload(){ this.tone(340, .05, 'square', .07); setTimeout(() => this.tone(220, .06, 'square', .07), 110);
+            setTimeout(() => this.tone(420, .05, 'square', .06), 260); },
+  casing(){ this.tone(2200, .04, 'triangle', .035, 1400); },
+  grunt(hi){ this.tone(hi ? 190 : 130, .12, 'sawtooth', .09, hi ? 120 : 80); }
 };
 
 /* ---------------------------------------------------------------- save */
@@ -479,7 +485,7 @@ const OLDKEY = 'aos_outbreak_v1';
 const defaultSave = () => ({
   lvl: 1, xp: 0, sp: 0, coins: 600, gems: 5, prestige: 0, ngplus: 0,
   antidotes: 2, mats: { scrap: 0, chem: 0, cell: 0, alloy: 0 }, bp: {},
-  throwOwned: { grenade: 1 }, throwable: 'grenade',
+  throwOwned: { grenade: 1 }, throwable: 'grenade', attach: {},
   cos: { hair: 'spike', head: 'none', body: 'none', glove: 'none', boot: 'none',
          colour: '#111318', wskin: 'none', emote: 'wave', victory: 'stand' },
   cosOwned: { spike: 1, wave: 1, stand: 1 },
@@ -520,6 +526,7 @@ function load(){
     const d = defaultSave();
     for (const k of ['mats', 'cos', 'settings', 'weekly', 'season', 'stats', 'records', 'throwOwned'])
       S[k] = Object.assign(d[k], S[k] || {});
+    S.attach = S.attach || {};
     S.allies = S.allies || {};
     for (const k in ALLIES) if (!(k in S.allies)) S.allies[k] = 0;
     S.party = (S.party || []).filter(id => ALLIES[id]);
@@ -598,7 +605,9 @@ function toast(msg, ms){
 const WEAPONS = [
   // --- melee -----------------------------------------------------------
   { id:'fist',    name:'Bare Fists',    kind:'melee', dmg:14,  rate:.26, range:62,  price:0,     desc:'Free, fast, endless.' },
+  { id:'knife',   name:'Combat Knife',  kind:'melee', dmg:20,  rate:.16, range:56,  price:300,   kb:60,  bleed:1, desc:'Fast, quiet, always on you.' },
   { id:'bat',     name:'Baseball Bat',  kind:'melee', dmg:26,  rate:.34, range:78,  price:450,   kb:230, desc:'Solid knockback.' },
+  { id:'crowbar', name:'Crowbar',       kind:'melee', dmg:34,  rate:.32, range:74,  price:900,   kb:250, desc:'Opens crates, closes arguments.' },
   { id:'axe',     name:'Fire Axe',      kind:'melee', dmg:42,  rate:.44, range:82,  price:1600,  kb:280, bleed:1, desc:'Heavy chopper. Causes bleeding.' },
   { id:'spear',   name:'Spear',         kind:'melee', dmg:48,  rate:.38, range:112, price:2600,  kb:200, desc:'Longest melee reach in the game.' },
   { id:'katana',  name:'Katana',        kind:'melee', dmg:56,  rate:.28, range:92,  price:4200,  kb:180, desc:'Lightning fast steel.' },
@@ -606,19 +615,20 @@ const WEAPONS = [
   { id:'chainsaw',name:'Chainsaw',      kind:'melee', dmg:22,  rate:.10, range:76,  price:15000, kb:40,  bleed:2, desc:'Shreds anything it touches.' },
   { id:'esword',  name:'Energy Sword',  kind:'melee', dmg:130, rate:.26, range:104, price:52000, kb:260, aoe:64, desc:'Lab prototype. Cuts through armour.', pierceShield:1 },
   // --- guns ------------------------------------------------------------
-  { id:'pistol',  name:'Pistol',        kind:'gun', dmg:22,  rate:.20,  ammo:150, bs:1050, price:700,   desc:'Reliable sidearm.' },
-  { id:'dual',    name:'Dual Pistols',  kind:'gun', dmg:19,  rate:.095, ammo:320, bs:1100, spread:.05, dual:1, price:3600, desc:'Two triggers, twice the noise.' },
-  { id:'revolver',name:'Revolver',      kind:'gun', dmg:58,  rate:.44,  ammo:90,  bs:1250, pierce:1, kb:210, price:3000, desc:'Hits like a truck.' },
-  { id:'smg',     name:'SMG',           kind:'gun', dmg:15,  rate:.065, ammo:500, bs:1150, spread:.07, price:2400, desc:'Spray and pray.' },
-  { id:'shotgun', name:'Shotgun',       kind:'gun', dmg:16,  rate:.62,  ammo:110, bs:950, pellets:8, spread:.24, price:4200, kb:260, desc:'Devastating up close.' },
-  { id:'rifle',   name:'Assault Rifle', kind:'gun', dmg:38,  rate:.13,  ammo:330, bs:1400, pierce:1, price:7000, desc:'Punches through a body.' },
-  { id:'sniper',  name:'Sniper Rifle',  kind:'gun', dmg:190, rate:1.02, ammo:60,  bs:2500, pierce:3, price:13000, scope:1, desc:'One shot, one corridor.' },
+  { id:'pistol', rec:.22,  name:'Pistol',        kind:'gun', dmg:22,  rate:.20,  ammo:150, bs:1050, price:700,   desc:'Reliable sidearm.' },
+  { id:'dual', rec:.16,    name:'Dual Pistols',  kind:'gun', dmg:19,  rate:.095, ammo:320, bs:1100, spread:.05, dual:1, price:3600, desc:'Two triggers, twice the noise.' },
+  { id:'revolver', rec:.45,name:'Revolver',      kind:'gun', dmg:58,  rate:.44,  ammo:90,  bs:1250, pierce:1, kb:210, price:3000, desc:'Hits like a truck.' },
+  { id:'smg', rec:.12,     name:'SMG',           kind:'gun', dmg:15,  rate:.065, ammo:500, bs:1150, spread:.07, price:2400, desc:'Spray and pray.' },
+  { id:'shotgun', rec:.55, name:'Shotgun',       kind:'gun', dmg:16,  rate:.62,  ammo:110, bs:950, pellets:8, spread:.24, price:4200, kb:260, desc:'Devastating up close.' },
+  { id:'rifle', rec:.20,   name:'Assault Rifle', kind:'gun', dmg:38,  rate:.13,  ammo:330, bs:1400, pierce:1, price:7000, desc:'Punches through a body.' },
+  { id:'sniper', rec:.70,  name:'Sniper Rifle',  kind:'gun', dmg:190, rate:1.02, ammo:60,  bs:2500, pierce:3, price:13000, scope:1, desc:'One shot, one corridor.' },
   { id:'flame',   name:'Flamethrower',  kind:'flame', dmg:11, rate:.035, ammo:800, bs:420, price:11000, desc:'Sets everything alight.' },
-  { id:'mini',    name:'Minigun',       kind:'gun', dmg:20,  rate:.045, ammo:900, bs:1300, spread:.09, price:17000, desc:'Wall of lead.' },
-  { id:'laser',   name:'Laser Rifle',   kind:'gun', dmg:34,  rate:.085, ammo:650, bs:2000, pierce:1, price:22000, beam:1, desc:'Continuous coherent burn.' },
-  { id:'rocket',  name:'RPG',           kind:'rocket', dmg:150, rate:1.0, ammo:50, bs:620, splash:120, price:26000, desc:'Removes crowds entirely.' },
-  { id:'plasma',  name:'Plasma Rifle',  kind:'rocket', dmg:95, rate:.34, ammo:220, bs:1000, splash:74, price:34000, plasma:1, desc:'Superheated bolts with a blast.' },
-  { id:'rail',    name:'Rail Cannon',   kind:'gun', dmg:230, rate:.9, ammo:60, bs:2600, pierce:99, price:46000, desc:'Prototype lab weapon. Pierces all.' }
+  { id:'lmg',     name:'Light MG',      kind:'gun', dmg:24,  rate:.075, ammo:700, bs:1300, spread:.06, price:12500, rec:.10, desc:'Belt-fed suppression.' },
+  { id:'mini',    name:'Minigun',       kind:'gun', dmg:20,  rate:.045, ammo:900, bs:1300, spread:.09, price:17000, rec:.07, desc:'Wall of lead.' },
+  { id:'laser', rec:.06,   name:'Laser Rifle',   kind:'gun', dmg:34,  rate:.085, ammo:650, bs:2000, pierce:1, price:22000, beam:1, desc:'Continuous coherent burn.' },
+  { id:'rocket', rec:.60,  name:'RPG',           kind:'rocket', dmg:150, rate:1.0, ammo:50, bs:620, splash:120, price:26000, desc:'Removes crowds entirely.' },
+  { id:'plasma', rec:.35,  name:'Plasma Rifle',  kind:'rocket', dmg:95, rate:.34, ammo:220, bs:1000, splash:74, price:34000, plasma:1, desc:'Superheated bolts with a blast.' },
+  { id:'rail', rec:.65,    name:'Rail Cannon',   kind:'gun', dmg:230, rate:.9, ammo:60, bs:2600, pierce:99, price:46000, desc:'Prototype lab weapon. Pierces all.' }
 ];
 const WMAP = {}; WEAPONS.forEach(w => WMAP[w.id] = w);
 const MAXLV = 10;
@@ -630,7 +640,9 @@ const wAmmo = (w, lv) => w.ammo ? Math.floor(w.ammo * (1 + .1 * (lv - 1))) : 0;
 const THROWS = [
   { id:'grenade', name:'Frag Grenade', dmg:190, splash:150, price:0,    col:'#4a5a3a', desc:'Standard fragmentation.' },
   { id:'sticky',  name:'Sticky Bomb',  dmg:280, splash:130, price:2600, col:'#7a4a2a', sticky:1, desc:'Clings to whatever it hits, then goes off.' },
-  { id:'molotov', name:'Molotov',      dmg:55,  splash:130, price:1800, col:'#c07a2a', fire:1,   desc:'Leaves a burning pool for 6 seconds.' }
+  { id:'molotov', name:'Molotov',      dmg:55,  splash:130, price:1800, col:'#c07a2a', fire:1,   desc:'Leaves a burning pool for 6 seconds.' },
+  { id:'flash',   name:'Flashbang',    dmg:10,  splash:320, price:2200, col:'#d8d8c0', flash:1,  desc:'Blinds and staggers everything in the room.' },
+  { id:'smoke',   name:'Smoke Grenade',dmg:0,   splash:150, price:1400, col:'#8a9098', smoke:1,  desc:'Breaks line of sight — enemies cannot shoot what they cannot see.' }
 ];
 const TMAP = {}; THROWS.forEach(t => TMAP[t.id] = t);
 
@@ -645,51 +657,80 @@ const ARMORS = [
 ];
 
 /* ------------------------------------------------------------- enemies
+   zomb  : part of the horde — only appears in Zombie Mode
+   human : a living hostile — only appears in the Campaign
    bite  : chance a landed melee hit transmits the virus
    infSp : how fast this strain fills the infection meter                */
 const ETYPES = {
-  walker:  { name:'Walker Zombie',   hp:70,   spd:52,  dmg:9,  atkR:52, rate:1.15, col:'#7fd66a', s:1.0,  xp:8,  coin:9,  bite:.20, infSp:1.0 },
-  runner:  { name:'Runner Zombie',   hp:48,   spd:172, dmg:8,  atkR:50, rate:.72,  col:'#e2ff5a', s:.95, xp:11, coin:12, bite:.16, infSp:1.3, lunge:1 },
-  crawler: { name:'Crawler',         hp:40,   spd:150, dmg:7,  atkR:44, rate:.8,   col:'#b6e07a', s:.7,  xp:9,  coin:10, bite:.14, infSp:1.1, crawl:1 },
-  dog:     { name:'Zombie Dog',      hp:56,   spd:220, dmg:11, atkR:46, rate:.6,   col:'#9a7a4a', s:.62, xp:14, coin:15, bite:.30, infSp:1.6, lunge:1, quad:1 },
-  heavy:   { name:'Heavy Zombie',    hp:230,  spd:40,  dmg:20, atkR:62, rate:1.5,  col:'#57a45a', s:1.35, xp:22, coin:26, bite:.24, infSp:1.2, kbres:.65 },
-  armored: { name:'Armored Zombie',  hp:420,  spd:46,  dmg:22, atkR:60, rate:1.4,  col:'#5a6a72', s:1.25, xp:34, coin:38, bite:.12, infSp:.9, kbres:.8, shield:.5, headGear:'helmet' },
-  spitter: { name:'Spitter',         hp:95,   spd:64,  dmg:14, atkR:360, rate:1.3, col:'#a8e04a', s:1.05, xp:20, coin:23, bite:.10, infSp:1.4, ranged:'spit', rangeR:380 },
-  toxic:   { name:'Toxic Zombie',    hp:150,  spd:70,  dmg:13, atkR:56, rate:1.1,  col:'#6ad6a0', s:1.05, xp:26, coin:29, bite:.42, infSp:2.1, gas:1 },
-  electric:{ name:'Electric Zombie', hp:180,  spd:82,  dmg:16, atkR:58, rate:1.2,  col:'#7ad8ff', s:1.05, xp:30, coin:34, bite:.26, infSp:1.4, zap:1 },
-  exploder:{ name:'Exploding Zombie',hp:80,   spd:130, dmg:52, atkR:56, rate:1,    col:'#d6b04a', s:1.1,  xp:24, coin:30, bite:0,   infSp:1, boom:1 },
-  mutant:  { name:'Giant Mutant',    hp:300,  spd:96,  dmg:24, atkR:64, rate:1.1,  col:'#c05ad6', s:1.25, xp:34, coin:40, bite:.22, infSp:1.5, ranged:'spit', rangeR:340 },
-  brute:   { name:'Giant Brute',     hp:820,  spd:56,  dmg:36, atkR:78, rate:1.6,  col:'#8a5a3a', s:1.8,  xp:75, coin:95, bite:.20, infSp:1.3, kbres:.85, charge:1 },
-  infected:{ name:'Infected Soldier',hp:110,  spd:88,  dmg:12, atkR:56, rate:1.0,  col:'#6fa8d6', s:1.0,  xp:16, coin:18, bite:.14, infSp:1.1, headGear:'helmet' },
-  gunner:  { name:'Militia Gunner',  hp:85,   spd:70,  dmg:11, atkR:420, rate:1.5, col:'#4d7fb0', s:1.0,  xp:19, coin:22, ranged:'bullet', headGear:'helmet' },
-  flamer:  { name:'Flame Soldier',   hp:200,  spd:66,  dmg:8,  atkR:230, rate:.6,  col:'#d6702a', s:1.1,  xp:38, coin:44, ranged:'fire', rangeR:250, headGear:'helmet' },
-  riot:    { name:'Riot Shield',     hp:210,  spd:62,  dmg:16, atkR:58, rate:1.2,  col:'#3f5f8a', s:1.1,  xp:24, coin:28, shield:.7, kbres:.5, headGear:'helmet' },
-  drone:   { name:'Attack Drone',    hp:110,  spd:150, dmg:12, atkR:340, rate:1.0, col:'#b0bcc8', s:.8,  xp:30, coin:36, ranged:'laser', fly:1 },
-  robot:   { name:'Combat Robot',    hp:390,  spd:74,  dmg:18, atkR:480, rate:1.3, col:'#b0bcc8', s:1.25, xp:52, coin:62, ranged:'laser', kbres:.7 },
-  mech:    { name:'Assault Mech',    hp:1200, spd:58,  dmg:34, atkR:460, rate:1.1, col:'#8a94a0', s:2.0,  xp:120, coin:150, ranged:'rocketE', kbres:.95, mechU:1 },
-  elite:   { name:'Elite Commander', hp:900,  spd:96,  dmg:30, atkR:420, rate:.9,  col:'#e0c060', s:1.3,  xp:150, coin:200, ranged:'bullet', kbres:.7, aura:1, drops:'anti', headGear:'helmet' }
+  /* ---------------- the horde ---------------- */
+  walker:  { name:'Walker Zombie',   zomb:1, hp:70,  spd:52,  dmg:9,  atkR:52, rate:1.15, col:'#7fd66a', s:1.0,  xp:8,  coin:9,  bite:.20, infSp:1.0 },
+  runner:  { name:'Runner Zombie',   zomb:1, hp:48,  spd:172, dmg:8,  atkR:50, rate:.72,  col:'#e2ff5a', s:.95, xp:11, coin:12, bite:.16, infSp:1.3, lunge:1 },
+  crawler: { name:'Crawler',         zomb:1, hp:40,  spd:150, dmg:7,  atkR:44, rate:.8,   col:'#b6e07a', s:.7,  xp:9,  coin:10, bite:.14, infSp:1.1, crawl:1 },
+  dog:     { name:'Zombie Dog',      zomb:1, hp:56,  spd:220, dmg:11, atkR:46, rate:.6,   col:'#9a7a4a', s:.62, xp:14, coin:15, bite:.30, infSp:1.6, lunge:1, quad:1 },
+  heavy:   { name:'Heavy Zombie',    zomb:1, hp:230, spd:40,  dmg:20, atkR:62, rate:1.5,  col:'#57a45a', s:1.35, xp:22, coin:26, bite:.24, infSp:1.2, kbres:.65 },
+  armored: { name:'Armored Zombie',  zomb:1, hp:420, spd:46,  dmg:22, atkR:60, rate:1.4,  col:'#5a6a72', s:1.25, xp:34, coin:38, bite:.12, infSp:.9, kbres:.8, shield:.5, headGear:'helmet' },
+  spitter: { name:'Spitter',         zomb:1, hp:95,  spd:64,  dmg:14, atkR:360, rate:1.3, col:'#a8e04a', s:1.05, xp:20, coin:23, bite:.10, infSp:1.4, ranged:'spit', rangeR:380 },
+  toxic:   { name:'Toxic Zombie',    zomb:1, hp:150, spd:70,  dmg:13, atkR:56, rate:1.1,  col:'#6ad6a0', s:1.05, xp:26, coin:29, bite:.42, infSp:2.1, gas:1 },
+  electric:{ name:'Electric Zombie', zomb:1, hp:180, spd:82,  dmg:16, atkR:58, rate:1.2,  col:'#7ad8ff', s:1.05, xp:30, coin:34, bite:.26, infSp:1.4, zap:1 },
+  exploder:{ name:'Exploding Zombie',zomb:1, hp:80,  spd:130, dmg:52, atkR:56, rate:1,    col:'#d6b04a', s:1.1,  xp:24, coin:30, bite:0,   infSp:1, boom:1 },
+  mutant:  { name:'Giant Mutant',    zomb:1, hp:300, spd:96,  dmg:24, atkR:64, rate:1.1,  col:'#c05ad6', s:1.25, xp:34, coin:40, bite:.22, infSp:1.5, ranged:'spit', rangeR:340 },
+  brute:   { name:'Zombie Brute',    zomb:1, hp:820, spd:56,  dmg:36, atkR:78, rate:1.6,  col:'#8a5a3a', s:1.8,  xp:75, coin:95, bite:.20, infSp:1.3, kbres:.85, charge:1, breaker:1 },
+  climber: { name:'Climber',         zomb:1, hp:90,  spd:140, dmg:12, atkR:50, rate:.9,   col:'#9fe07a', s:.92, xp:18, coin:20, bite:.22, infSp:1.4, lunge:1, climb:1 },
+
+  /* ---------------- the living ---------------- */
+  thug:    { name:'Criminal',        human:1, hp:110, spd:104, dmg:13, atkR:58, rate:.95, col:'#8a6a4a', s:1.0,  xp:14, coin:16, wep:'bat', headGear:'cap', cover:1 },
+  punk:    { name:'Armed Criminal',  human:1, hp:100, spd:112, dmg:11, atkR:400, rate:1.2, col:'#a06a5a', s:1.0,  xp:17, coin:20, ranged:'bullet', wep:'pistol', mag:7, cover:1, headGear:'cap' },
+  merc:    { name:'Mercenary',       human:1, hp:170, spd:120, dmg:9,  atkR:430, rate:.9, col:'#6a7a5a', s:1.02, xp:26, coin:30, ranged:'burst', wep:'smg', mag:24, cover:1, headGear:'cap' },
+  soldier: { name:'Soldier',         human:1, hp:220, spd:104, dmg:14, atkR:470, rate:1.1, col:'#4d7fb0', s:1.05, xp:32, coin:38, ranged:'burst', wep:'rifle', mag:20, cover:1, headGear:'helmet' },
+  shotgunner:{name:'Breacher',       human:1, hp:260, spd:118, dmg:11, atkR:220, rate:1.3, col:'#7a5a8a', s:1.06, xp:36, coin:42, ranged:'buck', wep:'shotgun', mag:6, headGear:'helmet' },
+  sniperE: { name:'Marksman',        human:1, hp:150, spd:92,  dmg:46, atkR:820, rate:2.2, col:'#5a7a6a', s:1.0,  xp:40, coin:46, ranged:'aimed', wep:'sniper', mag:5, laser:1, headGear:'cap' },
+  lmgE:    { name:'Heavy Gunner',    human:1, hp:420, spd:76,  dmg:12, atkR:520, rate:1.6, col:'#8a7a4a', s:1.2,  xp:52, coin:60, ranged:'suppress', wep:'mini', mag:80, kbres:.6, headGear:'helmet' },
+  riot:    { name:'Riot Officer',    human:1, hp:280, spd:70,  dmg:16, atkR:58, rate:1.2, col:'#3f5f8a', s:1.1,  xp:30, coin:34, shield:.7, kbres:.5, wep:'bat', headGear:'helmet' },
+  grenadier:{name:'Grenadier',       human:1, hp:190, spd:100, dmg:34, atkR:420, rate:2.4, col:'#9a6a3a', s:1.04, xp:42, coin:50, ranged:'lob', wep:'pistol', mag:6, headGear:'helmet' },
+  flamer:  { name:'Flame Trooper',   human:1, hp:250, spd:80,  dmg:8,  atkR:230, rate:.6, col:'#d6702a', s:1.1,  xp:44, coin:52, ranged:'fire', rangeR:250, wep:'flame', headGear:'helmet' },
+  spec:    { name:'Spec-Ops',        human:1, hp:340, spd:150, dmg:16, atkR:480, rate:.8, col:'#2f3f4f', s:1.05, xp:70, coin:80, ranged:'burst', wep:'rifle', mag:30, cover:1, rolls:1, nades:1, headGear:'mask' },
+  elite:   { name:'Elite Commander', human:1, hp:900, spd:112, dmg:26, atkR:460, rate:.9, col:'#e0c060', s:1.3,  xp:150, coin:200, ranged:'burst', wep:'rifle', mag:30, kbres:.7, aura:1, rolls:1, nades:1, headGear:'helmet' },
+  drone:   { name:'Attack Drone',    human:1, hp:110, spd:150, dmg:12, atkR:340, rate:1.0, col:'#b0bcc8', s:.8,  xp:30, coin:36, ranged:'laser', fly:1, machine:1 },
+  robot:   { name:'Combat Robot',    human:1, hp:390, spd:74,  dmg:18, atkR:480, rate:1.3, col:'#b0bcc8', s:1.25, xp:52, coin:62, ranged:'laser', kbres:.7, machine:1 },
+  mech:    { name:'Assault Mech',    human:1, hp:1200, spd:58, dmg:34, atkR:460, rate:1.1, col:'#8a94a0', s:2.0,  xp:120, coin:150, ranged:'rocketE', kbres:.95, machine:1 },
+
+  /* -- infected humans keep their silhouette but fight like the horde -- */
+  turned:  { name:'Turned Survivor', zomb:1, hp:120, spd:136, dmg:14, atkR:52, rate:.8, col:'#8fd8a0', s:1.0, xp:24, coin:26, bite:.30, infSp:1.5 }
 };
 const ELIST = Object.keys(ETYPES);
+const ZOMB_TYPES = ELIST.filter(k => ETYPES[k].zomb);
+const HUMAN_TYPES = ELIST.filter(k => ETYPES[k].human);
 
 /* --------------------------------------------------------------- bosses */
 const BOSSES = [
-  { id:'butcher',  name:'THE BUTCHER',       hp:2600,  col:'#c0463a', s:2.1, dmg:34, moves:['dash','slam','summon'],           drop:'axe' },
-  { id:'widow',    name:'TUNNEL WIDOW',      hp:3400,  col:'#8a4dc0', s:1.9, dmg:30, moves:['spit3','leap','summon'],          drop:'spear' },
-  { id:'zking',    name:'ZOMBIE KING',       hp:4600,  col:'#4a9a4a', s:2.3, dmg:34, moves:['slam','summon','roar'],           drop:null, plague:1 },
-  { id:'vex',      name:'DOCTOR VEX',        hp:5200,  col:'#d6d1a0', s:1.7, dmg:30, moves:['volley','gas','summon'],          drop:'smg' },
-  { id:'mallking', name:'MALL KING',         hp:6400,  col:'#e08a3a', s:2.3, dmg:40, moves:['charge','slam','throw'],          drop:'shotgun' },
-  { id:'gmutant',  name:'GIANT MUTANT',      hp:8200,  col:'#b04ad6', s:2.6, dmg:44, moves:['leap','slam','spit3','rage'],     drop:'revolver', plague:1 },
-  { id:'tank',     name:'MILITARY TANK',     hp:11000, col:'#5a6a4a', s:2.4, dmg:46, moves:['shell','mgun','charge'],          drop:'rifle', vehicle:'tank' },
-  { id:'kane',     name:'COLONEL KANE',      hp:12500, col:'#4d7fb0', s:1.9, dmg:42, moves:['volley','airstrike','dash'],      drop:'sniper' },
-  { id:'bioalpha', name:'BIO-EXPERIMENT α',  hp:15000, col:'#5ad6b0', s:2.2, dmg:48, moves:['leap','spit3','rage','summon'],   drop:'laser', plague:1 },
-  { id:'reaper',   name:'SKY REAPER',        hp:16500, col:'#9aa6b2', s:2.0, dmg:44, moves:['heli'],                           drop:'mini', heli:1 },
-  { id:'spider',   name:'SPIDER ROBOT',      hp:19000, col:'#c0c8d0', s:2.5, dmg:50, moves:['volley','leap','slam','mgun'],    drop:'plasma', spider:1 },
-  { id:'levia',    name:'SEWER LEVIATHAN',   hp:21000, col:'#4a9a7a', s:2.8, dmg:54, moves:['charge','spit3','summon'],        drop:'rocket', plague:1 },
-  { id:'furnace',  name:'FURNACE TITAN',     hp:24000, col:'#ff7a3a', s:2.4, dmg:56, moves:['flamewave','slam','summon'],      drop:'flame' },
-  { id:'scientist',name:'THE MAD SCIENTIST', hp:26000, col:'#e8e4c0', s:1.8, dmg:52, moves:['volley','gas','summon','airstrike'], drop:'chainsaw' },
-  { id:'final',    name:'FINAL MUTATION',    hp:42000, col:'#c07bff', s:2.9, dmg:64, moves:['volley','slam','summon','airstrike','rage','spit3'], drop:'esword', final:1, plague:1 }
+  /* ---- campaign: living, armed, and in charge ---- */
+  { id:'butcher',  name:'THE BUTCHER',       human:1, hp:2600,  col:'#c0463a', s:1.9, dmg:34, moves:['dash','slam','summon'],            drop:'axe' },
+  { id:'chopshop', name:'CHOP SHOP KING',    human:1, hp:3400,  col:'#8a6a3a', s:1.9, dmg:32, moves:['charge','throw','summon'],         drop:'crowbar' },
+  { id:'warden',   name:'THE WARDEN',        human:1, hp:4600,  col:'#3f5f8a', s:1.9, dmg:34, moves:['volley','slam','summon'],          drop:'shotgun' },
+  { id:'vex',      name:'DOCTOR VEX',        human:1, hp:5200,  col:'#d6d1a0', s:1.7, dmg:30, moves:['volley','gas','summon'],           drop:'smg' },
+  { id:'mallking', name:'MALL KING',         human:1, hp:6400,  col:'#e08a3a', s:2.1, dmg:40, moves:['charge','slam','throw'],           drop:'lmg' },
+  { id:'captain',  name:'MERC CAPTAIN',      human:1, hp:8200,  col:'#6a7a5a', s:1.8, dmg:38, moves:['volley','dash','summon','nadeStorm'], drop:'revolver' },
+  { id:'tank',     name:'MILITARY TANK',     human:1, hp:11000, col:'#5a6a4a', s:2.4, dmg:46, moves:['shell','mgun','charge'],           drop:'rifle', machine:1 },
+  { id:'kane',     name:'COLONEL KANE',      human:1, hp:12500, col:'#4d7fb0', s:1.9, dmg:42, moves:['volley','airstrike','dash'],       drop:'sniper' },
+  { id:'reaperman',name:'SPEC-OPS REAPER',   human:1, hp:14000, col:'#2f3f4f', s:1.8, dmg:44, moves:['dash','volley','nadeStorm','rage'], drop:'knife' },
+  { id:'reaper',   name:'SKY REAPER',        human:1, hp:16500, col:'#9aa6b2', s:2.0, dmg:44, moves:['heli'],                            drop:'mini', heli:1, machine:1 },
+  { id:'spider',   name:'SPIDER ROBOT',      human:1, hp:19000, col:'#c0c8d0', s:2.5, dmg:50, moves:['volley','leap','slam','mgun'],     drop:'plasma', machine:1 },
+  { id:'dealer',   name:'THE ARMS DEALER',   human:1, hp:21000, col:'#b08a3a', s:1.9, dmg:48, moves:['volley','nadeStorm','summon','airstrike'], drop:'rocket' },
+  { id:'furnace',  name:'FURNACE TITAN',     human:1, hp:24000, col:'#ff7a3a', s:2.3, dmg:54, moves:['flamewave','slam','summon'],       drop:'flame', machine:1 },
+  { id:'scientist',name:'THE MAD SCIENTIST', human:1, hp:26000, col:'#e8e4c0', s:1.8, dmg:52, moves:['volley','gas','summon','airstrike'], drop:'chainsaw' },
+  { id:'director', name:'DIRECTOR VULTURE',  human:1, hp:40000, col:'#c07bff', s:2.2, dmg:62, moves:['volley','slam','summon','airstrike','rage','nadeStorm'], drop:'esword', final:1 },
+
+  /* ---- zombie mode: the things the trials made ---- */
+  { id:'zking',    name:'ZOMBIE KING',       zomb:1, hp:6000,  col:'#4a9a4a', s:2.3, dmg:36, moves:['slam','summon','roar'],            drop:null, plague:1 },
+  { id:'widow',    name:'TUNNEL WIDOW',      zomb:1, hp:7400,  col:'#8a4dc0', s:1.9, dmg:34, moves:['spit3','leap','summon'],           drop:'spear', plague:1 },
+  { id:'gmutant',  name:'GIANT MUTANT',      zomb:1, hp:11000, col:'#b04ad6', s:2.6, dmg:46, moves:['leap','slam','spit3','rage'],      drop:null, plague:1 },
+  { id:'bioalpha', name:'BIO-EXPERIMENT α',  zomb:1, hp:16000, col:'#5ad6b0', s:2.2, dmg:50, moves:['leap','spit3','rage','summon'],    drop:'laser', plague:1 },
+  { id:'levia',    name:'SEWER LEVIATHAN',   zomb:1, hp:22000, col:'#4a9a7a', s:2.8, dmg:56, moves:['charge','spit3','summon'],         drop:'rocket', plague:1 },
+  { id:'final',    name:'FINAL MUTATION',    zomb:1, hp:42000, col:'#c07bff', s:2.9, dmg:64, moves:['volley','slam','summon','rage','spit3'], drop:'rail', plague:1 }
 ];
 const BMAP = {}; BOSSES.forEach(b => BMAP[b.id] = b);
+const CAMPAIGN_BOSSES = BOSSES.filter(b => b.human);
+const ZOMBIE_BOSSES = BOSSES.filter(b => b.zomb);
 
 /* ----------------------------------------------------------------- maps */
 const MAPS = [
@@ -711,43 +752,59 @@ const MAPS = [
 ];
 
 /* ------------------------------------------------------------- campaign */
-const CH_POOL = [
+const CH_POOL = [                                   // campaign: living enemies only
+  ['thug','thug','punk'],
+  ['thug','punk','punk','merc'],
+  ['punk','merc','thug','riot'],
+  ['merc','riot','punk','shotgunner'],
+  ['merc','soldier','shotgunner','riot'],
+  ['soldier','merc','sniperE','shotgunner'],
+  ['soldier','riot','grenadier','sniperE'],
+  ['soldier','lmgE','grenadier','shotgunner','merc'],
+  ['soldier','spec','sniperE','lmgE'],
+  ['spec','soldier','drone','grenadier'],
+  ['spec','lmgE','drone','flamer'],
+  ['spec','flamer','robot','sniperE','soldier'],
+  ['robot','drone','spec','lmgE','mech'],
+  ['robot','mech','spec','flamer','elite'],
+  ['mech','elite','robot','spec','lmgE','grenadier']
+];
+const Z_POOL = [                                    // zombie mode escalation
   ['walker','walker','runner','crawler'],
   ['walker','runner','crawler','dog'],
   ['walker','runner','heavy','crawler','dog'],
   ['walker','heavy','spitter','crawler','toxic'],
-  ['runner','heavy','spitter','exploder','infected'],
+  ['runner','heavy','spitter','exploder','climber'],
   ['heavy','crawler','toxic','exploder','armored'],
-  ['toxic','spitter','crawler','armored','electric'],
-  ['infected','gunner','riot','runner','exploder'],
-  ['gunner','riot','flamer','heavy','electric'],
-  ['infected','gunner','drone','riot','armored'],
-  ['gunner','flamer','riot','drone','mutant'],
-  ['electric','toxic','mutant','armored','dog'],
-  ['robot','drone','mutant','elite','armored'],
-  ['robot','mech','elite','flamer','electric'],
-  ['mech','elite','robot','mutant','brute','toxic']
+  ['toxic','spitter','crawler','armored','electric','climber'],
+  ['armored','electric','toxic','exploder','mutant'],
+  ['electric','toxic','mutant','armored','dog','climber'],
+  ['mutant','brute','armored','electric','toxic','runner']
 ];
 const STORY = [
-  { t:'OUTBREAK', b:'Nine days ago the Vulture Group filed a permit for a "civic wellness trial". Six days ago Downtown stopped answering the radio. You walk in with nothing but your fists and a promise to a friend who is still in there.\n\n<em>Careful — every bite can carry the virus.</em>' },
-  { t:'NO VACANCY', b:'Whole apartment blocks went quiet in a single night. The stairwells are full of people who never made it to the street, and some of them are still moving.' },
-  { t:'CLASS DISMISSED', b:'The school was an evacuation point. The buses never came. What Vulture shipped in instead was labelled <em>nutritional supplement</em>.' },
-  { t:'THE WARD', b:'St. Alder Hospital took in three hundred patients on the first night. Every intake form carries the same trial code: <em>PROJECT ANGER</em>.' },
-  { t:'CONSUMER GRADE', b:'The mall was a distribution hub. Vulture shipped the compound in energy drink cans. Half the city drank it before anyone got sick.' },
-  { t:'BELOW', b:'The evacuation trains never left the platform. Whatever came up through the tunnels was not made underground — it was <em>delivered</em> there, in crates stamped with a bird.' },
-  { t:'RUNOFF', b:'They dumped the failures into the storm drains. In the warm dark, the failures grew, and they learned to spit.' },
-  { t:'THE CROSSING', b:'The bridge is the last way off the island. The army holds one end. Something enormous holds the other.' },
-  { t:'LAST BOAT', b:'Vulture is moving the research out by sea. Colonel Kane has orders to make sure nothing else leaves the quarantine line — including you.' },
-  { t:'DEPARTURES', b:'Gate 14. A cargo plane fuelled and waiting, and a hangar full of things that used to be passengers.' },
-  { t:'SAND', b:'The desert base is where they tested the strain on volunteers who had no idea what they had volunteered for.' },
-  { t:'COLD STORAGE', b:'The research station keeps its specimens at minus forty. The heating failed six hours before you arrived. Everything in there is awake now.' },
-  { t:'SPECIMEN', b:'Under the station is a lab that does not exist on any map. In tank seven, something has been watching the door, waiting for you to open it.' },
-  { t:'MELTDOWN', b:'The reactor is the only thing still powering the network that keeps the outbreak coordinated. Shut it down, whatever it costs.' },
-  { t:'ANGER', b:'The Final Fortress. The mastermind. The man who signed the permit and called it wellness. End it here — for the city, and for everyone who did not make it this far.' }
+  { t:'PROTECTION MONEY', b:'The Vulture Group does not knock. It sends the men who used to run this block, now on a payroll with a logo. They took your street first because nobody there could fight back.\n\n<em>Campaign: living enemies only. Every one of them chose this.</em>' },
+  { t:'NO VACANCY', b:'They cleared the apartments floor by floor to make room for something they will not name. The tenants who argued are not in the building any more.' },
+  { t:'CLASS DISMISSED', b:'The school is a staging ground now. Crates stacked in the gym, guards on the doors, and a shipping manifest nobody wants you to read.' },
+  { t:'THE WARD', b:'St. Alder Hospital was bought overnight. Doctor Vex runs intake, and the intake forms all carry the same trial code: <em>PROJECT ANGER</em>.' },
+  { t:'CONSUMER GRADE', b:'The mall was the distribution hub. Energy drinks, sports supplements, a compound with no name on the label — and paid muscle on every escalator.' },
+  { t:'BELOW', b:'The subway is how they moved it. Mercenaries hold the platforms, and the freight cars are stencilled with a bird.' },
+  { t:'RUNOFF', b:'Whatever failed the trial went into the storm drains. Vulture keeps a crew down here to make sure nobody photographs it.' },
+  { t:'THE CROSSING', b:'The bridge is the last way off the island. The company holds one end with a grenade line and a marksman on every lamppost.' },
+  { t:'LAST BOAT', b:'The harbour is loading research onto a ship at gunpoint. Colonel Kane has orders that nothing leaves the quarantine line — including you.' },
+  { t:'DEPARTURES', b:'Gate 14. A cargo plane fuelled and waiting, drones sweeping the hangar, and files worth more than the city.' },
+  { t:'SAND', b:'The desert base is where they tested it on volunteers who had no idea what they had volunteered for. The guards knew.' },
+  { t:'COLD STORAGE', b:'Minus forty and full of paperwork. Vulture would rather burn the station than let the ledger walk out of it.' },
+  { t:'THE ARMOURY', b:'Under the station: the lab that supplies them. Robots off the line, mechs still warm, and the dealer who sells it all.' },
+  { t:'MELTDOWN', b:'The reactor powers everything they built here. The Mad Scientist would rather it go critical than be read into a court record.' },
+  { t:'ANGER', b:'The Final Fortress. Director Vulture signed the permit, called it wellness, and kept an army to keep the story straight. End it here.' }
 ];
 const CHAPTERS = MAPS.map((m, i) => ({
-  map: m.id, name: m.name, boss: BOSSES[i].id, pool: CH_POOL[i], story: STORY[i], stages: 3
+  map: m.id, name: m.name, boss: CAMPAIGN_BOSSES[i].id, pool: CH_POOL[i], story: STORY[i], stages: 3
 }));
+/* which modes belong to the horde */
+const ZOMBIE_MODES = ['survival', 'horde', 'endless', 'defense'];
+const isZombieMode = m => ZOMBIE_MODES.indexOf(m) >= 0 ||
+  (m === 'daily' && dailySeed() % 2 === 0) || (m === 'weekly' && weekSeed() % 2 === 0) || m === 'secret';
 const CH_N = CHAPTERS.length, ST_N = 3;
 
 /* --------------------------------------------------------------- skills */
@@ -971,7 +1028,10 @@ function updateParts(dt){
     const p = P[i]; p.t += dt;
     if (p.t >= p.life){ P.splice(i, 1); continue; }
     p.x += p.vx * dt; p.y += p.vy * dt; p.r += p.vr * dt;
-    if (p.type === 'blood' || p.type === 'chunk'){ p.vy += 900 * dt; if (p.y > GY){ p.y = GY; p.vy *= -.25; p.vx *= .6; } }
+    if (p.type === 'blood' || p.type === 'chunk' || p.type === 'casing'){
+      p.vy += 900 * dt;
+      if (p.y > GY){ p.y = GY; p.vy *= -.3; p.vx *= .55; p.vr *= .5; }
+    }
     else if (p.type === 'spark'){ p.vy += 480 * dt; p.vx *= .96; }
     else if (p.type === 'smoke'){ p.vx *= .97; p.vy *= .97; }
     else if (p.type === 'fire'){ p.vy -= 60 * dt; p.vx *= .95; }
@@ -985,7 +1045,9 @@ function drawParts(){
     if (p.type === 'fire'){ ctx.globalAlpha = k; ctx.fillStyle = k > .6 ? '#fff0a0' : k > .3 ? '#ff8a2a' : '#a03010';
       ctx.beginPath(); ctx.arc(p.x, p.y, p.size * k * 1.4, 0, 6.283); ctx.fill(); ctx.globalAlpha = 1; continue; }
     ctx.globalAlpha = Math.min(1, k * 1.6); ctx.fillStyle = p.col;
-    if (p.type === 'chunk'){ ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size); ctx.restore(); }
+    if (p.type === 'casing'){ ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r);
+      ctx.fillStyle = '#e0c070'; ctx.fillRect(-1.6, -3.4, 3.2, 6.8); ctx.restore(); }
+    else if (p.type === 'chunk'){ ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size); ctx.restore(); }
     else if (p.type === 'spark'){ ctx.fillRect(p.x, p.y, p.size, p.size * .8); }
     else { ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, 6.283); ctx.fill(); }
     ctx.globalAlpha = 1;
@@ -1230,6 +1292,14 @@ function drawStick(e){
     case 'crawl':
       lean = 1.15; aL = HALF + .9; kL = .6; aR = HALF + .3; kR = .8;
       sL = HALF + 1.3; eL = .8; sR = HALF + .6; eR = .9; break;
+    case 'reload': {
+      const k = Math.min(1, p);
+      const dip = Math.sin(k * Math.PI);
+      sR = .3 - dip * .5; eR = .5 + dip * .5;          // gun hand drops to the hip
+      sL = HALF + .55 - dip * .9; eL = .9 - dip * .5;  // support hand feeds the mag
+      lean = .06 + dip * .07;
+      aL = HALF + .28; aR = HALF - .24;
+      break; }
     case 'zombie': {                       // arms out, dragging shuffle
       const w = t * 3.4;
       aL = HALF + Math.sin(w) * .38; kL = Math.max(0, Math.cos(w)) * .35;
@@ -1293,8 +1363,74 @@ function drawStick(e){
   if (e.headGear === 'hair' || e.hairStyle === 'spike'){ ctx.strokeStyle = e.gearCol || '#222'; ctx.lineWidth = 2.4;
     for (let i = -1; i <= 1; i++){ ctx.beginPath(); ctx.moveTo(hdx + i * 3.4, hdy - 8); ctx.lineTo(hdx + i * 4.6 - 2, hdy - 14); ctx.stroke(); }
     ctx.strokeStyle = co; ctx.lineWidth = 5.4; }
-  // eyes for the hero / bosses
-  if (e.eyes){ ctx.fillStyle = e.eyes; ctx.fillRect(hdx + 2, hdy - 3, 5, 2.4); ctx.fillStyle = co; }
+  // expression: the eyes carry it
+  if (e.eyes){
+    const frac = e.maxHp ? clamp(e.hp / e.maxHp, 0, 1) : 1;
+    const st = infStage ? infStage(e) : 0;
+    ctx.fillStyle = st >= 2 ? '#ff9a9a' : e.eyes;
+    if (e.dead || e.zombified){                       // out of it
+      ctx.save(); ctx.translate(hdx + 3.5, hdy - 2); ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(-2.4, -2.4); ctx.lineTo(2.4, 2.4); ctx.moveTo(2.4, -2.4); ctx.lineTo(-2.4, 2.4); ctx.stroke(); ctx.restore();
+    } else if (st >= 2 || frac < .3){                 // hurting: narrowed, angled
+      ctx.save(); ctx.translate(hdx + 3.5, hdy - 2); ctx.rotate(-.35);
+      ctx.fillRect(-2.6, -1, 5.4, 2); ctx.restore();
+    } else if (e.pose === 'punch' || e.pose === 'punch2' || e.pose === 'swing' || e.pose === 'kick' || frac < .6){
+      ctx.save(); ctx.translate(hdx + 3.5, hdy - 2.4); ctx.rotate(.28);   // angry
+      ctx.fillRect(-2.6, -1.2, 5.6, 2.4); ctx.restore();
+    } else ctx.fillRect(hdx + 2, hdy - 3, 5, 2.4);
+    ctx.fillStyle = co;
+  }
+  // load-out: pack, belt, plate, role kit
+  if (e.kit || e.pack || e.belt || e.plate){
+    const bx = hx, by = hy, tx = sx, ty = sy;
+    ctx.save();
+    if (e.pack){                                                    // backpack
+      ctx.fillStyle = e.packCol || '#3a4450';
+      ctx.beginPath(); ctx.moveTo(tx - 6, ty + 1); ctx.lineTo(tx - 20, ty + 6);
+      ctx.lineTo(bx - 17, by + 4); ctx.lineTo(bx - 4, by); ctx.fill();
+      if (e.kit === 'medic'){ ctx.fillStyle = '#ff5347';
+        ctx.fillRect(tx - 15, ty + 8, 8, 2.6); ctx.fillRect(tx - 12.3, ty + 5.3, 2.6, 8); }
+    }
+    if (e.plate){                                                   // chest plate
+      ctx.fillStyle = e.plateCol || '#2f3a46';
+      ctx.beginPath(); ctx.moveTo(tx - 8, ty + 1); ctx.lineTo(tx + 8, ty + 1);
+      ctx.lineTo(bx + 7, by - 2); ctx.lineTo(bx - 7, by - 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.10)'; ctx.fillRect(tx - 6, ty + 4, 12, 2);
+    }
+    if (e.belt){                                                    // utility belt + pouches
+      ctx.fillStyle = e.beltCol || '#4a3a2a';
+      ctx.fillRect(bx - 9, by - 2, 18, 3.4);
+      ctx.fillRect(bx + 5, by - 1, 5, 7); ctx.fillRect(bx - 10, by - 1, 4.5, 6);
+    }
+    if (e.kit === 'heavy'){                                         // ammo belt
+      ctx.strokeStyle = '#c8a040'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(tx - 9, ty + 3); ctx.lineTo(bx + 9, by - 1); ctx.stroke();
+    }
+    if (e.kit === 'engineer'){                                      // tool rack
+      ctx.fillStyle = '#8a8f96'; ctx.fillRect(bx - 14, by - 6, 4, 12); ctx.fillRect(bx - 8, by - 4, 3, 10);
+    }
+    ctx.restore();
+  }
+  // battle damage: scratches, dirt, torn hem
+  if (e.maxHp && e.hp < e.maxHp * .62 && !e.dead){
+    const f = e.hp / e.maxHp;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(140,20,20,.75)'; ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(sx - 5, sy + 6); ctx.lineTo(sx + 3, sy + 13);
+    if (f < .34){ ctx.moveTo(sx + 5, sy + 4); ctx.lineTo(sx - 1, sy + 12);
+                  ctx.moveTo(hdx - 6, hdy + 2); ctx.lineTo(hdx - 1, hdy + 6); }
+    ctx.stroke();
+    if (f < .34){                                                   // torn clothing at the hip
+      ctx.strokeStyle = 'rgba(30,30,34,.8)'; ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(hx - 7, hy - 1); ctx.lineTo(hx - 3, hy + 3); ctx.lineTo(hx + 1, hy - 1); ctx.lineTo(hx + 5, hy + 3);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(90,72,50,.55)';
+      for (let i = 0; i < 4; i++) ctx.fillRect(hx - 8 + i * 5, hy + 6 + (i % 2) * 4, 3, 2.4);
+    }
+    ctx.restore();
+  }
   // body cosmetics sit over the torso
   if (e.bodyGear && e.bodyGear !== 'none'){
     const bg = e.bodyGear;
@@ -1331,6 +1467,15 @@ function drawStick(e){
   }
   e._hand = { x: handR.x, y: handR.y };
   if (e.wep) drawWeapon(e, handR, handL, st, p);
+  if (e.kit === 'shield'){
+    const cx = handL.x + 6, cy = handL.y - 6;
+    ctx.fillStyle = 'rgba(120,150,175,.85)';
+    ctx.beginPath(); ctx.moveTo(cx - 4, cy - 26); ctx.lineTo(cx + 10, cy - 22);
+    ctx.lineTo(cx + 10, cy + 24); ctx.lineTo(cx - 4, cy + 28); ctx.fill();
+    ctx.fillStyle = 'rgba(220,240,255,.35)'; ctx.fillRect(cx - 1, cy - 18, 8, 14);
+    ctx.strokeStyle = '#4a6a80'; ctx.lineWidth = 2;
+    ctx.strokeRect(cx - 4, cy - 26, 14, 54);
+  }
   ctx.restore();
   ctx.globalAlpha = 1;
 }
@@ -1424,7 +1569,7 @@ const Game = {
   player: null, allies: [], enemies: [], shots: [], pickups: [], civs: [], gear: [], flashes: [],
   bg: null, len: 4000, waves: [], wave: 0, waveT: 0, spawnQ: [], boss: null,
   time: 0, hitstop: 0, slowmo: 0, ammo: {}, nades: 0, bolts: [],
-  antidotes: 0, diffData: null, stance: 'fight', everBitten: false, startedWithAllies: 0,
+  antidotes: 0, diffData: null, stance: 'fight', everBitten: false, startedWithAllies: 0, zmode: false, npcs: [],
   squadWiped: 0, cine: null, weather: 'clear', night: 0,
   kills: 0, rescued: 0, coins: 0, gems: 0, xp: 0, combo: 0, comboT: 0, best: 0,
   over: false, exitOpen: false, dist: 0, endless: 0, result: null, paused: false,
@@ -1499,7 +1644,8 @@ function hurtEnt(t, dmg, opt){
   if (opt.up && !t.boss) { t.vy = -opt.up * (1 - kbres); t.onGround = false; }
   if (opt.burn && !t.burnT) { t.burnT = 3; t.burnSrc = opt.burnSrc || 6; }
   if (t !== Game.player) blood(t.x, t.y - 46 * t.s, dir, opt.big ? 12 : 5);
-  else { blood(t.x, t.y - 46, dir, 6); $('dmgVig').style.opacity = Math.min(.9, 1 - t.hp / t.maxHp); Snd.hurt();
+  if ((t.ally || t.npc || t.human) && !t.machine && Math.random() < .35) Snd.grunt(t.ally ? 1 : 0);
+  else { blood(t.x, t.y - 46, dir, 6); $('dmgVig').style.opacity = Math.min(.9, 1 - t.hp / t.maxHp); Snd.hurt(); Snd.grunt(0);
          setTimeout(() => { if (Game.player) $('dmgVig').style.opacity = clamp(1 - Game.player.hp / Game.player.maxHp - .35, 0, .8); }, 220); }
   if (opt.stun) t.stun = Math.max(t.stun, opt.stun);
   Snd.hit();
@@ -1546,6 +1692,8 @@ function makePlayer(){
     headGear: S.cos.head !== 'none' ? S.cos.head : null,
     hairStyle: S.cos.hair, gearCol: S.cos.hair === 'mohawk' ? '#c04a3a' : '#111',
     bodyGear: S.cos.body, gloveGear: S.cos.glove, bootGear: S.cos.boot, wskin: S.cos.wskin,
+    pack: 1, belt: 1, plate: S.armor >= 2 ? 1 : 0, packCol: '#2f3a46',
+    plateCol: ['#2f3a46', '#3a2f2a', '#2f3a46', '#3a4450', '#4a5560', '#3a5a4a', '#5a5a48'][S.armor] || '#2f3a46',
     hp: st.maxHp, maxHp: st.maxHp, atkMul: st.atk, spd: st.spd, crit: st.crit, dr: st.dr,
     mpGain: st.mpGain, regen: st.regen, greed: st.greed, rollCdMax: st.rollCd,
     mp: 0, combo: 0, comboT: 0, atkT: 0, atkKind: '', hitIds: null, rollCd: 0, rollT: 0,
@@ -1562,16 +1710,27 @@ function gunList(){ return WEAPONS.filter(w => w.kind !== 'melee' && S.owned[w.i
 
 function updatePlayer(p, dt){
   if (p.dead){ p.deadT += dt; p.pose = 'hurt'; physics(p, dt); return; }
+  if (p.turning){ updateTurning(p, dt); return; }
   if (p.vehicle){ updateVehicle(p, dt); updateInfection(p, dt); if (consume('anti')) useAntidote(); return; }
   const moving = (K.left ? -1 : 0) + (K.right ? 1 : 0);
   const busy = p.atkT > 0 || p.rollT > 0;
-  const spdMul = (p.berserkT > 0 ? 1.4 : 1) * (p.mechT > 0 ? .85 : 1);
+  const spdMul = (p.berserkT > 0 ? 1.4 : 1) * (p.mechT > 0 ? .85 : 1) * infSlow(p);
 
-  if (p.regen) p.hp = Math.min(p.maxHp, p.hp + p.regen * dt);
+  if (p.regen && infStage(p) < 3) p.hp = Math.min(p.maxHp, p.hp + p.regen * dt);
+  if (infStage(p) >= 3){                      // the last stage burns you out
+    p.hp = Math.max(1, p.hp - 1.6 * dt);      // but the virus gets the last word, not the drain
+    if (Math.random() < dt * .8) Snd.cough();
+  }
   if (p.mechT > 0){ p.mechT -= dt; if (p.mechT <= 0) toast('Mech suit offline'); }
   if (p.berserkT > 0) p.berserkT -= dt;
   if (p.rollCd > 0) p.rollCd -= dt;
   if (p.fireT > 0) p.fireT -= dt;
+  if (p.dryT > 0) p.dryT -= dt;
+  if (p.recoil > 0) p.recoil = Math.max(0, p.recoil - dt * 1.9);
+  if (p.reloadT > 0){
+    p.reloadT -= dt;
+    if (p.reloadT <= 0) finishReload(p);
+  }
   if (p.comboT > 0){ p.comboT -= dt; if (p.comboT <= 0) p.combo = 0; }
 
   // roll / dodge — on the ground it rolls, in the air it dashes, and the
@@ -1633,18 +1792,25 @@ function updatePlayer(p, dt){
       p.atkT = .3; p.atkMax = .3; p.atkKind = 'throw'; p.hitIds = new Set();
       const th = TMAP[S.throwable] || TMAP.grenade;
       Game.shots.push({ x: p.x + p.face * 26, y: p.y - 60, vx: p.face * 460, vy: -320, team: 'p',
-        type: 'nade', dmg: th.dmg * p.atkMul, splash: th.splash, life: th.fire ? 1.6 : 2.2, r: 6,
-        col: th.col, grav: 1, sticky: th.sticky, fire: th.fire });
+        type: 'nade', dmg: th.dmg * p.atkMul, splash: th.splash, life: th.fire ? 1.6 : th.flash ? 1.3 : 2.2, r: 6,
+        col: th.col, grav: 1, sticky: th.sticky, fire: th.fire, flash: th.flash, smoke: th.smoke });
       Snd.tone(300, .08, 'triangle', .08, 600);
     }
     if (consume('swap')){
       const gl = gunList();
-      if (gl.length){ const i = gl.indexOf(p.gun); p.gun = gl[(i + 1) % gl.length]; S.equipped[1] = p.gun; save();
-        toast(WMAP[p.gun].name + '  ' + (Game.ammo[p.gun] | 0), 900); Snd.ui(); }
-      else toast('No firearm owned');
+      if (p.gun && magOf(p.gun) < magSize(p.gun) && (Game.ammo[p.gun] | 0) > 0){
+        startReload(p, p.gun);                    // reload first, swap when topped up
+      } else if (gl.length > 1){
+        const i = gl.indexOf(p.gun); p.gun = gl[(i + 1) % gl.length]; S.equipped[1] = p.gun; save();
+        toast(WMAP[p.gun].name + '  ' + magOf(p.gun) + '/' + (Game.ammo[p.gun] | 0), 900); Snd.ui();
+        updateWeaponLabel();
+      } else if (!gl.length) toast('No firearm owned');
     }
     // shooting
-    if (K.fire && p.gun && p.fireT <= 0 && p.mechT <= 0) fireGun(p, p.gun);
+    if (K.fire && p.gun && p.fireT <= 0 && p.mechT <= 0){
+      if (canHoldGun(p)) fireGun(p, p.gun);
+      else if (p.fireT <= 0){ p.fireT = .6; toast('Hands shaking — you cannot aim', 900); Snd.grunt(); }
+    }
     if (K.fire && p.mechT > 0 && p.fireT <= 0) fireGun(p, 'mini', true);
   }
   // charging a heavy swing carries on through the current animation
@@ -1668,6 +1834,8 @@ function updatePlayer(p, dt){
     const prog = p.poseT;
     if (p.atkKind !== 'throw' && prog > .25 && prog < .8) meleeHit(p);
     if (p.atkT <= 0) p.pose = 'idle';
+  } else if (p.reloadT > 0){
+    p.pose = 'reload'; p.poseT = 1 - p.reloadT / reloadTime(p.reloadId || p.gun || 'pistol');
   } else if (p.rollT <= 0){
     if (!p.onGround) p.pose = p.vy < 0 ? 'jump' : 'fall';
     else if (K.fire && p.gun) p.pose = 'shoot';
@@ -1737,6 +1905,7 @@ function startMelee(p, kind, victim){
   p.atkMax = p.atkT;
   p.atkCd = p.atkT * .55;
   if (kind === 'light') Snd.tone(250, .05, 'square', .07, 140);
+  if (kind === 'heavy' || kind === 'finisher' || kind === 'dash') Snd.grunt(1);
 }
 function meleeHit(p){
   const w = WMAP[p.melee] || WMAP.fist;
@@ -1780,17 +1949,19 @@ function addMp(p, n){ p.mp = Math.min(100, p.mp + n * p.mpGain); }
 function fireGun(p, id, free){
   const w = WMAP[id], lv = S.owned[id] || 1;
   if (!free){
-    if ((Game.ammo[id] | 0) <= 0){ if (p.fireT <= 0){ Snd.tone(140, .06, 'square', .06); p.fireT = .3; toast('Out of ammo — press ⟳', 900); } return; }
-    Game.ammo[id]--;
+    if (p.reloadT > 0) return;
+    if (magOf(id) <= 0){ startReload(p, id); return; }
+    Game.mags[id] = magOf(id) - 1;
   }
   p.fireT = w.rate * (p.berserkT > 0 ? .7 : 1);
   p.pose = 'shoot'; p.poseT = 0;
   const hx = p.x + p.face * (28 * (p.mechT > 0 ? 1.5 : 1)), hy = p.y - 62 * (p.mechT > 0 ? 1.35 : 1);
   const crit = Math.random() < p.crit;
-  const dmg = wDmg(w, lv) * p.atkMul * (p.berserkT > 0 ? 2.2 : 1) * (free ? 1.8 : 1) * (crit ? 2 : 1);
+  const dmg = wDmg(w, lv) * p.atkMul * attachDmg(id) * (p.berserkT > 0 ? 2.2 : 1) * (free ? 1.8 : 1) * (crit ? 2 : 1);
   const n = w.pellets || 1;
+  const recoilSpread = (p.recoil || 0) * .22 + infAim(p);
   for (let i = 0; i < n; i++){
-    const sp = (w.spread || 0) * (n > 1 ? 1 : .5);
+    const sp = ((w.spread || 0) * (n > 1 ? 1 : .5) + recoilSpread) * attachSpread(id);
     const a = rnd(-sp, sp);
     if (w.kind === 'flame'){
       Game.shots.push({ x: hx, y: hy, vx: (Math.cos(a) * w.bs + rnd(-40, 40)) * p.face, vy: Math.sin(a) * w.bs * .6 + rnd(-30, 30),
@@ -1804,12 +1975,15 @@ function fireGun(p, id, free){
         pierce: (w.pierce || 0), col: id === 'rail' ? '#4de3a0' : '#ffe08a' });
     }
   }
-  sparks(hx + p.face * 12, hy, 4, '#ffd76a');
-  Game.flashes.push({ x: hx + p.face * 20, y: hy, r: 46, t: 0, life: .09 });
+  if (!hasAttach(id, 'supp') || w.kind === 'rocket') muzzle(hx, hy, p.face, w.kind === 'rocket' ? 2 : 1);
+  else Game.flashes.push({ x: hx + p.face * 10, y: hy, r: 18, t: 0, life: .05 });
+  if (w.kind !== 'flame' && w.kind !== 'rocket') ejectCasing(hx - p.face * 6, hy - 2, p.face);
+  addRecoil(p, (w.rec || .2) * attachRecoil(id) * (free ? .3 : 1));
   addMp(p, w.kind === 'flame' ? .4 : 1.6);
-  shake(w.kind === 'rocket' ? 6 : 1.2);
   if (w.kb) p.vx -= p.face * w.kb * .12;
+  p.vx -= p.face * (w.rec || .2) * 60;
   Snd.shot();
+  if (!free) updateWeaponLabel();
 }
 
 /* --------------------------------------------------------------- skills */
@@ -1893,7 +2067,12 @@ function makeEnemy(type, x, tier){
     wep: type === 'gunner' ? 'rifle' : type === 'robot' || type === 'drone' ? 'laser' : type === 'riot' ? 'bat' :
          type === 'flamer' ? 'flame' : type === 'mech' ? 'rocket' : type === 'elite' ? 'rifle' :
          type === 'mutant' || type === 'brute' ? 'claw' : null,
-    aiT: rnd(0, .6)
+    aiT: rnd(0, .6), baseCol: t.col,
+    human: t.human, machine: t.machine, cover: t.cover, rolls: t.rolls, nadesAI: t.nades,
+    magMax: t.mag || 0, mag: t.mag || 0, reloadT: 0, laserSight: t.laser, climb: t.climb, breaker: t.breaker,
+    pack: t.human && !t.machine ? 1 : 0, belt: t.human && !t.machine ? 1 : 0,
+    plate: ['soldier', 'spec', 'elite', 'lmgE', 'riot', 'shotgunner'].indexOf(type) >= 0 ? 1 : 0,
+    plateCol: '#2f3a46', kit: type === 'lmgE' ? 'heavy' : type === 'riot' ? 'shield' : null
   });
   if (t.crawl) e.pose = 'crawl';
   if (t.fly){ e.y = GY - 150; e.flyBase = GY - 150 - rnd(0, 40); }
@@ -1952,12 +2131,70 @@ function updateEnemy(e, dt){
     }
   }
   if (e.buffT > 0){ e.buffT -= dt; }
+  if (e.rolls && ad < 190 && e.rollCd === undefined) e.rollCd = rnd(1, 3);
+  if (e.rolls){
+    e.rollCd -= dt;
+    if (e.rollCd <= 0 && ad < 230){
+      e.rollCd = rnd(2.4, 4.2);
+      e.vx = -sign(dx) * 620; e.iframe = .3; e.pose = 'crawl';
+      for (let i = 0; i < 6; i++) part(e.x, GY - rnd(0, 20), -sign(dx) * rnd(40, 140), -rnd(20, 60), .3, '#9a9a8a', 3, 'chunk');
+    }
+  }
+  if (e.nadesAI){
+    e.nadeCd = (e.nadeCd === undefined ? rnd(4, 8) : e.nadeCd) - dt;
+    if (e.nadeCd <= 0 && ad < 460 && ad > 120){
+      e.nadeCd = rnd(7, 12);
+      Game.shots.push({ x: e.x + e.face * 26, y: e.y - 70, vx: e.face * rnd(320, 460), vy: -320, team: 'e',
+        type: 'nade', dmg: e.dmg * 1.4, splash: 130, life: 2.2, r: 6, col: '#4a5a3a', grav: 1 });
+      toast('GRENADE!', 800);
+    }
+  }
 
-  if (e.ranged && ad < e.rangeR && ad > 90){
+  // ---- blinded, reloading, in cover, or falling back ----
+  if (e.blind > 0){
+    e.blind -= dt;
+    e.pose = 'block'; e.vx *= .9;
+    if (Math.random() < dt * 12) part(e.x + rnd(-10, 10), e.y - rnd(40, 70), rnd(-20, 20), -rnd(10, 40), .3, '#ffffff', 2, 'dot');
+    physics(e, dt); return;
+  }
+  if (e.reloadT > 0){
+    e.reloadT -= dt; e.pose = 'reload'; e.poseT = 1 - e.reloadT / 1.9; e.vx *= .88;
+    if (e.reloadT <= 0){ e.mag = e.magMax; }
+    physics(e, dt); return;
+  }
+  if (e.human && !e.machine && e.hp < e.maxHp * .26 && !e.boss){
+    // overwhelmed: back off, keep shooting, call it in once
+    e.retreat = 1;
+    if (!e.calledIn){ e.calledIn = 1; if (Math.random() < .5) toast('"FALLING BACK — SEND SUPPORT"', 1200); }
+  } else if (e.hp > e.maxHp * .5) e.retreat = 0;
+  if (e.retreat && ad < 320){
+    e.vx -= sign(dx) * e.spd * 6 * dt;
+    e.vx = clamp(e.vx, -e.spd * 1.2, e.spd * 1.2);
+    e.pose = 'run'; e.face = sign(dx);
+  } else if (e.cover && e.hp < e.maxHp * .65 && ad < 520){
+    // duck behind the nearest solid thing and pop out to fire
+    let best = null, bd = 260;
+    for (const g of Game.gear){
+      if (g.broken || (g.type !== 'crateObj' && g.type !== 'barrel' && g.type !== 'barricade')) continue;
+      const d = Math.abs(g.x - e.x); if (d < bd){ bd = d; best = g; }
+    }
+    e.coverT = (e.coverT || 0) - dt;
+    if (best && bd > 34){ e.vx += sign(best.x - e.x) * e.spd * 6 * dt; e.pose = 'run'; }
+    else if (best){
+      e.vx *= .8;
+      if (e.coverT <= 0){ e.coverT = rnd(1.4, 2.6); e.popOut = 1; setTimeout(() => { e.popOut = 0; }, 900); }
+      if (!e.popOut){ e.pose = 'block'; e.hitT = e.hitT; e.inCover = 1; physics(e, dt); return; }
+    }
+    e.inCover = 0;
+  }
+  if (e.ranged && ad < e.rangeR && ad > 90 && !inSmoke(e.x) && !inSmoke(target.x)){
     e.vx *= .8;
-    e.pose = e.ranged === 'bullet' || e.ranged === 'laser' ? 'shoot' : 'throw';
+    e.pose = e.ranged === 'bullet' || e.ranged === 'laser' || e.ranged === 'burst' ||
+             e.ranged === 'buck' || e.ranged === 'aimed' || e.ranged === 'suppress' ? 'shoot' : 'throw';
+    if (e.magMax && e.mag <= 0){ e.reloadT = 1.9; Snd.reload(); physics(e, dt); return; }
     if (e.atkCd <= 0){
       e.atkCd = e.rate * rnd(.85, 1.3);
+      if (e.magMax) e.mag--;
       const hy = e.y - 60 * e.s;
       const dy = (target.y - 50 - hy) / Math.max(140, ad);
       if (e.ranged === 'fire'){
@@ -1968,12 +2205,47 @@ function updateEnemy(e, dt){
       } else if (e.ranged === 'rocketE'){
         Game.shots.push({ x: e.x + e.face * 40 * e.s, y: hy, vx: e.face * 620, vy: dy * 300, team: 'e',
           type: 'rocket', dmg: e.dmg, splash: 110, life: 2.4, r: 7, col: '#d8d0c0' });
+      } else if (e.ranged === 'burst' || e.ranged === 'suppress'){
+        const rounds = e.ranged === 'suppress' ? 7 : 3;
+        for (let i = 0; i < rounds; i++) setTimeout(() => {
+          if (e.dead || Game.state !== 'play') return;
+          Game.shots.push({ x: e.x + e.face * 26 * e.s, y: hy, vx: e.face * 1150,
+            vy: dy * 1150 * .55 + rnd(-40, 40) * (e.ranged === 'suppress' ? 2 : 1), team: 'e',
+            type: 'bullet', dmg: e.dmg, life: 1.4, r: 4, col: '#ffd76a' });
+          muzzle(e.x + e.face * 30 * e.s, hy, e.face);
+          ejectCasing(e.x + e.face * 18 * e.s, hy, e.face);
+          Snd.shot();
+        }, i * (e.ranged === 'suppress' ? 70 : 95));
+        if (e.magMax) e.mag = Math.max(0, e.mag - (rounds - 1));
+      } else if (e.ranged === 'buck'){
+        for (let i = 0; i < 6; i++){
+          const a2 = rnd(-.22, .22);
+          Game.shots.push({ x: e.x + e.face * 26 * e.s, y: hy, vx: e.face * 900 * Math.cos(a2),
+            vy: dy * 700 + a2 * 700, team: 'e', type: 'bullet', dmg: e.dmg, life: .5, r: 4, col: '#ffd76a' });
+        }
+        muzzle(e.x + e.face * 30 * e.s, hy, e.face, 1.4); ejectCasing(e.x + e.face * 16 * e.s, hy, e.face); Snd.shot();
+      } else if (e.ranged === 'aimed'){
+        // marksman: paint the target, then a single heavy round
+        e.aiming = .85; e.atkCd = e.rate;
+        setTimeout(() => {
+          if (e.dead || Game.state !== 'play') return;
+          e.aiming = 0;
+          Game.shots.push({ x: e.x + e.face * 30 * e.s, y: hy, vx: e.face * 2100, vy: dy * 900, team: 'e',
+            type: 'bullet', dmg: e.dmg, life: 1.6, r: 5, pierce: 1, col: '#ffffff' });
+          muzzle(e.x + e.face * 34 * e.s, hy, e.face, 1.6); ejectCasing(e.x + e.face * 16 * e.s, hy, e.face);
+          Snd.shot(); shake(2);
+        }, 850);
+      } else if (e.ranged === 'lob'){
+        Game.shots.push({ x: e.x + e.face * 26 * e.s, y: hy, vx: e.face * rnd(300, 460), vy: -330, team: 'e',
+          type: 'nade', dmg: e.dmg, splash: 130, life: 2.2, r: 6, col: '#6a5a4a', grav: 1 });
+        Snd.tone(300, .08, 'triangle', .07, 600);
       } else {
         const bs = e.ranged === 'laser' ? 900 : e.ranged === 'spit' ? 520 : 1000;
         Game.shots.push({ x: e.x + e.face * 26 * e.s, y: hy, vx: e.face * bs, vy: dy * bs * .55, team: 'e',
           type: e.ranged === 'spit' ? 'spit' : 'bullet', dmg: e.dmg, life: 1.4, r: e.ranged === 'spit' ? 8 : 4,
           col: e.ranged === 'spit' ? '#b6ff5a' : e.ranged === 'laser' ? '#ff6a6a' : '#ffd76a',
           grav: e.ranged === 'spit' ? .35 : 0, infect: e.ranged === 'spit' ? .12 : 0 });
+        if (e.ranged === 'bullet'){ muzzle(e.x + e.face * 30 * e.s, hy, e.face); ejectCasing(e.x + e.face * 16 * e.s, hy, e.face); }
       }
       sparks(e.x + e.face * 30 * e.s, hy, 3, '#ff9a5a'); Snd.shot();
       e.poseT = 0;
@@ -1985,8 +2257,46 @@ function updateEnemy(e, dt){
     const gap = o.x - e.x;
     if (Math.abs(gap) < 26 * e.s){ e.vx -= sign(gap || 1) * 340 * dt; break; }
   }
-  if (ad > e.atkR){
+  // the horde spreads out around its target instead of queueing up
+  if (e.zomb && e.flank === undefined) e.flank = rnd(-1, 1) * 70;
+  // a standing barricade has to come down first
+  if (e.zomb){
+    let block = null;
+    for (const g of Game.gear){
+      if (g.type !== 'barricade' || g.broken) continue;
+      if ((e.x < g.x) !== (target.x < g.x) && Math.abs(g.x - e.x) < 220){ block = g; break; }
+    }
+    if (block){
+      const bd2 = Math.abs(block.x - e.x);
+      e.face = sign(block.x - e.x);
+      if (bd2 > 46){ e.vx += e.face * e.spd * 8 * dt; e.vx = clamp(e.vx, -e.spd, e.spd); e.pose = e.crawl ? 'crawl' : 'run'; }
+      else {
+        e.vx *= .8;
+        e.barT = (e.barT || 0) - dt;
+        if (e.barT <= 0){
+          e.barT = e.breaker ? .5 : .9;
+          e.pose = 'punch'; e.poseT = 0;
+          block.hp -= e.dmg * (e.breaker ? 3.5 : 1.4);
+          debris(block.x, GY - 30, 4, '#7a6a4a'); Snd.hit(); shake(1);
+          if (block.hp <= 0){ block.broken = 1; debris(block.x, GY - 40, 18, '#7a6a4a'); Snd.boom(); shake(4);
+            toast('BARRICADE BREACHED', 1200); }
+        }
+        // climbers go over instead of through
+        if (e.climb && e.onGround && Math.random() < dt * 1.6){ e.vy = -560; e.vx = e.face * 300; }
+      }
+      physics(e, dt); return;
+    }
+  }
+  const aim = e.zomb ? Math.abs(dx + (e.flank || 0)) : ad;
+  if (aim > e.atkR){
     let sp = e.spd * (e.buffT > 0 ? 1.35 : 1);
+    if (e.zomb && e.flank) e.face = sign(dx);
+    // climbers hop obstacles in their way
+    if (e.climb && e.onGround){
+      for (const g of Game.gear)
+        if (!g.broken && (g.type === 'crateObj' || g.type === 'barrel') && Math.abs(g.x - e.x) < 54 &&
+            sign(g.x - e.x) === e.face){ e.vy = -520; e.vx = e.face * 260; break; }
+    }
     if (e.charge && ad < 420 && e.aiT <= 0){ sp *= 2.6; e.chargeT = (e.chargeT || 0) + dt;
       if (e.chargeT > 1.6){ e.chargeT = 0; e.aiT = 2.4; } }
     if (e.lunge && ad < 220 && e.onGround && Math.random() < dt * 1.6){ e.vy = -420; e.vx = e.face * 380; }
@@ -1998,6 +2308,7 @@ function updateEnemy(e, dt){
     if (e.atkCd <= 0){
       e.atkCd = e.rate * rnd(.8, 1.25); e.poseT = 0; e.atkAnim = .34;
       e.pendingHit = .16;
+      if (e.zomb) e.flank = rnd(-1, 1) * 70;      // reshuffle so they keep circling
     }
     if (e.atkAnim > 0){ e.atkAnim -= dt; e.pose = e.crawl ? 'crawl' : (e.type === 'brute' ? 'swing' : 'punch'); }
     else e.pose = e.crawl ? 'crawl' : 'idle';
@@ -2018,7 +2329,7 @@ function updateEnemy(e, dt){
 }
 function nearestTarget(e){
   let best = null, bd = 1e9;
-  const cands = [Game.player].concat(Game.allies);
+  const cands = livingHumans();
   for (const c of cands){ if (!c || c.dead) continue; const d = Math.abs(c.x - e.x); if (d < bd){ bd = d; best = c; } }
   return best;
 }
@@ -2057,7 +2368,7 @@ function updateBoss(b, dt){
     else if (mv === 'spit3'){ b.volley = 3; b.volleyT = 0; b.spit = 1; }
     else if (mv === 'summon'){
       for (let i = 0; i < (b.phase === 2 ? 4 : 3); i++){
-        const t = pick(CHAPTERS[Math.min(CH_N - 1, Game.ch)].pool);
+        const t = pick(Game.pool || CHAPTERS[Math.min(CH_N - 1, Game.ch)].pool);
         Game.enemies.push(makeEnemy(t, b.x + rnd(-260, 260), 1));
       }
       toast('REINFORCEMENTS!', 1100);
@@ -2148,14 +2459,25 @@ function makeAlly(id){
     wep: a.wep, gunId: a.wep, fireT: 0, downT: 0, r: 24, roleT: rnd(0, 3),
     immune: a.immune ? 1 : 0, quad: a.quad ? 1 : 0, shield: a.role === 'shield' ? .7 : 0,
     kbres: a.role === 'shield' ? .6 : a.role === 'robot' ? .5 : 0,
-    inf: 0, infSp: 1, melee: a.role === 'dog' || a.role === 'shield'
+    inf: 0, infSp: 1, melee: a.role === 'dog' || a.role === 'shield',
+    mag: 14, magMax: 14, reloadT: 0,
+    kit: a.role, baseCol: '#1a1a1a',
+    pack: a.role !== 'dog', belt: a.role !== 'dog', plate: ['heavy', 'shield', 'robot', 'assault'].indexOf(a.role) >= 0,
+    packCol: a.role === 'medic' ? '#e8eef2' : '#2f3a46',
+    plateCol: a.role === 'heavy' ? '#4a4030' : a.role === 'shield' ? '#3a5560' : '#2f3a46',
+    headGear2: a.role
   });
 }
 const ALLY_RANGE = { sniper: 940, heavy: 640, medic: 460, engineer: 600, drone: 620, robot: 660, dog: 460, shield: 300, assault: 560 };
 
 function updateAlly(a, dt){
   const p = Game.player;
+  if (a.turning){ updateTurning(a, dt); return; }
   updateInfection(a, dt);
+  if (infStage(a) >= 3){
+    a.hp -= 1.2 * dt;
+    if (a.hp <= 0){ a.hp = 1; }              // the virus takes them, not the damage
+  }
   if (a.dead){
     a.deadT += dt; a.downT -= dt; a.pose = 'hurt';
     // medics get their squadmates back on their feet faster
@@ -2175,6 +2497,7 @@ function updateAlly(a, dt){
   const retreat = Game.stance === 'retreat';
 
   /* ---- role utilities ---- */
+  a.spdEff = a.spd * infSlow(a);
   if (a.role === 'medic' && a.roleT <= 0){
     let worst = null, frac = .92;
     for (const t of [p].concat(Game.allies)){
@@ -2221,8 +2544,8 @@ function updateAlly(a, dt){
   if (tgt){
     a.face = sign(tgt.x - a.x) || 1;
     const d = Math.abs(tgt.x - a.x);
-    if (a.melee){
-      // dogs and shields close the distance and hit things
+    if (a.melee || !canHoldGun(a)){
+      // dogs and shields close the distance and hit things — so do the too-sick-to-shoot
       if (d > (a.role === 'dog' ? 40 : 54)){ a.vx += a.face * a.spd * 9 * dt; a.pose = a.quad ? 'run' : 'run'; }
       else {
         a.vx *= .8;
@@ -2237,16 +2560,22 @@ function updateAlly(a, dt){
       if (a.role === 'dog' && d > 150 && d < 260 && a.onGround && Math.random() < dt * 2){ a.vy = -400; a.vx = a.face * 420; }
     } else {
       const keep = a.role === 'sniper' ? 640 : a.role === 'heavy' ? 300 : 230;
+      const sick = infAim(a);
       if (d > keep){ a.vx += a.face * a.spd * 7 * dt; a.pose = 'run'; }
       else if (d < keep * .55){ a.vx -= a.face * a.spd * 5 * dt; a.pose = 'run'; }
       else { a.vx *= .8; a.pose = 'shoot'; }
-      if (a.fireT <= 0 && d < bd + 40){
+      if (a.reloadT > 0){
+        a.reloadT -= dt; a.pose = 'reload'; a.poseT = 1 - a.reloadT / 1.5;
+        if (a.reloadT <= 0) a.mag = a.magMax;
+      } else if (a.fireT <= 0 && d < bd + 40){
+        if (a.mag <= 0){ a.reloadT = 1.5; Snd.reload(); physics(a, dt); return; }
+        a.mag--;
         const w = a.gunId === 'laser' ? { rate: .5, bs: 1600 } : WMAP[a.gunId] || { rate: .4, bs: 900 };
         a.fireT = w.rate * (a.role === 'sniper' ? 2.2 : a.role === 'heavy' ? .9 : 1.5);
         a.pose = 'shoot'; a.poseT = 0;
         const n = a.gunId === 'shotgun' ? 5 : 1;
         for (let i = 0; i < n; i++){
-          const ang = rnd(-.11, .11);
+          const ang = rnd(-.11, .11) + rnd(-1, 1) * sick;
           const hy = a.y - 60 * a.s;
           const dy = ((tgt.y - 46 * tgt.s) - hy) / Math.max(120, d);
           Game.shots.push({ x: a.x + a.face * 26, y: hy,
@@ -2256,7 +2585,9 @@ function updateAlly(a, dt){
             life: a.role === 'sniper' ? 1.6 : 1.2, r: 4, pierce: a.role === 'sniper' ? 2 : 0,
             col: a.gunId === 'laser' ? '#9fe8ff' : a.role === 'sniper' ? '#ffffff' : '#ffe08a' });
         }
-        sparks(a.x + a.face * 30, a.y - 60, 3, '#ffd76a'); Snd.shot();
+        muzzle(a.x + a.face * 30, a.y - 60, a.face);
+        if (a.gunId !== 'laser' && a.gunId !== 'plasma') ejectCasing(a.x + a.face * 16, a.y - 60, a.face);
+        Snd.shot();
       }
     }
     a.vx = clamp(a.vx, -a.spd, a.spd);
@@ -2331,7 +2662,7 @@ function updateShots(dt){
     if (s.y > GY + 10 && s.type !== 'flame') gone = true;
     if (gone){ if (s.type === 'rocket' || s.type === 'nade') explode(s); arr.splice(i, 1); continue; }
     // collisions
-    const targets = s.team === 'p' ? Game.enemies : [Game.player].concat(Game.allies);
+    const targets = s.team === 'p' ? Game.enemies : livingHumans();
     for (const t of targets){
       if (!t || t.dead) continue;
       const hb = hitbox(t);
@@ -2358,12 +2689,14 @@ function updateShots(dt){
   }
 }
 function explode(s){
+  if (s.flash){ flashbang(s.x); return; }
+  if (s.smoke){ smokeScreen(s.x); return; }
   if (s.fire){
     firePool(s.x, 22, 6);
     for (let i = 0; i < 26; i++) fire(s.x + rnd(-60, 60), GY - rnd(0, 30), 1);
     Snd.boom(); shake(4); Game.flashes.push({ x: s.x, y: GY - 20, r: 130, t: 0, life: .3 });
   } else boomFX(s.x, s.y, s.splash || 100);
-  const targets = s.team === 'p' ? Game.enemies : [Game.player].concat(Game.allies);
+  const targets = s.team === 'p' ? Game.enemies : livingHumans();
   for (const t of targets){
     if (!t || t.dead) continue;
     const d = Math.abs(t.x - s.x);
@@ -2506,6 +2839,12 @@ function updateGear(dt){
         if (!isGas) for (const e of Game.enemies)
           if (!e.dead && Math.abs(e.x - g.x) < g.r) hurtEnt(e, g.dmg * 1.6, { fromX: g.x, kb: 0, burn: 1, burnSrc: 8 });
       }
+    } else if (g.type === 'barricade'){
+      if (!g.broken && g.hp <= 0) g.broken = 1;
+    } else if (g.type === 'smokecloud'){
+      g.t -= dt;
+      if (g.t <= 0){ Game.gear.splice(i, 1); continue; }
+      if (Math.random() < dt * 26) smoke(g.x + rnd(-g.r, g.r), GY - rnd(0, 90), 1, 'rgba(185,190,200,');
     } else if (g.type === 'drone'){
       const own = g.owner;
       if (g.t < 1e8){ g.t -= dt; if (g.t <= 0){ smoke(g.x, g.y, 6); Game.gear.splice(i, 1); continue; } }
@@ -2562,6 +2901,18 @@ function drawGear(){
       ctx.restore();
       ctx.fillStyle = '#4de3a0'; ctx.font = 'bold 11px Trebuchet MS'; ctx.textAlign = 'center';
       ctx.fillText('JUMP TO DRIVE', g.x, GY - def.h - 26); ctx.textAlign = 'left';
+    } else if (g.type === 'barricade' && !g.broken){
+      ctx.fillStyle = '#6a5a44';
+      for (let i = 0; i < 4; i++) ctx.fillRect(g.x - 26, GY - 16 - i * 16, 52, 11);
+      ctx.fillStyle = '#4a3f30'; ctx.fillRect(g.x - 30, GY - 74, 8, 74); ctx.fillRect(g.x + 22, GY - 74, 8, 74);
+      ctx.fillStyle = '#0a1018'; ctx.fillRect(g.x - 30, GY - 86, 60, 5);
+      ctx.fillStyle = g.hp / g.max > .4 ? '#4de3a0' : '#ff5347';
+      ctx.fillRect(g.x - 30, GY - 86, 60 * clamp(g.hp / g.max, 0, 1), 5);
+    } else if (g.type === 'smokecloud'){
+      ctx.globalAlpha = clamp(g.t / g.max, 0, 1) * .35;
+      ctx.fillStyle = '#c8ccd2';
+      ctx.beginPath(); ctx.ellipse(g.x, GY - 60, g.r, 70, 0, 0, 6.283); ctx.fill();
+      ctx.globalAlpha = 1;
     } else if (g.type === 'gas'){
       ctx.globalAlpha = clamp(g.t / g.max, 0, 1) * .3;
       ctx.fillStyle = '#6ad6a0';
@@ -2630,6 +2981,7 @@ const MAXALIVE = 24;
 function resetRun(){
   Game.player = null; Game.allies = []; Game.enemies = []; Game.shots = []; Game.pickups = [];
   Game.civs = []; Game.gear = []; Game.flashes = []; P.length = 0; DN.length = 0;
+  Game.npcs = []; Game.npcLost = 0; Game.encounterT = rnd(12, 22); Game.encounterActive = 0;
   Game.kills = Game.rescued = Game.coins = Game.gems = Game.xp = 0;
   Game.combo = 0; Game.comboT = 0; Game.best = 0; Game.time = 0; Game.over = false;
   Game.exitOpen = false; Game.boss = null; Game.wave = 0; Game.waveT = 0; Game.dist = 0;
@@ -2647,8 +2999,12 @@ function resetRun(){
   $('dmgVig').style.opacity = 0;
 }
 function loadAmmo(){
-  Game.ammo = {};
-  for (const w of WEAPONS) if (w.ammo && S.owned[w.id]) Game.ammo[w.id] = wAmmo(w, S.owned[w.id]);
+  Game.ammo = {}; Game.mags = {};
+  for (const w of WEAPONS) if (w.ammo && S.owned[w.id]){
+    const total = wAmmo(w, S.owned[w.id]);
+    const m = Math.min(magSize(w.id), total);
+    Game.mags[w.id] = m; Game.ammo[w.id] = total - m;
+  }
   Game.nades = playerStats().nades;
   $('nadeN').textContent = Game.nades;
 }
@@ -2663,6 +3019,7 @@ function startMission(mode, ch, st, opts){
   resetRun();
   Game.mode = mode; Game.ch = ch | 0; Game.st = st | 0; Game.diff = S.difficulty;
   Game.diffData = DIFFS[Game.diff];
+  Game.zmode = isZombieMode(mode) || mode === 'bossrush';   // is the virus in play?
   Game.antidotes = Math.min(S.antidotes, Game.diffData.maxAnti);
   Game.stance = 'fight'; Game.everBitten = false; Game.squadWiped = 0;
   $('kT').classList.remove('retreat');
@@ -2672,26 +3029,28 @@ function startMission(mode, ch, st, opts){
     const C = CHAPTERS[Game.ch];
     mapId = C.map; pool = C.pool; len = 2700 + Game.st * 550 + Game.ch * 60; seed = 1000 + Game.ch * 31 + Game.st;
   } else if (mode === 'survival'){
-    mapId = opts.map || pick(MAPS).id; pool = CH_POOL[rndi(0, CH_POOL.length - 1)]; len = 1900; seed = 7000 + rndi(0, 999);
+    mapId = opts.map || pick(MAPS).id; pool = Z_POOL[0]; len = 1900; seed = 7000 + rndi(0, 999);
   } else if (mode === 'defense'){
-    mapId = opts.map || pick(MAPS).id; pool = CH_POOL[rndi(2, CH_POOL.length - 1)]; len = 2200; seed = 6100 + rndi(0, 999);
+    mapId = opts.map || pick(MAPS).id; pool = Z_POOL[1]; len = 2200; seed = 6100 + rndi(0, 999);
   } else if (mode === 'horde'){
-    mapId = opts.map || pick(MAPS).id; pool = CH_POOL[rndi(4, CH_POOL.length - 1)]; len = 2600; seed = 6200 + rndi(0, 999);
+    mapId = opts.map || pick(MAPS).id; pool = Z_POOL[3]; len = 2600; seed = 6200 + rndi(0, 999);
   } else if (mode === 'timeattack'){
-    mapId = opts.map || pick(MAPS).id; pool = CH_POOL[rndi(1, CH_POOL.length - 1)]; len = 2400; seed = 6300 + rndi(0, 999);
+    mapId = opts.map || pick(MAPS).id; pool = CH_POOL[rndi(3, CH_POOL.length - 1)]; len = 2400; seed = 6300 + rndi(0, 999);
   } else if (mode === 'weekly'){
     const R2 = mulberry(weekSeed());
-    mapId = MAPS[Math.floor(R2() * MAPS.length)].id; pool = CH_POOL[Math.floor(R2() * CH_POOL.length)];
+    mapId = MAPS[Math.floor(R2() * MAPS.length)].id;
+    pool = isZombieMode('weekly') ? Z_POOL[Math.floor(R2() * Z_POOL.length)] : CH_POOL[Math.floor(R2() * CH_POOL.length)];
     len = 3600; seed = weekSeed();
   } else if (mode === 'bossrush'){
-    mapId = 'lab'; pool = CH_POOL[CH_POOL.length - 1]; len = 1900; seed = 8123;
+    mapId = 'lab'; pool = CH_POOL[CH_POOL.length - 1]; len = 1900; seed = 8123;   // boss rush: mixed
   } else if (mode === 'endless'){
-    mapId = opts.map || pick(MAPS).id; pool = CH_POOL[rndi(2, CH_POOL.length - 1)]; len = 60000; seed = 9000 + rndi(0, 999);
+    mapId = opts.map || pick(MAPS).id; pool = Z_POOL[2]; len = 60000; seed = 9000 + rndi(0, 999);
   } else if (mode === 'secret'){
-    mapId = 'lab'; pool = ['elite', 'robot', 'mech', 'armored', 'toxic']; len = 2400; seed = 4242;
+    mapId = 'lab'; pool = ['armored', 'toxic', 'electric', 'mutant', 'brute', 'climber']; len = 2400; seed = 4242;
   } else { // daily
     const R = mulberry(dailySeed());
-    mapId = MAPS[Math.floor(R() * MAPS.length)].id; pool = CH_POOL[Math.floor(R() * CH_POOL.length)];
+    mapId = MAPS[Math.floor(R() * MAPS.length)].id;
+    pool = isZombieMode('daily') ? Z_POOL[Math.floor(R() * Z_POOL.length)] : CH_POOL[Math.floor(R() * CH_POOL.length)];
     len = 3000; seed = dailySeed();
   }
   Game.len = len;
@@ -2715,6 +3074,10 @@ function startMission(mode, ch, st, opts){
     Game.gear.push({ type: 'secret', x: sx, breakable: 1, broken: 0 });
   }
   buildTraps(Game.bg, seed, len);
+  if (Game.zmode){
+    for (let x = 620; x < len - 400; x += 700 + R() * 600)
+      Game.gear.push({ type: 'barricade', x, hp: 420 * DIFFS[Game.diff].hp, max: 420 * DIFFS[Game.diff].hp, broken: 0 });
+  }
   // a ride shows up on the bigger stages
   if ((mode === 'story' && (Game.st === 1 || Game.ch >= 6)) || mode === 'endless' || mode === 'daily'){
     const pool = Game.ch >= 12 ? ['tank', 'apc', 'heli'] : Game.ch >= 8 ? ['jeep', 'apc', 'bike'] : ['bike', 'jeep'];
@@ -2789,8 +3152,10 @@ function dailySeed(){ const d = todayKey(); let h = 0; for (let i = 0; i < d.len
 function setObjective(t){ Game.objective = t; $('objective').textContent = t; }
 function updateWeaponLabel(){
   const p = Game.player; if (!p) return;
-  const g = p.gun ? WMAP[p.gun].name : 'no firearm';
-  $('wname').textContent = '⚔ ' + (WMAP[p.melee] ? WMAP[p.melee].name.toUpperCase() : 'FISTS') + '   ▸   ✦ ' + g.toUpperCase();
+  const g = p.gun ? WMAP[p.gun].name + '  ' + magOf(p.gun) + '/' + (Game.ammo[p.gun] | 0) : 'no firearm';
+  const at = p.gun && S.attach[p.gun] ? Object.keys(S.attach[p.gun]).filter(k => S.attach[p.gun][k]).length : 0;
+  $('wname').textContent = '⚔ ' + (WMAP[p.melee] ? WMAP[p.melee].name.toUpperCase() : 'FISTS') +
+    '   ▸   ✦ ' + g.toUpperCase() + (at ? '  ⊹' + at : '');
 }
 
 /* ------------------------------------------------------------- spawning */
@@ -2843,9 +3208,10 @@ function updateWaves(dt){
     }
     if (!Game.activeGate && Game.gates.every(x => x.done)){
       if (Game.bossPending && !Game.boss && !Game.bossDone && p.x > Game.len - 900){
-        const id = Game.mode === 'secret' ? 'scientist'
-                 : Game.mode === 'weekly' ? BOSSES[weekSeed() % BOSSES.length].id
-                 : Game.mode === 'daily' ? BOSSES[dailySeed() % BOSSES.length].id
+        const roster = Game.zmode ? ZOMBIE_BOSSES : CAMPAIGN_BOSSES;
+        const id = Game.mode === 'secret' ? 'bioalpha'
+                 : Game.mode === 'weekly' ? roster[weekSeed() % roster.length].id
+                 : Game.mode === 'daily' ? roster[dailySeed() % roster.length].id
                  : CHAPTERS[Game.ch].boss;
         Game.enemies.push(makeBoss(id, Math.min(Game.len - 120, p.x + 420)));
         Game.bossPending = 0; setObjective('DEFEAT THE BOSS');
@@ -2866,8 +3232,8 @@ function updateWaves(dt){
       toast('WAVE ' + Game.wave, 1400); Snd.bad();
       setObjective('WAVE ' + Game.wave);
       if (Game.wave % 5 === 0){
-        const bi = Math.min(BOSSES.length - 1, Math.floor(Game.wave / 5) - 1);
-        Game.enemies.push(makeBoss(BOSSES[bi].id, p.x + 500));
+        const bi = clamp(Math.floor(Game.wave / 5) - 1, 0, ZOMBIE_BOSSES.length - 1);
+        Game.enemies.push(makeBoss(ZOMBIE_BOSSES[bi].id, p.x + 500));
       }
     }
     if (Game.waveQ > 0 && aliveCount() < MAXALIVE){
@@ -2896,7 +3262,7 @@ function updateWaves(dt){
       Game.wave++; Game.waveQ = 5 + Game.wave * 3; Game.waveT = 0;
       toast('WAVE ' + Game.wave + ' — DEFEND THE GENERATOR', 1800); Snd.bad();
       g.hp = Math.min(g.max, g.hp + g.max * .08);
-      if (Game.wave % 4 === 0) Game.enemies.push(makeBoss(BOSSES[clamp(Math.floor(Game.wave / 4) - 1, 0, BOSSES.length - 1)].id, g.x + 420));
+      if (Game.wave % 4 === 0) Game.enemies.push(makeBoss(ZOMBIE_BOSSES[clamp(Math.floor(Game.wave / 4) - 1, 0, ZOMBIE_BOSSES.length - 1)].id, g.x + 420));
     }
     if (Game.waveQ > 0 && aliveCount() < MAXALIVE){
       const e = spawnAt(pick(Game.pool), Math.random() < .5 ? 1 : -1, Math.floor(Game.wave / 2));
@@ -2950,7 +3316,7 @@ function updateWaves(dt){
     }
     if (Game.dist > (Game.lastBoss || 0) + 2200){
       Game.lastBoss = Game.dist;
-      Game.enemies.push(makeBoss(BOSSES[clamp(Math.floor(Game.dist / 2200) - 1, 0, BOSSES.length - 1)].id, p.x + 520));
+      Game.enemies.push(makeBoss(ZOMBIE_BOSSES[clamp(Math.floor(Game.dist / 2200) - 1, 0, ZOMBIE_BOSSES.length - 1)].id, p.x + 520));
     }
     setObjective('DISTANCE  ' + Game.dist + 'm');
     S.records.endless = Math.max(S.records.endless, Game.dist);
@@ -2998,7 +3364,7 @@ function finishMission(win, reason){
       Game.wave++; Game.waveQ = 5 + Game.wave * 3; Game.waveT = 0;
       toast('WAVE ' + Game.wave + ' — DEFEND THE GENERATOR', 1800); Snd.bad();
       g.hp = Math.min(g.max, g.hp + g.max * .08);
-      if (Game.wave % 4 === 0) Game.enemies.push(makeBoss(BOSSES[clamp(Math.floor(Game.wave / 4) - 1, 0, BOSSES.length - 1)].id, g.x + 420));
+      if (Game.wave % 4 === 0) Game.enemies.push(makeBoss(ZOMBIE_BOSSES[clamp(Math.floor(Game.wave / 4) - 1, 0, ZOMBIE_BOSSES.length - 1)].id, g.x + 420));
     }
     if (Game.waveQ > 0 && aliveCount() < MAXALIVE){
       const e = spawnAt(pick(Game.pool), Math.random() < .5 ? 1 : -1, Math.floor(Game.wave / 2));
@@ -3084,6 +3450,11 @@ function step(dt){
 
   updatePlayer(p, dt);
   for (const a of Game.allies) updateAlly(a, dt);
+  for (let i = Game.npcs.length - 1; i >= 0; i--){
+    const n = Game.npcs[i];
+    updateNPC(n, dt);
+    if (n.dead && n.deadT > 3) Game.npcs.splice(i, 1);
+  }
   for (let i = Game.enemies.length - 1; i >= 0; i--){
     const e = Game.enemies[i];
     updateEnemy(e, dt);
@@ -3100,6 +3471,14 @@ function step(dt){
   for (let i = Game.flashes.length - 1; i >= 0; i--){ const f = Game.flashes[i]; f.t += dt; if (f.t > f.life) Game.flashes.splice(i, 1); }
   for (let i = Game.bolts.length - 1; i >= 0; i--){ Game.bolts[i].t += dt; if (Game.bolts[i].t > .3) Game.bolts.splice(i, 1); }
 
+  // zombie modes drop rescue / encounter events on the map
+  if (Game.zmode && !Game.over){
+    Game.encounterT -= dt;
+    if (Game.encounterT <= 0 && Game.npcs.length < 5){
+      Game.encounterT = rnd(26, 44);
+      spawnEncounter(clamp(Game.player.x + (Math.random() < .5 ? 340 : -340), 80, Game.len - 80));
+    }
+  }
   if (!Game.over) updateWaves(dt);
 
   // gate wall
@@ -3133,9 +3512,12 @@ function hudUpdate(){
   const kS = $('kS');
   kS.style.setProperty('--mp', Math.round(p.mp) + '%');
   kS.classList.toggle('ready', p.mp >= 100);
-  const at = $('ammoTxt'), am = p.mechT > 0 ? -1 : (p.gun ? (Game.ammo[p.gun] | 0) : -2);
-  at.textContent = am === -1 ? '∞' : am === -2 ? '—' : am;
-  at.classList.toggle('low', am >= 0 && am < 15);
+  const at = $('ammoTxt');
+  if (p.mechT > 0) at.textContent = '∞';
+  else if (!p.gun) at.textContent = '—';
+  else if (p.reloadT > 0) at.textContent = '↻';
+  else at.textContent = magOf(p.gun) + '/' + (Game.ammo[p.gun] | 0);
+  at.classList.toggle('low', !!p.gun && p.mechT <= 0 && magOf(p.gun) <= Math.max(2, magSize(p.gun) * .25));
   document.body.classList.toggle('lowhp', p.hp / p.maxHp < .28);
   const infRow = $('infRow');
   if (p.inf > 0){
@@ -3222,6 +3604,7 @@ function render(){
   drawGear();
   drawPickups();
   drawCivs();
+  drawNPCs();
   // entities sorted by scale so big things read behind
   const ents = Game.enemies.concat(Game.allies).filter(e => e.x > cam.x - 200 && e.x < cam.x + viewW + 200);
   ents.sort((a, b) => (b.s || 1) - (a.s || 1));
@@ -3230,6 +3613,14 @@ function render(){
   drawShots();
   drawParts();
   // light flashes (additive)
+  for (const e of Game.enemies){
+    if (e.dead || !e.laserSight) continue;
+    const t = nearestTarget(e); if (!t) continue;
+    ctx.globalAlpha = e.aiming ? .85 : .3;
+    ctx.strokeStyle = '#ff4d4d'; ctx.lineWidth = e.aiming ? 1.6 : 1;
+    ctx.beginPath(); ctx.moveTo(e.x + e.face * 26, e.y - 60 * e.s); ctx.lineTo(t.x, t.y - 50); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
   for (const b of Game.bolts){
     ctx.globalAlpha = clamp(1 - b.t / .3, 0, 1);
     drawBolt(b.x + rnd(-20, 20), -viewH, b.x, b.y, '#cfeaff');
@@ -3324,7 +3715,7 @@ function attractStart(){
     face: 1, pose: 'run', wep: pick(['katana', 'bat', 'rifle', 'axe', 'shotgun']) });
   hero.spd = 128; Attract.ents.push(hero);
   for (let i = 0; i < 7; i++){
-    const t = pick(['walker', 'runner', 'heavy', 'crawler', 'mutant', 'infected', 'dog', 'toxic']), d = ETYPES[t];
+    const t = pick(['walker', 'runner', 'heavy', 'crawler', 'mutant', 'thug', 'dog', 'toxic', 'merc']), d = ETYPES[t];
     const e = makeEnt({ x: cam.x + rnd(-260, viewW + 500), col: d.col, s: d.s,
       pose: d.crawl ? 'crawl' : 'run', face: -1, headGear: d.headGear || null, gearCol: '#2a3546', quad: d.quad });
     e.spd = d.spd * .55; Attract.ents.push(e);
@@ -3453,8 +3844,8 @@ const UI = {
       '</div>' +
       '<h2 class="title">Operations</h2>' +
       '<div class="grid">' +
-      this.card('story', 'Story Campaign', 'Chapter ' + (S.progress.chapter + 1) + '/' + CH_N + '<br>' + CHAPTERS[S.progress.chapter].name, 1, 'var(--neon)', '☣') +
-      this.card('survivalinfo', 'Zombie Survival', 'Endless waves in a sealed arena<br>Best: wave <b>' + S.records.survival + '</b>', 1, 'var(--red)', '⚑') +
+      this.card('story', 'Campaign', 'Human enemies only<br>Chapter ' + (S.progress.chapter + 1) + '/' + CH_N + ' — ' + CHAPTERS[S.progress.chapter].name, 1, 'var(--ice)', '★') +
+      this.card('survivalinfo', 'Zombie Survival', 'The horde only · rescue events<br>Best: wave <b>' + S.records.survival + '</b>', 1, 'var(--neon)', '☣') +
       this.card('bossrushinfo', 'Boss Rush', 'Every boss, back to back<br>Beaten: <b>' + Object.keys(S.bossKills).length + '/10</b>', Object.keys(S.bossKills).length > 0, 'var(--gold)', '☠') +
       this.card('endlessinfo', 'Endless Mode', 'Run east forever<br>Best: <b>' + fmt(S.records.endless) + 'm</b>', S.progress.chapter >= 1, 'var(--ice)', '∞') +
       this.card('dailyinfo', 'Daily Challenge', S.daily.chDone === todayKey() ? 'Completed today ✓' : 'New seeded mission every day', 1, 'var(--viol)', '★') +
@@ -3537,7 +3928,7 @@ const UI = {
       '<div class="card" style="--tone:var(--gold)"><div class="glyph">' + (c + 1) + '-' + (s + 1) + '</div>' +
       '<h3>Mission ' + (c + 1) + '-' + (s + 1) + ' — ' + C.name + '</h3>' +
       '<div class="meta">Difficulty: ' + DIFFS[S.difficulty].name + '<br>' +
-      'Hostiles: ' + C.pool.map(t => ETYPES[t].name).join(', ') +
+      'Hostiles (human): ' + C.pool.map(t => ETYPES[t].name).join(', ') +
       (s === ST_N - 1 ? '<br>Boss: <b>' + BMAP[C.boss].name + '</b>' : '') +
       '<br>Loadout: ' + (WMAP[S.equipped[0]] ? WMAP[S.equipped[0]].name : 'Fists') + ' + ' +
       (S.owned[S.equipped[1]] ? WMAP[S.equipped[1]].name : 'no firearm') +
@@ -3553,13 +3944,13 @@ const UI = {
   /* -------------------------------------------------------- mode intros */
   modeIntro(mode){
     const info = {
-      survival: ['Zombie Survival', 'Endless waves in a sealed arena. Every fifth wave sends a boss. How long can you hold?', 'survivalgo'],
+      survival: ['Zombie Survival', 'The horde, and nothing but the horde. Every fifth wave sends something worse. Survivors turn up mid-fight — every one you keep alive is one that does not join them.', 'survivalgo'],
       bossrush: ['Boss Rush', 'Every boss you have beaten, back to back, with no breaks. Bring ammo.', 'bossrushgo'],
       endless: ['Endless Mode', 'Run east forever. The city gets angrier the further you go. Distance is your score.', 'endlessgo'],
       daily: ['Daily Challenge', 'A randomly generated mission that changes every day. One bonus payout per day.', 'dailygo'],
-      defense: ['Defense Mode', 'A generator in the middle of the map, waves closing from both sides. It repairs a little between waves — that is all the help you get.', 'defensego'],
-      horde: ['Horde Mode', 'No waves, no breaks, no gates. Bodies until you drop. Your score is the body count.', 'hordego'],
-      timeattack: ['Time Attack', 'Ninety seconds. A kill quota. Nothing else matters.', 'timeattackgo'],
+      defense: ['Defense Mode', 'Zombies. A generator in the middle of the map, barricades to slow them, waves closing from both sides.', 'defensego'],
+      horde: ['Horde Mode', 'Zombies without waves, breaks or gates. Bodies until you drop. Your score is the body count.', 'hordego'],
+      timeattack: ['Time Attack', 'Ninety seconds against Vulture\'s people. A kill quota. Nothing else matters.', 'timeattackgo'],
       weekly: ['Weekly Challenge', 'A long seeded run with a boss at the end, the same for everyone all week. Resets Monday.', 'weeklygo'],
       secret: ['The Vault', 'Vulture\'s off-book archive, reachable only by the caches hidden in the campaign. Elites, mechs, and the man who signed the permit. Bring everything.', 'secretgo']
     }[mode];
@@ -3591,6 +3982,23 @@ const UI = {
              : '<button class="btn go" data-act="buy:' + w.id + '">Buy<small>' + fmt(w.price) + '◉</small></button>') +
         '</div></div>';
     }
+    h += '</div><div class="spacer"></div><h2 class="title">Attachments</h2>' +
+      '<div class="muted">Fitted to your equipped firearm: <b>' +
+      (S.owned[S.equipped[1]] ? WMAP[S.equipped[1]].name : 'none equipped') + '</b></div><div class="spacer"></div><div class="grid">';
+    const gid = S.equipped[1];
+    if (S.owned[gid] && WMAP[gid] && WMAP[gid].kind !== 'melee'){
+      for (const at of ATTACHMENTS){
+        const fitted = hasAttach(gid, at.id);
+        h += '<div class="card' + (fitted ? ' sel' : '') + '" style="--tone:var(--ice)">' +
+          (fitted ? '<div class="tag">FITTED</div>' : '') + '<div class="glyph">⊹</div>' +
+          '<h3>' + at.name + '</h3><div class="meta">' + at.desc +
+          (MAGS[gid] ? '<br>Magazine: <b>' + magSize(gid) + '</b> · reload <b>' + reloadTime(gid).toFixed(1) + 's</b>' : '') +
+          '</div><div class="spacer"></div>' +
+          (fitted ? '<button class="btn" data-act="unfit:' + gid + ':' + at.id + '">Remove</button>'
+                  : '<button class="btn go" data-act="fit:' + gid + ':' + at.id + '">Fit<small>' + fmt(at.price) + '◉</small></button>') +
+          '</div>';
+      }
+    } else h += '<div class="card"><div class="meta">Equip a firearm to fit attachments.</div></div>';
     h += '</div><div class="spacer"></div><h2 class="title">Throwables</h2><div class="grid">';
     for (const t of THROWS){
       const own = S.throwOwned[t.id], eq = S.throwable === t.id;
@@ -4072,6 +4480,17 @@ scr.addEventListener('click', e => {
       S.coins -= t.price; S.throwOwned[t.id] = 1; S.throwable = t.id;
       Snd.coin(); save(); UI.shop(); break; }
     case 'throwset': S.throwable = parts[1]; save(); UI.shop(); break;
+    case 'fit': {
+      const gid = parts[1], aid = parts[2], at = AMAP[aid];
+      if (hasAttach(gid, aid)) break;
+      if (S.coins < at.price){ toast('Not enough coins'); break; }
+      S.coins -= at.price;
+      S.attach[gid] = S.attach[gid] || {}; S.attach[gid][aid] = 1;
+      Snd.coin(); toast(at.name + ' fitted'); save(); UI.shop(); break; }
+    case 'unfit': {
+      const gid = parts[1], aid = parts[2];
+      if (S.attach[gid]) delete S.attach[gid][aid];
+      save(); UI.shop(); break; }
     case 'buyanti':
       if (S.coins < 2500){ toast('Not enough coins'); break; }
       S.coins -= 2500; S.antidotes++; Snd.coin(); toast('Antidote purchased (' + S.antidotes + ')');
@@ -4279,6 +4698,7 @@ function importSave(code){
     const d = defaultSave();
     for (const k of ['mats', 'cos', 'settings', 'weekly', 'season', 'stats', 'records', 'throwOwned'])
       S[k] = Object.assign(d[k], S[k] || {});
+    S.attach = S.attach || {};
     for (const k in ALLIES) if (!(k in S.allies)) S.allies[k] = 0;
     save(); applySettings();
     return true;
@@ -4639,6 +5059,8 @@ function tryInfect(t, chance, speed){
 function medicNear(t){
   for (const a of Game.allies)
     if (!a.dead && a.role === 'medic' && Math.abs(a.x - t.x) < 320) return true;
+  for (const n of Game.npcs)
+    if (!n.dead && n.heals && !n.turning && Math.abs(n.x - t.x) < 260) return true;
   return false;
 }
 function updateInfection(t, dt){
@@ -4646,11 +5068,14 @@ function updateInfection(t, dt){
   const slow = medicNear(t) ? .35 : 1;
   const rate = 1.55 * (t.infSp || 1) * Game.diffData.inf * slow * (1 - infResist(t) * .5);
   t.inf = clamp(t.inf + rate * dt, 0, INF_MAX);
-  if (t.inf > 55 && !t.infWarned){ t.infWarned = 1; Snd.infect();
-    toast(t === Game.player ? '⚠ INFECTION CRITICAL — USE AN ANTIDOTE' : '⚠ ' + ALLIES[t.allyId].name + ' IS TURNING', 2200); }
+  if (t.inf > 55 && !t.infWarned){
+    t.infWarned = 1; Snd.infect();
+    const who = t === Game.player ? null : t.allyId ? ALLIES[t.allyId].name : (t.npcName || 'A survivor');
+    toast(who ? '⚠ ' + who.toUpperCase() + ' IS TURNING' : '⚠ INFECTION CRITICAL — USE AN ANTIDOTE', 2200);
+  }
   if (Math.random() < dt * (t.inf / 40))
     part(t.x + rnd(-12, 12), t.y - rnd(20, 70), rnd(-16, 16), -rnd(18, 46), .7, '#6ad6a0', rnd(1.5, 3), 'dot');
-  if (t.inf >= INF_MAX) transform(t);
+  if (t.inf >= INF_MAX && !t.turning) beginTurning(t);
 }
 function cureEnt(t){
   if (!t || !t.inf) return false;
@@ -4670,17 +5095,20 @@ function useAntidote(){
   else {
     let worst = 0;
     for (const a of Game.allies) if (!a.dead && a.inf > worst){ worst = a.inf; target = a; }
+    for (const n of Game.npcs) if (!n.dead && !n.turning && n.inf > worst){ worst = n.inf; target = n; }
   }
   if (!target){ toast('Nobody is infected'); return; }
   Game.antidotes--;
   cureEnt(target);
-  toast(target === p ? 'ANTIDOTE USED — YOU ARE CLEAN' : ALLIES[target.allyId].name + ' IS CURED', 1800);
+  toast(target === p ? 'ANTIDOTE USED — YOU ARE CLEAN'
+        : ((target.allyId ? ALLIES[target.allyId].name : target.npcName) + ' IS CURED').toUpperCase(), 1800);
 }
 /* the virus wins */
 function transform(t){
   if (t.zombified) return;
   t.zombified = 1;
   if (t === Game.player){ startCinematic(); return; }
+  if (t.ally || t.npc){ becomeZombie(t); return; }
   // an ally turns and joins the horde
   const name = ALLIES[t.allyId].name;
   t.dead = true; t.downT = 1e9; t.gone = 1;
@@ -4695,6 +5123,300 @@ function transform(t){
     toast('SQUAD LOST', 2200);
     if (Game.startedWithAllies >= 1) { Game.squadWiped = 1; }
   }
+}
+
+/* =======================================================================
+   GUNPLAY — magazines, reloads, recoil, casings, muzzle flash, attachments
+   ======================================================================= */
+
+/* magazine size and reload time per weapon (guns only) */
+const MAGS = {
+  pistol:{ mag:12, rl:1.1 }, dual:{ mag:24, rl:1.5 }, revolver:{ mag:6, rl:1.7 },
+  smg:{ mag:32, rl:1.4 },   shotgun:{ mag:8, rl:2.0 }, rifle:{ mag:30, rl:1.6 },
+  sniper:{ mag:5, rl:2.2 }, lmg:{ mag:100, rl:3.4 },  mini:{ mag:200, rl:3.8 },
+  flame:{ mag:100, rl:2.4 }, laser:{ mag:60, rl:1.8 }, rocket:{ mag:1, rl:1.9 },
+  plasma:{ mag:12, rl:2.0 }, rail:{ mag:4, rl:2.4 }
+};
+const magSize = id => {
+  const m = MAGS[id]; if (!m) return 0;
+  return Math.round(m.mag * (hasAttach(id, 'extmag') ? 1.5 : 1));
+};
+const reloadTime = id => {
+  const m = MAGS[id]; if (!m) return .8;
+  return m.rl * (hasAttach(id, 'grip') ? .78 : 1);
+};
+
+/* ---------------------------------------------------------- attachments */
+const ATTACHMENTS = [
+  { id:'scope',  name:'Scope',            price:2200, desc:'+18% damage, tighter groups at range.' },
+  { id:'supp',   name:'Suppressor',       price:2600, desc:'Quieter, smaller flash, −20% recoil.' },
+  { id:'extmag', name:'Extended Magazine',price:1800, desc:'+50% magazine size.' },
+  { id:'laser',  name:'Laser Sight',      price:1500, desc:'−45% spread, visible beam.' },
+  { id:'grip',   name:'Foregrip',         price:1600, desc:'−35% recoil, −22% reload time.' }
+];
+const AMAP = {}; ATTACHMENTS.forEach(a => AMAP[a.id] = a);
+function hasAttach(id, a){ return !!(S.attach && S.attach[id] && S.attach[id][a]); }
+function attachDmg(id){ return hasAttach(id, 'scope') ? 1.18 : 1; }
+function attachSpread(id){ return hasAttach(id, 'laser') ? .55 : 1; }
+function attachRecoil(id){ return (hasAttach(id, 'grip') ? .65 : 1) * (hasAttach(id, 'supp') ? .8 : 1); }
+
+/* ------------------------------------------------------------- feedback */
+function muzzle(x, y, f, size){
+  const r = size || 1;
+  Game.flashes.push({ x: x + f * 8, y, r: 42 * r, t: 0, life: .07 });
+  for (let i = 0; i < 3 * r; i++)
+    part(x, y + rnd(-2, 2), f * rnd(120, 420), rnd(-90, 90), rnd(.05, .14), i % 2 ? '#fff3b0' : '#ffb04a', rnd(2, 4.5), 'spark');
+}
+function ejectCasing(x, y, f){
+  P.push({ x, y, vx: -f * rnd(60, 170), vy: -rnd(150, 260), t: 0, life: 1.4,
+    col: '#d8b45a', size: 2.6, type: 'casing', r: rnd(0, 6.28), vr: rnd(-16, 16) });
+  if (Math.random() < .3) Snd.casing();
+}
+function addRecoil(e, amount){
+  e.recoil = Math.min(1.2, (e.recoil || 0) + amount);
+  if (e === Game.player) shake(amount * 5);
+}
+
+/* --------------------------------------------------------- reload logic */
+function magOf(id){ return Game.mags[id] === undefined ? magSize(id) : Game.mags[id]; }
+function startReload(p, id){
+  if (p.reloadT > 0) return;
+  const reserve = Game.ammo[id] | 0;
+  if (reserve <= 0){ if (!p.dryT || p.dryT <= 0){ p.dryT = .5; Snd.tone(140, .06, 'square', .06); toast('Out of ammo — press ⟳ to switch', 900); } return; }
+  if (magOf(id) >= magSize(id)) return;
+  p.reloadT = reloadTime(id);
+  p.reloadId = id;
+  Snd.reload();
+}
+function finishReload(p){
+  const id = p.reloadId;
+  if (!id) return;
+  const want = magSize(id) - magOf(id);
+  const take = Math.min(want, Game.ammo[id] | 0);
+  Game.mags[id] = magOf(id) + take;
+  Game.ammo[id] = (Game.ammo[id] | 0) - take;
+  p.reloadId = null;
+  updateWeaponLabel();
+}
+
+/* -------------------------------------------------- flashbang and smoke */
+function flashbang(x){
+  Game.flashes.push({ x, y: GY - 70, r: 320, t: 0, life: .5 });
+  flashScreen(.85); Snd.boom(); shake(9);
+  for (const e of Game.enemies){
+    if (e.dead || e.boss) continue;
+    if (Math.abs(e.x - x) < 320){ e.stun = Math.max(e.stun, 3.4); e.blind = 4; e.flash = .3; }
+  }
+  toast('FLASHBANG', 900);
+}
+function smokeScreen(x){
+  Game.gear.push({ type: 'smokecloud', x, t: 9, max: 9, r: 150 });
+  for (let i = 0; i < 30; i++) smoke(x + rnd(-120, 120), GY - rnd(0, 90), 1, 'rgba(190,195,205,');
+  toast('SMOKE DEPLOYED', 900);
+}
+function inSmoke(x){
+  for (const g of Game.gear)
+    if (g.type === 'smokecloud' && Math.abs(g.x - x) < g.r) return true;
+  return false;
+}
+
+/* =======================================================================
+   HUMANS IN THE FIELD — survivors, soldiers, staged infection, turning
+   ======================================================================= */
+
+/* infection stages: 0 healthy · 1 slowing · 2 shaking · 3 losing the fight */
+function infStage(e){
+  const i = e.inf || 0;
+  return i <= 0 ? 0 : i < 38 ? 1 : i < 68 ? 2 : 3;
+}
+const infSlow = e => [1, .86, .68, .46][infStage(e)];        // movement multiplier
+const infAim  = e => [0, .05, .16, .40][infStage(e)];        // added shot spread
+const canHoldGun = e => infStage(e) < 3;                     // stage 3: hands shake too much
+
+/* the last two seconds of a human life, in five beats */
+function beginTurning(e){
+  if (e.turning) return;
+  e.turning = { t: 0, phase: 'stumble' };
+  e.inf = INF_MAX;
+  e.vx *= .3;
+  Snd.cough();
+  if (e === Game.player) return;
+  toast('☣ ' + (e.npcName || (e.allyId ? ALLIES[e.allyId].name : 'A SURVIVOR')) + ' IS TURNING', 1800);
+}
+function updateTurning(e, dt){
+  const T = e.turning;
+  T.t += dt;
+  // stumble → twitch → cough and vomit → collapse → rise
+  if (T.t < .7){ T.phase = 'stumble'; e.pose = 'hurt'; e.vx += rnd(-90, 90) * dt * 8; }
+  else if (T.t < 1.5){
+    T.phase = 'twitch'; e.pose = Math.floor(T.t * 22) % 2 ? 'block' : 'hurt';
+    e.x += rnd(-1.4, 1.4); e.vx *= .8;
+  } else if (T.t < 2.5){
+    T.phase = 'vomit'; e.pose = 'crawl'; e.vx *= .7;
+    if (!T.coughed){ T.coughed = 1; Snd.cough(); }
+    if (Math.random() < dt * 40)
+      part(e.x + e.face * rnd(10, 30), e.y - rnd(28, 44) * e.s, e.face * rnd(40, 170), rnd(-40, 90),
+        .8, '#8fd86a', rnd(2, 5), 'blood');
+  } else if (T.t < 3.2){
+    T.phase = 'collapse'; e.pose = 'hurt'; e.vx *= .5;
+    if (!T.fell){ T.fell = 1; Snd.hurt(); blood(e.x, e.y - 24 * e.s, e.face, 6); }
+  } else {
+    T.phase = 'rise';
+    if (!T.done){
+      T.done = 1;
+      if (e === Game.player) startCinematic();
+      else becomeZombie(e);
+    }
+  }
+  e.col = mixCol(e.baseCol || e.col, '#8fd8a0', clamp(T.t / 2.6, 0, 1) * .85);
+  if (Math.random() < dt * 9)
+    part(e.x + rnd(-12, 12), e.y - rnd(10, 60) * e.s, rnd(-24, 24), -rnd(20, 70), .8, '#6ad6a0', rnd(2, 4), 'dot');
+  physics(e, dt);
+}
+/* a human becomes part of the horde and hunts whatever is still breathing */
+function becomeZombie(e){
+  const z = makeEnemy('turned', e.x, 1);
+  z.col = '#8fd8a0';
+  z.headGear = e.headGear; z.gearCol = e.gearCol;
+  z.hp = z.maxHp = Math.max(90, (e.maxHp || 120) * .8);
+  z.turned = 1; z.face = e.face; z.y = e.y;
+  z.name = (e.npcName || (e.allyId ? ALLIES[e.allyId].name : 'Turned')) + ' (turned)';
+  Game.enemies.push(z);
+  Snd.bad(); shake(5); flashScreen(.2);
+  for (let i = 0; i < 20; i++)
+    part(e.x + rnd(-14, 14), e.y - rnd(0, 70), rnd(-60, 60), -rnd(30, 150), 1, '#6ad6a0', rnd(2, 5), 'dot');
+  if (e.ally){
+    Game.allies.splice(Game.allies.indexOf(e), 1);
+    S.stats.turned = (S.stats.turned || 0) + 1;
+    if (!Game.allies.length && Game.startedWithAllies) Game.squadWiped = 1;
+  } else {
+    const i = Game.npcs.indexOf(e);
+    if (i >= 0) Game.npcs.splice(i, 1);
+    Game.npcLost = (Game.npcLost || 0) + 1;
+  }
+}
+
+/* ------------------------------------------------------------ field NPCs */
+const NPC_KINDS = {
+  civilian: { name:'Civilian', hp:70,  spd:170, dmg:0,  col:'#3a3a44', gun:null,      headGear:'hair',   gearCol:'#8a5a3a', flee:1 },
+  survivor: { name:'Survivor', hp:130, spd:150, dmg:16, col:'#2f3a4a', gun:'pistol',  headGear:'cap',    gearCol:'#5a6a3a' },
+  medicN:   { name:'Paramedic',hp:120, spd:160, dmg:12, col:'#e8eef2', gun:'pistol',  headGear:'hair',   gearCol:'#cfd8e0', heals:1 },
+  soldierN: { name:'Soldier',  hp:230, spd:130, dmg:22, col:'#4d7fb0', gun:'rifle',   headGear:'helmet', gearCol:'#2a3546' }
+};
+function makeNPC(kind, x){
+  const k = NPC_KINDS[kind];
+  const e = makeEnt({
+    x, y: GY, team: 'p', npc: 1, npcKind: kind, npcName: k.name, col: k.col, baseCol: k.col,
+    hp: k.hp, maxHp: k.hp, dmg: k.dmg, spd: k.spd, s: .98, r: 24,
+    gunId: k.gun, wep: k.gun, headGear: k.headGear, gearCol: k.gearCol, eyes: '#fff',
+    pack: kind !== 'civilian', belt: 1, plate: kind === 'soldierN' ? 1 : 0,
+    packCol: kind === 'medicN' ? '#e8eef2' : '#3a4450', kit: kind === 'medicN' ? 'medic' : null,
+    flee: k.flee, heals: k.heals, inf: 0, infSp: 1, fireT: 0, mag: k.gun ? 12 : 0, reloadT: 0,
+    coverT: 0, roleT: rnd(0, 3)
+  });
+  Game.npcs.push(e);
+  return e;
+}
+function livingHumans(){
+  const out = [];
+  if (Game.player && !Game.player.dead && !Game.player.zombified) out.push(Game.player);
+  for (const a of Game.allies) if (!a.dead) out.push(a);
+  for (const n of Game.npcs) if (!n.dead && !n.turning) out.push(n);
+  return out;
+}
+function updateNPC(n, dt){
+  if (n.dead){ n.deadT += dt; n.pose = 'hurt'; physics(n, dt); return; }
+  if (n.turning){ updateTurning(n, dt); return; }
+  updateInfection(n, dt);
+  n.roleT -= dt;
+  if (n.fireT > 0) n.fireT -= dt;
+  if (n.reloadT > 0){
+    n.reloadT -= dt; n.pose = 'reload'; n.vx *= .85;
+    if (n.reloadT <= 0) n.mag = 12;
+    physics(n, dt); return;
+  }
+  let tgt = null, bd = 460;
+  for (const e of Game.enemies){
+    if (e.dead) continue;
+    const d = Math.abs(e.x - n.x);
+    if (d < bd){ bd = d; tgt = e; }
+  }
+  const spd = n.spd * infSlow(n);
+  // paramedics patch up whoever is worst off
+  if (n.heals && n.roleT <= 0){
+    let worst = null, frac = .8;
+    for (const t of livingHumans()){
+      const f = t.hp / t.maxHp;
+      if (f < frac && Math.abs(t.x - n.x) < 260){ frac = f; worst = t; }
+    }
+    if (worst){ n.roleT = 9; worst.hp = Math.min(worst.maxHp, worst.hp + worst.maxHp * .2);
+      for (let i = 0; i < 10; i++) part(worst.x + rnd(-12, 12), worst.y - rnd(10, 60), rnd(-20, 20), -rnd(30, 90), .6, '#ffffff', 3, 'dot');
+      Snd.cure(); }
+  }
+  if (n.flee || !n.gunId || !canHoldGun(n)){
+    // unarmed, or too sick to shoot: run for the player and stay behind them
+    const anchor = Game.player ? Game.player.x - Game.player.face * 70 : n.x;
+    const away = tgt && bd < 160 ? n.x + sign(n.x - tgt.x) * 200 : anchor;
+    const d = away - n.x;
+    if (Math.abs(d) > 40){ n.face = sign(d); n.vx += sign(d) * spd * 8 * dt; n.vx = clamp(n.vx, -spd, spd); n.pose = 'run'; }
+    else { n.vx *= .85; n.pose = infStage(n) >= 2 ? 'hurt' : 'block'; }
+    // stage 3 humans still swing at what is chewing on them
+    if (tgt && bd < 60 && n.fireT <= 0 && n.dmg){
+      n.fireT = 1.1; n.pose = 'punch'; n.poseT = 0;
+      hurtEnt(tgt, n.dmg * .6, { fromX: n.x, kb: 120, dir: sign(tgt.x - n.x) });
+    }
+  } else if (tgt){
+    n.face = sign(tgt.x - n.x) || 1;
+    const keep = 220;
+    if (bd > keep){ n.vx += n.face * spd * 7 * dt; n.pose = 'run'; }
+    else if (bd < keep * .55){ n.vx -= n.face * spd * 6 * dt; n.pose = 'run'; }
+    else { n.vx *= .84; n.pose = 'shoot'; }
+    n.vx = clamp(n.vx, -spd, spd);
+    if (n.fireT <= 0 && bd < 520){
+      if (n.mag <= 0){ n.reloadT = 1.6; Snd.reload(); physics(n, dt); return; }
+      n.mag--;
+      const w = WMAP[n.gunId] || { rate: .4, bs: 1000 };
+      n.fireT = w.rate * 2.2;
+      n.pose = 'shoot'; n.poseT = 0;
+      const spread = rnd(-.05, .05) + rnd(-1, 1) * infAim(n);
+      Game.shots.push({ x: n.x + n.face * 26, y: n.y - 60, vx: n.face * (w.bs || 1000) * Math.cos(spread),
+        vy: (w.bs || 1000) * spread * .5, team: 'p', type: 'bullet', dmg: n.dmg, life: 1.2, r: 4, col: '#ffe08a' });
+      muzzle(n.x + n.face * 30, n.y - 60, n.face); Snd.shot();
+    }
+  } else {
+    const anchor = Game.player ? Game.player.x - Game.player.face * 90 : n.x;
+    const d = anchor - n.x;
+    if (Math.abs(d) > 70){ n.face = sign(d); n.vx += sign(d) * spd * 6 * dt; n.vx = clamp(n.vx, -spd, spd); n.pose = 'run'; }
+    else { n.vx *= .85; n.pose = 'idle'; }
+  }
+  physics(n, dt);
+}
+function drawNPCs(){
+  for (const n of Game.npcs){
+    drawStick(n);
+    if (n.inf > 0 && !n.turning){
+      // infection tag above the head
+      const w = 26, x = n.x - w / 2, y = n.y - 100;
+      ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(x - 1, y - 1, w + 2, 5);
+      ctx.fillStyle = '#6ad6a0'; ctx.fillRect(x, y, w * clamp(n.inf / INF_MAX, 0, 1), 3);
+    }
+    if (!n.turning && n.npcKind === 'civilian'){
+      ctx.fillStyle = '#9fe8ff'; ctx.font = '10px Trebuchet MS'; ctx.textAlign = 'center';
+      ctx.fillText('!', n.x, n.y - 104); ctx.textAlign = 'left';
+    }
+  }
+}
+/* rescue / encounter events drop a knot of humans into a zombie mission */
+function spawnEncounter(x){
+  const roll = Math.random();
+  let members;
+  if (roll < .4) members = ['civilian', 'civilian', 'survivor'];
+  else if (roll < .7) members = ['survivor', 'survivor', 'medicN'];
+  else members = ['soldierN', 'soldierN', 'survivor'];
+  members.forEach((k, i) => makeNPC(k, x + i * 42));
+  Game.encounterActive = 1;
+  toast('SURVIVORS SPOTTED — KEEP THEM ALIVE', 2400);
+  Snd.ui();
 }
 
 /* --------------------------------------------------- failure cinematic */
