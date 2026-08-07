@@ -175,8 +175,8 @@
   #rotateTip{
     position:absolute;left:50%;top:32%;transform:translateX(-50%);
     z-index:7;background:rgba(20,22,28,.9);color:#fff;font-size:12.5px;font-weight:650;
-    padding:10px 15px;border-radius:99px;white-space:nowrap;pointer-events:none;
-    opacity:0;transition:opacity .4s ease;max-width:92vw;
+    padding:11px 17px;border-radius:18px;pointer-events:none;text-align:center;
+    opacity:0;transition:opacity .4s ease;max-width:76vw;line-height:1.45;
   }
   #rotateTip.show{opacity:1}
   #pauseOverlay{
@@ -1309,15 +1309,21 @@ function layout(s){
   const top = 18 + (window.visualViewport ? 0 : 0);
 
   if (mobile){
-    s.playerSize = clamp(Math.min(w / 5.0, h / 6.2), 46, 128);
-    s.oppSize    = clamp(s.playerSize * 0.42, 24, 52);
-    s.playerGap  = s.playerSize * 1.14;
+    // Tiles live in the thumb zone at the bottom and notes fall onto them, so
+    // the tap targets stay a bounded row instead of four full-height columns.
+    s.hudH       = 58;
+    s.playerSize = clamp(Math.min((w - 20) / 4.4, h / 6.4), 44, 118);
+    s.playerGap  = s.playerSize * 1.10;
     s.playerX    = w/2 - s.playerGap * 1.5;
-    s.strumY     = clamp(h * 0.16, 62, 150);
+    s.tileH      = s.playerSize * 1.26;
+    s.strumY     = h - s.hudH - s.tileH * 0.5 - 4;
+    s.dir        = -1;                       // downscroll
+    s.oppSize    = clamp(s.playerSize * 0.40, 22, 46);
     s.oppGap     = s.oppSize * 1.16;
-    s.oppX       = 14 + s.oppSize/2;
-    s.oppY       = 20 + s.oppSize/2;
+    s.oppX       = w/2 - s.oppGap * 1.5;
+    s.oppY       = 24 + s.oppSize/2;
     s.oppVisible = true;
+    s.oppNotes   = false;                    // receptors flash instead
   } else {
     s.playerSize = clamp(Math.min(w / 9.6, h / 8.4), 34, 82);
     s.oppSize    = s.playerSize;
@@ -1327,9 +1333,24 @@ function layout(s){
     s.playerX    = w/2 + s.playerGap * 0.5 + 6;
     s.strumY     = clamp(h * 0.14, 56, 130);
     s.oppY       = s.strumY;
+    s.dir        = 1;                        // upscroll
+    s.hudH       = 72;
+    s.tileH      = 0;
     s.oppVisible = true;
+    s.oppNotes   = true;
   }
   s.top = top;
+}
+
+function roundRectPath(g, x, y, w, h, r){
+  r = Math.min(r, w/2, h/2);
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w, y, x + w, y + r);
+  g.lineTo(x + w, y + h - r); g.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  g.lineTo(x + r, y + h); g.quadraticCurveTo(x, y + h, x, y + h - r);
+  g.lineTo(x, y + r); g.quadraticCurveTo(x, y, x + r, y);
+  g.closePath();
 }
 
 function laneX(s, lane, mine){
@@ -1526,6 +1547,9 @@ const pointerLane = new Map();
 function laneFromPoint(x, y){
   if (!game) return -1;
   const s = game;
+  // Mobile taps only count from the top of the tile row down — the note field
+  // above it is for watching, not tapping.
+  if (settings.mode === "mobile" && y < s.strumY - s.tileH * 0.5) return -1;
   const half = s.playerGap * 0.5;
   for (let l = 0; l < 4; l++){
     const cx = laneX(s, l, true);
@@ -1710,11 +1734,11 @@ function render(){
   /* --- characters --- */
   const beatPos = (s.time - SONG.chart.offset) / SONG.chart.beatLen;
   const bop = Math.max(0, Math.sin((beatPos % 1) * Math.PI)) * 3.5;
-  // Stand the cast on top of the HUD rather than behind it, and size them by
-  // the room actually left between the strumline and the health bar.
-  const hudH = mobile ? 58 : 72;
-  const charScale = clamp(Math.min(s.w / 560, (s.h - s.strumY - 120) / 230), 0.45, 1.3) * (mobile ? 0.86 : 1);
-  const groundY = s.h - hudH;
+  // Stand the cast on the floor of the play area: above the HUD on PC, above
+  // the tile row on mobile. Size them by the headroom that actually remains.
+  const groundY = mobile ? s.strumY - s.tileH * 0.5 - 6 : s.h - s.hudH;
+  const headroom = mobile ? groundY - s.oppY - 40 : s.h - s.strumY - 120;
+  const charScale = clamp(Math.min(s.w / 560, headroom / 230), 0.42, 1.3) * (mobile ? 0.8 : 1);
 
   g.save();
   g.globalAlpha = 0.95;
@@ -1730,12 +1754,17 @@ function render(){
   drawChar(g, CHARS.bf, s.bfPose, s.bfBlend, bop);
   g.restore();
 
-  /* --- lane guides (mobile tap zones) --- */
+  /* --- mobile tap tiles (a bounded row, not full-height columns) --- */
   if (mobile){
     for (let l = 0; l < 4; l++){
       const x = laneX(s, l, true);
-      g.fillStyle = s.held[l] ? "rgba(61,90,254,.07)" : "rgba(20,22,28,.022)";
-      g.fillRect(x - s.playerSize*0.6, s.strumY, s.playerSize*1.2, s.h - s.strumY);
+      const tw = s.playerGap - 7, th = s.tileH;
+      roundRectPath(g, x - tw/2, s.strumY - th/2, tw, th, s.playerSize * 0.26);
+      g.fillStyle = s.held[l] ? "rgba(61,90,254,.12)" : "rgba(20,22,28,.04)";
+      g.fill();
+      g.lineWidth = 1.5;
+      g.strokeStyle = s.held[l] ? "rgba(61,90,254,.35)" : "rgba(20,22,28,.09)";
+      g.stroke();
     }
   }
 
@@ -1770,42 +1799,43 @@ function render(){
     if (dt < -0.6 && (n.hit || !n.mustHit)) continue;
 
     const mine = n.mustHit;
-    // In Mobile Mode the opponent's strums are a small corner row — keep their
-    // notes close to it instead of sweeping them through the player's lanes.
-    if (!mine && mobile && dt > 0.9) continue;
+    // In Mobile Mode the opponent's row is a top-of-screen indicator that
+    // lights up as they sing; scrolling their notes too would just be clutter.
+    if (!mine && !s.oppNotes) continue;
     const size = mine ? s.playerSize : s.oppSize;
     const x = laneX(s, n.lane, mine);
     const baseY = laneY(s, mine);
-    const y = baseY + dt * pps;
+    const y = baseY + s.dir * dt * pps;
 
     if (y > s.h + size || y < -size - 4) {
       if (n.len <= 0) continue;
     }
 
-    // sustain trail
+    // sustain trail — extends away from the strum, whichever way we scroll
     if (n.len > 0){
-      const yEnd = baseY + (dt + n.len) * pps;
+      const yEnd = baseY + s.dir * (dt + n.len) * pps;
       const held = n.hit && (mine ? s.held[n.lane] : true);
-      const yTop = Math.max(n.hit ? baseY : -50, Math.min(y, yEnd));
-      g.save();
-      g.globalAlpha = n.hit ? (held ? 0.85 : 0.3) : 0.62;
-      g.fillStyle = LANE_COLORS[n.lane];
-      const tw = size * 0.30;
-      const a = Math.min(yTop, yEnd), b = Math.max(yTop, yEnd);
-      g.beginPath();
-      g.moveTo(x - tw/2, a);
-      g.lineTo(x + tw/2, a);
-      g.lineTo(x + tw/2, b - tw/2);
-      g.arc(x, b - tw/2, tw/2, 0, Math.PI);
-      g.closePath();
-      g.fill();
-      g.restore();
+      let a = Math.min(y, yEnd), b = Math.max(y, yEnd);
+      // once hit, only the part that has not reached the strum yet remains
+      if (n.hit){
+        if (s.dir > 0) a = Math.max(a, baseY);
+        else           b = Math.min(b, baseY);
+      }
+      if (b > a){
+        g.save();
+        g.globalAlpha = n.hit ? (held ? 0.85 : 0.3) : 0.62;
+        g.fillStyle = LANE_COLORS[n.lane];
+        const tw = size * 0.30;
+        roundRectPath(g, x - tw/2, a, tw, b - a, tw/2);
+        g.fill();
+        g.restore();
+      }
     }
 
     if (!n.hit && y >= -size && y <= s.h + size){
       g.save();
       if (mine && dt < 0) g.globalAlpha = clamp(1 + dt * 2.2, 0.25, 1);
-      if (!mine) g.globalAlpha = mobile ? 0.72 : 0.9;
+      if (!mine) g.globalAlpha = 0.9;
       drawArrow(g, x, y, size, n.lane, "filled", 1);
       g.restore();
     }
