@@ -1,0 +1,1935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>FNF Song Maker — V1.00</title>
+<style>
+  :root{
+    --bg:#ffffff;
+    --ink:#14161c;
+    --muted:#767b8a;
+    --line:#e6e8ef;
+    --accent:#3d5afe;
+    --accent-dark:#2a3fd4;
+    --pink:#ff5c9a;
+    --green:#22c55e;
+    --red:#ef4444;
+    --radius:18px;
+    --shadow:0 6px 18px rgba(20,22,28,.08);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    overflow:hidden;touch-action:manipulation;
+    -webkit-user-select:none;user-select:none;
+    overscroll-behavior:none;
+  }
+  #app{position:fixed;inset:0;overflow:hidden}
+
+  .screen{
+    position:absolute;inset:0;
+    display:flex;flex-direction:column;
+    padding:calc(env(safe-area-inset-top) + 18px) 18px calc(env(safe-area-inset-bottom) + 18px);
+    background:var(--bg);
+    opacity:0;transform:translateY(14px);
+    pointer-events:none;
+    transition:opacity .28s ease, transform .28s ease;
+    overflow-y:auto;-webkit-overflow-scrolling:touch;
+  }
+  .screen.active{opacity:1;transform:none;pointer-events:auto}
+  .screen.behind{opacity:0;transform:translateY(-10px)}
+
+  .wrap{width:100%;max-width:560px;margin:0 auto;flex:1;display:flex;flex-direction:column}
+
+  header.top{display:flex;align-items:center;gap:12px;margin-bottom:20px;min-height:44px}
+  header.top h2{font-size:20px;margin:0;font-weight:800;letter-spacing:-.4px}
+  .back{
+    width:42px;height:42px;flex:0 0 42px;border-radius:14px;border:1.5px solid var(--line);
+    background:#fff;display:grid;place-items:center;font-size:19px;color:var(--ink);
+    cursor:pointer;transition:transform .15s ease,background .15s ease;
+  }
+  .back:active{transform:scale(.93);background:#f4f5f9}
+
+  /* ---------- Title ---------- */
+  .brand{text-align:center;margin:6vh 0 5vh}
+  .brand .logo{
+    font-size:clamp(30px,9vw,46px);font-weight:900;letter-spacing:-1.6px;line-height:1;
+    background:linear-gradient(92deg,var(--accent),var(--pink));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .brand .sub{margin-top:10px;color:var(--muted);font-size:13px;font-weight:600;letter-spacing:.4px}
+  .arrows-row{display:flex;justify-content:center;gap:10px;margin-top:20px}
+  .mini-arrow{
+    width:44px;height:44px;border-radius:13px;display:grid;place-items:center;
+    font-size:18px;color:#fff;box-shadow:var(--shadow);
+    animation:bop 1.1s ease-in-out infinite;
+  }
+  .mini-arrow:nth-child(1){background:#c24bff;animation-delay:0s}
+  .mini-arrow:nth-child(2){background:#00e0ff;animation-delay:.1s}
+  .mini-arrow:nth-child(3){background:#12ca5c;animation-delay:.2s}
+  .mini-arrow:nth-child(4){background:#f5426c;animation-delay:.3s}
+  @keyframes bop{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+
+  /* ---------- Buttons ---------- */
+  .btn{
+    display:flex;align-items:center;justify-content:center;gap:10px;
+    width:100%;padding:17px 18px;margin-bottom:13px;
+    border-radius:var(--radius);border:none;
+    background:var(--accent);color:#fff;
+    font-size:16.5px;font-weight:750;font-family:inherit;
+    cursor:pointer;box-shadow:var(--shadow);
+    transition:transform .14s ease, box-shadow .14s ease, background .14s ease, opacity .14s ease;
+  }
+  .btn:active{transform:scale(.972);box-shadow:0 3px 10px rgba(20,22,28,.1)}
+  .btn.ghost{background:#fff;color:var(--ink);border:1.5px solid var(--line);box-shadow:none}
+  .btn.ghost:active{background:#f4f5f9}
+  .btn.pink{background:var(--pink)}
+  .btn.green{background:var(--green)}
+  .btn.small{padding:12px 14px;font-size:14px;border-radius:14px;margin-bottom:0;width:auto}
+  .btn[disabled]{opacity:.42;pointer-events:none}
+  .btn .ic{font-size:18px;line-height:1}
+
+  /* ---------- Cards ---------- */
+  .card{
+    border:1.5px solid var(--line);border-radius:var(--radius);
+    padding:16px;margin-bottom:14px;background:#fff;
+  }
+  .card h3{margin:0 0 4px;font-size:15.5px;font-weight:800;letter-spacing:-.2px}
+  .card .hint{margin:0 0 13px;font-size:12.5px;color:var(--muted);line-height:1.5}
+  .lbl{font-size:11.5px;font-weight:800;color:var(--muted);letter-spacing:.7px;text-transform:uppercase;margin-bottom:8px}
+
+  .seg{display:flex;gap:7px;background:#f3f4f8;padding:5px;border-radius:14px}
+  .seg button{
+    flex:1;padding:10px 6px;border:none;border-radius:10px;background:transparent;
+    font-family:inherit;font-size:13.5px;font-weight:750;color:var(--muted);cursor:pointer;
+    transition:background .18s ease,color .18s ease,box-shadow .18s ease;
+  }
+  .seg button.on{background:#fff;color:var(--ink);box-shadow:0 2px 6px rgba(20,22,28,.09)}
+
+  .filerow{display:flex;align-items:center;gap:11px;margin-top:12px}
+  .filerow .status{
+    flex:1;min-width:0;font-size:12.5px;color:var(--muted);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .filerow .status.ok{color:var(--green);font-weight:700}
+  input[type=file]{display:none}
+
+  .setting{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 0;border-bottom:1px solid var(--line)}
+  .setting:last-child{border-bottom:none}
+  .setting .name{font-size:14.5px;font-weight:650}
+  .setting .val{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:52px;text-align:right}
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;width:150px;height:5px;border-radius:99px;background:var(--line);outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:21px;height:21px;border-radius:50%;background:var(--accent);
+    box-shadow:0 2px 6px rgba(61,90,254,.4);cursor:pointer;
+  }
+  input[type=range]::-moz-range-thumb{width:21px;height:21px;border:none;border-radius:50%;background:var(--accent);cursor:pointer}
+
+  .switch{width:52px;height:31px;border-radius:99px;background:var(--line);position:relative;cursor:pointer;transition:background .2s ease;flex:0 0 52px}
+  .switch::after{content:"";position:absolute;top:3px;left:3px;width:25px;height:25px;border-radius:50%;background:#fff;box-shadow:0 2px 5px rgba(0,0,0,.2);transition:transform .2s ease}
+  .switch.on{background:var(--green)}
+  .switch.on::after{transform:translateX(21px)}
+
+  .note{font-size:12px;color:var(--muted);line-height:1.6;background:#f7f8fb;border-radius:14px;padding:12px 14px;margin-bottom:14px}
+  .note b{color:var(--ink)}
+
+  /* ---------- Progress ---------- */
+  #progressScreen .wrap{justify-content:center;text-align:center}
+  .bar{height:11px;background:var(--line);border-radius:99px;overflow:hidden;margin:22px 0 12px}
+  .bar>i{display:block;height:100%;width:0%;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--pink));transition:width .32s ease}
+  #progStage{font-size:16px;font-weight:750;min-height:22px}
+  #progPct{font-size:34px;font-weight:900;letter-spacing:-1.4px;font-variant-numeric:tabular-nums}
+  #progSub{font-size:12.5px;color:var(--muted);margin-top:6px;min-height:18px}
+  .spinner{width:46px;height:46px;margin:0 auto 20px;border-radius:50%;border:4px solid var(--line);border-top-color:var(--accent);animation:spin .85s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ---------- Sprite preview ---------- */
+  .preview{width:100%;height:250px;border:1.5px solid var(--line);border-radius:var(--radius);background:#fff;display:block}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .chip{
+    padding:9px 13px;border-radius:12px;border:1.5px solid var(--line);background:#fff;
+    font-family:inherit;font-size:12.5px;font-weight:700;color:var(--ink);cursor:pointer;transition:all .15s ease;
+  }
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .chip:active{transform:scale(.95)}
+
+  .statgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:11px;margin-bottom:16px}
+  .stat{border:1.5px solid var(--line);border-radius:15px;padding:13px}
+  .stat .k{font-size:11px;font-weight:800;color:var(--muted);letter-spacing:.6px;text-transform:uppercase}
+  .stat .v{font-size:20px;font-weight:850;margin-top:3px;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
+
+  /* ---------- Game ---------- */
+  #gameScreen{padding:0;background:#fff;overflow:hidden}
+  #gameCanvas{display:block;width:100%;height:100%;touch-action:none}
+  #pauseBtn{
+    position:absolute;top:calc(env(safe-area-inset-top) + 10px);right:12px;z-index:6;
+    width:40px;height:40px;border-radius:13px;border:1.5px solid var(--line);background:rgba(255,255,255,.9);
+    font-size:15px;cursor:pointer;display:grid;place-items:center;color:var(--ink);
+  }
+  #rotateTip{
+    position:absolute;left:50%;top:32%;transform:translateX(-50%);
+    z-index:7;background:rgba(20,22,28,.9);color:#fff;font-size:12.5px;font-weight:650;
+    padding:10px 15px;border-radius:99px;white-space:nowrap;pointer-events:none;
+    opacity:0;transition:opacity .4s ease;max-width:92vw;
+  }
+  #rotateTip.show{opacity:1}
+  #pauseOverlay{
+    position:absolute;inset:0;z-index:8;background:rgba(255,255,255,.96);
+    display:none;flex-direction:column;align-items:center;justify-content:center;padding:24px;
+  }
+  #pauseOverlay.show{display:flex}
+  #pauseOverlay h2{font-size:26px;font-weight:900;margin:0 0 22px;letter-spacing:-.8px}
+  #pauseOverlay .btn{max-width:300px}
+
+  .center-note{text-align:center;color:var(--muted);font-size:12.5px;margin-top:auto;padding-top:18px;line-height:1.6}
+  .spacer{flex:1}
+  .rank{font-size:52px;font-weight:900;letter-spacing:-2px;text-align:center;margin:4px 0 2px}
+  .rank.s{color:#f5a623}.rank.a{color:var(--green)}.rank.b{color:var(--accent)}
+  .rank.c{color:#8b5cf6}.rank.f{color:var(--red)}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ MENU ============ -->
+  <section class="screen active" id="menuScreen">
+    <div class="wrap">
+      <div class="brand">
+        <div class="logo">FNF SONG MAKER</div>
+        <div class="sub">V1.00</div>
+        <div class="arrows-row">
+          <div class="mini-arrow">←</div><div class="mini-arrow">↓</div>
+          <div class="mini-arrow">↑</div><div class="mini-arrow">→</div>
+        </div>
+      </div>
+      <button class="btn" data-go="editorScreen"><span class="ic">🎵</span>Editor</button>
+      <button class="btn ghost" data-go="spritesScreen"><span class="ic">🕺</span>Sprites</button>
+      <button class="btn ghost" data-go="settingsScreen"><span class="ic">⚙️</span>Settings</button>
+      <div class="spacer"></div>
+      <p class="center-note">Import your own Instrumental &amp; Vocals,<br>then let the game chart the song for you.</p>
+    </div>
+  </section>
+
+  <!-- ============ EDITOR ============ -->
+  <section class="screen" id="editorScreen">
+    <div class="wrap">
+      <header class="top"><button class="back" data-go="menuScreen">←</button><h2>Editor</h2></header>
+
+      <div class="card">
+        <h3>Instrumental</h3>
+        <p class="hint">The music track without vocals. Drives beat &amp; tempo detection.</p>
+        <div class="lbl">Format</div>
+        <div class="seg" id="instFormat">
+          <button class="on" data-fmt="m4a">M4A</button>
+          <button data-fmt="mp3">MP3</button>
+          <button data-fmt="ogg">OGG</button>
+        </div>
+        <div class="filerow">
+          <button class="btn small ghost" id="instPick">Import Instrumental</button>
+          <span class="status" id="instStatus">No file selected</span>
+        </div>
+        <input type="file" id="instFile" accept=".m4a,audio/mp4,audio/x-m4a">
+      </div>
+
+      <div class="card">
+        <h3>Vocals</h3>
+        <p class="hint">The isolated voice track. Drives note placement for both characters.</p>
+        <div class="lbl">Format</div>
+        <div class="seg" id="vocFormat">
+          <button class="on" data-fmt="m4a">M4A</button>
+          <button data-fmt="mp3">MP3</button>
+          <button data-fmt="ogg">OGG</button>
+        </div>
+        <div class="filerow">
+          <button class="btn small ghost" id="vocPick">Import Vocals</button>
+          <span class="status" id="vocStatus">No file selected</span>
+        </div>
+        <input type="file" id="vocFile" accept=".m4a,audio/mp4,audio/x-m4a">
+      </div>
+
+      <button class="btn pink" id="autoChartBtn" disabled><span class="ic">✨</span>Auto Chart Song</button>
+      <p class="center-note">Charting usually takes a few seconds, and up to <b>1–3 minutes</b> for a long song on an older phone.<br>Keep this screen open while it works.</p>
+    </div>
+  </section>
+
+  <!-- ============ PROGRESS ============ -->
+  <section class="screen" id="progressScreen">
+    <div class="wrap">
+      <div class="spinner"></div>
+      <div id="progPct">0%</div>
+      <div class="bar"><i id="progBar"></i></div>
+      <div id="progStage">Reading audio...</div>
+      <div id="progSub"></div>
+      <div class="spacer"></div>
+      <button class="btn ghost" id="cancelChart">Cancel</button>
+    </div>
+  </section>
+
+  <!-- ============ CHART READY ============ -->
+  <section class="screen" id="readyScreen">
+    <div class="wrap">
+      <header class="top"><button class="back" data-go="editorScreen">←</button><h2>Chart Ready</h2></header>
+      <div class="statgrid">
+        <div class="stat"><div class="k">BPM</div><div class="v" id="stBpm">—</div></div>
+        <div class="stat"><div class="k">Length</div><div class="v" id="stLen">—</div></div>
+        <div class="stat"><div class="k">Notes</div><div class="v" id="stNotes">—</div></div>
+        <div class="stat"><div class="k">Sections</div><div class="v" id="stSec">—</div></div>
+      </div>
+      <div class="note">Chart synced to the detected beat grid — notes are snapped to 16ths (finer on slow songs) so every tap lands on the music.</div>
+      <button class="btn green" id="playBtn"><span class="ic">▶</span>Play Chart</button>
+      <button class="btn ghost" id="exportBtn"><span class="ic">⬇</span>Export Chart (.json)</button>
+      <button class="btn ghost" data-go="settingsScreen"><span class="ic">⚙️</span>Gameplay Settings</button>
+      <div class="spacer"></div>
+      <p class="center-note" id="readyMode"></p>
+    </div>
+  </section>
+
+  <!-- ============ SPRITES ============ -->
+  <section class="screen" id="spritesScreen">
+    <div class="wrap">
+      <header class="top"><button class="back" data-go="menuScreen">←</button><h2>Sprites</h2></header>
+      <p class="hint" style="color:var(--muted);font-size:12.5px;margin:-8px 0 14px">Choose who appears in the chart.</p>
+
+      <canvas class="preview" id="spritePreview"></canvas>
+
+      <div class="chips" id="poseChips">
+        <button class="chip on" data-pose="idle">Idle</button>
+        <button class="chip" data-pose="left">Left</button>
+        <button class="chip" data-pose="down">Down</button>
+        <button class="chip" data-pose="up">Up</button>
+        <button class="chip" data-pose="right">Right</button>
+        <button class="chip" data-pose="miss">Miss</button>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <h3>Player</h3>
+        <p class="hint">Boyfriend — idle, left / down / up / right singing, and miss animations.</p>
+        <div class="seg" id="playerSel">
+          <button class="on" data-char="bf">Boyfriend</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Opponent</h3>
+        <p class="hint">The character on the left side of the stage.</p>
+        <div class="seg" id="oppSel">
+          <button class="on" data-char="demo">Demo Opponent</button>
+        </div>
+      </div>
+
+      <div class="note">Tap a pose above to preview it. The <b>Miss</b> animation only exists for Boyfriend — the opponent never misses.</div>
+    </div>
+  </section>
+
+  <!-- ============ SETTINGS ============ -->
+  <section class="screen" id="settingsScreen">
+    <div class="wrap">
+      <header class="top"><button class="back" data-go="menuScreen">←</button><h2>Settings</h2></header>
+
+      <div class="card">
+        <h3>Gameplay Layout</h3>
+        <p class="hint">Choose your preferred control style.</p>
+        <div class="seg" id="modeSel">
+          <button data-mode="pc">PC Mode</button>
+          <button class="on" data-mode="mobile">Mobile Mode</button>
+        </div>
+        <p class="hint" id="modeHint" style="margin:12px 0 0"></p>
+      </div>
+
+      <div class="card">
+        <h3>Audio &amp; Feel</h3>
+        <div class="setting">
+          <span class="name">Music Volume</span>
+          <span style="display:flex;align-items:center;gap:10px">
+            <input type="range" id="sMusic" min="0" max="100" step="1">
+            <span class="val" id="vMusic">100%</span>
+          </span>
+        </div>
+        <div class="setting">
+          <span class="name">Vocal Volume</span>
+          <span style="display:flex;align-items:center;gap:10px">
+            <input type="range" id="sVocal" min="0" max="100" step="1">
+            <span class="val" id="vVocal">100%</span>
+          </span>
+        </div>
+        <div class="setting">
+          <span class="name">Scroll Speed</span>
+          <span style="display:flex;align-items:center;gap:10px">
+            <input type="range" id="sSpeed" min="10" max="45" step="1">
+            <span class="val" id="vSpeed">2.0x</span>
+          </span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Display</h3>
+        <div class="setting"><span class="name">FPS Counter</span><div class="switch" id="tFps"></div></div>
+        <div class="setting"><span class="name">Note Splash</span><div class="switch" id="tSplash"></div></div>
+      </div>
+
+      <button class="btn ghost" id="resetSettings">Reset to Defaults</button>
+      <p class="center-note">Settings are saved on this device.</p>
+    </div>
+  </section>
+
+  <!-- ============ GAME ============ -->
+  <section class="screen" id="gameScreen">
+    <canvas id="gameCanvas"></canvas>
+    <button id="pauseBtn">⏸</button>
+    <div id="rotateTip">For the best experience, tilt your device into landscape mode.</div>
+    <div id="pauseOverlay">
+      <h2>Paused</h2>
+      <button class="btn" id="resumeBtn">Resume</button>
+      <button class="btn ghost" id="restartBtn">Restart Song</button>
+      <button class="btn ghost" id="quitBtn">Quit to Menu</button>
+    </div>
+  </section>
+
+  <!-- ============ RESULTS ============ -->
+  <section class="screen" id="resultsScreen">
+    <div class="wrap">
+      <header class="top"><h2 id="resTitle">Song Cleared</h2></header>
+      <div class="rank" id="resRank">S</div>
+      <p class="center-note" style="margin:0 0 20px" id="resAcc">100.00%</p>
+      <div class="statgrid">
+        <div class="stat"><div class="k">Score</div><div class="v" id="resScore">0</div></div>
+        <div class="stat"><div class="k">Max Combo</div><div class="v" id="resCombo">0</div></div>
+        <div class="stat"><div class="k">Sicks</div><div class="v" id="resSick">0</div></div>
+        <div class="stat"><div class="k">Misses</div><div class="v" id="resMiss">0</div></div>
+      </div>
+      <button class="btn" id="againBtn">Play Again</button>
+      <button class="btn ghost" data-go="readyScreen">Back to Chart</button>
+      <button class="btn ghost" data-go="menuScreen">Main Menu</button>
+    </div>
+  </section>
+
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+   FNF Song Maker — V1.00
+   Single-file mobile chart maker + rhythm game.
+   ===================================================================== */
+
+/* ------------------------- tiny helpers ------------------------- */
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const clamp = (v,a,b) => v < a ? a : v > b ? b : v;
+const lerp  = (a,b,t) => a + (b-a)*t;
+const fmtTime = s => { s = Math.max(0, Math.floor(s)); return Math.floor(s/60)+":"+String(s%60).padStart(2,"0"); };
+const nextFrame = () => new Promise(r => setTimeout(r, 0));
+
+/* ------------------------- screens ------------------------- */
+let currentScreen = "menuScreen";
+function show(id){
+  if (id === currentScreen) return;
+  const from = document.getElementById(currentScreen);
+  const to   = document.getElementById(id);
+  if (from){ from.classList.remove("active"); from.classList.add("behind"); }
+  to.classList.remove("behind");
+  // force reflow so the transition always plays
+  void to.offsetWidth;
+  to.classList.add("active");
+  to.scrollTop = 0;
+  currentScreen = id;
+  if (id === "spritesScreen") startPreviewLoop(); else stopPreviewLoop();
+}
+$$("[data-go]").forEach(b => b.addEventListener("click", () => show(b.dataset.go)));
+
+/* ------------------------- settings ------------------------- */
+const DEFAULTS = { mode:"mobile", music:100, vocal:100, speed:20, fps:false, splash:true };
+let settings = Object.assign({}, DEFAULTS);
+try{
+  const raw = localStorage.getItem("fnfsm_settings");
+  if (raw) settings = Object.assign({}, DEFAULTS, JSON.parse(raw));
+}catch(e){ /* storage unavailable — defaults are fine */ }
+const saveSettings = () => { try{ localStorage.setItem("fnfsm_settings", JSON.stringify(settings)); }catch(e){} };
+const scrollPxPerSec = () => (settings.speed / 10) * 235;
+
+const MODE_HINTS = {
+  pc: "Traditional four-lane keyboard layout. Use D F J K or the arrow keys.",
+  mobile: "Large touch note tiles designed for phones. For the best experience, tilt your device into landscape mode."
+};
+
+function paintSettings(){
+  $$("#modeSel button").forEach(b => b.classList.toggle("on", b.dataset.mode === settings.mode));
+  $("#modeHint").textContent = MODE_HINTS[settings.mode];
+  $("#sMusic").value = settings.music; $("#vMusic").textContent = settings.music + "%";
+  $("#sVocal").value = settings.vocal; $("#vVocal").textContent = settings.vocal + "%";
+  $("#sSpeed").value = settings.speed; $("#vSpeed").textContent = (settings.speed/10).toFixed(1) + "x";
+  $("#tFps").classList.toggle("on", settings.fps);
+  $("#tSplash").classList.toggle("on", settings.splash);
+  $("#readyMode").textContent = settings.mode === "pc"
+    ? "PC Mode — keys D F J K or arrow keys."
+    : "Mobile Mode — tap the four lanes. Landscape recommended.";
+}
+$$("#modeSel button").forEach(b => b.addEventListener("click", () => { settings.mode = b.dataset.mode; saveSettings(); paintSettings(); }));
+$("#sMusic").addEventListener("input", e => { settings.music = +e.target.value; saveSettings(); paintSettings(); applyLiveVolumes(); });
+$("#sVocal").addEventListener("input", e => { settings.vocal = +e.target.value; saveSettings(); paintSettings(); applyLiveVolumes(); });
+$("#sSpeed").addEventListener("input", e => { settings.speed = +e.target.value; saveSettings(); paintSettings(); });
+$("#tFps").addEventListener("click", () => { settings.fps = !settings.fps; saveSettings(); paintSettings(); });
+$("#tSplash").addEventListener("click", () => { settings.splash = !settings.splash; saveSettings(); paintSettings(); });
+$("#resetSettings").addEventListener("click", () => { settings = Object.assign({}, DEFAULTS); saveSettings(); paintSettings(); applyLiveVolumes(); });
+paintSettings();
+
+/* ------------------------- file import ------------------------- */
+const ACCEPT = {
+  m4a: ".m4a,audio/mp4,audio/x-m4a,audio/aac",
+  mp3: ".mp3,audio/mpeg",
+  ogg: ".ogg,audio/ogg,application/ogg"
+};
+const picked = { inst:null, voc:null };
+
+function wireFormat(segId, inputId){
+  $$("#" + segId + " button").forEach(b => b.addEventListener("click", () => {
+    $$("#" + segId + " button").forEach(x => x.classList.remove("on"));
+    b.classList.add("on");
+    $("#" + inputId).setAttribute("accept", ACCEPT[b.dataset.fmt]);
+  }));
+}
+wireFormat("instFormat", "instFile");
+wireFormat("vocFormat", "vocFile");
+
+function wirePicker(btnId, inputId, statusId, key){
+  $("#" + btnId).addEventListener("click", () => $("#" + inputId).click());
+  $("#" + inputId).addEventListener("change", e => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    picked[key] = f;
+    const el = $("#" + statusId);
+    el.textContent = f.name + "  (" + (f.size/1048576).toFixed(1) + " MB)";
+    el.classList.add("ok");
+    $("#autoChartBtn").disabled = !(picked.inst && picked.voc);
+  });
+}
+wirePicker("instPick", "instFile", "instStatus", "inst");
+wirePicker("vocPick",  "vocFile",  "vocStatus",  "voc");
+
+/* =====================================================================
+   AUDIO ANALYSIS
+   ===================================================================== */
+let audioCtx = null;
+function getCtx(){
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  return audioCtx;
+}
+
+/* in-place iterative radix-2 FFT */
+function fft(re, im){
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++){
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j){
+      let t = re[i]; re[i] = re[j]; re[j] = t;
+      t = im[i]; im[i] = im[j]; im[j] = t;
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1){
+    const ang = -2 * Math.PI / len;
+    const wr = Math.cos(ang), wi = Math.sin(ang);
+    const half = len >> 1;
+    for (let i = 0; i < n; i += len){
+      let cr = 1, ci = 0;
+      for (let k = 0; k < half; k++){
+        const ar = re[i+k], ai = im[i+k];
+        const br = re[i+k+half], bi = im[i+k+half];
+        const vr = br*cr - bi*ci, vi = br*ci + bi*cr;
+        re[i+k] = ar + vr;      im[i+k] = ai + vi;
+        re[i+k+half] = ar - vr; im[i+k+half] = ai - vi;
+        const ncr = cr*wr - ci*wi;
+        ci = cr*wi + ci*wr; cr = ncr;
+      }
+    }
+  }
+}
+
+const WIN = 512, HOP = 256, TARGET_SR = 22050;
+
+/* mono downmix + decimate to ~22.05 kHz */
+function toMono(buffer){
+  const n = buffer.length, ch = buffer.numberOfChannels;
+  const a = buffer.getChannelData(0);
+  const b = ch > 1 ? buffer.getChannelData(1) : null;
+  const factor = Math.max(1, Math.round(buffer.sampleRate / TARGET_SR));
+  const outLen = Math.floor(n / factor);
+  const out = new Float32Array(outLen);
+  for (let i = 0; i < outLen; i++){
+    let acc = 0;
+    const base = i * factor;
+    for (let k = 0; k < factor; k++){
+      const idx = base + k;
+      acc += b ? (a[idx] + b[idx]) * 0.5 : a[idx];
+    }
+    out[i] = acc / factor;
+  }
+  return { data: out, sr: buffer.sampleRate / factor };
+}
+
+/* Spectral flux / RMS / centroid envelopes. Yields to the UI as it goes. */
+async function analyzeTrack(buffer, onProg){
+  const { data, sr } = toMono(buffer);
+  const frames = Math.max(1, Math.floor((data.length - WIN) / HOP));
+  const bins = WIN >> 1;
+
+  const flux     = new Float32Array(frames);
+  const rms      = new Float32Array(frames);
+  const centroid = new Float32Array(frames);
+
+  const win = new Float32Array(WIN);
+  for (let i = 0; i < WIN; i++) win[i] = 0.5 - 0.5 * Math.cos(2*Math.PI*i/(WIN-1)); // Hann
+
+  const re = new Float32Array(WIN), im = new Float32Array(WIN);
+  let prev = new Float32Array(bins), cur = new Float32Array(bins);
+  let yieldAt = performance.now();
+
+  for (let f = 0; f < frames; f++){
+    const off = f * HOP;
+    let energy = 0;
+    for (let i = 0; i < WIN; i++){
+      const s = data[off + i];
+      energy += s * s;
+      re[i] = s * win[i];
+      im[i] = 0;
+    }
+    rms[f] = Math.sqrt(energy / WIN);
+
+    fft(re, im);
+
+    let fl = 0, wsum = 0, msum = 0;
+    for (let k = 0; k < bins; k++){
+      const mag = Math.sqrt(re[k]*re[k] + im[k]*im[k]);
+      cur[k] = mag;
+      const d = mag - prev[k];
+      if (d > 0) fl += d;             // half-wave rectified flux
+      wsum += mag * k;
+      msum += mag;
+    }
+    flux[f] = fl;
+    centroid[f] = msum > 1e-9 ? (wsum / msum) * (sr / WIN) : 0;
+
+    const t = prev; prev = cur; cur = t;
+
+    if ((f & 63) === 0 && performance.now() - yieldAt > 45){
+      yieldAt = performance.now();
+      if (onProg) onProg(f / frames);
+      await nextFrame();
+      if (chartCancelled) throw new Error("cancelled");
+    }
+  }
+  if (onProg) onProg(1);
+  return { flux, rms, centroid, fps: sr / HOP, dur: buffer.duration };
+}
+
+/* normalise an envelope to 0..1 */
+function normalise(arr){
+  let mx = 0;
+  for (let i = 0; i < arr.length; i++) if (arr[i] > mx) mx = arr[i];
+  if (mx <= 0) return arr;
+  const out = new Float32Array(arr.length);
+  for (let i = 0; i < arr.length; i++) out[i] = arr[i] / mx;
+  return out;
+}
+
+/* tempo + downbeat phase from an onset envelope */
+function detectTempo(env, fps){
+  // subtract a moving average so the autocorrelation sees pulses, not loudness
+  const n = env.length;
+  const w = Math.round(fps * 0.35);
+  const d = new Float32Array(n);
+  let run = 0;
+  for (let i = 0; i < n; i++){
+    run += env[i];
+    if (i >= w) run -= env[i - w];
+    const mean = run / Math.min(i + 1, w);
+    d[i] = Math.max(0, env[i] - mean);
+  }
+
+  const minBpm = 70, maxBpm = 190;
+  const minLag = Math.floor(fps * 60 / maxBpm);
+  const maxLag = Math.ceil(fps * 60 / minBpm);
+  const score = new Float64Array(maxLag + 2);
+  let bestLag = minLag, bestScore = -1;
+
+  for (let lag = minLag; lag <= maxLag; lag++){
+    let s = 0;
+    for (let i = lag; i < n; i++) s += d[i] * d[i - lag];
+    s /= (n - lag);
+    // favour tempos near 128 BPM a touch — keeps halved/doubled picks honest
+    const bpm = fps * 60 / lag;
+    s *= 1 - 0.16 * Math.abs(Math.log2(bpm / 128));
+    score[lag] = s;
+    if (s > bestScore){ bestScore = s; bestLag = lag; }
+  }
+
+  // Integer lags are coarse: at ~86 fps one lag step near 128 BPM is ~3 BPM,
+  // which drifts the beat grid by half a beat across a 3-minute song. Fit a
+  // parabola through the peak's neighbours for a sub-frame lag.
+  let refined = bestLag;
+  if (bestLag > minLag && bestLag < maxLag){
+    const a = score[bestLag-1], b = score[bestLag], c = score[bestLag+1];
+    const den = a - 2*b + c;
+    if (den < 0) refined = bestLag + clamp(0.5 * (a - c) / den, -0.5, 0.5);
+  }
+
+  // Fold into the range real charts live in. The bounds are deliberately wide
+  // enough that a genuine 90 BPM song is not doubled into 180.
+  let coarse = fps * 60 / refined;
+  while (coarse < 85)  coarse *= 2;
+  while (coarse > 175) coarse /= 2;
+
+  // Joint (tempo, phase) refinement. Autocorrelation alone leaves a few tenths
+  // of a BPM of error, which is enough to slide the grid off the beat by the
+  // end of a long song, so score an actual comb against the envelope and keep
+  // the best pair.
+  const comb = (lag, off) => {
+    let sum = 0, cnt = 0;
+    for (let p = off; p < n; p += lag){
+      const i = Math.round(p);
+      if (i >= 0 && i < n){ sum += d[i]; cnt++; }
+    }
+    return cnt ? sum / cnt : -1;
+  };
+
+  let bpm = coarse, bestOff = 0, bestSum = -1;
+  const TRIALS = 240;
+  for (let s = 0; s <= TRIALS; s++){
+    const cand = coarse * (0.97 + 0.06 * s / TRIALS);
+    const lag = fps * 60 / cand;
+    const steps = Math.max(12, Math.round(lag));
+    for (let k = 0; k < steps; k++){
+      const off = k * lag / steps;
+      const v = comb(lag, off);
+      if (v > bestSum){ bestSum = v; bpm = cand; bestOff = off; }
+    }
+  }
+
+  // Octave check. An alternating kick/snare pattern autocorrelates ~2x better
+  // at half tempo (kick against kick beats kick against snare), so the peak
+  // often lands an octave low. The honest test is whether the half-beat
+  // positions carry onsets too: if they do, the faster reading is the real
+  // beat; if they are silent, the slower one was right.
+  {
+    const lag = fps * 60 / bpm;
+    const base = comb(lag, bestOff);
+    if (bpm < 105 && bpm * 2 <= 190 && base > 0){
+      if (comb(lag / 2, bestOff) / base >= 0.62) bpm *= 2;
+    }
+  }
+
+  // Frame f covers samples [f*HOP, f*HOP+WIN), so its true centre sits half a
+  // window later. pickOnsets applies the same shift — keep them consistent.
+  const centre = WIN / (2 * HOP);
+  return { bpm, offset: (bestOff + centre) / fps, beatLen: 60 / bpm };
+}
+
+/* Quantisation step. Independent of the octave the detector settled on: a
+   slow reading must not cost grid resolution, so keep subdividing until the
+   step is fine enough to place fast material accurately. */
+function gridStep(beatLen){
+  let step = beatLen / 4;              // 16ths
+  while (step > 0.13) step /= 2;       // ...32nds and finer at slow tempos
+  return step;
+}
+
+/* adaptive peak picking → onset times (seconds) */
+function pickOnsets(env, fps, sensitivity){
+  const n = env.length;
+  const half = Math.round(fps * 0.12);
+  const out = [];
+  const minGap = Math.round(fps * 0.075);
+  let last = -1e9;
+
+  for (let i = 1; i < n - 1; i++){
+    const v = env[i];
+    if (v <= env[i-1] || v < env[i+1]) continue;       // local maximum only
+    let sum = 0, cnt = 0;
+    const a = Math.max(0, i - half), b = Math.min(n - 1, i + half);
+    for (let k = a; k <= b; k++){ sum += env[k]; cnt++; }
+    const thresh = (sum / cnt) * sensitivity + 0.012;
+    if (v > thresh && i - last >= minGap){
+      out.push((i + WIN / (2 * HOP)) / fps);   // report the window centre
+      last = i;
+    }
+  }
+  return out;
+}
+
+/* =====================================================================
+   CHART BUILDER
+   ===================================================================== */
+let chartCancelled = false;
+let SONG = null;   // { instBuf, vocBuf, chart }
+
+function quantise(t, offset, step){
+  const k = Math.round((t - offset) / step);
+  const q = offset + k * step;
+  return Math.abs(q - t) <= step * 0.62 ? q : t;  // snap only if it's close
+}
+
+function buildChart(instA, vocA, tempo, duration){
+  const vocEnv  = normalise(vocA.flux);
+  const instEnv = normalise(instA.flux);
+  const vocRms  = normalise(vocA.rms);
+
+  let onsets = pickOnsets(vocEnv, vocA.fps, 1.42).map(t => ({ t, src:"voc" }));
+
+  // Fill instrumental-only stretches so the chart never goes dead for long.
+  // Vocal onsets are bucketed at 0.1 s so the "is anyone singing here?" test is O(1).
+  const BUCKET = 0.1, REACH = 9;                 // REACH * BUCKET ≈ 0.9 s either side
+  const vocBuckets = new Set(onsets.map(o => Math.round(o.t / BUCKET)));
+  const hasVocalNear = t => {
+    const b = Math.round(t / BUCKET);
+    for (let d = -REACH; d <= REACH; d++) if (vocBuckets.has(b + d)) return true;
+    return false;
+  };
+  const instOnsets = pickOnsets(instEnv, instA.fps, 1.75);
+  for (const t of instOnsets) if (!hasVocalNear(t)) onsets.push({ t, src:"inst" });
+  onsets.sort((a,b) => a.t - b.t);
+
+  // Quantise + de-duplicate
+  const step = gridStep(tempo.beatLen);
+  const seen = new Set();
+  const q = [];
+  for (const o of onsets){
+    if (o.t < 1.0 || o.t > duration - 0.35) continue;
+    const t = quantise(o.t, tempo.offset, step);
+    const key = Math.round(t / (step * 0.5));
+    if (seen.has(key)) continue;
+    seen.add(key);
+    q.push({ t, src:o.src });
+  }
+
+  // Centroid → lane. Quartiles keep the spread even across any song.
+  const cents = q.map(o => {
+    const A = o.src === "voc" ? vocA : instA;
+    const i = clamp(Math.round(o.t * A.fps), 0, A.centroid.length - 1);
+    return A.centroid[i];
+  });
+  const sorted = cents.slice().sort((a,b) => a-b);
+  const qt = p => sorted.length ? sorted[clamp(Math.floor(sorted.length*p), 0, sorted.length-1)] : 0;
+  const c1 = qt(0.25), c2 = qt(0.5), c3 = qt(0.75);
+
+  // Phrases: a gap of >1.1s starts a new phrase; phrases alternate singer.
+  const phrases = [];
+  let cur = [];
+  for (let i = 0; i < q.length; i++){
+    if (cur.length && q[i].t - q[i-1].t > 1.1){ phrases.push(cur); cur = []; }
+    cur.push(i);
+  }
+  if (cur.length) phrases.push(cur);
+
+  const notes = [];
+  const lastLane = [];          // recent lane history for anti-repeat
+  let owner = false;            // false = opponent sings first, like most FNF songs
+
+  phrases.forEach((idxs, pi) => {
+    if (pi > 0) owner = !owner;
+    for (const i of idxs){
+      const o = q[i];
+      const c = cents[i];
+      let lane = c < c1 ? 0 : c < c2 ? 1 : c < c3 ? 2 : 3;
+
+      // avoid three of the same lane in a row
+      const L = lastLane;
+      if (L.length >= 2 && L[L.length-1] === lane && L[L.length-2] === lane){
+        lane = (lane + (Math.random() < 0.5 ? 1 : 3)) % 4;
+      }
+      L.push(lane);
+      if (L.length > 4) L.shift();
+
+      // hold notes: a long gap with the voice still sustaining
+      const nextT = (i + 1 < q.length) ? q[i+1].t : duration;
+      const gap = nextT - o.t;
+      let len = 0;
+      if (o.src === "voc" && gap > 0.55){
+        const fi = clamp(Math.round((o.t + 0.28) * vocA.fps), 0, vocRms.length - 1);
+        if (vocRms[fi] > 0.16){
+          len = Math.min(gap - 0.18, tempo.beatLen * 2.5);
+          len = Math.round(len / step) * step;
+          if (len < step * 2) len = 0;
+        }
+      }
+
+      notes.push({ t:o.t, lane, mustHit:owner, len });
+    }
+  });
+
+  notes.sort((a,b) => a.t - b.t);
+
+  // Never allow two notes in the same lane closer than a 32nd
+  const byLane = [[],[],[],[]];
+  const clean = [];
+  for (const nt of notes){
+    const arr = byLane[nt.lane];
+    const prev = arr.length ? arr[arr.length-1] : null;
+    if (prev && nt.t - prev.t < step * 0.5) continue;
+    if (prev && prev.len > 0 && nt.t < prev.t + prev.len + 0.05) prev.len = Math.max(0, nt.t - prev.t - step);
+    arr.push(nt);
+    clean.push(nt);
+  }
+
+  return {
+    bpm: tempo.bpm,
+    offset: tempo.offset,
+    beatLen: tempo.beatLen,
+    duration,
+    notes: clean,
+    sections: phrases.length
+  };
+}
+
+/* ------------------------- charting flow ------------------------- */
+const STAGES = [
+  "Reading audio...",
+  "Detecting beats...",
+  "Detecting vocals...",
+  "Creating notes...",
+  "Finalizing chart..."
+];
+let shownPct = 0;
+function setProgress(pct, stage, sub){
+  shownPct = Math.max(shownPct, pct);
+  $("#progBar").style.width = shownPct.toFixed(1) + "%";
+  $("#progPct").textContent = Math.round(shownPct) + "%";
+  if (stage !== undefined) $("#progStage").textContent = stage;
+  if (sub !== undefined) $("#progSub").textContent = sub;
+}
+
+function readFile(file){
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload  = () => res(fr.result);
+    fr.onerror = () => rej(new Error("Could not read " + file.name));
+    fr.readAsArrayBuffer(file);
+  });
+}
+
+async function decode(file){
+  const buf = await readFile(file);
+  const ctx = getCtx();
+  return await new Promise((res, rej) => {
+    const p = ctx.decodeAudioData(buf, res, rej);
+    if (p && p.then) p.then(res, rej);
+  });
+}
+
+$("#cancelChart").addEventListener("click", () => { chartCancelled = true; show("editorScreen"); });
+
+$("#autoChartBtn").addEventListener("click", async () => {
+  chartCancelled = false;
+  shownPct = 0;
+  setProgress(0, STAGES[0], "");
+  show("progressScreen");
+  const started = performance.now();
+  const tick = setInterval(() => {
+    if (currentScreen !== "progressScreen") return;
+    $("#progSub").textContent = "Elapsed " + fmtTime((performance.now()-started)/1000);
+  }, 1000);
+
+  try{
+    getCtx();
+    setProgress(3, STAGES[0]);
+    const instBuf = await decode(picked.inst);
+    if (chartCancelled) throw new Error("cancelled");
+    setProgress(12, STAGES[0]);
+    const vocBuf = await decode(picked.voc);
+    if (chartCancelled) throw new Error("cancelled");
+
+    if (instBuf.duration > 8 * 60) throw new Error("Song is longer than 8 minutes. Please use a shorter track.");
+    setProgress(20, STAGES[1]);
+
+    const instA = await analyzeTrack(instBuf, p => setProgress(20 + p*30, STAGES[1]));
+    if (chartCancelled) throw new Error("cancelled");
+
+    setProgress(50, STAGES[2]);
+    const vocA = await analyzeTrack(vocBuf, p => setProgress(50 + p*22, STAGES[2]));
+    if (chartCancelled) throw new Error("cancelled");
+
+    setProgress(72, STAGES[3]);
+    await nextFrame();
+    const tempo = detectTempo(normalise(instA.flux), instA.fps);
+    setProgress(84, STAGES[3]);
+    await nextFrame();
+
+    const duration = Math.max(instBuf.duration, vocBuf.duration);
+    const chart = buildChart(instA, vocA, tempo, duration);
+    if (!chart.notes.length) throw new Error("No notes could be detected. Try a louder or less compressed track.");
+
+    setProgress(93, STAGES[4]);
+    await nextFrame();
+    SONG = { instBuf, vocBuf, chart, name: picked.inst.name.replace(/\.[^.]+$/, "") };
+    setProgress(100, STAGES[4], "Done");
+    await new Promise(r => setTimeout(r, 380));
+
+    $("#stBpm").textContent   = Math.round(chart.bpm);
+    $("#stLen").textContent   = fmtTime(chart.duration);
+    $("#stNotes").textContent = chart.notes.length;
+    $("#stSec").textContent   = chart.sections;
+    show("readyScreen");
+  }catch(err){
+    if (!chartCancelled){
+      alert("Charting failed: " + (err && err.message ? err.message : err));
+      show("editorScreen");
+    }
+  }finally{
+    clearInterval(tick);
+  }
+});
+
+$("#exportBtn").addEventListener("click", () => {
+  if (!SONG) return;
+  const c = SONG.chart;
+  const data = {
+    song: SONG.name, bpm: +c.bpm.toFixed(2), offset: +c.offset.toFixed(4),
+    duration: +c.duration.toFixed(3), generator: "FNF Song Maker V1.00",
+    notes: c.notes.map(n => ({ time:+n.t.toFixed(4), lane:n.lane, mustHit:n.mustHit, length:+n.len.toFixed(4) }))
+  };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], {type:"application/json"}));
+  const a = document.createElement("a");
+  a.href = url; a.download = SONG.name + "-chart.json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+});
+
+/* =====================================================================
+   CHARACTERS
+   ===================================================================== */
+const CHARS = {
+  bf: {
+    name:"Boyfriend",
+    skin:"#f6c9a0", skinShade:"#e0ab7e",
+    hair:"#2b6fe0", hairDark:"#1d51ad",
+    shirt:"#ffffff", shirtShade:"#dfe4ee",
+    pants:"#2f3d63", shoes:"#e23b3b",
+    line:"#181a20", mic:true, spiky:true
+  },
+  demo: {
+    name:"Demo Opponent",
+    skin:"#a8e08a", skinShade:"#86bd6a",
+    hair:"#6d3fa8", hairDark:"#4d2b7a",
+    shirt:"#8b5cf6", shirtShade:"#6f45d0",
+    pants:"#31283f", shoes:"#241d2f",
+    line:"#181a20", mic:true, spiky:false
+  }
+};
+
+/* pose table — angles are radians from the shoulder, 0 = right, PI/2 = down */
+const POSES = {
+  idle:  { bx: 0, by: 0, hx: 0, hy: 0, al: 2.30, ar: 0.84, mouth:"idle",  eyes:"normal", tilt: 0 },
+  left:  { bx:-9, by: 1, hx:-4, hy: 0, al: 3.05, ar: 1.00, mouth:"o",     eyes:"normal", tilt:-0.07 },
+  right: { bx: 9, by: 1, hx: 4, hy: 0, al: 2.16, ar: 0.09, mouth:"o",     eyes:"normal", tilt: 0.07 },
+  up:    { bx: 0, by:-7, hx: 0, hy:-3, al: 4.15, ar: 5.30, mouth:"wide",  eyes:"up",     tilt: 0 },
+  down:  { bx: 0, by: 7, hx: 0, hy: 3, al: 1.92, ar: 1.24, mouth:"wide",  eyes:"down",   tilt: 0 },
+  miss:  { bx: 0, by: 5, hx: 0, hy: 2, al: 2.55, ar: 0.66, mouth:"frown", eyes:"x",      tilt: 0.05 }
+};
+
+function capsule(g, x, y, ang, len, w, fill, line){
+  g.save();
+  g.translate(x, y);
+  g.rotate(ang);
+  g.beginPath();
+  g.moveTo(0, -w/2);
+  g.lineTo(len, -w/2);
+  g.arc(len, 0, w/2, -Math.PI/2, Math.PI/2);
+  g.lineTo(0, w/2);
+  g.arc(0, 0, w/2, Math.PI/2, -Math.PI/2);
+  g.closePath();
+  g.fillStyle = fill; g.fill();
+  g.lineWidth = 3; g.strokeStyle = line; g.stroke();
+  g.restore();
+}
+
+/* draws a character centred on (cx, groundY) at the given scale */
+function drawChar(g, def, poseName, blend, bop){
+  const p = POSES[poseName] || POSES.idle;
+  const idle = POSES.idle;
+  const k = clamp(blend, 0, 1);
+  const m = (a, b) => lerp(a, b, k);
+  const bx = m(idle.bx, p.bx), by = m(idle.by, p.by) + bop;
+  const hx = m(idle.hx, p.hx), hy = m(idle.hy, p.hy);
+  const al = m(idle.al, p.al), ar = m(idle.ar, p.ar);
+  const tilt = m(0, p.tilt);
+  const L = def.line;
+
+  g.save();
+  g.translate(bx, by);
+  g.rotate(tilt);
+  g.lineJoin = "round";
+  g.lineCap = "round";
+
+  // shadow
+  g.save();
+  g.globalAlpha = .12;
+  g.fillStyle = "#000";
+  g.beginPath(); g.ellipse(0, 4, 44, 9, 0, 0, Math.PI*2); g.fill();
+  g.restore();
+
+  // legs + shoes
+  const legY = -6;
+  capsule(g, -13, legY - 46, Math.PI/2 - .06, 42, 20, def.pants, L);
+  capsule(g,  13, legY - 46, Math.PI/2 + .06, 42, 20, def.pants, L);
+  for (const sx of [-15, 15]){
+    g.beginPath();
+    g.moveTo(sx - 12, legY);
+    g.lineTo(sx + 14, legY);
+    g.quadraticCurveTo(sx + 17, legY - 12, sx + 9, legY - 13);
+    g.lineTo(sx - 10, legY - 13);
+    g.quadraticCurveTo(sx - 14, legY - 12, sx - 12, legY);
+    g.closePath();
+    g.fillStyle = def.shoes; g.fill();
+    g.lineWidth = 3; g.strokeStyle = L; g.stroke();
+  }
+
+  // torso
+  const torsoTop = -122, torsoBot = -48;
+  g.beginPath();
+  g.moveTo(-25, torsoBot + 4);
+  g.quadraticCurveTo(-30, torsoTop + 12, -22, torsoTop);
+  g.lineTo(22, torsoTop);
+  g.quadraticCurveTo(30, torsoTop + 12, 25, torsoBot + 4);
+  g.quadraticCurveTo(0, torsoBot + 12, -25, torsoBot + 4);
+  g.closePath();
+  g.fillStyle = def.shirt; g.fill();
+  g.lineWidth = 3.2; g.strokeStyle = L; g.stroke();
+  g.save(); g.clip();
+  g.fillStyle = def.shirtShade;
+  g.fillRect(10, torsoTop, 30, 90);
+  g.restore();
+
+  // arms
+  const shoulderY = torsoTop + 12;
+  capsule(g, -22, shoulderY, al, 40, 16, def.skin, L);
+  capsule(g,  22, shoulderY, ar, 40, 16, def.skin, L);
+
+  // microphone in the right hand
+  if (def.mic){
+    const mx = 22 + Math.cos(ar) * 44, my = shoulderY + Math.sin(ar) * 44;
+    g.save();
+    g.translate(mx, my);
+    g.rotate(ar - Math.PI/2);
+    g.fillStyle = "#3a3f4d";
+    g.fillRect(-3, 0, 6, 24);
+    g.beginPath(); g.arc(0, -2, 7.5, 0, Math.PI*2);
+    g.fillStyle = "#8d94a6"; g.fill();
+    g.lineWidth = 2.4; g.strokeStyle = L; g.stroke();
+    g.restore();
+  }
+
+  // head
+  const headY = torsoTop - 34 + hy, headX = hx;
+  g.save();
+  g.translate(headX, headY);
+
+  // hair (behind the face)
+  g.beginPath();
+  if (def.spiky){
+    g.moveTo(-33, -4);
+    g.lineTo(-30, -26); g.lineTo(-19, -16);
+    g.lineTo(-12, -38); g.lineTo(-2, -20);
+    g.lineTo(7, -40);   g.lineTo(16, -18);
+    g.lineTo(27, -30);  g.lineTo(31, -6);
+    g.quadraticCurveTo(34, 10, 26, 14);
+    g.lineTo(-26, 14);
+    g.quadraticCurveTo(-36, 10, -33, -4);
+  } else {
+    g.moveTo(-32, 2);
+    g.quadraticCurveTo(-34, -32, 0, -34);
+    g.quadraticCurveTo(34, -32, 32, 2);
+    g.lineTo(30, 16); g.lineTo(-30, 16);
+  }
+  g.closePath();
+  g.fillStyle = def.hair; g.fill();
+  g.lineWidth = 3; g.strokeStyle = L; g.stroke();
+
+  // face
+  g.beginPath();
+  g.ellipse(0, 6, 26, 25, 0, 0, Math.PI*2);
+  g.fillStyle = def.skin; g.fill();
+  g.lineWidth = 3; g.strokeStyle = L; g.stroke();
+
+  // horns for the opponent
+  if (!def.spiky){
+    for (const s of [-1, 1]){
+      g.beginPath();
+      g.moveTo(s*22, -22); g.quadraticCurveTo(s*34, -40, s*24, -46);
+      g.quadraticCurveTo(s*26, -34, s*16, -26);
+      g.closePath();
+      g.fillStyle = def.hairDark; g.fill();
+      g.lineWidth = 2.6; g.strokeStyle = L; g.stroke();
+    }
+  }
+
+  // eyes
+  const ey = p.eyes === "up" ? -1 : p.eyes === "down" ? 5 : 2;
+  if (p.eyes === "x" && k > .5){
+    g.strokeStyle = L; g.lineWidth = 3;
+    for (const s of [-10, 10]){
+      g.beginPath();
+      g.moveTo(s-5, ey-5); g.lineTo(s+5, ey+5);
+      g.moveTo(s+5, ey-5); g.lineTo(s-5, ey+5);
+      g.stroke();
+    }
+  } else {
+    for (const s of [-10, 10]){
+      g.beginPath(); g.ellipse(s, ey, 5.6, 6.4, 0, 0, Math.PI*2);
+      g.fillStyle = "#fff"; g.fill();
+      g.lineWidth = 2.2; g.strokeStyle = L; g.stroke();
+      g.beginPath(); g.arc(s + (p.eyes==="up" ? 0 : 0), ey + (p.eyes==="up" ? -2 : p.eyes==="down" ? 2 : 0), 2.7, 0, Math.PI*2);
+      g.fillStyle = "#1b2a5e"; g.fill();
+    }
+  }
+
+  // mouth
+  g.beginPath();
+  const mouth = k > .5 ? p.mouth : "idle";
+  if (mouth === "o"){
+    g.ellipse(0, 17, 7, 8, 0, 0, Math.PI*2);
+    g.fillStyle = "#5a2230"; g.fill();
+  } else if (mouth === "wide"){
+    g.ellipse(0, 17, 11, 7, 0, 0, Math.PI*2);
+    g.fillStyle = "#5a2230"; g.fill();
+  } else if (mouth === "frown"){
+    g.moveTo(-9, 20); g.quadraticCurveTo(0, 13, 9, 20);
+    g.lineWidth = 3; g.strokeStyle = L; g.stroke();
+  } else {
+    g.moveTo(-8, 16); g.quadraticCurveTo(0, 21, 8, 16);
+    g.lineWidth = 3; g.strokeStyle = L; g.stroke();
+  }
+
+  g.restore(); // head
+  g.restore(); // body
+}
+
+/* ------------------------- sprite preview ------------------------- */
+let previewRAF = 0, previewPose = "idle", previewT = 0;
+$$("#poseChips .chip").forEach(c => c.addEventListener("click", () => {
+  $$("#poseChips .chip").forEach(x => x.classList.remove("on"));
+  c.classList.add("on");
+  previewPose = c.dataset.pose;
+  previewT = 0;
+}));
+
+function previewFrame(){
+  const cv = $("#spritePreview");
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== w*dpr || cv.height !== h*dpr){ cv.width = w*dpr; cv.height = h*dpr; }
+  const g = cv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+
+  previewT += 1/60;
+  const beat = (previewT * 2) % 1;
+  const bop = previewPose === "idle" ? Math.sin(beat * Math.PI) * 3 : 0;
+  const blend = previewPose === "idle" ? 1 : clamp((previewT % 1.1) < .75 ? 1 : 0, 0, 1);
+
+  const s = Math.min(w / 420, h / 260);
+  const gy = h - 26;
+
+  g.save(); g.translate(w*0.29, gy); g.scale(s*0.92, s*0.92);
+  drawChar(g, CHARS.demo, previewPose === "miss" ? "idle" : previewPose, blend, bop);
+  g.restore();
+
+  g.save(); g.translate(w*0.71, gy); g.scale(s*0.92, s*0.92);
+  drawChar(g, CHARS.bf, previewPose, blend, bop);
+  g.restore();
+
+  g.font = "700 11px -apple-system,system-ui,sans-serif";
+  g.fillStyle = "#767b8a"; g.textAlign = "center";
+  g.fillText("DEMO OPPONENT", w*0.29, h - 8);
+  g.fillText("BOYFRIEND", w*0.71, h - 8);
+
+  previewRAF = requestAnimationFrame(previewFrame);
+}
+function startPreviewLoop(){ if (!previewRAF) previewRAF = requestAnimationFrame(previewFrame); }
+function stopPreviewLoop(){ if (previewRAF){ cancelAnimationFrame(previewRAF); previewRAF = 0; } }
+
+/* =====================================================================
+   GAMEPLAY
+   ===================================================================== */
+const LANE_COLORS = ["#c24bff", "#00d8f5", "#12ca5c", "#f5426c"];
+const LANE_GLYPH  = ["←", "↓", "↑", "→"];
+const KEYMAP = {
+  KeyD:0, KeyF:1, KeyJ:2, KeyK:3,
+  ArrowLeft:0, ArrowDown:1, ArrowUp:2, ArrowRight:3
+};
+const WINDOWS = [
+  { name:"SICK",  ms:45,  score:350, health: 0.023, acc:1.00 },
+  { name:"GOOD",  ms:90,  score:200, health: 0.014, acc:0.75 },
+  { name:"BAD",   ms:135, score:100, health: 0.000, acc:0.35 },
+  { name:"SHIT",  ms:165, score:50,  health:-0.012, acc:0.10 }
+];
+const MISS_WINDOW = 0.180;
+
+const cv = $("#gameCanvas");
+const G  = cv.getContext("2d");
+
+let game = null;
+let gameRAF = 0;
+let nodes = { inst:null, voc:null, instGain:null, vocGain:null };
+
+function applyLiveVolumes(){
+  if (nodes.instGain) nodes.instGain.gain.value = settings.music / 100;
+  if (nodes.vocGain && game) nodes.vocGain.gain.value = (settings.vocal / 100) * (game.vocalMuted ? 0 : 1);
+}
+
+function resizeCanvas(){
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  const w = window.innerWidth, h = window.innerHeight;
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(h * dpr);
+  cv.style.width = w + "px";
+  cv.style.height = h + "px";
+  if (game){ game.w = w; game.h = h; game.dpr = dpr; layout(game); }
+}
+window.addEventListener("resize", () => { resizeCanvas(); dismissRotateTipIfLandscape(); });
+window.addEventListener("orientationchange", () => setTimeout(() => {
+  resizeCanvas(); dismissRotateTipIfLandscape();
+}, 220));
+
+/* the landscape hint has served its purpose the moment the device turns */
+function dismissRotateTipIfLandscape(){
+  if (window.innerWidth > window.innerHeight) $("#rotateTip").classList.remove("show");
+}
+
+/* lane geometry for the current mode/size */
+function layout(s){
+  const w = s.w, h = s.h;
+  const mobile = settings.mode === "mobile";
+  const top = 18 + (window.visualViewport ? 0 : 0);
+
+  if (mobile){
+    s.playerSize = clamp(Math.min(w / 5.0, h / 6.2), 46, 128);
+    s.oppSize    = clamp(s.playerSize * 0.42, 24, 52);
+    s.playerGap  = s.playerSize * 1.14;
+    s.playerX    = w/2 - s.playerGap * 1.5;
+    s.strumY     = clamp(h * 0.16, 62, 150);
+    s.oppGap     = s.oppSize * 1.16;
+    s.oppX       = 14 + s.oppSize/2;
+    s.oppY       = 20 + s.oppSize/2;
+    s.oppVisible = true;
+  } else {
+    s.playerSize = clamp(Math.min(w / 9.6, h / 8.4), 34, 82);
+    s.oppSize    = s.playerSize;
+    s.playerGap  = s.playerSize * 1.16;
+    s.oppGap     = s.playerGap;
+    s.oppX       = w/2 - s.playerGap * 3.5 - 6;
+    s.playerX    = w/2 + s.playerGap * 0.5 + 6;
+    s.strumY     = clamp(h * 0.14, 56, 130);
+    s.oppY       = s.strumY;
+    s.oppVisible = true;
+  }
+  s.top = top;
+}
+
+function laneX(s, lane, mine){
+  return mine ? s.playerX + lane * s.playerGap : s.oppX + lane * s.oppGap;
+}
+function laneY(s, mine){ return mine ? s.strumY : s.oppY; }
+
+function startGame(){
+  if (!SONG) return;
+  stopAudio();
+  show("gameScreen");
+  resizeCanvas();
+
+  const chart = SONG.chart;
+  game = {
+    w: window.innerWidth, h: window.innerHeight, dpr: Math.min(devicePixelRatio||1, 2.5),
+    notes: chart.notes.map(n => ({ t:n.t, lane:n.lane, mustHit:n.mustHit, len:n.len, hit:false, gone:false, holdDone:false })),
+    time: -3.0,
+    startedAt: 0,
+    started: false,
+    paused: false,
+    over: false,
+    health: 1,
+    score: 0, combo: 0, maxCombo: 0,
+    counts: { SICK:0, GOOD:0, BAD:0, SHIT:0, MISS:0 },
+    accSum: 0, accTotal: 0,
+    held: [false,false,false,false],
+    pressGlow: [0,0,0,0],
+    confirm: [0,0,0,0],
+    oppConfirm: [0,0,0,0],
+    splashes: [],
+    popups: [],
+    vocalMuted: false,
+    bfPose: "idle", bfBlend: 0, bfHold: 0,
+    opPose: "idle", opBlend: 0, opHold: 0,
+    fpsSamples: [], lastFrame: performance.now(),
+    countdown: 3
+  };
+  layout(game);
+
+  // audio graph
+  const ctx = getCtx();
+  nodes.instGain = ctx.createGain();
+  nodes.vocGain  = ctx.createGain();
+  nodes.instGain.connect(ctx.destination);
+  nodes.vocGain.connect(ctx.destination);
+  applyLiveVolumes();
+
+  nodes.inst = ctx.createBufferSource(); nodes.inst.buffer = SONG.instBuf; nodes.inst.connect(nodes.instGain);
+  nodes.voc  = ctx.createBufferSource(); nodes.voc.buffer  = SONG.vocBuf;  nodes.voc.connect(nodes.vocGain);
+
+  const at = ctx.currentTime + 3.0;   // 3s countdown
+  game.startedAt = at;
+  nodes.inst.start(at);
+  nodes.voc.start(at);
+
+  // landscape recommendation
+  if (settings.mode === "mobile" && window.innerHeight > window.innerWidth){
+    const tip = $("#rotateTip");
+    tip.classList.add("show");
+    setTimeout(() => tip.classList.remove("show"), 4200);
+  }
+
+  $("#pauseOverlay").classList.remove("show");
+  if (!gameRAF) gameRAF = requestAnimationFrame(frame);
+}
+
+function stopAudio(){
+  for (const k of ["inst","voc"]){
+    if (nodes[k]){ try{ nodes[k].stop(); }catch(e){} try{ nodes[k].disconnect(); }catch(e){} nodes[k] = null; }
+  }
+  if (nodes.instGain){ try{ nodes.instGain.disconnect(); }catch(e){} nodes.instGain = null; }
+  if (nodes.vocGain){ try{ nodes.vocGain.disconnect(); }catch(e){} nodes.vocGain = null; }
+}
+
+function endGame(died){
+  if (!game || game.over) return;
+  game.over = true;
+  stopAudio();
+  cancelAnimationFrame(gameRAF); gameRAF = 0;
+
+  const acc = game.accTotal ? (game.accSum / game.accTotal) * 100 : 0;
+  const c = game.counts;
+  $("#resTitle").textContent = died ? "Blue Balled" : "Song Cleared";
+  $("#resScore").textContent = game.score.toLocaleString();
+  $("#resCombo").textContent = game.maxCombo;
+  $("#resSick").textContent  = c.SICK;
+  $("#resMiss").textContent  = c.MISS;
+  $("#resAcc").textContent   = acc.toFixed(2) + "%  ·  " + c.SICK + " sick / " + c.GOOD + " good / " + c.BAD + " bad / " + c.SHIT + " shit";
+
+  let r = "F", cls = "f";
+  if (died) { r = "F"; cls = "f"; }
+  else if (c.MISS === 0 && acc >= 99) { r = "S+"; cls = "s"; }
+  else if (acc >= 95) { r = "S"; cls = "s"; }
+  else if (acc >= 88) { r = "A"; cls = "a"; }
+  else if (acc >= 78) { r = "B"; cls = "b"; }
+  else if (acc >= 65) { r = "C"; cls = "c"; }
+  else { r = "D"; cls = "f"; }
+  const el = $("#resRank");
+  el.textContent = r;
+  el.className = "rank " + cls;
+
+  show("resultsScreen");
+  game = null;
+}
+
+/* ------------------------- input ------------------------- */
+function press(lane){
+  if (!game || game.paused || game.over) return;
+  game.held[lane] = true;
+  game.pressGlow[lane] = 1;
+
+  // nearest un-hit player note in this lane inside the miss window
+  let best = null, bestD = 1e9;
+  for (let i = 0; i < game.notes.length; i++){
+    const n = game.notes[i];
+    if (!n.mustHit || n.hit || n.gone || n.lane !== lane) continue;
+    const d = Math.abs(n.t - game.time);
+    if (n.t - game.time > MISS_WINDOW + 0.02) break;
+    if (d < bestD){ bestD = d; best = n; }
+  }
+  if (best && bestD <= MISS_WINDOW){
+    judge(best, bestD);
+  }
+}
+function release(lane){
+  if (!game) return;
+  game.held[lane] = false;
+}
+
+function judge(note, dist){
+  const ms = dist * 1000;
+  let w = WINDOWS[WINDOWS.length - 1];
+  for (const cand of WINDOWS) if (ms <= cand.ms){ w = cand; break; }
+
+  note.hit = true;
+  game.score += w.score;
+  game.combo++;
+  game.maxCombo = Math.max(game.maxCombo, game.combo);
+  game.counts[w.name]++;
+  game.accSum += w.acc; game.accTotal++;
+  game.health = clamp(game.health + w.health, 0, 2);
+  game.confirm[note.lane] = 0.16;
+  setPose("bf", ["left","down","up","right"][note.lane]);
+  unmuteVocals();
+  addPopup(w.name, w.name === "SICK" ? "#12ca5c" : w.name === "GOOD" ? "#3d5afe" : "#f5a623");
+  if (settings.splash && w.name === "SICK") addSplash(note.lane, true);
+}
+
+function missNote(note){
+  if (!game || game.over) return;
+  note.gone = true;
+  game.combo = 0;
+  game.counts.MISS++;
+  game.accSum += 0; game.accTotal++;
+  game.score = Math.max(0, game.score - 10);
+  game.health = clamp(game.health - 0.055, 0, 2);
+  setPose("bf", "miss", 0.34);
+  muteVocals();
+  addPopup("MISS", "#ef4444");
+  if (game.health <= 0) endGame(true);
+}
+
+function muteVocals(){ if (game){ game.vocalMuted = true; applyLiveVolumes(); } }
+function unmuteVocals(){ if (game && game.vocalMuted){ game.vocalMuted = false; applyLiveVolumes(); } }
+
+function setPose(who, pose, hold){
+  if (!game) return;
+  if (who === "bf"){ game.bfPose = pose; game.bfBlend = 1; game.bfHold = hold || 0.20; }
+  else { game.opPose = pose; game.opBlend = 1; game.opHold = hold || 0.20; }
+}
+function addPopup(text, color){
+  game.popups.push({ text, color, life: 0.55 });
+  if (game.popups.length > 4) game.popups.shift();
+}
+function addSplash(lane, mine){
+  game.splashes.push({ lane, mine, life: 0.32, seed: Math.random()*6.28 });
+}
+
+document.addEventListener("keydown", e => {
+  if (currentScreen !== "gameScreen") return;
+  if (e.code === "Escape"){ togglePause(); return; }
+  if (e.repeat) return;
+  const l = KEYMAP[e.code];
+  if (l !== undefined){ e.preventDefault(); press(l); }
+});
+document.addEventListener("keyup", e => {
+  const l = KEYMAP[e.code];
+  if (l !== undefined) release(l);
+});
+
+/* touch — a tap anywhere in a lane column counts */
+const pointerLane = new Map();
+function laneFromPoint(x, y){
+  if (!game) return -1;
+  const s = game;
+  const half = s.playerGap * 0.5;
+  for (let l = 0; l < 4; l++){
+    const cx = laneX(s, l, true);
+    if (x >= cx - half && x <= cx + half) return l;
+  }
+  return -1;
+}
+cv.addEventListener("pointerdown", e => {
+  if (!game || game.paused) return;
+  e.preventDefault();
+  const l = laneFromPoint(e.clientX, e.clientY);
+  if (l >= 0){ pointerLane.set(e.pointerId, l); press(l); }
+}, { passive:false });
+cv.addEventListener("pointerup", e => {
+  const l = pointerLane.get(e.pointerId);
+  if (l !== undefined){ release(l); pointerLane.delete(e.pointerId); }
+});
+cv.addEventListener("pointercancel", e => {
+  const l = pointerLane.get(e.pointerId);
+  if (l !== undefined){ release(l); pointerLane.delete(e.pointerId); }
+});
+cv.addEventListener("pointermove", e => {
+  if (!game || !pointerLane.has(e.pointerId)) return;
+  const old = pointerLane.get(e.pointerId);
+  const l = laneFromPoint(e.clientX, e.clientY);
+  if (l >= 0 && l !== old){ release(old); pointerLane.set(e.pointerId, l); press(l); }
+}, { passive:true });
+
+/* ------------------------- pause ------------------------- */
+function togglePause(){
+  if (!game || game.over) return;
+  game.paused = !game.paused;
+  $("#pauseOverlay").classList.toggle("show", game.paused);
+  const ctx = getCtx();
+  if (game.paused) ctx.suspend(); else ctx.resume();
+}
+$("#pauseBtn").addEventListener("click", togglePause);
+$("#resumeBtn").addEventListener("click", togglePause);
+$("#restartBtn").addEventListener("click", () => { getCtx().resume(); startGame(); });
+$("#quitBtn").addEventListener("click", () => {
+  getCtx().resume();
+  stopAudio();
+  cancelAnimationFrame(gameRAF); gameRAF = 0;
+  game = null;
+  $("#pauseOverlay").classList.remove("show");
+  show("menuScreen");
+});
+$("#playBtn").addEventListener("click", startGame);
+$("#againBtn").addEventListener("click", startGame);
+
+/* ------------------------- main loop ------------------------- */
+function frame(){
+  gameRAF = requestAnimationFrame(frame);
+  if (!game) return;
+
+  const now = performance.now();
+  const dt = Math.min(0.05, (now - game.lastFrame) / 1000);
+  game.lastFrame = now;
+
+  if (settings.fps){
+    game.fpsSamples.push(now);
+    while (game.fpsSamples.length && now - game.fpsSamples[0] > 1000) game.fpsSamples.shift();
+  }
+
+  if (!game.paused){
+    const ctx = getCtx();
+    game.time = ctx.currentTime - game.startedAt;
+    update(dt);
+    // update() can finish the song (or blue-ball the player), which tears the
+    // state down — there is nothing left to draw this frame.
+    if (!game) return;
+  }
+  render();
+}
+
+function update(dt){
+  const s = game;
+
+  // misses & holds
+  for (const n of s.notes){
+    if (s.over) return;          // a miss may have ended the run mid-loop
+    if (n.gone) continue;
+    if (!n.mustHit){
+      // opponent auto-plays
+      if (!n.hit && s.time >= n.t){
+        n.hit = true;
+        s.oppConfirm[n.lane] = 0.16;
+        setPose("op", ["left","down","up","right"][n.lane]);
+        if (settings.splash && Math.random() < 0.25) addSplash(n.lane, false);
+      }
+      if (n.hit && s.time > n.t + n.len + 0.4) n.gone = true;
+      continue;
+    }
+    if (!n.hit && s.time - n.t > MISS_WINDOW){ missNote(n); continue; }
+    if (n.hit && n.len > 0 && !n.holdDone){
+      if (s.time <= n.t + n.len){
+        if (s.held[n.lane]){
+          s.score += Math.round(140 * dt);
+          s.health = clamp(s.health + 0.010 * dt, 0, 2);
+          s.confirm[n.lane] = 0.10;
+          setPose("bf", ["left","down","up","right"][n.lane], 0.12);
+        }
+      } else n.holdDone = true;
+    }
+    if (n.hit && s.time > n.t + n.len + 0.6) n.gone = true;
+  }
+
+  // pose timers
+  s.bfHold -= dt; if (s.bfHold <= 0){ s.bfBlend = Math.max(0, s.bfBlend - dt * 5); if (s.bfBlend <= 0) s.bfPose = "idle"; }
+  s.opHold -= dt; if (s.opHold <= 0){ s.opBlend = Math.max(0, s.opBlend - dt * 5); if (s.opBlend <= 0) s.opPose = "idle"; }
+
+  for (let l = 0; l < 4; l++){
+    s.pressGlow[l] = Math.max(0, s.pressGlow[l] - dt * 4);
+    s.confirm[l]   = Math.max(0, s.confirm[l] - dt);
+    s.oppConfirm[l]= Math.max(0, s.oppConfirm[l] - dt);
+  }
+  s.splashes = s.splashes.filter(p => (p.life -= dt) > 0);
+  s.popups   = s.popups.filter(p => (p.life -= dt) > 0);
+
+  // song finished?
+  if (s.time > SONG.chart.duration + 1.2) endGame(false);
+}
+
+function drawArrow(g, x, y, size, lane, mode, alpha){
+  // mode: "outline" | "filled"
+  const r = size * 0.5;
+  g.save();
+  g.translate(x, y);
+  g.globalAlpha = alpha === undefined ? 1 : alpha;
+
+  const rot = [Math.PI, Math.PI/2, -Math.PI/2, 0][lane];
+  const col = LANE_COLORS[lane];
+
+  // rounded plate
+  const pr = size * 0.24;
+  g.beginPath();
+  const hw = r;
+  g.moveTo(-hw + pr, -hw);
+  g.lineTo(hw - pr, -hw); g.quadraticCurveTo(hw, -hw, hw, -hw + pr);
+  g.lineTo(hw, hw - pr);  g.quadraticCurveTo(hw, hw, hw - pr, hw);
+  g.lineTo(-hw + pr, hw); g.quadraticCurveTo(-hw, hw, -hw, hw - pr);
+  g.lineTo(-hw, -hw + pr);g.quadraticCurveTo(-hw, -hw, -hw + pr, -hw);
+  g.closePath();
+
+  if (mode === "filled"){
+    g.fillStyle = col; g.fill();
+    g.lineWidth = size * 0.055; g.strokeStyle = "rgba(0,0,0,.28)"; g.stroke();
+  } else {
+    g.fillStyle = "#fff"; g.fill();
+    g.lineWidth = size * 0.075; g.strokeStyle = "#dfe3ec"; g.stroke();
+  }
+
+  // arrow glyph
+  g.rotate(rot);
+  g.beginPath();
+  const a = size * 0.30;
+  g.moveTo(a * 0.72, 0);
+  g.lineTo(-a * 0.05, -a * 0.78);
+  g.lineTo(-a * 0.05, -a * 0.32);
+  g.lineTo(-a * 0.80, -a * 0.32);
+  g.lineTo(-a * 0.80, a * 0.32);
+  g.lineTo(-a * 0.05, a * 0.32);
+  g.lineTo(-a * 0.05, a * 0.78);
+  g.closePath();
+  g.fillStyle = mode === "filled" ? "#fff" : "#c8cddb";
+  g.fill();
+
+  g.restore();
+}
+
+function render(){
+  const s = game;
+  const g = G;
+  g.setTransform(s.dpr, 0, 0, s.dpr, 0, 0);
+  g.clearRect(0, 0, s.w, s.h);
+  g.fillStyle = "#ffffff";
+  g.fillRect(0, 0, s.w, s.h);
+
+  const mobile = settings.mode === "mobile";
+  const pps = scrollPxPerSec();
+
+  /* --- characters --- */
+  const beatPos = (s.time - SONG.chart.offset) / SONG.chart.beatLen;
+  const bop = Math.max(0, Math.sin((beatPos % 1) * Math.PI)) * 3.5;
+  // Stand the cast on top of the HUD rather than behind it, and size them by
+  // the room actually left between the strumline and the health bar.
+  const hudH = mobile ? 58 : 72;
+  const charScale = clamp(Math.min(s.w / 560, (s.h - s.strumY - 120) / 230), 0.45, 1.3) * (mobile ? 0.86 : 1);
+  const groundY = s.h - hudH;
+
+  g.save();
+  g.globalAlpha = 0.95;
+  g.translate(s.w * (mobile ? 0.19 : 0.2), groundY);
+  g.scale(charScale, charScale);
+  drawChar(g, CHARS.demo, s.opPose, s.opBlend, bop);
+  g.restore();
+
+  g.save();
+  g.globalAlpha = 0.95;
+  g.translate(s.w * (mobile ? 0.81 : 0.8), groundY);
+  g.scale(charScale, charScale);
+  drawChar(g, CHARS.bf, s.bfPose, s.bfBlend, bop);
+  g.restore();
+
+  /* --- lane guides (mobile tap zones) --- */
+  if (mobile){
+    for (let l = 0; l < 4; l++){
+      const x = laneX(s, l, true);
+      g.fillStyle = s.held[l] ? "rgba(61,90,254,.07)" : "rgba(20,22,28,.022)";
+      g.fillRect(x - s.playerSize*0.6, s.strumY, s.playerSize*1.2, s.h - s.strumY);
+    }
+  }
+
+  /* --- strum receptors --- */
+  for (let l = 0; l < 4; l++){
+    const px = laneX(s, l, true), py = laneY(s, true);
+    const on = s.confirm[l] > 0;
+    const scale = 1 + (s.confirm[l] > 0 ? 0.13 : 0) + s.pressGlow[l] * 0.06;
+    g.save(); g.translate(px, py); g.scale(scale, scale); g.translate(-px, -py);
+    drawArrow(g, px, py, s.playerSize, l, on ? "filled" : "outline", 1);
+    g.restore();
+
+    if (s.oppVisible){
+      const ox = laneX(s, l, false), oy = laneY(s, false);
+      const oon = s.oppConfirm[l] > 0;
+      g.save();
+      g.globalAlpha = mobile ? 0.75 : 1;
+      const sc = 1 + (oon ? 0.13 : 0);
+      g.translate(ox, oy); g.scale(sc, sc); g.translate(-ox, -oy);
+      drawArrow(g, ox, oy, s.oppSize, l, oon ? "filled" : "outline", 1);
+      g.restore();
+    }
+  }
+
+  /* --- notes --- */
+  const lookahead = (s.h + 220) / pps;
+  for (const n of s.notes){
+    if (n.gone) continue;
+    const dt = n.t - s.time;
+    if (dt > lookahead) break;
+    if (n.hit && n.len <= 0) continue;
+    if (dt < -0.6 && (n.hit || !n.mustHit)) continue;
+
+    const mine = n.mustHit;
+    // In Mobile Mode the opponent's strums are a small corner row — keep their
+    // notes close to it instead of sweeping them through the player's lanes.
+    if (!mine && mobile && dt > 0.9) continue;
+    const size = mine ? s.playerSize : s.oppSize;
+    const x = laneX(s, n.lane, mine);
+    const baseY = laneY(s, mine);
+    const y = baseY + dt * pps;
+
+    if (y > s.h + size || y < -size - 4) {
+      if (n.len <= 0) continue;
+    }
+
+    // sustain trail
+    if (n.len > 0){
+      const yEnd = baseY + (dt + n.len) * pps;
+      const held = n.hit && (mine ? s.held[n.lane] : true);
+      const yTop = Math.max(n.hit ? baseY : -50, Math.min(y, yEnd));
+      g.save();
+      g.globalAlpha = n.hit ? (held ? 0.85 : 0.3) : 0.62;
+      g.fillStyle = LANE_COLORS[n.lane];
+      const tw = size * 0.30;
+      const a = Math.min(yTop, yEnd), b = Math.max(yTop, yEnd);
+      g.beginPath();
+      g.moveTo(x - tw/2, a);
+      g.lineTo(x + tw/2, a);
+      g.lineTo(x + tw/2, b - tw/2);
+      g.arc(x, b - tw/2, tw/2, 0, Math.PI);
+      g.closePath();
+      g.fill();
+      g.restore();
+    }
+
+    if (!n.hit && y >= -size && y <= s.h + size){
+      g.save();
+      if (mine && dt < 0) g.globalAlpha = clamp(1 + dt * 2.2, 0.25, 1);
+      if (!mine) g.globalAlpha = mobile ? 0.72 : 0.9;
+      drawArrow(g, x, y, size, n.lane, "filled", 1);
+      g.restore();
+    }
+  }
+
+  /* --- note splashes --- */
+  for (const p of s.splashes){
+    const x = laneX(s, p.lane, p.mine), y = laneY(s, p.mine);
+    const size = p.mine ? s.playerSize : s.oppSize;
+    const k = 1 - p.life / 0.32;
+    g.save();
+    g.globalAlpha = (1 - k) * 0.9;
+    g.strokeStyle = LANE_COLORS[p.lane];
+    g.lineWidth = size * 0.10 * (1 - k);
+    g.beginPath(); g.arc(x, y, size * (0.35 + k * 0.75), 0, Math.PI*2); g.stroke();
+    for (let i = 0; i < 8; i++){
+      const a = p.seed + i * Math.PI / 4;
+      const r0 = size * (0.35 + k * 0.6), r1 = r0 + size * 0.22 * (1-k);
+      g.beginPath();
+      g.moveTo(x + Math.cos(a)*r0, y + Math.sin(a)*r0);
+      g.lineTo(x + Math.cos(a)*r1, y + Math.sin(a)*r1);
+      g.stroke();
+    }
+    g.restore();
+  }
+
+  /* --- HUD --- */
+  drawHUD(g, s, mobile);
+
+  /* --- countdown --- */
+  if (s.time < 0){
+    const n = Math.ceil(-s.time);
+    const label = n >= 3 ? "3" : n === 2 ? "2" : n === 1 ? "1" : "GO!";
+    const frac = 1 - (-s.time % 1);
+    g.save();
+    g.globalAlpha = clamp(1.4 - frac, 0, 1) * 0.9 + 0.1;
+    g.fillStyle = "#14161c";
+    g.textAlign = "center"; g.textBaseline = "middle";
+    g.font = "900 " + Math.round(clamp(s.h*0.12, 40, 96)) + "px -apple-system,system-ui,sans-serif";
+    g.fillText(label, s.w/2, s.h*0.52);
+    g.restore();
+  } else if (s.time < 0.45){
+    g.save();
+    g.globalAlpha = 1 - s.time/0.45;
+    g.fillStyle = "#14161c";
+    g.textAlign = "center"; g.textBaseline = "middle";
+    g.font = "900 " + Math.round(clamp(s.h*0.12, 40, 96)) + "px -apple-system,system-ui,sans-serif";
+    g.fillText("GO!", s.w/2, s.h*0.52);
+    g.restore();
+  }
+}
+
+function drawHUD(g, s, mobile){
+  // health bar
+  const bw = clamp(s.w * 0.62, 200, 460), bh = 15;
+  const bx = s.w/2 - bw/2, by = s.h - (mobile ? 40 : 52);
+  const frac = clamp(s.health / 2, 0.03, 0.97);
+
+  g.save();
+  g.globalAlpha = 0.96;
+  const r = bh/2;
+  g.beginPath();
+  g.moveTo(bx + r, by); g.lineTo(bx + bw - r, by);
+  g.arc(bx + bw - r, by + r, r, -Math.PI/2, Math.PI/2);
+  g.lineTo(bx + r, by + bh);
+  g.arc(bx + r, by + r, r, Math.PI/2, -Math.PI/2);
+  g.closePath();
+  g.save(); g.clip();
+  g.fillStyle = "#8b5cf6"; g.fillRect(bx, by, bw, bh);                    // opponent side
+  g.fillStyle = "#12ca5c"; g.fillRect(bx + bw*(1-frac), by, bw*frac, bh); // player side
+  g.restore();
+  g.lineWidth = 2.4; g.strokeStyle = "#14161c"; g.stroke();
+  g.restore();
+
+  // score line
+  g.save();
+  g.textAlign = "center"; g.textBaseline = "top";
+  g.fillStyle = "#14161c";
+  g.font = "800 " + (mobile ? 12 : 13) + "px -apple-system,system-ui,sans-serif";
+  const acc = s.accTotal ? (s.accSum / s.accTotal) * 100 : 100;
+  g.fillText("Score " + s.score + "   ·   Combo " + s.combo + "   ·   " + acc.toFixed(1) + "%", s.w/2, by + bh + 6);
+  g.restore();
+
+  // judgement — only the newest rating, the way FNF shows it
+  if (s.popups.length){
+    const p = s.popups[s.popups.length - 1];
+    const k = p.life / 0.55;
+    g.save();
+    g.textAlign = "center"; g.textBaseline = "middle";
+    g.globalAlpha = clamp(k * 1.6, 0, 1);
+    g.fillStyle = p.color;
+    const sz = Math.round(clamp(s.w*0.05, 18, 30)) * (1 + (1-k) * 0.12);
+    g.font = "900 " + sz.toFixed(0) + "px -apple-system,system-ui,sans-serif";
+    g.fillText(p.text, s.w/2, s.h * 0.44 - (1-k) * 16);
+    g.restore();
+  }
+
+  // progress
+  const pw = clamp(s.w*0.5, 150, 340);
+  const px = s.w/2 - pw/2, ppy = mobile ? 8 : 10;
+  const prog = clamp(s.time / SONG.chart.duration, 0, 1);
+  g.save();
+  g.globalAlpha = 0.9;
+  g.fillStyle = "#eceef4";
+  g.fillRect(px, ppy, pw, 4);
+  g.fillStyle = "#3d5afe";
+  g.fillRect(px, ppy, pw * prog, 4);
+  g.restore();
+
+  // fps
+  if (settings.fps){
+    g.save();
+    g.textAlign = "left"; g.textBaseline = "top";
+    g.fillStyle = "#767b8a";
+    g.font = "700 12px ui-monospace,SFMono-Regular,Menlo,monospace";
+    g.fillText(s.fpsSamples.length + " FPS", 12, s.h - 24);
+    g.restore();
+  }
+}
+
+/* boot */
+resizeCanvas();
+window.addEventListener("pageshow", resizeCanvas);
+document.addEventListener("gesturestart", e => e.preventDefault());
+</script>
+</body>
+</html>
