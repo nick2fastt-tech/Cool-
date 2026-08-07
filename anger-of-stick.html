@@ -1443,6 +1443,32 @@ function drawStick(e){
   // head
   const hdx = sx + Math.sin(lean) * 8, hdy = headY + bob;
   ctx.beginPath(); ctx.arc(hdx, hdy, 9.6, 0, 6.283); ctx.fill();
+  if (e.headband){
+    // light blue band across the brow, with two tails that stream behind
+    const bc = e.headbandCol || '#7fd4ff';
+    const wob = Math.sin(e.anim * 7) , spd = clamp(Math.abs(e.vx || 0) / 320, 0, 1);
+    const air = e.onGround === false ? 1 : 0;
+    ctx.save();
+    ctx.strokeStyle = bc; ctx.lineCap = 'round';
+    ctx.lineWidth = 2.5;
+    for (let i = 0; i < 2; i++){                       // tails
+      const y0 = hdy - 5.2 + i * 2.6;
+      const len = 11 + spd * 8 + air * 3;
+      const sway = wob * (2.2 + i * 1.4) + spd * 1.5;
+      ctx.beginPath();
+      ctx.moveTo(hdx - 7.5, y0);
+      ctx.quadraticCurveTo(hdx - 7.5 - len * .55, y0 + sway * .5 + 1.5,
+                           hdx - 7.5 - len, y0 + sway + 4.5 + i * 3.4 - spd * 2);
+      ctx.stroke();
+    }
+    ctx.fillStyle = bc;                                // the band itself
+    ctx.save(); ctx.translate(hdx, hdy - 4.4); ctx.rotate(-.06);
+    ctx.fillRect(-10.4, -2.3, 20.8, 4.6);
+    ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.fillRect(-3, -2.3, 6.5, 1.7);
+    ctx.restore();
+    ctx.restore();
+    ctx.fillStyle = co; ctx.strokeStyle = co;
+  }
   if (e.headGear === 'helmet'){ ctx.fillStyle = e.gearCol || '#334'; ctx.beginPath();
     ctx.arc(hdx, hdy - 1.5, 11, Math.PI, 0); ctx.fill(); ctx.fillStyle = co; }
   if (e.headGear === 'cap'){ ctx.fillStyle = e.gearCol || '#2a4a6a'; ctx.beginPath();
@@ -1471,19 +1497,70 @@ function drawStick(e){
   if (e.headGear === 'hair' || e.hairStyle === 'spike'){ ctx.strokeStyle = e.gearCol || '#222'; ctx.lineWidth = 2.4;
     for (let i = -1; i <= 1; i++){ ctx.beginPath(); ctx.moveTo(hdx + i * 3.4, hdy - 8); ctx.lineTo(hdx + i * 4.6 - 2, hdy - 14); ctx.stroke(); }
     ctx.strokeStyle = co; ctx.lineWidth = 5.4; }
-  // expression: the eyes carry it
-  if (e.eyes){
+  // face: two eyes looking forward and a closed mouth
+  const masked = e.headGear === 'mask' || e.headGear === 'skull' || e.headGear === 'visor';
+  if (e.faceDetail && !masked){
+    const frac = e.maxHp ? clamp(e.hp / e.maxHp, 0, 1) : 1;
+    const st = infStage ? infStage(e) : 0;
+    const white = st >= 2 ? '#ffd2d2' : '#f2f8ff';
+    const eyeY = hdy - 2.2, e1 = hdx + .6, e2 = hdx + 5.4;
+    ctx.save();
+    if (e.dead || e.zombified){                                  // gone
+      ctx.strokeStyle = white; ctx.lineWidth = 1.5; ctx.lineCap = 'round';
+      for (const ex of [e1, e2]){
+        ctx.beginPath();
+        ctx.moveTo(ex - 1.8, eyeY - 1.8); ctx.lineTo(ex + 1.8, eyeY + 1.8);
+        ctx.moveTo(ex + 1.8, eyeY - 1.8); ctx.lineTo(ex - 1.8, eyeY + 1.8);
+        ctx.stroke();
+      }
+    } else if (st >= 3 || frac < .28){                           // squeezed shut with pain
+      ctx.strokeStyle = white; ctx.lineWidth = 1.5; ctx.lineCap = 'round';
+      for (const ex of [e1, e2]){
+        ctx.beginPath(); ctx.moveTo(ex - 2, eyeY + .4); ctx.quadraticCurveTo(ex, eyeY - 1.6, ex + 2, eyeY + .4); ctx.stroke();
+      }
+    } else {
+      ctx.fillStyle = white;                                      // open, looking forward
+      const lid = frac < .55 || st >= 1 ? .72 : 1;
+      for (const ex of [e1, e2]){
+        ctx.beginPath(); ctx.ellipse(ex, eyeY, 2.1, 2.5 * lid, 0, 0, 6.283); ctx.fill();
+      }
+      ctx.fillStyle = st >= 2 ? '#a02020' : '#12161c';            // pupils, both facing front
+      for (const ex of [e1, e2]){
+        ctx.beginPath(); ctx.arc(ex + .8, eyeY, 1.1, 0, 6.283); ctx.fill();
+      }
+      // brows: angry mid-swing, flat otherwise
+      const fighting = e.pose === 'punch' || e.pose === 'punch2' || e.pose === 'swing' ||
+                       e.pose === 'kick' || e.pose === 'bslam' || frac < .6;
+      ctx.strokeStyle = white; ctx.lineWidth = 1.3; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(e1 - 2.2, eyeY - (fighting ? 3.6 : 4.1)); ctx.lineTo(e1 + 2.2, eyeY - (fighting ? 4.4 : 4.1));
+      ctx.moveTo(e2 - 2.2, eyeY - (fighting ? 4.2 : 4.1)); ctx.lineTo(e2 + 2.2, eyeY - (fighting ? 3.4 : 4.1));
+      ctx.stroke();
+    }
+    // mouth: closed, a flat line — set grim when hurt
+    ctx.strokeStyle = e.dead ? 'rgba(240,248,255,.6)' : white;
+    ctx.lineWidth = 1.4; ctx.lineCap = 'round';
+    ctx.beginPath();
+    if (frac < .4 || st >= 2){
+      ctx.moveTo(hdx + .4, hdy + 4.4); ctx.quadraticCurveTo(hdx + 3, hdy + 3.4, hdx + 5.6, hdy + 4.4);
+    } else {
+      ctx.moveTo(hdx + .8, hdy + 4.1); ctx.lineTo(hdx + 5.4, hdy + 4.1);
+    }
+    ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = co; ctx.strokeStyle = co;
+  } else if (e.eyes){
     const frac = e.maxHp ? clamp(e.hp / e.maxHp, 0, 1) : 1;
     const st = infStage ? infStage(e) : 0;
     ctx.fillStyle = st >= 2 ? '#ff9a9a' : e.eyes;
-    if (e.dead || e.zombified){                       // out of it
+    if (e.dead || e.zombified){
       ctx.save(); ctx.translate(hdx + 3.5, hdy - 2); ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 1.6;
       ctx.beginPath(); ctx.moveTo(-2.4, -2.4); ctx.lineTo(2.4, 2.4); ctx.moveTo(2.4, -2.4); ctx.lineTo(-2.4, 2.4); ctx.stroke(); ctx.restore();
-    } else if (st >= 2 || frac < .3){                 // hurting: narrowed, angled
+    } else if (st >= 2 || frac < .3){
       ctx.save(); ctx.translate(hdx + 3.5, hdy - 2); ctx.rotate(-.35);
       ctx.fillRect(-2.6, -1, 5.4, 2); ctx.restore();
     } else if (e.pose === 'punch' || e.pose === 'punch2' || e.pose === 'swing' || e.pose === 'kick' || frac < .6){
-      ctx.save(); ctx.translate(hdx + 3.5, hdy - 2.4); ctx.rotate(.28);   // angry
+      ctx.save(); ctx.translate(hdx + 3.5, hdy - 2.4); ctx.rotate(.28);
       ctx.fillRect(-2.6, -1.2, 5.6, 2.4); ctx.restore();
     } else ctx.fillRect(hdx + 2, hdy - 3, 5, 2.4);
     ctx.fillStyle = co;
@@ -1854,6 +1931,7 @@ function makePlayer(){
   const st = playerStats();
   const p = makeEnt({
     x: 140, team: 'p', col: S.cos.colour || '#111318', s: 1.06, r: 26, eyes: '#fff',
+    faceDetail: 1, headband: 1, headbandCol: '#7fd4ff',
     headGear: S.cos.head !== 'none' ? S.cos.head : null,
     hairStyle: S.cos.hair, gearCol: S.cos.hair === 'mohawk' ? '#c04a3a' : '#111',
     bodyGear: S.cos.body, gloveGear: S.cos.glove, bootGear: S.cos.boot, wskin: S.cos.wskin,
@@ -1864,7 +1942,8 @@ function makePlayer(){
     mp: 0, combo: 0, comboT: 0, atkT: 0, atkKind: '', hitIds: null, rollCd: 0, rollT: 0,
     fireT: 0, mechT: 0, berserkT: 0, gun: null, wep: null,
     holding: 0, holdT: 0, parryT: 0, jumps: 0, airDashed: 0, atkType: 'light',
-    atkPower: 1, atkKb: 150, atkUp: 0, inf: 0, infSp: 1
+    atkPower: 1, atkKb: 150, atkUp: 0, inf: 0, infSp: 1,
+    bruteT: 0, bruteCd: 0, bruteHp: 0, recoil: 0, reloadT: 0, dryT: 0, stumbleT: 0
   });
   p.gun = S.equipped[1] && S.owned[S.equipped[1]] ? S.equipped[1] : null;
   p.melee = S.equipped[0] && S.owned[S.equipped[0]] ? S.equipped[0] : 'fist';
@@ -1876,7 +1955,13 @@ function gunList(){ return WEAPONS.filter(w => w.kind !== 'melee' && S.owned[w.i
 function updatePlayer(p, dt){
   if (p.dead){ p.deadT += dt; p.pose = 'hurt'; physics(p, dt); return; }
   if (p.turning){ updateTurning(p, dt); return; }
-  if (p.vehicle){ updateVehicle(p, dt); updateInfection(p, dt); if (consume('anti')) useAntidote(); return; }
+  if (p.vehicle){
+    if (p.bruteT > 0){ p.bruteT -= dt; if (p.bruteT <= 0) exitBrute(p); }
+    if (p.bruteCd > 0) p.bruteCd -= dt;
+    updateVehicle(p, dt); updateInfection(p, dt);
+    if (consume('anti')) useAntidote();
+    return;
+  }
   const moving = (K.left ? -1 : 0) + (K.right ? 1 : 0);
   const busy = p.atkT > 0 || p.rollT > 0;
   const spdMul = (p.berserkT > 0 ? 1.4 : 1) * (p.mechT > 0 ? .85 : 1) * infSlow(p);
@@ -1937,7 +2022,7 @@ function updatePlayer(p, dt){
   if (!busy){
     if (moving){ p.face = moving; p.vx += moving * p.spd * spdMul * 9 * dt; p.vx = clamp(p.vx, -p.spd * spdMul, p.spd * spdMul); }
     let jumpTap = consume('jump');
-    if (jumpTap && p.onGround && !p.vehicle){
+    if (jumpTap && p.onGround && !p.vehicle && !(p.bruteT > 0)){  // a Brute does not fit in a jeep
       for (const g of Game.gear)
         if (g.type === 'vehicle' && Math.abs(p.x - g.x) < 54){ jumpTap = 0; mountVehicle(g); break; }
     }
@@ -2743,7 +2828,7 @@ function makeAlly(id){
     kbres: a.role === 'shield' ? .6 : a.role === 'robot' ? .5 : 0,
     inf: 0, infSp: 1, melee: a.role === 'dog' || a.role === 'shield',
     mag: 14, magMax: 14, reloadT: 0,
-    kit: a.role, baseCol: '#1a1a1a',
+    kit: a.role, baseCol: '#1a1a1a', faceDetail: 1,
     pack: a.role !== 'dog', belt: a.role !== 'dog', plate: ['heavy', 'shield', 'robot', 'assault'].indexOf(a.role) >= 0,
     packCol: a.role === 'medic' ? '#e8eef2' : '#2f3a46',
     plateCol: a.role === 'heavy' ? '#4a4030' : a.role === 'shield' ? '#3a5560' : '#2f3a46',
@@ -3097,9 +3182,12 @@ function breakGear(g){
     if (Math.random() < .18) spawnPickup(g.x, GY - 40, 'nade', 1);
   }
 }
+const GEAR_STATIC = { spikes: 1, zapfloor: 1, sawblade: 1, vehicle: 1, barricade: 1, crateObj: 1, barrel: 1, secret: 1 };
 function updateGear(dt){
   for (let i = Game.gear.length - 1; i >= 0; i--){
     const g = Game.gear[i];
+    // static scenery only matters near the camera
+    if (GEAR_STATIC[g.type] && (g.x < cam.x - 400 || g.x > cam.x + viewW + 400)) continue;
     if (g.type === 'spikes' || g.type === 'zapfloor' || g.type === 'sawblade'){
       updateTraps(g, dt, i);
     } else if (g.type === 'vehicle'){
@@ -3175,6 +3263,7 @@ function updateGear(dt){
 }
 function drawGear(){
   for (const g of Game.gear){
+    if (g.x < cam.x - 260 || g.x > cam.x + viewW + 260) continue;
     if (g.type === 'turret'){
       ctx.fillStyle = '#2a3a4a'; ctx.fillRect(g.x - 16, GY - 22, 32, 22);
       ctx.fillStyle = '#4a6a80'; ctx.fillRect(g.x - 10, GY - 40, 20, 20);
@@ -3360,7 +3449,8 @@ function startMission(mode, ch, st, opts){
 
   const R = mulberry(seed);
   // interactive objects & secrets
-  for (let x = 320; x < len - 300; x += 380 + R() * 320){
+  const propGap = len > 8000 ? 1400 : 380;
+  for (let x = 320; x < len - 300; x += propGap + R() * 320){
     const k = R();
     Game.gear.push({ type: k > .7 ? 'barrel' : 'crateObj', x, breakable: 1, broken: 0 });
   }
@@ -3370,7 +3460,7 @@ function startMission(mode, ch, st, opts){
   }
   buildTraps(Game.bg, seed, len);
   if (Game.zmode){
-    for (let x = 620; x < len - 400; x += 700 + R() * 600)
+    for (let x = 620; x < len - 400; x += (len > 8000 ? 2600 : 700) + R() * 600)
       Game.gear.push({ type: 'barricade', x, hp: 420 * DIFFS[Game.diff].hp, max: 420 * DIFFS[Game.diff].hp, broken: 0 });
   }
   // a ride shows up on the bigger stages
@@ -4029,6 +4119,7 @@ function attractStart(){
   P.length = 0; DN.length = 0;
   Attract.ents = []; Attract.on = true;
   const hero = makeEnt({ x: cam.x + viewW * .36, col: '#111318', s: 1.06, headGear: 'hair', eyes: '#fff',
+    faceDetail: 1, headband: 1, headbandCol: '#7fd4ff',
     face: 1, pose: 'run', wep: pick(['katana', 'bat', 'rifle', 'axe', 'shotgun']) });
   hero.spd = 128; Attract.ents.push(hero);
   for (let i = 0; i < 7; i++){
@@ -5164,7 +5255,8 @@ function drawWeather(){
 /* --------------------------------------------------------------- traps */
 function buildTraps(bg, seed, len){
   const R = mulberry(seed + 313);
-  for (let x = 700; x < len - 400; x += 500 + R() * 700){
+  const gap = len > 8000 ? 2200 : 500;                 // endless runs stay sparse
+  for (let x = 700; x < len - 400; x += gap + R() * 700){
     const k = R();
     if (k < .34) Game.gear.push({ type: 'spikes', x, armed: 1, cd: 0 });
     else if (k < .62) Game.gear.push({ type: 'zapfloor', x, cd: rnd(0, 2), on: 0 });
@@ -5802,6 +5894,7 @@ function makeNPC(kind, x){
     x, y: GY, team: 'p', npc: 1, npcKind: kind, npcName: k.name, col: k.col, baseCol: k.col,
     hp: k.hp, maxHp: k.hp, dmg: k.dmg, spd: k.spd, s: .98, r: 24,
     gunId: k.gun, wep: k.gun, headGear: k.headGear, gearCol: k.gearCol, eyes: '#fff',
+    faceDetail: 1,
     pack: kind !== 'civilian', belt: 1, plate: kind === 'soldierN' ? 1 : 0,
     packCol: kind === 'medicN' ? '#e8eef2' : '#3a4450', kit: kind === 'medicN' ? 'medic' : null,
     flee: k.flee, heals: k.heals, inf: 0, infSp: 1, fireT: 0, mag: k.gun ? 12 : 0, reloadT: 0,
@@ -5811,10 +5904,12 @@ function makeNPC(kind, x){
   return e;
 }
 function livingHumans(){
+  if (Game._humansT === Game.time && Game._humans) return Game._humans;   // one list per tick
   const out = [];
   if (Game.player && !Game.player.dead && !Game.player.zombified) out.push(Game.player);
   for (const a of Game.allies) if (!a.dead) out.push(a);
   for (const n of Game.npcs) if (!n.dead && !n.turning) out.push(n);
+  Game._humans = out; Game._humansT = Game.time;
   return out;
 }
 function updateNPC(n, dt){

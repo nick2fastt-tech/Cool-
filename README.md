@@ -146,9 +146,12 @@ turning hostile and joining the horde. Every one you fail to protect is one more
 - **Progression** — level 100, prestige for permanent power, skill tree, weapon and armour levels,
   crafting with materials and blueprints, supply crates, weekly missions, a seasonal event track,
   30 achievements, daily login rewards, checkpoints, and a full statistics page.
-- **Character detail** — backpacks, utility belts, chest plates that match your armour tier, role kit
-  (medic cross, ammo belts, tool racks, shields), eyes that change with pain, rage and infection, and
-  battle damage: scratches, torn clothing and dirt as your health drops.
+- **Character detail** — the hero and every squadmate have a face: two eyes looking forward with
+  pupils and brows, and a closed mouth that sets grim as they get hurt, squeezes shut in pain and
+  goes to crosses when they fall. The hero wears a light blue headband whose tails stream out behind
+  him as he runs and jumps. Plus backpacks, utility belts, chest plates that match your armour tier,
+  role kit (medic cross, ammo belts, tool racks, shields), and battle damage: scratches, torn
+  clothing and dirt as health drops.
 - **Customisation** — hair, headgear, outfits, gloves, boots, body colour, weapon skins, emotes and
   victory poses, all drawn on the stickman.
 - **Audio** — procedural rock soundtrack that shifts for boss fights, plus combat and ambient SFX.
