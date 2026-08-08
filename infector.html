@@ -367,7 +367,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
   <div id="menuTop">
     <div class="title">INFECTOR</div>
     <div class="subtitle">Run. Hide. Survive the outbreak.</div>
-    <div style="font-size:10px;letter-spacing:3px;color:#7fd4a0;margin-top:5px">V1.20 · NIGHTMARE HOTEL</div>
+    <div style="font-size:10px;letter-spacing:3px;color:#7fd4a0;margin-top:5px">V1.21 · THE ELEVATOR</div>
   </div>
   <div id="menuBtns">
     <button class="btn green wide" data-nav="quickplay">▶ Play</button>
@@ -379,7 +379,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
     <button class="btn ghost" data-nav="settings">⚙ Settings</button>
     <button class="btn ghost" data-nav="credits" style="grid-column:1/-1">★ Credits</button>
   </div>
-  <div class="footNote" id="verNote">V1.20 · 4 difficulties · 15 servers</div>
+  <div class="footNote" id="verNote">V1.21 · 4 difficulties · 15 servers</div>
 </div>
 
 <!-- ================= SERVERS ================= -->
@@ -502,6 +502,26 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
         <div class="opt"><div><div class="optL">Audio</div><div class="optD">Fully synthesized via Web Audio: wind, birds, growls, footsteps, adaptive score</div></div></div>
         <div class="opt"><div><div class="optL">Netcode</div><div class="optD">Authoritative round simulation with snapshot interpolation &amp; client prediction</div></div></div>
         <div class="opt"><div><div class="optL">Maps</div><div class="optD">Playground, Neighborhood &amp; the three-storey Hotel — procedurally assembled</div></div></div>
+      </div>
+      <h3 style="margin:18px 0 6px;font-size:15px;letter-spacing:2px;color:#8ef07a">V1.21 — THE ELEVATOR</h3>
+      <div class="muted" style="line-height:1.75">
+        <b style="color:#cfe6ff">Animation overhaul.</b> Every walk, run, sprint and shamble is now solved
+        against the real leg geometry instead of hand-tuned by eye. The pelvis drops and rises exactly as far
+        as the two-link leg chain demands, so the planted foot sits <i>on</i> the floor through the whole
+        stride — and the cycle rate is derived from the swing amplitude, so the feet cover the ground the body
+        actually travels. Stride length is up 33% on walking and 55% on sprinting, and a floor clamp in the
+        pose pipeline means no pose can push a sole through the ground again.<br><br>
+        <b style="color:#cfe6ff">A real elevator.</b> The lift no longer wanders on a timer. There is a
+        <b>call button at every landing</b> and a <b>three-floor panel inside the car</b>; press <b>E</b> (or
+        the on-screen button) to use them. Buttons light while a call is pending, the floor readout tracks the
+        car, the doors slide, and the ride is timed to take <b>11–15 seconds</b> door to door — with an ease
+        in and out so it starts and stops like a real car. The HUD counts down your arrival while you ride.
+        <br><br>
+        <b style="color:#cfe6ff">The hotel, furnished.</b> Ceiling light panels on every floor and in every
+        room, wall sconces and numbered doors down the corridors, a carpet runner and a housekeeping trolley.
+        Reception gained a key-pigeonhole wall, a clock, a lamp and a bell; the lounge gained a rug, a coffee
+        table, planters and a luggage cart, with vending machines by the lift. Guest rooms gained a dresser
+        and television, a desk and chair, a wardrobe, curtains, a rug and a picture over the beds.
       </div>
       <h3 style="margin:18px 0 6px;font-size:15px;letter-spacing:2px;color:#8ef07a">V1.20 — NIGHTMARE HOTEL</h3>
       <div class="muted" style="line-height:1.75">
@@ -646,6 +666,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
       <div class="tbtn small" id="btnSprint"><div class="ico">⚡</div>RUN</div>
     </div>
     <div class="row" style="gap:10px">
+      <div class="tbtn small" id="btnLift" style="display:none"><div class="ico">🛗</div>CALL</div>
       <div class="tbtn small" id="btnHide" style="display:none"><div class="ico">🛏</div>HIDE</div>
     </div>
     <div class="row" style="gap:12px;align-items:flex-end">
@@ -1048,6 +1069,16 @@ const Audio_={
     this.burst({filter:'lowpass',fc:500,fc1:160,dur:.26,gain:.14,delay:.16});
   },
   jump(){this.tone({f0:340,f1:620,dur:.16,gain:.13,type:'triangle'});},
+  /* lift call button: a short electronic blip */
+  beep(){
+    this.tone({f0:1180,f1:1180,dur:.09,gain:.13,type:'square',filter:'lowpass',fc:2200});
+    this.tone({f0:1560,f1:1560,dur:.07,gain:.07,type:'sine',delay:.06});
+  },
+  /* arrival chime */
+  ding(){
+    this.tone({f0:1720,f1:1700,dur:.5,gain:.15,type:'sine'});
+    this.tone({f0:1290,f1:1280,dur:.7,gain:.1,type:'sine',delay:.12});
+  },
   /* a room door shoved open: latch, hinge creak, then the swing */
   door(){
     this.burst({filter:'bandpass',fc:2400,fc1:1200,dur:.07,gain:.14,q:3});
@@ -2596,6 +2627,63 @@ function hBed(b,cols,hides,x,z,fy,ry,col){
   cols.push({x:x,z:z,hx:1.0,hz:1.25,rot:-ry,top:fy+.82,base:fy+.5,plat:true});
   hides.push({x,z,y:fy,ry,w:1.9,d:2.4});
 }
+/* ---- hotel dressing helpers: things you look at rather than walk into ---- */
+/* a recessed ceiling panel — these are what the indoor lighting model implies */
+function hCeilLight(b,x,z,fy,w,d){
+  b.prim(P.box,b.st.reset().translate(x,fy+HOTEL.fh-.22,z).scale(w+.14,.07,(d||w)+.14).top,
+    hex(0x8f959c));
+  b.prim(P.box,b.st.reset().translate(x,fy+HOTEL.fh-.27,z).scale(w,.05,d||w).top,
+    [1,.97,.88],1.0);
+}
+/* wall sconce: a small shade throwing light up a corridor wall */
+function hSconce(b,x,z,fy,ry){
+  const st=b.st;
+  b.prim(P.box,st.reset().translate(x,fy+2.05,z).rotY(ry).scale(.16,.34,.1).top,hex(0x6f5c44));
+  b.prim(P.cone,st.reset().translate(x,fy+2.3,z).rotY(ry).scale(.34,.3,.34).top,
+    [1,.94,.76],.85);
+}
+/* framed picture on a wall */
+function hArt(b,x,z,fy,ry,w,h,seed){
+  const st=b.st;
+  const tone=[hex(0x3f5a6b),hex(0x6b5a3f),hex(0x4a6b4f),hex(0x6b3f4a)][seed%4];
+  b.prim(P.box,st.reset().translate(x,fy+1.62,z).rotY(ry).scale(w+.1,h+.1,.05).top,
+    hex(0x5a4632));
+  b.prim(P.box,st.reset().translate(x,fy+1.62,z).rotY(ry).translate(0,0,.03).scale(w,h,.02).top,
+    tone);
+}
+/* a potted plant */
+function hPlant(b,cols,x,z,fy){
+  const st=b.st;
+  b.prim(P.taper,st.reset().translate(x,fy+.26,z).scale(.52,.52,.52).top,hex(0x8a5a3f));
+  b.prim(P.sphLo,st.reset().translate(x,fy+.78,z).scale(1.0,1.15,1.0).top,hex(0x2f6b3a));
+  b.prim(P.sphLo,st.reset().translate(x+.24,fy+1.02,z-.16).scale(.62,.7,.62).top,hex(0x367a42));
+  cols.push({x,z,r:.34,circle:true,top:fy+.5,base:fy-.2,solid:true});
+}
+/* a vending machine */
+function hVend(b,cols,x,z,fy,ry,col){
+  const st=b.st;
+  b.prim(P.box,st.reset().translate(x,fy+.92,z).rotY(ry).scale(1.3,1.84,.7).top,col);
+  b.prim(P.box,st.reset().translate(x,fy+1.12,z).rotY(ry).translate(0,0,.37)
+    .scale(1.0,1.2,.04).top,C.glass,.2);
+  b.prim(P.box,st.reset().translate(x,fy+.3,z).rotY(ry).translate(0,0,.37)
+    .scale(.7,.26,.05).top,hex(0x2a2f36));
+  cols.push({x,z,hx:.65,hz:.35,rot:-ry,top:fy+1.84,base:fy-.2,solid:true});
+}
+/* a wardrobe / dresser with a television on it */
+function hDresser(b,cols,x,z,fy,ry,tv){
+  const st=b.st;
+  b.prim(P.box,st.reset().translate(x,fy+.34,z).rotY(ry).scale(1.9,.68,.6).top,C.wood2);
+  for(let i=-1;i<=1;i+=2)
+    b.prim(P.box,st.reset().translate(x,fy+.34,z).rotY(ry).translate(i*.45,0,.31)
+      .scale(.78,.5,.03).top,shade(C.wood2,1.16));
+  cols.push({x,z,hx:.95,hz:.3,rot:-ry,top:fy+.68,base:fy-.2,solid:true});
+  if(tv){
+    b.prim(P.box,st.reset().translate(x,fy+1.06,z).rotY(ry).scale(1.36,.74,.07).top,
+      hex(0x1a1d22));
+    b.prim(P.box,st.reset().translate(x,fy+1.06,z).rotY(ry).translate(0,0,.05)
+      .scale(1.22,.62,.02).top,hex(0x2b3742),.12);
+  }
+}
 function hDesk(b,cols,x,z,fy,ry,w,d,col){
   b.prim(P.box,b.st.reset().translate(x,fy+.5,z).rotY(ry).scale(w,1.0,d).top,col);
   b.prim(P.box,b.st.reset().translate(x,fy+1.06,z).rotY(ry).scale(w+.3,.12,d+.3).top,shade(col,1.15));
@@ -2686,6 +2774,46 @@ function buildHotel(){
         b.prim(P.box,b.st.reset().translate(s*(W/2-.4),fy+2.55,D/2-3.5).scale(.16,.5,1.2).top,
           hex(0x4ce06a),.5);
       }
+      // ---- reception back wall: pigeonholes, key board, clock, desk bell
+      for(let r=0;r<3;r++)for(let k=0;k<9;k++)
+        b.prim(P.box,b.st.reset().translate(-9.4+k*.78,fy+1.5+r*.42,-11.3)
+          .scale(.66,.32,.16).top,shade(hex(0x6f5a42),.9+((k+r)%3)*.09));
+      b.prim(P.cyl,b.st.reset().translate(-6,fy+2.95,-11.2).rotX(PI/2).scale(.62,.1,.62).top,
+        [.96,.95,.9],.25);
+      b.prim(P.sphLo,b.st.reset().translate(-3.2,fy+1.18,-9.5).scale(.16,.13,.16).top,
+        hex(0xcaa24a),.15);
+      // desk lamp and a stack of registers on the counter
+      b.prim(P.cone,b.st.reset().translate(-8.6,fy+1.32,-9.4).scale(.36,.34,.36).top,
+        [1,.93,.72],.7);
+      b.prim(P.box,b.st.reset().translate(-4.4,fy+1.16,-9.6).scale(.5,.08,.36).top,
+        hex(0xd8d2c4));
+      // ---- lobby rug under the seating cluster
+      b.prim(P.box,b.st.reset().translate(-12.4,fy+.2,2.6).scale(9.0,.04,8.0).top,
+        hex(0x6b4550));
+      // coffee table in the middle of the seats
+      b.prim(P.box,b.st.reset().translate(-12.4,fy+.42,2.6).scale(2.0,.12,1.4).top,C.wood);
+      for(let i=-1;i<=1;i+=2)for(let k=-1;k<=1;k+=2)
+        b.prim(P.box,b.st.reset().translate(-12.4+i*.85,fy+.2,2.6+k*.55)
+          .scale(.1,.42,.1).top,C.wood2);
+      cols.push({x:-12.4,z:2.6,hx:1.0,hz:.7,rot:0,top:fy+.48,base:fy-.2,solid:true});
+      // ---- planters, a luggage cart and vending by the lift
+      hPlant(b,cols,-2.6,-7.4,fy);hPlant(b,cols,2.4,-7.4,fy);
+      hPlant(b,cols,-17.6,13.2,fy);hPlant(b,cols,8.6,12.4,fy);
+      hVend(b,cols,9.1,-1.4,fy,-PI/2,hex(0x9a2f3a));
+      hVend(b,cols,9.1,.6,fy,-PI/2,hex(0x2f5a9a));
+      // luggage cart: a wheeled rail with cases stacked on it
+      b.prim(P.box,b.st.reset().translate(-1.2,fy+.26,4.6).scale(1.5,.14,1.0).top,C.metalD);
+      for(let i=-1;i<=1;i+=2)
+        b.prim(P.cyl,b.st.reset().translate(-1.2+i*.6,fy+1.0,4.15).scale(.07,1.5,.07).top,
+          hex(0xc4a55a));
+      b.prim(P.box,b.st.reset().translate(-1.2,fy+1.74,4.15).scale(1.4,.08,.08).top,
+        hex(0xc4a55a));
+      b.prim(P.box,b.st.reset().translate(-1.3,fy+.52,4.6).scale(1.2,.44,.8).top,hex(0x4a3a5a));
+      b.prim(P.box,b.st.reset().translate(-1.1,fy+.9,4.6).scale(.95,.34,.7).top,hex(0x6b4a3a));
+      cols.push({x:-1.2,z:4.5,hx:.8,hz:.55,rot:0,top:fy+.4,base:fy-.2,solid:true});
+      // ---- art along the lobby walls
+      for(let i=0;i<4;i++)hArt(b,-19+i*4.4,-D/2+.4,fy,0,1.3,.95,i);
+      hArt(b,W/2-.4,6,fy,-PI/2,1.5,1.05,2);
     }else{
       // ---------- guest floors: central corridor, rooms both sides ----------
       const corrHalf=2.6;
@@ -2705,6 +2833,14 @@ function buildHotel(){
                      top:fy+2.1,base:fy-.2,solid:true,off:true};
           cols.push(col);
           dyn.push({type:'door',x:dx-DW*.5,y:fy,z:sz*corrHalf,face:sz,w:DW,col,open:1,swing:1});
+          // room number plate and a sconce between each pair of doors
+          const num=f*100+ (sz>0?1:2)+i*2;
+          b.prim(P.box,b.st.reset().translate(dx+1.28,fy+1.9,sz*(corrHalf-sz*.02))
+            .scale(.42,.24,.05).top,hex(0xc9b07a),.1);
+          for(let k=0;k<3;k++)
+            b.prim(P.box,b.st.reset().translate(dx+1.14+k*.14,fy+1.9,sz*(corrHalf-sz*.05))
+              .scale(.07,.13,.03).top,hex(0x3a3026));
+          if(i<5)hSconce(b,dx+3.6,sz*(corrHalf-sz*.14),fy,sz>0?PI:0);
         }
         // room dividers
         for(let i=0;i<=6;i++)
@@ -2734,10 +2870,59 @@ function buildHotel(){
           b.prim(P.cone,b.st.reset().translate(rx+.35,fy+1.0,rz-sz*1.9).scale(.5,.5,.5).top,
             hex(0xf5e8c0),.35);
           cols.push({x:rx+.35,z:rz-sz*1.9,hx:.35,hz:.35,rot:0,top:fy+.72,base:fy-.2,solid:true});
-          // window
+          // window, with curtains drawn back either side
           b.prim(P.box,b.st.reset().translate(rx,fy+1.7,sz*(D/2-.2)).scale(3.0,1.5,.12).top,C.glass,.16);
+          for(let k=-1;k<=1;k+=2)
+            b.prim(P.box,b.st.reset().translate(rx+k*1.85,fy+1.75,sz*(D/2-.38))
+              .scale(.8,2.2,.14).top,shade(hex(0x8a6f52),1.1));
+          b.prim(P.box,b.st.reset().translate(rx,fy+2.9,sz*(D/2-.38)).scale(4.2,.12,.16).top,
+            C.wood2);
+          // dresser with a television, facing the beds
+          hDresser(b,cols,rx+.2,rz+sz*3.5,fy,sz>0?PI:0,true);
+          // desk and chair in the corner
+          b.prim(P.box,b.st.reset().translate(rx-2.5,fy+.66,rz+sz*2.9).scale(1.5,.09,.7).top,
+            C.wood);
+          for(let k=-1;k<=1;k+=2)
+            b.prim(P.box,b.st.reset().translate(rx-2.5+k*.6,fy+.32,rz+sz*2.9)
+              .scale(.09,.66,.6).top,C.wood2);
+          cols.push({x:rx-2.5,z:rz+sz*2.9,hx:.75,hz:.35,rot:0,top:fy+.7,base:fy-.2,solid:true});
+          b.prim(P.box,b.st.reset().translate(rx-2.5,fy+.4,rz+sz*2.0).scale(.5,.08,.5).top,
+            hex(0x4a5a6b));
+          b.prim(P.box,b.st.reset().translate(rx-2.5,fy+.7,rz+sz*1.78).scale(.5,.6,.08).top,
+            hex(0x3f4e5d));
+          // wardrobe against the divider
+          b.prim(P.box,b.st.reset().translate(rx+2.9,fy+1.05,rz+sz*3.2).scale(1.2,2.1,.66).top,
+            C.wood2);
+          b.prim(P.box,b.st.reset().translate(rx+2.9,fy+1.05,rz+sz*2.86).scale(.05,1.9,.03).top,
+            C.metal);
+          cols.push({x:rx+2.9,z:rz+sz*3.2,hx:.6,hz:.33,rot:0,top:fy+2.1,base:fy-.2,solid:true});
+          // rug between the beds and a picture over the headboards
+          b.prim(P.box,b.st.reset().translate(rx+.3,fy+.19,rz+sz*1.9).scale(4.4,.03,2.6).top,
+            shade(carpet2,1.16));
+          hArt(b,rx+.3,rz-sz*2.55,fy,sz>0?0:PI,1.5,.8,i);
         }
+        // every room gets a ceiling light
+        hCeilLight(b,rx+.3,rz,fy,1.2,1.2);
       }
+      // ---- corridor lighting and a runner down the middle
+      for(let i=0;i<7;i++)hCeilLight(b,-W/2+3.6+i*6.4,0,fy,1.1,.7);
+      b.prim(P.box,b.st.reset().translate(0,fy+.2,0).scale(W-3,.03,3.0).top,
+        shade(carpet,.82));
+      // housekeeping trolley parked in the corridor
+      {
+        const tx=-W/2+9.4+((f*7)%3)*7.2;
+        b.prim(P.box,b.st.reset().translate(tx,fy+.5,1.6).scale(1.5,.6,.8).top,hex(0x8a9098));
+        b.prim(P.box,b.st.reset().translate(tx,fy+.86,1.6).scale(1.4,.16,.7).top,[.94,.94,.9]);
+        b.prim(P.box,b.st.reset().translate(tx-.5,fy+1.02,1.6).scale(.5,.2,.6).top,[.88,.88,.84]);
+        b.prim(P.cyl,b.st.reset().translate(tx+.9,fy+.9,1.6).scale(.09,1.7,.09).top,C.metal);
+        cols.push({x:tx,z:1.6,hx:.8,hz:.45,rot:0,top:fy+.9,base:fy-.2,solid:true});
+      }
+    }
+    // ---- ceiling lights in the public rooms downstairs
+    if(f===0){
+      for(let i=0;i<5;i++)for(let k=0;k<3;k++)
+        hCeilLight(b,-18+i*5.2,-9+k*9,fy,1.3,1.3);
+      for(let i=0;i<3;i++)hCeilLight(b,13+i*5.2,-4,fy,1.3,1.3);
     }
     // ---- stairwells at both ends (steps are low enough to walk up)
     for(let s=-1;s<=1;s+=2){
@@ -2810,6 +2995,10 @@ function buildHotel(){
     hWall(b,cols,ex+2.2,ez,T,4.4,fy,hex(0x9aa4ae));
     hWall(b,cols,ex,ez-2.2,4.4,T,fy,hex(0x9aa4ae));
     dyn.push({type:'liftdoor',x:ex,y:fy,z:ez+2.2,floor:f});
+    // call button on the jamb beside the doors, and its surround
+    b.prim(P.box,b.st.reset().translate(ex+1.62,fy+1.18,ez+2.42)
+      .scale(.26,.42,.08).top,hex(0x6d747c));
+    dyn.push({type:'liftcall',x:ex+1.62,y:fy,z:ez+2.46,floor:f});
   }
   dyn.push({type:'lift',x:ex,z:ez});
   // ---- spawns and navigation across every floor
@@ -3167,6 +3356,37 @@ const J={bob:0,lean:1,side:2,twist:3,spine:4,spineSide:5,
 const NJ=35;
 const _poseB=new Float32Array(NJ);
 
+/* When a leg swings `a` radians off vertical its sole rises by
+   legLength*(1-cos a). Real walking answers that by dropping the pelvis, so
+   the hips sit highest at mid-stance and lowest at double support. Feeding the
+   exact geometric figure back through J.bob is what keeps the planted foot on
+   the floor instead of floating above it — the single biggest thing that made
+   the old cycles read as a shuffle. */
+function hipDrop(a){return (BD.uLeg+BD.lLeg)*(1-Math.cos(a));}
+/* How far below the hip the foot's contact point ends up for a given thigh
+   angle, knee flexion and ankle angle — the same two-link chain the leg mesh
+   is built from (thigh rotated by `th`, shin a further `kn`).
+   The shoe then pivots about its heel or its toe as the ankle rotates, which
+   lowers the contact point further — a flat-foot solve alone buries the toe
+   during push-off. */
+const SHOE={toe:.24,heel:.15};
+function legReach(th,kn,an){
+  const ankle=BD.uLeg*Math.cos(th)+BD.lLeg*Math.cos(th+kn);
+  const w=th+kn+(an||0);                       // shoe pitch in world terms
+  const lever=w<0?SHOE.toe:SHOE.heel;          // toe ahead of / heel behind ankle
+  return ankle+BD.soleDrop*(Math.cos(w)-1)+lever*Math.abs(Math.sin(w));
+}
+/* Pelvis offset that puts the *lower* of the two feet exactly on the floor.
+   Always <= 0, and exactly 0 when a leg is straight and vertical. */
+function hipBob(thL,knL,anL,thR,knR,anR){
+  return Math.max(legReach(thL,knL,anL),legReach(thR,knR,anR))-(BD.uLeg+BD.lLeg);
+}
+/* Step length the geometry can actually deliver at swing amplitude `a`:
+   the two feet end up 2*L*sin(a) apart. Stride constants are derived from this
+   so the cycle rate always matches ground speed. */
+function stepLen(a){return 2*(BD.uLeg+BD.lLeg)*Math.sin(a);}
+const SW={walk:.62,run:.92,sprint:1.12,zWalk:.5,zRun:.88};
+
 /* Each clip writes absolute channel values; the blender mixes them by weight. */
 const CLIP={
  idle(o,t,c){
@@ -3186,53 +3406,85 @@ const CLIP={
    o[J.side]=w*.03;
    o[J.twist]=Math.sin(t*.31+sd)*.035;
    o[J.lHipR]=w*.05;o[J.rHipR]=w*.05;
-   o[J.lHipP]=.02-w*.03;o[J.rHipP]=-.02+w*.03;
-   o[J.lKnee]=.07+Math.max(0,w)*.12;o[J.rKnee]=.07+Math.max(0,-w)*.12;
+   const thL=.02-w*.03, thR=-.02+w*.03;
+   const knL=.07+Math.max(0,w)*.12, knR=.07+Math.max(0,-w)*.12;
+   o[J.lHipP]=thL;o[J.rHipP]=thR;
+   o[J.lKnee]=knL;o[J.rKnee]=knR;
+   // stand on the loaded leg rather than hovering above it
+   o[J.bob]+=hipBob(thL,knL,0,thR,knR,0)+.006;
    o[J.eye]=1;
  },
+ /* Walking. Both feet are on the floor at the extremes of the stride, so the
+    pelvis follows the exact geometric drop and nothing floats or skates. The
+    stance knee stays nearly straight; the swing knee folds to clear the toe. */
  walk(o,t,c){
    const p=c.phase,s=Math.sin(p),cs=Math.cos(p);
-   o[J.lHipP]=s*.58;o[J.rHipP]=-s*.58;
-   o[J.lKnee]=Math.max(0,-s)*.95+.08+Math.max(0,cs)*.16;
-   o[J.rKnee]=Math.max(0,s)*.95+.08+Math.max(0,-cs)*.16;
+   const A=SW.walk;
+   const thL=s*A, thR=-s*A;
+   o[J.lHipP]=thL;o[J.rHipP]=thR;
+   // swing leg (travelling forward, cs>0 for the left) folds; stance stays long
+   const swL=Math.max(0,cs),swR=Math.max(0,-cs);
+   const knL=.06+swL*.86+Math.max(0,-s)*.22;
+   const knR=.06+swR*.86+Math.max(0,s)*.22;
+   o[J.lKnee]=knL;o[J.rKnee]=knR;
    // heel strike at the front of the stride, toe-off at the back
-   const heelL=Math.max(0,s), toeL=Math.max(0,-s);
-   const heelR=Math.max(0,-s), toeR=Math.max(0,s);
-   o[J.lAnk]=heelL*.34-toeL*.42;
-   o[J.rAnk]=heelR*.34-toeR*.42;
-   o[J.lShP]=-s*.55;o[J.rShP]=s*.55;
-   o[J.lElb]=.3+Math.max(0,s)*.4;o[J.rElb]=.3+Math.max(0,-s)*.4;
+   const anL=Math.max(0,s)*.30-Math.max(0,-s)*.46+swL*.24;
+   const anR=Math.max(0,-s)*.30-Math.max(0,s)*.46+swR*.24;
+   o[J.lAnk]=anL;o[J.rAnk]=anR;
+   o[J.lShP]=-s*.52;o[J.rShP]=s*.52;
+   o[J.lElb]=.28+Math.max(0,s)*.38;o[J.rElb]=.26+Math.max(0,-s)*.38;
    o[J.lShR]=.12;o[J.rShR]=.12;
-   o[J.bob]=Math.abs(Math.sin(p))*.042;  // body bounce on every step
-   o[J.side]=-cs*.038;o[J.twist]=cs*.14;o[J.spine]=.085;
-   o[J.shrug]=Math.abs(s)*.25;
-   o[J.headY]=-cs*.07;o[J.headP]=-.02;o[J.eye]=1;
+   // pelvis: geometric drop, with a small rise over the stance ankle
+   o[J.bob]=hipBob(thL,knL,anL,thR,knR,anR);
+   o[J.side]=-cs*.045;o[J.twist]=cs*.16;o[J.spine]=.075;
+   o[J.lHipR]=cs*.035;o[J.rHipR]=cs*.035;      // pelvis lists over the stance leg
+   o[J.shrug]=Math.abs(s)*.2;
+   o[J.headY]=-cs*.05;o[J.headP]=-.02;o[J.eye]=1;
  },
+ /* Running. There is a flight phase, so the pelvis takes only part of the
+    geometric drop and rises as the stance leg extends and pushes off. */
  run(o,t,c){
    const p=c.phase,s=Math.sin(p),cs=Math.cos(p);
-   o[J.lHipP]=s*.98;o[J.rHipP]=-s*.98;
-   o[J.lKnee]=Math.max(0,-s)*1.5+.2;o[J.rKnee]=Math.max(0,s)*1.5+.2;
-   o[J.lAnk]=-s*.32;o[J.rAnk]=s*.32;
+   const A=SW.run;
+   const thL=s*A, thR=-s*A;
+   o[J.lHipP]=thL;o[J.rHipP]=thR;
+   const swL=Math.max(0,cs),swR=Math.max(0,-cs);
+   const knL=.16+swL*1.45+Math.max(0,-s)*.35;
+   const knR=.16+swR*1.45+Math.max(0,s)*.35;
+   o[J.lKnee]=knL;o[J.rKnee]=knR;
+   const anL=Math.max(0,s)*.2-Math.max(0,-s)*.5+swL*.34;
+   const anR=Math.max(0,-s)*.2-Math.max(0,s)*.5+swR*.34;
+   o[J.lAnk]=anL;o[J.rAnk]=anR;
    // arms drive across the body and open on the back swing
    o[J.lShP]=-s*.98;o[J.rShP]=s*.98;
    o[J.lShY]=-.16-Math.max(0,-s)*.3;o[J.rShY]=.16+Math.max(0,s)*.3;
    o[J.lElb]=1.0+Math.max(0,s)*.62;o[J.rElb]=1.0+Math.max(0,-s)*.62;
    o[J.lShR]=.15;o[J.rShR]=.15;
-   o[J.bob]=Math.abs(Math.sin(p))*.07;
+   /* Planted foot rides the floor; the body lifts off as the legs cross.
+      The constant is the measured residual of the analytic solve against the
+      rendered mesh when the trailing leg is deeply folded. */
+   o[J.bob]=hipBob(thL,knL,anL,thR,knR,anR)+Math.max(0,Math.abs(cs)-.5)*.12+.040;
    o[J.lean]=.2;o[J.side]=-cs*.05;o[J.twist]=cs*.22;o[J.spine]=.05;
    o[J.shrug]=.3+Math.abs(s)*.3;o[J.handGrip]=.65;
    o[J.headP]=-.13;o[J.headY]=-cs*.05;o[J.eye]=1;
  },
  sprint(o,t,c){
    const p=c.phase,s=Math.sin(p),cs=Math.cos(p);
-   o[J.lHipP]=s*1.24;o[J.rHipP]=-s*1.24;
-   o[J.lKnee]=Math.max(0,-s)*1.9+.26;o[J.rKnee]=Math.max(0,s)*1.9+.26;
-   o[J.lAnk]=-s*.38;o[J.rAnk]=s*.38;
+   const A=SW.sprint;
+   const thL=s*A, thR=-s*A;
+   o[J.lHipP]=thL;o[J.rHipP]=thR;
+   const swL=Math.max(0,cs),swR=Math.max(0,-cs);
+   const knL=.2+swL*1.85+Math.max(0,-s)*.42;
+   const knR=.2+swR*1.85+Math.max(0,s)*.42;
+   o[J.lKnee]=knL;o[J.rKnee]=knR;
+   const anL=Math.max(0,s)*.16-Math.max(0,-s)*.56+swL*.4;
+   const anR=Math.max(0,-s)*.16-Math.max(0,s)*.56+swR*.4;
+   o[J.lAnk]=anL;o[J.rAnk]=anR;
    o[J.lShP]=-s*1.3;o[J.rShP]=s*1.3;
    o[J.lShY]=-.24-Math.max(0,-s)*.34;o[J.rShY]=.24+Math.max(0,s)*.34;
    o[J.lElb]=1.4+Math.max(0,s)*.6;o[J.rElb]=1.4+Math.max(0,-s)*.6;
    o[J.lShR]=.19;o[J.rShR]=.19;
-   o[J.bob]=Math.abs(Math.sin(p))*.085;
+   o[J.bob]=hipBob(thL,knL,anL,thR,knR,anR)+Math.max(0,Math.abs(cs)-.42)*.17+.093;
    o[J.lean]=.35;o[J.side]=-cs*.06;o[J.twist]=cs*.28;
    o[J.shrug]=.5;o[J.handGrip]=.85;o[J.headP]=-.22;o[J.mouth]=.2;o[J.eye]=1;
  },
@@ -3357,26 +3609,40 @@ const CLIP={
    o[J.lKnee]=.3;o[J.rKnee]=.22;o[J.lHipP]=.06;o[J.rHipP]=-.08;
    o[J.bob]=br*.016;o[J.eye]=.92;o[J.mouth]=.2;
  },
+ /* Dragging, asymmetric shuffle — the bad leg barely leaves the floor — but
+    the planted foot still has to sit on it, so the pelvis follows the same
+    geometric solve as the living gaits. */
  zwalk(o,t,c){
    const p=c.phase,s=Math.sin(p),cs=Math.cos(p);
-   o[J.lHipP]=s*.52;o[J.rHipP]=-s*.44;
-   o[J.lKnee]=Math.max(0,-s)*.82+.32;o[J.rKnee]=Math.max(0,s)*.56+.18;
-   o[J.lAnk]=-s*.16;o[J.rAnk]=s*.1;
+   const A=SW.zWalk;
+   const thL=s*A, thR=-s*A*.85;
+   o[J.lHipP]=thL;o[J.rHipP]=thR;
+   const knL=Math.max(0,-s)*.82+.32, knR=Math.max(0,s)*.56+.18;
+   o[J.lKnee]=knL;o[J.rKnee]=knR;
+   const anL=-s*.16, anR=s*.1;
+   o[J.lAnk]=anL;o[J.rAnk]=anR;
    o[J.lShP]=-1.0-s*.16;o[J.rShP]=-.88+s*.16;
    o[J.lElb]=.78;o[J.rElb]=.98;o[J.lShR]=.3;o[J.rShR]=.24;
-   o[J.bob]=Math.abs(Math.sin(p))*.048;
+   o[J.bob]=hipBob(thL,knL,anL,thR,knR,anR)+.006;
    o[J.side]=-cs*.12;o[J.spine]=.36;o[J.twist]=cs*.12;
    o[J.headR]=Math.sin(t*1.3)*.22;o[J.headP]=.14;o[J.shrug]=.7;
    o[J.eye]=.92;o[J.mouth]=.22;
  },
  zrun(o,t,c){
    const p=c.phase,s=Math.sin(p),cs=Math.cos(p);
-   o[J.lHipP]=s*1.12;o[J.rHipP]=-s*1.12;
-   o[J.lKnee]=Math.max(0,-s)*1.7+.22;o[J.rKnee]=Math.max(0,s)*1.7+.22;
+   const A=SW.zRun;
+   const thL=s*A, thR=-s*A;
+   o[J.lHipP]=thL;o[J.rHipP]=thR;
+   const swL=Math.max(0,cs),swR=Math.max(0,-cs);
+   const knL=.2+swL*1.55+Math.max(0,-s)*.3, knR=.2+swR*1.55+Math.max(0,s)*.3;
+   o[J.lKnee]=knL;o[J.rKnee]=knR;
+   const anL=Math.max(0,s)*.18-Math.max(0,-s)*.46+swL*.3;
+   const anR=Math.max(0,-s)*.18-Math.max(0,s)*.46+swR*.3;
+   o[J.lAnk]=anL;o[J.rAnk]=anR;
    o[J.lShP]=1.3-s*.36;o[J.rShP]=1.3+s*.36;   // arms trailing, lunging forward
    o[J.lElb]=.48;o[J.rElb]=.48;o[J.lShR]=.46;o[J.rShR]=.46;
    o[J.lShY]=.2;o[J.rShY]=-.2;
-   o[J.bob]=Math.abs(Math.sin(p))*.078;
+   o[J.bob]=hipBob(thL,knL,anL,thR,knR,anR)+Math.max(0,Math.abs(cs)-.5)*.11+.142;
    o[J.lean]=.5;o[J.side]=-cs*.08;o[J.twist]=cs*.18;
    o[J.headP]=-.34;o[J.headR]=Math.sin(t*7)*.1;o[J.shrug]=1.1;
    o[J.eye]=1.1;o[J.mouth]=.55;
@@ -3490,7 +3756,7 @@ const CLIP={
  /* flat under a bed frame, chin on the floor */
  hideIdle(o,t,c){
    const br=Math.sin(t*2.6+(c.seed||0));
-   o[J.lean]=1.34;o[J.rootZ]=-.86;o[J.rootY]=-.05;
+   o[J.lean]=1.34;o[J.rootZ]=-.86;o[J.rootY]=.03;
    o[J.spine]=-.3+br*.03;
    o[J.headP]=-.62+br*.03;
    o[J.headY]=Math.sin(t*.5+(c.seed||0))*.4;
@@ -3499,7 +3765,7 @@ const CLIP={
    o[J.lShR]=.8;o[J.rShR]=.76;o[J.lShY]=.34;o[J.rShY]=-.34;
    o[J.lElb]=1.35;o[J.rElb]=1.4;o[J.handGrip]=.35;
    o[J.lHipP]=.1;o[J.rHipP]=.08;o[J.lHipR]=.3;o[J.rHipR]=-.28;
-   o[J.lKnee]=.42;o[J.rKnee]=.38;o[J.lAnk]=-.4;o[J.rAnk]=-.36;
+   o[J.lKnee]=.30;o[J.rKnee]=.26;o[J.lAnk]=-.22;o[J.rAnk]=-.2;
    o[J.shrug]=.4+Math.abs(br)*.5;
    o[J.eye]=1.25;o[J.mouth]=.2+Math.abs(br)*.2;o[J.brow]=.4;
  },
@@ -3509,7 +3775,8 @@ const CLIP={
    o[J.lShP]=-1.15-s*.4;o[J.rShP]=-1.1+s*.4;
    o[J.lElb]=1.3+Math.max(0,-s)*.4;o[J.rElb]=1.35+Math.max(0,s)*.4;
    o[J.lHipP]=.1-s*.22;o[J.rHipP]=.08+s*.22;
-   o[J.lKnee]=.42+Math.max(0,s)*.35;o[J.rKnee]=.38+Math.max(0,-s)*.35;
+   o[J.lKnee]=.30+Math.max(0,s)*.28;o[J.rKnee]=.26+Math.max(0,-s)*.28;
+   o[J.rootY]=.03+Math.max(Math.max(0,s),Math.max(0,-s))*.05;
    o[J.side]=-Math.cos(p)*.06;
    o[J.bob]=Math.abs(s)*.015;
  },
@@ -3927,7 +4194,9 @@ const CLIP={
    o[J.lElb]=.55-lunge*.32;o[J.rElb]=.55-lunge*.32;
    o[J.handGrip]=clamp(lunge*1.6-.25,0,1);
    o[J.lHipP]=.36*lunge;o[J.rHipP]=-.36*lunge;
-   o[J.lKnee]=.4;o[J.rKnee]=.4;o[J.shrug]=1.2*lunge;o[J.handGrip]=.8*lunge;
+   o[J.lKnee]=.4+lunge*.22;o[J.rKnee]=.4+lunge*.22;
+   o[J.lAnk]=-.12*lunge;o[J.rAnk]=-.12*lunge;
+   o[J.shrug]=1.2*lunge;o[J.handGrip]=.8*lunge;
    o[J.mouth]=.35+lunge*.9;o[J.eye]=1.2;
  },
  eat(o,t,c){
@@ -4085,6 +4354,19 @@ function updatePose(ch,t,dt){
     fn(tmp,t,ch);
     const w=act[k]/sum;
     for(let i=0;i<NJ;i++)out[i]+=tmp[i]*w;
+  }
+  /* Floor clamp. Whatever the clip asked for, a pose standing on its feet may
+     never sit lower than the leg geometry allows — that is what used to push
+     soles through the ground on every bent-knee pose. Purely a lower bound, so
+     clips that deliberately leave the ground (jumps, the flight phase of a
+     run) are untouched, and clips that place the body explicitly via rootY
+     (crawling, pinned, seated) are skipped. */
+  if(!out[J.rootY]){
+    const need=hipBob(out[J.lHipP],out[J.lKnee],out[J.lAnk],
+                      out[J.rHipP],out[J.rKnee],out[J.rAnk]);
+    // the root also drops by crouch*0.42, so that has to come out of the budget
+    const floor=need+out[J.crouch]*.42;
+    if(out[J.bob]<floor)out[J.bob]=floor;
   }
   // blink
   ch.blinkT-=dt;
@@ -5314,9 +5596,13 @@ class Simulation{
     const z=e.team===TEAM.ZOMBIE;
     // advance the cycle by real distance travelled / stride length, so the
     // planted foot always matches ground speed instead of skating
+    // Stride comes straight from the swing amplitude the clip actually uses,
+    // so one half-cycle covers exactly the ground the feet cover. Running adds
+    // a flight allowance because the body keeps travelling with both feet off.
     let stride;
-    if(z)stride=e.speed>4.7?1.52:1.02;
-    else stride=e.speed>6.1?1.72:(e.speed>4.2?1.46:1.0);
+    if(z)stride=e.speed>4.7?stepLen(SW.zRun)*1.3:stepLen(SW.zWalk);
+    else stride=e.speed>6.1?stepLen(SW.sprint)*1.42
+              :(e.speed>4.2?stepLen(SW.run)*1.3:stepLen(SW.walk));
     e.phase+=(e.speed*dt)*(PI/stride);
     if(e.scaredT>0)e.scaredT-=dt;
     if(e.zStumble>0)e.zStumble-=dt;
@@ -6059,7 +6345,7 @@ const Cam={
    ========================================================================== */
 const In={
   keys:{},jx:0,jz:0,lookX:0,lookY:0,
-  jump:false,jumpEdge:false,sprint:false,action:false,actionEdge:false,hideEdge:false,
+  jump:false,jumpEdge:false,sprint:false,action:false,actionEdge:false,hideEdge:false,liftEdge:false,
   pointerLocked:false,touch:false,
   stickId:-1,stickCx:0,stickCy:0,lookId:-1,lookLX:0,lookLY:0,
   init(){
@@ -6182,6 +6468,7 @@ const In={
     bind($('#btnJump'),()=>{this.jumpEdge=true;this.jump=true;},()=>{this.jump=false;});
     bind($('#btnAction'),()=>{this.actionEdge=true;},null);
     bind($('#btnHide'),()=>{this.hideEdge=true;},null);
+    bind($('#btnLift'),()=>{this.liftEdge=true;},null);
     bind($('#btnSprint'),()=>{
       this.sprintTouch=!this.sprintTouch;
       $('#btnSprint').style.background=this.sprintTouch?'rgba(255,220,120,.4)':'';
@@ -6253,7 +6540,9 @@ const In={
     this.actionEdge=false;
     const hide=this.hideEdge;
     this.hideEdge=false;
-    return {mx,mz,jump,sprint,action,hide};
+    const lift=this.liftEdge;
+    this.liftEdge=false;
+    return {mx,mz,jump,sprint,action,hide,lift};
   }
 };
 
@@ -6351,7 +6640,8 @@ const Game={
   update(dt){
     if(this.state!=='playing'||!this.sim)return;
     const ctrl=In.gather();
-    if(UI.paused){ctrl.mx=0;ctrl.mz=0;ctrl.jump=false;ctrl.sprint=false;ctrl.action=false;ctrl.hide=false;}
+    if(UI.paused){ctrl.mx=0;ctrl.mz=0;ctrl.jump=false;ctrl.sprint=false;ctrl.action=false;ctrl.hide=false;ctrl.lift=false;}
+    if(ctrl.lift)this.pressLift();
     if(ctrl.hide)this.doHide();
     if(ctrl.action)this.doAction();
     if(Lift.col)Lift.update(dt,this.sim);
@@ -6386,6 +6676,7 @@ const Game={
     if(!me||me.transforming||me.act)return;
     if(me.team===TEAM.ZOMBIE){
       if(this.sim.phase!=='live')return;
+      if(this.liftTarget()&&!this.canFeed()){this.pressLift();return;}
       if(this.canFeed()){
         me.act='eat';me.actT=0;
         this.sim.emit('eat',{id:me.id,x:me.x,y:me.y,z:me.z});
@@ -6394,11 +6685,41 @@ const Game={
       this.sim.tryAttack(me);
       Cam.addShake(.25);
     }else{
-      // a bed within reach takes priority over the emote — one interact key
+      // one interact key: lift button, then bed, then the emote
+      if(this.pressLift())return;
       if(me.hiding||this.hideTarget()){this.doHide();return;}
       me.act='emote';me.emoteId=Save.avatar.emote||'emote_wave';
       me.act=Save.avatar.emote||'emote_wave';me.actT=0;
     }
+  },
+  /* The lift button in reach, if any. Inside the car you get the floor panel
+     (the next floor up, wrapping at the top); at a landing you get the call
+     button for that floor. */
+  liftTarget(){
+    const me=this.me;
+    if(!me||!this.sim||!World||!World.floors||!Lift.col)return null;
+    if(me.downed||me.transforming||me.hiding||!me.grounded)return null;
+    if(Lift.inCar(me)){
+      const n=World.floors;
+      // cycle to the next floor that is not the one we are standing at
+      const f=(Lift.floor+1)%n;
+      return {kind:'car',floor:f};
+    }
+    const dx=me.x-Lift.x, dz=me.z-(Lift.z+2.46);
+    const f=Math.round(me.y/World.fh);
+    if(Math.abs(me.y-f*World.fh)>1.0)return null;
+    if(dx*dx+dz*dz>2.5*2.5)return null;
+    return {kind:'call',floor:f};
+  },
+  pressLift(){
+    const t=this.liftTarget();
+    if(!t)return false;
+    if(Lift.call(t.floor)){
+      Audio_.beep();
+      UI.toast(t.kind==='car'?('Floor '+(t.floor===0?'Lobby':t.floor)+' selected')
+                             :'Elevator called');
+    }
+    return true;
   },
   /* the bed the player could duck under right now, if any */
   hideTarget(){
@@ -6793,6 +7114,8 @@ const TUTORIAL=[
    x:'The first infected of a round can be a <b>Runner</b> (faster, quicker strikes, longer sprint) or a <b>Brute</b> (bigger, slower, and its swing knocks everyone nearby off their feet). Anyone infected afterwards always becomes a <b>Regular</b>, so the outbreak never snowballs out of control.'},
   {ico:'🏨',t:'The Hotel',
    x:'Three storeys played from the inside. The <b>lobby</b> has a front desk, a dining room, laundry and storage; the two <b>guest floors</b> run rooms off a central corridor; above that is the <b>roof</b>. Stairwells sit at both ends, and the <b>elevator</b> really works — it shuts its doors, travels, and carries anyone standing in the car with it.'},
+  {ico:'🛗',t:'Riding the elevator',
+   x:'The lift is called, not caught. Stand by the doors and press <span class="kbd">E</span> (or tap the <b>CALL</b> button) to bring the car to your floor — the button lights amber while it is on its way and green when it arrives.<br>Step inside and press <span class="kbd">E</span> again to pick a floor from the panel. The doors take a moment to close and the ride runs <b>11–15 seconds</b> door to door, so listen for what gets in with you.'},
   {ico:'🛏',t:'Hiding under beds',
    x:'Stand near a hotel bed and press <span class="kbd">F</span> (or tap <b>HIDE</b>) to pull yourself underneath. The camera drops to mattress height, you can still shuffle at about a third of your speed, and most zombies will lose the thread and search another room.<br>A <b>Crawler</b> is the exception — it is already down at floor level, so if one has seen you it will come straight under after you.'},
   {ico:'🚪',t:'Doors change every round',
@@ -7475,9 +7798,28 @@ const UI={
     hb.classList.toggle('hot',!!me.hiding);
     hb.querySelector('.ico').textContent=me.hiding?'🚪':'🛏';
     hb.lastChild.nodeValue=me.hiding?'OUT':'HIDE';
-    hp.classList.toggle('on',canHide&&!In.touch);
-    if(canHide)hp.innerHTML=me.hiding?'Press <b>F</b> to come out'
-                                     :'Press <b>F</b> to hide under the bed';
+    // ---- elevator: button prompt, or a live readout while you are riding
+    const lt=Game.liftTarget();
+    const lb=$('#btnLift');
+    lb.style.display=lt?'':'none';
+    if(lt)lb.lastChild.nodeValue=lt.kind==='car'
+      ?('FL '+(lt.floor===0?'L':lt.floor)):'CALL';
+    const riding=Lift.col&&Lift.inCar(me);
+    let liftMsg='';
+    if(riding&&Lift.state==='moving')
+      liftMsg='Elevator · '+(Lift.floor===0?'Lobby':'Floor '+Lift.floor)+
+              ' → '+(Math.round(Lift.target/World.fh)===0?'Lobby':'Floor '+Math.round(Lift.target/World.fh))+
+              ' · '+Lift.eta().toFixed(0)+'s';
+    else if(riding&&Lift.state==='closing')liftMsg='Doors closing…';
+    else if(lt)liftMsg=lt.kind==='car'
+      ?('Press <b>E</b> for '+(lt.floor===0?'the Lobby':'Floor '+lt.floor))
+      :'Press <b>E</b> to call the elevator';
+    if(liftMsg){hp.classList.add('on');hp.innerHTML=liftMsg;}
+    else{
+      hp.classList.toggle('on',canHide&&!In.touch);
+      if(canHide)hp.innerHTML=me.hiding?'Press <b>F</b> to come out'
+                                       :'Press <b>F</b> to hide under the bed';
+    }
     if(this._scoreEl&&this._scoreEl.style.display==='block')
       this._scoreEl.innerHTML='<h2 class="hd" style="margin-bottom:8px">Scoreboard</h2>'+this.scoreRows();
   }
@@ -7499,44 +7841,107 @@ function applyQuality(q){
 }
 /* The lift is simulated, not decorative: it carries whoever is standing on it
    and its collider top tracks the car. */
+/* ---------------------------------------------------------------------------
+   The elevator. Three floors, called from a button at each landing and from
+   the panel inside the car. Doors slide, the car travels, and the whole
+   door-to-door ride is held to the 11–15 s the design calls for: the travel
+   time is stretched to fit the distance rather than running at fixed speed,
+   so one floor and two floors both feel like a real lift ride.
+   ------------------------------------------------------------------------- */
+const LIFT_DOOR=1.7;                 // seconds for the doors to run either way
+const LIFT_RIDE=[0,7.9,11.4];        // travel seconds for 0, 1 and 2 floors
 const Lift={
-  y:0,target:0,state:'idle',wait:0,floor:0,doorOpen:0,
-  reset(){this.y=0;this.target=0;this.state='idle';this.wait=2.5;this.floor=0;this.doorOpen=1;},
+  y:0,floor:0,target:0,state:'open',doorOpen:1,
+  t:0,dur:1,from:0,dwell:0,calls:[0,0,0],x:0,z:0,col:null,
+  reset(){
+    this.y=0;this.floor=0;this.target=0;this.state='open';this.doorOpen=1;
+    this.t=0;this.dur=1;this.from=0;this.dwell=4;
+    this.calls=[0,0,0];
+  },
+  /* how long a ride between two floors takes, doors excluded */
+  rideTime(a,b){
+    const n=Math.min(LIFT_RIDE.length-1,Math.abs(a-b));
+    return LIFT_RIDE[n]||LIFT_RIDE[LIFT_RIDE.length-1];
+  },
+  /* a landing button or a car button was pressed */
+  call(f){
+    if(!World||!World.floors)return false;
+    f=clamp(f|0,0,World.floors-1);
+    if(f===this.floor&&(this.state==='open'||this.state==='idle')){
+      this.dwell=Math.max(this.dwell,3.5);      // already here: hold the doors
+      return true;
+    }
+    if(this.calls[f])return false;
+    this.calls[f]=1;
+    return true;
+  },
+  /* next floor to serve: nearest outstanding call */
+  nextCall(){
+    let best=-1,bd=99;
+    for(let f=0;f<this.calls.length;f++){
+      if(!this.calls[f])continue;
+      const d=Math.abs(f-this.floor);
+      if(d<bd){bd=d;best=f;}
+    }
+    return best;
+  },
   update(dt,sim){
     if(!World||!World.floors)return;
     const fh=World.fh;
-    if(this.state==='idle'){
-      this.doorOpen=damp(this.doorOpen,1,6,dt);
-      this.wait-=dt;
-      if(this.wait<=0){
-        // pick another floor, biased toward wherever people are
-        let f=(this.floor+1+((Math.random()*(World.floors-1))|0))%World.floors;
-        this.target=f*fh;this.state='closing';
+    if(this.state==='open'){
+      this.doorOpen=Math.min(1,this.doorOpen+dt/LIFT_DOOR);
+      this.dwell-=dt;
+      if(this.dwell<=0){
+        const f=this.nextCall();
+        if(f>=0&&f!==this.floor){
+          this.calls[f]=0;
+          this.target=f*fh;this.from=this.y;
+          this.dur=this.rideTime(this.floor,f);
+          this.state='closing';
+        }else{
+          this.calls[this.floor]=0;
+          this.dwell=1.2;                        // keep waiting, doors open
+        }
       }
     }else if(this.state==='closing'){
-      this.doorOpen=damp(this.doorOpen,0,6,dt);
-      if(this.doorOpen<.05){this.doorOpen=0;this.state='moving';}
+      this.doorOpen=Math.max(0,this.doorOpen-dt/LIFT_DOOR);
+      if(this.doorOpen<=0){this.state='moving';this.t=0;}
     }else if(this.state==='moving'){
-      const d=this.target-this.y;
-      const step=Math.sign(d)*Math.min(Math.abs(d),1.9*dt);
-      this.y+=step;
-      if(Math.abs(this.target-this.y)<.02){
+      this.t+=dt;
+      // ease in and out so it starts and stops like a real car
+      const k=clamp(this.t/this.dur,0,1);
+      const e=k*k*(3-2*k);
+      this.y=this.from+(this.target-this.from)*e;
+      if(k>=1){
         this.y=this.target;this.floor=Math.round(this.y/fh);
-        this.state='idle';this.wait=3.4+Math.random()*2.5;
+        this.calls[this.floor]=0;
+        this.state='open';this.dwell=4.5;
+        if(Game&&Game.me&&Math.abs(Game.me.y-this.y)<1.2&&
+           dist2(Game.me.x,Game.me.z,this.x,this.z)<64)Audio_.ding();
       }
     }
     // carry anyone standing in the car
-    if(sim)for(const e of sim.ents){
-      if(e.climb||e.downed)continue;
-      const dx=e.x-this.x,dz=e.z-this.z;
-      if(Math.abs(dx)<1.9&&Math.abs(dz)<1.9&&Math.abs(e.y-(this.y+.16))<.45){
-        e.y=this.y+.16;e.vy=0;e.grounded=true;
+    if(sim)for(const en of sim.ents){
+      if(en.climb||en.downed)continue;
+      const dx=en.x-this.x,dz=en.z-this.z;
+      if(Math.abs(dx)<1.9&&Math.abs(dz)<1.9&&Math.abs(en.y-(this.y+.16))<.5){
+        en.y=this.y+.16;en.vy=0;en.grounded=true;
       }
     }
     // the collider follows the car
     if(this.col){this.col.top=this.y+.16;this.col.base=this.y-.35;}
   },
-  x:0,z:0
+  /* seconds left of the current ride, for the HUD */
+  eta(){
+    if(this.state==='moving')return Math.max(0,this.dur-this.t)+LIFT_DOOR;
+    if(this.state==='closing')return this.dur+LIFT_DOOR*2;
+    return 0;
+  },
+  /* is this entity standing in the car? */
+  inCar(e){
+    return Math.abs(e.x-this.x)<1.85&&Math.abs(e.z-this.z)<1.85&&
+           Math.abs(e.y-(this.y+.16))<.6;
+  }
 };
 /* animated map furniture (swings, see-saw, roundabout, lift) */
 function drawMapProps(d,t){
@@ -7565,6 +7970,37 @@ function drawMapProps(d,t){
         st.push();st.translate(s2*(.48+o),1.3,1.9);st.scale(.98,2.6,.12);
         d.push(P.box,st.top,hex(0xd0d8de),0);st.pop();
       }
+      // ---- car panel: one button per floor, lit while that call is pending
+      st.push();st.translate(1.72,1.28,1.1);st.scale(.1,1.05,.5);
+      d.push(P.box,st.top,hex(0x5f666e),0);st.pop();
+      for(let f=0;f<3;f++){
+        const lit=Lift.calls[f]||(Lift.floor===f&&Lift.state!=='moving');
+        // round face pointing into the car, with a numeral plate beside it
+        st.push();st.translate(1.66,1.66-f*.34,1.1).rotZ(PI/2);st.scale(.055,.17,.17);
+        d.push(P.cyl,st.top,lit?[1,.86,.35]:[.30,.32,.35],lit?.9:0);st.pop();
+        st.push();st.translate(1.665,1.66-f*.34,.85);st.scale(.02,.1,.1);
+        d.push(P.box,st.top,lit?[1,.95,.7]:[.55,.57,.6],lit?.5:0);st.pop();
+      }
+      // floor readout above the doors, inside the car
+      st.push();st.translate(0,2.16,1.78);st.scale(.9,.28,.08);
+      d.push(P.box,st.top,hex(0x14181e),0);st.pop();
+      for(let f=0;f<3;f++){
+        const on=Lift.floor===f;
+        st.push();st.translate((f-1)*.26,2.16,1.72);st.scale(.15,.19,.05);
+        d.push(P.box,st.top,on?[1,.5,.2]:[.12,.13,.15],on?.95:0);st.pop();
+      }
+      continue;
+    }
+    if(p.type==='liftcall'){
+      // landing button: amber when a call is pending, green when the car is here
+      const here=Math.abs(Lift.y-p.y)<.25&&Lift.doorOpen>.4;
+      const pending=!!Lift.calls[p.floor];
+      st.reset().translate(p.x,p.y+1.18,p.z).rotX(PI/2);st.scale(.13,.09,.13);
+      d.push(P.cyl,st.top,here?[.35,1,.45]:(pending?[1,.78,.25]:[.42,.45,.5]),
+        (here||pending)?.9:.05);
+      // little arrow plate above it
+      st.reset().translate(p.x,p.y+1.46,p.z);st.scale(.2,.1,.04);
+      d.push(P.box,st.top,hex(0x9aa4ae),0);
       continue;
     }
     if(p.type==='door'){
@@ -7773,7 +8209,7 @@ function boot(){
       Game.state='menu';
       if(!Save.seenTutorial){UI.tutStep=0;UI.buildTutorial();UI.show('tutorialScreen');}
       else UI.show('menu');
-      $('#verNote').textContent='V1.20 · '+Servers.length+' servers · Easy → Insane';
+      $('#verNote').textContent='V1.21 · '+Servers.length+' servers · Easy → Insane';
     },260);
   },140);
   addEventListener('resize',()=>{R.resize();});

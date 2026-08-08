@@ -1,6 +1,6 @@
 # Cool-
 
-## Infector — V1.20 "Nightmare Hotel"
+## Infector — V1.21 "The Elevator"
 
 An online 3D multiplayer infection-survival game that runs from a **single HTML file** —
 no build step, no engine, no downloads. Open `infector.html` in any browser (desktop or
@@ -11,11 +11,11 @@ all animation, the particles and every sound.
 
 ### Play
 
-- **PC** — `W A S D` move, `Shift` sprint, `Space` jump, `E` / left click infect,
-  `F` hide under a bed, `Q` emotes, `Tab` scoreboard, `Esc` pause. Click once to lock the
-  mouse for camera control.
+- **PC** — `W A S D` move, `Shift` sprint, `Space` jump, `E` interact (infect, press a
+  lift button, duck under a bed), `F` hide, `Q` emotes, `Tab` scoreboard, `Esc` pause.
+  Click once to lock the mouse for camera control.
 - **Mobile** — drag the left half for the joystick, the right half to look, and use the
-  on-screen `RUN` / `JUMP` / `INFECT` / `HIDE` buttons.
+  on-screen `RUN` / `JUMP` / `INFECT` / `HIDE` / `CALL` buttons.
 
 ### The round
 
@@ -47,8 +47,9 @@ Every server runs a fixed mode; the servers screen filters by map and by mode.
 - **Neighborhood** — houses, fences, parked cars and porches you can vault and mantle.
 - **Hotel** — three storeys played from the inside. A lobby with a front desk, dining
   room, laundry and storage; two guest floors of rooms off a central corridor; a roof.
-  Stairwells at both ends and a **working elevator** that shuts its doors, travels
-  between floors and carries whoever is standing in the car.
+  Stairwells at both ends and a **working elevator** with a call button at each
+  landing and a three-floor panel inside the car — press `E` to use them. The ride
+  runs 11–15 seconds door to door and carries whoever is standing in the car.
 
 ### Infected classes
 
@@ -93,6 +94,14 @@ shoves it open — loudly.
 
 ### Version history
 
+- **V1.21 — The Elevator.** Locomotion rebuilt on the real leg geometry: the pelvis
+  follows the exact two-link chain solve so planted feet stay on the floor, cycle rate
+  is derived from swing amplitude so nothing skates, and a floor clamp in the pose
+  pipeline stops any pose pushing a sole through the ground. Stride is up 33% walking
+  and 55% sprinting. The elevator gained call buttons, an in-car floor panel, lit
+  indicators, eased travel and an 11–15 second ride. The hotel gained ceiling lights,
+  sconces, numbered doors, a corridor runner and trolley, a furnished reception and
+  lounge, and dressers, desks, wardrobes, curtains and rugs in every guest room.
 - **V1.20 — Nightmare Hotel.** Four difficulty modes with per-mode round length, lobby
   size, carrier count and infected aggression. The Hotel map: three storeys, working
   elevator, stairwells, hide-under-beds, per-round door shuffle, indoor lighting and
