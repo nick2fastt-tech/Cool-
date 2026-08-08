@@ -238,23 +238,39 @@
       </div>
 
       <div class="card">
-        <h3>Vocals</h3>
-        <p class="hint">The isolated voice track. Drives note placement for both characters.</p>
+        <h3>Opponent Vocals</h3>
+        <p class="hint">The voice on the left. Every note found here becomes an opponent note.</p>
         <div class="lbl">Format</div>
-        <div class="seg" id="vocFormat">
+        <div class="seg" id="oppVocFormat">
           <button class="on" data-fmt="m4a">M4A</button>
           <button data-fmt="mp3">MP3</button>
           <button data-fmt="ogg">OGG</button>
         </div>
         <div class="filerow">
-          <button class="btn small ghost" id="vocPick">Import Vocals</button>
-          <span class="status" id="vocStatus">No file selected</span>
+          <button class="btn small ghost" id="oppVocPick">Import Opponent Vocals</button>
+          <span class="status" id="oppVocStatus">No file selected</span>
         </div>
-        <input type="file" id="vocFile" accept=".m4a,audio/mp4,audio/x-m4a">
+        <input type="file" id="oppVocFile" accept=".m4a,audio/mp4,audio/x-m4a">
+      </div>
+
+      <div class="card">
+        <h3>Player Vocals</h3>
+        <p class="hint">Boyfriend's voice. Every note found here becomes a note you have to hit.</p>
+        <div class="lbl">Format</div>
+        <div class="seg" id="plrVocFormat">
+          <button class="on" data-fmt="m4a">M4A</button>
+          <button data-fmt="mp3">MP3</button>
+          <button data-fmt="ogg">OGG</button>
+        </div>
+        <div class="filerow">
+          <button class="btn small ghost" id="plrVocPick">Import Player Vocals</button>
+          <span class="status" id="plrVocStatus">No file selected</span>
+        </div>
+        <input type="file" id="plrVocFile" accept=".m4a,audio/mp4,audio/x-m4a">
       </div>
 
       <button class="btn pink" id="autoChartBtn" disabled><span class="ic">✨</span>Auto Chart Song</button>
-      <p class="center-note">Charting usually takes a few seconds, and up to <b>1–3 minutes</b> for a long song on an older phone.<br>Keep this screen open while it works.</p>
+      <p class="center-note" id="editorHint">Import the instrumental and at least one vocal track.</p>
     </div>
   </section>
 
@@ -361,7 +377,7 @@
         <div class="setting">
           <span class="name">Scroll Speed</span>
           <span style="display:flex;align-items:center;gap:10px">
-            <input type="range" id="sSpeed" min="10" max="45" step="1">
+            <input type="range" id="sSpeed" min="15" max="32" step="1">
             <span class="val" id="vSpeed">2.0x</span>
           </span>
         </div>
@@ -444,12 +460,16 @@ function show(id){
 $$("[data-go]").forEach(b => b.addEventListener("click", () => show(b.dataset.go)));
 
 /* ------------------------- settings ------------------------- */
+/* Scroll speed is stored as tenths and runs 1.5x-3.2x, the range FNF songs
+   actually chart within. */
+const SPEED_MIN = 15, SPEED_MAX = 32;
 const DEFAULTS = { mode:"mobile", music:100, vocal:100, speed:20, fps:false, splash:true };
 let settings = Object.assign({}, DEFAULTS);
 try{
   const raw = localStorage.getItem("fnfsm_settings");
   if (raw) settings = Object.assign({}, DEFAULTS, JSON.parse(raw));
 }catch(e){ /* storage unavailable — defaults are fine */ }
+settings.speed = clamp(Math.round(settings.speed), SPEED_MIN, SPEED_MAX);  // older saves may sit outside
 const saveSettings = () => { try{ localStorage.setItem("fnfsm_settings", JSON.stringify(settings)); }catch(e){} };
 const scrollPxPerSec = () => (settings.speed / 10) * 235;
 
@@ -485,7 +505,7 @@ const ACCEPT = {
   mp3: ".mp3,audio/mpeg",
   ogg: ".ogg,audio/ogg,application/ogg"
 };
-const picked = { inst:null, voc:null };
+const picked = { inst:null, oppVoc:null, plrVoc:null };
 
 function wireFormat(segId, inputId){
   $$("#" + segId + " button").forEach(b => b.addEventListener("click", () => {
@@ -494,8 +514,19 @@ function wireFormat(segId, inputId){
     $("#" + inputId).setAttribute("accept", ACCEPT[b.dataset.fmt]);
   }));
 }
-wireFormat("instFormat", "instFile");
-wireFormat("vocFormat", "vocFile");
+wireFormat("instFormat",   "instFile");
+wireFormat("oppVocFormat", "oppVocFile");
+wireFormat("plrVocFormat", "plrVocFile");
+
+function refreshEditor(){
+  const vocals = (picked.oppVoc ? 1 : 0) + (picked.plrVoc ? 1 : 0);
+  $("#autoChartBtn").disabled = !(picked.inst && vocals > 0);
+  $("#editorHint").innerHTML =
+    !picked.inst ? "Import the instrumental and at least one vocal track."
+    : vocals === 2 ? "Both voices loaded — each one's notes go straight to its own character.<br>Charting usually takes a few seconds, and up to <b>1–3 minutes</b> for a long song on an older phone."
+    : vocals === 1 ? "One vocal track loaded. Add the other for an exact split, or chart now and the phrases will be shared out between both characters."
+    : "Import the instrumental and at least one vocal track.";
+}
 
 function wirePicker(btnId, inputId, statusId, key){
   $("#" + btnId).addEventListener("click", () => $("#" + inputId).click());
@@ -506,11 +537,13 @@ function wirePicker(btnId, inputId, statusId, key){
     const el = $("#" + statusId);
     el.textContent = f.name + "  (" + (f.size/1048576).toFixed(1) + " MB)";
     el.classList.add("ok");
-    $("#autoChartBtn").disabled = !(picked.inst && picked.voc);
+    refreshEditor();
   });
 }
-wirePicker("instPick", "instFile", "instStatus", "inst");
-wirePicker("vocPick",  "vocFile",  "vocStatus",  "voc");
+wirePicker("instPick",   "instFile",   "instStatus",   "inst");
+wirePicker("oppVocPick", "oppVocFile", "oppVocStatus", "oppVoc");
+wirePicker("plrVocPick", "plrVocFile", "plrVocStatus", "plrVoc");
+refreshEditor();
 
 /* =====================================================================
    AUDIO ANALYSIS
@@ -823,7 +856,7 @@ function pickOnsets(env, fps, sensitivity){
    CHART BUILDER
    ===================================================================== */
 let chartCancelled = false;
-let SONG = null;   // { instBuf, vocBuf, chart }
+let SONG = null;   // { instBuf, tracks:[{buf,side,combined}], chart, name }
 
 function quantise(t, offset, step){
   const k = Math.round((t - offset) / step);
@@ -831,12 +864,22 @@ function quantise(t, offset, step){
   return Math.abs(q - t) <= step * 0.62 ? q : t;  // snap only if it's close
 }
 
-function buildChart(instA, vocA, tempo, duration){
-  const vocEnv  = normalise(vocA.flux);
+/* tracks: [{ A: analysis, side: "opp" | "plr" | null }]
+   Two stems means we already know who sings what and nothing has to be
+   guessed. One combined stem falls back to splitting it by voice. */
+function buildChart(instA, tracks, tempo, duration){
   const instEnv = normalise(instA.flux);
-  const vocRms  = normalise(vocA.rms);
+  const split = tracks.length > 1;
 
-  let onsets = pickOnsets(vocEnv, vocA.fps, 1.42).map(t => ({ t, src:"voc" }));
+  let onsets = [];
+  for (const tr of tracks){
+    const env = normalise(tr.A.flux);
+    const rmsN = normalise(tr.A.rms);
+    for (const t of pickOnsets(env, tr.A.fps, 1.42)){
+      onsets.push({ t, src:"voc", side: tr.side, A: tr.A, rmsN });
+    }
+  }
+  onsets.sort((a,b) => a.t - b.t);
 
   // The vocals decide the chart. The instrumental is only consulted where
   // nobody is singing for a good while, so a long intro or breakdown is not
@@ -852,154 +895,171 @@ function buildChart(instA, vocA, tempo, duration){
   let lastFill = -1e9;
   for (const t of instOnsets){
     if (hasVocalNear(t)) continue;
-    if (t - lastFill < tempo.beatLen * 0.5) continue;   // keep fills sparse
+    if (t - lastFill < tempo.beatLen) continue;         // at most one per beat
     onsets.push({ t, src:"inst" });
     lastFill = t;
   }
   onsets.sort((a,b) => a.t - b.t);
 
-  // Quantise + de-duplicate
+  // ---- snap everything to the grid; de-duplication happens per side ----
   const step = gridStep(tempo.beatLen);
-  const seen = new Set();
   const q = [];
   for (const o of onsets){
     if (o.t < 1.0 || o.t > duration - 0.35) continue;
-    const t = quantise(o.t, tempo.offset, step);
-    const key = Math.round(t / (step * 0.5));
-    if (seen.has(key)) continue;
-    seen.add(key);
-    q.push({ t, src:o.src });
+    q.push({ t: quantise(o.t, tempo.offset, step), src:o.src, side:o.side,
+             A:o.A, rmsN:o.rmsN });
   }
+  q.sort((a,b) => a.t - b.t);
 
-  // Centroid → lane. Quartiles keep the spread even across any song.
-  const cents = q.map(o => {
-    const A = o.src === "voc" ? vocA : instA;
-    const i = clamp(Math.round(o.t * A.fps), 0, A.centroid.length - 1);
-    return A.centroid[i];
-  });
-  const sorted = cents.slice().sort((a,b) => a-b);
-  const qt = p => sorted.length ? sorted[clamp(Math.floor(sorted.length*p), 0, sorted.length-1)] : 0;
-  const c1 = qt(0.25), c2 = qt(0.5), c3 = qt(0.75);
-
-  // Phrases: a gap of >1.1s starts a new one.
-  const phrases = [];
-  let cur = [];
-  for (let i = 0; i < q.length; i++){
-    if (cur.length && q[i].t - q[i-1].t > 1.1){ phrases.push(cur); cur = []; }
-    cur.push(i);
-  }
-  if (cur.length) phrases.push(cur);
-
-  // Work out who sings each phrase from the voice itself. Phrases that came
-  // from the instrumental have no singer, so they are left out of the vote
-  // and handed to the player afterwards.
-  const vocPhrases = [];
-  phrases.forEach((idxs, pi) => {
-    if (idxs.some(i => q[i].src === "voc")) vocPhrases.push(pi);
-  });
-
-  const feat = pi => {
-    const idxs = phrases[pi].filter(i => q[i].src === "voc");
-    const med = pick => {
-      const a = idxs.map(i => {
-        const f = clamp(Math.round(q[i].t * vocA.fps), 0, vocA.centroid.length - 1);
-        return pick(f);
-      }).sort((x,y) => x-y);
-      return a.length ? a[a.length >> 1] : 0;
-    };
-    return [ med(f => vocA.centroid[f]), med(f => vocA.rolloff[f]), med(f => vocA.lowRatio[f]) ];
+  const phrasesOf = list => {
+    const out = [];
+    let cur = [];
+    for (let i = 0; i < list.length; i++){
+      if (cur.length && list[i].t - list[i-1].t > 1.1){ out.push(cur); cur = []; }
+      cur.push(i);
+    }
+    if (cur.length) out.push(cur);
+    return out;
   };
 
-  const owners = new Array(phrases.length).fill(false);
-  let singerFound = false, voiceQuality = 0, voiceBalance = 0;
+  const vocalOnsets = q.filter(o => o.src === "voc");
+  let singerFound = split, voiceQuality = 0, voiceBalance = 0;
 
-  if (vocPhrases.length >= 4){
-    const raw = vocPhrases.map(feat);
-    // z-normalise each dimension so centroid Hz does not swamp a 0..1 ratio
-    const dims = raw[0].length, mean = [], sd = [];
-    for (let k = 0; k < dims; k++){
-      let m = 0; for (const v of raw) m += v[k]; m /= raw.length;
-      let s = 0; for (const v of raw) s += (v[k]-m)*(v[k]-m);
-      mean.push(m); sd.push(Math.sqrt(s/raw.length) || 1);
+  // With one combined stem nothing tells us who is singing, so fall back to
+  // splitting it by voice. With two stems this whole step disappears.
+  if (!split){
+    const vocA = tracks[0].A;
+    const phrases = phrasesOf(vocalOnsets);
+    const owners = new Array(phrases.length).fill(false);
+
+    const feat = idxs => {
+      const med = pick => {
+        const a = idxs.map(i => {
+          const f = clamp(Math.round(vocalOnsets[i].t * vocA.fps), 0, vocA.centroid.length - 1);
+          return pick(f);
+        }).sort((x,y) => x-y);
+        return a.length ? a[a.length >> 1] : 0;
+      };
+      return [ med(f => vocA.centroid[f]), med(f => vocA.rolloff[f]), med(f => vocA.lowRatio[f]) ];
+    };
+
+    if (phrases.length >= 4){
+      const raw = phrases.map(feat);
+      // z-normalise each dimension so centroid Hz does not swamp a 0..1 ratio
+      const dims = raw[0].length, mean = [], sd = [];
+      for (let k = 0; k < dims; k++){
+        let m = 0; for (const v of raw) m += v[k]; m /= raw.length;
+        let sq = 0; for (const v of raw) sq += (v[k]-m)*(v[k]-m);
+        mean.push(m); sd.push(Math.sqrt(sq/raw.length) || 1);
+      }
+      const norm = raw.map(v => v.map((x,k) => (x - mean[k]) / sd[k]));
+      const { label, quality } = kmeans2(norm, 14);
+
+      let n1 = 0; for (const l of label) n1 += l;
+      const balance = Math.min(n1, label.length - n1) / label.length;
+      voiceQuality = quality; voiceBalance = balance;
+
+      // Only trust the split when the two groups are genuinely far apart and
+      // both sides carry a real share of the song. One singer ranging over a
+      // wide pitch span will also cluster into two — it just clusters weakly
+      // and lopsidedly, which is what these thresholds reject.
+      if (quality > 1.6 && balance >= 0.3){
+        const oppLabel = label[0];        // FNF opens with the opponent
+        phrases.forEach((_, pi) => { owners[pi] = label[pi] !== oppLabel; });
+        singerFound = true;
+      }
     }
-    const norm = raw.map(v => v.map((x,k) => (x - mean[k]) / sd[k]));
-    const { label, quality } = kmeans2(norm, 14);
-
-    let n1 = 0; for (const l of label) n1 += l;
-    const balance = Math.min(n1, label.length - n1) / label.length;
-    voiceQuality = quality; voiceBalance = balance;
-
-    // Only trust the split when the two groups are genuinely far apart and
-    // both sides carry a real share of the song. One singer ranging over a
-    // wide pitch span will also cluster into two — it just clusters weakly
-    // and lopsidedly, which is exactly what these thresholds reject.
-    if (quality > 1.6 && balance >= 0.3){
-      // FNF opens with the opponent, so the group holding the first phrase is theirs
-      const oppLabel = label[0];
-      vocPhrases.forEach((pi, k) => { owners[pi] = label[k] !== oppLabel; });
-      singerFound = true;
+    if (!singerFound){
+      let alt = false;
+      for (let pi = 0; pi < phrases.length; pi++){ owners[pi] = alt; alt = !alt; }
     }
+    phrases.forEach((idxs, pi) => {
+      for (const i of idxs) vocalOnsets[i].side = owners[pi] ? "plr" : "opp";
+    });
   }
 
-  if (!singerFound){
-    // No usable voice split (one singer, or too few phrases): fall back to
-    // trading phrases back and forth.
-    let alt = false;
-    for (const pi of vocPhrases){ owners[pi] = alt; alt = !alt; }
-  }
+  // instrumental fill keeps breaks playable, so it goes to the player
+  for (const o of q) if (o.src === "inst") o.side = "plr";
 
-  // instrumental-only phrases go to the player so breaks stay playable
-  phrases.forEach((idxs, pi) => {
-    if (!idxs.some(i => q[i].src === "voc")) owners[pi] = true;
-  });
-
+  // ---- per side: de-duplicate, pick lanes, work out sustains ----
+  // The two characters have their own strumlines, so a note on one side never
+  // conflicts with a note on the other — they can sing at the same instant.
   const notes = [];
-  const lastLane = [];          // recent lane history for anti-repeat
+  for (const side of ["opp", "plr"]){
+    const list = q.filter(o => o.side === side);
+    const seen = new Set(), kept = [];
+    for (const o of list){
+      const key = Math.round(o.t / (step * 0.5));
+      if (seen.has(key)) continue;
+      seen.add(key);
+      kept.push(o);
+    }
+    if (!kept.length) continue;
 
-  phrases.forEach((idxs, pi) => {
-    const owner = owners[pi];
-    for (const i of idxs){
-      const o = q[i];
-      const c = cents[i];
+    // Centroid → lane, with this side's own quartiles so each character gets
+    // the full spread regardless of how high or low their voice sits.
+    const cents = kept.map(o => {
+      const A = o.A || instA;
+      const i = clamp(Math.round(o.t * A.fps), 0, A.centroid.length - 1);
+      return A.centroid[i];
+    });
+    const sorted = cents.slice().sort((a,b) => a-b);
+    const qt = p => sorted[clamp(Math.floor(sorted.length*p), 0, sorted.length-1)];
+    const c1 = qt(0.25), c2 = qt(0.5), c3 = qt(0.75);
+
+    const hist = [];
+    for (let i = 0; i < kept.length; i++){
+      const o = kept[i], c = cents[i];
       let lane = c < c1 ? 0 : c < c2 ? 1 : c < c3 ? 2 : 3;
 
       // avoid three of the same lane in a row
-      const L = lastLane;
-      if (L.length >= 2 && L[L.length-1] === lane && L[L.length-2] === lane){
+      if (hist.length >= 2 && hist[hist.length-1] === lane && hist[hist.length-2] === lane){
         lane = (lane + (Math.random() < 0.5 ? 1 : 3)) % 4;
       }
-      L.push(lane);
-      if (L.length > 4) L.shift();
+      hist.push(lane);
+      if (hist.length > 4) hist.shift();
 
       // hold notes: a long gap with the voice still sustaining
-      const nextT = (i + 1 < q.length) ? q[i+1].t : duration;
+      const nextT = (i + 1 < kept.length) ? kept[i+1].t : duration;
       const gap = nextT - o.t;
       let len = 0;
-      if (o.src === "voc" && gap > 0.55){
-        const fi = clamp(Math.round((o.t + 0.28) * vocA.fps), 0, vocRms.length - 1);
-        if (vocRms[fi] > 0.16){
+      if (o.src === "voc" && o.rmsN && gap > 0.55){
+        const fi = clamp(Math.round((o.t + 0.28) * o.A.fps), 0, o.rmsN.length - 1);
+        if (o.rmsN[fi] > 0.16){
           len = Math.min(gap - 0.18, tempo.beatLen * 2.5);
           len = Math.round(len / step) * step;
           if (len < step * 2) len = 0;
         }
       }
 
-      notes.push({ t:o.t, lane, mustHit:owner, len });
+      notes.push({ t:o.t, lane, mustHit: side === "plr", len });
     }
-  });
+  }
 
   notes.sort((a,b) => a.t - b.t);
 
-  // Never allow two notes in the same lane closer than a 32nd
-  const byLane = [[],[],[],[]];
+  // Never allow two notes in the same lane on the same side closer than a 32nd
+  const byLane = [[],[],[],[],[],[],[],[]];
   const clean = [];
   for (const nt of notes){
-    const arr = byLane[nt.lane];
+    const arr = byLane[(nt.mustHit ? 4 : 0) + nt.lane];
     const prev = arr.length ? arr[arr.length-1] : null;
     if (prev && nt.t - prev.t < step * 0.5) continue;
     if (prev && prev.len > 0 && nt.t < prev.t + prev.len + 0.05) prev.len = Math.max(0, nt.t - prev.t - step);
     arr.push(nt);
     clean.push(nt);
+  }
+
+  // A section is one run of singing by one character. Counting per side keeps
+  // the figure meaningful when the two stems overlap or trade quickly.
+  let sections = 0;
+  for (const side of [false, true]){
+    let prev = null;
+    for (const n of clean){
+      if (n.mustHit !== side) continue;
+      if (prev === null || n.t - prev > 1.1) sections++;
+      prev = n.t;
+    }
   }
 
   return {
@@ -1008,8 +1068,9 @@ function buildChart(instA, vocA, tempo, duration){
     beatLen: tempo.beatLen,
     duration,
     notes: clean,
-    sections: phrases.length,
-    singerSplit: singerFound,       // true when two voices were actually told apart
+    sections,
+    stems: tracks.length,           // 2 = each character had their own vocal track
+    singerSplit: singerFound,       // sides are known rather than shared out blindly
     voiceQuality, voiceBalance
   };
 }
@@ -1067,9 +1128,18 @@ $("#autoChartBtn").addEventListener("click", async () => {
     setProgress(3, STAGES[0]);
     const instBuf = await decode(picked.inst);
     if (chartCancelled) throw new Error("cancelled");
-    setProgress(12, STAGES[0]);
-    const vocBuf = await decode(picked.voc);
-    if (chartCancelled) throw new Error("cancelled");
+
+    // whichever vocal stems the player gave us, in stage order
+    const stems = [];
+    if (picked.oppVoc) stems.push({ file: picked.oppVoc, side: "opp" });
+    if (picked.plrVoc) stems.push({ file: picked.plrVoc, side: "plr" });
+
+    setProgress(8, STAGES[0]);
+    for (let i = 0; i < stems.length; i++){
+      stems[i].buf = await decode(stems[i].file);
+      if (chartCancelled) throw new Error("cancelled");
+      setProgress(8 + (i+1) / stems.length * 12, STAGES[0]);
+    }
 
     if (instBuf.duration > 8 * 60) throw new Error("Song is longer than 8 minutes. Please use a shorter track.");
     setProgress(20, STAGES[1]);
@@ -1078,8 +1148,12 @@ $("#autoChartBtn").addEventListener("click", async () => {
     if (chartCancelled) throw new Error("cancelled");
 
     setProgress(50, STAGES[2]);
-    const vocA = await analyzeTrack(vocBuf, p => setProgress(50 + p*22, STAGES[2]));
-    if (chartCancelled) throw new Error("cancelled");
+    for (let i = 0; i < stems.length; i++){
+      const base = 50 + (i / stems.length) * 22;
+      stems[i].A = await analyzeTrack(stems[i].buf,
+        p => setProgress(base + (p / stems.length) * 22, STAGES[2]));
+      if (chartCancelled) throw new Error("cancelled");
+    }
 
     setProgress(72, STAGES[3]);
     await nextFrame();
@@ -1087,13 +1161,20 @@ $("#autoChartBtn").addEventListener("click", async () => {
     setProgress(84, STAGES[3]);
     await nextFrame();
 
-    const duration = Math.max(instBuf.duration, vocBuf.duration);
-    const chart = buildChart(instA, vocA, tempo, duration);
+    let duration = instBuf.duration;
+    for (const s of stems) duration = Math.max(duration, s.buf.duration);
+
+    const chart = buildChart(instA, stems.map(s => ({ A: s.A, side: s.side })), tempo, duration);
     if (!chart.notes.length) throw new Error("No notes could be detected. Try a louder or less compressed track.");
 
     setProgress(93, STAGES[4]);
     await nextFrame();
-    SONG = { instBuf, vocBuf, chart, name: picked.inst.name.replace(/\.[^.]+$/, "") };
+    SONG = {
+      instBuf,
+      tracks: stems.map(s => ({ buf: s.buf, side: s.side, combined: stems.length === 1 })),
+      chart,
+      name: picked.inst.name.replace(/\.[^.]+$/, "")
+    };
     setProgress(100, STAGES[4], "Done");
     await new Promise(r => setTimeout(r, 380));
 
@@ -1102,9 +1183,10 @@ $("#autoChartBtn").addEventListener("click", async () => {
     $("#stNotes").textContent = chart.notes.length;
     $("#stSec").textContent   = chart.sections;
     const mine = chart.notes.filter(n => n.mustHit).length;
-    $("#readyNote").innerHTML = (chart.singerSplit
-        ? "Told <b>two voices apart</b> in your vocal track — the opponent sings their lines, you sing yours."
-        : "Heard <b>one voice</b> in your vocal track, so phrases trade back and forth between you and the opponent.")
+    $("#readyNote").innerHTML = (
+        chart.stems === 2 ? "Charted from <b>both vocal tracks</b> — every note came from the voice that sings it, so the sides are exact."
+      : chart.singerSplit ? "One combined vocal track: <b>two voices told apart</b> and given a side each."
+      : "One combined vocal track with a single voice, so phrases trade back and forth between you and the opponent.")
       + " You sing " + mine + " of " + chart.notes.length + " notes, snapped to the detected beat grid.";
     show("readyScreen");
   }catch(err){
@@ -1528,11 +1610,17 @@ const G  = cv.getContext("2d");
 
 let game = null;
 let gameRAF = 0;
-let nodes = { inst:null, voc:null, instGain:null, vocGain:null };
+let nodes = { inst:null, instGain:null, vocals:[] };   // vocals: one source+gain per stem
 
 function applyLiveVolumes(){
   if (nodes.instGain) nodes.instGain.gain.value = settings.music / 100;
-  if (nodes.vocGain && game) nodes.vocGain.gain.value = (settings.vocal / 100) * (game.vocalMuted ? 0 : 1);
+  const vol = settings.vocal / 100;
+  for (const v of nodes.vocals){
+    // A miss cuts the voice that missed. With separate stems that is only
+    // Boyfriend, so the opponent keeps singing over you — as it should.
+    const ducked = game && game.vocalMuted && v.side !== "opp";
+    v.gain.gain.value = ducked ? 0 : vol;
+  }
 }
 
 /* Flat art with thick outlines gains nothing above 2x, and every extra device
@@ -1679,18 +1767,26 @@ function startGame(){
   // audio graph
   const ctx = getCtx();
   nodes.instGain = ctx.createGain();
-  nodes.vocGain  = ctx.createGain();
   nodes.instGain.connect(ctx.destination);
-  nodes.vocGain.connect(ctx.destination);
-  applyLiveVolumes();
+  nodes.inst = ctx.createBufferSource();
+  nodes.inst.buffer = SONG.instBuf;
+  nodes.inst.connect(nodes.instGain);
 
-  nodes.inst = ctx.createBufferSource(); nodes.inst.buffer = SONG.instBuf; nodes.inst.connect(nodes.instGain);
-  nodes.voc  = ctx.createBufferSource(); nodes.voc.buffer  = SONG.vocBuf;  nodes.voc.connect(nodes.vocGain);
+  nodes.vocals = SONG.tracks.map(tr => {
+    const gain = ctx.createGain();
+    gain.connect(ctx.destination);
+    const src = ctx.createBufferSource();
+    src.buffer = tr.buf;
+    src.connect(gain);
+    // a single combined stem carries both voices, so a miss ducks all of it
+    return { src, gain, side: tr.combined ? "both" : tr.side };
+  });
+  applyLiveVolumes();
 
   const at = ctx.currentTime + 3.0;   // 3s countdown
   game.startedAt = at;
   nodes.inst.start(at);
-  nodes.voc.start(at);
+  for (const v of nodes.vocals) v.src.start(at);
 
   // landscape recommendation
   if (settings.mode === "mobile" && window.innerHeight > window.innerWidth){
@@ -1704,11 +1800,14 @@ function startGame(){
 }
 
 function stopAudio(){
-  for (const k of ["inst","voc"]){
-    if (nodes[k]){ try{ nodes[k].stop(); }catch(e){} try{ nodes[k].disconnect(); }catch(e){} nodes[k] = null; }
+  if (nodes.inst){ try{ nodes.inst.stop(); }catch(e){} try{ nodes.inst.disconnect(); }catch(e){} nodes.inst = null; }
+  for (const v of nodes.vocals){
+    try{ v.src.stop(); }catch(e){}
+    try{ v.src.disconnect(); }catch(e){}
+    try{ v.gain.disconnect(); }catch(e){}
   }
+  nodes.vocals = [];
   if (nodes.instGain){ try{ nodes.instGain.disconnect(); }catch(e){} nodes.instGain = null; }
-  if (nodes.vocGain){ try{ nodes.vocGain.disconnect(); }catch(e){} nodes.vocGain = null; }
 }
 
 function endGame(died){
