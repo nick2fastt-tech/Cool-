@@ -1,6 +1,6 @@
 # Cool-
 
-## Infector — V1.21 "The Elevator"
+## Infector — V1.22 "Ground Truth"
 
 An online 3D multiplayer infection-survival game that runs from a **single HTML file** —
 no build step, no engine, no downloads. Open `infector.html` in any browser (desktop or
@@ -94,6 +94,15 @@ shoves it open — loudly.
 
 ### Version history
 
+- **V1.22 — Ground Truth.** Foot placement is now measured from the rendered mesh
+  rather than predicted, so all 68 animation clips keep their feet on the floor with
+  none sinking or hovering. Rebuilt the pinned-victim pose (it floated a metre up), the
+  stage-three sit-down (it perched on an invisible chair) and the jump crouch; the
+  Sprinter's arms trail instead of splaying. Fixed the hotel: guest rooms were built on
+  top of the stairwells, blocking the flights and making floors two and three
+  unreachable by stairs. The end bays are stair landings now, flights alternate sides as
+  a real switchback, stairwell openings have balustrades, and the rooftop plant room no
+  longer sits over the roof stairs.
 - **V1.21 — The Elevator.** Locomotion rebuilt on the real leg geometry: the pelvis
   follows the exact two-link chain solve so planted feet stay on the floor, cycle rate
   is derived from swing amplitude so nothing skates, and a floor clamp in the pose

@@ -367,7 +367,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
   <div id="menuTop">
     <div class="title">INFECTOR</div>
     <div class="subtitle">Run. Hide. Survive the outbreak.</div>
-    <div style="font-size:10px;letter-spacing:3px;color:#7fd4a0;margin-top:5px">V1.21 · THE ELEVATOR</div>
+    <div style="font-size:10px;letter-spacing:3px;color:#7fd4a0;margin-top:5px">V1.22 · GROUND TRUTH</div>
   </div>
   <div id="menuBtns">
     <button class="btn green wide" data-nav="quickplay">▶ Play</button>
@@ -379,7 +379,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
     <button class="btn ghost" data-nav="settings">⚙ Settings</button>
     <button class="btn ghost" data-nav="credits" style="grid-column:1/-1">★ Credits</button>
   </div>
-  <div class="footNote" id="verNote">V1.21 · 4 difficulties · 15 servers</div>
+  <div class="footNote" id="verNote">V1.22 · 4 difficulties · 15 servers</div>
 </div>
 
 <!-- ================= SERVERS ================= -->
@@ -502,6 +502,23 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
         <div class="opt"><div><div class="optL">Audio</div><div class="optD">Fully synthesized via Web Audio: wind, birds, growls, footsteps, adaptive score</div></div></div>
         <div class="opt"><div><div class="optL">Netcode</div><div class="optD">Authoritative round simulation with snapshot interpolation &amp; client prediction</div></div></div>
         <div class="opt"><div><div class="optL">Maps</div><div class="optD">Playground, Neighborhood &amp; the three-storey Hotel — procedurally assembled</div></div></div>
+      </div>
+      <h3 style="margin:18px 0 6px;font-size:15px;letter-spacing:2px;color:#8ef07a">V1.22 — GROUND TRUTH</h3>
+      <div class="muted" style="line-height:1.75">
+        <b style="color:#cfe6ff">Every animation now stands on the floor.</b> Instead of predicting where the
+        legs end up, the game measures it: after a character is drawn its vertices are scanned, and the next
+        frame lifts the body by however far the lowest one fell through the ground. All <b>68</b> clips are
+        clean — no pose sinks and none hovers.<br><br>
+        <b style="color:#cfe6ff">Broken poses rebuilt.</b> A survivor pinned by a Crawler was floating a metre
+        in the air instead of lying on their back. The stage-three sit-down perched on an invisible chair with
+        its legs folded through the floor. Both are now solved against the rig's real pivot, and the jump crouch
+        no longer squats in mid-air. The Sprinter's arms trail behind it instead of splaying overhead.<br><br>
+        <b style="color:#cfe6ff">The hotel was broken and is fixed.</b> Guest rooms were being built on top of
+        the stairwells, so beds and dressers stood inside the shaft and blocked the flight halfway up — floors
+        two and three were unreachable by stairs. The end bays are now proper stair landings, the flights
+        alternate sides as a real switchback so an up-flight never sits on top of the one below, every
+        stairwell opening has a balustrade, and the rooftop plant room no longer sits over the roof stairs. All
+        five flights climb and descend.
       </div>
       <h3 style="margin:18px 0 6px;font-size:15px;letter-spacing:2px;color:#8ef07a">V1.21 — THE ELEVATOR</h3>
       <div class="muted" style="line-height:1.75">
@@ -2691,16 +2708,37 @@ function hDesk(b,cols,x,z,fy,ry,w,d,col){
 }
 /* Which stairwell openings a given level needs: one per flight that lands on
    it, i.e. per flight built on the level below. */
+/* Where a flight on floor `f` starts and ends. Flights alternate direction
+   like a real switchback stair: even floors climb north, odd floors climb
+   south. Without that the flight up from floor 1 would start inside the very
+   opening cut for the flight up from floor 0, and you would fall through the
+   hole instead of climbing. */
+function stairRun(f){
+  const D=HOTEL.D, north=-D/2+2.2, south=-D/2+11.7;
+  return (f%2===0)?{foot:south,top:north}:{foot:north,top:south};
+}
+/* Centre line of the flight leaving floor `f` on side `s`. Odd floors take the
+   other half of the shaft so an ascending flight never sits on top of the one
+   below it — walk down from floor 1 and you take the far side, as you would in
+   a real switchback. */
+const STAIR_HW=1.5;
+function stairX(f,s){return s*(HOTEL.W/2-3.4)+(f%2?STAIR_HW+.12:-(STAIR_HW+.12));}
 function stairHoles(level){
   const f=level-1;
   if(f<0||f>=HOTEL.floors)return null;
   const out=[];
+  const r=stairRun(f);
+  const lo=Math.min(r.foot,r.top), hi=Math.max(r.foot,r.top);
   for(let s=-1;s<=1;s+=2){
     if(f>=HOTEL.floors-1&&s<0)continue;
-    const sx=s*(HOTEL.W/2-3.4);
-    /* The opening sits over the run of the flight, stopping short of the top
-       so the climber steps off onto solid floor at the north end. */
-    out.push({x0:sx-2.15,x1:sx+2.15,z0:-HOTEL.D/2+3.0,z1:-HOTEL.D/2+13.2});
+    const sx=stairX(f,s);
+    /* The opening covers the run of the flight but stops 1.1 m short of the
+       top, so the climber steps off onto solid floor — and stops short of the
+       foot end too, leaving somewhere for the next flight up to start. */
+    const pad=1.1;
+    out.push({x0:sx-STAIR_HW-.2,x1:sx+STAIR_HW+.2,
+              z0:lo+(r.top<r.foot?pad:0.6),
+              z1:hi-(r.top>r.foot?pad:0.6)});
   }
   return out;
 }
@@ -2822,6 +2860,7 @@ function buildHotel(){
            sits on the room's centre line and wall fills the rest of the bay,
            so the corridor never has an accidental hole in it. */
         for(let i=0;i<6;i++){
+          if(i===0||i===5)continue;          // stair landing, not a room
           const x0=-W/2+2.2+i*7.2, dx=x0+.9, DW=1.9;
           const leftW=(dx-DW/2)-(x0-2.7), rightW=(x0+4.5)-(dx+DW/2);
           hWall(b,cols,(x0-2.7+dx-DW/2)*.5,sz*corrHalf,leftW,T,fy,wallC2);
@@ -2842,12 +2881,13 @@ function buildHotel(){
               .scale(.07,.13,.03).top,hex(0x3a3026));
           if(i<5)hSconce(b,dx+3.6,sz*(corrHalf-sz*.14),fy,sz>0?PI:0);
         }
-        // room dividers
-        for(let i=0;i<=6;i++)
+        // room dividers, only between actual bedrooms
+        for(let i=1;i<=5;i++)
           hWall(b,cols,-W/2+2.2+i*7.2-2.6,sz*(corrHalf+ (D/2-corrHalf)/2),T,D/2-corrHalf,fy,wallC2);
       }
       // rooms
       for(let sz=-1;sz<=1;sz+=2)for(let i=0;i<6;i++){
+        if(i===0||i===5)continue;          // stair landing, not a room
         const rx=-W/2+2.2+i*7.2+.9, rz=sz*(corrHalf+4.6);
         const kind=(i+ (sz>0?1:0))%4;
         if(kind===3){
@@ -2906,7 +2946,7 @@ function buildHotel(){
       }
       // ---- corridor lighting and a runner down the middle
       for(let i=0;i<7;i++)hCeilLight(b,-W/2+3.6+i*6.4,0,fy,1.1,.7);
-      b.prim(P.box,b.st.reset().translate(0,fy+.2,0).scale(W-3,.03,3.0).top,
+      b.prim(P.box,b.st.reset().translate(0,fy+.2,0).scale(W-13,.03,3.0).top,
         shade(carpet,.82));
       // housekeeping trolley parked in the corridor
       {
@@ -2927,25 +2967,59 @@ function buildHotel(){
     // ---- stairwells at both ends (steps are low enough to walk up)
     for(let s=-1;s<=1;s+=2){
       if(f>=HOTEL.floors-1&&s<0)continue;
-      const sx=s*(W/2-3.4);
+      const sx=stairX(f,s);
       const steps=Math.round(fh/.28);
+      const run=stairRun(f);
+      const dir=Math.sign(run.top-run.foot);       // +1 climbs toward +z
+      const span=Math.abs(run.top-run.foot);
       for(let i=0;i<steps;i++){
         const sy=fy+.18+i*(fh/steps);
-        // the flight climbs from south to north, so its foot opens onto the
-        // lobby/corridor rather than being buried at the far wall
-        const sz2=-D/2+11.7-i*(9.5/steps);
-        b.prim(P.box,b.st.reset().translate(sx,sy-.1,sz2).scale(3.7,.24,9.5/steps+.06).top,
+        const sz2=run.foot+dir*i*(span/steps);
+        b.prim(P.box,b.st.reset().translate(sx,sy-.1,sz2).scale(STAIR_HW*2,.24,span/steps+.06).top,
           hex(0xa9a49a));
         // steps are platforms, not walls — a solid step 30 cm up reads as an
         // obstacle to the AI's forward probe and nobody ever gets upstairs
-        cols.push({x:sx,z:sz2,hx:1.85,hz:9.5/steps*.5+.05,rot:0,top:sy,base:fy-.4,plat:true});
+        cols.push({x:sx,z:sz2,hx:STAIR_HW,hz:span/steps*.5+.05,rot:0,top:sy,base:fy-.4,plat:true});
+        // stringer down the open side of the flight
+        if(i%3===0)
+          b.prim(P.box,b.st.reset().translate(sx,sy+.42,sz2)
+            .scale(STAIR_HW*2+.1,.9,span/steps*.5).top,hex(0x8d887e));
       }
-      hWall(b,cols,sx-s*2.0,-D/2+7,T,10,fy,wallC2);
-      b.prim(P.box,b.st.reset().translate(sx,fy+fh+1.0,-D/2+1.4).scale(3.9,.14,.5).top,C.metal);
+      // wall closing the stair hall off from the corridor bay
+      hWall(b,cols,s*(W/2-3.4)-s*3.3,-D/2+7,T,10,fy,wallC2);
+      /* Balustrade around the stairwell opening on the landing above. It runs
+         down the two long sides and across the foot end only — a rail across
+         the head of the flight would wall the climber in, and its base sits at
+         landing level so it never touches anyone still on the steps below. */
+      {
+        const h=stairHoles(f+1);
+        if(h)for(const o of h){
+          if(Math.abs((o.x0+o.x1)*.5-sx)>.6)continue;
+          const ly=fy+fh;
+          const zc=(o.z0+o.z1)*.5, zl=Math.abs(o.z1-o.z0);
+          for(let k=-1;k<=1;k+=2){
+            const rx=sx+k*(STAIR_HW+.22);
+            b.prim(P.box,b.st.reset().translate(rx,ly+.52,zc).scale(.1,.08,zl).top,C.metal);
+            b.prim(P.box,b.st.reset().translate(rx,ly+.98,zc).scale(.1,.08,zl).top,C.metal);
+            for(let n=0;n<4;n++)
+              b.prim(P.cyl,b.st.reset().translate(rx,ly+.55,o.z0+ (n+.5)*zl/4)
+                .scale(.07,1.1,.07).top,C.metalD);
+            cols.push({x:rx,z:zc,hx:.16,hz:zl*.5,rot:0,top:ly+1.05,base:ly+.02,solid:true});
+          }
+          // across the foot end of the flight, where nobody steps off
+          const footZ=(Math.abs(run.foot-o.z0)<Math.abs(run.foot-o.z1))?o.z0:o.z1;
+          b.prim(P.box,b.st.reset().translate(sx,ly+.52,footZ).scale(STAIR_HW*2+.4,.08,.1).top,C.metal);
+          b.prim(P.box,b.st.reset().translate(sx,ly+.98,footZ).scale(STAIR_HW*2+.4,.08,.1).top,C.metal);
+          for(let k=-1;k<=1;k++)
+            b.prim(P.cyl,b.st.reset().translate(sx+k*1.5,ly+.55,footZ).scale(.07,1.1,.07).top,
+              C.metalD);
+          cols.push({x:sx,z:footZ,hx:STAIR_HW+.2,hz:.14,rot:0,top:ly+1.05,base:ly+.02,solid:true});
+        }
+      }
       // route data so the AI can actually find its way between storeys
-      stairs.push({x:sx,z0:-D/2+12.4,z1:-D/2+.9,y0:fy,y1:fy+fh});
-      nav.push({x:sx,z:-D/2+12.4,y:fy});
-      nav.push({x:sx,z:-D/2+.9,y:fy+fh});
+      stairs.push({x:sx,z0:run.foot-dir*1.2,z1:run.top+dir*1.4,y0:fy,y1:fy+fh});
+      nav.push({x:sx,z:run.foot-dir*1.2,y:fy});
+      nav.push({x:sx,z:run.top+dir*1.4,y:fy+fh});
     }
   }
   // ---- exterior dressing: window bands, a canopy and the sign over the doors
@@ -2983,8 +3057,11 @@ function buildHotel(){
     hWall(b,cols,0,s*(D/2-.4),W,.4,ry,hex(0x8a9098),1.1);
     hWall(b,cols,s*(W/2-.4),0,.4,D,ry,hex(0x8a9098),1.1);
   }
-  b.prim(P.box,b.st.reset().translate(W/2-3.4,ry+1.4,-D/2+5).scale(4.4,2.6,5.6).top,hex(0x9aa0a8));
-  cols.push({x:W/2-3.4,z:-D/2+5,hx:2.2,hz:2.8,rot:0,top:ry+2.6,base:ry-.2,solid:true});
+  // plant room, kept clear of the stairwell opening it used to sit on top of
+  b.prim(P.box,b.st.reset().translate(-W/2+7.5,ry+1.4,-D/2+6).scale(4.4,2.6,5.6).top,hex(0x9aa0a8));
+  cols.push({x:-W/2+7.5,z:-D/2+6,hx:2.2,hz:2.8,rot:0,top:ry+2.6,base:ry-.2,solid:true});
+  b.prim(P.box,b.st.reset().translate(-W/2+7.5,ry+2.9,-D/2+6).scale(4.8,.24,6.0).top,
+    hex(0x7a8088));
   for(let i=0;i<5;i++)
     b.prim(P.box,b.st.reset().translate(-12+i*5,ry+.9,4).scale(2.6,1.6,2.6).top,hex(0x7a8088));
   // ---- lift shaft: walls on three sides, open to the corridor
@@ -3531,8 +3608,12 @@ const CLIP={
  /* wind-up: knees bend and the arms drop back before the launch */
  jumpPrep(o,t,c){
    const k=clamp(1-c.jumpPrep/.075,0,1);
-   o[J.crouch]=.42*k;o[J.lKnee]=1.1*k;o[J.rKnee]=1.1*k;
-   o[J.lHipP]=.5*k;o[J.rHipP]=.5*k;o[J.lAnk]=-.3*k;o[J.rAnk]=-.3*k;
+   const th=.5*k, kn=1.1*k, an=-.3*k;
+   // knees this deep shorten the leg a long way — the hips have to follow them
+   // down or the character squats in mid-air
+   o[J.bob]=hipBob(th,kn,an,th,kn,an);
+   o[J.crouch]=.12*k;o[J.lKnee]=kn;o[J.rKnee]=kn;
+   o[J.lHipP]=th;o[J.rHipP]=th;o[J.lAnk]=an;o[J.rAnk]=an;
    o[J.lShP]=.95*k;o[J.rShP]=.95*k;o[J.lShR]=.28*k;o[J.rShR]=.28*k;
    o[J.lElb]=.35*k;o[J.rElb]=.35*k;
    o[J.spine]=.34*k;o[J.headP]=.12*k;o[J.shrug]=-.4*k;o[J.eye]=1;
@@ -3639,9 +3720,11 @@ const CLIP={
    const anL=Math.max(0,s)*.18-Math.max(0,-s)*.46+swL*.3;
    const anR=Math.max(0,-s)*.18-Math.max(0,s)*.46+swR*.3;
    o[J.lAnk]=anL;o[J.rAnk]=anR;
-   o[J.lShP]=1.3-s*.36;o[J.rShP]=1.3+s*.36;   // arms trailing, lunging forward
-   o[J.lElb]=.48;o[J.rElb]=.48;o[J.lShR]=.46;o[J.rShR]=.46;
-   o[J.lShY]=.2;o[J.rShY]=-.2;
+   // arms trail behind and swing with the stride instead of splaying overhead
+   o[J.lShP]=.86-s*.5;o[J.rShP]=.86+s*.5;
+   o[J.lElb]=.6+Math.max(0,-s)*.5;o[J.rElb]=.6+Math.max(0,s)*.5;
+   o[J.lShR]=.24;o[J.rShR]=.24;
+   o[J.lShY]=.14;o[J.rShY]=-.14;
    o[J.bob]=hipBob(thL,knL,anL,thR,knR,anR)+Math.max(0,Math.abs(cs)-.5)*.11+.142;
    o[J.lean]=.5;o[J.side]=-cs*.08;o[J.twist]=cs*.18;
    o[J.headP]=-.34;o[J.headR]=Math.sin(t*7)*.1;o[J.shrug]=1.1;
@@ -3933,12 +4016,16 @@ const CLIP={
    const life=1-clamp((p-.25)/.5,0,1);
    const th=Math.sin(t*11)*fight+Math.sin(t*4.2)*life*.5;
    const br=Math.sin(t*2.4)*life;
-   o[J.rootY]=.40;o[J.rootZ]=.89;
-   o[J.lean]=-1.42;o[J.crouch]=.1;
-   o[J.spine]=-.2+th*.12+br*.04;
+   /* Flat on the back. `lean` pivots at the ground and carries the legs with
+      it, so the limbs stay close to neutral and the root only has to sit at
+      about body thickness — the old +0.40 left the victim floating. */
+   o[J.rootY]=.15;o[J.rootZ]=.62;
+   o[J.lean]=-1.50;o[J.crouch]=.1;
+   o[J.spine]=-.16+th*.12+br*.04;
    o[J.side]=th*.09;
-   o[J.lHipP]=-.35+th*.34;o[J.rHipP]=-.3-th*.3;
-   o[J.lKnee]=.55+Math.abs(th)*.7;o[J.rKnee]=.5+Math.abs(th)*.5;
+   o[J.lHipP]=-.22+th*.34;o[J.rHipP]=-.18-th*.3;
+   o[J.lKnee]=.34+Math.abs(th)*.7;o[J.rKnee]=.3+Math.abs(th)*.5;
+   o[J.lAnk]=.16;o[J.rAnk]=.14;
    o[J.lHipR]=.2;o[J.rHipR]=-.18;
    o[J.lShP]=-1.35+th*.7;o[J.rShP]=-1.3-th*.6;
    o[J.lShR]=1.1+th*.3;o[J.rShR]=1.05-th*.25;
@@ -4049,11 +4136,11 @@ const CLIP={
    const wob=Math.sin(c.actT*11)*(1-a)*.07;
    // knees buckle first, then the hips reach the ground and the legs go out
    const buckle=Math.sin(Math.min(PI,a*PI*1.5))*(1-k);
-   o[J.crouch]=1.45*k+.35*buckle;
-   o[J.lHipP]=-1.5*k-.5*buckle;o[J.rHipP]=-1.46*k-.45*buckle;
-   o[J.lKnee]=.3*k+1.5*buckle;o[J.rKnee]=.34*k+1.45*buckle;
+   o[J.crouch]=1.45*k+.35*buckle;o[J.rootY]=-.06*k;
+   o[J.lHipP]=-1.54*k-.5*buckle;o[J.rHipP]=-1.50*k-.45*buckle;
+   o[J.lKnee]=.12*k+1.5*buckle;o[J.rKnee]=.15*k+1.45*buckle;
    o[J.lHipR]=.16*k;o[J.rHipR]=-.14*k;
-   o[J.lAnk]=.35*k;o[J.rAnk]=.32*k;
+   o[J.lAnk]=-.16*k;o[J.rAnk]=-.14*k;
    o[J.spine]=.18+.16*k+.2*buckle;o[J.lean]=.05*k;
    o[J.lShP]=.5*k+ -.6*buckle;o[J.rShP]=.46*k+ -.8*buckle;   // hands reach back
    o[J.lShR]=.46*k+.5*buckle;o[J.rShR]=.42*k+.4*buckle;
@@ -4065,11 +4152,11 @@ const CLIP={
  seated(o,t,c){
    const k=clamp(((c.infT||0)-INF.sit)/Math.max(1,INF.dur-INF.sit),0,1);
    const br=Math.sin(t*4.6+(c.seed||0));     // shallow, quick breathing
-   o[J.crouch]=1.45;
-   o[J.lHipP]=-1.5;o[J.rHipP]=-1.46;
-   o[J.lKnee]=.3+k*.22;o[J.rKnee]=.34+k*.2;
+   o[J.crouch]=1.45;o[J.rootY]=-.06;   // buttocks on the floor
+   o[J.lHipP]=-1.54;o[J.rHipP]=-1.50;
+   o[J.lKnee]=.12+k*.22;o[J.rKnee]=.15+k*.2;
    o[J.lHipR]=.16;o[J.rHipR]=-.14;
-   o[J.lAnk]=.35;o[J.rAnk]=.32;
+   o[J.lAnk]=-.16;o[J.rAnk]=-.14;      // heels down, toes relaxed outward
    o[J.spine]=.18+k*.34+br*.03;              // torso sags forward as it goes
    o[J.lean]=.05+k*.12;
    o[J.lShP]=.5-k*.1;o[J.rShP]=.46-k*.08;    // arms braced behind, slowly giving
@@ -4354,19 +4441,6 @@ function updatePose(ch,t,dt){
     fn(tmp,t,ch);
     const w=act[k]/sum;
     for(let i=0;i<NJ;i++)out[i]+=tmp[i]*w;
-  }
-  /* Floor clamp. Whatever the clip asked for, a pose standing on its feet may
-     never sit lower than the leg geometry allows — that is what used to push
-     soles through the ground on every bent-knee pose. Purely a lower bound, so
-     clips that deliberately leave the ground (jumps, the flight phase of a
-     run) are untouched, and clips that place the body explicitly via rootY
-     (crawling, pinned, seated) are skipped. */
-  if(!out[J.rootY]){
-    const need=hipBob(out[J.lHipP],out[J.lKnee],out[J.lAnk],
-                      out[J.rHipP],out[J.rKnee],out[J.rAnk]);
-    // the root also drops by crouch*0.42, so that has to come out of the budget
-    const floor=need+out[J.crouch]*.42;
-    if(out[J.bob]<floor)out[J.bob]=floor;
   }
   // blink
   ch.blinkT-=dt;
@@ -4659,6 +4733,25 @@ function drawBack(d,st,L,style){
   }
 }
 /* full character */
+/* Ground truth for the feet.
+   No analytic model of the leg chain can predict where the *mesh* actually
+   ends up — the shoe, its caps, the trouser leg and every avatar variation all
+   move the lowest vertex around. So instead of predicting it we measure it:
+   after a character is drawn, scan the vertices it just wrote and record how
+   far the lowest one fell below the character's own ground. The next frame
+   lifts the root by that much. One frame of lag at 60 Hz is invisible, and it
+   is exact for every clip, every avatar and every shoe.
+   The measurement subtracts the correction already applied, so the loop
+   settles instead of oscillating. */
+function measureFootFix(d,ch,nv0){
+  if(ch.climb){ch.footErr=0;return;}          // mid-climb the legs hang free
+  let lo=1e9;
+  const v=d.v;
+  for(let i=nv0;i<d.nv;i++){const y=v[i*10+1];if(y<lo)lo=y;}
+  if(lo>1e8)return;
+  const raw=lo-(ch.footFix||0);               // where it would be uncorrected
+  ch.footErr=Math.max(0,Math.min(.45,ch.y-raw));
+}
 function drawChar(d,ch,camDist){
   const L=ch.look,p=ch.pose,av=L.cfg;
   const lod=camDist<13?0:(camDist<32?1:2);
@@ -4667,9 +4760,12 @@ function drawChar(d,ch,camDist){
   const st=_stack.reset();
   const sc=ch.scale||1;
   const fem=L.female;
+  const _nv0=d.nv;
+  // ease toward the correction the last frame measured
+  ch.footFix=(ch.footFix||0)+((ch.footErr||0)-(ch.footFix||0))*.34;
   // clothing lag: hems and hoods trail behind the body as it accelerates
   const swayX=ch.clothX||0, swayZ=ch.clothZ||0;
-  st.translate(ch.x,ch.y,ch.z).rotY(ch.yaw+p[J.yawOff]);
+  st.translate(ch.x,ch.y+ch.footFix,ch.z).rotY(ch.yaw+p[J.yawOff]);
   if(sc!==1)st.scale(sc,sc,sc);
   st.translate(0,p[J.bob]-p[J.crouch]*.42+p[J.rootY],p[J.rootZ]);
   st.rotZ(p[J.side]).rotX(p[J.lean]);
@@ -4859,7 +4955,7 @@ function drawChar(d,ch,camDist){
   // back item: re-anchor at the chest
   if(lod<2&&av.back!=='bk_none'){
     const st2=_stack.reset();
-    st2.translate(ch.x,ch.y,ch.z).rotY(ch.yaw+p[J.yawOff]);
+    st2.translate(ch.x,ch.y+ch.footFix,ch.z).rotY(ch.yaw+p[J.yawOff]);
     if(sc!==1)st2.scale(sc,sc,sc);
     st2.translate(0,p[J.bob]-p[J.crouch]*.42+p[J.rootY],p[J.rootZ]);
     st2.rotZ(p[J.side]).rotX(p[J.lean]);
@@ -4867,6 +4963,7 @@ function drawChar(d,ch,camDist){
     st2.rotX(p[J.spine]).rotZ(p[J.spineSide]).rotY(p[J.twist]);
     drawBack(d,st2,L,av.back);
   }
+  measureFootFix(d,ch,_nv0);
 }
 /* look interpolation used while a survivor is transforming */
 /* The infection spreads outward from the wound, so each body region turns at a
@@ -5959,8 +6056,13 @@ class Simulation{
        the bottom of it first. */
     const entryZ=up?best.z0:best.z1, exitZ=up?best.z1:best.z0;
     const onTreads=up?e.y>best.y0+.35:e.y<best.y1-.35;
-    const atEntry=Math.abs(e.x-best.x)<2.4&&Math.abs(e.z-entryZ)<2.0;
-    return (onTreads||atEntry)?{x:best.x,z:exitZ}:{x:best.x,z:entryZ};
+    const atEntry=Math.abs(e.x-best.x)<2.4&&Math.abs(e.z-entryZ)<2.2;
+    if(!(onTreads||atEntry))return {x:best.x,z:entryZ};
+    /* Stepping off a landing into the stairwell needs a near target: aimed at
+       the far end the walker creeps up to the lip and stalls there. Once it is
+       actually on the treads the full run is the goal again. */
+    if(!up&&!onTreads)return {x:best.x,z:entryZ+(exitZ-entryZ)*.34};
+    return {x:best.x,z:exitZ};
   }
   seek(e,ctrl,tx,tz,gain){
     let dx=tx-e.x,dz=tz-e.z;
@@ -8209,7 +8311,7 @@ function boot(){
       Game.state='menu';
       if(!Save.seenTutorial){UI.tutStep=0;UI.buildTutorial();UI.show('tutorialScreen');}
       else UI.show('menu');
-      $('#verNote').textContent='V1.21 · '+Servers.length+' servers · Easy → Insane';
+      $('#verNote').textContent='V1.22 · '+Servers.length+' servers · Easy → Insane';
     },260);
   },140);
   addEventListener('resize',()=>{R.resize();});
