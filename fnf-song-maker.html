@@ -1926,18 +1926,28 @@ function layout(s){
   s.hudH       = mobile ? 58 : 72;
 
   if (mobile){
-    // Mobile adds a separate row of big buttons down where the thumbs are.
-    // These are what you press; they are not where the notes are judged.
-    s.padSize = clamp(Math.min((w - 20) / 4.4, h / 7), 44, 116);
-    s.padGap  = landscape
-      ? Math.min(w * 0.88 / 4, s.padSize * 2.3)   // spread out and leave side margins
-      : s.padSize * 1.10;
-    s.padX    = w/2 - s.padGap * 1.5;
-    s.padH    = s.padSize * (landscape ? 1.45 : 1.24);
-    s.padY    = h - s.hudH - s.padH * 0.5 - 4;
+    // Funky-Friday-style lane columns: four bounded translucent strips that
+    // run the height of the play field. You press a column anywhere down its
+    // length — the arrows at the top are only the judge line.
+    const block  = landscape ? w * 0.62 : w * 0.94;
+    s.laneW      = block / 4;
+    s.playerGap  = s.laneW;
+    s.playerSize = clamp(Math.min(s.laneW * 0.70, h * 0.17), 32, 92);
+    s.playerX    = w/2 - s.playerGap * 1.5;
+    s.strumY     = clamp(h * 0.12, 52, 116);
+    s.colTop     = Math.max(0, s.strumY - s.playerSize * 0.8);
+    s.colBottom  = h - s.hudH + 10;
+
+    // the opponent keeps a compact row up in the corner that lights as they
+    // sing; scrolling their notes across the player's columns is just noise
+    s.oppSize    = clamp(s.playerSize * 0.42, 18, 40);
+    s.oppGap     = s.oppSize * 1.16;
+    s.oppX       = 12 + s.oppSize / 2;
+    s.oppY       = 14 + s.oppSize / 2;
+    s.oppNotes   = false;
   } else {
-    s.padSize = s.padGap = s.padH = 0;
-    s.padY    = h;
+    s.laneW = s.colTop = 0;
+    s.colBottom = h;
   }
 
   arrowCache.clear();          // sizes just changed; stale bitmaps are dead weight
@@ -2161,13 +2171,13 @@ const pointerLane = new Map();
 function laneFromPoint(x, y){
   if (!game) return -1;
   const s = game;
-  // Only the buttons take presses. The strumline is a judge line, so tapping
-  // an arrow up there does nothing.
+  // A press lands anywhere inside a lane column, all the way down its length.
+  // Outside them — the HUD, the margins, the opponent's corner — nothing.
   if (settings.mode !== "mobile") return -1;
-  if (y < s.padY - s.padH * 0.5) return -1;
-  const half = s.padGap * 0.5;
+  if (y < s.colTop || y > s.colBottom) return -1;
+  const half = s.laneW * 0.5;
   for (let l = 0; l < 4; l++){
-    const cx = s.padX + l * s.padGap;
+    const cx = s.playerX + l * s.playerGap;
     if (x >= cx - half && x <= cx + half) return l;
   }
   return -1;
@@ -2488,7 +2498,7 @@ function render(){
   const bop = Math.max(0, Math.sin((beatPos % 1) * Math.PI)) * 3.5;
   // Stand the cast on the floor of the play area: above the HUD on PC, above
   // the tile row on mobile. Size them by the headroom that actually remains.
-  const groundY = mobile ? s.padY - s.padH * 0.5 - 8 : s.h - s.hudH;
+  const groundY = mobile ? s.h - s.hudH - 4 : s.h - s.hudH;
   const headroom = groundY - s.strumY - 40;
   const charScale = clamp(Math.min(s.w / 470, headroom / 230), 0.42, 1.3) * (mobile ? 0.95 : 1);
 
@@ -2511,22 +2521,21 @@ function render(){
   drawCharCached(g, CHARS.bf, "bf", s.bfPose, s.bfBlend, bop, rightX, groundY, charScale, s.dpr);
   g.restore();
 
-  /* --- mobile tap buttons, down in the thumb zone --- */
+  /* --- mobile lane columns --- */
+  // Drawn after the cast so they tint over them, the way the reference does.
   if (mobile){
     for (let l = 0; l < 4; l++){
-      const x = s.padX + l * s.padGap;
-      const tw = s.padGap - 8, th = s.padH;
+      const x = s.playerX + l * s.playerGap;
       const down = s.held[l];
-      roundRectPath(g, x - tw/2, s.padY - th/2, tw, th, s.padSize * 0.26);
-      g.fillStyle = down ? "rgba(61,90,254,.16)" : "rgba(20,22,28,.045)";
-      g.fill();
-      g.lineWidth = 2;
-      g.strokeStyle = down ? "rgba(61,90,254,.45)" : "rgba(20,22,28,.10)";
-      g.stroke();
-      // the glyph tells you which lane the button drives
       g.save();
-      g.globalAlpha = down ? 0.85 : 0.4;
-      drawArrow(g, x, s.padY, s.padSize * 0.72, l, down ? "filled" : "outline", 1);
+      g.fillStyle = down ? "rgba(124,92,214,.20)" : "rgba(124,92,214,.075)";
+      g.fillRect(x - s.laneW/2, s.colTop, s.laneW, s.colBottom - s.colTop);
+      g.strokeStyle = down ? "rgba(124,92,214,.55)" : "rgba(124,92,214,.28)";
+      g.lineWidth = 2;
+      g.beginPath();
+      g.moveTo(x - s.laneW/2, s.colTop); g.lineTo(x - s.laneW/2, s.colBottom);
+      g.moveTo(x + s.laneW/2, s.colTop); g.lineTo(x + s.laneW/2, s.colBottom);
+      g.stroke();
       g.restore();
     }
   }
@@ -2553,9 +2562,8 @@ function render(){
   }
 
   /* --- notes --- */
-  // On mobile the buttons occupy the bottom of the screen, so the note field
-  // ends where they begin rather than running underneath them.
-  const fieldBottom = mobile ? s.padY - s.padH * 0.5 - 12 : s.h;
+  // Notes run the full height of the columns, so the field is the screen.
+  const fieldBottom = mobile ? s.colBottom : s.h;
   g.save();
   if (mobile) g.beginPath(), g.rect(0, 0, s.w, fieldBottom), g.clip();
 
