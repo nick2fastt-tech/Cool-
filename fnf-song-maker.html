@@ -1880,7 +1880,6 @@ function dropQuality(){
   if (qualityStep >= QUALITY.length - 1) return false;
   qualityStep++;
   spriteCache.clear();
-  arrowCache.clear();
   resizeCanvas();
   return true;
 }
@@ -1926,31 +1925,29 @@ function layout(s){
   s.hudH       = mobile ? 58 : 72;
 
   if (mobile){
-    // Funky-Friday-style lane columns: four bounded translucent strips that
-    // run the height of the play field. You press a column anywhere down its
-    // length — the arrows at the top are only the judge line.
-    const block  = landscape ? w * 0.62 : w * 0.94;
-    s.laneW      = block / 4;
+    // Four lane columns filling the screen, receptors down at the bottom and
+    // notes falling into them. A press lands anywhere down a column.
+    s.laneW      = w / 4;
     s.playerGap  = s.laneW;
-    s.playerSize = clamp(Math.min(s.laneW * 0.70, h * 0.17), 32, 92);
-    s.playerX    = w/2 - s.playerGap * 1.5;
-    s.strumY     = clamp(h * 0.12, 52, 116);
-    s.colTop     = Math.max(0, s.strumY - s.playerSize * 0.8);
-    s.colBottom  = h - s.hudH + 10;
+    s.playerSize = clamp(Math.min(s.laneW * 0.72, h * 0.17), 32, 104);
+    s.playerX    = s.laneW * 0.5;
+    s.colTop     = 0;
+    s.colBottom  = h - s.hudH + 6;
+    s.strumY     = s.colBottom - s.playerSize * 0.78;
+    s.dir        = -1;                        // downscroll
 
     // the opponent keeps a compact row up in the corner that lights as they
     // sing; scrolling their notes across the player's columns is just noise
-    s.oppSize    = clamp(s.playerSize * 0.42, 18, 40);
+    s.oppSize    = clamp(s.playerSize * 0.40, 18, 38);
     s.oppGap     = s.oppSize * 1.16;
     s.oppX       = 12 + s.oppSize / 2;
-    s.oppY       = 14 + s.oppSize / 2;
+    s.oppY       = 13 + s.oppSize / 2;
     s.oppNotes   = false;
   } else {
     s.laneW = s.colTop = 0;
     s.colBottom = h;
   }
 
-  arrowCache.clear();          // sizes just changed; stale bitmaps are dead weight
 }
 
 function roundRectPath(g, x, y, w, h, r){
@@ -2456,29 +2453,6 @@ function buildStage(w, h, dpr){
   return cv;
 }
 
-/* Arrows are two paths plus a fill and a stroke each, and a busy chart has
-   40-odd on screen. There are only a handful of distinct ones, so rasterise
-   each and blit. */
-const arrowCache = new Map();
-const ARROW_PAD = 5;
-
-function blitArrow(g, x, y, size, lane, mode, dpr){
-  const key = lane + "|" + mode + "|" + Math.round(size) + "|" + dpr;
-  let cv = arrowCache.get(key);
-  if (!cv){
-    const d = size + ARROW_PAD * 2;
-    const px = Math.max(1, Math.ceil(d * dpr));
-    cv = document.createElement("canvas");
-    cv.width = px; cv.height = px;
-    const c = cv.getContext("2d");
-    c.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawArrow(c, d/2, d/2, size, lane, mode, 1);
-    arrowCache.set(key, cv);
-  }
-  const d = size + ARROW_PAD * 2;
-  g.drawImage(cv, x - d/2, y - d/2, d, d);
-}
-
 function render(){
   const s = game;
   const g = G;
@@ -2498,22 +2472,14 @@ function render(){
   const bop = Math.max(0, Math.sin((beatPos % 1) * Math.PI)) * 3.5;
   // Stand the cast on the floor of the play area: above the HUD on PC, above
   // the tile row on mobile. Size them by the headroom that actually remains.
-  const groundY = mobile ? s.h - s.hudH - 4 : s.h - s.hudH;
-  const headroom = groundY - s.strumY - 40;
+  const groundY = mobile ? s.strumY - s.playerSize * 0.85 - 10 : s.h - s.hudH;
+  const headroom = mobile ? groundY - 30 : s.h - s.strumY - 120;
   const charScale = clamp(Math.min(s.w / 470, headroom / 230), 0.42, 1.3) * (mobile ? 0.95 : 1);
 
-  // Sideways, the tiles are wide enough that the outer lanes would drop notes
-  // straight through the characters — stand them in the margins instead.
-  let leftX, rightX;
-  if (mobile && s.w > s.h){
-    const lEdge = s.playerX - s.playerGap * 0.5;
-    const rEdge = s.playerX + s.playerGap * 3.5;
-    leftX  = lEdge * 0.5;
-    rightX = rEdge + (s.w - rEdge) * 0.5;
-  } else {
-    leftX  = s.w * (mobile ? 0.19 : 0.2);
-    rightX = s.w * (mobile ? 0.81 : 0.8);
-  }
+  // The lane columns cover the full width now, so there are no margins to
+  // stand in — place the cast by fraction and let the lanes tint over them.
+  const leftX  = s.w * (mobile ? 0.17 : 0.2);
+  const rightX = s.w * (mobile ? 0.83 : 0.8);
 
   g.save();
   g.globalAlpha = 0.95;
@@ -2528,16 +2494,21 @@ function render(){
       const x = s.playerX + l * s.playerGap;
       const down = s.held[l];
       g.save();
-      g.fillStyle = down ? "rgba(124,92,214,.20)" : "rgba(124,92,214,.075)";
+      g.fillStyle = down ? "rgba(56,189,248,.24)" : "rgba(125,211,252,.11)";
       g.fillRect(x - s.laneW/2, s.colTop, s.laneW, s.colBottom - s.colTop);
-      g.strokeStyle = down ? "rgba(124,92,214,.55)" : "rgba(124,92,214,.28)";
-      g.lineWidth = 2;
+      g.strokeStyle = down ? "rgba(14,165,233,.75)" : "rgba(56,189,248,.45)";
+      g.lineWidth = 2.5;
       g.beginPath();
       g.moveTo(x - s.laneW/2, s.colTop); g.lineTo(x - s.laneW/2, s.colBottom);
       g.moveTo(x + s.laneW/2, s.colTop); g.lineTo(x + s.laneW/2, s.colBottom);
       g.stroke();
       g.restore();
     }
+    // floor line under the receptors
+    g.save();
+    g.strokeStyle = "rgba(14,165,233,.45)"; g.lineWidth = 2.5;
+    g.beginPath(); g.moveTo(0, s.colBottom); g.lineTo(s.w, s.colBottom); g.stroke();
+    g.restore();
   }
 
   /* --- strum receptors --- */
@@ -2546,17 +2517,16 @@ function render(){
     const on = s.confirm[l] > 0;
     const scale = 1 + (s.confirm[l] > 0 ? 0.13 : 0) + s.pressGlow[l] * 0.06;
     g.save(); g.translate(px, py); g.scale(scale, scale); g.translate(-px, -py);
-    blitArrow(g, px, py, s.playerSize, l, on ? "filled" : "outline", s.dpr);
+    drawArrow(g, px, py, s.playerSize, l, on ? "filled" : "outline", 1);
     g.restore();
 
-    if (s.oppVisible){
+    if (s.oppVisible && !mobile){
       const ox = laneX(s, l, false), oy = laneY(s, false);
       const oon = s.oppConfirm[l] > 0;
       g.save();
-      g.globalAlpha = mobile ? 0.75 : 1;
       const sc = 1 + (oon ? 0.13 : 0);
       g.translate(ox, oy); g.scale(sc, sc); g.translate(-ox, -oy);
-      blitArrow(g, ox, oy, s.oppSize, l, oon ? "filled" : "outline", s.dpr);
+      drawArrow(g, ox, oy, s.oppSize, l, oon ? "filled" : "outline", 1);
       g.restore();
     }
   }
@@ -2614,12 +2584,33 @@ function render(){
       g.save();
       if (mine && dt < 0) g.globalAlpha = clamp(1 + dt * 2.2, 0.25, 1);
       if (!mine) g.globalAlpha = 0.9;
-      blitArrow(g, x, y, size, n.lane, "filled", s.dpr);
+      drawArrow(g, x, y, size, n.lane, "filled", 1);
       g.restore();
     }
   }
 
   g.restore();      // end note-field clip
+
+  /* --- opponent's corner row (mobile) --- */
+  // Notes fall from the top on mobile, right through this corner, so it is
+  // drawn last on its own plate rather than being buried by them.
+  if (mobile && s.oppVisible){
+    const bw = s.oppGap * 3 + s.oppSize + 14, bh = s.oppSize + 14;
+    g.save();
+    roundRectPath(g, s.oppX - s.oppSize/2 - 7, s.oppY - bh/2, bw, bh, 10);
+    g.fillStyle = "rgba(255,255,255,.82)"; g.fill();
+    g.strokeStyle = "rgba(20,22,28,.10)"; g.lineWidth = 1.5; g.stroke();
+    for (let l = 0; l < 4; l++){
+      const ox = s.oppX + l * s.oppGap, oy = s.oppY;
+      const oon = s.oppConfirm[l] > 0;
+      const sc = 1 + (oon ? 0.14 : 0);
+      g.save();
+      g.translate(ox, oy); g.scale(sc, sc); g.translate(-ox, -oy);
+      drawArrow(g, ox, oy, s.oppSize, l, oon ? "filled" : "outline", 1);
+      g.restore();
+    }
+    g.restore();
+  }
 
   /* --- note splashes --- */
   for (const p of s.splashes){
