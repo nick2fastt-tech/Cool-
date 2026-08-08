@@ -196,6 +196,17 @@ html, body { background: #f7d94b; }
   .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
   .chip:active{transform:scale(.95)}
 
+  textarea{
+    width:100%;padding:12px 13px;border-radius:14px;border:1.5px solid var(--line);
+    font-family:inherit;font-size:14px;line-height:1.5;color:var(--ink);background:#fff;
+    resize:vertical;
+  }
+  textarea:focus{outline:none;border-color:var(--accent)}
+  .readback{margin-top:12px;font-size:12.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:9px;align-items:center}
+  .swatch{
+    width:15px;height:15px;border-radius:5px;border:1.5px solid rgba(20,22,28,.18);
+    display:inline-block;margin-right:5px;vertical-align:-3px;
+  }
   .statgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:11px;margin-bottom:16px}
   .stat{border:1.5px solid var(--line);border-radius:15px;padding:13px}
   .stat .k{font-size:11px;font-weight:800;color:var(--muted);letter-spacing:.6px;text-transform:uppercase}
@@ -365,6 +376,17 @@ html, body { background: #f7d94b; }
         <input type="file" id="plrVocFile" accept=".m4a,audio/mp4,audio/x-m4a">
       </div>
 
+      <div class="card">
+        <h3>Difficulty</h3>
+        <p class="hint">Same song either way — this decides how much of the vocal detail becomes notes, and which patterns are on the table.</p>
+        <div class="seg" id="diffSel">
+          <button data-diff="easy">Easy</button>
+          <button class="on" data-diff="normal">Normal</button>
+          <button data-diff="hard">Hard</button>
+        </div>
+        <p class="hint" id="diffHint" style="margin:12px 0 0"></p>
+      </div>
+
       <button class="btn pink" id="autoChartBtn" disabled><span class="ic">✨</span>Auto Chart Song</button>
       <button class="btn ghost" id="openSongs"><span class="ic">📀</span><span id="songsCount">My Mod</span></button>
       <p class="center-note" id="editorHint">Import the instrumental and at least one vocal track.</p>
@@ -392,7 +414,8 @@ html, body { background: #f7d94b; }
         <div class="stat"><div class="k">BPM</div><div class="v" id="stBpm">—</div></div>
         <div class="stat"><div class="k">Length</div><div class="v" id="stLen">—</div></div>
         <div class="stat"><div class="k">Notes</div><div class="v" id="stNotes">—</div></div>
-        <div class="stat"><div class="k">Sections</div><div class="v" id="stSec">—</div></div>
+        <div class="stat"><div class="k" id="stSecLbl">Sections</div><div class="v" id="stSec">—</div></div>
+        <div class="stat"><div class="k">Difficulty</div><div class="v" id="stDiff">—</div></div>
       </div>
       <div class="note" id="readyNote"></div>
       <button class="btn green" id="playBtn"><span class="ic">▶</span>Play Chart</button>
@@ -491,6 +514,36 @@ html, body { background: #f7d94b; }
       </div>
 
       <div class="note">Tap a pose above to preview it. The <b>Miss</b> animation only exists for Boyfriend — the opponent never misses.</div>
+
+      <div class="card">
+        <h3>Create Custom Sprite</h3>
+        <p class="hint" id="spriteInUse">No custom character yet.</p>
+        <div class="lbl" style="margin-top:12px">Describe your character</div>
+        <textarea id="spriteDesc" rows="3" placeholder="A blue-haired cartoon character wearing a red hoodie, black pants, and white sneakers."></textarea>
+        <div class="lbl" style="margin-top:12px">Describe the character's animations</div>
+        <textarea id="spriteAnim" rows="3" placeholder="Bounces slightly during idle, leans left when singing left, crouches down for the down animation, looks upward during up, and leans dramatically to the right during right."></textarea>
+        <div class="lbl" style="margin-top:14px">Use as</div>
+        <div class="seg" id="slotSel">
+          <button data-slot="opp">Opponent</button>
+          <button class="on" data-slot="plr">BF / Player</button>
+        </div>
+        <button class="btn" id="genSpriteBtn" style="margin-top:14px"><span class="ic">✨</span>Generate Sprite</button>
+        <button class="btn ghost" id="clearSpriteBtn" style="display:none">Remove Custom Sprite</button>
+      </div>
+
+      <div class="card" id="spritePreviewWrap" style="display:none">
+        <h3>Preview Sprite</h3>
+        <p class="hint">Idle → Left → Down → Up → Right → Miss</p>
+        <canvas class="preview" id="genPreview" style="height:240px"></canvas>
+        <div id="spriteReadback" class="readback"></div>
+        <div class="chips" style="margin-top:12px">
+          <button class="chip" id="regenBtn">Regenerate</button>
+          <button class="chip" id="editDescBtn">Edit Description</button>
+          <button class="chip" id="editAnimBtn">Edit Animation</button>
+          <button class="chip on" id="useSpriteBtn">Use Sprite</button>
+          <button class="chip" id="cancelSpriteBtn">Cancel</button>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -724,7 +777,7 @@ window.addEventListener("resize", drawMenuBg);
 /* Scroll speed is stored as tenths and runs 1.5x-3.2x, the range FNF songs
    actually chart within. */
 const SPEED_MIN = 15, SPEED_MAX = 32;
-const DEFAULTS = { mode:"mobile", music:100, vocal:100, speed:20, fps:false, splash:true, stage:"bedroom", botplay:false };
+const DEFAULTS = { difficulty:"normal", mode:"mobile", music:100, vocal:100, speed:20, fps:false, splash:true, stage:"bedroom", botplay:false };
 let settings = Object.assign({}, DEFAULTS);
 try{
   const raw = localStorage.getItem("fnfsm_settings");
@@ -734,12 +787,19 @@ settings.speed = clamp(Math.round(settings.speed), SPEED_MIN, SPEED_MAX);  // ol
 const saveSettings = () => { try{ localStorage.setItem("fnfsm_settings", JSON.stringify(settings)); }catch(e){} };
 const scrollPxPerSec = () => (settings.speed / 10) * 235;
 
+const DIFF_HINTS = {
+  easy:   "Single notes, the strongest syllables only, no jumps.",
+  normal: "Alternating runs and stairs, the odd jump on a hard downbeat.",
+  hard:   "Streams and rolls, finer vocal detail kept, jumps where they land."
+};
 const MODE_HINTS = {
   pc: "Traditional four-lane keyboard layout. Use D F J K or the arrow keys.",
   mobile: "Large touch note tiles designed for phones. For the best experience, tilt your device into landscape mode."
 };
 
 function paintSettings(){
+  $$("#diffSel button").forEach(b => b.classList.toggle("on", b.dataset.diff === settings.difficulty));
+  $("#diffHint").textContent = DIFF_HINTS[settings.difficulty];
   $$("#modeSel button").forEach(b => b.classList.toggle("on", b.dataset.mode === settings.mode));
   $("#modeHint").textContent = MODE_HINTS[settings.mode];
   $("#sMusic").value = settings.music; $("#vMusic").textContent = settings.music + "%";
@@ -752,6 +812,9 @@ function paintSettings(){
     ? "PC Mode — keys D F J K or arrow keys."
     : "Mobile Mode — tap the four lanes. Landscape recommended.";
 }
+$$("#diffSel button").forEach(b => b.addEventListener("click", () => {
+  settings.difficulty = b.dataset.diff; saveSettings(); paintSettings();
+}));
 $$("#modeSel button").forEach(b => b.addEventListener("click", () => { settings.mode = b.dataset.mode; saveSettings(); paintSettings(); }));
 $("#sMusic").addEventListener("input", e => { settings.music = +e.target.value; saveSettings(); paintSettings(); applyLiveVolumes(); });
 $("#sVocal").addEventListener("input", e => { settings.vocal = +e.target.value; saveSettings(); paintSettings(); applyLiveVolumes(); });
@@ -1136,10 +1199,26 @@ function quantise(t, offset, step){
   return Math.abs(q - t) <= step * 0.33 ? q : t;
 }
 
+/* Difficulty is not a speed setting — the song is the song. It decides how
+   much of the vocal detail survives into the chart, and which shapes are on
+   the table when a run is laid out. */
+const DIFFS = {
+  // minStep is the closest two notes may sit, counted in grid steps, so the
+  // same setting means the same thing at 90 BPM and at 180.
+  // detail is the onset-strength floor: lower keeps quieter syllables.
+  // sens is the onset peak-picking threshold — lower hears quieter syllables;
+  // detail is the strength floor applied after; minStep is the closest two
+  // notes may sit, counted in grid steps.
+  easy:   { sens: 1.75, minStep: 3, detail: 0.55, jumpRate: 0,    patterns:["single","alt","stair"] },
+  normal: { sens: 1.50, minStep: 1, detail: 0.35, jumpRate: 0.35, patterns:["single","alt","stair","stream","jack"] },
+  hard:   { sens: 1.28, minStep: 1, detail: 0.18, jumpRate: 0.60, patterns:["single","alt","stair","stream","jack","roll"] }
+};
+
 /* tracks: [{ A: analysis, side: "opp" | "plr" | null }]
    Two stems means we already know who sings what and nothing has to be
    guessed. One combined stem falls back to splitting it by voice. */
-function buildChart(instA, tracks, tempo, duration){
+function buildChart(instA, tracks, tempo, duration, difficulty){
+  const DIFF = DIFFS[difficulty] || DIFFS.normal;
   const split = tracks.length > 1;
 
   let onsets = [];
@@ -1159,9 +1238,9 @@ function buildChart(instA, tracks, tempo, duration){
     // Hitting a new note is a far bigger event than the wobble partway
     // through a held vowel, so judge each peak against the typical peak on
     // this track and drop the runts.
-    const cands = pickOnsets(env, tr.A.fps, 1.5);
+    const cands = pickOnsets(env, tr.A.fps, DIFF.sens);
     const strengths = cands.map(c => c.v).sort((a,b) => a-b);
-    const minV = strengths.length ? strengths[strengths.length >> 1] * 0.35 : 0;
+    const minV = strengths.length ? strengths[strengths.length >> 1] * DIFF.detail : 0;
 
     for (const cand of cands){
       if (cand.v < minV) continue;
@@ -1173,7 +1252,7 @@ function buildChart(instA, tracks, tempo, duration){
         if (rmsN[k] > peak) peak = rmsN[k];
       }
       if (peak < floor) continue;
-      onsets.push({ t, src:"voc", side: tr.side, A: tr.A, rmsN });
+      onsets.push({ t, src:"voc", side: tr.side, A: tr.A, rmsN, v: cand.v });
     }
   }
   onsets.sort((a,b) => a.t - b.t);
@@ -1189,7 +1268,7 @@ function buildChart(instA, tracks, tempo, duration){
   for (const o of onsets){
     if (o.t < 1.0 || o.t > duration - 0.35) continue;
     q.push({ t: quantise(o.t, tempo.offset, step), src:o.src, side:o.side,
-             A:o.A, rmsN:o.rmsN });
+             A:o.A, rmsN:o.rmsN, v:o.v });
   }
   q.sort((a,b) => a.t - b.t);
 
@@ -1260,15 +1339,18 @@ function buildChart(instA, tracks, tempo, duration){
     });
   }
 
-  // ---- per side: de-duplicate, pick lanes, work out sustains ----
+  // ---- per side: thin to difficulty, shape into patterns, add sustains ----
   // The two characters have their own strumlines, so a note on one side never
   // conflicts with a note on the other — they can sing at the same instant.
+  const D = DIFF;
   const notes = [];
+
   for (const side of ["opp", "plr"]){
     const list = q.filter(o => o.side === side);
     // One note per grid step per side. Vibrato and consonants used to slip
     // an extra note in half a step behind the real one.
-    const seen = new Set(), kept = [];
+    const seen = new Set();
+    let kept = [];
     for (const o of list){
       const key = Math.round(o.t / step);
       if (seen.has(key)) continue;
@@ -1277,8 +1359,23 @@ function buildChart(instA, tracks, tempo, duration){
     }
     if (!kept.length) continue;
 
-    // Centroid → lane, with this side's own quartiles so each character gets
-    // the full spread regardless of how high or low their voice sits.
+    // Difficulty thinning. Easy does not get a slower song, it gets the same
+    // song with the quieter syllables left out — so keep whichever of two
+    // crowded onsets was actually the stronger attack.
+    const minGap = step * D.minStep - 1e-6;
+    if (D.minStep > 1){
+      const thinned = [];
+      for (const o of kept){
+        const prev = thinned[thinned.length - 1];
+        if (prev && o.t - prev.t < minGap){
+          if ((o.v || 0) > (prev.v || 0)) thinned[thinned.length - 1] = o;
+          continue;
+        }
+        thinned.push(o);
+      }
+      kept = thinned;
+    }
+
     const cents = kept.map(o => {
       const A = o.A || instA;
       const i = clamp(Math.round(o.t * A.fps), 0, A.centroid.length - 1);
@@ -1287,60 +1384,163 @@ function buildChart(instA, tracks, tempo, duration){
     const sorted = cents.slice().sort((a,b) => a-b);
     const qt = p => sorted[clamp(Math.floor(sorted.length*p), 0, sorted.length-1)];
     const c1 = qt(0.25), c2 = qt(0.5), c3 = qt(0.75);
-
-    // Real charts are shaped by the melody: a rising line walks up the lanes,
-    // a falling one walks down, and a repeated note sits still as a jack.
-    // Quartiles alone scatter notes around by absolute pitch and lose all of
-    // that, so within a run the contour drives and quartiles only set where a
-    // fresh phrase starts.
     const spread = Math.max(1e-6, qt(0.85) - qt(0.15));
     const STEP_UP = spread * 0.10;
-    const hist = [];
-    let prevLane = -1;
+    const quartOf = c => c < c1 ? 0 : c < c2 ? 1 : c < c3 ? 2 : 3;
 
-    for (let i = 0; i < kept.length; i++){
-      const o = kept[i], c = cents[i];
-      const quart = c < c1 ? 0 : c < c2 ? 1 : c < c3 ? 2 : 3;
-      let lane;
+    // strong attacks, used to decide where a jump is earned
+    const vs = kept.map(o => o.v || 0).slice().sort((a,b) => a-b);
+    const strongV = vs.length ? vs[Math.floor(vs.length * 0.80)] : Infinity;
 
-      const runs = i > 0 && (o.t - kept[i-1].t) < 0.5 && prevLane >= 0;
-      let dir = 0;
-      if (runs){
-        const d = c - cents[i-1];
-        dir = d > STEP_UP ? 1 : d < -STEP_UP ? -1 : 0;
-        lane = prevLane + dir;
-        // walked off the end of the board — hold at the edge rather than
-        // leaping somewhere unrelated, which reads as a mistake mid-run
+    // ---- split into runs, then into gestures ----
+    // A run is notes close enough together to belong to one breath. But a long
+    // legato line can climb, fall and then sit still inside a single breath,
+    // and averaging those three shapes together describes none of them — so
+    // each run is cut again wherever the melody turns around.
+    const rawRuns = [];
+    let cur = [0];
+    for (let i = 1; i < kept.length; i++){
+      if (kept[i].t - kept[i-1].t > 0.5){ rawRuns.push(cur); cur = []; }
+      cur.push(i);
+    }
+    rawRuns.push(cur);
+
+    const runs = [];
+    for (const run of rawRuns){
+      let seg = [run[0]], lastDir = 0;
+      for (let k = 1; k < run.length; k++){
+        const d = cents[run[k]] - cents[run[k-1]];
+        const dir = d > STEP_UP ? 1 : d < -STEP_UP ? -1 : 0;
+        if (dir !== 0 && lastDir !== 0 && dir !== lastDir && seg.length >= 3){
+          runs.push(seg);
+          seg = [run[k]];
+          lastDir = dir;
+          continue;
+        }
+        if (dir !== 0) lastDir = dir;
+        seg.push(run[k]);
+      }
+      if (seg.length) runs.push(seg);
+    }
+
+    const rnd = seeded(hashName(side) ^ kept.length ^ Math.round(tempo.bpm * 7));
+    const recent = [];              // pattern names of the last few runs
+    const laneHist = [];            // every lane emitted on this side, in order
+    let lastJump = -1e9;
+
+    for (const run of runs){
+      const n = run.length;
+      // read the shape of this run from the voice
+      let ups = 0, downs = 0, flats = 0;
+      for (let k = 1; k < n; k++){
+        const d = cents[run[k]] - cents[run[k-1]];
+        if (d > STEP_UP) ups++; else if (d < -STEP_UP) downs++; else flats++;
+      }
+      const moves = ups + downs + flats || 1;
+      const directed = Math.abs(ups - downs) / moves;      // one-way melodic line
+      const flatness = flats / moves;
+
+      // Choose the pattern the run's shape suggests, then reject anything the
+      // last couple of runs already used — a chart that keeps reaching for the
+      // same shape is what makes generated charts feel automatic.
+      let choices;
+      // Only a run that is genuinely flat gives up its shape to a trill or a
+      // jack. Anything with melodic movement is laid out by patterns that
+      // follow the line — variety must not cost the melody.
+      if (n <= 2)                     choices = ["single"];
+      else if (flatness > 0.6)        choices = ["alt", "jack", "single"];
+      else if (directed > 0.55)       choices = ["stair", "roll"];
+      else                            choices = ["stair", "stream"];
+      choices = choices.filter(p => D.patterns.indexOf(p) >= 0);
+      if (!choices.length) choices = ["single"];
+      let pattern = choices.find(p => recent.indexOf(p) < 0) || choices[Math.floor(rnd() * choices.length)];
+      recent.push(pattern);
+      if (recent.length > 3) recent.shift();
+
+      // ---- lay the run out ----
+      const lanes = [];
+      let altA = quartOf(cents[run[0]]);
+      let altB = (altA + 1 + Math.floor(rnd() * 3)) % 4;
+      if (altB === altA) altB = (altA + 1) % 4;
+      let rollDir = (ups >= downs) ? 1 : -1;
+
+      for (let k = 0; k < n; k++){
+        const i = run[k];
+        const c = cents[i];
+        const quart = quartOf(c);
+        let lane;
+
+        if (k === 0){
+          lane = quart;
+        } else {
+          const d = c - cents[run[k-1]];
+          const dir = d > STEP_UP ? 1 : d < -STEP_UP ? -1 : 0;
+          switch (pattern){
+            case "alt":
+              lane = (k % 2 === 0) ? altA : altB;
+              break;
+            case "jack":
+              lane = lanes[k-1];
+              break;
+            case "roll":
+              lane = (lanes[k-1] + rollDir + 4) % 4;    // wraps, so it keeps climbing
+              break;
+            case "stream":
+              lane = clamp(lanes[k-1] + (dir || (rnd() < 0.5 ? 1 : -1)), 0, 3);
+              if (lane === lanes[k-1]) lane = clamp(lane + (lane >= 2 ? -1 : 1), 0, 3);
+              break;
+            case "stair":
+              lane = clamp(lanes[k-1] + dir, 0, 3);
+              break;
+            default:                     // single — sit where the pitch sits
+              lane = quart;
+          }
+        }
+
+        // Never more than two of the same lane running — checked against
+        // everything emitted on this side, not just this run, or two runs
+        // butting together sneak a third through.
+        const H = laneHist.length;
+        if (H >= 2 && laneHist[H-1] === lane && laneHist[H-2] === lane){
+          lane = lane >= 2 ? lane - 1 : lane + 1;
+        }
         lane = clamp(lane, 0, 3);
-      } else {
-        lane = quart;
+        lanes.push(lane);
+        laneHist.push(lane);
+        if (laneHist.length > 8) laneHist.shift();
       }
 
-      // Never more than two of the same lane running. Break the run the way
-      // the melody is already moving, so the fix does not fight the line.
-      if (hist.length >= 2 && hist[hist.length-1] === lane && hist[hist.length-2] === lane){
-        const want = dir > 0 ? lane + 1 : dir < 0 ? lane - 1 : (lane >= 2 ? lane - 1 : lane + 1);
-        lane = (want < 0 || want > 3) ? (lane >= 2 ? lane - 1 : lane + 1) : want;
-      }
-      lane = clamp(lane, 0, 3);
-      hist.push(lane);
-      if (hist.length > 4) hist.shift();
-      prevLane = lane;
+      // ---- emit, with the occasional earned jump ----
+      for (let k = 0; k < n; k++){
+        const i = run[k], o = kept[i];
+        const lane = lanes[k];
 
-      // hold notes: a long gap with the voice still sustaining
-      const nextT = (i + 1 < kept.length) ? kept[i+1].t : duration;
-      const gap = nextT - o.t;
-      let len = 0;
-      if (o.src === "voc" && o.rmsN && gap > 0.55){
-        const fi = clamp(Math.round((o.t + 0.28) * o.A.fps), 0, o.rmsN.length - 1);
-        if (o.rmsN[fi] > 0.16){
-          len = Math.min(gap - 0.18, tempo.beatLen * 2.5);
-          len = Math.round(len / step) * step;
-          if (len < step * 2) len = 0;
+        const nextT = (i + 1 < kept.length) ? kept[i+1].t : duration;
+        const gap = nextT - o.t;
+        let len = 0;
+        if (o.src === "voc" && o.rmsN && gap > 0.55){
+          const fi = clamp(Math.round((o.t + 0.28) * o.A.fps), 0, o.rmsN.length - 1);
+          if (o.rmsN[fi] > 0.16){
+            len = Math.min(gap - 0.18, tempo.beatLen * 2.5);
+            len = Math.round(len / step) * step;
+            if (len < step * 2) len = 0;
+          }
+        }
+        notes.push({ t:o.t, lane, mustHit: side === "plr", len });
+
+        // A jump is two notes at once. It has to be earned: a hard attack, on
+        // a beat, opening a phrase, and never twice in quick succession —
+        // otherwise every other note becomes a double and the chart turns to
+        // mush.
+        const onBeat = Math.abs(((o.t - tempo.offset) / tempo.beatLen) % 1) < 0.08;
+        if (D.jumpRate > 0 && k === 0 && n > 2 &&
+            (o.v || 0) >= strongV && onBeat && len === 0 &&
+            o.t - lastJump > tempo.beatLen * 6 && rnd() < D.jumpRate){
+          let jl = (lane + 2) % 4;                 // the opposite hand
+          notes.push({ t:o.t, lane:jl, mustHit: side === "plr", len:0 });
+          lastJump = o.t;
         }
       }
-
-      notes.push({ t:o.t, lane, mustHit: side === "plr", len });
     }
   }
 
@@ -1377,6 +1577,7 @@ function buildChart(instA, tracks, tempo, duration){
     duration,
     notes: clean,
     sections,
+    difficulty: difficulty || "normal",
     stems: tracks.length,           // 2 = each character had their own vocal track
     singerSplit: singerFound,       // sides are known rather than shared out blindly
     voiceQuality, voiceBalance
@@ -1405,6 +1606,8 @@ function paintReady(chart){
   $("#stLen").textContent   = fmtTime(chart.duration);
   $("#stNotes").textContent = chart.notes.length;
   $("#stSec").textContent   = chart.sections;
+  $("#stSecLbl").textContent = "Sections";
+  $("#stDiff").textContent  = (chart.difficulty || "normal").replace(/^./, ch => ch.toUpperCase());
   const mine = chart.notes.filter(n => n.mustHit).length;
   $("#readyNote").innerHTML = (
       chart.stems === 2 ? "Charted from <b>both vocal tracks</b> — every note came from the voice that sings it, so the sides are exact."
@@ -1487,7 +1690,7 @@ $("#autoChartBtn").addEventListener("click", async () => {
     let duration = instBuf.duration;
     for (const s of stems) duration = Math.max(duration, s.buf.duration);
 
-    const chart = buildChart(instA, stems.map(s => ({ A: s.A, side: s.side })), tempo, duration);
+    const chart = buildChart(instA, stems.map(s => ({ A: s.A, side: s.side })), tempo, duration, settings.difficulty);
     if (!chart.notes.length) throw new Error("No notes could be detected. Try a louder or less compressed track.");
 
     setProgress(93, STAGES[4]);
@@ -1978,7 +2181,8 @@ function drawPortrait(who){
   g.save();
   g.translate(w/2, h - 6);
   g.scale(s, s);
-  drawChar(g, who === "bf" ? CHARS.bf : CHARS.demo, "idle", 1, 0);
+  const slot = who === "bf" ? "plr" : "opp";
+  drawChar(g, charFor(slot), "idle", 1, 0, posesFor(slot));
   g.restore();
 }
 
@@ -2090,6 +2294,10 @@ function capsule(g, x, y, ang, len, w, fill, line){
 
 /* A plain grey stick figure — the default stand-in opponent. Shares the pose
    table with the drawn characters so it sings the same four directions. */
+function drawCharPosed(g, def, poses, poseName, blend, bop){
+  return drawChar(g, def, poseName, blend, bop, poses);
+}
+
 function drawStick(g, def, p, k, al, ar){
   const L = def.line, LD = def.lineDark;
   const hipY = -66, shoulderY = -126, headY = -166, headR = 25;
@@ -2170,9 +2378,10 @@ function drawStick(g, def, p, k, al, ar){
 }
 
 /* draws a character centred on (cx, groundY) at the given scale */
-function drawChar(g, def, poseName, blend, bop){
-  const p = POSES[poseName] || POSES.idle;
-  const idle = POSES.idle;
+function drawChar(g, def, poseName, blend, bop, poseTable){
+  const T = poseTable || POSES;
+  const p = T[poseName] || T.idle || POSES.idle;
+  const idle = T.idle || POSES.idle;
   const k = clamp(blend, 0, 1);
   const m = (a, b) => lerp(a, b, k);
   const bx = m(idle.bx, p.bx), by = m(idle.by, p.by) + bop;
@@ -2384,7 +2593,7 @@ const spriteCache = new Map();
 let spriteCacheScale = 0, spriteCacheDpr = 0;
 const CHAR_BOX = { x:-72, y:-205, w:144, h:232 };   // character bounds in local units
 
-function drawCharCached(g, def, id, poseName, blend, bop, x, y, scale, dpr){
+function drawCharCached(g, def, id, poseName, blend, bop, x, y, scale, dpr, poseTable){
   if (scale !== spriteCacheScale || dpr !== spriteCacheDpr){
     spriteCache.clear();
     spriteCacheScale = scale; spriteCacheDpr = dpr;
@@ -2404,12 +2613,348 @@ function drawCharCached(g, def, id, poseName, blend, bop, x, y, scale, dpr){
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
     c.translate(-CHAR_BOX.x * scale, -CHAR_BOX.y * scale);
     c.scale(scale, scale);
-    drawChar(c, def, poseName, bucket / 4, 0);   // bop is applied at blit time
+    drawChar(c, def, poseName, bucket / 4, 0, poseTable);   // bop is applied at blit time
     spriteCache.set(key, cv);
   }
   g.drawImage(cv, x + CHAR_BOX.x * scale, y + (CHAR_BOX.y + bop) * scale,
                   CHAR_BOX.w * scale, CHAR_BOX.h * scale);
 }
+
+/* =====================================================================
+   SPRITE CREATOR
+   The page has no model behind it, so "describe your character" is read
+   here: colour words are bound to the garment or feature they sit next
+   to, and the animation sentence is parsed into pose offsets. What comes
+   out drives the same renderer the built-in cast uses, so a generated
+   character sings all four directions and misses like any other.
+   ===================================================================== */
+const COLOR_WORDS = {
+  red:"#e33b3b", crimson:"#c62432", scarlet:"#e02b2b", maroon:"#7d2230",
+  blue:"#2f6fe0", navy:"#22315e", cyan:"#22cfe0", teal:"#1f9c9c", turquoise:"#2ec4b6",
+  sky:"#63b8f0", azure:"#3a8ee6",
+  green:"#2fb84a", lime:"#7ed321", emerald:"#1f9d55", olive:"#7a8b3a", mint:"#8fe3c0",
+  yellow:"#f2c53d", gold:"#e0af2a", amber:"#eaa521", orange:"#ef8b31",
+  purple:"#8b5cf6", violet:"#7c4dd6", lavender:"#b9a6e8", magenta:"#d63bb0",
+  pink:"#f07cb0", rose:"#e86d92",
+  black:"#22242c", white:"#f6f7fb", grey:"#8f96a3", gray:"#8f96a3",
+  silver:"#c3c9d4", brown:"#8a5a34", tan:"#c9a274", beige:"#e2cfae",
+  peach:"#f7c9a4", cream:"#f3e6cf"
+};
+
+// which part of the character a word refers to
+const SLOTS = [
+  { key:"hair",  words:["hair","haired","fringe","ponytail","mohawk","afro","bangs","locks"] },
+  { key:"shirt", words:["hoodie","hoody","shirt","tshirt","t-shirt","tee","jacket","top","sweater",
+                        "jumper","sweatshirt","coat","vest","robe","dress","blouse","uniform"] },
+  { key:"pants", words:["pants","jeans","trousers","shorts","skirt","leggings","joggers","slacks"] },
+  { key:"shoes", words:["shoes","sneakers","trainers","boots","kicks","sandals","heels"] },
+  { key:"skin",  words:["skin","skinned","complexion","fur","scales"] },
+  { key:"eyes",  words:["eyes","eyed"] },
+  { key:"cap",   words:["hat","cap","beanie","helmet","hood","crown","headband"] }
+];
+
+const FEATURE_WORDS = {
+  horns:  ["horn","horns","horned","demon","devil","imp"],
+  ears:   ["ears","cat","kitty","feline","fox","wolf","bunny","rabbit"],
+  glasses:["glasses","specs","shades","sunglasses","goggles"],
+  spiky:  ["spiky","spikey","spiked","punk","messy","wild"],
+  stick:  ["stick figure","stickman","stick man","stick-figure"],
+  skull:  ["skull","skeleton","bones","bony"]
+};
+
+function normaliseWords(text){
+  // hyphens split too: "blue-haired" has to become "blue" + "haired" or the
+  // colour has nothing to bind to
+  return text.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim().split(" ");
+}
+
+/* Colour words bind to the nearest slot word, looking forward first
+   ("red hoodie") and then back ("hair that is blue"). */
+function parseSprite(text){
+  const words = normaliseWords(text);
+  const def = {
+    name: "Custom",
+    skin:"#f6c9a0", skinShade:"#e0ab7e",
+    hair:"#3a3f4d", hairDark:"#23262f",
+    shirt:"#ffffff", shirtShade:"#e2e6ef",
+    sleeve:null, pants:"#38406b", pantsShade:"#2a3054",
+    shoes:"#d84a4a", shoeSole:"#ffffff",
+    eyeColor:"#1b2a5e", cap:null,
+    line:"#141418", mic:true, spiky:false,
+    horns:false, ears:false, glasses:false
+  };
+
+  const slotOf = w => {
+    for (const s of SLOTS) if (s.words.indexOf(w) >= 0) return s.key;
+    return null;
+  };
+  const assign = (slot, hex) => {
+    if (slot === "hair"){ def.hair = hex; def.hairDark = shade(hex, -0.28); }
+    else if (slot === "shirt"){ def.shirt = hex; def.shirtShade = shade(hex, -0.12); }
+    else if (slot === "pants"){ def.pants = hex; def.pantsShade = shade(hex, -0.22); }
+    else if (slot === "shoes"){ def.shoes = hex; }
+    else if (slot === "skin"){ def.skin = hex; def.skinShade = shade(hex, -0.16); }
+    else if (slot === "eyes"){ def.eyeColor = hex; }
+    else if (slot === "cap"){ def.cap = hex; }
+  };
+
+  // First bind every colour that names what it colours, so "teal jacket" wins
+  // its slot before a loose "pink" earlier in the sentence can squat on it.
+  const used = new Set(), loose = [];
+  for (let i = 0; i < words.length; i++){
+    const hex = COLOR_WORDS[words[i]];
+    if (!hex) continue;
+    let target = null;
+    for (let j = i + 1; j <= Math.min(i + 3, words.length - 1); j++){
+      const sl = slotOf(words[j]);
+      if (sl){ target = sl; break; }
+    }
+    if (!target){
+      for (let j = i - 1; j >= Math.max(0, i - 3); j--){
+        const sl = slotOf(words[j]);
+        if (sl){ target = sl; break; }
+      }
+    }
+    if (target){ if (!used.has(target)){ assign(target, hex); used.add(target); } }
+    else loose.push(hex);
+  }
+  // then spend whatever is left on the slots nobody claimed
+  for (const hex of loose){
+    const slot = ["shirt","hair","skin"].find(k => !used.has(k));
+    if (!slot) break;
+    assign(slot, hex);
+    used.add(slot);
+  }
+
+  const blob = words.join(" ");
+  for (const [feat, keys] of Object.entries(FEATURE_WORDS)){
+    if (keys.some(k => blob.indexOf(k) >= 0)){
+      if (feat === "stick") def.style = "stick";
+      else if (feat === "skull") def.skull = true;
+      else def[feat] = true;
+    }
+  }
+  if (def.style === "stick"){ def.line = def.hair; def.lineDark = def.hairDark; }
+  if (blob.indexOf("no mic") >= 0 || blob.indexOf("without a mic") >= 0) def.mic = false;
+  return def;
+}
+
+function shade(hex, amt){
+  const n = parseInt(hex.slice(1), 16);
+  let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  const f = v => clamp(Math.round(amt < 0 ? v * (1 + amt) : v + (255 - v) * amt), 0, 255);
+  return "#" + ((1 << 24) + (f(r) << 16) + (f(g) << 8) + f(b)).toString(16).slice(1);
+}
+
+/* ---- the animation sentence ----
+   Read per direction: which way it leans, whether it crouches or reaches,
+   and how big the whole thing is played. */
+const DIR_WORDS = { left:"left", down:"down", up:"up", right:"right", idle:"idle", miss:"miss" };
+
+function parseAnim(text){
+  const poses = JSON.parse(JSON.stringify(POSES));       // start from the defaults
+  if (!text || !text.trim()) return poses;
+
+  const lower = text.toLowerCase();
+  // split into clauses so "leans left when singing left" does not leak into
+  // the next direction's description
+  const clauses = lower.split(/[,.;]|\band\b|\bthen\b/).map(c => c.trim()).filter(Boolean);
+
+  const globalBig = /\b(dramatic|dramatically|exaggerated|big|wild|heavily|hard)\b/.test(lower);
+  const globalSmall = /\b(slight|slightly|subtle|small|gentle|barely|little)\b/.test(lower);
+
+  for (const clause of clauses){
+    // which direction is this clause about?
+    let dir = null;
+    for (const key of Object.keys(DIR_WORDS)) if (clause.indexOf(key) >= 0) dir = key;
+    if (!dir) continue;
+    const p = poses[dir];
+    if (!p) continue;
+
+    const big = /\b(dramatic|dramatically|exaggerated|big|wild|heavily|hard|deep|far)\b/.test(clause);
+    const small = /\b(slight|slightly|subtle|small|gentle|barely|little)\b/.test(clause);
+    const amt = big ? 1.85 : small ? 0.55 : 1;
+
+    if (/\blean|tilt|sway|lurch/.test(clause)){
+      const toLeft = /\bleft\b/.test(clause) && dir !== "right";
+      const toRight = /\bright\b/.test(clause) && dir !== "left";
+      const sign = toRight ? 1 : toLeft ? -1 : (dir === "right" ? 1 : dir === "left" ? -1 : 0);
+      p.bx = 9 * sign * amt;
+      p.tilt = 0.09 * sign * amt;
+    }
+    if (/\bcrouch|duck|squat|kneel|drop|dip|hunch\b/.test(clause)){
+      p.by = 11 * amt;
+      p.hy = 5 * amt;
+    }
+    if (/\bjump|leap|hop|rise|stand tall|stretch|reach\b/.test(clause)){
+      p.by = -11 * amt;
+      p.hy = -5 * amt;
+    }
+    if (/\blook(s|ing)? up|upward|skyward|head back\b/.test(clause)){
+      p.eyes = "up"; p.hy = -4 * amt;
+    }
+    if (/\blook(s|ing)? down|downward|at the floor|head down\b/.test(clause)){
+      p.eyes = "down"; p.hy = 4 * amt;
+    }
+    if (/\bbounce|bob|bops|bobbing|sway|groove\b/.test(clause) && dir === "idle"){
+      poses.idle.bounce = (small ? 0.5 : big ? 2.1 : 1.2);
+    }
+    if (/\bsmile|grin|happy|cheer/.test(clause)) p.mouth = "idle";
+    if (/\bshout|yell|scream|belt|wide\b/.test(clause)) p.mouth = "wide";
+    if (/\bfrown|sad|upset|angry|scowl/.test(clause)) p.mouth = "frown";
+    if (/\bclose(d)? eyes|eyes shut|winc/.test(clause)) p.eyes = "x";
+    if (/\barms? up|hands? up|raise/.test(clause)){ p.al = 4.15; p.ar = 5.30; }
+    if (/\barms? (down|low)|hands? down/.test(clause)){ p.al = 1.92; p.ar = 1.24; }
+  }
+
+  if (globalBig && !globalSmall){
+    for (const k of ["left","down","up","right"]){
+      poses[k].bx *= 1.35; poses[k].by *= 1.2; poses[k].tilt *= 1.35;
+    }
+  }
+  return poses;
+}
+
+/* ---- state ---- */
+let customSprite = null;          // { def, poses, desc, animDesc, slot }
+try{
+  const raw = localStorage.getItem("fnfsm_sprite");
+  if (raw) customSprite = JSON.parse(raw);
+}catch(e){}
+
+function applyCustomSprite(){
+  if (!customSprite) return;
+  CHARS.custom = customSprite.def;
+  spriteCache.clear();
+}
+applyCustomSprite();
+
+function charFor(slot){
+  if (customSprite && customSprite.slot === slot) return CHARS.custom;
+  return slot === "opp" ? CHARS.demo : CHARS.bf;
+}
+function posesFor(slot){
+  if (customSprite && customSprite.slot === slot && customSprite.poses) return customSprite.poses;
+  return POSES;
+}
+
+/* ---- generation + preview ---- */
+let genDef = null, genPoses = null;
+let previewSeq = ["idle","left","down","up","right","miss"], previewStep = 0, previewClock = 0;
+
+function generateSprite(){
+  const desc = $("#spriteDesc").value.trim();
+  const anim = $("#spriteAnim").value.trim();
+  if (!desc){ alert("Describe the character first — colours, clothes, anything."); return; }
+  genDef = parseSprite(desc);
+  genPoses = parseAnim(anim);
+  genDef.name = "Custom";
+  $("#spriteReadback").innerHTML = describeParse(genDef, genPoses);
+  $("#spritePreviewWrap").style.display = "block";
+  previewStep = 0; previewClock = 0;
+  startGenPreview();
+}
+
+function describeParse(def, poses){
+  const bits = [];
+  const named = { hair:"hair", shirt:"top", pants:"legs", shoes:"shoes", skin:"skin" };
+  for (const [k, label] of Object.entries(named)){
+    bits.push('<span class="swatch" style="background:' + def[k] + '"></span>' + label);
+  }
+  const feats = [];
+  if (def.horns) feats.push("horns");
+  if (def.ears) feats.push("ears");
+  if (def.glasses) feats.push("glasses");
+  if (def.style === "stick") feats.push("stick figure");
+  if (!def.mic) feats.push("no mic");
+  const moved = ["left","down","up","right","idle"].filter(k =>
+    JSON.stringify(poses[k]) !== JSON.stringify(POSES[k]));
+  return bits.join("") +
+    (feats.length ? '<div class="hint" style="margin:8px 0 0">Also read: ' + feats.join(", ") + "</div>" : "") +
+    '<div class="hint" style="margin:6px 0 0">' +
+      (moved.length ? "Animation notes applied to: " + moved.join(", ") : "Using the default animation set") +
+    "</div>";
+}
+
+let genRAF = 0;
+function genPreviewFrame(){
+  genRAF = requestAnimationFrame(genPreviewFrame);
+  const cv = $("#genPreview");
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (!w || !h || !genDef) return;
+  if (cv.width !== Math.ceil(w*dpr)) { cv.width = Math.ceil(w*dpr); cv.height = Math.ceil(h*dpr); }
+  const g = cv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+
+  previewClock += 1/60;
+  if (previewClock > 0.9){ previewClock = 0; previewStep = (previewStep + 1) % previewSeq.length; }
+  const pose = previewSeq[previewStep];
+  const blend = clamp(previewClock * 6, 0, 1) * (previewClock > 0.72 ? clamp((0.9-previewClock)*6, 0, 1) : 1);
+  const bounce = (genPoses.idle && genPoses.idle.bounce) || 1;
+  const bop = pose === "idle" ? Math.sin(previewClock * 7) * 3.2 * bounce : 0;
+
+  const s = Math.min(w / 190, h / 250);
+  g.save();
+  g.translate(w/2, h - 14);
+  g.scale(s, s);
+  drawCharPosed(g, genDef, genPoses, pose, blend, bop);
+  g.restore();
+
+  g.font = "800 12px -apple-system,system-ui,sans-serif";
+  g.fillStyle = "#767b8a";
+  g.textAlign = "center";
+  g.fillText(pose.toUpperCase(), w/2, h - 3);
+}
+function startGenPreview(){ if (!genRAF) genRAF = requestAnimationFrame(genPreviewFrame); }
+function stopGenPreview(){ if (genRAF){ cancelAnimationFrame(genRAF); genRAF = 0; } }
+
+$("#genSpriteBtn").addEventListener("click", generateSprite);
+$("#regenBtn").addEventListener("click", generateSprite);
+$("#editDescBtn").addEventListener("click", () => { $("#spriteDesc").focus(); $("#spriteDesc").scrollIntoView({behavior:"smooth", block:"center"}); });
+$("#editAnimBtn").addEventListener("click", () => { $("#spriteAnim").focus(); $("#spriteAnim").scrollIntoView({behavior:"smooth", block:"center"}); });
+$("#cancelSpriteBtn").addEventListener("click", () => {
+  stopGenPreview();
+  $("#spritePreviewWrap").style.display = "none";
+});
+$("#useSpriteBtn").addEventListener("click", () => {
+  if (!genDef) return;
+  const slot = $$("#slotSel button").find(b => b.classList.contains("on")).dataset.slot;
+  customSprite = { def: genDef, poses: genPoses, slot,
+                   desc: $("#spriteDesc").value, animDesc: $("#spriteAnim").value };
+  try{ localStorage.setItem("fnfsm_sprite", JSON.stringify(customSprite)); }catch(e){}
+  applyCustomSprite();
+  stopGenPreview();
+  $("#spritePreviewWrap").style.display = "none";
+  paintSpriteSlots();
+  alert("Done — your character is now the " + (slot === "opp" ? "opponent" : "player") + ".");
+});
+$("#clearSpriteBtn").addEventListener("click", () => {
+  customSprite = null;
+  try{ localStorage.removeItem("fnfsm_sprite"); }catch(e){}
+  delete CHARS.custom;
+  spriteCache.clear();
+  paintSpriteSlots();
+});
+$$("#slotSel button").forEach(b => b.addEventListener("click", () => {
+  $$("#slotSel button").forEach(x => x.classList.remove("on"));
+  b.classList.add("on");
+}));
+
+function paintSpriteSlots(){
+  const on = !!customSprite;
+  $("#clearSpriteBtn").style.display = on ? "flex" : "none";
+  $("#spriteInUse").textContent = on
+    ? "In use as the " + (customSprite.slot === "opp" ? "opponent" : "player") + "."
+    : "No custom character yet.";
+  if (on){
+    $("#spriteDesc").value = customSprite.desc || "";
+    $("#spriteAnim").value = customSprite.animDesc || "";
+    $$("#slotSel button").forEach(x => x.classList.toggle("on", x.dataset.slot === customSprite.slot));
+  }
+}
+paintSpriteSlots();
 
 /* ------------------------- sprite preview ------------------------- */
 let previewRAF = 0, previewPose = "idle", previewT = 0;
@@ -2438,11 +2983,11 @@ function previewFrame(){
   const gy = h - 26;
 
   g.save(); g.translate(w*0.29, gy); g.scale(s*0.92, s*0.92);
-  drawChar(g, CHARS.demo, previewPose === "miss" ? "idle" : previewPose, blend, bop);
+  drawChar(g, charFor("opp"), previewPose === "miss" ? "idle" : previewPose, blend, bop, posesFor("opp"));
   g.restore();
 
   g.save(); g.translate(w*0.71, gy); g.scale(s*0.92, s*0.92);
-  drawChar(g, CHARS.bf, previewPose, blend, bop);
+  drawChar(g, charFor("plr"), previewPose, blend, bop, posesFor("plr"));
   g.restore();
 
   g.font = "700 11px -apple-system,system-ui,sans-serif";
@@ -3374,8 +3919,12 @@ function render(){
 
   g.save();
   g.globalAlpha = 0.95;
-  drawCharCached(g, CHARS.demo, "demo", s.opPose, s.opBlend, bop, leftX, groundY, charScale, s.dpr);
-  drawCharCached(g, CHARS.bf, "bf", s.bfPose, s.bfBlend, bop, rightX, groundY, charScale, s.dpr);
+  const oppCustom = customSprite && customSprite.slot === "opp";
+  const plrCustom = customSprite && customSprite.slot === "plr";
+  drawCharCached(g, charFor("opp"), oppCustom ? "cu-opp" : "demo", s.opPose, s.opBlend, bop,
+                 leftX, groundY, charScale, s.dpr, posesFor("opp"));
+  drawCharCached(g, charFor("plr"), plrCustom ? "cu-plr" : "bf", s.bfPose, s.bfBlend, bop,
+                 rightX, groundY, charScale, s.dpr, posesFor("plr"));
   g.restore();
 
   /* --- mobile lane columns --- */
