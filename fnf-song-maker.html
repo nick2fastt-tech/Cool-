@@ -187,6 +187,53 @@
   #pauseOverlay h2{font-size:26px;font-weight:900;margin:0 0 22px;letter-spacing:-.8px}
   #pauseOverlay .btn{max-width:300px}
 
+  /* --- mod maker --- */
+  .cover{
+    width:100%;aspect-ratio:16/9;border-radius:var(--radius);border:2px dashed var(--line);
+    display:grid;place-items:center;text-align:center;color:var(--muted);font-size:13px;
+    cursor:pointer;overflow:hidden;background:#fafbfd;margin-bottom:12px;
+  }
+  .cover.has{border-style:solid;padding:0}
+  .cover img{width:100%;height:100%;object-fit:cover;display:block}
+  .cover small{font-size:11px;opacity:.75}
+  #modName{
+    width:100%;padding:13px 14px;border-radius:14px;border:1.5px solid var(--line);
+    font-family:inherit;font-size:15.5px;font-weight:700;color:var(--ink);background:#fff;margin-bottom:10px;
+  }
+  .modrow{display:flex;align-items:center;gap:11px;padding:11px}
+  .modrow .thumb{
+    width:52px;height:52px;flex:0 0 52px;border-radius:12px;background:#eef0f6;
+    display:grid;place-items:center;font-weight:800;color:var(--muted);overflow:hidden;
+  }
+  .modrow .thumb img{width:100%;height:100%;object-fit:cover}
+  .modrow .meta{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+  .modrow .meta b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .modrow .meta .hint,.modrow .meta .dlg{font-size:11.5px;margin:0}
+  .modrow .ops{display:flex;flex-direction:column;gap:4px}
+  .modrow .ops .chip{padding:4px 8px;font-size:11px;border-radius:8px}
+  .poolbtn{width:100%;justify-content:flex-start;margin-bottom:8px;text-align:left}
+  #autoModWrap{display:none;margin-bottom:14px}
+
+  /* --- dialogue --- */
+  #dialogueScreen{background:linear-gradient(180deg,#efe7f6 0%,#e6dcf2 62%,#e3c9a6 62%,#dcc09b 100%);
+    padding:0;cursor:pointer;overflow:hidden}
+  #dlgPortrait{position:absolute;left:50%;transform:translateX(-50%);bottom:31%;width:min(58vw,300px);height:44%}
+  #dlgBox{
+    position:absolute;left:14px;right:14px;bottom:calc(env(safe-area-inset-bottom) + 16px);
+    background:#fff;border:3px solid #14161c;border-radius:20px;padding:15px 17px 17px;
+    box-shadow:0 8px 24px rgba(20,22,28,.18);min-height:120px;
+  }
+  #dlgBox.bf{border-color:#1b8fc4}
+  #dlgWho{font-size:11.5px;font-weight:900;letter-spacing:1.2px;color:var(--muted);margin-bottom:6px}
+  #dlgBox.bf #dlgWho{color:#1b8fc4}
+  #dlgText{font-size:16px;line-height:1.5;font-weight:600;min-height:48px}
+  #dlgHint{font-size:11.5px;color:var(--muted);margin-top:8px;text-align:right}
+  #dlgSkip{
+    position:absolute;top:calc(env(safe-area-inset-top) + 12px);right:14px;z-index:3;
+    padding:9px 14px;border-radius:99px;border:1.5px solid var(--line);background:rgba(255,255,255,.92);
+    font-family:inherit;font-size:12.5px;font-weight:750;color:var(--ink);cursor:pointer;
+  }
+
   .center-note{text-align:center;color:var(--muted);font-size:12.5px;margin-top:auto;padding-top:18px;line-height:1.6}
   .spacer{flex:1}
   .rank{font-size:52px;font-weight:900;letter-spacing:-2px;text-align:center;margin:4px 0 2px}
@@ -209,6 +256,7 @@
         </div>
       </div>
       <button class="btn" data-go="editorScreen"><span class="ic">🎵</span>Editor</button>
+      <button class="btn ghost" id="openMod"><span class="ic">📦</span>Mod Maker</button>
       <button class="btn ghost" data-go="spritesScreen"><span class="ic">🕺</span>Sprites</button>
       <button class="btn ghost" data-go="settingsScreen"><span class="ic">⚙️</span>Settings</button>
       <div class="spacer"></div>
@@ -305,6 +353,47 @@
       <button class="btn ghost" data-go="settingsScreen"><span class="ic">⚙️</span>Gameplay Settings</button>
       <div class="spacer"></div>
       <p class="center-note" id="readyMode"></p>
+    </div>
+  </section>
+
+  <!-- ============ MOD MAKER ============ -->
+  <section class="screen" id="modScreen">
+    <div class="wrap">
+      <header class="top"><button class="back" data-go="menuScreen">←</button><h2>Mod Maker</h2></header>
+
+      <div class="cover" id="modCover"><span>No cover<br><small>PNG or JPG</small></span></div>
+      <input id="modName" type="text" maxlength="40" placeholder="Mod name">
+      <p class="hint" style="color:var(--muted);font-size:12.5px;margin:0 0 16px" id="modStats"></p>
+
+      <div id="autoModWrap">
+        <div class="bar"><i id="autoModBar"></i></div>
+        <p class="hint" id="autoModNote" style="margin:6px 0 0"></p>
+      </div>
+
+      <button class="btn" id="playModBtn" disabled><span class="ic">▶</span>Play Mod</button>
+      <button class="btn pink" id="autoModBtn" disabled><span class="ic">✨</span>Auto Mod</button>
+      <p class="center-note" style="margin:0 0 18px">Auto Mod writes the dialogue for every song from how that song actually plays.</p>
+
+      <div class="lbl">In this mod</div>
+      <div id="modSongs"></div>
+      <p class="center-note" id="modEmpty" style="display:none;margin:0 0 16px">
+        Nothing here yet. Add a saved song below.</p>
+
+      <div class="lbl" style="margin-top:16px">Add a saved song</div>
+      <div id="modPool"></div>
+      <p class="center-note" id="poolEmpty" style="display:none"></p>
+      <input type="file" id="thumbFile" accept="image/png,image/jpeg,image/webp">
+    </div>
+  </section>
+
+  <!-- ============ DIALOGUE ============ -->
+  <section class="screen" id="dialogueScreen">
+    <button id="dlgSkip">Skip</button>
+    <canvas id="dlgPortrait"></canvas>
+    <div id="dlgBox">
+      <div id="dlgWho">OPPONENT</div>
+      <div id="dlgText"></div>
+      <div id="dlgHint">tap to continue</div>
     </div>
   </section>
 
@@ -442,6 +531,7 @@
         <div class="stat"><div class="k">Sicks</div><div class="v" id="resSick">0</div></div>
         <div class="stat"><div class="k">Misses</div><div class="v" id="resMiss">0</div></div>
       </div>
+      <button class="btn" id="modNextBtn" style="display:none"><span class="ic">▶</span>Next Song</button>
       <button class="btn" id="againBtn">Play Again</button>
       <button class="btn ghost" data-go="readyScreen">Back to Chart</button>
       <button class="btn ghost" data-go="menuScreen">Main Menu</button>
@@ -887,10 +977,15 @@ function pickOnsets(env, fps, sensitivity){
 let chartCancelled = false;
 let SONG = null;   // { instBuf, tracks:[{buf,side,combined}], chart, name }
 
+/* Snapping tidies a chart, but only up to a point: drag a note far enough and
+   it no longer lands where the singer actually sang, which is worse than an
+   untidy grid. Anything further out than a third of a step keeps the time the
+   voice gave it, so a note never moves more than about 30ms — inside the SICK
+   window, so what you hear and what you hit agree. */
 function quantise(t, offset, step){
   const k = Math.round((t - offset) / step);
   const q = offset + k * step;
-  return Math.abs(q - t) <= step * 0.62 ? q : t;  // snap only if it's close
+  return Math.abs(q - t) <= step * 0.33 ? q : t;
 }
 
 /* tracks: [{ A: analysis, side: "opp" | "plr" | null }]
@@ -1267,26 +1362,27 @@ $("#exportBtn").addEventListener("click", () => {
    holds, hence IndexedDB.
    ===================================================================== */
 const MAX_SONGS = 15;
-const DB_NAME = "fnfsm", DB_STORE = "songs";
+const DB_NAME = "fnfsm", DB_STORE = "songs", MOD_STORE = "mod";
 let dbPromise = null;
 
 function db(){
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((res, rej) => {
-    const rq = indexedDB.open(DB_NAME, 1);
+    const rq = indexedDB.open(DB_NAME, 2);
     rq.onupgradeneeded = () => {
       const d = rq.result;
       if (!d.objectStoreNames.contains(DB_STORE)) d.createObjectStore(DB_STORE, { keyPath:"id" });
+      if (!d.objectStoreNames.contains(MOD_STORE)) d.createObjectStore(MOD_STORE, { keyPath:"id" });
     };
     rq.onsuccess = () => res(rq.result);
     rq.onerror = () => rej(rq.error);
   });
   return dbPromise;
 }
-function dbTx(mode, fn){
+function dbTx(mode, fn, store){
   return db().then(d => new Promise((res, rej) => {
-    const tx = d.transaction(DB_STORE, mode);
-    const rq = fn(tx.objectStore(DB_STORE));
+    const tx = d.transaction(store || DB_STORE, mode);
+    const rq = fn(tx.objectStore(store || DB_STORE));
     tx.oncomplete = () => res(rq && rq.result);
     tx.onerror = () => rej(tx.error);
   }));
@@ -1378,20 +1474,377 @@ $("#saveSongBtn").addEventListener("click", async () => {
 });
 
 async function loadSong(id){
+  if (await loadSongById(id)){
+    paintReady(SONG.chart);
+    show("readyScreen");
+  } else show("songsScreen");
+}
+
+/* =====================================================================
+   MOD MAKER
+   A mod is an ordered set of saved songs with a name, cover art and,
+   once Auto Mod has run, dialogue to play before each one.
+   ===================================================================== */
+let MOD = { name:"My Mod", thumb:null, songs:[] };   // songs: {id, thumb, dialogue:[]}
+
+
+async function loadMod(){
+  if (!songsSupported()) return;
+  try{
+    const rec = await dbTx("readonly", st => st.get("current"), MOD_STORE);
+    if (rec) MOD = { name: rec.name || "My Mod", thumb: rec.thumb || null, songs: rec.songs || [] };
+  }catch(e){ /* first run */ }
+}
+async function saveMod(){
+  if (!songsSupported()) return;
+  try{ await dbTx("readwrite", st => st.put({ id:"current", name:MOD.name, thumb:MOD.thumb, songs:MOD.songs }), MOD_STORE); }
+  catch(e){ /* storage full — the UI still works for this session */ }
+}
+
+let thumbURLs = [];
+function freeThumbs(){ thumbURLs.forEach(URL.revokeObjectURL); thumbURLs = []; }
+function thumbURL(blob){ const u = URL.createObjectURL(blob); thumbURLs.push(u); return u; }
+
+function totalModLength(lib){
+  let secs = 0;
+  for (const entry of MOD.songs){
+    const rec = lib.find(r => r.id === entry.id);
+    if (rec) secs += rec.chart.duration;
+  }
+  return secs;
+}
+
+async function renderMod(){
+  if (!songsSupported()) return;
+  let lib = [];
+  try{ lib = await songsAll(); }catch(e){ lib = []; }
+
+  // drop entries whose song has since been deleted
+  const before = MOD.songs.length;
+  MOD.songs = MOD.songs.filter(e => lib.some(r => r.id === e.id));
+  if (MOD.songs.length !== before) saveMod();
+
+  freeThumbs();
+  $("#modName").value = MOD.name;
+
+  const cover = $("#modCover");
+  if (MOD.thumb){
+    cover.innerHTML = '<img src="' + thumbURL(MOD.thumb) + '" alt="Mod cover">';
+    cover.classList.add("has");
+  } else {
+    cover.innerHTML = '<span>No cover<br><small>PNG or JPG</small></span>';
+    cover.classList.remove("has");
+  }
+
+  const total = totalModLength(lib);
+  $("#modStats").textContent = MOD.songs.length + (MOD.songs.length === 1 ? " song" : " songs") +
+    " · " + fmtTime(total) + " total";
+
+  // ---- songs already in the mod ----
+  const host = $("#modSongs");
+  host.innerHTML = "";
+  $("#modEmpty").style.display = MOD.songs.length ? "none" : "block";
+
+  MOD.songs.forEach((entry, i) => {
+    const rec = lib.find(r => r.id === entry.id);
+    if (!rec) return;
+    const card = document.createElement("div");
+    card.className = "card modrow";
+    card.innerHTML =
+      '<div class="thumb"></div>' +
+      '<div class="meta"><b></b><span class="hint"></span><span class="dlg"></span></div>' +
+      '<div class="ops">' +
+        '<button class="chip" data-op="up">▲</button>' +
+        '<button class="chip" data-op="down">▼</button>' +
+        '<button class="chip" data-op="art">Art</button>' +
+        '<button class="chip" data-op="rm">✕</button>' +
+      '</div>';
+    const th = card.querySelector(".thumb");
+    if (entry.thumb) th.innerHTML = '<img src="' + thumbURL(entry.thumb) + '" alt="">';
+    else th.textContent = String(i + 1);
+    card.querySelector("b").textContent = rec.name;
+    card.querySelector(".hint").textContent =
+      fmtTime(rec.chart.duration) + " · " + Math.round(rec.chart.bpm) + " BPM · " + rec.chart.notes.length + " notes";
+    const d = card.querySelector(".dlg");
+    d.textContent = entry.dialogue && entry.dialogue.length
+      ? entry.dialogue.length + " dialogue lines" : "no dialogue yet";
+    d.style.color = entry.dialogue && entry.dialogue.length ? "var(--green)" : "var(--muted)";
+
+    card.querySelector('[data-op="up"]').addEventListener("click", () => {
+      if (i === 0) return;
+      [MOD.songs[i-1], MOD.songs[i]] = [MOD.songs[i], MOD.songs[i-1]];
+      saveMod(); renderMod();
+    });
+    card.querySelector('[data-op="down"]').addEventListener("click", () => {
+      if (i === MOD.songs.length - 1) return;
+      [MOD.songs[i+1], MOD.songs[i]] = [MOD.songs[i], MOD.songs[i+1]];
+      saveMod(); renderMod();
+    });
+    card.querySelector('[data-op="art"]').addEventListener("click", () => pickThumb(i));
+    card.querySelector('[data-op="rm"]').addEventListener("click", () => {
+      MOD.songs.splice(i, 1); saveMod(); renderMod();
+    });
+    host.appendChild(card);
+  });
+
+  // ---- saved songs still available to add ----
+  const pool = $("#modPool");
+  pool.innerHTML = "";
+  const spare = lib.filter(r => !MOD.songs.some(e => e.id === r.id));
+  $("#poolEmpty").style.display = spare.length ? "none" : "block";
+  $("#poolEmpty").textContent = lib.length
+    ? "Every saved song is already in the mod."
+    : "No saved songs yet — chart one in the Editor and save it first.";
+  for (const rec of spare){
+    const b = document.createElement("button");
+    b.className = "btn ghost small poolbtn";
+    b.innerHTML = "<span>+ </span>";
+    b.querySelector("span").textContent = "+ " + rec.name + "  ·  " + fmtTime(rec.chart.duration);
+    b.addEventListener("click", () => {
+      MOD.songs.push({ id: rec.id, thumb: null, dialogue: [] });
+      saveMod(); renderMod();
+    });
+    pool.appendChild(b);
+  }
+  $("#playModBtn").disabled = MOD.songs.length === 0;
+  $("#autoModBtn").disabled = MOD.songs.length === 0;
+}
+
+/* ---- artwork ---- */
+let thumbTarget = -1;                 // -1 = the mod cover, otherwise a song index
+function pickThumb(i){ thumbTarget = i; $("#thumbFile").click(); }
+$("#modCover").addEventListener("click", () => pickThumb(-1));
+$("#thumbFile").addEventListener("change", async e => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = "";
+  if (!f) return;
+  if (!/^image\//.test(f.type)){ alert("That is not an image. Pick a PNG or JPG."); return; }
+  if (f.size > 4 * 1024 * 1024){ alert("That image is over 4 MB. Pick a smaller one."); return; }
+  if (thumbTarget < 0) MOD.thumb = f;
+  else if (MOD.songs[thumbTarget]) MOD.songs[thumbTarget].thumb = f;
+  await saveMod();
+  renderMod();
+});
+$("#modName").addEventListener("change", () => {
+  MOD.name = $("#modName").value.trim() || "My Mod";
+  saveMod();
+});
+
+/* =====================================================================
+   AUTO MOD — writes the dialogue
+   The chart already knows how the song behaves: how fast it is, how
+   dense, how the two sides trade lines. That is enough to write an
+   exchange that fits the song instead of generic filler.
+   ===================================================================== */
+const DLG = {
+  openOpp: [
+    "So you finally showed up.",
+    "You again. Back for more?",
+    "Well, well. Look who wandered in.",
+    "You sure you want to do this?",
+    "Hope you warmed up."
+  ],
+  openBf: ["Beep bo bo beep!", "Beep!", "Bo bo beep bo!", "Beep bo!"],
+  fast: [
+    "Keep up if you can. I do not slow down.",
+    "This one moves. Try not to fall behind.",
+    "Fast hands only past this point."
+  ],
+  slow: [
+    "Take your time. Feel it out.",
+    "Slow and heavy. Every note counts.",
+    "No rushing this one."
+  ],
+  dense: [
+    "I have a lot to say. Every single beat.",
+    "Hope you like busy. It does not let up.",
+    "There is barely a gap in this one."
+  ],
+  sparse: [
+    "Not many notes. Miss one and it shows.",
+    "Every note is exposed here. No hiding.",
+    "Sparse. So do not waste one."
+  ],
+  tradeHeavy: [
+    "Back and forth, line for line. Match me.",
+    "I sing, you answer. That is the deal.",
+    "Trade with me. Do not drop your half."
+  ],
+  closeOpp: [
+    "Let us see what you have got.",
+    "Enough talk. Play.",
+    "Show me then.",
+    "Alright. Here we go."
+  ],
+  closeBf: ["Beep bo beep bo BEEP!", "Bo beep!", "Beep bo bo!", "Beep beep!"]
+};
+
+// deterministic pick so a song always gets the same dialogue back
+function seeded(seed){
+  let x = seed >>> 0;
+  return () => { x ^= x << 13; x >>>= 0; x ^= x >> 17; x ^= x << 5; x >>>= 0; return x / 4294967296; };
+}
+function hashName(s){
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+
+function writeDialogue(rec){
+  const c = rec.chart;
+  const rnd = seeded(hashName(rec.name) ^ Math.round(c.bpm * 100) ^ c.notes.length);
+  const pick = arr => arr[Math.floor(rnd() * arr.length)];
+
+  const nps = c.notes.length / Math.max(1, c.duration);
+  const mine = c.notes.filter(n => n.mustHit).length;
+  const share = c.notes.length ? mine / c.notes.length : 0.5;
+
+  // how often the singing changes hands — a real call-and-response song
+  // flips sides far more than one where a character carries a whole verse
+  let flips = 0;
+  for (let i = 1; i < c.notes.length; i++) if (c.notes[i].mustHit !== c.notes[i-1].mustHit) flips++;
+  const tradeRate = c.notes.length ? flips / c.notes.length : 0;
+
+  const lines = [];
+  lines.push({ who:"opp", text: pick(DLG.openOpp) });
+  lines.push({ who:"bf",  text: pick(DLG.openBf) });
+  lines.push({ who:"opp", text: c.bpm >= 155 ? pick(DLG.fast) : c.bpm <= 105 ? pick(DLG.slow)
+                            : nps >= 4 ? pick(DLG.dense) : pick(DLG.sparse) });
+  if (tradeRate > 0.28) lines.push({ who:"opp", text: pick(DLG.tradeHeavy) });
+  else if (share > 0.62) lines.push({ who:"opp", text: "Most of this one is yours. Carry it." });
+  else if (share < 0.38) lines.push({ who:"opp", text: "I will be doing most of the singing. Keep up where you can." });
+  lines.push({ who:"bf",  text: pick(DLG.closeBf) });
+  lines.push({ who:"opp", text: pick(DLG.closeOpp) });
+  return lines;
+}
+
+$("#autoModBtn").addEventListener("click", async () => {
+  const lib = await songsAll();
+  const btn = $("#autoModBtn");
+  btn.disabled = true;
+  const bar = $("#autoModBar"), note = $("#autoModNote");
+  $("#autoModWrap").style.display = "block";
+
+  const steps = MOD.songs.length;
+  for (let i = 0; i < steps; i++){
+    const entry = MOD.songs[i];
+    const rec = lib.find(r => r.id === entry.id);
+    note.textContent = "Writing dialogue for " + (rec ? rec.name : "song " + (i+1)) + "...";
+    bar.style.width = Math.round(((i + 0.5) / steps) * 100) + "%";
+    await new Promise(r => setTimeout(r, 220));      // let the UI show each step
+    if (rec) entry.dialogue = writeDialogue(rec);
+  }
+  bar.style.width = "100%";
+  note.textContent = "Done — dialogue written for " + steps + (steps === 1 ? " song." : " songs.");
+  await saveMod();
+  await renderMod();
+  btn.disabled = false;
+  setTimeout(() => { $("#autoModWrap").style.display = "none"; bar.style.width = "0%"; }, 2600);
+});
+
+/* =====================================================================
+   DIALOGUE PLAYBACK
+   ===================================================================== */
+let dlgLines = [], dlgIndex = 0, dlgTyped = 0, dlgTimer = 0, dlgAfter = null;
+
+function startDialogue(lines, after){
+  if (!lines || !lines.length){ after(); return; }
+  dlgLines = lines; dlgIndex = 0; dlgAfter = after;
+  show("dialogueScreen");
+  showLine();
+}
+function showLine(){
+  const line = dlgLines[dlgIndex];
+  $("#dlgWho").textContent = line.who === "bf" ? "BOYFRIEND" : "OPPONENT";
+  $("#dlgBox").classList.toggle("bf", line.who === "bf");
+  drawPortrait(line.who);
+  dlgTyped = 0;
+  $("#dlgText").textContent = "";
+  clearInterval(dlgTimer);
+  dlgTimer = setInterval(() => {
+    dlgTyped++;
+    $("#dlgText").textContent = line.text.slice(0, dlgTyped);
+    if (dlgTyped >= line.text.length) clearInterval(dlgTimer);
+  }, 26);
+}
+function advanceDialogue(){
+  const line = dlgLines[dlgIndex];
+  if (dlgTyped < line.text.length){          // first tap finishes the typing
+    clearInterval(dlgTimer);
+    dlgTyped = line.text.length;
+    $("#dlgText").textContent = line.text;
+    return;
+  }
+  dlgIndex++;
+  if (dlgIndex >= dlgLines.length){
+    clearInterval(dlgTimer);
+    const done = dlgAfter; dlgAfter = null;
+    if (done) done();
+  } else showLine();
+}
+$("#dialogueScreen").addEventListener("click", advanceDialogue);
+$("#dlgSkip").addEventListener("click", e => {
+  e.stopPropagation();
+  clearInterval(dlgTimer);
+  const done = dlgAfter; dlgAfter = null;
+  if (done) done();
+});
+
+function drawPortrait(who){
+  const cv = $("#dlgPortrait");
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (!w || !h) return;
+  if (cv.width !== w*dpr || cv.height !== h*dpr){ cv.width = w*dpr; cv.height = h*dpr; }
+  const g = cv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  const s = Math.min(w / 150, h / 210);
+  g.save();
+  g.translate(w/2, h - 6);
+  g.scale(s, s);
+  drawChar(g, who === "bf" ? CHARS.bf : CHARS.demo, "idle", 1, 0);
+  g.restore();
+}
+
+/* =====================================================================
+   PLAYING A MOD
+   ===================================================================== */
+let modQueue = [], modPos = 0, inMod = false;
+
+$("#playModBtn").addEventListener("click", async () => {
+  if (!MOD.songs.length) return;
+  modQueue = MOD.songs.slice();
+  modPos = 0;
+  inMod = true;
+  playModEntry();
+});
+
+async function playModEntry(){
+  if (modPos >= modQueue.length){ inMod = false; show("modScreen"); return; }
+  const entry = modQueue[modPos];
+  const ok = await loadSongById(entry.id);
+  if (!ok){ modPos++; return playModEntry(); }
+  startDialogue(entry.dialogue, () => startGame());
+}
+
+$("#modNextBtn").addEventListener("click", () => { modPos++; playModEntry(); });
+
+// shared by My Mod and by mod playback
+async function loadSongById(id){
   const list = await songsAll();
   const rec = list.find(r => r.id === id);
-  if (!rec) return;
+  if (!rec) return false;
   shownPct = 0;
   setProgress(0, "Reading audio...", rec.name);
   show("progressScreen");
   try{
     getCtx();
     const instBuf = await decodeBlob(rec.inst);
-    setProgress(45, "Reading audio...", rec.name);
+    setProgress(50, "Reading audio...", rec.name);
     const tracks = [];
     if (rec.opp && rec.plr){
       tracks.push({ buf: await decodeBlob(rec.opp), side:"opp", combined:false });
-      setProgress(75, "Reading audio...", rec.name);
       tracks.push({ buf: await decodeBlob(rec.plr), side:"plr", combined:false });
     } else {
       tracks.push({ buf: await decodeBlob(rec.opp || rec.plr), side:"plr", combined:true });
@@ -1399,13 +1852,15 @@ async function loadSong(id){
     setProgress(100, "Finalizing chart...", rec.name);
     SONG = { instBuf, tracks, chart: rec.chart, name: rec.name,
              sourceFiles: { inst: rec.inst, opp: rec.opp, plr: rec.plr } };
-    paintReady(rec.chart);
-    show("readyScreen");
+    return true;
   }catch(err){
     alert("Could not load that song: " + (err && err.message ? err.message : err));
-    show("songsScreen");
+    return false;
   }
 }
+
+$("#openMod").addEventListener("click", async () => { await loadMod(); await renderMod(); show("modScreen"); });
+loadMod();
 
 /* =====================================================================
    CHARACTERS
@@ -1870,6 +2325,9 @@ function applyLiveVolumes(){
 const MAX_DPR = 2;
 const QUALITY = [1, 0.75, 0.625, 0.5];
 let qualityStep = 0;
+// On a device already shedding resolution, the outline pass on every note is
+// the next biggest cost under heavy spam. Drop it rather than drop frames.
+let lowDetail = false;
 
 function effectiveDpr(){
   const base = Math.min(window.devicePixelRatio || 1, MAX_DPR);
@@ -1879,6 +2337,7 @@ function effectiveDpr(){
 function dropQuality(){
   if (qualityStep >= QUALITY.length - 1) return false;
   qualityStep++;
+  lowDetail = qualityStep >= 2;
   spriteCache.clear();
   resizeCanvas();
   return true;
@@ -2074,6 +2533,7 @@ function endGame(died){
   el.textContent = r;
   el.className = "rank " + cls;
 
+  $("#modNextBtn").style.display = (inMod && modPos < modQueue.length - 1) ? "flex" : "none";
   show("resultsScreen");
   game = null;
 }
@@ -2212,6 +2672,7 @@ $("#pauseBtn").addEventListener("click", togglePause);
 $("#resumeBtn").addEventListener("click", togglePause);
 $("#restartBtn").addEventListener("click", () => { getCtx().resume(); startGame(); });
 $("#quitBtn").addEventListener("click", () => {
+  inMod = false;
   getCtx().resume();
   stopAudio();
   cancelAnimationFrame(gameRAF); gameRAF = 0;
@@ -2352,10 +2813,11 @@ function drawArrow(g, x, y, size, lane, mode, alpha){
 
   if (mode === "filled"){
     g.fillStyle = col; g.fill();
-    g.lineWidth = size * 0.055; g.strokeStyle = "rgba(0,0,0,.28)"; g.stroke();
+    if (!lowDetail){ g.lineWidth = size * 0.055; g.strokeStyle = "rgba(0,0,0,.28)"; g.stroke(); }
   } else {
     g.fillStyle = "#fff"; g.fill();
-    g.lineWidth = size * 0.075; g.strokeStyle = "#dfe3ec"; g.stroke();
+    if (!lowDetail){ g.lineWidth = size * 0.075; g.strokeStyle = "#dfe3ec"; g.stroke(); }
+    else { g.lineWidth = size * 0.05; g.strokeStyle = "#e6eaf2"; g.stroke(); }
   }
 
   // arrow glyph
