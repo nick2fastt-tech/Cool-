@@ -367,7 +367,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
   <div id="menuTop">
     <div class="title">INFECTOR</div>
     <div class="subtitle">Run. Hide. Survive the outbreak.</div>
-    <div style="font-size:10px;letter-spacing:3px;color:#7fd4a0;margin-top:5px">V1.22 · GROUND TRUTH</div>
+    <div style="font-size:10px;letter-spacing:3px;color:#7fd4a0;margin-top:5px">V1.23 · CHARACTER POLISH</div>
   </div>
   <div id="menuBtns">
     <button class="btn green wide" data-nav="quickplay">▶ Play</button>
@@ -379,7 +379,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
     <button class="btn ghost" data-nav="settings">⚙ Settings</button>
     <button class="btn ghost" data-nav="credits" style="grid-column:1/-1">★ Credits</button>
   </div>
-  <div class="footNote" id="verNote">V1.22 · 4 difficulties · 15 servers</div>
+  <div class="footNote" id="verNote">V1.23 · 4 difficulties · 15 servers</div>
 </div>
 
 <!-- ================= SERVERS ================= -->
@@ -502,6 +502,25 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
         <div class="opt"><div><div class="optL">Audio</div><div class="optD">Fully synthesized via Web Audio: wind, birds, growls, footsteps, adaptive score</div></div></div>
         <div class="opt"><div><div class="optL">Netcode</div><div class="optD">Authoritative round simulation with snapshot interpolation &amp; client prediction</div></div></div>
         <div class="opt"><div><div class="optL">Maps</div><div class="optD">Playground, Neighborhood &amp; the three-storey Hotel — procedurally assembled</div></div></div>
+      </div>
+      <h3 style="margin:18px 0 6px;font-size:15px;letter-spacing:2px;color:#8ef07a">V1.23 — HUMAN CHARACTER POLISH</h3>
+      <div class="muted" style="line-height:1.75">
+        <b style="color:#cfe6ff">Every elbow in the game bent backwards.</b> A positive elbow angle was
+        swinging the forearm behind the body, so every clip hinged the wrong way. Measured, then corrected at
+        the joint — all 68 clips now bend forward the way an arm does.<br><br>
+        <b style="color:#cfe6ff">Real hands.</b> The old hand was a palm with four flat pads. Now there are
+        five separate digits: four fingers of graded length on the knuckle line and a thumb set low on the
+        inner edge and rotated out of the palm plane, each built from two segments with a knuckle between them
+        so it folds at both joints. A relaxed hand keeps a soft hook rather than a flat paddle; the fingers
+        straighten as you reach and close into a fist as you grip, with the far joint always leading and the
+        spread closing as they curl so neighbours converge instead of intersecting. Wrists are a real joint
+        now, so the hand follows the forearm and trails the swing.<br><br>
+        <b style="color:#cfe6ff">Hair with weight.</b> Long, ponytail, pigtail and curly styles are built from
+        groups of strands of differing length and lean instead of one shell. The whole head of hair hangs off a
+        light spring that chases the stride bounce, acceleration, turning and vertical motion — it lifts on a
+        jump, settles on landing, and swings when you turn, with the ponytail carrying further than the head.
+        Two spring channels total, and distant characters keep the cheap shell, so a phone renders a full
+        lobby exactly as fast as before.
       </div>
       <h3 style="margin:18px 0 6px;font-size:15px;letter-spacing:2px;color:#8ef07a">V1.22 — GROUND TRUTH</h3>
       <div class="muted" style="line-height:1.75">
@@ -3429,8 +3448,8 @@ const J={bob:0,lean:1,side:2,twist:3,spine:4,spineSide:5,
   lHipP:17,lHipR:18,lKnee:19,lAnk:20,
   rHipP:21,rHipR:22,rKnee:23,rAnk:24,
   crouch:25,yawOff:26,mouth:27,brow:28,eye:29,armR:30,shrug:31,handGrip:32,
-  rootZ:33,rootY:34};
-const NJ=35;
+  rootZ:33,rootY:34,lWri:35,rWri:36,hairP:37,hairR:38};
+const NJ=39;
 const _poseB=new Float32Array(NJ);
 
 /* When a leg swings `a` radians off vertical its sole rises by
@@ -3478,6 +3497,8 @@ const CLIP={
    o[J.lShP]=.05+br*.065;o[J.rShP]=.05-br*.055;
    o[J.lShR]=.14+br2*.025;o[J.rShR]=.14+br2*.025;
    o[J.lElb]=.19+br*.04;o[J.rElb]=.17-br*.04;
+   o[J.lWri]=-.12+br*.05;o[J.rWri]=-.10-br*.05;
+   o[J.handGrip]=.18;                        // relaxed, not a flat paddle
    // weight shifts onto one leg and back: hips tip, the loaded knee locks
    const w=Math.sin(t*.37+sd);
    o[J.side]=w*.03;
@@ -3510,6 +3531,8 @@ const CLIP={
    o[J.lAnk]=anL;o[J.rAnk]=anR;
    o[J.lShP]=-s*.52;o[J.rShP]=s*.52;
    o[J.lElb]=.28+Math.max(0,s)*.38;o[J.rElb]=.26+Math.max(0,-s)*.38;
+   o[J.lWri]=-.14-cs*.16;o[J.rWri]=-.14+cs*.16;   // wrist trails the swing
+   o[J.handGrip]=.22;
    o[J.lShR]=.12;o[J.rShR]=.12;
    // pelvis: geometric drop, with a small rise over the stance ankle
    o[J.bob]=hipBob(thL,knL,anL,thR,knR,anR);
@@ -3536,6 +3559,7 @@ const CLIP={
    o[J.lShP]=-s*.98;o[J.rShP]=s*.98;
    o[J.lShY]=-.16-Math.max(0,-s)*.3;o[J.rShY]=.16+Math.max(0,s)*.3;
    o[J.lElb]=1.0+Math.max(0,s)*.62;o[J.rElb]=1.0+Math.max(0,-s)*.62;
+   o[J.lWri]=-.2-cs*.2;o[J.rWri]=-.2+cs*.2;
    o[J.lShR]=.15;o[J.rShR]=.15;
    /* Planted foot rides the floor; the body lifts off as the legs cross.
       The constant is the measured residual of the analytic solve against the
@@ -3560,6 +3584,7 @@ const CLIP={
    o[J.lShP]=-s*1.3;o[J.rShP]=s*1.3;
    o[J.lShY]=-.24-Math.max(0,-s)*.34;o[J.rShY]=.24+Math.max(0,s)*.34;
    o[J.lElb]=1.4+Math.max(0,s)*.6;o[J.rElb]=1.4+Math.max(0,-s)*.6;
+   o[J.lWri]=-.24-cs*.24;o[J.rWri]=-.24+cs*.24;
    o[J.lShR]=.19;o[J.rShR]=.19;
    o[J.bob]=hipBob(thL,knL,anL,thR,knR,anR)+Math.max(0,Math.abs(cs)-.42)*.17+.093;
    o[J.lean]=.35;o[J.side]=-cs*.06;o[J.twist]=cs*.28;
@@ -3578,6 +3603,9 @@ const CLIP={
    o[J.lShR]=.34*reach;o[J.rShR]=.34*reach;
    o[J.lElb]=.2*reach+1.75*pull-1.5*stand;
    o[J.rElb]=.22*reach+1.8*pull-1.55*stand;
+   // fingers open on the way up, close over the edge, release as you stand
+   o[J.handGrip]=clamp(reach*.15+pull*1.0-stand*.95,0,1);
+   o[J.lWri]=.55*reach-.5*stand;o[J.rWri]=.55*reach-.5*stand;
    o[J.shrug]=1.3*reach-.5*stand;
    // one knee drives up onto the lip, the other trails and follows
    o[J.lHipP]=-.5*reach-1.55*plant+1.3*stand;
@@ -4451,6 +4479,7 @@ function updatePose(ch,t,dt){
   if(ch.headLook)out[J.headY]+=ch.headLook;
   if(ch.headPitchLook)out[J.headP]+=ch.headPitchLook;
   if(ch.turnLean){out[J.side]-=ch.turnLean;out[J.twist]+=ch.turnLean*1.3;}
+  out[J.hairP]=ch.hairP||0;out[J.hairR]=ch.hairR||0;
 }
 
 /* ============================================================================
@@ -4594,9 +4623,93 @@ function drawFace(d,st,L,p,lod,ex,zAmt,skinC){
     if(lod===0)_bx(d,st,.035,.06,ez-.03,.04,.009,.02,[.5,.12,.1],0);
   }
 }
+/* ---------------------------------------------------------------------------
+   The hand. Five separated digits: four fingers of graded length in a row off
+   the knuckle line, and a thumb set low on the inner edge and rotated out of
+   the palm plane. Each digit is two segments with a knuckle between them, so
+   it folds at both joints like a real finger.
+
+   Curl is driven by handGrip but never reaches zero — a relaxed hand keeps a
+   soft hook, which is what stops the old flat paddle look. The distal joint
+   always leads the proximal one, and the spread closes as the fingers curl so
+   neighbours converge on the palm instead of intersecting each other.
+   ------------------------------------------------------------------------- */
+const FINGER_LEN=[.95,1.0,.94,.78];       // index, middle, ring, little
+const FINGER_REL=[.26,.22,.28,.36];       // relaxed curl, little finger most
+function drawHand(d,st,s,skin,grip,lod,armR){
+  const PALM=armR*1.02, LEN=armR*.86;
+  // palm: broader across the knuckles than at the wrist, and flattened
+  _pr(d,st,P.sphLo,0,-PALM*.50,0,0,0,0,armR*2.18,PALM*1.44,armR*1.30,skin,0);
+  if(lod>=2)return;                        // distant characters keep the blob
+  const seg=lod?P.cylLo:P.cyl;
+  const knuckleY=-PALM*1.02;
+  for(let f=0;f<4;f++){
+    const L1=LEN*FINGER_LEN[f], L2=L1*.74;
+    // curl: relaxed hook, closing to a fist; the far joint always leads
+    const c1=FINGER_REL[f]*(1-grip*.55)+grip*1.32;
+    const c2=c1*1.28+grip*.34;
+    // spread fans the fingers apart when open and closes them into a fist
+    const spread=(f-1.5)*.13*(1-grip*.8);
+    const fx=(f-1.5)*armR*.60;
+    st.push();
+    st.translate(fx,knuckleY,armR*.10);
+    st.rotZ(-s*spread).rotX(c1);
+    _ball(d,st,P.sphLo,0,0,0,armR*.42,skin,0);            // knuckle
+    st.push();st.translate(0,-L1*.5,0);st.scale(armR*.72,L1,armR*.74);
+    d.push(seg,st.top,skin,0);st.pop();
+    st.translate(0,-L1,0);
+    st.rotX(c2);
+    _ball(d,st,P.sphLo,0,0,0,armR*.36,skin,0);            // middle joint
+    st.push();st.translate(0,-L2*.5,0);st.scale(armR*.62,L2,armR*.64);
+    d.push(seg,st.top,skin,0);st.pop();
+    _ball(d,st,P.sphLo,0,-L2,0,armR*.33,skin,0);          // fingertip
+    st.pop();
+  }
+  // thumb: low on the inner edge, swung out of the palm plane and forward
+  {
+    const L1=LEN*.80, L2=L1*.72;
+    const c1=.34*(1-grip*.4)+grip*.86;
+    st.push();
+    st.translate(-s*armR*1.28,-PALM*.42,armR*.30);
+    st.rotZ(s*1.02).rotY(-s*.42).rotX(c1*.5);
+    _ball(d,st,P.sphLo,0,0,0,armR*.50,skin,0);
+    st.push();st.translate(0,-L1*.5,0);st.scale(armR*.84,L1,armR*.84);
+    d.push(seg,st.top,skin,0);st.pop();
+    st.translate(0,-L1,0);
+    st.rotX(c1*1.15);
+    _ball(d,st,P.sphLo,0,0,0,armR*.40,skin,0);
+    st.push();st.translate(0,-L2*.5,0);st.scale(armR*.70,L2,armR*.70);
+    d.push(seg,st.top,skin,0);st.pop();
+    _ball(d,st,P.sphLo,0,-L2,0,armR*.36,skin,0);
+    st.pop();
+  }
+}
+/* A group of strands falling from an anchor, each one a slightly different
+   length and lean so the mass reads as hair rather than a shell. `sway` tips
+   the whole group, and strands further out lag a little more. */
+function hairFall(d,st,c,n,x,y,z,spread,len,thick,sway,lod){
+  const prim=lod?P.sphLo:P.taper;
+  for(let i=0;i<n;i++){
+    const t=n>1?(i/(n-1)-.5):0;
+    const l=len*(.78+.32*Math.cos(t*2.4));
+    const lag=sway*(1+Math.abs(t)*.55);
+    _pr(d,st,prim,x+t*spread,y-l*.36,z+Math.abs(t)*spread*.22,
+        lag,t*.28,-t*.42,thick*(1-Math.abs(t)*.22),l,thick*.86,
+        shade(c,1+ (i%2?.06:-.05)),0);
+  }
+}
 function drawHair(d,st,L,style,lod){
   const c=L.hair,hr=BD.headR;
   if(style==='hair_none')return;
+  const p=L._pose;
+  const swP=p?p[J.hairP]:0, swR=p?p[J.hairR]:0;
+  st.push();
+  // the whole head of hair hangs off the skull and lags it
+  st.translate(0,-hr*.25,0).rotX(swP*.5).rotZ(swR*.5).translate(0,hr*.25,0);
+  drawHairBody(d,st,L,style,lod,c,hr,swP,swR);
+  st.pop();
+}
+function drawHairBody(d,st,L,style,lod,c,hr,swP,swR){
   const cap=(sy,sc)=>_pr(d,st,lod?P.sphLo:P.sph,0,.045,-.032,0,0,0,
     hr*2.11*(sc||1),hr*1.92*(sy||1),hr*2.04*(sc||1),c,0);
   switch(style){
@@ -4610,13 +4723,17 @@ function drawHair(d,st,L,style,lod){
       }break;
     case 'hair_long':
       cap(1.02,1.06);
-      _pr(d,st,lod?P.sphLo:P.sph,0,-.06,-.085,0,0,0,.3,.38,.22,c,0);
-      for(let s=-1;s<=1;s+=2)
-        _pr(d,st,lod?P.sphLo:P.sph,s*.152,-.04,-.035,0,0,s*.09,.085,.30,.18,c,0);
+      // a fall of strands down the back plus a curtain either side of the face
+      hairFall(d,st,c,lod?4:7,0,-.02,-.10,.115,.42,.072,swP*.9,lod);
+      for(let sd=-1;sd<=1;sd+=2)
+        hairFall(d,st,c,lod?2:3,sd*.168,-.02,-.062,.042,.34,.056,swP*.75,lod);
       break;
     case 'hair_pony':
       cap(1.0,1.06);
-      _pr(d,st,P.taper,0,-.02,-.16,-.5,0,0,.12,.34,.12,c,0);
+      // the tail swings further than the head does
+      st.push();st.translate(0,.04,-.13).rotX(-.5+swP*1.5).rotZ(swR*1.2);
+      hairFall(d,st,c,lod?3:5,0,0,0,.055,.40,.062,swP*.8,lod);
+      st.pop();
       _pr(d,st,P.torus,0,.06,-.12,PI/2,0,0,.14,.14,.14,[.9,.3,.5],0);
       break;
     case 'hair_bun':
@@ -4629,15 +4746,24 @@ function drawHair(d,st,L,style,lod){
       break;
     case 'hair_curly':
       cap(.95,1.02);
-      for(let i=0;i<7;i++){
-        const a=i/7*TAU;
-        _ball(d,st,P.sphLo,Math.cos(a)*.14,.06+Math.sin(a*2)*.05,Math.sin(a)*.13-.01,.07,c,0);
+      // two rings of curls give the mass some real volume
+      for(let i=0;i<(lod?7:11);i++){
+        const n=lod?7:11,a=i/n*TAU;
+        _ball(d,st,P.sphLo,Math.cos(a)*.145,.055+Math.sin(a*2)*.05,Math.sin(a)*.135-.01,
+          .07,shade(c,i%2?1.07:.94),0);
+      }
+      if(!lod)for(let i=0;i<6;i++){
+        const a=i/6*TAU+.4;
+        _ball(d,st,P.sphLo,Math.cos(a)*.10,.14+Math.sin(a*3)*.03,Math.sin(a)*.09-.01,
+          .062,shade(c,i%2?.93:1.05),0);
       }break;
     case 'hair_pigtail':
       cap(1.0,1.06);
-      for(let s=-1;s<=1;s+=2){
-        _ball(d,st,lod?P.sphLo:P.sph,s*.19,-.02,-.02,.075,c,0);
-        _pr(d,st,P.taper,s*.23,-.12,-.02,0,0,s*.35,.09,.2,.09,c,0);
+      for(let sd=-1;sd<=1;sd+=2){
+        _ball(d,st,lod?P.sphLo:P.sph,sd*.19,-.02,-.02,.075,c,0);
+        st.push();st.translate(sd*.21,-.05,-.02).rotZ(sd*(.35+swR*1.4)).rotX(swP*1.3);
+        hairFall(d,st,c,lod?2:3,0,0,0,.05,.26,.062,swP*.7,lod);
+        st.pop();
       }break;
     case 'hair_wave':
       cap(.95,1.05);
@@ -4917,23 +5043,18 @@ function drawChar(d,ch,camDist){
     else if(sleeve>=1)_pr(d,st,CYL,0,-BD.uArm*.5,0,0,0,0,armR*2.12,BD.uArm,armR*2.12,top,0);
     st.translate(0,-BD.uArm,0);
     _ball(d,st,SPH,0,0,0,armR*1.04,sleeve>=1?top:skinArm,0);    // elbow
-    st.rotX(el);
+    // A human elbow closes toward the front of the body. Positive rotX here
+    // swings the forearm backwards, so every clip's positive elbow value was
+    // hinging the wrong way — negate it once rather than in 68 clips.
+    st.rotX(-el);
     _seg(d,st,CYL,BD.lArm,armR*.94,sleeve>=1?top:skinArm,0);
     if(sleeve>=1)_pr(d,st,CYL,0,-BD.lArm*.35,0,0,0,0,armR*2.04,BD.lArm*.7,armR*2.04,top,0);
     if(zA>.55&&lod<2)_bxr(d,st,armR*.9,-BD.lArm*.5,0,0,0,.4,.02,.09,.04,[.45,.1,.09],0);
     st.translate(0,-BD.lArm,0);
-    // ---- hand: palm, four finger pads and a thumb
-    _pr(d,st,SPH,0,-.02,0,0,0,0,armR*2.3,armR*2.5,armR*2.0,skinHand,0);
-    if(lod<2){
-      const grip=clamp(p[J.handGrip]||0,0,1);
-      for(let f=0;f<4;f++){
-        const fo=(f-1.5)*armR*.62;
-        _pr(d,st,P.sphLo,fo,-.052-grip*.012,armR*.5*(1-grip*.6),grip*1.2,0,0,
-          armR*.5,armR*1.5,armR*.62,skinHand,0);
-      }
-      _pr(d,st,P.sphLo,-s*armR*1.15,-.024,.014,0,0,-s*.6,
-        armR*.72,armR*1.15,armR*.66,skinHand,0);
-    }
+    // ---- wrist, then a proper hand
+    _ball(d,st,SPH,0,0,0,armR*.86,skinHand,0);
+    st.rotX(-(i?p[J.rWri]:p[J.lWri]));
+    drawHand(d,st,s,skinHand,clamp(p[J.handGrip]||0,0,1),lod,armR);
     st.pop();
   }
   // ---------------- neck & head
@@ -4946,7 +5067,7 @@ function drawChar(d,ch,camDist){
   _pr(d,st,SPH,0,-.072,.012,0,0,0,BD.headR*1.62,BD.headR*.92,BD.headR*1.5,skinHead,0);  // jaw
   drawFace(d,st,L,p,lod,ch.expr,zA,skinHead);
   if(lod<2){
-    drawHair(d,st,L,av.hair,lod);
+    L._pose=p;drawHair(d,st,L,av.hair,lod);
     drawHat(d,st,L,av.hat,lod);
     drawGlasses(d,st,L,av.glasses);
   }else if(av.hat!=='hat_none'){
@@ -5154,7 +5275,8 @@ function makeEntity(id,name,avatar,isBot){
     anim:'idle',animN:[null,null,null,null,null],act_:new Float32Array(5),
     pose:new Float32Array(NJ),phase:0,
     expr:Float32Array.from(EXPR.neutral),exprName:'neutral',threat:99,
-    clothX:0,clothZ:0,airT:0,landT:0,landHard:false,turnRate:0,turnLean:0,twitch:0,twitchT:rnd(1,4),
+    clothX:0,clothZ:0,hairP:0,hairR:0,hairPV:0,hairRV:0,
+    airT:0,landT:0,landHard:false,turnRate:0,turnLean:0,twitch:0,twitchT:rnd(1,4),
     ikHipL:0,ikHipR:0,ikKneeL:0,ikKneeR:0,ikAnkL:0,ikAnkR:0,
     climb:null,climbCool:0,blockT:0,jumpPrep:0,jumpCool:0,variant:'walker',bulk:1,searching:0,
     headLook:0,headPitchLook:0,stuckT:0,lastX:0,lastZ:0,unstick:0,
@@ -5590,6 +5712,20 @@ class Simulation{
     const localZ=-(accX*sid+accZ*fwd), localX=-(accX*fwd-accZ*sid);
     e.clothZ=damp(e.clothZ,clamp(localZ*.012,-.3,.3)+clamp(e.speed*.012,0,.14),9,dt);
     e.clothX=damp(e.clothX,clamp(localX*.01,-.25,.25),9,dt);
+    /* Hair lag. A light spring chasing the same forces the clothing feels,
+       plus the stride bounce and whatever the head is doing, so it lifts on a
+       jump, settles on landing and swings when you turn. Two channels, one
+       spring each — cheap enough for a phone. */
+    {
+      const bounce=e.grounded?Math.sin(e.phase*2)*clamp(e.speed*.03,0,.13):0;
+      const air=clamp(-e.vy*.028,-.30,.34);
+      const tgtP=clamp(localZ*.018,-.42,.42)+bounce+air+clamp(e.speed*.016,0,.20);
+      const tgtR=clamp(localX*.016,-.34,.34)-clamp(e.turnRate*.05,-.28,.28);
+      e.hairPV=((e.hairPV||0)+(tgtP-(e.hairP||0))*38*dt)*Math.exp(-7.5*dt);
+      e.hairRV=((e.hairRV||0)+(tgtR-(e.hairR||0))*38*dt)*Math.exp(-7.5*dt);
+      e.hairP=clamp((e.hairP||0)+e.hairPV*dt,-.5,.5);
+      e.hairR=clamp((e.hairR||0)+e.hairRV*dt,-.4,.4);
+    }
     // gravity & jump — a short crouch loads the jump when standing still, while
     // a running jump launches immediately so chases stay responsive
     if(e.jumpCool>0)e.jumpCool-=dt;
@@ -8311,7 +8447,7 @@ function boot(){
       Game.state='menu';
       if(!Save.seenTutorial){UI.tutStep=0;UI.buildTutorial();UI.show('tutorialScreen');}
       else UI.show('menu');
-      $('#verNote').textContent='V1.22 · '+Servers.length+' servers · Easy → Insane';
+      $('#verNote').textContent='V1.23 · '+Servers.length+' servers · Easy → Insane';
     },260);
   },140);
   addEventListener('resize',()=>{R.resize();});

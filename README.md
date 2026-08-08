@@ -1,6 +1,6 @@
 # Cool-
 
-## Infector — V1.22 "Ground Truth"
+## Infector — V1.23 "Human Character Polish"
 
 An online 3D multiplayer infection-survival game that runs from a **single HTML file** —
 no build step, no engine, no downloads. Open `infector.html` in any browser (desktop or
@@ -94,6 +94,13 @@ shoves it open — loudly.
 
 ### Version history
 
+- **V1.23 — Human Character Polish.** Fixed elbows, which bent backwards in every clip
+  in the game. Rebuilt the hands: five separate digits, each two segments with a
+  knuckle, graded finger lengths, a thumb rotated out of the palm plane, a relaxed
+  hook that straightens on reach and closes to a fist on grip, and real wrist joints so
+  the hand follows the forearm. Hair gained strand groups and a two-channel spring that
+  reacts to stride, acceleration, turning, jumping and landing — distant characters keep
+  the cheap shell so crowd performance is unchanged.
 - **V1.22 — Ground Truth.** Foot placement is now measured from the rendered mesh
   rather than predicted, so all 68 animation clips keep their feet on the floor with
   none sinking or hovering. Rebuilt the pinned-victim pose (it floated a metre up), the
