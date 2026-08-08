@@ -270,6 +270,7 @@
       </div>
 
       <button class="btn pink" id="autoChartBtn" disabled><span class="ic">✨</span>Auto Chart Song</button>
+      <button class="btn ghost" id="openSongs"><span class="ic">📀</span><span id="songsCount">My Mod</span></button>
       <p class="center-note" id="editorHint">Import the instrumental and at least one vocal track.</p>
     </div>
   </section>
@@ -299,10 +300,23 @@
       </div>
       <div class="note" id="readyNote"></div>
       <button class="btn green" id="playBtn"><span class="ic">▶</span>Play Chart</button>
+      <button class="btn ghost" id="saveSongBtn"><span class="ic">💾</span>Save to My Mod</button>
       <button class="btn ghost" id="exportBtn"><span class="ic">⬇</span>Export Chart (.json)</button>
       <button class="btn ghost" data-go="settingsScreen"><span class="ic">⚙️</span>Gameplay Settings</button>
       <div class="spacer"></div>
       <p class="center-note" id="readyMode"></p>
+    </div>
+  </section>
+
+  <!-- ============ MY MOD ============ -->
+  <section class="screen" id="songsScreen">
+    <div class="wrap">
+      <header class="top"><button class="back" data-go="editorScreen">←</button><h2>My Mod</h2></header>
+      <p class="hint" style="color:var(--muted);font-size:12.5px;margin:-8px 0 14px">
+        Charted songs are saved on this device, audio and all. Up to 15.</p>
+      <div id="songList"></div>
+      <p class="center-note" id="songsEmpty" style="display:none">
+        Nothing saved yet.<br>Chart a song, then tap <b>Save to My Mod</b>.</p>
     </div>
   </section>
 
@@ -385,6 +399,15 @@
 
       <div class="card">
         <h3>Display</h3>
+        <div class="setting">
+          <span class="name">Stage</span>
+          <span style="display:flex;align-items:center;gap:10px">
+            <div class="seg" id="stageSel" style="padding:4px">
+              <button data-stage="bedroom">Bedroom</button>
+              <button data-stage="white">White</button>
+            </div>
+          </span>
+        </div>
         <div class="setting"><span class="name">FPS Counter</span><div class="switch" id="tFps"></div></div>
         <div class="setting"><span class="name">Note Splash</span><div class="switch" id="tSplash"></div></div>
       </div>
@@ -463,7 +486,7 @@ $$("[data-go]").forEach(b => b.addEventListener("click", () => show(b.dataset.go
 /* Scroll speed is stored as tenths and runs 1.5x-3.2x, the range FNF songs
    actually chart within. */
 const SPEED_MIN = 15, SPEED_MAX = 32;
-const DEFAULTS = { mode:"mobile", music:100, vocal:100, speed:20, fps:false, splash:true };
+const DEFAULTS = { mode:"mobile", music:100, vocal:100, speed:20, fps:false, splash:true, stage:"bedroom" };
 let settings = Object.assign({}, DEFAULTS);
 try{
   const raw = localStorage.getItem("fnfsm_settings");
@@ -484,6 +507,7 @@ function paintSettings(){
   $("#sMusic").value = settings.music; $("#vMusic").textContent = settings.music + "%";
   $("#sVocal").value = settings.vocal; $("#vVocal").textContent = settings.vocal + "%";
   $("#sSpeed").value = settings.speed; $("#vSpeed").textContent = (settings.speed/10).toFixed(1) + "x";
+  $$("#stageSel button").forEach(b => b.classList.toggle("on", b.dataset.stage === settings.stage));
   $("#tFps").classList.toggle("on", settings.fps);
   $("#tSplash").classList.toggle("on", settings.splash);
   $("#readyMode").textContent = settings.mode === "pc"
@@ -494,6 +518,9 @@ $$("#modeSel button").forEach(b => b.addEventListener("click", () => { settings.
 $("#sMusic").addEventListener("input", e => { settings.music = +e.target.value; saveSettings(); paintSettings(); applyLiveVolumes(); });
 $("#sVocal").addEventListener("input", e => { settings.vocal = +e.target.value; saveSettings(); paintSettings(); applyLiveVolumes(); });
 $("#sSpeed").addEventListener("input", e => { settings.speed = +e.target.value; saveSettings(); paintSettings(); });
+$$("#stageSel button").forEach(b => b.addEventListener("click", () => {
+  settings.stage = b.dataset.stage; stageCache = null; saveSettings(); paintSettings();
+}));
 $("#tFps").addEventListener("click", () => { settings.fps = !settings.fps; saveSettings(); paintSettings(); });
 $("#tSplash").addEventListener("click", () => { settings.splash = !settings.splash; saveSettings(); paintSettings(); });
 $("#resetSettings").addEventListener("click", () => { settings = Object.assign({}, DEFAULTS); saveSettings(); paintSettings(); applyLiveVolumes(); });
@@ -845,7 +872,9 @@ function pickOnsets(env, fps, sensitivity){
     for (let k = a; k <= b; k++){ sum += env[k]; cnt++; }
     const thresh = (sum / cnt) * sensitivity + 0.012;
     if (v > thresh && i - last >= minGap){
-      out.push((i + WIN / (2 * HOP)) / fps);   // report the window centre
+      // window centre, plus how strong the peak was — callers use the
+      // strength to tell real attacks from wobble inside a held note
+      out.push({ t: (i + WIN / (2 * HOP)) / fps, v });
       last = i;
     }
   }
@@ -868,38 +897,48 @@ function quantise(t, offset, step){
    Two stems means we already know who sings what and nothing has to be
    guessed. One combined stem falls back to splitting it by voice. */
 function buildChart(instA, tracks, tempo, duration){
-  const instEnv = normalise(instA.flux);
   const split = tracks.length > 1;
 
   let onsets = [];
   for (const tr of tracks){
     const env = normalise(tr.A.flux);
     const rmsN = normalise(tr.A.rms);
-    for (const t of pickOnsets(env, tr.A.fps, 1.42)){
+
+    // A vocal stem is mostly silence between lines, and what fills that
+    // silence — breaths, room tone, bleed from the backing track — still
+    // throws flux peaks that look like onsets. Measure how loud this track is
+    // when it is actually singing, and ignore anything well below that.
+    const loud = Array.from(rmsN).filter(v => v > 0.02).sort((a,b) => a-b);
+    const ref = loud.length ? loud[Math.floor(loud.length * 0.75)] : 0;
+    const floor = ref * 0.22;
+    const ahead = Math.max(1, Math.round(tr.A.fps * 0.12));
+
+    // Hitting a new note is a far bigger event than the wobble partway
+    // through a held vowel, so judge each peak against the typical peak on
+    // this track and drop the runts.
+    const cands = pickOnsets(env, tr.A.fps, 1.5);
+    const strengths = cands.map(c => c.v).sort((a,b) => a-b);
+    const minV = strengths.length ? strengths[strengths.length >> 1] * 0.35 : 0;
+
+    for (const cand of cands){
+      if (cand.v < minV) continue;
+      const t = cand.t;
+      const i = clamp(Math.round(t * tr.A.fps), 0, rmsN.length - 1);
+      // the detected frame can land just before the vowel, so peek forward
+      let peak = 0;
+      for (let k = i; k < Math.min(rmsN.length, i + ahead); k++){
+        if (rmsN[k] > peak) peak = rmsN[k];
+      }
+      if (peak < floor) continue;
       onsets.push({ t, src:"voc", side: tr.side, A: tr.A, rmsN });
     }
   }
   onsets.sort((a,b) => a.t - b.t);
 
-  // The vocals decide the chart. The instrumental is only consulted where
-  // nobody is singing for a good while, so a long intro or breakdown is not
-  // dead air — and even then it stays sparse.
-  const BUCKET = 0.1, REACH = 15;                // REACH * BUCKET = 1.5 s either side
-  const vocBuckets = new Set(onsets.map(o => Math.round(o.t / BUCKET)));
-  const hasVocalNear = t => {
-    const b = Math.round(t / BUCKET);
-    for (let d = -REACH; d <= REACH; d++) if (vocBuckets.has(b + d)) return true;
-    return false;
-  };
-  const instOnsets = pickOnsets(instEnv, instA.fps, 1.9);
-  let lastFill = -1e9;
-  for (const t of instOnsets){
-    if (hasVocalNear(t)) continue;
-    if (t - lastFill < tempo.beatLen) continue;         // at most one per beat
-    onsets.push({ t, src:"inst" });
-    lastFill = t;
-  }
-  onsets.sort((a,b) => a.t - b.t);
+  // Nothing but the voices charts a note. The instrumental is read for tempo
+  // and nothing else — drums and synth stabs are not something anyone sings,
+  // so turning them into notes only ever added things to hit that are not in
+  // the vocal line.
 
   // ---- snap everything to the grid; de-duplication happens per side ----
   const step = gridStep(tempo.beatLen);
@@ -978,18 +1017,17 @@ function buildChart(instA, tracks, tempo, duration){
     });
   }
 
-  // instrumental fill keeps breaks playable, so it goes to the player
-  for (const o of q) if (o.src === "inst") o.side = "plr";
-
   // ---- per side: de-duplicate, pick lanes, work out sustains ----
   // The two characters have their own strumlines, so a note on one side never
   // conflicts with a note on the other — they can sing at the same instant.
   const notes = [];
   for (const side of ["opp", "plr"]){
     const list = q.filter(o => o.side === side);
+    // One note per grid step per side. Vibrato and consonants used to slip
+    // an extra note in half a step behind the real one.
     const seen = new Set(), kept = [];
     for (const o of list){
-      const key = Math.round(o.t / (step * 0.5));
+      const key = Math.round(o.t / step);
       if (seen.has(key)) continue;
       seen.add(key);
       kept.push(o);
@@ -1092,6 +1130,19 @@ function setProgress(pct, stage, sub){
   if (sub !== undefined) $("#progSub").textContent = sub;
 }
 
+function paintReady(chart){
+  $("#stBpm").textContent   = Math.round(chart.bpm);
+  $("#stLen").textContent   = fmtTime(chart.duration);
+  $("#stNotes").textContent = chart.notes.length;
+  $("#stSec").textContent   = chart.sections;
+  const mine = chart.notes.filter(n => n.mustHit).length;
+  $("#readyNote").innerHTML = (
+      chart.stems === 2 ? "Charted from <b>both vocal tracks</b> — every note came from the voice that sings it, so the sides are exact."
+    : chart.singerSplit ? "One combined vocal track: <b>two voices told apart</b> and given a side each."
+    : "One combined vocal track with a single voice, so phrases trade back and forth between you and the opponent.")
+    + " You sing " + mine + " of " + chart.notes.length + " notes, snapped to the detected beat grid.";
+}
+
 function readFile(file){
   return new Promise((res, rej) => {
     const fr = new FileReader();
@@ -1100,6 +1151,8 @@ function readFile(file){
     fr.readAsArrayBuffer(file);
   });
 }
+
+function decodeBlob(blob){ return decode(blob); }
 
 async function decode(file){
   const buf = await readFile(file);
@@ -1173,21 +1226,14 @@ $("#autoChartBtn").addEventListener("click", async () => {
       instBuf,
       tracks: stems.map(s => ({ buf: s.buf, side: s.side, combined: stems.length === 1 })),
       chart,
-      name: picked.inst.name.replace(/\.[^.]+$/, "")
+      name: picked.inst.name.replace(/\.[^.]+$/, ""),
+      // keep the encoded files around so the song can be stored and replayed
+      sourceFiles: { inst: picked.inst, opp: picked.oppVoc, plr: picked.plrVoc }
     };
     setProgress(100, STAGES[4], "Done");
     await new Promise(r => setTimeout(r, 380));
 
-    $("#stBpm").textContent   = Math.round(chart.bpm);
-    $("#stLen").textContent   = fmtTime(chart.duration);
-    $("#stNotes").textContent = chart.notes.length;
-    $("#stSec").textContent   = chart.sections;
-    const mine = chart.notes.filter(n => n.mustHit).length;
-    $("#readyNote").innerHTML = (
-        chart.stems === 2 ? "Charted from <b>both vocal tracks</b> — every note came from the voice that sings it, so the sides are exact."
-      : chart.singerSplit ? "One combined vocal track: <b>two voices told apart</b> and given a side each."
-      : "One combined vocal track with a single voice, so phrases trade back and forth between you and the opponent.")
-      + " You sing " + mine + " of " + chart.notes.length + " notes, snapped to the detected beat grid.";
+    paintReady(chart);
     show("readyScreen");
   }catch(err){
     if (!chartCancelled){
@@ -1215,16 +1261,166 @@ $("#exportBtn").addEventListener("click", () => {
 });
 
 /* =====================================================================
+   MY MOD — saved songs
+   A song is its chart plus the audio it was charted from, so it has to
+   survive without the original files. That is far past what localStorage
+   holds, hence IndexedDB.
+   ===================================================================== */
+const MAX_SONGS = 15;
+const DB_NAME = "fnfsm", DB_STORE = "songs";
+let dbPromise = null;
+
+function db(){
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise((res, rej) => {
+    const rq = indexedDB.open(DB_NAME, 1);
+    rq.onupgradeneeded = () => {
+      const d = rq.result;
+      if (!d.objectStoreNames.contains(DB_STORE)) d.createObjectStore(DB_STORE, { keyPath:"id" });
+    };
+    rq.onsuccess = () => res(rq.result);
+    rq.onerror = () => rej(rq.error);
+  });
+  return dbPromise;
+}
+function dbTx(mode, fn){
+  return db().then(d => new Promise((res, rej) => {
+    const tx = d.transaction(DB_STORE, mode);
+    const rq = fn(tx.objectStore(DB_STORE));
+    tx.oncomplete = () => res(rq && rq.result);
+    tx.onerror = () => rej(tx.error);
+  }));
+}
+const songsAll    = () => dbTx("readonly",   st => st.getAll());
+const songsPut    = rec => dbTx("readwrite", st => st.put(rec));
+const songsDelete = id  => dbTx("readwrite", st => st.delete(id));
+
+function songsSupported(){
+  try{ return typeof indexedDB !== "undefined" && indexedDB !== null; }catch(e){ return false; }
+}
+
+async function refreshSongsUI(){
+  if (!songsSupported()) return;
+  let list = [];
+  try{ list = await songsAll(); }catch(e){ list = []; }
+  list.sort((a,b) => b.created - a.created);
+
+  $("#songsCount").textContent = "My Mod (" + list.length + "/" + MAX_SONGS + ")";
+  const host = $("#songList");
+  host.innerHTML = "";
+  $("#songsEmpty").style.display = list.length ? "none" : "block";
+
+  for (const rec of list){
+    const card = document.createElement("div");
+    card.className = "card";
+    const stems = (rec.opp && rec.plr) ? 2 : 1;
+    card.innerHTML =
+      '<h3 style="word-break:break-word"></h3>' +
+      '<p class="hint" style="margin-bottom:12px"></p>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+        '<button class="btn small" data-act="play">▶ Play</button>' +
+        '<button class="btn small ghost" data-act="rename">Rename</button>' +
+        '<button class="btn small ghost" data-act="del">Delete</button>' +
+      '</div>';
+    card.querySelector("h3").textContent = rec.name;
+    card.querySelector(".hint").textContent =
+      Math.round(rec.chart.bpm) + " BPM · " + fmtTime(rec.chart.duration) + " · " +
+      rec.chart.notes.length + " notes · " + (stems === 2 ? "two vocal stems" : "one vocal track");
+    card.querySelector('[data-act="play"]').addEventListener("click", () => loadSong(rec.id));
+    card.querySelector('[data-act="rename"]').addEventListener("click", async () => {
+      const name = prompt("Song name", rec.name);
+      if (name && name.trim()){ rec.name = name.trim(); await songsPut(rec); refreshSongsUI(); }
+    });
+    card.querySelector('[data-act="del"]').addEventListener("click", async () => {
+      if (!confirm('Delete "' + rec.name + '" from your mod?')) return;
+      await songsDelete(rec.id);
+      refreshSongsUI();
+    });
+    host.appendChild(card);
+  }
+}
+
+$("#openSongs").addEventListener("click", () => { refreshSongsUI(); show("songsScreen"); });
+
+$("#saveSongBtn").addEventListener("click", async () => {
+  if (!SONG) return;
+  if (!songsSupported() || !SONG.sourceFiles){
+    alert("This song cannot be saved on this device.");
+    return;
+  }
+  const btn = $("#saveSongBtn");
+  try{
+    const list = await songsAll();
+    if (list.length >= MAX_SONGS){
+      alert("Your mod is full (" + MAX_SONGS + " songs). Delete one from My Mod to make room.");
+      return;
+    }
+    const name = (prompt("Name this song", SONG.name) || "").trim();
+    if (!name) return;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="ic">💾</span>Saving...';
+    await songsPut({
+      id: "s" + Date.now() + Math.random().toString(36).slice(2,7),
+      name, created: Date.now(), chart: SONG.chart,
+      inst: SONG.sourceFiles.inst,
+      opp:  SONG.sourceFiles.opp,
+      plr:  SONG.sourceFiles.plr
+    });
+    btn.innerHTML = '<span class="ic">✓</span>Saved to My Mod';
+    refreshSongsUI();
+    setTimeout(() => { btn.innerHTML = '<span class="ic">💾</span>Save to My Mod'; btn.disabled = false; }, 1800);
+  }catch(err){
+    btn.disabled = false;
+    btn.innerHTML = '<span class="ic">💾</span>Save to My Mod';
+    alert("Could not save: " + (err && err.message ? err.message : err) +
+          "\n\nThis usually means the browser is out of storage room.");
+  }
+});
+
+async function loadSong(id){
+  const list = await songsAll();
+  const rec = list.find(r => r.id === id);
+  if (!rec) return;
+  shownPct = 0;
+  setProgress(0, "Reading audio...", rec.name);
+  show("progressScreen");
+  try{
+    getCtx();
+    const instBuf = await decodeBlob(rec.inst);
+    setProgress(45, "Reading audio...", rec.name);
+    const tracks = [];
+    if (rec.opp && rec.plr){
+      tracks.push({ buf: await decodeBlob(rec.opp), side:"opp", combined:false });
+      setProgress(75, "Reading audio...", rec.name);
+      tracks.push({ buf: await decodeBlob(rec.plr), side:"plr", combined:false });
+    } else {
+      tracks.push({ buf: await decodeBlob(rec.opp || rec.plr), side:"plr", combined:true });
+    }
+    setProgress(100, "Finalizing chart...", rec.name);
+    SONG = { instBuf, tracks, chart: rec.chart, name: rec.name,
+             sourceFiles: { inst: rec.inst, opp: rec.opp, plr: rec.plr } };
+    paintReady(rec.chart);
+    show("readyScreen");
+  }catch(err){
+    alert("Could not load that song: " + (err && err.message ? err.message : err));
+    show("songsScreen");
+  }
+}
+
+/* =====================================================================
    CHARACTERS
    ===================================================================== */
 const CHARS = {
   bf: {
     name:"Boyfriend",
-    skin:"#f6c9a0", skinShade:"#e0ab7e",
-    hair:"#2b6fe0", hairDark:"#1d51ad",
-    shirt:"#ffffff", shirtShade:"#dfe4ee",
-    pants:"#2f3d63", shoes:"#e23b3b",
-    line:"#181a20", mic:true, spiky:true
+    skin:"#ffd9a8", skinShade:"#e8b980",
+    hair:"#29b6f0", hairDark:"#1b8fc4",      // cyan-blue, not navy
+    shirt:"#ffffff", shirtShade:"#e4e9f2",
+    sleeve:"#d43a52",                        // red cuffs on the tee
+    pants:"#3b4a86", pantsShade:"#2d3a6b",
+    shoes:"#e8443f", shoeSole:"#ffffff",
+    cap:"#2f2f38",
+    line:"#141418", mic:true, spiky:true
   },
   demo: {
     name:"Demo Opponent",
@@ -1376,71 +1572,96 @@ function drawChar(g, def, poseName, blend, bop){
 
   // legs + shoes
   const legY = -6;
-  capsule(g, -13, legY - 46, Math.PI/2 - .06, 42, 20, def.pants, L);
-  capsule(g,  13, legY - 46, Math.PI/2 + .06, 42, 20, def.pants, L);
-  for (const sx of [-15, 15]){
+  capsule(g, -14, legY - 48, Math.PI/2 - .05, 44, 22, def.pants, L);
+  capsule(g,  14, legY - 48, Math.PI/2 + .05, 44, 22, def.pants, L);
+  for (const sx of [-16, 16]){
+    // chunky red sneaker with a white sole
     g.beginPath();
-    g.moveTo(sx - 12, legY);
-    g.lineTo(sx + 14, legY);
-    g.quadraticCurveTo(sx + 17, legY - 12, sx + 9, legY - 13);
-    g.lineTo(sx - 10, legY - 13);
-    g.quadraticCurveTo(sx - 14, legY - 12, sx - 12, legY);
+    g.moveTo(sx - 13, legY - 4);
+    g.quadraticCurveTo(sx - 15, legY - 15, sx - 8, legY - 16);
+    g.lineTo(sx + 8, legY - 16);
+    g.quadraticCurveTo(sx + 18, legY - 14, sx + 17, legY - 4);
     g.closePath();
     g.fillStyle = def.shoes; g.fill();
     g.lineWidth = 3; g.strokeStyle = L; g.stroke();
+    g.beginPath();
+    roundRectPath(g, sx - 14, legY - 5, 32, 6, 3);
+    g.fillStyle = def.shoeSole || "#fff"; g.fill();
+    g.lineWidth = 2.6; g.strokeStyle = L; g.stroke();
   }
 
-  // torso
-  const torsoTop = -122, torsoBot = -48;
+  // torso — a boxy white tee
+  const torsoTop = -124, torsoBot = -50;
   g.beginPath();
-  g.moveTo(-25, torsoBot + 4);
-  g.quadraticCurveTo(-30, torsoTop + 12, -22, torsoTop);
-  g.lineTo(22, torsoTop);
-  g.quadraticCurveTo(30, torsoTop + 12, 25, torsoBot + 4);
-  g.quadraticCurveTo(0, torsoBot + 12, -25, torsoBot + 4);
+  g.moveTo(-26, torsoBot + 2);
+  g.quadraticCurveTo(-31, torsoTop + 14, -23, torsoTop);
+  g.lineTo(23, torsoTop);
+  g.quadraticCurveTo(31, torsoTop + 14, 26, torsoBot + 2);
+  g.quadraticCurveTo(0, torsoBot + 11, -26, torsoBot + 2);
   g.closePath();
   g.fillStyle = def.shirt; g.fill();
-  g.lineWidth = 3.2; g.strokeStyle = L; g.stroke();
+  g.lineWidth = 3.4; g.strokeStyle = L; g.stroke();
   g.save(); g.clip();
   g.fillStyle = def.shirtShade;
-  g.fillRect(10, torsoTop, 30, 90);
+  g.fillRect(12, torsoTop, 30, 92);
   g.restore();
 
-  // arms
-  const shoulderY = torsoTop + 12;
-  capsule(g, -22, shoulderY, al, 40, 16, def.skin, L);
-  capsule(g,  22, shoulderY, ar, 40, 16, def.skin, L);
+  // collar
+  g.beginPath();
+  g.moveTo(-10, torsoTop + 1);
+  g.quadraticCurveTo(0, torsoTop + 10, 10, torsoTop + 1);
+  g.lineWidth = 3.2; g.strokeStyle = L; g.stroke();
+
+  // arms, with the red sleeve cuff the tee is known for
+  const shoulderY = torsoTop + 14;
+  for (const [sx, ang] of [[-23, al], [23, ar]]){
+    capsule(g, sx, shoulderY, ang, 42, 17, def.skin, L);
+    if (def.sleeve){
+      g.save();
+      g.translate(sx, shoulderY); g.rotate(ang);
+      g.beginPath();
+      roundRectPath(g, 6, -9.5, 11, 19, 4);
+      g.fillStyle = def.sleeve; g.fill();
+      g.lineWidth = 2.6; g.strokeStyle = L; g.stroke();
+      g.restore();
+    }
+  }
 
   // microphone in the right hand
   if (def.mic){
-    const mx = 22 + Math.cos(ar) * 44, my = shoulderY + Math.sin(ar) * 44;
+    const mx = 23 + Math.cos(ar) * 46, my = shoulderY + Math.sin(ar) * 46;
     g.save();
     g.translate(mx, my);
     g.rotate(ar - Math.PI/2);
-    g.fillStyle = "#3a3f4d";
-    g.fillRect(-3, 0, 6, 24);
-    g.beginPath(); g.arc(0, -2, 7.5, 0, Math.PI*2);
-    g.fillStyle = "#8d94a6"; g.fill();
-    g.lineWidth = 2.4; g.strokeStyle = L; g.stroke();
+    g.fillStyle = "#33373f";
+    roundRectPath(g, -3, 0, 6, 26, 3); g.fill();
+    g.lineWidth = 2.2; g.strokeStyle = L; g.stroke();
+    g.beginPath(); g.arc(0, -3, 8, 0, Math.PI*2);
+    g.fillStyle = "#9aa1b2"; g.fill();
+    g.lineWidth = 2.6; g.strokeStyle = L; g.stroke();
     g.restore();
   }
 
   // head
-  const headY = torsoTop - 34 + hy, headX = hx;
+  const headY = torsoTop - 36 + hy, headX = hx;
   g.save();
   g.translate(headX, headY);
 
-  // hair (behind the face)
+  // hair — tall forward-swept spikes
   g.beginPath();
   if (def.spiky){
-    g.moveTo(-33, -4);
-    g.lineTo(-30, -26); g.lineTo(-19, -16);
-    g.lineTo(-12, -38); g.lineTo(-2, -20);
-    g.lineTo(7, -40);   g.lineTo(16, -18);
-    g.lineTo(27, -30);  g.lineTo(31, -6);
-    g.quadraticCurveTo(34, 10, 26, 14);
-    g.lineTo(-26, 14);
-    g.quadraticCurveTo(-36, 10, -33, -4);
+    g.moveTo(-31, 2);
+    g.lineTo(-33, -20);
+    g.lineTo(-21, -13);
+    g.lineTo(-17, -40);
+    g.lineTo(-4, -19);
+    g.lineTo(4, -44);
+    g.lineTo(15, -20);
+    g.lineTo(26, -34);
+    g.lineTo(30, -10);
+    g.quadraticCurveTo(35, 8, 27, 14);
+    g.lineTo(-27, 14);
+    g.quadraticCurveTo(-35, 9, -31, 2);
   } else {
     g.moveTo(-32, 2);
     g.quadraticCurveTo(-34, -32, 0, -34);
@@ -1449,20 +1670,33 @@ function drawChar(g, def, poseName, blend, bop){
   }
   g.closePath();
   g.fillStyle = def.hair; g.fill();
-  g.lineWidth = 3; g.strokeStyle = L; g.stroke();
+  g.lineWidth = 3.2; g.strokeStyle = L; g.stroke();
 
   // face
   g.beginPath();
-  g.ellipse(0, 6, 26, 25, 0, 0, Math.PI*2);
+  g.ellipse(0, 7, 27, 26, 0, 0, Math.PI*2);
   g.fillStyle = def.skin; g.fill();
-  g.lineWidth = 3; g.strokeStyle = L; g.stroke();
+  g.lineWidth = 3.2; g.strokeStyle = L; g.stroke();
+
+  // a fringe of hair overlapping the brow, so the face sits under the spikes
+  g.save();
+  g.beginPath(); g.ellipse(0, 7, 27, 26, 0, 0, Math.PI*2); g.clip();
+  g.beginPath();
+  g.moveTo(-28, -20);
+  g.quadraticCurveTo(-10, -2, 4, -12);
+  g.quadraticCurveTo(16, -1, 28, -18);
+  g.lineTo(28, -30); g.lineTo(-28, -30);
+  g.closePath();
+  g.fillStyle = def.hair; g.fill();
+  g.lineWidth = 2.8; g.strokeStyle = L; g.stroke();
+  g.restore();
 
   // horns for the opponent
   if (!def.spiky){
-    for (const s of [-1, 1]){
+    for (const s2 of [-1, 1]){
       g.beginPath();
-      g.moveTo(s*22, -22); g.quadraticCurveTo(s*34, -40, s*24, -46);
-      g.quadraticCurveTo(s*26, -34, s*16, -26);
+      g.moveTo(s2*22, -22); g.quadraticCurveTo(s2*34, -40, s2*24, -46);
+      g.quadraticCurveTo(s2*26, -34, s2*16, -26);
       g.closePath();
       g.fillStyle = def.hairDark; g.fill();
       g.lineWidth = 2.6; g.strokeStyle = L; g.stroke();
@@ -1470,21 +1704,22 @@ function drawChar(g, def, poseName, blend, bop){
   }
 
   // eyes
-  const ey = p.eyes === "up" ? -1 : p.eyes === "down" ? 5 : 2;
+  const ey = p.eyes === "up" ? 2 : p.eyes === "down" ? 8 : 5;
   if (p.eyes === "x" && k > .5){
-    g.strokeStyle = L; g.lineWidth = 3;
-    for (const s of [-10, 10]){
+    g.strokeStyle = L; g.lineWidth = 3.2;
+    for (const s2 of [-11, 11]){
       g.beginPath();
-      g.moveTo(s-5, ey-5); g.lineTo(s+5, ey+5);
-      g.moveTo(s+5, ey-5); g.lineTo(s-5, ey+5);
+      g.moveTo(s2-5, ey-5); g.lineTo(s2+5, ey+5);
+      g.moveTo(s2+5, ey-5); g.lineTo(s2-5, ey+5);
       g.stroke();
     }
   } else {
-    for (const s of [-10, 10]){
-      g.beginPath(); g.ellipse(s, ey, 5.6, 6.4, 0, 0, Math.PI*2);
+    for (const s2 of [-11, 11]){
+      g.beginPath(); g.ellipse(s2, ey, 6.2, 7, 0, 0, Math.PI*2);
       g.fillStyle = "#fff"; g.fill();
-      g.lineWidth = 2.2; g.strokeStyle = L; g.stroke();
-      g.beginPath(); g.arc(s + (p.eyes==="up" ? 0 : 0), ey + (p.eyes==="up" ? -2 : p.eyes==="down" ? 2 : 0), 2.7, 0, Math.PI*2);
+      g.lineWidth = 2.4; g.strokeStyle = L; g.stroke();
+      g.beginPath();
+      g.arc(s2, ey + (p.eyes === "up" ? -2 : p.eyes === "down" ? 2 : 0), 3, 0, Math.PI*2);
       g.fillStyle = "#1b2a5e"; g.fill();
     }
   }
@@ -1493,17 +1728,19 @@ function drawChar(g, def, poseName, blend, bop){
   g.beginPath();
   const mouth = k > .5 ? p.mouth : "idle";
   if (mouth === "o"){
-    g.ellipse(0, 17, 7, 8, 0, 0, Math.PI*2);
+    g.ellipse(0, 20, 7, 8.5, 0, 0, Math.PI*2);
     g.fillStyle = "#5a2230"; g.fill();
+    g.lineWidth = 2.4; g.strokeStyle = L; g.stroke();
   } else if (mouth === "wide"){
-    g.ellipse(0, 17, 11, 7, 0, 0, Math.PI*2);
+    g.ellipse(0, 20, 11.5, 7.5, 0, 0, Math.PI*2);
     g.fillStyle = "#5a2230"; g.fill();
+    g.lineWidth = 2.4; g.strokeStyle = L; g.stroke();
   } else if (mouth === "frown"){
-    g.moveTo(-9, 20); g.quadraticCurveTo(0, 13, 9, 20);
-    g.lineWidth = 3; g.strokeStyle = L; g.stroke();
+    g.moveTo(-9, 23); g.quadraticCurveTo(0, 16, 9, 23);
+    g.lineWidth = 3.2; g.strokeStyle = L; g.stroke();
   } else {
-    g.moveTo(-8, 16); g.quadraticCurveTo(0, 21, 8, 16);
-    g.lineWidth = 3; g.strokeStyle = L; g.stroke();
+    g.moveTo(-8, 19); g.quadraticCurveTo(0, 24, 8, 19);
+    g.lineWidth = 3.2; g.strokeStyle = L; g.stroke();
   }
 
   g.restore(); // head
@@ -1671,45 +1908,38 @@ function dismissRotateTipIfLandscape(){
 function layout(s){
   const w = s.w, h = s.h;
   const mobile = settings.mode === "mobile";
-  const top = 18 + (window.visualViewport ? 0 : 0);
+  const landscape = w > h;
+
+  // Both strumlines sit at the top and notes rise to them, exactly as on PC.
+  // The arrows are the judge line, not a button — nobody taps them.
+  s.playerSize = clamp(Math.min(w / 9.6, h / 8.4), 34, 82);
+  s.oppSize    = s.playerSize;
+  s.playerGap  = s.playerSize * 1.16;
+  s.oppGap     = s.playerGap;
+  s.oppX       = w/2 - s.playerGap * 3.5 - 6;
+  s.playerX    = w/2 + s.playerGap * 0.5 + 6;
+  s.strumY     = clamp(h * 0.14, 56, 130);
+  s.oppY       = s.strumY;
+  s.dir        = 1;                          // upscroll
+  s.oppVisible = true;
+  s.oppNotes   = true;
+  s.hudH       = mobile ? 58 : 72;
 
   if (mobile){
-    // Tiles live in the thumb zone at the bottom and notes fall onto them, so
-    // the tap targets stay a bounded row instead of four full-height columns.
-    // Turned sideways the screen is all width and no height, so let the tiles
-    // spread out and go wide rather than stay square and stranded mid-screen.
-    const landscape = w > h;
-    s.hudH       = 58;
-    s.playerSize = clamp(Math.min((w - 20) / 4.4, h / 6.4), 44, 118);
-    s.playerGap  = landscape
-      ? Math.min(w * 0.88 / 4, s.playerSize * 2.3)   // leaves side margins for the cast
-      : s.playerSize * 1.10;
-    s.playerX    = w/2 - s.playerGap * 1.5;
-    s.tileH      = s.playerSize * (landscape ? 1.5 : 1.26);
-    s.strumY     = h - s.hudH - s.tileH * 0.5 - 4;
-    s.dir        = -1;                       // downscroll
-    s.oppSize    = clamp(s.playerSize * 0.40, 22, 46);
-    s.oppGap     = s.oppSize * 1.16;
-    s.oppX       = w/2 - s.oppGap * 1.5;
-    s.oppY       = 24 + s.oppSize/2;
-    s.oppVisible = true;
-    s.oppNotes   = false;                    // receptors flash instead
+    // Mobile adds a separate row of big buttons down where the thumbs are.
+    // These are what you press; they are not where the notes are judged.
+    s.padSize = clamp(Math.min((w - 20) / 4.4, h / 7), 44, 116);
+    s.padGap  = landscape
+      ? Math.min(w * 0.88 / 4, s.padSize * 2.3)   // spread out and leave side margins
+      : s.padSize * 1.10;
+    s.padX    = w/2 - s.padGap * 1.5;
+    s.padH    = s.padSize * (landscape ? 1.45 : 1.24);
+    s.padY    = h - s.hudH - s.padH * 0.5 - 4;
   } else {
-    s.playerSize = clamp(Math.min(w / 9.6, h / 8.4), 34, 82);
-    s.oppSize    = s.playerSize;
-    s.playerGap  = s.playerSize * 1.16;
-    s.oppGap     = s.playerGap;
-    s.oppX       = w/2 - s.playerGap * 3.5 - 6;
-    s.playerX    = w/2 + s.playerGap * 0.5 + 6;
-    s.strumY     = clamp(h * 0.14, 56, 130);
-    s.oppY       = s.strumY;
-    s.dir        = 1;                        // upscroll
-    s.hudH       = 72;
-    s.tileH      = 0;
-    s.oppVisible = true;
-    s.oppNotes   = true;
+    s.padSize = s.padGap = s.padH = 0;
+    s.padY    = h;
   }
-  s.top = top;
+
   arrowCache.clear();          // sizes just changed; stale bitmaps are dead weight
 }
 
@@ -1931,12 +2161,13 @@ const pointerLane = new Map();
 function laneFromPoint(x, y){
   if (!game) return -1;
   const s = game;
-  // Mobile taps only count from the top of the tile row down — the note field
-  // above it is for watching, not tapping.
-  if (settings.mode === "mobile" && y < s.strumY - s.tileH * 0.5) return -1;
-  const half = s.playerGap * 0.5;
+  // Only the buttons take presses. The strumline is a judge line, so tapping
+  // an arrow up there does nothing.
+  if (settings.mode !== "mobile") return -1;
+  if (y < s.padY - s.padH * 0.5) return -1;
+  const half = s.padGap * 0.5;
   for (let l = 0; l < 4; l++){
-    const cx = laneX(s, l, true);
+    const cx = s.padX + l * s.padGap;
     if (x >= cx - half && x <= cx + half) return l;
   }
   return -1;
@@ -2138,6 +2369,83 @@ function drawArrow(g, x, y, size, lane, mode, alpha){
   g.restore();
 }
 
+/* ------------------------- the bedroom stage -------------------------
+   Drawn flat and pale on purpose: it has to read as a room without ever
+   competing with the notes travelling over it. Rasterised once per size. */
+let stageCache = null, stageKey = "";
+
+function buildStage(w, h, dpr){
+  const key = w + "x" + h + "@" + dpr;
+  if (stageCache && stageKey === key) return stageCache;
+  const cv = document.createElement("canvas");
+  cv.width = Math.max(1, Math.ceil(w * dpr));
+  cv.height = Math.max(1, Math.ceil(h * dpr));
+  const g = cv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const floorY = h * 0.74;
+
+  // wall and floor
+  g.fillStyle = "#efe7f6"; g.fillRect(0, 0, w, floorY);
+  g.fillStyle = "#e3c9a6"; g.fillRect(0, floorY, w, h - floorY);
+  g.fillStyle = "#d8bb95";
+  for (let x = -h; x < w + h; x += 74){    // floorboards, angled for depth
+    g.beginPath();
+    g.moveTo(x, h); g.lineTo(x + (h - floorY) * 0.5, floorY);
+    g.lineTo(x + (h - floorY) * 0.5 + 3, floorY); g.lineTo(x + 3, h);
+    g.closePath(); g.fill();
+  }
+  g.fillStyle = "#cdb08c"; g.fillRect(0, floorY - 5, w, 6);
+
+  const u = clamp(Math.min(w, h) / 420, 0.5, 1.9);   // scene unit
+
+  // window, upper left
+  const wx = w * 0.13, wy = floorY - 210*u, ww = 150*u, wh = 125*u;
+  g.fillStyle = "#2b3566"; g.fillRect(wx, wy, ww, wh);
+  g.fillStyle = "#f7f3c8";                            // moon
+  g.beginPath(); g.arc(wx + ww*0.7, wy + wh*0.3, 15*u, 0, Math.PI*2); g.fill();
+  g.fillStyle = "#ffffff";
+  for (const [sx, sy] of [[0.2,0.25],[0.35,0.55],[0.5,0.2],[0.25,0.75],[0.8,0.65]]){
+    g.beginPath(); g.arc(wx + ww*sx, wy + wh*sy, 1.8*u, 0, Math.PI*2); g.fill();
+  }
+  g.strokeStyle = "#b9a7cd"; g.lineWidth = 5*u;
+  g.strokeRect(wx, wy, ww, wh);
+  g.beginPath();
+  g.moveTo(wx + ww/2, wy); g.lineTo(wx + ww/2, wy + wh);
+  g.moveTo(wx, wy + wh/2); g.lineTo(wx + ww, wy + wh/2);
+  g.lineWidth = 3.5*u; g.stroke();
+
+  // bed, lower right
+  const bx = w * 0.62, by = floorY - 46*u, bw = w * 0.34, bh = 78*u;
+  g.fillStyle = "#8d6a4f";                            // headboard
+  g.fillRect(bx + bw - 20*u, by - 62*u, 20*u, 62*u);
+  g.fillStyle = "#c9d6ef"; g.fillRect(bx, by, bw, bh);      // mattress
+  g.fillStyle = "#7f9ad6"; g.fillRect(bx, by, bw * 0.62, bh); // blanket
+  g.fillStyle = "#ffffff";                             // pillow
+  roundRectPath(g, bx + bw - 62*u, by - 16*u, 46*u, 24*u, 7*u); g.fill();
+  g.fillStyle = "#6b543f";
+  g.fillRect(bx, by + bh, 8*u, 16*u);
+  g.fillRect(bx + bw - 12*u, by + bh, 8*u, 16*u);
+
+  // poster above the bed
+  const px = w * 0.66, py = floorY - 200*u;
+  g.fillStyle = "#ffd9e6"; g.fillRect(px, py, 78*u, 58*u);
+  g.strokeStyle = "#e79ab6"; g.lineWidth = 3*u; g.strokeRect(px, py, 78*u, 58*u);
+  g.fillStyle = "#e2688f";
+  for (let i = 0; i < 3; i++) g.fillRect(px + 10*u, py + (13 + i*15)*u, (52 - i*14)*u, 5*u);
+
+  // rug
+  g.fillStyle = "#d8a5b8";
+  g.beginPath(); g.ellipse(w * 0.34, h * 0.90, w * 0.20, (h - floorY) * 0.30, 0, 0, Math.PI*2); g.fill();
+
+  // wash everything out so notes stay the brightest thing on screen
+  g.fillStyle = "rgba(255,255,255,.46)";
+  g.fillRect(0, 0, w, h);
+
+  stageCache = cv; stageKey = key;
+  return cv;
+}
+
 /* Arrows are two paths plus a fill and a stroke each, and a busy chart has
    40-odd on screen. There are only a handful of distinct ones, so rasterise
    each and blit. */
@@ -2165,8 +2473,12 @@ function render(){
   const s = game;
   const g = G;
   g.setTransform(s.dpr, 0, 0, s.dpr, 0, 0);
-  g.fillStyle = "#ffffff";
-  g.fillRect(0, 0, s.w, s.h);   // opaque, so no clearRect needed first
+  if (settings.stage === "bedroom"){
+    g.drawImage(buildStage(s.w, s.h, s.dpr), 0, 0, s.w, s.h);
+  } else {
+    g.fillStyle = "#ffffff";
+    g.fillRect(0, 0, s.w, s.h);   // opaque, so no clearRect needed first
+  }
 
   const mobile = settings.mode === "mobile";
   const pps = scrollPxPerSec();
@@ -2176,9 +2488,9 @@ function render(){
   const bop = Math.max(0, Math.sin((beatPos % 1) * Math.PI)) * 3.5;
   // Stand the cast on the floor of the play area: above the HUD on PC, above
   // the tile row on mobile. Size them by the headroom that actually remains.
-  const groundY = mobile ? s.strumY - s.tileH * 0.5 - 6 : s.h - s.hudH;
-  const headroom = mobile ? groundY - s.oppY - 40 : s.h - s.strumY - 120;
-  const charScale = clamp(Math.min(s.w / 560, headroom / 230), 0.42, 1.3) * (mobile ? 0.8 : 1);
+  const groundY = mobile ? s.padY - s.padH * 0.5 - 8 : s.h - s.hudH;
+  const headroom = groundY - s.strumY - 40;
+  const charScale = clamp(Math.min(s.w / 470, headroom / 230), 0.42, 1.3) * (mobile ? 0.95 : 1);
 
   // Sideways, the tiles are wide enough that the outer lanes would drop notes
   // straight through the characters — stand them in the margins instead.
@@ -2199,17 +2511,23 @@ function render(){
   drawCharCached(g, CHARS.bf, "bf", s.bfPose, s.bfBlend, bop, rightX, groundY, charScale, s.dpr);
   g.restore();
 
-  /* --- mobile tap tiles (a bounded row, not full-height columns) --- */
+  /* --- mobile tap buttons, down in the thumb zone --- */
   if (mobile){
     for (let l = 0; l < 4; l++){
-      const x = laneX(s, l, true);
-      const tw = s.playerGap - 7, th = s.tileH;
-      roundRectPath(g, x - tw/2, s.strumY - th/2, tw, th, s.playerSize * 0.26);
-      g.fillStyle = s.held[l] ? "rgba(61,90,254,.12)" : "rgba(20,22,28,.04)";
+      const x = s.padX + l * s.padGap;
+      const tw = s.padGap - 8, th = s.padH;
+      const down = s.held[l];
+      roundRectPath(g, x - tw/2, s.padY - th/2, tw, th, s.padSize * 0.26);
+      g.fillStyle = down ? "rgba(61,90,254,.16)" : "rgba(20,22,28,.045)";
       g.fill();
-      g.lineWidth = 1.5;
-      g.strokeStyle = s.held[l] ? "rgba(61,90,254,.35)" : "rgba(20,22,28,.09)";
+      g.lineWidth = 2;
+      g.strokeStyle = down ? "rgba(61,90,254,.45)" : "rgba(20,22,28,.10)";
       g.stroke();
+      // the glyph tells you which lane the button drives
+      g.save();
+      g.globalAlpha = down ? 0.85 : 0.4;
+      drawArrow(g, x, s.padY, s.padSize * 0.72, l, down ? "filled" : "outline", 1);
+      g.restore();
     }
   }
 
@@ -2235,7 +2553,13 @@ function render(){
   }
 
   /* --- notes --- */
-  const lookahead = (s.h + 220) / pps;
+  // On mobile the buttons occupy the bottom of the screen, so the note field
+  // ends where they begin rather than running underneath them.
+  const fieldBottom = mobile ? s.padY - s.padH * 0.5 - 12 : s.h;
+  g.save();
+  if (mobile) g.beginPath(), g.rect(0, 0, s.w, fieldBottom), g.clip();
+
+  const lookahead = (fieldBottom + 220) / pps;
   for (let i = s.head; i < s.notes.length; i++){
     const n = s.notes[i];
     if (n.gone) continue;
@@ -2278,10 +2602,7 @@ function render(){
       }
     }
 
-    // A note that has gone past the tiles is spent — do not let it slide on
-    // over the health bar.
-    const spent = mobile && mine && y > s.strumY + s.tileH * 0.5;
-    if (!n.hit && !spent && y >= -size && y <= s.h + size){
+    if (!n.hit && y >= -size && y <= s.h + size){
       g.save();
       if (mine && dt < 0) g.globalAlpha = clamp(1 + dt * 2.2, 0.25, 1);
       if (!mine) g.globalAlpha = 0.9;
@@ -2289,6 +2610,8 @@ function render(){
       g.restore();
     }
   }
+
+  g.restore();      // end note-field clip
 
   /* --- note splashes --- */
   for (const p of s.splashes){
