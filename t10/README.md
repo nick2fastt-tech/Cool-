@@ -43,7 +43,8 @@ over http — GitHub Pages, or `python3 -m http.server` — if you want saving
 guaranteed everywhere.
 
 **Touch (phones and tablets)**
-- Touch anywhere on the lower-left to raise the joystick, and drag to walk.
+- Touch anywhere on the lower-left to raise the joystick, and drag to walk —
+  up walks the way the camera faces, down backs up, left and right strafe.
   Push past half-way to run.
 - Drag anywhere else on the screen to look around.
 - Buttons: interact ✋, sprint ⇈, jump ⤒, map 🗺️, inventory 🎒, camera 🎥,
@@ -67,6 +68,11 @@ libraries, basketball courts, gas stations, bus stops.
 
 Everything is generated on the fly around you and thrown away behind you, so the
 map is enormous but only a few hundred metres of it exists at any moment.
+
+There are no invisible walls. Anything you can stand on is drawn, and anywhere
+the paving stops — the river's edge, the harbour — a seawall and railing stand
+there to tell you so. Walkability is derived from the same cells the city is
+paved from, so the two cannot disagree.
 
 ## Living here
 
@@ -125,7 +131,13 @@ station. You'll see a light-blue **PROGRESS SAVED** badge when it happens.
 Quality auto-selects from the device (low / medium / high / ultra, overridable
 in Settings). The city streams in chunks around the player with frustum culling
 and distance limits; everything is drawn with instanced boxes from a single
-procedural shader, so a whole city block costs one draw call. Shadows are a
+procedural shader, so a whole city block costs one draw call.
+
+Each chunk is built in two tiers — structure (ground, buildings, landmarks)
+followed by street-level detail (lane markings, signals, fire escapes, meters,
+mailboxes, awnings, stoops, scaffolding). Distant chunks draw only the first
+tier, which is what lets the view reach well over a kilometre while the block
+you are standing on stays dense. Shadows are a
 single cascade and can be turned off. Simulation load (pedestrian and traffic
 counts) scales itself down automatically if the frame time slips.
 

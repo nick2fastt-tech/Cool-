@@ -76,12 +76,15 @@
     var target = mag * run * T10.Systems.speedFactor();
     if (I.scene) target = Math.min(target, RUN);
 
-    // camera-relative movement
+    // Camera-relative movement. Screen Y grows downward, so pushing the stick
+    // up (or pressing W) arrives as moveY = -1 and has to be flipped to mean
+    // "walk the way the camera is looking".
     var cy = Pl.camYaw;
+    var fwd = -input.moveY;
     var fx = Math.sin(cy), fz = -Math.cos(cy);
     var rx = Math.cos(cy), rz = Math.sin(cy);
-    var dx = fx * input.moveY + rx * input.moveX;
-    var dz = fz * input.moveY + rz * input.moveX;
+    var dx = fx * fwd + rx * input.moveX;
+    var dz = fz * fwd + rz * input.moveX;
     var dl = Math.hypot(dx, dz);
     if (dl > 0.001) { dx /= dl; dz /= dl; }
 

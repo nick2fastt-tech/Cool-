@@ -76,20 +76,30 @@
   W.groundHeight = function (x, z) {
     var br = bridgeAt(x, z);
     if (br) return bridgeHeight(br.b, br.t);
-    // High Line elevated park
-    var f = P.features;
-    for (var i = 0; i < f.length; i++) {
-      if (f[i].kind === 'elevated_park') {
-        var e = f[i];
-        if (Math.abs(x - e.x) < e.w / 2 && Math.abs(z - e.z) < e.d / 2) return e.h;
-      }
-    }
     return 0;
   };
 
+  /* The chunk builder paves the world in cells; a cell is either land or water.
+     Walkability is decided the same way, so the ground you can see is exactly
+     the ground you can stand on — no invisible edges. */
+  var CELL = CH / 4;
+  function cellCentre(v) { return Math.floor(v / CELL) * CELL + CELL / 2; }
+  W.cellIsLand = function (x, z) { return P.landAt(cellCentre(x), cellCentre(z)) !== null; };
+
+  function onPier(x, z) {
+    for (var i = 0; i < P.features.length; i++) {
+      var f = P.features[i];
+      if (f.kind !== 'pier') continue;
+      if (Math.abs(x - f.x) < f.w / 2 + 1 && Math.abs(z - f.z) < f.d / 2 + 1) return true;
+    }
+    return false;
+  }
+
   W.isWalkable = function (x, z) {
     if (bridgeAt(x, z)) return true;
-    return P.landAt(x, z) !== null;
+    if (P.landAt(x, z)) return true;
+    if (onPier(x, z)) return true;
+    return W.cellIsLand(x, z);
   };
 
   /* --------------------------------------------------------- block layout */
@@ -112,7 +122,7 @@
 
   /* ------------------------------------------------------- geometry pieces */
   var GRASS = [0.24, 0.42, 0.20], PATH = [0.55, 0.51, 0.45];
-  var SIDEWALK = [0.53, 0.53, 0.55], ASPHALT = [0.17, 0.17, 0.19];
+  var SIDEWALK = [0.55, 0.55, 0.57], ASPHALT = [0.21, 0.21, 0.23];
   var WATER = [0.10, 0.20, 0.30];
 
   function addTree(B, x, z, y, rnd, scale) {
@@ -161,8 +171,85 @@
     B.push(x, y + 0.16, z, 2.0, 0.32, 4.5, rot, [0.08, 0.08, 0.09], 1, 0, 0);
   }
 
+  function addFireEscape(D, cx, cz, w, h, faceZ, rnd) {
+    var levels = Math.min(6, Math.floor(h / 4));
+    var fx = cx + rnd.range(-w * 0.2, w * 0.2);
+    for (var i = 1; i <= levels; i++) {
+      var y = 0.2 + i * 3.6;
+      D.push(fx, y, faceZ, Math.min(4.2, w * 0.5), 0.12, 1.3, 0, [0.22, 0.20, 0.19], 1, 0, 0);   // platform
+      D.push(fx, y, faceZ + (faceZ > cz ? 0.6 : -0.6), Math.min(4.2, w * 0.5), 1.0, 0.08, 0, [0.24, 0.22, 0.21], 1, 0, 0);
+      D.push(fx + 1.6, y - 1.7, faceZ, 0.1, 1.8, 1.1, 0.5, [0.22, 0.20, 0.19], 1, 0, 0);          // ladder run
+    }
+    D.push(fx - 2.0, 0.2, faceZ, 0.1, 0.2 + levels * 3.6, 0.1, 0, [0.22, 0.20, 0.19], 1, 0, 0);
+    D.push(fx + 2.0, 0.2, faceZ, 0.1, 0.2 + levels * 3.6, 0.1, 0, [0.22, 0.20, 0.19], 1, 0, 0);
+  }
+
+  function addAcUnits(D, cx, cz, w, h, faceZ, rnd) {
+    var n = Math.min(4, Math.floor(h / 9));
+    for (var i = 0; i < n; i++) {
+      if (!rnd.chance(0.5)) continue;
+      D.push(cx + rnd.range(-w * 0.4, w * 0.4), 4.0 + i * 3.6, faceZ, 0.7, 0.45, 0.45, 0, [0.34, 0.35, 0.37], 1, 9, 0);
+    }
+  }
+
+  /* Kerbside clutter: meters, bollards, mailboxes, bags, grates, planters. */
+  function addStreetProps(D, x, z, rnd, colliders) {
+    var r = rnd();
+    if (r < 0.16) {                                   // parking meter
+      D.push(x, 0.17, z, 0.13, 1.25, 0.13, 0, [0.30, 0.32, 0.34], 1, 9, 0);
+      D.push(x, 1.42, z, 0.22, 0.34, 0.18, 0, [0.16, 0.17, 0.19], 1, 0, 0);
+    } else if (r < 0.28) {                            // mailbox
+      D.push(x, 0.17, z, 0.75, 1.15, 0.6, rnd.range(0, 0.4), [0.14, 0.28, 0.55], 1, 9, 0);
+      D.push(x, 1.32, z, 0.78, 0.18, 0.63, 0, [0.12, 0.24, 0.48], 1, 0, 0);
+    } else if (r < 0.42) {                            // rubbish bags
+      for (var b = 0; b < 3; b++) {
+        D.push(x + rnd.range(-0.7, 0.7), 0.17, z + rnd.range(-0.35, 0.35),
+          rnd.range(0.5, 0.8), rnd.range(0.4, 0.7), rnd.range(0.5, 0.8), rnd.range(0, 1.5), [0.09, 0.09, 0.10], 1, 0, 0);
+      }
+    } else if (r < 0.52) {                            // sidewalk grate
+      D.push(x, 0.175, z, 1.5, 0.03, 1.1, 0, [0.20, 0.20, 0.21], 1, 9, 0);
+    } else if (r < 0.60) {                            // planter
+      D.push(x, 0.17, z, 1.1, 0.65, 1.1, 0, [0.42, 0.38, 0.34], 1, 6, 0);
+      D.push(x, 0.8, z, 1.0, 0.9, 1.0, rnd.range(0, 1.5), [0.22, 0.42, 0.20], 1, 5, rnd.range(0, 9));
+    } else if (r < 0.66) {                            // bollards
+      for (var i = 0; i < 3; i++) D.push(x + (i - 1) * 1.3, 0.17, z, 0.2, 0.85, 0.2, 0, [0.35, 0.30, 0.14], 1, 9, 0);
+    } else if (r < 0.70) {                            // news stand
+      D.push(x, 0.17, z, 2.4, 2.3, 1.5, 0, [0.20, 0.24, 0.32], 1, 0, 0);
+      D.push(x, 2.5, z, 2.6, 0.2, 1.7, 0, [0.55, 0.16, 0.14], 1, 0, 0);
+      if (colliders) colliders.push(x - 1.2, z - 0.75, x + 1.2, z + 0.75);
+    }
+  }
+
+  /* Lane markings — centre lines, lane dashes and stop bars. */
+  function addRoadMarkings(D, x0, z0, size) {
+    var i, t, dash = 2.4, gap = 5.0;
+    var a0 = Math.floor(x0 / P.AVE), a1 = Math.ceil((x0 + size) / P.AVE);
+    for (i = a0; i <= a1; i++) {
+      var ax = i * P.AVE;
+      if (ax < x0 || ax >= x0 + size) continue;
+      for (t = z0; t < z0 + size; t += dash + gap) {
+        if (Math.abs(t - Math.round(t / P.ST) * P.ST) < P.ST_HALF + 2) continue;   // skip junctions
+        if (!P.landAt(ax, t)) continue;
+        D.push(ax - 0.35, 0.04, t, 0.16, 0.03, dash, 0, [0.72, 0.62, 0.18], 1, 0, 0);
+        D.push(ax + 0.35, 0.04, t, 0.16, 0.03, dash, 0, [0.72, 0.62, 0.18], 1, 0, 0);
+        D.push(ax - 4.9, 0.04, t, 0.14, 0.03, dash, 0, [0.80, 0.80, 0.78], 1, 0, 0);
+        D.push(ax + 4.9, 0.04, t, 0.14, 0.03, dash, 0, [0.80, 0.80, 0.78], 1, 0, 0);
+      }
+    }
+    var s0 = Math.floor(z0 / P.ST), s1 = Math.ceil((z0 + size) / P.ST);
+    for (i = s0; i <= s1; i++) {
+      var sz = i * P.ST;
+      if (sz < z0 || sz >= z0 + size) continue;
+      for (t = x0; t < x0 + size; t += dash + gap) {
+        if (Math.abs(t - Math.round(t / P.AVE) * P.AVE) < P.AVE_HALF + 2) continue;
+        if (!P.landAt(t, sz)) continue;
+        D.push(t, 0.04, sz, dash, 0.03, 0.16, 0, [0.72, 0.62, 0.18], 1, 0, 0);
+      }
+    }
+  }
+
   /* One building: base mass + optional setback + roof clutter. */
-  function addBuilding(B, cx, cz, w, d, h, rnd, pal, colliders, y) {
+  function addBuilding(B, D, cx, cz, w, d, h, rnd, pal, colliders, y, faceZ) {
     y = y || 0;
     var pc = pal[rnd.int(0, pal.length - 1)];
     var tint = rnd.range(-0.045, 0.045);
@@ -187,11 +274,23 @@
     }
     if (rnd.chance(0.6)) B.push(cx + rnd.range(-w * 0.3, w * 0.3), top, cz + rnd.range(-d * 0.3, d * 0.3), 1.6, 0.9, 1.6, 0, [0.4, 0.41, 0.43], 1, 0, 0);
     if (h > 120 && rnd.chance(0.7)) B.push(cx, top, cz, 0.4, rnd.range(8, 20), 0.4, 0, [0.5, 0.2, 0.2], 1, 10, 0);
+    if (D) {
+      // parapet, roof rails and a couple of vents read as detail up close
+      D.push(cx, top, cz, w * 1.02, 0.9, d * 1.02, 0, [col[0] * 0.86, col[1] * 0.86, col[2] * 0.86], 1, 0, 0);
+      if (rnd.chance(0.5)) D.push(cx + rnd.range(-w * 0.3, w * 0.3), top, cz + rnd.range(-d * 0.3, d * 0.3), 0.9, 1.4, 0.9, 0, [0.42, 0.42, 0.44], 1, 9, 0);
+      if (faceZ !== undefined && h < 46 && rnd.chance(0.55)) addFireEscape(D, cx, cz, w, h, faceZ, rnd);
+      if (faceZ !== undefined && rnd.chance(0.45)) addAcUnits(D, cx, cz, w, h, faceZ, rnd);
+      // a single cornice band rather than a ledge per floor, which read as stripes
+      if (faceZ !== undefined && h > 14) {
+        D.push(cx, 0.2 + Math.min(h - 1.2, 11.0), faceZ, w * 0.98, 0.3, 0.3, 0,
+          [col[0] * 0.72, col[1] * 0.72, col[2] * 0.74], 1, 0, 0);
+      }
+    }
     if (colliders) colliders.push(cx - w / 2, cz - d / 2, cx + w / 2, cz + d / 2);
   }
 
   /* A city block: sidewalk slab, two rows of buildings, street furniture. */
-  function buildBlock(B, ai, sj, dist, colliders) {
+  function buildBlock(B, D, ai, sj, dist, colliders) {
     var r = blockRect(ai, sj);
     var rnd = T10.rng((ai * 73856093) ^ (sj * 19349663) ^ 0x9e3779b9);
     var cxm = (r.x0 + r.x1) / 2, czm = (r.z0 + r.z1) / 2;
@@ -200,8 +299,8 @@
     // sidewalk: the block plus a 5m strip out to the kerb on every side
     B.push(cxm, 0, czm, bw + 10, 0.17, bd + 10, 0, SIDEWALK, 1, 6, 0);
 
-    if (dist.type === 'park') { buildParkBlock(B, r, rnd, dist, colliders); return; }
-    if (dist.type === 'beach') { buildBeachBlock(B, r, rnd, colliders); return; }
+    if (dist.type === 'park') { buildParkBlock(B, D, r, rnd, dist, colliders); return; }
+    if (dist.type === 'beach') { buildBeachBlock(B, D, r, rnd, colliders); return; }
 
     var pal = P.palettes[dist.pal] || P.palettes[0];
     var hmin = dist.h[0], hmax = dist.h[1];
@@ -209,8 +308,8 @@
     // occasional open lot: a small park, a court or a parking lot
     if (rnd.chance(0.09)) {
       var kind = rnd.int(0, 2);
-      if (kind === 0) { buildParkBlock(B, r, rnd, dist, colliders); return; }
-      if (kind === 1) { buildCourtBlock(B, r, rnd, colliders); return; }
+      if (kind === 0) { buildParkBlock(B, D, r, rnd, dist, colliders); return; }
+      if (kind === 1) { buildCourtBlock(B, D, r, rnd, colliders); return; }
       B.push(cxm, 0.18, czm, bw, 0.04, bd, 0, [0.20, 0.20, 0.22], 1, 2, 0);
       for (var pc = 0; pc < 8; pc++) addCarStatic(B, r.x0 + 3 + (pc % 4) * 6, r.z0 + 4 + Math.floor(pc / 4) * 9, 0.2, 0, rnd);
       return;
@@ -232,18 +331,22 @@
         if (corner) h *= rnd.range(1.0, 1.35);
         if (rnd.chance(0.05)) h *= rnd.range(1.4, 2.1);        // the odd tower
         h = Math.max(8, h);
-        addBuilding(B, x + lw / 2, rows[ri].z, lw - 0.6, rows[ri].d, h, rnd, pal, colliders, 0.17);
+        var side = ri === 0 ? -1 : 1;
+        var faceZ = rows[ri].z + side * (rows[ri].d / 2 + 0.05);
+        addBuilding(B, D, x + lw / 2, rows[ri].z, lw - 0.6, rows[ri].d, h, rnd, pal, colliders, 0.17, faceZ);
         // storefront awning toward the street
         if (rnd.chance(0.45)) {
-          var side = ri === 0 ? -1 : 1;
           var az = rows[ri].z + side * (rows[ri].d / 2 + 1.0);
-          B.push(x + lw / 2, 3.1, az, lw - 2, 0.25, 2.2, 0,
+          D.push(x + lw / 2, 3.1, az, lw - 2, 0.25, 2.2, 0,
             [rnd.range(0.2, 0.8), rnd.range(0.15, 0.5), rnd.range(0.15, 0.5)], 1, 0, 0);
+          if (rnd.chance(0.4)) D.push(x + lw / 2, 3.42, az, (lw - 2) * 0.6, 0.42, 0.12, 0, [0.14, 0.14, 0.16], 1, 7, rnd.range(0, 20));
         }
-        // stoop
+        // stoop with a rail
         if (rnd.chance(0.3)) {
-          var side2 = ri === 0 ? -1 : 1;
-          B.push(x + lw / 2, 0.17, rows[ri].z + side2 * (rows[ri].d / 2 + 0.8), 2.4, 0.9, 1.6, 0, [0.45, 0.42, 0.40], 1, 6, 0);
+          var sz2 = rows[ri].z + side * (rows[ri].d / 2 + 0.8);
+          D.push(x + lw / 2, 0.17, sz2, 2.4, 0.9, 1.6, 0, [0.45, 0.42, 0.40], 1, 6, 0);
+          D.push(x + lw / 2 - 1.1, 1.07, sz2, 0.1, 0.95, 1.6, 0, [0.20, 0.20, 0.22], 1, 9, 0);
+          D.push(x + lw / 2 + 1.1, 1.07, sz2, 0.1, 0.95, 1.6, 0, [0.20, 0.20, 0.22], 1, 9, 0);
         }
         x += lw;
       }
@@ -256,24 +359,27 @@
     var n = Math.max(2, Math.floor(bw / 30));
     for (var i = 0; i <= n; i++) {
       var lx = r.x0 + (bw / n) * i;
-      addLamp(B, lx, r.z0 - 4.0, 0.17, Math.PI);
-      addLamp(B, lx, r.z1 + 4.0, 0.17, 0);
+      addLamp(D, lx, r.z0 - 4.0, 0.17, Math.PI);
+      addLamp(D, lx, r.z1 + 4.0, 0.17, 0);
       if (rnd.chance(0.6)) addTree(B, lx + 8, r.z0 - 3.8, 0.17, rnd, 0.9);
       if (rnd.chance(0.55)) addTree(B, lx - 6, r.z1 + 3.8, 0.17, rnd, 0.9);
-      if (rnd.chance(0.35)) B.push(lx + 3, 0.17, r.z0 - 3.9, 0.5, 0.9, 0.5, 0, [0.7, 0.25, 0.2], 1, 0, 0); // hydrant
-      if (rnd.chance(0.3)) B.push(lx - 4, 0.17, r.z1 + 3.9, 0.8, 1.1, 0.8, 0, [0.16, 0.28, 0.20], 1, 0, 0); // trash can
-      if (rnd.chance(0.18)) B.push(lx, 0.17, r.z0 - 3.6, 0.6, 1.4, 0.5, 0, [0.25, 0.28, 0.55], 1, 0, 0);    // newspaper box
+      if (rnd.chance(0.35)) D.push(lx + 3, 0.17, r.z0 - 3.9, 0.5, 0.9, 0.5, 0, [0.7, 0.25, 0.2], 1, 0, 0);  // hydrant
+      if (rnd.chance(0.3)) D.push(lx - 4, 0.17, r.z1 + 3.9, 0.8, 1.1, 0.8, 0, [0.16, 0.28, 0.20], 1, 0, 0); // trash can
+      addStreetProps(D, lx + rnd.range(-6, 6), r.z0 - 3.7, rnd, colliders);
+      addStreetProps(D, lx + rnd.range(-6, 6), r.z1 + 3.7, rnd, colliders);
     }
     // scaffolding — it is New York, after all
     if (rnd.chance(0.14)) {
       for (var sx = r.x0; sx < r.x1; sx += 4) {
-        B.push(sx, 0.17, r.z0 - 2.2, 0.2, 5.2, 0.2, 0, [0.35, 0.32, 0.28], 1, 0, 0);
+        D.push(sx, 0.17, r.z0 - 2.2, 0.2, 5.2, 0.2, 0, [0.35, 0.32, 0.28], 1, 0, 0);
+        D.push(sx, 0.17, r.z0 - 3.4, 0.2, 5.2, 0.2, 0, [0.35, 0.32, 0.28], 1, 0, 0);
       }
-      B.push(cxm, 5.3, r.z0 - 2.2, bw, 0.3, 4.4, 0, [0.30, 0.30, 0.32], 1, 0, 0);
+      D.push(cxm, 5.3, r.z0 - 2.8, bw, 0.3, 4.4, 0, [0.30, 0.30, 0.32], 1, 0, 0);
+      D.push(cxm, 5.6, r.z0 - 2.8, bw, 0.5, 0.2, 0, [0.75, 0.35, 0.12], 1, 0, 0);
     }
   }
 
-  function buildParkBlock(B, r, rnd, dist, colliders) {
+  function buildParkBlock(B, D, r, rnd, dist, colliders) {
     var cxm = (r.x0 + r.x1) / 2, czm = (r.z0 + r.z1) / 2;
     var bw = r.x1 - r.x0, bd = r.z1 - r.z0;
     B.push(cxm, 0.18, czm, bw + 10, 0.06, bd + 10, 0, GRASS, 1, 5, 0);
@@ -285,13 +391,14 @@
       if (Math.abs(tx - cxm) < 3.5 || Math.abs(tz - czm) < 3.5) continue;
       addTree(B, tx, tz, 0.2, rnd, rnd.range(0.9, 1.5));
     }
-    for (var b = 0; b < 4; b++) addBench(B, cxm + rnd.range(-bw / 3, bw / 3), czm + (b % 2 ? 3.2 : -3.2), 0.22, b % 2 ? 0 : Math.PI);
+    for (var b = 0; b < 4; b++) addBench(D, cxm + rnd.range(-bw / 3, bw / 3), czm + (b % 2 ? 3.2 : -3.2), 0.22, b % 2 ? 0 : Math.PI);
+    for (var lp = 0; lp < 3; lp++) addLamp(D, cxm + rnd.range(-bw / 2, bw / 2), czm + rnd.range(-bd / 2, bd / 2), 0.2, rnd.range(0, 6));
     if (rnd.chance(0.35)) {
       B.push(cxm + rnd.range(-bw / 4, bw / 4), 0.1, czm + rnd.range(-bd / 4, bd / 4), bw * 0.35, 0.3, bd * 0.35, 0, WATER, 1, 3, 0);
     }
   }
 
-  function buildCourtBlock(B, r, rnd, colliders) {
+  function buildCourtBlock(B, D, r, rnd, colliders) {
     var cxm = (r.x0 + r.x1) / 2, czm = (r.z0 + r.z1) / 2;
     var bw = r.x1 - r.x0, bd = r.z1 - r.z0;
     B.push(cxm, 0.18, czm, bw, 0.05, bd, 0, [0.30, 0.34, 0.38], 1, 6, 0);
@@ -310,7 +417,7 @@
     }
   }
 
-  function buildBeachBlock(B, r, rnd, colliders) {
+  function buildBeachBlock(B, D, r, rnd, colliders) {
     var cxm = (r.x0 + r.x1) / 2, czm = (r.z0 + r.z1) / 2;
     var bw = r.x1 - r.x0, bd = r.z1 - r.z0;
     B.push(cxm, 0.1, czm, bw + 10, 0.12, bd + 10, 0, [0.72, 0.66, 0.50], 1, 6, 0);
@@ -337,7 +444,7 @@
   }
 
   /* -------------------------------------------------------------- features */
-  function buildFeature(B, f, colliders) {
+  function buildFeature(B, D, f, colliders) {
     var rnd = T10.rng(f.id.length * 7919 + f.x + f.z * 31);
     var col = f.color || [0.5, 0.5, 0.52];
     var y = 0.18;
@@ -448,7 +555,8 @@
           if (Math.abs(tx - f.x) < 4 || Math.abs(tz - f.z) < 4) continue;
           addTree(B, tx, tz, 0.2, rnd, rnd.range(1.0, 1.7));
         }
-        for (var bn = 0; bn < 8; bn++) addBench(B, f.x + rnd.range(-f.w / 2 + 5, f.w / 2 - 5), f.z + (bn % 2 ? 4 : -4), 0.22, bn % 2 ? 0 : Math.PI);
+        for (var bn = 0; bn < 8; bn++) addBench(D, f.x + rnd.range(-f.w / 2 + 5, f.w / 2 - 5), f.z + (bn % 2 ? 4 : -4), 0.22, bn % 2 ? 0 : Math.PI);
+        for (var pl2 = 0; pl2 < 5; pl2++) addLamp(D, f.x + rnd.range(-f.w / 2, f.w / 2), f.z + rnd.range(-f.d / 2, f.d / 2), 0.2, rnd.range(0, 6));
         if (f.kind === 'park_arch') {
           B.push(f.x - 5.5, 0.2, f.z - f.d / 2 + 6, 3, 14, 3, 0, [0.80, 0.77, 0.70], 1, 0, 0);
           B.push(f.x + 5.5, 0.2, f.z - f.d / 2 + 6, 3, 14, 3, 0, [0.80, 0.77, 0.70], 1, 0, 0);
@@ -507,6 +615,7 @@
       case 'elevated_park': {
         for (var ez = -f.d / 2; ez < f.d / 2; ez += 12) {
           B.push(f.x, 0.2, f.z + ez, 1.0, f.h, 1.0, 0, [0.32, 0.32, 0.34], 1, 0, 0);
+          colliders.push(f.x - 0.5, f.z + ez - 0.5, f.x + 0.5, f.z + ez + 0.5);
         }
         B.push(f.x, f.h, f.z, f.w, 0.5, f.d, 0, [0.40, 0.42, 0.38], 1, 6, 0);
         for (var eg = -f.d / 2 + 6; eg < f.d / 2; eg += 16) addTree(B, f.x + rnd.range(-6, 6), f.z + eg, f.h + 0.5, rnd, 0.7);
@@ -571,20 +680,23 @@
 
   function buildPOIMarker(B, poi, colliders) {
     var rnd = T10.rng((poi.seed || 7) * 977 + Math.round(poi.x));
-    if (colliders) colliders.push(poi.x - 3.2, poi.z - 0.35, poi.x + 3.2, poi.z + 0.35);
-    var f = poi.face || -1;                 // which way the entrance looks
-    var col = [rnd.range(0.25, 0.7), rnd.range(0.2, 0.6), rnd.range(0.25, 0.7)];
-    B.push(poi.x, 0.18, poi.z, 6.4, 4.2, 0.5, 0, col, 1, 0, 0);                       // shopfront
-    B.push(poi.x, 4.4, poi.z, 6.8, 1.4, 0.8, 0, [0.10, 0.11, 0.13], 1, 7, (poi.seed || 3) % 20);  // lit sign
-    B.push(poi.x, 0.2, poi.z + f * 0.4, 2.0, 2.6, 0.3, 0, [0.15, 0.16, 0.20], 1, 4, 0);          // glass door
-    B.push(poi.x, 3.1, poi.z + f * 1.0, 6.0, 0.24, 1.8, 0, col, 1, 0, 0);                        // awning
-    B.push(poi.x - 2.6, 0.2, poi.z + f * 1.7, 0.16, 2.9, 0.16, 0, [0.2, 0.2, 0.22], 1, 0, 0);
-    B.push(poi.x + 2.6, 0.2, poi.z + f * 1.7, 0.16, 2.9, 0.16, 0, [0.2, 0.2, 0.22], 1, 0, 0);
+    if (colliders) colliders.push(poi.x - 2.9, poi.z - 0.3, poi.x + 2.9, poi.z + 0.3);
+    var f = poi.face || -1;                        // which way the entrance looks
+    var accent = [rnd.range(0.18, 0.62), rnd.range(0.12, 0.48), rnd.range(0.16, 0.55)];
+    var frame = [0.19, 0.18, 0.19];
+    // dark frame around a glazed shopfront, set into the building line
+    B.push(poi.x, 0.18, poi.z, 5.8, 3.5, 0.34, 0, frame, 1, 0, 0);
+    B.push(poi.x, 0.2, poi.z + f * 0.16, 4.9, 2.7, 0.14, 0, [0.14, 0.17, 0.22], 1, 4, 0);   // window
+    B.push(poi.x + 1.9, 0.2, poi.z + f * 0.2, 1.1, 2.5, 0.12, 0, [0.10, 0.12, 0.16], 1, 4, 0); // door
+    B.push(poi.x, 3.68, poi.z, 5.9, 0.62, 0.42, 0, [0.11, 0.12, 0.14], 1, 7, (poi.seed || 3) % 20); // sign
+    B.push(poi.x, 3.0, poi.z + f * 0.85, 5.4, 0.18, 1.5, 0, accent, 1, 0, 0);                  // awning
+    B.push(poi.x, 2.72, poi.z + f * 1.55, 5.4, 0.3, 0.1, 0, accent, 1, 0, 0);                  // awning valance
   }
 
   /* --------------------------------------------------------- chunk builder */
   function generateChunk(cx, cz) {
-    var B = new R.Builder();
+    var B = new R.Builder();     // structure: ground, buildings, landmarks
+    var D = new R.Builder();     // street-level detail, drawn only up close
     var colliders = [];
     var x0 = cx * CH, z0 = cz * CH;
     var rnd = T10.rng((cx * 374761393 + cz * 668265263) >>> 0);
@@ -596,6 +708,32 @@
         var gx = x0 + cs * (gi + 0.5), gz = z0 + cs * (gj + 0.5);
         if (P.landAt(gx, gz)) B.push(gx, -0.02, gz, cs + 0.4, 0.06, cs + 0.4, 0, ASPHALT, 1, 2, 0);
         else B.push(gx, -0.9, gz, cs + 0.4, 0.9, cs + 0.4, 0, WATER, 1, 3, 0);
+      }
+    }
+
+    // seawall wherever paved ground meets water: the edge you can see is the
+    // edge you stop at
+    for (var wi = 0; wi < CELLS; wi++) {
+      for (var wj = 0; wj < CELLS; wj++) {
+        var wx = x0 + cs * (wi + 0.5), wz = z0 + cs * (wj + 0.5);
+        if (!P.landAt(wx, wz)) continue;
+        var sides = [[cs, 0], [-cs, 0], [0, cs], [0, -cs]];
+        for (var si = 0; si < sides.length; si++) {
+          var nx2 = wx + sides[si][0], nz2 = wz + sides[si][1];
+          if (P.landAt(nx2, nz2)) continue;
+          var ex = wx + sides[si][0] * 0.5, ez = wz + sides[si][1] * 0.5;
+          if (bridgeAt(ex, ez) || onPier(ex, ez)) continue;      // leave the crossings open
+          var alongX = sides[si][0] === 0;
+          var ww = alongX ? cs + 0.6 : 0.7, wd = alongX ? 0.7 : cs + 0.6;
+          B.push(ex, 0, ez, ww, 1.05, wd, 0, [0.44, 0.43, 0.41], 1, 6, 0);
+          B.push(ex, 1.05, ez, ww, 0.16, wd + 0.3, 0, [0.34, 0.34, 0.33], 1, 0, 0);
+          for (var pi3 = -1; pi3 <= 1; pi3++) {                   // handrail
+            B.push(ex + (alongX ? pi3 * cs * 0.33 : 0), 1.2, ez + (alongX ? 0 : pi3 * cs * 0.33),
+              alongX ? 0.14 : 0.14, 0.95, 0.14, 0, [0.30, 0.31, 0.33], 1, 0, 0);
+          }
+          B.push(ex, 2.05, ez, alongX ? cs + 0.6 : 0.14, 0.12, alongX ? 0.14 : cs + 0.6, 0, [0.30, 0.31, 0.33], 1, 0, 0);
+          colliders.push(ex - ww / 2, ez - wd / 2, ex + ww / 2, ez + wd / 2);
+        }
       }
     }
 
@@ -612,7 +750,7 @@
         var dist = P.districtAt(bcx, bcz);
         if (!dist) continue;
         if (openAirBlock(r)) { buildClearing(B, r); continue; }
-        buildBlock(B, ai, sj, dist, colliders);
+        buildBlock(B, D, ai, sj, dist, colliders);
       }
     }
 
@@ -623,20 +761,29 @@
         if (ix < x0 || ix >= x0 + CH || iz < z0 || iz >= z0 + CH) continue;
         if (!P.landAt(ix, iz)) continue;
         if (featureCovers(ix, iz, 0)) continue;
-        addCrosswalk(B, ix, iz - P.ST_HALF + 2.0, 0, true);
-        addCrosswalk(B, ix, iz + P.ST_HALF - 2.0, 0, true);
-        addCrosswalk(B, ix - P.AVE_HALF + 2.0, iz, 0, false);
-        addCrosswalk(B, ix + P.AVE_HALF - 2.0, iz, 0, false);
-        addTrafficSignal(B, ix - P.AVE_HALF + 2.6, iz - P.ST_HALF + 2.6, 0.17, 0);
-        addTrafficSignal(B, ix + P.AVE_HALF - 2.6, iz + P.ST_HALF - 2.6, 0.17, Math.PI);
+        addCrosswalk(D, ix, iz - P.ST_HALF + 2.0, 0, true);
+        addCrosswalk(D, ix, iz + P.ST_HALF - 2.0, 0, true);
+        addCrosswalk(D, ix - P.AVE_HALF + 2.0, iz, 0, false);
+        addCrosswalk(D, ix + P.AVE_HALF - 2.0, iz, 0, false);
+        addTrafficSignal(D, ix - P.AVE_HALF + 2.6, iz - P.ST_HALF + 2.6, 0.17, 0);
+        addTrafficSignal(D, ix + P.AVE_HALF - 2.6, iz + P.ST_HALF - 2.6, 0.17, Math.PI);
+        // stop bars on every approach
+        D.push(ix, 0.04, iz - P.ST_HALF + 3.6, P.AVE_HALF - 4, 0.03, 0.4, 0, [0.82, 0.82, 0.80], 1, 0, 0);
+        D.push(ix, 0.04, iz + P.ST_HALF - 3.6, P.AVE_HALF - 4, 0.03, 0.4, 0, [0.82, 0.82, 0.80], 1, 0, 0);
+        D.push(ix - P.AVE_HALF + 3.6, 0.04, iz, 0.4, 0.03, P.ST_HALF - 4, 0, [0.82, 0.82, 0.80], 1, 0, 0);
+        D.push(ix + P.AVE_HALF - 3.6, 0.04, iz, 0.4, 0.03, P.ST_HALF - 4, 0, [0.82, 0.82, 0.80], 1, 0, 0);
+        // manhole
+        D.push(ix + 3.5, 0.045, iz - 3.5, 1.1, 0.03, 1.1, 0, [0.24, 0.23, 0.22], 1, 9, 0);
       }
     }
+
+    addRoadMarkings(D, x0, z0, CH);
 
     // hand-placed features centred in this chunk
     for (var fi = 0; fi < P.features.length; fi++) {
       var f = P.features[fi];
       if (f.x < x0 || f.x >= x0 + CH || f.z < z0 || f.z >= z0 + CH) continue;
-      buildFeature(B, f, colliders);
+      buildFeature(B, D, f, colliders);
     }
 
     // bridges whose midpoint is in this chunk
@@ -651,16 +798,18 @@
     for (var pi = 0; pi < P.pois.length; pi++) {
       var poi = P.pois[pi];
       if (poi.x < x0 || poi.x >= x0 + CH || poi.z < z0 || poi.z >= z0 + CH) continue;
-      if (poi.cat === 'subway') buildSubwayEntrance(B, poi, colliders);
+      if (poi.cat === 'subway') buildSubwayEntrance(D, poi, colliders);
       else if (poi.cat === 'taxistand') {
-        B.push(poi.x, 0.18, poi.z, 0.3, 3.2, 0.3, 0, [0.3, 0.3, 0.32], 1, 0, 0);
-        B.push(poi.x, 3.2, poi.z, 1.6, 0.7, 0.2, 0, [0.95, 0.78, 0.15], 1, 10, 0);
+        D.push(poi.x, 0.18, poi.z, 0.3, 3.2, 0.3, 0, [0.3, 0.3, 0.32], 1, 0, 0);
+        D.push(poi.x, 3.2, poi.z, 1.6, 0.7, 0.2, 0, [0.95, 0.78, 0.15], 1, 10, 0);
       } else if (poi.cat === 'busstop') {
         colliders.push(poi.x - 2.0, poi.z - 0.9, poi.x + 2.0, poi.z - 0.5);
-        B.push(poi.x, 0.18, poi.z, 4.0, 0.2, 1.6, 0, [0.35, 0.36, 0.38], 1, 6, 0);
-        B.push(poi.x, 0.2, poi.z - 0.7, 4.0, 2.6, 0.2, 0, [0.25, 0.27, 0.30], 1, 4, 0);
-        B.push(poi.x, 2.8, poi.z, 4.2, 0.2, 1.8, 0, [0.30, 0.32, 0.34], 1, 0, 0);
-        B.push(poi.x + 1.6, 0.2, poi.z + 0.6, 0.2, 3.2, 0.2, 0, [0.3, 0.3, 0.32], 1, 0, 0);
+        D.push(poi.x, 0.18, poi.z, 4.0, 0.2, 1.6, 0, [0.35, 0.36, 0.38], 1, 6, 0);
+        D.push(poi.x, 0.2, poi.z - 0.7, 4.0, 2.6, 0.2, 0, [0.25, 0.27, 0.30], 1, 4, 0);
+        D.push(poi.x, 2.8, poi.z, 4.2, 0.2, 1.8, 0, [0.30, 0.32, 0.34], 1, 0, 0);
+        D.push(poi.x, 2.55, poi.z - 0.75, 3.4, 0.45, 0.12, 0, [0.15, 0.35, 0.65], 1, 7, 4);
+        D.push(poi.x + 1.6, 0.2, poi.z + 0.6, 0.2, 3.2, 0.2, 0, [0.3, 0.3, 0.32], 1, 0, 0);
+        D.push(poi.x - 1.2, 0.2, poi.z + 0.3, 2.0, 0.45, 0.5, 0, [0.32, 0.33, 0.36], 1, 9, 0);
       } else if (poi.cat === 'basketball') {
         B.push(poi.x, 0.19, poi.z, 26, 0.06, 16, 0, [0.30, 0.34, 0.40], 1, 6, 0);
         for (var hs = -1; hs <= 1; hs += 2) {
@@ -679,7 +828,7 @@
         B.push(poi.x + 5, 0.2, poi.z, 0.5, 5.0, 0.5, 0, [0.5, 0.5, 0.52], 1, 0, 0);
         B.push(poi.x, 0.2, poi.z - 2, 1.0, 1.6, 0.8, 0, [0.85, 0.25, 0.2], 1, 0, 0);
       } else if (poi.enterable && poi.cat !== 'home') {
-        buildPOIMarker(B, poi, colliders);
+        buildPOIMarker(D, poi, colliders);
       } else if (poi.cat === 'home') {
         var hf = poi.face || -1;
         colliders.push(poi.x - 3.5, poi.z - 0.5, poi.x + 3.5, poi.z + 0.5);
@@ -692,7 +841,10 @@
       }
     }
 
-    return { arr: B.array(), colliders: new Float32Array(colliders) };
+    var arr = new Float32Array(B.data.length + D.data.length);
+    arr.set(B.array(), 0);
+    arr.set(D.array(), B.data.length);
+    return { arr: arr, colliders: new Float32Array(colliders), baseCount: B.count() };
   }
 
   /* -------------------------------------------------------------- streaming */
@@ -710,7 +862,7 @@
     if (W.chunks[k]) return;
     var data = W.cache[k];
     if (!data) { data = generateChunk(cx, cz); cacheStore(k, data); W.generatedCount++; }
-    R.setStatic('c' + k, data.arr, cx * CH + CH / 2, cz * CH + CH / 2, CHUNK_RADIUS);
+    R.setStatic('c' + k, data.arr, cx * CH + CH / 2, cz * CH + CH / 2, CHUNK_RADIUS, data.baseCount);
     W.chunks[k] = { cx: cx, cz: cz, colliders: data.colliders };
   }
 
@@ -828,6 +980,22 @@
   W.doorstep = function (poi) {
     var f = poi.face || -1;
     return W.safeSpot(poi.x, poi.z + f * 3.2);
+  };
+
+  /* Visits every traffic signal head near the player so the game can light the
+     lamp that matches the current phase. */
+  W.forEachSignal = function (px, pz, radius, cb) {
+    var a0 = Math.round((px - radius) / P.AVE), a1 = Math.round((px + radius) / P.AVE);
+    var s0 = Math.round((pz - radius) / P.ST), s1 = Math.round((pz + radius) / P.ST);
+    for (var ai = a0; ai <= a1; ai++) {
+      for (var sj = s0; sj <= s1; sj++) {
+        var ix = ai * P.AVE, iz = sj * P.ST;
+        if (M.dist2(px, pz, ix, iz) > radius * radius) continue;
+        if (!P.landAt(ix, iz) || featureCovers(ix, iz, 0)) continue;
+        cb(ai, sj, ix - P.AVE_HALF + 2.6, iz - P.ST_HALF + 2.6, 0);
+        cb(ai, sj, ix + P.AVE_HALF - 2.6, iz + P.ST_HALF - 2.6, Math.PI);
+      }
+    }
   };
 
   W.stats = function () {

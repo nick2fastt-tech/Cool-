@@ -136,12 +136,13 @@
     e.fogColor = mix3(e.horizon, [0.55, 0.57, 0.60], wx.cloud * 0.25);
     if (wx.fog > 2) e.fogColor = mix3(e.fogColor, mix3([0.72, 0.74, 0.76], [0.16, 0.17, 0.19], e.night), 0.5);
 
-    e.ambSky = mix3([0.065, 0.075, 0.125], [0.42, 0.47, 0.58], day);
-    e.ambGround = mix3([0.035, 0.035, 0.05], [0.26, 0.24, 0.22], day);
+    e.ambSky = mix3([0.060, 0.070, 0.115], [0.33, 0.38, 0.48], day);
+    e.ambGround = mix3([0.032, 0.032, 0.046], [0.21, 0.19, 0.17], day);
     e.ambSky = mix3(e.ambSky, [0.13, 0.11, 0.12], e.night * 0.5);   // streetlight bounce
     e.ambGround = mix3(e.ambGround, [0.10, 0.08, 0.07], e.night * 0.5);
 
-    e.exposure = wx.exposure * (indoor ? 1.15 : 1.0);
+    // daylight sits a little brighter than the raw weather exposure
+    e.exposure = wx.exposure * (indoor ? 1.2 : (1.0 + 0.16 * day));
     e.fogScale = wx.fog;
     e.wind = wx.wind;
     e.weatherMode = wx.snow > wx.rain ? 1 : 0;

@@ -101,8 +101,8 @@
     '    glow = win * onNight * 1.25; glowCol = vec3(1.0,0.84,0.58);',
     '    if(v_local.y < 4.0 && horiz < 0.5){',  // street-level storefronts
     '      float sf = step(0.35, hash11(seed*31.0 + floor(uv.x/6.0)));',
-    '      base = mix(base, vec3(0.12,0.13,0.16), 0.5);',
-    '      glow = max(glow, sf * (0.35 + 0.65*u_night)); glowCol = mix(glowCol, vec3(0.55,0.85,1.0), 0.5);',
+    '      base = mix(base, vec3(0.14,0.14,0.17), 0.55);',
+    '      glow = max(glow, sf * u_night * 0.9); glowCol = mix(glowCol, vec3(0.85,0.90,1.0), 0.45);',
     '    }',
     '    rough = 0.75;',
     '  }',
@@ -144,7 +144,8 @@
     '    float band = fract(v_local.y*0.35 - u_time*0.35 + seed);',
     '    vec3 c2 = vec3(0.5+0.5*sin(seed*9.0+u_time*0.6), 0.5+0.5*sin(seed*5.0+2.0+u_time*0.4), 0.9);',
     '    base = mix(base, c2, 0.55 + 0.45*sin(band*6.28318));',
-    '    glow = 1.4; glowCol = base;',
+    // signage is washed out by daylight and only really burns after dark
+    '    glow = mix(0.45, 1.5, u_night); glowCol = base;',
     '  }',
     // --- skin / cloth
     '  else if(kind > 7.5 && kind < 8.5){ rough = 0.85; }',
@@ -158,6 +159,9 @@
     '    base = mix(base, vec3(0.93,0.95,1.0), clamp(cover,0.0,0.92));',
     '    rough = mix(rough, 0.9, cover);',
     '  }',
+    // cheap contact occlusion — vertical faces darken toward their base
+    '  float ao = mix(mix(0.58, 1.0, smoothstep(0.0, 3.2, v_world.y)), 1.0, upFace);',
+    '  base *= ao;',
     '  vec3 V = normalize(u_camPos - v_world);',
     '  float ndl = max(dot(N, u_sunDir), 0.0);',
     '  vec3 sc = v_shadow.xyz / max(v_shadow.w, 0.0001) * 0.5 + 0.5;',
@@ -167,7 +171,7 @@
     '  vec3 diffuse = u_sunColor * ndl * sh;',
     '  vec3 H = normalize(u_sunDir + V);',
     '  float spec = pow(max(dot(N,H),0.0), mix(8.0, 180.0, 1.0-rough)) * (1.0-rough) * sh;',
-    '  vec3 col = base * (amb + diffuse) + u_sunColor*spec*0.6;',
+    '  vec3 col = base * (amb + diffuse * 1.15) + u_sunColor*spec*0.6;',
     // wet ground gets a cheap vertical smear reflection of the sky
     '  if(u_wet > 0.02 && upFace > 0.6 && kind < 7.0){',
     '    float fres = pow(1.0 - max(dot(N,V),0.0), 3.0);',
@@ -427,10 +431,10 @@
   }
 
   R.QUALITY = {
-    low: { dpr: 0.7, shadow: 0, far: 420, fog: 0.0032, particles: 500, drawDist: 380 },
-    medium: { dpr: 0.85, shadow: 1024, far: 700, fog: 0.0021, particles: 1100, drawDist: 620 },
-    high: { dpr: 1.0, shadow: 1536, far: 1100, fog: 0.0014, particles: 1800, drawDist: 950 },
-    ultra: { dpr: 1.35, shadow: 2048, far: 1600, fog: 0.0010, particles: 2400, drawDist: 1300 }
+    low: { dpr: 0.75, shadow: 0, far: 700, fog: 0.0021, particles: 600, drawDist: 620, detailDist: 140 },
+    medium: { dpr: 0.9, shadow: 1024, far: 1100, fog: 0.0015, particles: 1200, drawDist: 950, detailDist: 230 },
+    high: { dpr: 1.0, shadow: 2048, far: 1700, fog: 0.0011, particles: 1900, drawDist: 1450, detailDist: 340 },
+    ultra: { dpr: 1.5, shadow: 2048, far: 2400, fog: 0.00085, particles: 2400, drawDist: 2000, detailDist: 480 }
   };
 
   R.setQuality = function (q) {
@@ -443,6 +447,7 @@
     R.fogDensity = Q.fog;
     R.particleCount = Math.min(Q.particles, MAX_PART);
     R.drawDist = Q.drawDist;
+    R.detailDist = Q.detailDist;
     if (Q.shadow && R.shadowsOn) buildShadow(Q.shadow);
     else { shadowFBO = null; }
     R.resize();
@@ -465,12 +470,15 @@
   };
 
   /* ------------------------------------------------------------ static sets */
-  R.setStatic = function (key, arr, cx, cz, radius) {
+  /* `baseCount` is how many leading instances are structural. Everything after
+     it is street-level detail that only draws when the chunk is close. */
+  R.setStatic = function (key, arr, cx, cz, radius, baseCount) {
     var s = statics[key];
-    if (!s) { s = statics[key] = { vbo: gl.createBuffer(), count: 0, cx: 0, cz: 0, r: 0 }; }
+    if (!s) { s = statics[key] = { vbo: gl.createBuffer(), count: 0, cx: 0, cz: 0, r: 0, base: 0 }; }
     gl.bindBuffer(gl.ARRAY_BUFFER, s.vbo);
     gl.bufferData(gl.ARRAY_BUFFER, arr, gl.STATIC_DRAW);
     s.count = arr.length / FLOATS_PER_INST;
+    s.base = baseCount === undefined ? s.count : Math.min(baseCount, s.count);
     s.cx = cx; s.cz = cz; s.r = radius;
   };
   R.dropStatic = function (key) {
@@ -573,8 +581,11 @@
       var s = statics[k];
       if (!s.count) continue;
       var dx = s.cx - eye[0], dz = s.cz - eye[2];
-      if (dx * dx + dz * dz > (drawDist + s.r) * (drawDist + s.r)) continue;
+      var d2 = dx * dx + dz * dz;
+      if (d2 > (drawDist + s.r) * (drawDist + s.r)) continue;
       if (!sphereVisible(s.cx, 30, s.cz, s.r + 60)) continue;
+      s.drawCount = d2 > (R.detailDist + s.r) * (R.detailDist + s.r) ? s.base : s.count;
+      if (!s.drawCount) continue;
       visible.push(s);
     }
 
@@ -606,7 +617,7 @@
         var sv = visible[i];
         if (Math.hypot(sv.cx - cx, sv.cz - cz) > R0 + sv.r + 40) continue;
         bindInstanced(progDepth, sv.vbo, false);
-        drawInstanced(gl.TRIANGLES, mb.count, gl.UNSIGNED_SHORT, 0, sv.count);
+        drawInstanced(gl.TRIANGLES, mb.count, gl.UNSIGNED_SHORT, 0, sv.drawCount);
         R.stats.draws++;
       }
       if (dynCount) {
@@ -676,8 +687,8 @@
     var mb2 = bindMesh('box', true);
     for (var v = 0; v < visible.length; v++) {
       bindInstanced(progMain, visible[v].vbo, true);
-      drawInstanced(gl.TRIANGLES, mb2.count, gl.UNSIGNED_SHORT, 0, visible[v].count);
-      R.stats.draws++; R.stats.instances += visible[v].count;
+      drawInstanced(gl.TRIANGLES, mb2.count, gl.UNSIGNED_SHORT, 0, visible[v].drawCount);
+      R.stats.draws++; R.stats.instances += visible[v].drawCount;
     }
     if (dynCount) {
       bindInstanced(progMain, dynBuf, true);

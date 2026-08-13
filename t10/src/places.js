@@ -85,6 +85,19 @@
     { id: 'jersey', name: 'New Jersey Waterfront', land: 'jersey', z: [-1600, 1400], x: [-2600, -1250], type: 'mid', h: [18, 70], pal: 2 }
   ];
 
+  /* Palettes are stored a touch desaturated; this pushes them back toward the
+     material colour so brick reads as brick under a bright midday sun. */
+  function richer(pal) {
+    return pal.map(function (c) {
+      var m = (c[0] + c[1] + c[2]) / 3;
+      return [
+        Math.max(0, Math.min(1, m + (c[0] - m) * 1.45)),
+        Math.max(0, Math.min(1, m + (c[1] - m) * 1.45)),
+        Math.max(0, Math.min(1, m + (c[2] - m) * 1.45))
+      ];
+    });
+  }
+
   P.palettes = [
     [[0.52, 0.46, 0.42], [0.44, 0.40, 0.38], [0.58, 0.52, 0.46]],   // 0 stone
     [[0.55, 0.32, 0.26], [0.47, 0.29, 0.24], [0.60, 0.38, 0.30]],   // 1 brick
@@ -98,7 +111,7 @@
     [[0.28, 0.31, 0.36], [0.34, 0.37, 0.42], [0.24, 0.27, 0.32]],   // 9 fidi
     [[0.50, 0.38, 0.32], [0.44, 0.38, 0.34], [0.56, 0.46, 0.38]],   // 10 outer borough
     [[0.62, 0.56, 0.46], [0.68, 0.62, 0.50], [0.56, 0.50, 0.44]]    // 11 boardwalk
-  ];
+  ].map(richer);
 
   P.districtAt = function (x, z) {
     var land = P.landAt(x, z);

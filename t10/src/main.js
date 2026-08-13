@@ -787,6 +787,22 @@
     Pl.draw(push, now / 1000);
     A.draw(push, now / 1000, indoor, indoor ? I.scene.floor : 0);
     if (indoor) I.drawDynamic(push, now / 1000, env, I.scene.type === 'subway' ? trainPhase : null);
+    // traffic signals light the lamp matching the phase the cars are obeying
+    if (!indoor) {
+      var tsec = now / 1000;
+      W.forEachSignal(Pl.x, Pl.z, 95, function (ai, sj, hx, hz, rot) {
+        var ph = W.lightPhase(ai, sj, tsec);
+        var st = rot === 0 ? ph.ns : ph.ew;
+        var sx = hx + Math.sin(rot) * 3.1, sz = hz - Math.cos(rot) * 3.1;
+        var lamps = [['red', [1.0, 0.15, 0.10], 5.85], ['yellow', [1.0, 0.72, 0.10], 5.42], ['green', [0.20, 1.0, 0.35], 4.99]];
+        for (var li = 0; li < 3; li++) {
+          var on = st === lamps[li][0];
+          push(sx, lamps[li][2], sz, 0.3, 0.28, 0.16, -rot,
+            on ? lamps[li][1] : [lamps[li][1][0] * 0.12, lamps[li][1][1] * 0.12, lamps[li][1][2] * 0.12],
+            on ? 2.2 : 0.5, on ? 10 : 0, 0);
+        }
+      });
+    }
     if (waypoint && !indoor) {
       var d = M.dist(Pl.x, Pl.z, waypoint.x, waypoint.z);
       if (d < 900) {
