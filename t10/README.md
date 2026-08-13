@@ -1,13 +1,22 @@
 # T10 WORLD — V1.00
 
 A full 3D New York City life simulation that runs in a browser. No engine, no
-build step, no downloads: open `index.html` and you are standing in your
+build step, no downloads: open the file and you are standing in your
 apartment in Greenwich Village at 7:03 AM.
 
 The goal is not to win anything. It is to feel like you live here.
 
+## Two editions, same game
+
+- **[`t10.html`](../t10.html)** at the repo root — the whole game in one file.
+  Download it, double-click it, play. Nothing else needed.
+- **`t10/`** — the same game as readable modules. This is the source of truth;
+  edit here and run `node t10/build.js` to regenerate the single file.
+
 ```
+t10.html          single-file build (generated — do not edit by hand)
 t10/
+  build.js        inlines the modules into t10.html
   index.html      the whole shell: markup, styling, mobile controls
   src/core.js     math, deterministic RNG, save system, state
   src/gl.js       instanced WebGL renderer (shadows, sky, weather, no textures)
@@ -24,8 +33,14 @@ t10/
 
 ## Playing
 
-Open `t10/index.html` in any browser — locally from disk or hosted. It works
-offline; nothing is fetched at runtime.
+Open `t10.html` (or `t10/index.html`) in any browser — from disk or hosted. It
+works offline: the page makes no network requests at all, at load or at runtime.
+
+Saves live in `localStorage`. That works from `file://` in Chrome, Edge and
+Firefox; a few browsers (notably Safari) restrict storage for local files, and
+there the game still runs but will not remember you between sessions. Serve it
+over http — GitHub Pages, or `python3 -m http.server` — if you want saving
+guaranteed everywhere.
 
 **Touch (phones and tablets)**
 - Touch anywhere on the lower-left to raise the joystick, and drag to walk.
