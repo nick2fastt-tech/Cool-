@@ -7,8 +7,10 @@
 <meta name="theme-color" content="#000000">
 <title>HORROR GAME</title>
 <style>
-  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
-  html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Courier New',monospace;color:#cdc5b4}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;
+    user-select:none;-webkit-user-select:none;touch-action:none}
+  html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;position:fixed;
+    background:#000;font-family:'Courier New',monospace;color:#cdc5b4}
   #view{display:block;position:absolute;inset:0;width:100%;height:100%;touch-action:none}
 
   .screen{position:absolute;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -38,7 +40,8 @@
   #prompt{position:absolute;bottom:34%;left:0;right:0;text-align:center;font-size:clamp(12px,3.4vw,15px);
     letter-spacing:2px;color:#e2d6b6;text-shadow:0 2px 10px #000;opacity:0;transition:opacity .2s}
   #prompt.show{opacity:1}
-  #stick{position:absolute;width:132px;height:132px;bottom:38px;left:30px;border-radius:50%;pointer-events:auto;
+  /* purely visual -- it must never swallow a touch, or look-drag dies on it */
+  #stick{position:absolute;width:132px;height:132px;bottom:38px;left:30px;border-radius:50%;pointer-events:none;
     background:rgba(60,52,42,.16);border:1px solid rgba(150,130,100,.24);display:none}
   #knob{position:absolute;width:56px;height:56px;top:38px;left:38px;border-radius:50%;
     background:radial-gradient(circle at 36% 30%,#9b8964,#3a3125);border:1px solid rgba(190,165,120,.4)}
@@ -49,7 +52,6 @@
   #bUse{width:84px;height:84px;bottom:100px;right:26px;font-size:12px}
   #bCrouch{width:66px;height:66px;bottom:36px;right:120px}
   #bPhone{width:66px;height:66px;bottom:36px;right:34px}
-  #bRun{width:66px;height:66px;bottom:112px;left:170px}
 
   #camTabs{position:absolute;bottom:calc(20px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);
     display:flex;gap:8px;z-index:12;opacity:0;pointer-events:none;transition:opacity .3s}
@@ -90,7 +92,6 @@
   <div id="prompt"></div>
   <div id="stick"><div id="knob"></div></div>
   <div class="abtn" id="bUse">USE</div>
-  <div class="abtn" id="bRun">RUN</div>
   <div class="abtn" id="bCrouch">CROUCH</div>
   <div class="abtn" id="bPhone">PHONE</div>
 </div>
@@ -285,7 +286,7 @@ function wallKindAt(lv,c,r){
   return 'paper';
 }
 function floorKindAt(lv,c,r){
-  if(lv===STREET) return 'asphalt';
+  if(lv===STREET) return r>=16?'asphalt':'grass';
   if(lv===BASEMENT) return 'concrete';
   const rm=roomOf(lv,c+.5,r+.5);
   if(rm==='BATHROOM') return 'tilefloor';
@@ -624,6 +625,23 @@ function texSiding(seed){
           roughnessMap:grayTex(fbm(S,S,40,3,seed+7),S,S,.7,1.0)};
 }
 
+function texGrass(seed){
+  const S=256, cv=C(S,S), g=cv.getContext('2d'), rnd=mulberry(seed);
+  const n=fbm(S,S,26,4,seed), n2=fbm(S,S,5,3,seed+1);
+  const img=g.createImageData(S,S), d=img.data;
+  for(let i=0;i<S*S;i++){
+    const v=n[i]*.7+n2[i]*.3, j=i*4;
+    d[j]=16+v*22; d[j+1]=26+v*34; d[j+2]=14+v*16; d[j+3]=255;
+  }
+  g.putImageData(img,0,0);
+  for(let i=0;i<2200;i++){                       // blades
+    const x=rnd()*S,y=rnd()*S,l=2+rnd()*5;
+    g.strokeStyle='rgba('+(20+rnd()*30|0)+','+(38+rnd()*40|0)+','+(18+rnd()*20|0)+',.5)';
+    g.lineWidth=.8; g.beginPath(); g.moveTo(x,y); g.lineTo(x+(rnd()-.5)*2,y-l); g.stroke();
+  }
+  return {map:albedoTex(cv), normalMap:normalTex(n2,S,S,1.8),
+          roughnessMap:grayTex(n,S,S,.8,1.0)};
+}
 function texAsphalt(seed){
   const S=256, cv=C(S,S), g=cv.getContext('2d');
   const n=fbm(S,S,5,4,seed), n2=fbm(S,S,40,3,seed+1);
@@ -695,6 +713,7 @@ function buildTextures(step){
     ['concrete',()=>texConcrete(71)],
     ['siding',  ()=>texSiding(83)],
     ['asphalt', ()=>texAsphalt(89)],
+    ['grass',   ()=>texGrass(107)],
     ['couch',   ()=>texFabric('#243a5e',97)],
     ['bedding', ()=>texFabric('#8d8672',101)],
     ['gown',    ()=>texFabric('#cfc9b6',103,.95)]
@@ -737,12 +756,16 @@ function buildMaterials(){
   MAT.wood    =mkMat(TEX.wood,    [1,1]);
   MAT.tilefloor=mkMat(TEX.tilefloor,[1,1]);
   MAT.asphalt =mkMat(TEX.asphalt, [1,1]);
+  MAT.grass   =mkMat(TEX.grass,   [1,1]);
   MAT.ceiling =mkMat(TEX.ceiling, [1,1]);
   MAT.couch   =mkMat(TEX.couch,   [1,1]);
   MAT.bedding =mkMat(TEX.bedding, [1,1]);
   MAT.gown    =mkMat(TEX.gown,    [1,1]);
   MAT.gown.vertexColors=false;
   MAT.couch.vertexColors=false; MAT.bedding.vertexColors=false;
+  MAT.sidingP=mkMat(TEX.siding,[3,2]); MAT.sidingP.vertexColors=false;
+  MAT.roadP  =mkMat(TEX.asphalt,[6,6]); MAT.roadP.vertexColors=false;
+  MAT.grassP =mkMat(TEX.grass,[8,8]);  MAT.grassP.vertexColors=false;
   const plain=(c,r,m)=>{const x=new T.MeshStandardMaterial({color:c,roughness:r===undefined?.8:r,metalness:m||0});return x;};
   MAT.darkwood=plain(0x3a2a1a,.75);
   MAT.trim    =plain(0x2a2118,.8);
@@ -754,6 +777,9 @@ function buildMaterials(){
   MAT.hair    =plain(0x6d6659,.98);
   MAT.glass   =new T.MeshStandardMaterial({color:0x223044,roughness:.12,metalness:.4});
   MAT.blood   =plain(0x4d0708,.45);
+  MAT.roof    =plain(0x17171b,.94);
+  MAT.kerb    =plain(0x4a4a46,.9);
+  MAT.foliage =plain(0x0a1009,.98);
 }
 
 /* ==========================================================
@@ -833,6 +859,8 @@ function buildLevel(lv){
     ];
     for(const [dx,dz,v] of sides){
       if(!solid(lv,c+dx,r+dz)) continue;
+      // outdoors the map edges are invisible bounds -- the house is real geometry
+      if(isStreet) continue;
       // canvas top == v1 (flipY), and the wallpaper art has the paper up top and
       // the wainscot down the bottom, so the floor edge must be v0.
       const uv=[[0,0],[1,0],[1,1],[0,1]];
@@ -975,27 +1003,132 @@ function makeDoor(mat){
   kn.position.set(.36,1.0,.07); g.add(kn);
   return g;
 }
-// windows + porch on the street-facing wall. Exactly one upstairs window is lit.
-function makeFacade(){
+/* ---------- the neighbourhood ---------- */
+const WIN_FRAME=()=>new T.MeshStandardMaterial({color:0x141419,roughness:.8});
+const WIN_DARK =()=>new T.MeshStandardMaterial({color:0x05060a,roughness:.25,metalness:.3});
+const WIN_LIT  =(c)=>new T.MeshStandardMaterial({color:0x2a2113,roughness:.4,
+                    emissive:c||0xffb257,emissiveIntensity:1.6});
+// a window standing proud of a wall plane, optionally lit from within
+function window3(g,x,y,z,w,h,isLit,col,addLight){
+  const frame=WIN_FRAME();
+  const grp=new T.Group();
+  grp.add(box(w+.14,h+.14,.07,frame,0,0,0));
+  grp.add(box(w,h,.05,isLit?WIN_LIT(col):WIN_DARK(),0,0,.03));
+  grp.add(box(.06,h,.06,frame,0,0,.04));
+  grp.add(box(w,.06,.06,frame,0,0,.04));
+  grp.position.set(x,y,z); g.add(grp);
+  if(isLit&&addLight){ const l=new T.PointLight(col||0xffb257,5,5,2);
+    l.position.set(x,y,z+.5); g.add(l); }
+}
+// gable roof: two slabs meeting at a ridge that runs along X
+function gableRoof(g,cx,cz,W,D,eaveY,rise,mat){
+  const half=D/2, slope=Math.hypot(half,rise), ang=Math.atan2(rise,half);
+  for(const s of [1,-1]){
+    const slab=new T.Mesh(new T.BoxGeometry(W+.5,.18,slope+.3),mat);
+    slab.position.set(cx,eaveY+rise/2,cz+s*(D/4));
+    slab.rotation.x=s*ang;
+    slab.castShadow=true; g.add(slab);
+  }
+  g.add(box(W+.5,.14,.22,mat,cx,eaveY+rise+.04,cz));      // ridge cap
+}
+// a house: body + gable roof + windows. `lit` marks which windows glow.
+function makeHouseShell(cx,cz,W,D,H,rise,seed,litList,col){
+  const g=new T.Group(), rnd=mulberry(seed);
+  g.add(box(W,H,D,MAT.sidingP,cx,H/2,cz));
+  gableRoof(g,cx,cz,W,D,H,rise,MAT.roof);
+  const zf=cz+D/2+.02;
+  const cols=Math.max(2,Math.round(W/3.2));
+  let i=0;
+  for(let row=0;row<2;row++)for(let k=0;k<cols;k++){
+    const x=cx-W/2+W*(k+.5)/cols, y=1.5+row*2.4;
+    window3(g,x,y,zf,.78,1.06,litList.indexOf(i)>=0,col,false);
+    i++;
+  }
+  if(rnd()<.7) g.add(box(.7,1.6,.7,MAT.roof,cx+W*.3,H+rise*.6,cz-D*.1)); // chimney
+  return g;
+}
+function makeNeighborhood(){
   const g=new T.Group();
-  const frame=new T.MeshStandardMaterial({color:0x141419,roughness:.8});
-  const dark =new T.MeshStandardMaterial({color:0x05060a,roughness:.25,metalness:.3});
-  const lit  =new T.MeshStandardMaterial({color:0x2a2113,roughness:.4,
-                emissive:0xffb257,emissiveIntensity:1.5});
-  const win=(x,y,isLit)=>{
-    const w=new T.Group();
-    w.add(box(.92,1.20,.07,frame,0,0,0));
-    w.add(box(.78,1.06,.05,isLit?lit:dark,0,0,.03));
-    w.add(box(.06,1.06,.06,frame,0,0,.04));            // mullions
-    w.add(box(.78,.06,.06,frame,0,0,.04));
-    w.position.set(x,y,9.02); g.add(w);
-    if(isLit){ const l=new T.PointLight(0xffb257,6,5,2); l.position.set(x,y,9.5); g.add(l); }
-    return w;
-  };
-  win(2.6,1.5,false); win(8.4,1.5,false);
-  win(2.6,3.9,false); win(5.5,3.9,true); win(8.4,3.9,false);
-  g.add(box(3.0,.16,1.0,MAT.darkwood,5.5,.07,9.55));    // porch step
-  g.add(box(3.0,.10,.10,MAT.darkwood,5.5,.16,10.02));
+
+  /* --- the house itself: front face on z=9, porch out to the lawn --- */
+  const HW=11.6, HD=8.5, HH=5.0, cx=5.5, cz=9-HD/2;
+  g.add(box(HW,HH,HD,MAT.sidingP,cx,HH/2,cz));
+  gableRoof(g,cx,cz,HW,HD,HH,2.6,MAT.roof);
+  g.add(box(.8,2.0,.8,MAT.roof,cx+3.4,HH+1.7,cz-1.0));            // chimney
+  // downstairs windows either side of the door, one lit window upstairs
+  window3(g,2.4,1.55,9.02,.86,1.20,false);
+  window3(g,8.6,1.55,9.02,.86,1.20,false);
+  window3(g,2.4,3.95,9.02,.86,1.20,false);
+  window3(g,5.5,3.95,9.02,.86,1.20,true,0xffb257,true);
+  window3(g,8.6,3.95,9.02,.86,1.20,false);
+  // porch: deck, posts, roof
+  g.add(box(5.2,.18,2.0,MAT.darkwood,5.5,.10,10.0));
+  g.add(box(5.4,.12,.24,MAT.darkwood,5.5,.02,10.98));
+  for(const px of [3.2,7.8]){
+    g.add(box(.18,2.5,.18,MAT.darkwood,px,1.25,10.85));
+    g.add(box(.30,.16,.30,MAT.darkwood,px,2.55,10.85));
+  }
+  g.add(box(5.6,.22,2.3,MAT.roof,5.5,2.68,10.0));
+  g.add(box(5.6,.30,.16,MAT.darkwood,5.5,2.52,11.06));
+  // porch lamp above the door
+  const lampG=new T.Group();
+  lampG.add(box(.20,.30,.20,new T.MeshStandardMaterial({color:0x2a2113,roughness:.4,
+    emissive:0xffcf8a,emissiveIntensity:2.4}),0,0,0));
+  lampG.position.set(5.5,2.35,9.25); g.add(lampG);
+
+  /* --- neighbours up and down the street --- */
+  g.add(makeHouseShell(-8.5, 4.0, 10.0,8.0,4.6,2.3, 3,[1],0xffb257));
+  g.add(makeHouseShell(-20.0,5.5, 9.0, 7.5,4.4,2.1, 7,[],0));
+  g.add(makeHouseShell( 19.5,4.5, 10.5,8.0,4.8,2.4, 11,[3],0x9fd0ff));
+  g.add(makeHouseShell( 31.0,5.5, 9.5, 7.5,4.4,2.2, 13,[],0));
+  // across the road, facing back at us (rotate 180 so their fronts face -Z)
+  for(const [x,s,l] of [[-4,17,[0]],[9,19,[]],[22,23,[2]]]){
+    const h=makeHouseShell(0,0,10.0,8.0,4.6,2.3,s,l,0xffb257);
+    h.rotation.y=Math.PI; h.position.set(x,0,27.5); g.add(h);
+  }
+
+  /* --- road, kerbs, path --- */
+  const road=new T.Mesh(new T.PlaneGeometry(110,7.5),MAT.roadP);
+  road.rotation.x=-Math.PI/2; road.position.set(5.5,.01,19.6); g.add(road);
+  const grassFar=new T.Mesh(new T.PlaneGeometry(110,26),MAT.grassP);
+  grassFar.rotation.x=-Math.PI/2; grassFar.position.set(5.5,0,9); g.add(grassFar);
+  const grassBack=new T.Mesh(new T.PlaneGeometry(110,14),MAT.grassP);
+  grassBack.rotation.x=-Math.PI/2; grassBack.position.set(5.5,0,30); g.add(grassBack);
+  g.add(box(110,.16,.5,MAT.kerb,5.5,.08,15.85));                  // kerb
+  g.add(box(110,.16,.5,MAT.kerb,5.5,.08,23.4));
+  const path=new T.Mesh(new T.PlaneGeometry(1.8,5.6),MAT.kerb);
+  path.rotation.x=-Math.PI/2; path.position.set(5.5,.02,13.2); g.add(path);
+
+  /* --- picket fence along the lawn, with a gap for the path --- */
+  for(let x=-6;x<20;x+=0.42){
+    if(Math.abs(x-5.5)<1.4) continue;
+    g.add(box(.09,.95,.05,MAT.darkwood,x,.48,15.2));
+  }
+  g.add(box(26,.07,.07,MAT.darkwood,7,.86,15.2));
+  g.add(box(26,.07,.07,MAT.darkwood,7,.42,15.2));
+
+  /* --- streetlamps --- */
+  for(const lx of [-3.5,15.5,34]){
+    g.add(cyl(.07,.10,5.0,MAT.kerb,lx,2.5,16.4,8));
+    g.add(box(.9,.10,.10,MAT.kerb,lx+.4,4.95,16.4));
+    const head=new T.Mesh(new T.BoxGeometry(.5,.22,.4),
+      new T.MeshStandardMaterial({color:0x2a2820,roughness:.5,
+        emissive:0xffd9a0,emissiveIntensity:2.6}));
+    head.position.set(lx+.8,4.82,16.4); g.add(head);
+    const pl=new T.PointLight(0xffd9a0,44,20,2); pl.position.set(lx+.8,4.6,16.4); g.add(pl);
+  }
+
+  /* --- a few bare trees --- */
+  for(const [tx,tz,ts] of [[-1.5,13.0,1.0],[13.5,12.4,.85],[24,14,1.1],[-12,13,.9]]){
+    g.add(cyl(.13*ts,.20*ts,2.6*ts,MAT.darkwood,tx,1.3*ts,tz,7));
+    const crown=new T.Mesh(new T.SphereGeometry(1.5*ts,7,6),MAT.foliage);
+    crown.position.set(tx,3.1*ts,tz); crown.scale.y=.75; g.add(crown);
+  }
+
+  /* --- moon --- */
+  const moonBall=new T.Mesh(new T.SphereGeometry(2.2,16,14),
+    new T.MeshBasicMaterial({color:0xd9e2f2}));
+  moonBall.position.set(-26,20,-34); g.add(moonBall);
   return g;
 }
 function makeStairs(up){
@@ -1232,9 +1365,9 @@ function buildWorld(){
   // basement
   put(2,makeBoxes(),8.0,11.0,.2);
   put(2,makeDoor(),1.05,10.5,-Math.PI/2);
-  // street: the facade wall face is at z=9, so the door and windows sit just proud of it
-  put(3,makeDoor(),5.5,9.03,0);
-  P[3].add(makeFacade());
+  // street: the facade plane is z=9, so the door sits just proud of it
+  put(3,makeDoor(),5.5,9.04,0);
+  P[3].add(makeNeighborhood());
 
   // key on the nightstand
   keyObj=makeKey(); keyObj.position.set(5.4,.66,2.5); P[0].add(keyObj);
@@ -1262,10 +1395,45 @@ function buildWorld(){
   addLight(3,5.5,9.6,2.4,0xffcc80,1.1,6);      // porch light
   addLight(3,11.0,14.0,3.2,0x6f7fbf,0.9,14);   // streetlamp
 
+  buildDoors(P);
+
   // the woman
   woman=makeWoman(); woman.visible=false; scene.add(woman);
 
   buildPhone();
+}
+
+/* ---- interior doors. USE opens/closes them; the kitchen stays open archways. ---- */
+const DOOR_DEFS=[
+  {lv:0,c:7, r:3, axis:'x',name:'BEDROOM DOOR'},
+  {lv:0,c:12,r:10,axis:'x',name:'DOOR'},
+  {lv:0,c:12,r:16,axis:'x',name:'DOOR'},
+  {lv:1,c:16,r:13,axis:'z',name:'BATHROOM DOOR'},
+  {lv:1,c:12,r:16,axis:'x',name:'ATTIC DOOR'}
+];
+const doors=[];
+function buildDoors(P){
+  for(const d of DOOR_DEFS){
+    const hinge=new T.Group();
+    const panel=makeDoor(); panel.position.x=0.47;   // swing about the tile edge
+    hinge.add(panel);
+    if(d.axis==='x'){ hinge.position.set(d.c+.5,0,d.r+.98); hinge.rotation.y=Math.PI/2; }
+    else            { hinge.position.set(d.c+.02,0,d.r+.5); hinge.rotation.y=0; }
+    hinge.userData.base=hinge.rotation.y;
+    P[d.lv].add(hinge);
+    doors.push({lv:d.lv,c:d.c,r:d.r,name:d.name,hinge,open:false,t:0});
+  }
+}
+const doorAt=(lv,c,r)=>{
+  for(const d of doors) if(d.lv===lv&&d.c===c&&d.r===r) return d;
+  return null;
+};
+function updateDoors(dt){
+  for(const d of doors){
+    const want=d.open?1:0;
+    d.t+=(want-d.t)*Math.min(1,dt*6);
+    d.hinge.rotation.y=d.hinge.userData.base+d.t*1.62;
+  }
 }
 
 let keyObj=null; const camMeshes=[];
@@ -1345,7 +1513,9 @@ const BLOCKERS=[
 function blocked(lv,x,z,rad,ignoreProps){
   for(let oz=-1;oz<=1;oz++)for(let ox=-1;ox<=1;ox++){
     const c=(x+ox*rad)|0, r=(z+oz*rad)|0;
-    if(solid(lv,c,r)){
+    // a shut door seals its tile for the player; she opens them instead (ignoreProps)
+    const dr=ignoreProps?null:doorAt(lv,c,r);
+    if(solid(lv,c,r)||(dr&&!dr.open)){
       const nx=Math.max(c,Math.min(x,c+1)), nz=Math.max(r,Math.min(z,r+1));
       if((x-nx)**2+(z-nz)**2<rad*rad) return true;
     }
@@ -1474,6 +1644,14 @@ function entityUpdate(dt){
       break;
     }
   }
+  // she shoves doors open as she reaches them
+  for(const d of doors){
+    if(d.lv!==ent.lv||d.open) continue;
+    if(Math.hypot(ent.x-(d.c+.5),ent.z-(d.r+.5))<1.35){
+      d.open=true;
+      if(Math.hypot(state.px-ent.x,state.pz-ent.z)<14) sfx.creak();
+    }
+  }
   if(ent.speed>0){
     ent.stepA+=dt*(ent.state==='CHASE'?7:3.4);
     if(ent.stepA>1){ ent.stepA=0;
@@ -1569,6 +1747,11 @@ function nearestInteract(){
     if(Math.hypot(state.px-d.x,state.pz-d.z)<1.6)
       return {kind:'camspot',cam:i,label:'PLACE CAMERA · '+d.name};
   }
+  for(const d of doors){
+    if(d.lv!==state.lv) continue;
+    if(Math.hypot(state.px-(d.c+.5),state.pz-(d.r+.5))<1.45)
+      return {kind:'door',door:d,label:(d.open?'CLOSE THE ':'OPEN THE ')+d.name};
+  }
   for(const h of HIDES){
     if(h.lv!==state.lv) continue;
     if(Math.hypot(state.px-h.x,state.pz-h.z)<1.25) return {kind:h.k,label:h.lab};
@@ -1595,6 +1778,7 @@ function doInteract(){
       camMeshes[it.cam].visible=true;
       document.querySelectorAll('#camTabs button')[it.cam].disabled=false;
       setObjective('CAMERA PLACED · '+(3-state.camsLeft)+'/3'); break;
+    case 'door': it.door.open=!it.door.open; sfx.creak(); break;
     case 'couch': case 'bed': case 'attic': state.hidden=it.kind; sfx.creak(); break;
   }
 }
@@ -1614,8 +1798,8 @@ function showLevel(lv){
   scene.fog.density = lv===STREET?0.045:(lv===BASEMENT?0.16:0.13);
   scene.fog.color.setHex(lv===STREET?0x0a1020:0x05060a);
   renderer.setClearColor(lv===STREET?0x0a1020:0x000000,1);
-  if(moon) moon.intensity = lv===STREET?1.7:0;              // moonlight, outdoors only
-  if(ambLight) ambLight.intensity = lv===STREET?3.6:2.6;
+  if(moon) moon.intensity = lv===STREET?2.3:0;              // moonlight, outdoors only
+  if(ambLight) ambLight.intensity = lv===STREET?4.8:2.6;
 }
 
 /* ==========================================================
@@ -1624,28 +1808,35 @@ function showLevel(lv){
 const mv={x:0,y:0}; let lookDX=0,lookDY=0; const keys={};
 let stickId=null,lookId=null,lookLX=0,lookLY=0,stickBase={x:0,y:0};
 const stickEl=document.getElementById('stick'),knobEl=document.getElementById('knob');
+// The first touch on the left half drives the stick; ANY other touch looks around,
+// whichever half it lands on, so a drag never gets ignored.
 function tStart(e){
   if(state.mode!=='play') return;
   for(const t of e.changedTouches){
-    if(t.clientX<window.innerWidth*.5&&stickId===null){
+    if(stickId===null&&t.clientX<window.innerWidth*.5){
       stickId=t.identifier; stickBase={x:t.clientX,y:t.clientY};
       stickEl.style.display='block';
       stickEl.style.left=(t.clientX-66)+'px'; stickEl.style.top=(t.clientY-66)+'px';
-    } else if(lookId===null){ lookId=t.identifier; lookLX=t.clientX; lookLY=t.clientY; }
+      knobEl.style.left='38px'; knobEl.style.top='38px';
+    } else if(lookId===null){
+      lookId=t.identifier; lookLX=t.clientX; lookLY=t.clientY;
+    }
   }
 }
 function tMove(e){
-  e.preventDefault();
+  if(e.cancelable) e.preventDefault();
   for(const t of e.changedTouches){
     if(t.identifier===stickId){
       let dx=t.clientX-stickBase.x, dy=t.clientY-stickBase.y;
       const d=Math.hypot(dx,dy),max=56;
       if(d>max){dx=dx/d*max;dy=dy/d*max;}
       knobEl.style.left=(38+dx)+'px'; knobEl.style.top=(38+dy)+'px';
-      mv.x=dx/max; mv.y=dy/max;
+      const dead=0.14, m=Math.hypot(dx,dy)/max;
+      if(m<dead){ mv.x=mv.y=0; }
+      else { const s=(m-dead)/(1-dead)/(m||1); mv.x=dx/max*s; mv.y=dy/max*s; }
     } else if(t.identifier===lookId){
-      lookDX+=(t.clientX-lookLX)*0.0052*(settings.sens/100);
-      lookDY+=(t.clientY-lookLY)*0.0040*(settings.sens/100);
+      lookDX+=(t.clientX-lookLX)*0.0058*(settings.sens/100);
+      lookDY+=(t.clientY-lookLY)*0.0044*(settings.sens/100);
       lookLX=t.clientX; lookLY=t.clientY;
     }
   }
@@ -1689,7 +1880,6 @@ const bind=(id,fn,hold)=>{
 bind('bUse',()=>doInteract());
 bind('bCrouch',()=>{state.crouch=!state.crouch;});
 bind('bPhone',()=>togglePhone());
-bind('bRun',v=>{state.run=v;},true);
 function readPad(){
   if(!navigator.getGamepads) return;
   const g=navigator.getGamepads()[0]; if(!g) return;
@@ -1764,21 +1954,25 @@ const totalCineT=()=>cineTotal;
 function startChapter1(fromBeat,fromSave){
   resetRun();
   if(fromBeat&&fromBeat!=='STREET'){ jumpToBeat(fromBeat,fromSave); return; }
-  // yaw 0 looks down -Z, which is where the house is
-  state.lv=STREET; state.px=5.5; state.pz=16.5; state.yaw=0; state.pitch=0;
+  // open out on the road so the street and the neighbours read, then push in
+  state.lv=STREET; state.px=11.5; state.pz=22.5; state.yaw=0.42; state.pitch=0.03;
   showLevel(STREET);
   state.beat='STREET'; cineTotal=0;
-  playCine(t=>{                                   // slow dolly toward the house
-    const k=Math.min(1,t/15);
-    state.px=5.5; state.pz=16.5-k*3.4;
-    state.yaw=Math.sin(t*.16)*.05;
-    state.pitch=0.04+Math.sin(t*.21)*.02;
+  playCine(t=>{
+    const k=Math.min(1,t/15.5), e=k*k*(3-2*k);    // ease in/out
+    state.px=11.5+(6.4-11.5)*e;
+    state.pz=22.5+(14.0-22.5)*e;
+    state.yaw=0.42+(0.21-0.42)*e+Math.sin(t*.17)*.012;
+    state.pitch=0.05+Math.sin(t*.21)*.015;
   },[
     {t:'BARRY CLARK · 27 · HOME INSPECTOR',d:2.6},
     {t:'"This house has been built. For 150 years exact."',d:4.0},
     {t:'"Since they didn\'t wanna take it down, it\'s time I would do a inspection and see what\'s in here."',d:5.2},
     {t:'"Ah, it\'s 2:03 AM. One quick look and I\'m out."',d:4.0}
-  ],()=>{ state.beat='APPROACH'; setObjective('GO TO THE HOUSE'); });
+  // the rig flies outside the walkable grid, so land on a valid tile whether the
+  // cutscene played out or the player hit SKIP on the first frame
+  ],()=>{ state.px=6.4; state.pz=14.0; state.yaw=0.21; state.pitch=0;
+          state.beat='APPROACH'; setObjective('GO TO THE HOUSE'); });
 }
 function jumpToBeat(b,fromSave){
   state.lv=GROUND; state.px=5.5; state.pz=17.6; state.yaw=-0.7; state.pitch=0;
@@ -1812,6 +2006,7 @@ function resetRun(){
   tabsEl.classList.remove('on');
   if(phoneMesh) phoneMesh.visible=false;
   ent.active=false; ent.state='SLEEP'; ent.lv=0; ent.x=BED.x; ent.z=BED.z; ent.screamT=0;
+  doors.forEach(d=>{d.open=false;});
   flowKey='';
   document.querySelectorAll('#camTabs button').forEach(x=>x.disabled=true);
   camMeshes.forEach(m=>m.visible=false);
@@ -1860,8 +2055,9 @@ function update(dt){
   lookDX=lookDY=0;
 
   if(!state.hidden){
-    let spd=state.crouch?1.35:(running?4.0:2.5);
-    if(state.beat==='CHASE'||state.beat==='BASEMENT') spd*=1.1;
+    // once she's after you, moving at all means sprinting -- no button to hold
+    const fleeing=(state.beat==='CHASE'||state.beat==='BASEMENT'||ent.state==='CHASE');
+    let spd=state.crouch?1.35:((running||fleeing)?4.2:2.5);
     // must match the camera: three looks down -Z, so after rotateY(yaw)
     // forward is (-sin yaw, -cos yaw) and right is (cos yaw, -sin yaw)
     const fx=-Math.sin(state.yaw), fz=-Math.cos(state.yaw);
@@ -1960,6 +2156,7 @@ function syncCamera(dt){
       L.visible=true;
     } else { L.visible=false; L.intensity=0; }
   }
+  updateDoors(dt);
   if(keyObj&&keyObj.visible) keyObj.rotation.y+=dt*1.6;
   camMeshes.forEach(m=>{ if(m.visible&&m.userData.led)
     m.userData.led.material.color.setHex(((performance.now()%1400)<700)?0xff2020:0x400808); });
@@ -2065,7 +2262,7 @@ segInit('sQual',settings.qual,v=>{settings.qual=v;resize();});
 segInit('sScare',settings.scares,v=>settings.scares=+v);
 segInit('sBlood',settings.blood,v=>settings.blood=+v);
 paintPlatNote();
-if(!IS_TOUCH) ['bUse','bCrouch','bPhone','bRun'].forEach(id=>document.getElementById(id).style.display='none');
+if(!IS_TOUCH) ['bUse','bCrouch','bPhone'].forEach(id=>document.getElementById(id).style.display='none');
 
 /* ==========================================================
    BOOT
@@ -2087,7 +2284,7 @@ function loop(t){
   document.getElementById('btnResume').disabled=!save.beat;
   show('mMain');
   window.__hg={state,ent,beat,jumpToBeat,startChapter1,doInteract,setObjective,
-               blocked,slide,solid,LEVELS,CAMS,camMeshes,
+               blocked,slide,solid,LEVELS,CAMS,camMeshes,doors,
                get mv(){return mv;}, get keys(){return keys;},
                scene:()=>scene, renderer:()=>renderer, showLevel, togglePhone};
   requestAnimationFrame(loop);
