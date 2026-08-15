@@ -1,0 +1,1572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#000000">
+<title>HORROR GAME</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+  html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Courier New',monospace;color:#cdc5b4}
+  #view{display:block;position:absolute;inset:0;width:100%;height:100%;touch-action:none;image-rendering:pixelated}
+
+  .screen{position:absolute;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:28px;background:radial-gradient(ellipse at 50% 40%,#141210 0%,#050404 70%,#000 100%)}
+  .hide{display:none!important}
+
+  h1{font-size:clamp(30px,10vw,64px);letter-spacing:10px;color:#c8b98e;text-shadow:0 0 26px rgba(150,30,20,.55);margin-bottom:6px}
+  .tag{font-size:clamp(10px,3vw,14px);letter-spacing:6px;color:#6b6152;margin-bottom:38px}
+  .mbtn{display:block;width:min(320px,80vw);margin:9px auto;padding:15px 10px;background:rgba(20,17,14,.6);
+    border:1px solid #4a4034;color:#d2c7ab;font-family:inherit;font-size:clamp(14px,4vw,18px);letter-spacing:5px;cursor:pointer;transition:.18s}
+  .mbtn:active,.mbtn:hover{background:rgba(90,25,20,.45);border-color:#a05038;color:#fff}
+  .mbtn[disabled]{opacity:.32;pointer-events:none}
+  .row{display:flex;align-items:center;justify-content:space-between;width:min(360px,86vw);margin:11px auto;
+    font-size:clamp(12px,3.4vw,15px);letter-spacing:2px;color:#a99d86}
+  .seg{display:flex;gap:6px}
+  .seg button{background:rgba(20,17,14,.6);border:1px solid #4a4034;color:#a99d86;font-family:inherit;
+    font-size:clamp(11px,3vw,13px);padding:8px 12px;letter-spacing:2px;cursor:pointer}
+  .seg button.on{background:#7a2a1c;border-color:#c06a4a;color:#fff}
+  input[type=range]{width:150px;accent-color:#a04030}
+  .note{font-size:clamp(10px,2.8vw,12px);color:#5f564a;letter-spacing:1px;line-height:1.9;margin-top:26px;max-width:400px}
+
+  /* ---------- HUD ---------- */
+  #hud{position:absolute;inset:0;z-index:10;pointer-events:none}
+  #obj{position:absolute;top:calc(14px + env(safe-area-inset-top));left:0;right:0;text-align:center;
+    font-size:clamp(11px,3.2vw,14px);letter-spacing:3px;color:#b7a98c;text-shadow:0 2px 8px #000;opacity:0;transition:opacity .6s}
+  #obj.show{opacity:1}
+  #roomLbl{position:absolute;top:calc(46px + env(safe-area-inset-top));left:0;right:0;text-align:center;
+    font-size:clamp(9px,2.6vw,11px);letter-spacing:7px;color:#6d6353;opacity:0;transition:opacity .8s}
+  #prompt{position:absolute;bottom:34%;left:0;right:0;text-align:center;font-size:clamp(12px,3.4vw,15px);
+    letter-spacing:2px;color:#e2d6b6;text-shadow:0 2px 10px #000;opacity:0;transition:opacity .2s}
+  #prompt.show{opacity:1}
+
+  .pad{position:absolute;border-radius:50%;pointer-events:auto}
+  #stick{width:132px;height:132px;bottom:38px;left:30px;background:rgba(60,52,42,.16);border:1px solid rgba(150,130,100,.24);display:none}
+  #knob{position:absolute;width:56px;height:56px;top:38px;left:38px;border-radius:50%;
+    background:radial-gradient(circle at 36% 30%,#9b8964,#3a3125);border:1px solid rgba(190,165,120,.4)}
+  .abtn{position:absolute;pointer-events:auto;border-radius:50%;background:rgba(28,24,19,.55);
+    border:1px solid rgba(150,130,100,.32);color:#c3b696;font-size:10px;letter-spacing:1px;
+    display:flex;align-items:center;justify-content:center;text-align:center;line-height:1.2}
+  .abtn:active{background:rgba(120,40,28,.6);color:#fff}
+  #bUse{width:84px;height:84px;bottom:100px;right:26px;font-size:12px}
+  #bCrouch{width:66px;height:66px;bottom:36px;right:120px}
+  #bPhone{width:66px;height:66px;bottom:36px;right:34px}
+
+  /* ---------- phone ---------- */
+  #phone{position:absolute;inset:0;z-index:14;pointer-events:none;display:flex;align-items:center;justify-content:center}
+  #phoneBody{width:min(330px,74vw);aspect-ratio:9/17;background:#0b0b0d;border:2px solid #24242a;border-radius:22px;
+    box-shadow:0 30px 60px rgba(0,0,0,.9);padding:14px 10px;display:flex;flex-direction:column;gap:8px;
+    transform:translateY(115vh) rotate(8deg);transition:transform .42s cubic-bezier(.2,.9,.3,1)}
+  #phone.up #phoneBody{transform:translateY(0) rotate(0)}
+  #feed{flex:1;background:#000;border:1px solid #1b1b20;position:relative;overflow:hidden}
+  #feedCv{width:100%;height:100%;display:block;image-rendering:pixelated}
+  #feedLbl{position:absolute;top:5px;left:7px;font-size:9px;letter-spacing:2px;color:#7ce07c;text-shadow:0 0 6px #0f0;z-index:2}
+  #feedRec{position:absolute;top:5px;right:7px;font-size:9px;color:#e04040;z-index:2}
+  #camTabs{display:flex;gap:6px;pointer-events:auto}
+  #camTabs button{flex:1;background:#16161a;border:1px solid #2a2a32;color:#7a7a86;font-family:inherit;
+    font-size:9px;padding:8px 2px;letter-spacing:1px;cursor:pointer}
+  #camTabs button.on{background:#1f3a1f;border-color:#3e7a3e;color:#9de89d}
+  #camTabs button[disabled]{opacity:.3}
+
+  /* ---------- cutscene / overlays ---------- */
+  #cine{position:absolute;inset:0;z-index:16;pointer-events:none;opacity:0;transition:opacity .5s;background:#000}
+  #cine.on{opacity:1;pointer-events:auto}
+  #cineCv{position:absolute;inset:0;width:100%;height:100%}
+  .bar{position:absolute;left:0;right:0;height:11%;background:#000;z-index:2}
+  .bar.t{top:0} .bar.b{bottom:0}
+  #sub{position:absolute;bottom:15%;left:0;right:0;text-align:center;padding:0 24px;z-index:3;
+    font-size:clamp(13px,3.8vw,19px);letter-spacing:1px;color:#ded2b4;text-shadow:0 3px 12px #000;line-height:1.6}
+  #skip{position:absolute;bottom:calc(16px + env(safe-area-inset-bottom));right:18px;z-index:4;font-size:10px;
+    letter-spacing:3px;color:#6a6153;border:1px solid #3a352c;padding:9px 15px;pointer-events:auto;cursor:pointer}
+
+  #fade{position:absolute;inset:0;z-index:17;background:#000;pointer-events:none;opacity:0;transition:opacity .5s}
+  #death{position:absolute;inset:0;z-index:18;pointer-events:none;opacity:0;transition:opacity .35s;
+    display:flex;align-items:center;justify-content:center;flex-direction:column;background:rgba(20,0,0,.86)}
+  #death.on{opacity:1;pointer-events:auto}
+  #death h2{font-size:clamp(26px,8vw,48px);letter-spacing:8px;color:#8e1616;text-shadow:0 0 30px rgba(200,0,0,.7)}
+  #death p{font-size:12px;letter-spacing:3px;color:#6a5a52;margin:14px 0 30px}
+
+  #vig{position:absolute;inset:0;z-index:9;pointer-events:none;box-shadow:inset 0 0 190px 55px rgba(0,0,0,.86)}
+  #hurt{position:absolute;inset:0;z-index:11;pointer-events:none;background:radial-gradient(ellipse at center,transparent 35%,rgba(120,0,0,.7));opacity:0}
+</style>
+</head>
+<body>
+
+<canvas id="view"></canvas>
+<div id="vig"></div>
+<div id="hurt"></div>
+
+<div id="hud" class="hide">
+  <div id="obj"></div>
+  <div id="roomLbl"></div>
+  <div id="prompt"></div>
+  <div class="pad" id="stick"><div id="knob"></div></div>
+  <div class="abtn" id="bUse">USE</div>
+  <div class="abtn" id="bCrouch">CROUCH</div>
+  <div class="abtn" id="bPhone">PHONE</div>
+</div>
+
+<div id="phone">
+  <div id="phoneBody">
+    <div id="feed">
+      <canvas id="feedCv"></canvas>
+      <div id="feedLbl">CAM 1</div>
+      <div id="feedRec">● REC</div>
+    </div>
+    <div id="camTabs">
+      <button data-c="0">LIVING</button>
+      <button data-c="1">KITCHEN</button>
+      <button data-c="2">BATH</button>
+    </div>
+  </div>
+</div>
+
+<div id="cine">
+  <canvas id="cineCv"></canvas>
+  <div class="bar t"></div><div class="bar b"></div>
+  <div id="sub"></div>
+  <div id="skip">SKIP</div>
+</div>
+
+<div id="fade"></div>
+
+<div id="death">
+  <h2>CAUGHT</h2>
+  <p id="deathSub">SHE FOUND YOU</p>
+  <button class="mbtn" id="btnContinue">CONTINUE</button>
+  <button class="mbtn" id="btnQuitDeath">MAIN MENU</button>
+</div>
+
+<!-- ================= MENUS ================= -->
+<div class="screen" id="mMain">
+  <h1>HORROR GAME</h1>
+  <div class="tag">150 YEARS &nbsp;·&nbsp; 2:03 AM</div>
+  <button class="mbtn" id="btnResume">CONTINUE</button>
+  <button class="mbtn" id="btnChapters">CHAPTERS</button>
+  <button class="mbtn" id="btnSettings">SETTINGS</button>
+  <div class="note" id="platNote"></div>
+</div>
+
+<div class="screen hide" id="mChapters">
+  <h1 style="font-size:clamp(22px,7vw,40px)">CHAPTERS</h1>
+  <div class="tag">SELECT</div>
+  <button class="mbtn" id="ch1">CHAPTER 1 — THE INSPECTION</button>
+  <button class="mbtn" disabled>CHAPTER 2 — LOCKED</button>
+  <button class="mbtn" disabled>CHAPTER 3 — LOCKED</button>
+  <button class="mbtn" id="chBack">BACK</button>
+</div>
+
+<div class="screen hide" id="mSettings">
+  <h1 style="font-size:clamp(22px,7vw,40px)">SETTINGS</h1>
+  <div class="tag">&nbsp;</div>
+  <div class="row"><span>VOLUME</span><input type="range" id="sVol" min="0" max="100" value="70"></div>
+  <div class="row"><span>QUALITY</span>
+    <div class="seg" id="sQual"><button data-q="low">LOW</button><button data-q="med">MED</button><button data-q="high">HIGH</button></div>
+  </div>
+  <div class="row"><span>JUMP SCARES</span>
+    <div class="seg" id="sScare"><button data-v="1">ON</button><button data-v="0">OFF</button></div>
+  </div>
+  <div class="row"><span>BLOOD</span>
+    <div class="seg" id="sBlood"><button data-v="1">ON</button><button data-v="0">OFF</button></div>
+  </div>
+  <button class="mbtn" id="setBack" style="margin-top:26px">BACK</button>
+</div>
+
+<div class="screen hide" id="mPause">
+  <h1 style="font-size:clamp(22px,7vw,40px)">PAUSED</h1>
+  <div class="tag">&nbsp;</div>
+  <button class="mbtn" id="pResume">RESUME</button>
+  <button class="mbtn" id="pSettings">SETTINGS</button>
+  <button class="mbtn" id="pQuit">SAVE &amp; QUIT</button>
+</div>
+
+<script>
+(()=>{
+"use strict";
+
+/* ============================================================
+   0. SETTINGS + SAVE
+   ============================================================ */
+const SKEY='hg_settings_v1', GKEY='hg_save_v1';
+const settings=Object.assign({vol:70,qual:'med',scares:1,blood:1},JSON.parse(localStorage.getItem(SKEY)||'{}'));
+const saveSettings=()=>localStorage.setItem(SKEY,JSON.stringify(settings));
+let save=Object.assign({chapter:0,beat:null,deaths:0,cams:[false,false,false],
+                        hasKey:false,doorsLocked:false},
+                       JSON.parse(localStorage.getItem(GKEY)||'{}'));
+function writeSave(){
+  if(typeof state!=='undefined'&&state.mode!=='menu'){   // snapshot live progress
+    save.cams=state.camsPlaced.slice();
+    save.hasKey=state.hasKey;
+    save.doorsLocked=state.doorsLocked;
+  }
+  localStorage.setItem(GKEY,JSON.stringify(save));
+}
+
+const IS_TOUCH=('ontouchstart' in window)||navigator.maxTouchPoints>0;
+let PLATFORM=IS_TOUCH?'MOBILE':'PC';
+window.addEventListener('gamepadconnected',()=>{PLATFORM='CONSOLE';paintPlatNote();});
+function paintPlatNote(){
+  document.getElementById('platNote').textContent =
+    PLATFORM==='MOBILE' ? 'MOBILE DETECTED · LEFT PAD MOVES · DRAG RIGHT TO LOOK'
+  : PLATFORM==='CONSOLE'? 'CONTROLLER DETECTED · LEFT STICK MOVE · RIGHT STICK LOOK · A USE'
+  : 'PC DETECTED · WASD MOVE · MOUSE LOOK · E USE · C CROUCH · TAB PHONE';
+}
+
+/* ============================================================
+   1. AUDIO
+   ============================================================ */
+let AC=null,master=null,drone=null,droneG=null;
+function audioInit(){
+  if(AC)return;
+  try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){return;}
+  master=AC.createGain(); master.gain.value=settings.vol/100; master.connect(AC.destination);
+  const o1=AC.createOscillator(),o2=AC.createOscillator(),f=AC.createBiquadFilter();
+  droneG=AC.createGain(); droneG.gain.value=0.0;
+  o1.type='sawtooth'; o1.frequency.value=36; o2.type='sine'; o2.frequency.value=54.2;
+  f.type='lowpass'; f.frequency.value=150;
+  o1.connect(f); o2.connect(f); f.connect(droneG); droneG.connect(master);
+  o1.start(); o2.start(); drone=true;
+}
+function setVol(){ if(master) master.gain.value=settings.vol/100; }
+function noiseBuf(dur){
+  const n=Math.floor(AC.sampleRate*dur),b=AC.createBuffer(1,n,AC.sampleRate),d=b.getChannelData(0);
+  for(let i=0;i<n;i++)d[i]=Math.random()*2-1;
+  return b;
+}
+function sfxNoise(dur,freq,q,gain,type){
+  if(!AC)return;
+  const s=AC.createBufferSource(); s.buffer=noiseBuf(dur);
+  const f=AC.createBiquadFilter(); f.type=type||'bandpass'; f.frequency.value=freq; f.Q.value=q||1;
+  const g=AC.createGain(); g.gain.setValueAtTime(gain,AC.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001,AC.currentTime+dur);
+  s.connect(f); f.connect(g); g.connect(master); s.start();
+}
+function sfxTone(f0,f1,dur,gain,type){
+  if(!AC)return;
+  const o=AC.createOscillator(),g=AC.createGain();
+  o.type=type||'sine'; o.frequency.setValueAtTime(f0,AC.currentTime);
+  o.frequency.exponentialRampToValueAtTime(Math.max(1,f1),AC.currentTime+dur);
+  g.gain.setValueAtTime(gain,AC.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001,AC.currentTime+dur);
+  o.connect(g); g.connect(master); o.start(); o.stop(AC.currentTime+dur+.05);
+}
+const sfx={
+  knock:()=>sfxNoise(.16,220,3,.5,'lowpass'),
+  creak:()=>sfxNoise(.55,900,7,.14),
+  step :()=>sfxNoise(.09,420,4,.075),
+  faucet:()=>sfxNoise(1.6,2600,.8,.10,'highpass'),
+  lock :()=>{sfxNoise(.1,1400,6,.32); setTimeout(()=>sfxTone(300,120,.12,.3,'square'),90);},
+  place:()=>sfxTone(760,1300,.1,.16,'square'),
+  pickup:()=>{sfxTone(700,1500,.09,.2,'triangle');setTimeout(()=>sfxTone(1100,1900,.1,.15,'triangle'),80);},
+  ui   :()=>sfxTone(500,300,.05,.12,'square'),
+  deny :()=>sfxTone(180,90,.18,.22,'sawtooth'),
+  phone:()=>sfxNoise(.2,600,2,.1),
+  heart:(i)=>{sfxTone(64,42,.13,.16*i,'sine'); setTimeout(()=>sfxTone(58,38,.11,.11*i,'sine'),165);},
+  scream:()=>{
+    sfxNoise(1.5,1500,.6,.55,'bandpass');
+    sfxTone(1300,180,1.4,.4,'sawtooth');
+    sfxTone(660,120,1.5,.25,'square');
+  },
+  wake:()=>{sfxNoise(.9,300,2,.3,'lowpass'); sfxTone(90,50,1.1,.2,'sine');}
+};
+
+/* ============================================================
+   2. MAPS
+   ============================================================ */
+const F1=[
+"######################",
+"#......#....#........#",
+"#......#....#........#",
+"#....................#",
+"#......#....#........#",
+"#......#....#........#",
+"#......#....#........#",
+"########....####.#####",
+"########....#........#",
+"########....#........#",
+"########.............D",
+"########....#........#",
+"########....#........#",
+"########....######.###",
+"#...........#........#",
+"#...........#........#",
+"#....................#",
+"#...........#........#",
+"#...........#.....U..#",
+"#####F################"];
+
+const F2=[
+"######################",
+"######################",
+"######################",
+"######################",
+"######################",
+"######################",
+"######################",
+"######################",
+"#############........#",
+"#############........#",
+"#############........#",
+"#############........#",
+"#############........#",
+"################.#####",
+"#...........#........#",
+"#...........#........#",
+"#....................#",
+"#...........#........#",
+"#...........#.....d..#",
+"######################"];
+
+const F3=[
+"######################",
+"######################",
+"######################",
+"######################",
+"######################",
+"######################",
+"######################",
+"######################",
+"######################",
+"#....................#",
+"#O...................#",
+"#....................#",
+"#....................#",
+"######################",
+"######################",
+"######################",
+"######################",
+"######################",
+"######################",
+"######################"];
+
+// outside: the neighborhood street + the house facade
+const FS=[
+"######################",
+"######################",
+"######################",
+"######################",
+"######################",
+"######################",
+"######################",
+"######################",
+"#####P################",
+"#....................#",
+"#....................#",
+"#....................#",
+"#....................#",
+"#....................#",
+"#....................#",
+"#....................#",
+"#....................#",
+"#....................#",
+"#....................#",
+"######################"];
+
+const LEVELS=[F1,F2,F3,FS];
+const COLS=22, ROWS=20;
+const GROUND=0, UPSTAIRS=1, BASEMENT=2, STREET=3;
+
+const solid=(lv,c,r)=>{
+  if(c<0||r<0||c>=COLS||r>=ROWS) return true;
+  const ch=LEVELS[lv][r][c];
+  if(ch==='D') return !state.basementOpen;   // basement door: solid until unlocked
+  return ch==='#'||ch==='F'||ch==='P';       // front door stays shut all chapter
+};
+const tileAt=(lv,c,r)=>(c<0||r<0||c>=COLS||r>=ROWS)?'#':LEVELS[lv][r][c];
+const walkable=(lv,c,r)=>{const t=tileAt(lv,c,r);return t!=='#'&&t!=='F';};
+
+// room lookup: [level, c0,c1, r0,r1, name]
+const ROOMS=[
+  [0,1,6,1,6,'BEDROOM'],   [0,8,11,1,13,'HALLWAY'], [0,13,20,1,6,'KITCHEN'],
+  [0,13,20,8,12,'BACK HALL'], [0,1,11,14,18,'LIVING ROOM'], [0,13,20,14,18,'STAIRWELL'],
+  [1,13,20,8,12,'BATHROOM'], [1,1,11,14,18,'ATTIC'], [1,13,20,14,18,'UPSTAIRS HALL'],
+  [2,1,20,9,12,'BASEMENT']
+];
+function roomOf(lv,x,y){
+  const c=x|0,r=y|0;
+  for(const m of ROOMS) if(m[0]===lv&&c>=m[1]&&c<=m[2]&&r>=m[3]&&r<=m[4]) return m[5];
+  return '';
+}
+
+/* ---- props (billboards + interactables) ---- */
+// kind: bed|couch|tv|nightstand|sink|camspot|cam|key|toilet|tub|box
+const PROPS=[
+  {k:'bed',        lv:0,x:2.9,y:2.6,w:1.9,h:.62,lab:'HIDE UNDER THE BED',hide:'bed'},
+  {k:'nightstand', lv:0,x:5.4,y:2.5,w:.7,h:.7},
+  {k:'key',        lv:0,x:5.4,y:2.5,w:.28,h:.24,lab:'TAKE THE KEY',z:.72},
+  {k:'couch',      lv:0,x:3.4,y:16.4,w:2.2,h:.78,lab:'HIDE BEHIND THE COUCH',hide:'couch'},
+  {k:'tv',         lv:0,x:3.4,y:14.6,w:1.1,h:.85},
+  {k:'sink',       lv:0,x:14.4,y:1.6,w:1.2,h:.9},
+  {k:'camspot',    lv:0,x:9.6,y:15.4,w:.34,h:.3,cam:0,z:1.75,lab:'PLACE CAMERA · LIVING ROOM'},
+  {k:'camspot',    lv:0,x:18.5,y:2.4,w:.34,h:.3,cam:1,z:1.75,lab:'PLACE CAMERA · KITCHEN'},
+  {k:'camspot',    lv:1,x:16.5,y:9.4,w:.34,h:.3,cam:2,z:1.75,lab:'PLACE CAMERA · BATHROOM'},
+  {k:'tub',        lv:1,x:18.5,y:11.4,w:2.0,h:.66},
+  {k:'toilet',     lv:1,x:14.4,y:11.5,w:.66,h:.72},
+  {k:'box',        lv:1,x:3.0,y:16.0,w:.9,h:.8},
+  {k:'box',        lv:1,x:8.4,y:15.2,w:.8,h:.7},
+  {k:'atticspot',  lv:1,x:6.0,y:16.4,w:.5,h:.4,lab:'HIDE IN THE ATTIC',hide:'attic'}
+];
+// camera view definitions (pos + angle + level)
+const CAMS=[
+  {lv:0,x:9.6,y:15.4,a:Math.PI*0.75,name:'LIVING'},
+  {lv:0,x:18.5,y:2.4,a:Math.PI*0.85,name:'KITCHEN'},
+  {lv:1,x:16.5,y:9.4,a:Math.PI*0.35,name:'BATH'}
+];
+const BLOCKERS=[ // props that block movement: x,y,halfW,halfH (AABB, level)
+  {lv:0,x:2.9,y:2.6,hw:1.0,hh:.75},   // bed
+  {lv:0,x:5.4,y:2.5,hw:.38,hh:.38},   // nightstand
+  {lv:0,x:3.4,y:16.4,hw:1.15,hh:.42}, // couch
+  {lv:0,x:3.4,y:14.6,hw:.6,hh:.35},   // tv
+  {lv:1,x:18.5,y:11.4,hw:1.05,hh:.42} // tub
+];
+
+/* ============================================================
+   3. STATE
+   ============================================================ */
+const state={
+  mode:'menu',           // menu | play | cine | dead | pause
+  beat:'STREET',
+  lv:0,
+  px:5.5,py:22.0,pa:-Math.PI/2, // player (starts outside for street walk)
+  crouch:false, eyeH:0,
+  bob:0, stepT:0,
+  hidden:null,           // 'couch' | 'bed' | 'attic' | null
+  hasKey:false,
+  camsPlaced:[false,false,false],
+  camsLeft:3,
+  basementOpen:false,
+  doorsLocked:false,
+  phoneUp:false, phoneCam:0, phoneAnim:0,
+  beatT:0, exploreRooms:{},
+  fear:0, heartT:0,
+  hurtFlash:0,
+  outsideDone:false
+};
+
+const ent={
+  lv:0,x:2.9,y:3.4,a:0, spd:0, state:'SLEEP',
+  seeT:0, lostT:0, tx:2.9, ty:3.4, anim:0, wakeT:0,
+  patrolI:0, waitT:0, roamT:0, screamT:0, active:false
+};
+
+/* ============================================================
+   4. CANVAS / RENDER CORE
+   ============================================================ */
+const view=document.getElementById('view'), vctx=view.getContext('2d',{alpha:false});
+const feedCv=document.getElementById('feedCv'), fctx=feedCv.getContext('2d');
+const cineCv=document.getElementById('cineCv'), cctx=cineCv.getContext('2d');
+let VW=0,VH=0,SCALE=.55;
+const QSCALE={low:.34,med:.52,high:.78};
+
+function resize(){
+  const w=window.innerWidth,h=window.innerHeight;
+  SCALE=QSCALE[settings.qual]||.52;
+  VW=Math.max(140,Math.round(w*SCALE)); VH=Math.max(90,Math.round(h*SCALE));
+  view.width=VW; view.height=VH; view.style.width=w+'px'; view.style.height=h+'px';
+  cineCv.width=Math.round(w*.6); cineCv.height=Math.round(h*.6);
+  feedCv.width=180; feedCv.height=250;
+  vctx.imageSmoothingEnabled=false;
+}
+window.addEventListener('resize',resize); resize();
+
+const FOV=Math.PI/2.7;
+const zbuf=new Float32Array(2048);
+
+/* ---- wall palette: dirty navy wainscot + yellowed upper ---- */
+// hRatio: 0 at ceiling, 1 at floor.  wx: 0..1 along the wall face (gives grime real texture)
+function wallShade(lv,mc,mr,side,dist,hRatio,wx){
+  let r,g,b;
+  if(lv===STREET){                              // dark clapboard siding at night
+    r=26; g=26; b=32;
+    if(((hRatio*16)|0)%2){ r+=8; g+=8; b+=9; }  // siding boards
+  }
+  else if(lv===BASEMENT){
+    r=64; g=60; b=54;
+    if(((hRatio*9)|0+(wx*4|0))%3===0){ r-=9; g-=9; b-=8; }  // block courses
+  }
+  else if(hRatio>0.58){ r=32; g=42; b=68; }     // navy blue wainscot
+  else { r=176; g=168; b=136; }                 // yellowed off-white upper
+  // chair rail + baseboard
+  if(lv!==STREET&&lv!==BASEMENT){
+    if(hRatio>0.555&&hRatio<0.595){ r=58;g=46;b=30; }
+    if(hRatio>0.945){ r=42;g=34;b=22; }
+  }
+  // grime / tears: hash on tile AND position along the face, so it isn't flat
+  const cell=((wx*6)|0), band=((hRatio*9)|0);
+  let h=(mc*374761393)^(mr*668265263)^(side*1442695041)^(cell*2246822519)^(band*3266489917);
+  h=(h^(h>>>13))>>>0;
+  const dirt=(h%1024)/1024;
+  if(dirt>0.70){ const d=(dirt-0.70)*2.2; r*=(1-d*.55); g*=(1-d*.58); b*=(1-d*.50); }
+  else if(dirt<0.05){ r*=.42; g*=.42; b*=.42; }  // ripped through to the lath
+  const sh=(side?0.70:1.0)*Math.max(.05,Math.min(1,1.25/(1+dist*dist*0.075)));
+  return [r*sh|0, g*sh|0, b*sh|0];
+}
+
+function renderView(ctx,W,H,cam,opts){
+  opts=opts||{};
+  const lv=cam.lv, px=cam.x, py=cam.y, pa=cam.a;
+  const horizon = H*0.5 + (opts.eyeOff||0)*H;
+  // ceiling
+  const cg=ctx.createLinearGradient(0,0,0,horizon);
+  if(lv===STREET){cg.addColorStop(0,'#04060e');cg.addColorStop(1,'#0d1226');}
+  else if(lv===BASEMENT){cg.addColorStop(0,'#0c0c0e');cg.addColorStop(1,'#1a1a1c');}
+  else{cg.addColorStop(0,'#20201c');cg.addColorStop(1,'#54503f');}
+  ctx.fillStyle=cg; ctx.fillRect(0,0,W,horizon+1);
+  if(lv===STREET){ // stars, scattered by hash so they don't band
+    for(let i=0;i<90;i++){
+      const h1=(i*2654435761)>>>0, h2=(i*40503*2246822519)>>>0;
+      const sx=(h1%10007)/10007*W, sy=(h2%10007)/10007*horizon;
+      ctx.fillStyle='rgba(255,255,240,'+(0.10+(h1%50)/220)+')';
+      ctx.fillRect(sx|0,sy|0,1,1);
+    }
+  }
+  // floor: brown planks w/ perspective bands
+  const fg=ctx.createLinearGradient(0,horizon,0,H);
+  if(lv===STREET){fg.addColorStop(0,'#0a0d0a');fg.addColorStop(1,'#20241c');}
+  else if(lv===BASEMENT){fg.addColorStop(0,'#171512');fg.addColorStop(1,'#3a352e');}
+  else{fg.addColorStop(0,'#150f09');fg.addColorStop(1,'#4a3620');}
+  ctx.fillStyle=fg; ctx.fillRect(0,horizon,W,H-horizon);
+  if(lv!==STREET){
+    ctx.fillStyle='rgba(0,0,0,.30)';
+    for(let d=1;d<15;d++){
+      const y=horizon + (H*0.52)/d;
+      if(y>horizon&&y<H) ctx.fillRect(0,y|0,W,1);
+    }
+  }
+
+  const rays=W;
+  for(let i=0;i<rays;i++){
+    const camX=2*i/rays-1;
+    const ang=pa+Math.atan(camX*Math.tan(FOV/2));
+    const dx=Math.cos(ang),dy=Math.sin(ang);
+    let mc=px|0,mr=py|0;
+    const ddx=Math.abs(1/(dx||1e-9)), ddy=Math.abs(1/(dy||1e-9));
+    let sx,sy,sdx,sdy;
+    if(dx<0){sx=-1;sdx=(px-mc)*ddx;}else{sx=1;sdx=(mc+1-px)*ddx;}
+    if(dy<0){sy=-1;sdy=(py-mr)*ddy;}else{sy=1;sdy=(mr+1-py)*ddy;}
+    let side=0,hit=false,guard=0;
+    while(!hit&&guard++<64){
+      if(sdx<sdy){sdx+=ddx;mc+=sx;side=0;}else{sdy+=ddy;mr+=sy;side=1;}
+      if(solid(lv,mc,mr)) hit=true;
+    }
+    const pd = side===0 ? (sdx-ddx) : (sdy-ddy);
+    const dist=Math.max(.02,pd*Math.cos(ang-pa));
+    zbuf[i]=dist;
+    // exact hit point along the wall face, for texturing
+    let wallX = side===0 ? (py+pd*dy) : (px+pd*dx);
+    wallX -= Math.floor(wallX);
+    const lh=Math.min(H*4,(H*0.62)/dist);
+    let y0=horizon-lh, y1=horizon+lh;
+    const top=Math.max(0,y0|0), bot=Math.min(H,y1|0);
+    const bands=12, bh=(y1-y0)/bands;
+    for(let b=0;b<bands;b++){
+      const by0=y0+b*bh, by1=by0+bh;
+      const t0=Math.max(top,by0|0), t1=Math.min(bot,Math.ceil(by1));
+      if(t1<=t0) continue;
+      const [rr,gg,bb]=wallShade(lv,mc,mr,side,dist,(b+.5)/bands,wallX);
+      ctx.fillStyle='rgb('+rr+','+gg+','+bb+')';
+      ctx.fillRect(i,t0,1,t1-t0);
+    }
+  }
+  drawSprites(ctx,W,H,cam,horizon,opts);
+  // dim yellow ambience wash
+  ctx.fillStyle= lv===STREET ? 'rgba(18,26,52,.30)'
+               : lv===BASEMENT ? 'rgba(20,24,34,.22)' : 'rgba(120,96,40,.11)';
+  ctx.fillRect(0,0,W,H);
+}
+
+/* ---- sprite billboards ---- */
+function drawSprites(ctx,W,H,cam,horizon,opts){
+  const list=[];
+  for(const p of PROPS){
+    if(p.lv!==cam.lv) continue;
+    if(p.k==='key'&&(state.hasKey||!keyVisible())) continue;
+    if(p.k==='camspot'&&state.camsPlaced[p.cam]) continue;
+    if(p.k==='camspot'&&state.beat!=='CAMERAS') continue;
+    if(p.k==='atticspot') continue;
+    list.push(p);
+  }
+  for(let i=0;i<3;i++) if(state.camsPlaced[i]) list.push({k:'cam',lv:CAMS[i].lv,x:CAMS[i].x,y:CAMS[i].y,w:.3,h:.26,z:1.75});
+  if(ent.active&&ent.lv===cam.lv&&ent.state!=='SLEEP') list.push({k:'entity',x:ent.x,y:ent.y,w:.82,h:1.72});
+
+  for(const s of list) s._d=(s.x-cam.x)**2+(s.y-cam.y)**2;
+  list.sort((a,b)=>b._d-a._d);
+
+  const dirx=Math.cos(cam.a),diry=Math.sin(cam.a);
+  const planex=-diry*Math.tan(FOV/2), planey=dirx*Math.tan(FOV/2);
+  const invDet=1/(planex*diry-dirx*planey);
+
+  for(const s of list){
+    const rx=s.x-cam.x, ry=s.y-cam.y;
+    const tx=invDet*(diry*rx-dirx*ry);
+    const ty=invDet*(-planey*rx+planex*ry);
+    if(ty<=0.12) continue;
+    const sx=(W/2)*(1+tx/ty);
+    const sh=Math.abs((H*0.62)/ty)*s.h;
+    const sw=Math.abs((H*0.62)/ty)*s.w;
+    // eye sits 1 unit above the floor in this projection, so a sprite whose
+    // centre is zoff above the floor lands at horizon + proj*(1 - zoff)
+    const zoff=(s.z!==undefined? s.z : s.h/2);
+    const cy=horizon + ((H*0.62)/ty)*(1 - zoff);
+    const x0=Math.floor(sx-sw/2), x1=Math.ceil(sx+sw/2);
+    if(x1<0||x0>W) continue;
+    // occlusion test on center column band
+    let vis=false;
+    for(let x=Math.max(0,x0);x<Math.min(W,x1);x++) if(ty<zbuf[x]){vis=true;break;}
+    if(!vis) continue;
+    ctx.save();
+    // clip to unoccluded columns
+    ctx.beginPath();
+    let run=-1;
+    for(let x=Math.max(0,x0);x<=Math.min(W,x1);x++){
+      const ok = x<Math.min(W,x1) && ty<zbuf[x];
+      if(ok&&run<0) run=x;
+      if(!ok&&run>=0){ ctx.rect(run,0,x-run,H); run=-1; }
+    }
+    ctx.clip();
+    const fade=Math.max(.12,Math.min(1,1.9/(1+ty*ty*0.05)));
+    ctx.globalAlpha=fade;
+    drawProp(ctx,s,sx,cy,sw,sh,ty);
+    ctx.restore();
+  }
+}
+
+function drawProp(ctx,s,cx,cy,w,h,dist){
+  const x=cx-w/2, y=cy-h/2;
+  switch(s.k){
+    case 'entity': drawEntity(ctx,cx,cy,w,h,dist); break;
+    case 'bed':
+      ctx.fillStyle='#2b2018'; ctx.fillRect(x,y+h*.25,w,h*.75);
+      ctx.fillStyle='#7d7466'; ctx.fillRect(x+w*.04,y,w*.92,h*.4);
+      ctx.fillStyle='#5d5446'; ctx.fillRect(x+w*.62,y-h*.12,w*.3,h*.28);
+      ctx.fillStyle='rgba(0,0,0,.45)'; ctx.fillRect(x,y+h*.86,w,h*.14); break;
+    case 'couch':
+      ctx.fillStyle='#1b2a48'; ctx.fillRect(x,y,w,h);
+      ctx.fillStyle='#263a5e'; ctx.fillRect(x,y,w,h*.42);
+      ctx.fillStyle='#12203a'; ctx.fillRect(x+w*.03,y+h*.45,w*.44,h*.3); ctx.fillRect(x+w*.53,y+h*.45,w*.44,h*.3);
+      break;
+    case 'tv':
+      ctx.fillStyle='#0d0d10'; ctx.fillRect(x,y,w,h);
+      ctx.fillStyle='#1a1a1f'; ctx.fillRect(x+w*.08,y+h*.08,w*.84,h*.66);
+      ctx.fillStyle='#3a3a2c'; ctx.fillRect(x+w*.3,y+h*.86,w*.4,h*.12); break;
+    case 'nightstand':
+      ctx.fillStyle='#33261a'; ctx.fillRect(x,y,w,h);
+      ctx.fillStyle='#1d150e'; ctx.fillRect(x+w*.15,y+h*.2,w*.7,h*.22); break;
+    case 'key':
+      ctx.fillStyle='#d9be62'; ctx.fillRect(x,y+h*.35,w,h*.3);
+      ctx.beginPath(); ctx.arc(x+w*.16,cy,h*.42,0,6.283); ctx.fillStyle='#e8cf78'; ctx.fill();
+      ctx.fillStyle='#d9be62'; ctx.fillRect(x+w*.72,y+h*.55,w*.12,h*.4);
+      ctx.shadowColor='#ffd870'; ctx.shadowBlur=10; ctx.fillRect(x+w*.72,y+h*.55,w*.12,h*.4); break;
+    case 'sink':
+      ctx.fillStyle='#8b8578'; ctx.fillRect(x,y,w,h*.34);
+      ctx.fillStyle='#463f36'; ctx.fillRect(x+w*.06,y+h*.34,w*.88,h*.62);
+      ctx.fillStyle='#6a6458'; ctx.fillRect(x+w*.44,y-h*.2,w*.06,h*.22); break;
+    case 'tub':
+      ctx.fillStyle='#a9a496'; ctx.fillRect(x,y,w,h);
+      ctx.fillStyle='#4d4740'; ctx.fillRect(x+w*.05,y+h*.12,w*.9,h*.5);
+      if(settings.blood){ ctx.fillStyle='rgba(96,10,10,.85)';
+        ctx.fillRect(x+w*.12,y+h*.3,w*.5,h*.3);
+        ctx.beginPath(); ctx.ellipse(cx,y+h*.9,w*.3,h*.13,0,0,6.283); ctx.fill(); }
+      break;
+    case 'toilet':
+      ctx.fillStyle='#9d988a';
+      ctx.fillRect(x+w*.1,y+h*.3,w*.8,h*.7); ctx.fillRect(x+w*.22,y,w*.56,h*.34); break;
+    case 'box':
+      ctx.fillStyle='#5a462c'; ctx.fillRect(x,y,w,h);
+      ctx.strokeStyle='#3a2c1a'; ctx.lineWidth=Math.max(1,w*.05); ctx.strokeRect(x,y,w,h);
+      ctx.fillStyle='#6b5636'; ctx.fillRect(x,y+h*.42,w,h*.1); break;
+    case 'camspot': case 'cam':
+      ctx.fillStyle= s.k==='cam' ? '#20242a' : 'rgba(120,140,120,.5)';
+      ctx.fillRect(x,y,w,h*.8);
+      ctx.fillStyle='#0b0d10'; ctx.fillRect(x+w*.72,y+h*.2,w*.3,h*.4);
+      if(s.k==='cam'){ ctx.fillStyle=(performance.now()%1400<700)?'#ff3838':'#401010';
+        ctx.fillRect(x+w*.1,y+h*.1,Math.max(1,w*.16),Math.max(1,h*.16)); }
+      break;
+  }
+}
+
+/* ---- pre-rendered entity ---- */
+const ESPR=[];
+function buildEntity(){
+  for(let f=0;f<3;f++){
+    const c=document.createElement('canvas'); c.width=96; c.height=200;
+    const g=c.getContext('2d');
+    const sway=f===0?0:(f===1?3:-3), scream=(f===2);
+    g.save(); g.translate(48,0);
+    // legs
+    g.fillStyle='#a89f92';
+    g.fillRect(-13+sway*.4,150,10,50); g.fillRect(4+sway*.4,150,10,50);
+    // nightgown
+    g.fillStyle='#d8d3c4';
+    g.beginPath(); g.moveTo(-19,58); g.lineTo(19,58); g.lineTo(26,158); g.lineTo(-26,158); g.closePath(); g.fill();
+    // grime: irregular smudges, not blobs
+    for(let i=0;i<22;i++){
+      const h=(i*2654435761)>>>0, h2=(i*40503*2246822519)>>>0;
+      const gx=((h%2000)/2000-.5)*44, gy=64+((h2%2000)/2000)*92;
+      const rx=2.5+((h>>>7)%9), ry=2+((h2>>>5)%7);
+      g.fillStyle='rgba(84,78,60,'+(0.14+((h>>>3)%30)/120)+')';
+      g.beginPath(); g.ellipse(gx,gy,rx,ry,(h%10)/5,0,6.283); g.fill();
+    }
+    // torn hem
+    g.fillStyle='#000';
+    for(let i=-26;i<26;i+=7){ g.beginPath(); g.moveTo(i,158); g.lineTo(i+3.5,150); g.lineTo(i+7,158); g.closePath(); g.fill(); }
+    // arms
+    g.fillStyle='#b3aa9c';
+    g.fillRect(-27+sway,62,9,66); g.fillRect(18+sway,62,9,66);
+    // head
+    g.fillStyle='#cbc4b7';
+    g.beginPath(); g.ellipse(0,36,20,25,0,0,6.283); g.fill();
+    // hair: hangs either side so the face stays readable
+    g.fillStyle='#6f6a5e';                       // scalp
+    g.beginPath(); g.ellipse(0,20,21,13,0,0,6.283); g.fill();
+    g.strokeStyle='#8b8578'; g.lineWidth=2.3;
+    for(let i=-9;i<=9;i++){
+      if(Math.abs(i)<4) continue;                // keep the middle clear
+      const sgn=i<0?-1:1;
+      g.beginPath(); g.moveTo(i*1.9,16+Math.abs(i)*.8);
+      g.quadraticCurveTo(i*3.2+sgn*3+sway, 54, i*3.0+sgn*5+sway*1.5, 88+((i*37)%20));
+      g.stroke();
+    }
+    g.strokeStyle='rgba(139,133,120,.7)'; g.lineWidth=1.5;  // two strays over the face
+    g.beginPath(); g.moveTo(-4,17); g.quadraticCurveTo(-7+sway,46,-3+sway,74); g.stroke();
+    g.beginPath(); g.moveTo(6,17);  g.quadraticCurveTo(9+sway,44,5+sway,70);  g.stroke();
+    // eyes
+    g.fillStyle='#efeae0';
+    g.beginPath(); g.ellipse(-7.5,32,4.6,scream?5.4:4.2,0,0,6.283); g.fill();
+    g.beginPath(); g.ellipse(7.5,32,4.6,scream?5.4:4.2,0,0,6.283); g.fill();
+    g.fillStyle='#15120e';
+    g.beginPath(); g.arc(-7.5,32,1.9,0,6.283); g.fill();
+    g.beginPath(); g.arc(7.5,32,1.9,0,6.283); g.fill();
+    // mouth
+    g.fillStyle='#0a0708';
+    g.beginPath(); g.ellipse(0,scream?52:50,scream?12:8.5,scream?20:13,0,0,6.283); g.fill();
+    g.fillStyle='#c2ab5c';
+    const tw=scream?12:8.5;
+    for(let i=-2;i<=2;i++){
+      g.fillRect(i*(tw*.4)-1.6, scream?34:39, 3.2, 5);
+      g.fillRect(i*(tw*.4)-1.6, scream?66:59, 3.2, 4.4);
+    }
+    g.restore();
+    ESPR.push(c);
+  }
+}
+buildEntity();
+
+function drawEntity(ctx,cx,cy,w,h,dist){
+  const rushing=(ent.state==='CHASE'||ent.state==='RUSH');
+  let f=0;
+  if(ent.screamT>0) f=2;
+  else if(rushing||ent.state==='HUNT') f=(Math.floor(ent.anim*(rushing?9:4.5))%2)?1:0;
+  const img=ESPR[f];
+  const hh=h, ww=hh*(img.width/img.height);   // keep her tall and gaunt
+  ctx.drawImage(img,cx-ww/2,cy-hh/2,ww,hh);
+  if(dist<7){
+    ctx.globalAlpha=Math.min(.55,(7-dist)/9);
+    ctx.fillStyle='#ffe9a0';
+    const ex=cx-ww*.078, ex2=cx+ww*.078, ey=cy-hh*.32;
+    ctx.beginPath(); ctx.arc(ex,ey,Math.max(1,ww*.03),0,6.283); ctx.arc(ex2,ey,Math.max(1,ww*.03),0,6.283); ctx.fill();
+    ctx.globalAlpha=1;
+  }
+}
+
+/* ============================================================
+   5. MOVEMENT / COLLISION
+   ============================================================ */
+// ignoreProps: the entity lives here — furniture never stops her, and it keeps
+// her from being trapped inside her own bed's box on the frame she gets up.
+function blocked(lv,x,y,rad,ignoreProps){
+  for(let oy=-1;oy<=1;oy++)for(let ox=-1;ox<=1;ox++){
+    const c=(x+ox*rad)|0, r=(y+oy*rad)|0;
+    if(solid(lv,c,r)) {
+      const nx=Math.max(c,Math.min(x,c+1)), ny=Math.max(r,Math.min(y,r+1));
+      if((x-nx)**2+(y-ny)**2 < rad*rad) return true;
+    }
+  }
+  if(!ignoreProps) for(const b of BLOCKERS){
+    if(b.lv!==lv) continue;
+    if(Math.abs(x-b.x)<b.hw+rad && Math.abs(y-b.y)<b.hh+rad) return true;
+  }
+  return false;
+}
+function moveEnt(o,dx,dy,rad,ignoreProps){
+  if(!blocked(o.lv,o.x+dx,o.y,rad,ignoreProps)) o.x+=dx;
+  if(!blocked(o.lv,o.x,o.y+dy,rad,ignoreProps)) o.y+=dy;
+}
+function los(lv,ax,ay,bx,by){
+  const d=Math.hypot(bx-ax,by-ay), steps=Math.ceil(d*4);
+  for(let i=1;i<steps;i++){
+    const t=i/steps;
+    if(solid(lv,(ax+(bx-ax)*t)|0,(ay+(by-ay)*t)|0)) return false;
+  }
+  return true;
+}
+
+/* ---- BFS flow field for the entity ---- */
+let flow=null, flowKey='';
+function computeFlow(lv,tc,tr){
+  const key=lv+':'+tc+':'+tr; if(key===flowKey) return; flowKey=key;
+  const d=new Int16Array(COLS*ROWS).fill(-1);
+  if(!walkable(lv,tc,tr)){flow=null;return;}
+  const q=[tc+tr*COLS]; d[tc+tr*COLS]=0;
+  for(let h=0;h<q.length;h++){
+    const cur=q[h], c=cur%COLS, r=(cur/COLS)|0, nd=d[cur]+1;
+    const nb=[[c+1,r],[c-1,r],[c,r+1],[c,r-1]];
+    for(const [nc,nr] of nb){
+      if(nc<0||nr<0||nc>=COLS||nr>=ROWS) continue;
+      const idx=nc+nr*COLS;
+      if(d[idx]!==-1||!walkable(lv,nc,nr)) continue;
+      d[idx]=nd; q.push(idx);
+    }
+  }
+  flow=d;
+}
+function stepToward(o,tx,ty,spd,dt){
+  computeFlow(o.lv,tx|0,ty|0);
+  let gx=tx,gy=ty;
+  if(flow){
+    const c=o.x|0,r=o.y|0, here=flow[c+r*COLS];
+    if(here>0){
+      let best=here,bc=c,br=r;
+      for(const [nc,nr] of [[c+1,r],[c-1,r],[c,r+1],[c,r-1]]){
+        if(nc<0||nr<0||nc>=COLS||nr>=ROWS) continue;
+        const v=flow[nc+nr*COLS];
+        if(v>=0&&v<best){best=v;bc=nc;br=nr;}
+      }
+      gx=bc+.5; gy=br+.5;
+    }
+  }
+  const dx=gx-o.x, dy=gy-o.y, m=Math.hypot(dx,dy)||1;
+  o.a=Math.atan2(dy,dx);
+  moveEnt(o,dx/m*spd*dt,dy/m*spd*dt,.3,true);
+}
+
+/* ============================================================
+   6. ENTITY AI
+   ============================================================ */
+const BED={x:4.6,y:4.4};   // where she stands once she's up — clear of the bed itself
+const PATROL=[ {lv:0,x:9.8,y:9.5},{lv:0,x:16.5,y:3.5},{lv:0,x:17.0,y:10.5},{lv:0,x:6.0,y:16.0},{lv:0,x:9.8,y:15.5} ];
+
+function canSeePlayer(){
+  if(state.hidden) return false;
+  if(ent.lv!==state.lv) return false;
+  const dx=state.px-ent.x, dy=state.py-ent.y, d=Math.hypot(dx,dy);
+  let range = state.crouch?7.5:13;
+  if(d>range) return false;
+  const ang=Math.atan2(dy,dx);
+  let diff=Math.abs(((ang-ent.a+Math.PI*3)%(Math.PI*2))-Math.PI);
+  if(d>1.6 && diff>1.05) return false;
+  return los(ent.lv,ent.x,ent.y,state.px,state.py);
+}
+
+function entityUpdate(dt){
+  ent.anim+=dt;
+  if(ent.screamT>0){ ent.screamT-=dt; return; }
+  if(!ent.active) return;
+
+  switch(ent.state){
+    case 'SLEEP': break;
+    case 'WAKE':
+      ent.wakeT-=dt;
+      if(ent.wakeT<=0){ ent.state='HUNT'; ent.patrolI=0; }
+      break;
+    case 'HUNT': {           // roams the house looking
+      const t=PATROL[ent.patrolI%PATROL.length];
+      stepToward(ent,t.x,t.y,1.45,dt);
+      if(Math.hypot(t.x-ent.x,t.y-ent.y)<.55){
+        ent.patrolI++; ent.waitT=1.1+Math.random()*1.4; ent.state='LOOK';
+      }
+      if(canSeePlayer()) spot();
+      break;
+    }
+    case 'LOOK':
+      ent.waitT-=dt; ent.a+=dt*1.5;
+      if(ent.waitT<=0) ent.state='HUNT';
+      if(canSeePlayer()) spot();
+      break;
+    case 'RETURN':
+      stepToward(ent,BED.x,BED.y,1.35,dt);
+      if(Math.hypot(BED.x-ent.x,BED.y-ent.y)<.6){ ent.state='SLEEP'; ent.active=false; onBeat('SHE_SLEEPS'); }
+      if(canSeePlayer()) spot();
+      break;
+    case 'BEDROOM_IDLE': {   // in bedroom, occasionally leaves (WAIT_PHONE beat)
+      ent.roamT-=dt;
+      if(ent.roamT<=0){ ent.state='ROAM'; ent.roamT=9+Math.random()*7; ent.patrolI=1; }
+      else { stepToward(ent,BED.x+ (Math.sin(ent.anim*.7)*1.2), BED.y+.4, .55, dt); }
+      if(canSeePlayer()) spot();
+      break;
+    }
+    case 'ROAM': {
+      ent.roamT-=dt;
+      const t=PATROL[ent.patrolI%PATROL.length];
+      stepToward(ent,t.x,t.y,1.3,dt);
+      if(Math.hypot(t.x-ent.x,t.y-ent.y)<.6) ent.patrolI++;
+      if(ent.roamT<=0){ ent.state='BEDROOM_RETURN'; }
+      if(canSeePlayer()) spot();
+      break;
+    }
+    case 'BEDROOM_RETURN':
+      stepToward(ent,BED.x,BED.y,1.25,dt);
+      if(Math.hypot(BED.x-ent.x,BED.y-ent.y)<.7){ ent.state='BEDROOM_IDLE'; ent.roamT=10+Math.random()*8; }
+      if(canSeePlayer()) spot();
+      break;
+    case 'CHASE': {
+      if(ent.lv!==state.lv){ ent.lostT+=dt; if(ent.lostT>3){ent.state='HUNT';} }
+      else ent.lostT=0;
+      stepToward(ent,state.px,state.py,3.35,dt);   // mad fast
+      const d=Math.hypot(state.px-ent.x,state.py-ent.y);
+      if(!state.hidden && d<0.72) grab();
+      if(!canSeePlayer()){ ent.seeT-=dt; if(ent.seeT<=0){ ent.state='HUNT'; } }
+      else ent.seeT=3.0;
+      break;
+    }
+  }
+  // footstep audio
+  if(ent.state==='CHASE'||ent.state==='HUNT'||ent.state==='ROAM'||ent.state==='BEDROOM_RETURN'||ent.state==='RETURN'){
+    ent.stepA=(ent.stepA||0)+dt*(ent.state==='CHASE'?7:3.4);
+    if(ent.stepA>1){ ent.stepA=0;
+      const d=Math.hypot(state.px-ent.x,state.py-ent.y);
+      if(ent.lv===state.lv&&d<11&&AC) sfxNoise(.08,300,3,Math.max(0,.09*(1-d/11)));
+    }
+  }
+}
+function spot(){
+  if(ent.state==='CHASE') { ent.seeT=3; return; }
+  ent.state='CHASE'; ent.seeT=3; ent.lostT=0;
+  sfx.scream(); state.fear=1;
+  if(state.beat==='HIDE_COUCH'||state.beat==='SHE_WAKES') {} // still fatal
+}
+function grab(){
+  if(state.mode!=='play') return;
+  ent.screamT=1.2;
+  sfx.scream();
+  state.mode='dead'; save.deaths++; writeSave();
+  document.getElementById('deathSub').textContent =
+    settings.blood ? 'SHE FOUND YOU' : 'SHE FOUND YOU';
+  if(settings.scares){ state.hurtFlash=1; }
+  setTimeout(()=>{ document.getElementById('death').classList.add('on'); },700);
+}
+
+/* ============================================================
+   7. BEATS / SCRIPT
+   ============================================================ */
+const OBJ=document.getElementById('obj');
+function setObjective(t){
+  OBJ.textContent=t; OBJ.classList.add('show');
+  clearTimeout(setObjective._t);
+  setObjective._t=setTimeout(()=>OBJ.classList.remove('show'),5200);
+}
+function beat(b){
+  state.beat=b; state.beatT=0; save.beat=b; save.chapter=1; writeSave();
+  switch(b){
+    case 'EXPLORE':
+      setObjective('LOOK AROUND THE HOUSE'); state.exploreRooms={}; break;
+    case 'SHE_WAKES':
+      ent.active=true; ent.state='WAKE'; ent.wakeT=2.6; ent.lv=0; ent.x=BED.x; ent.y=BED.y;
+      sfx.wake(); setObjective('SOMETHING GOT UP. HIDE BEHIND THE COUCH'); break;
+    case 'HIDDEN_WAIT':
+      setObjective('STAY DOWN'); break;
+    case 'SHE_LOCKS':
+      sfx.lock(); state.doorsLocked=true;
+      setObjective('SHE LOCKED THE DOORS'); break;
+    case 'CAMERAS':
+      state.hidden=null;   // she's back in bed — no reason to stay down
+      setObjective('SET UP 3 CAMERAS · LIVING ROOM · KITCHEN · BATHROOM'); break;
+    case 'WAIT_PHONE':
+      ent.active=true; ent.state='BEDROOM_IDLE'; ent.roamT=6+Math.random()*5;
+      setObjective('WATCH THE CAMERAS. WAIT FOR HER TO LEAVE THE BEDROOM'); break;
+    case 'GET_KEY':
+      setObjective('GET THE KEY FROM HER BEDROOM'); break;
+    case 'CHASE':
+      setObjective('RUN. GET TO THE BASEMENT'); break;
+    case 'BASEMENT':
+      setObjective('THE DOOR OUT'); break;
+  }
+}
+function onBeat(ev){
+  if(ev==='SHE_SLEEPS' && state.beat==='SHE_LOCKS'){ beat('CAMERAS'); }
+}
+function keyVisible(){ return state.beat==='GET_KEY'||state.beat==='WAIT_PHONE'; }
+
+function beatsUpdate(dt){
+  state.beatT+=dt;
+  const room=roomOf(state.lv,state.px,state.py);
+
+  if(state.beat==='EXPLORE'){
+    if(room) state.exploreRooms[room]=1;
+    const n=Object.keys(state.exploreRooms).length;
+    if(state.beatT>26 || n>=4){ beat('SHE_WAKES'); }
+  }
+  else if(state.beat==='SHE_WAKES'){
+    if(state.hidden==='couch'){ beat('HIDDEN_WAIT'); }
+  }
+  else if(state.beat==='HIDDEN_WAIT'){
+    if(state.beatT>5.5){ beat('SHE_LOCKS'); ent.state='RETURN'; }
+  }
+  else if(state.beat==='SHE_LOCKS'){
+    if(state.beatT>2 && ent.state==='SLEEP'){ beat('CAMERAS'); }
+  }
+  else if(state.beat==='CAMERAS'){
+    if(state.camsPlaced.every(v=>v)) beat('WAIT_PHONE');
+  }
+  else if(state.beat==='WAIT_PHONE'){
+    // once she's out of the bedroom and the player has SEEN it on the phone
+    const sheOut = ent.state==='ROAM' && roomOf(0,ent.x,ent.y)!=='BEDROOM';
+    if(sheOut && state.phoneUp) beat('GET_KEY');
+  }
+  else if(state.beat==='GET_KEY'){
+    if(state.hasKey && room==='LIVING ROOM'){
+      ent.active=true; ent.state='CHASE'; ent.seeT=4;
+      if(ent.lv!==0){ent.lv=0;}
+      ent.x=9.6; ent.y=13.6; sfx.scream(); beat('CHASE');
+    }
+  }
+  else if(state.beat==='CHASE'){
+    if(state.lv===BASEMENT) beat('BASEMENT');
+  }
+  // room label
+  if(room && room!==beatsUpdate._room){
+    beatsUpdate._room=room;
+    const rl=document.getElementById('roomLbl');
+    rl.textContent=room; rl.style.opacity='1';
+    clearTimeout(beatsUpdate._t); beatsUpdate._t=setTimeout(()=>rl.style.opacity='0',2400);
+  }
+}
+
+/* ============================================================
+   8. INTERACTION
+   ============================================================ */
+const PROMPT=document.getElementById('prompt');
+function nearestInteract(){
+  if(state.hidden) return {kind:'unhide',label:'COME OUT'};
+  // doors / stairs
+  const c=state.px|0, r=state.py|0;
+  for(const [dc,dr] of [[0,0],[1,0],[-1,0],[0,1],[0,-1]]){
+    const t=tileAt(state.lv,c+dc,r+dr);
+    if(t==='U') return {kind:'up',label:'GO UPSTAIRS'};
+    if(t==='d') return {kind:'down',label:'GO DOWNSTAIRS'};
+    if(t==='F') return {kind:'front',label:'FRONT DOOR'};
+    if(t==='D') return {kind:'bdoor',label: state.hasKey?'UNLOCK THE BASEMENT':'LOCKED · NEEDS A KEY'};
+    if(t==='O') return {kind:'out',label:'GET OUT'};
+  }
+  let best=null,bd=1.35;
+  for(const p of PROPS){
+    if(p.lv!==state.lv||!p.lab) continue;
+    if(p.k==='key'&&(!keyVisible()||state.hasKey)) continue;
+    if(p.k==='camspot'&&(state.camsPlaced[p.cam]||state.beat!=='CAMERAS')) continue;
+    if(p.hide&&!hideAllowed(p.hide)) continue;
+    const d=Math.hypot(p.x-state.px,p.y-state.py);
+    if(d<bd){bd=d;best=p;}
+  }
+  if(best) return {kind:best.k,label:best.lab,prop:best};
+  return null;
+}
+function hideAllowed(){ return true; }
+
+function doInteract(){
+  const it=nearestInteract(); if(!it) return;
+  switch(it.kind){
+    case 'unhide': state.hidden=null; sfx.creak(); break;
+    case 'up':   changeLevel(UPSTAIRS,18.5,17.4); break;
+    case 'down': changeLevel(GROUND,18.5,17.4); break;
+    case 'front':
+      sfx.deny(); setObjective(state.doorsLocked?'SHE LOCKED IT':'BOARDED FROM THE OUTSIDE'); break;
+    case 'bdoor':
+      if(state.hasKey){ state.basementOpen=true; sfx.lock(); flowKey='';
+        setObjective('OPEN'); changeLevel(BASEMENT,19.4,10.5); }
+      else sfx.deny();
+      break;
+    case 'out':
+      if(state.lv===BASEMENT && state.hasKey) finishChapter();
+      else sfx.deny();
+      break;
+    case 'key':
+      state.hasKey=true; sfx.pickup(); setObjective('BASEMENT KEY'); break;
+    case 'camspot':
+      state.camsPlaced[it.prop.cam]=true; state.camsLeft--; sfx.place();
+      document.querySelectorAll('#camTabs button')[it.prop.cam].disabled=false;
+      setObjective('CAMERA PLACED · '+(3-state.camsLeft)+'/3'); break;
+    case 'bed':   state.hidden='bed';   sfx.creak(); break;
+    case 'couch': state.hidden='couch'; sfx.creak(); break;
+    case 'atticspot': state.hidden='attic'; sfx.creak(); break;
+  }
+}
+function changeLevel(lv,x,y){
+  state.lv=lv; state.px=x; state.py=y; flowKey=''; sfx.creak();
+  if(lv===BASEMENT){ ent.lv=BASEMENT; ent.x=19.4; ent.y=12.4; ent.state='CHASE'; ent.active=true; ent.seeT=6; }
+}
+
+/* ============================================================
+   9. INPUT
+   ============================================================ */
+const mv={x:0,y:0}; let look=0;
+const keys={};
+let stickId=null,lookId=null,lookLast=0,stickBase={x:0,y:0};
+const stick=document.getElementById('stick'),knob=document.getElementById('knob');
+
+function tStart(e){
+  if(state.mode!=='play') return;
+  for(const t of e.changedTouches){
+    if(t.clientX<window.innerWidth*0.5 && stickId===null){
+      stickId=t.identifier; stickBase={x:t.clientX,y:t.clientY};
+      stick.style.display='block';
+      stick.style.left=(t.clientX-66)+'px'; stick.style.top=(t.clientY-66)+'px';
+    } else if(lookId===null){ lookId=t.identifier; lookLast=t.clientX; }
+  }
+}
+function tMove(e){
+  e.preventDefault();
+  for(const t of e.changedTouches){
+    if(t.identifier===stickId){
+      let dx=t.clientX-stickBase.x, dy=t.clientY-stickBase.y;
+      const d=Math.hypot(dx,dy),max=56;
+      if(d>max){dx=dx/d*max;dy=dy/d*max;}
+      knob.style.left=(38+dx)+'px'; knob.style.top=(38+dy)+'px';
+      mv.x=dx/max; mv.y=dy/max;
+    } else if(t.identifier===lookId){
+      look += (t.clientX-lookLast)*0.0055; lookLast=t.clientX;
+    }
+  }
+}
+function tEnd(e){
+  for(const t of e.changedTouches){
+    if(t.identifier===stickId){ stickId=null; mv.x=0;mv.y=0;
+      knob.style.left='38px';knob.style.top='38px'; stick.style.display='none'; }
+    if(t.identifier===lookId) lookId=null;
+  }
+}
+view.addEventListener('touchstart',tStart,{passive:false});
+view.addEventListener('touchmove',tMove,{passive:false});
+view.addEventListener('touchend',tEnd); view.addEventListener('touchcancel',tEnd);
+
+window.addEventListener('keydown',e=>{
+  keys[e.key.toLowerCase()]=true;
+  if(state.mode==='play'){
+    if(e.key.toLowerCase()==='e') doInteract();
+    if(e.key.toLowerCase()==='c') state.crouch=!state.crouch;
+    if(e.key==='Tab'||e.key.toLowerCase()==='f'){ e.preventDefault(); togglePhone(); }
+    if(e.key==='Escape') pause();
+  } else if(state.mode==='cine' && e.key===' ') skipCine();
+});
+window.addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+view.addEventListener('mousemove',e=>{ if(document.pointerLockElement===view) look+=e.movementX*0.0022; });
+view.addEventListener('click',()=>{ if(state.mode==='play'&&!IS_TOUCH&&!document.pointerLockElement) view.requestPointerLock(); });
+
+const bind=(id,fn)=>{const el=document.getElementById(id);
+  el.addEventListener('touchstart',ev=>{ev.preventDefault();ev.stopPropagation();fn();},{passive:false});
+  el.addEventListener('click',ev=>{ev.stopPropagation();if(!IS_TOUCH)fn();});};
+bind('bUse',()=>doInteract());
+bind('bCrouch',()=>{state.crouch=!state.crouch;});
+bind('bPhone',()=>togglePhone());
+
+function readPad(){
+  if(!navigator.getGamepads) return;
+  const gp=navigator.getGamepads()[0]; if(!gp) return;
+  const dz=v=>Math.abs(v)<.18?0:v;
+  mv.x=dz(gp.axes[0]); mv.y=dz(gp.axes[1]);
+  look+=dz(gp.axes[2]||0)*0.045;
+  if(gp.buttons[0]&&gp.buttons[0].pressed&&!readPad._a) doInteract();
+  readPad._a=gp.buttons[0]&&gp.buttons[0].pressed;
+  if(gp.buttons[1]&&gp.buttons[1].pressed&&!readPad._b) state.crouch=!state.crouch;
+  readPad._b=gp.buttons[1]&&gp.buttons[1].pressed;
+  if(gp.buttons[3]&&gp.buttons[3].pressed&&!readPad._y) togglePhone();
+  readPad._y=gp.buttons[3]&&gp.buttons[3].pressed;
+}
+
+/* ============================================================
+   10. PHONE
+   ============================================================ */
+const phoneEl=document.getElementById('phone');
+function togglePhone(){
+  if(state.beat==='STREET'||state.beat==='APPROACH') return;
+  state.phoneUp=!state.phoneUp;
+  phoneEl.classList.toggle('up',state.phoneUp);
+  sfx.phone();
+}
+document.querySelectorAll('#camTabs button').forEach(b=>{
+  b.disabled=true;
+  const go=ev=>{ev.stopPropagation(); state.phoneCam=+b.dataset.c; paintTabs(); sfx.ui();};
+  b.addEventListener('touchstart',e=>{e.preventDefault();go(e);},{passive:false});
+  b.addEventListener('click',go);
+});
+function paintTabs(){
+  document.querySelectorAll('#camTabs button').forEach((b,i)=>b.classList.toggle('on',i===state.phoneCam));
+}
+paintTabs();
+
+let glitchT=0, rollY=0;
+function drawFeed(dt){
+  const i=state.phoneCam;
+  document.getElementById('feedLbl').textContent='CAM '+(i+1)+' · '+CAMS[i].name;
+  const W=feedCv.width,H=feedCv.height;
+  if(!state.camsPlaced[i]){
+    fctx.fillStyle='#000'; fctx.fillRect(0,0,W,H);
+    fctx.fillStyle='#2a2a2a'; fctx.font='9px monospace'; fctx.textAlign='center';
+    fctx.fillText('NO SIGNAL',W/2,H/2);
+    // static
+    for(let k=0;k<400;k++){ fctx.fillStyle='rgba(255,255,255,'+(Math.random()*.14)+')';
+      fctx.fillRect(Math.random()*W|0,Math.random()*H|0,2,1); }
+    return;
+  }
+  glitchT-=dt;
+  const cam=CAMS[i];
+  renderView(fctx,W,H,{lv:cam.lv,x:cam.x,y:cam.y,a:cam.a},{eyeOff:0.06});
+  // CCTV grade: desaturate + green, scanlines, noise, roll
+  const img=fctx.getImageData(0,0,W,H), d=img.data;
+  for(let p=0;p<d.length;p+=4){
+    const l=(d[p]*.36+d[p+1]*.5+d[p+2]*.14);
+    d[p]=l*.72; d[p+1]=l*1.0; d[p+2]=l*.66;
+  }
+  fctx.putImageData(img,0,0);
+  fctx.fillStyle='rgba(0,0,0,.30)';
+  for(let y=0;y<H;y+=3) fctx.fillRect(0,y,W,1);
+  for(let k=0;k<260;k++){ fctx.fillStyle='rgba(200,255,200,'+(Math.random()*.10)+')';
+    fctx.fillRect(Math.random()*W|0,Math.random()*H|0,1,1); }
+  if(glitchT<0){
+    if(Math.random()<0.035){
+      const y=Math.random()*H|0, h=4+Math.random()*22;
+      const slice=fctx.getImageData(0,y,W,h);
+      fctx.putImageData(slice,(Math.random()*22-11)|0,y);
+      glitchT=.08;
+    }
+  }
+  rollY=(rollY+dt*13)%H;
+  fctx.fillStyle='rgba(255,255,255,.045)'; fctx.fillRect(0,rollY,W,10);
+}
+
+/* ============================================================
+   11. CUTSCENES
+   ============================================================ */
+const cine=document.getElementById('cine'), sub=document.getElementById('sub');
+let cineQ=[], cineI=0, cineT=0, cineDone=null, cineScene='street';
+
+function playCine(scene,lines,done){
+  cineScene=scene; cineQ=lines; cineI=0; cineT=0; cineDone=done;
+  state.mode='cine'; cine.classList.add('on');
+  document.getElementById('hud').classList.add('hide');
+  sub.textContent=lines[0]?lines[0].t:'';
+}
+function skipCine(){ if(state.mode!=='cine') return; endCine(); }
+document.getElementById('skip').addEventListener('click',skipCine);
+document.getElementById('skip').addEventListener('touchstart',e=>{e.preventDefault();skipCine();},{passive:false});
+
+function endCine(){
+  cine.classList.remove('on'); state.mode='play';
+  document.getElementById('hud').classList.remove('hide');
+  const f=cineDone; cineDone=null; if(f) f();
+}
+function cineUpdate(dt){
+  cineT+=dt;
+  const cur=cineQ[cineI];
+  if(!cur){ endCine(); return; }
+  if(cur.sfx&&!cur._p){ cur._p=1; (sfx[cur.sfx]||(()=>{}))(); }
+  if(cineT>cur.d){ cineT=0; cineI++;
+    const n=cineQ[cineI];
+    sub.textContent=n?n.t:'';
+    if(!n) endCine();
+  }
+  drawCine();
+}
+function drawCine(){
+  const W=cineCv.width,H=cineCv.height,g=cctx;
+  if(cineScene==='street'){
+    const sky=g.createLinearGradient(0,0,0,H);
+    sky.addColorStop(0,'#05070e'); sky.addColorStop(.62,'#0c1020'); sky.addColorStop(1,'#141420');
+    g.fillStyle=sky; g.fillRect(0,0,W,H);
+    for(let i=0;i<110;i++){
+      const h1=(i*2654435761)>>>0, h2=(i*40503*2246822519)>>>0;
+      const sx=(h1%10007)/10007*W, sy=(h2%10007)/10007*(H*.55);
+      g.fillStyle='rgba(255,255,240,'+(0.12+(h1%50)/200)+')'; g.fillRect(sx|0,sy|0,1.4,1.4); }
+    g.fillStyle='rgba(230,230,210,.85)'; g.beginPath(); g.arc(W*.79,H*.16,H*.045,0,6.283); g.fill();
+    // house
+    const hx=W*.28,hy=H*.30,hw=W*.44,hh=H*.44;
+    g.fillStyle='#0a0a0c'; g.fillRect(hx,hy,hw,hh);
+    g.beginPath(); g.moveTo(hx-hw*.07,hy); g.lineTo(hx+hw*.5,hy-hh*.32); g.lineTo(hx+hw*1.07,hy); g.closePath(); g.fill();
+    // windows, one dim yellow
+    const win=(a,b,w2,h2,lit)=>{ g.fillStyle=lit?'rgba(196,158,66,.5)':'#050506'; g.fillRect(a,b,w2,h2);
+      g.strokeStyle='#141416'; g.lineWidth=2; g.strokeRect(a,b,w2,h2); };
+    win(hx+hw*.10,hy+hh*.13,hw*.19,hh*.20,false);
+    win(hx+hw*.40,hy+hh*.13,hw*.19,hh*.20,true);
+    win(hx+hw*.70,hy+hh*.13,hw*.19,hh*.20,false);
+    win(hx+hw*.10,hy+hh*.50,hw*.19,hh*.20,false);
+    win(hx+hw*.70,hy+hh*.50,hw*.19,hh*.20,false);
+    g.fillStyle='#131318'; g.fillRect(hx+hw*.42,hy+hh*.52,hw*.16,hh*.48);
+    g.fillStyle='#1a1a1e'; g.fillRect(0,hy+hh,W,H-(hy+hh));
+    g.fillStyle='#26262c'; g.fillRect(0,hy+hh,W,3);
+  } else if(cineScene==='door'){
+    g.fillStyle='#08070a'; g.fillRect(0,0,W,H);
+    const dx=W*.30,dy=H*.10,dw=W*.40,dh=H*.78;
+    g.fillStyle='#241a12'; g.fillRect(dx,dy,dw,dh);
+    g.strokeStyle='#14100a'; g.lineWidth=4;
+    g.strokeRect(dx+dw*.09,dy+dh*.07,dw*.34,dh*.34);
+    g.strokeRect(dx+dw*.57,dy+dh*.07,dw*.34,dh*.34);
+    g.strokeRect(dx+dw*.09,dy+dh*.52,dw*.34,dh*.38);
+    g.strokeRect(dx+dw*.57,dy+dh*.52,dw*.34,dh*.38);
+    g.fillStyle='#8c7a44'; g.beginPath(); g.arc(dx+dw*.90,dy+dh*.5,W*.014,0,6.283); g.fill();
+    const gl=g.createRadialGradient(W*.5,H*.5,0,W*.5,H*.5,W*.6);
+    gl.addColorStop(0,'rgba(150,120,50,.16)'); gl.addColorStop(1,'rgba(0,0,0,.88)');
+    g.fillStyle=gl; g.fillRect(0,0,W,H);
+  } else if(cineScene==='out'){
+    const sky=g.createLinearGradient(0,0,0,H);
+    sky.addColorStop(0,'#0a1020'); sky.addColorStop(1,'#2a2418');
+    g.fillStyle=sky; g.fillRect(0,0,W,H);
+    g.fillStyle='#0a0a0c'; g.fillRect(0,H*.66,W,H*.34);
+    g.fillStyle='#101014';
+    g.fillRect(W*.05,H*.30,W*.30,H*.38);
+    g.fillStyle='rgba(196,158,66,.35)'; g.fillRect(W*.13,H*.38,W*.07,H*.09);
+  }
+}
+
+/* ============================================================
+   12. CHAPTER FLOW
+   ============================================================ */
+function startChapter1(fromBeat,fromSave){
+  resetRun();
+  if(fromBeat && fromBeat!=='STREET'){ jumpToBeat(fromBeat,fromSave); return; }
+  state.lv=STREET; state.px=5.5; state.py=16.5; state.pa=-Math.PI/2;
+  state.beat='STREET';
+  playCine('street',[
+    {t:'BARRY CLARK · 27 · HOME INSPECTOR',d:2.6},
+    {t:'"This house has been built. For 150 years exact."',d:4.0},
+    {t:'"Since they didn\'t wanna take it down, it\'s time I would do a inspection and see what\'s in here."',d:5.2},
+    {t:'"Ah, it\'s 2:03 AM. One quick look and I\'m out."',d:4.0}
+  ],()=>{ state.beat='APPROACH'; setObjective('GO TO THE HOUSE'); });
+}
+function jumpToBeat(b,fromSave){
+  // place player sensibly for a mid-chapter resume
+  state.lv=GROUND; state.px=5.5; state.py=17.6; state.pa=-Math.PI/2; flowKey='';
+  if(fromSave){                       // carry real progress back in
+    state.camsPlaced=(save.cams||[false,false,false]).slice();
+    state.hasKey=!!save.hasKey;
+    state.doorsLocked=!!save.doorsLocked;
+    // never resume past a beat whose prerequisites aren't actually met
+    if((b==='WAIT_PHONE'||b==='GET_KEY')&&!state.camsPlaced.every(Boolean)) b='CAMERAS';
+    if((b==='CHASE'||b==='BASEMENT')&&!state.hasKey) b='GET_KEY';
+  }
+  const cams=()=>{ state.doorsLocked=true; if(!fromSave) state.camsPlaced=[true,true,true]; };
+  switch(b){
+    case 'SHE_WAKES': case 'HIDDEN_WAIT': beat('SHE_WAKES'); break;
+    case 'SHE_LOCKS': case 'CAMERAS':     state.doorsLocked=true; beat('CAMERAS'); break;
+    case 'WAIT_PHONE':                    cams(); beat('WAIT_PHONE'); break;
+    case 'GET_KEY':
+      cams();
+      ent.active=true; ent.state='ROAM'; ent.roamT=14; ent.lv=0; ent.x=16.5; ent.y=3.5;
+      beat('GET_KEY'); break;
+    case 'CHASE': case 'BASEMENT':        cams(); state.hasKey=true; beat('GET_KEY'); break;
+    default:                              beat('EXPLORE');
+  }
+  state.camsLeft=3-state.camsPlaced.filter(Boolean).length;
+  document.querySelectorAll('#camTabs button').forEach((x,i)=>x.disabled=!state.camsPlaced[i]);
+}
+function resetRun(){
+  state.lv=0; state.crouch=false; state.hidden=null; state.hasKey=false;
+  state.camsPlaced=[false,false,false]; state.camsLeft=3; state.basementOpen=false;
+  state.doorsLocked=false; state.phoneUp=false; phoneEl.classList.remove('up');
+  state.fear=0; state.eyeH=0; state.hurtFlash=0;
+  ent.active=false; ent.state='SLEEP'; ent.lv=0; ent.x=BED.x; ent.y=BED.y; ent.screamT=0;
+  flowKey='';
+  document.querySelectorAll('#camTabs button').forEach(x=>x.disabled=true);
+  state.mode='play';
+  document.getElementById('hud').classList.remove('hide');
+  document.getElementById('death').classList.remove('on');
+  hideAllScreens();
+}
+function respawn(){
+  let b=state.beat;
+  if(b==='CHASE'||b==='BASEMENT') b='CHASE';   // retry the run, not the doorway
+  save.cams=state.camsPlaced.slice(); save.hasKey=state.hasKey; save.doorsLocked=state.doorsLocked;
+  document.getElementById('death').classList.remove('on');
+  resetRun();
+  jumpToBeat(b,true);
+}
+function finishChapter(){
+  save.chapter=1; save.beat=null; writeSave();
+  playCine('out',[
+    {t:'The basement door gives. Cold air. Grass.',d:3.4},
+    {t:'"...I never even got upstairs."',d:3.6},
+    {t:'CHAPTER 1 COMPLETE',d:3.0}
+  ],()=>{ toMenu(); });
+}
+
+/* ============================================================
+   13. UPDATE
+   ============================================================ */
+function update(dt){
+  if(state.mode==='cine'){ cineUpdate(dt); return; }
+  if(state.mode!=='play') return;
+  if(PLATFORM==='CONSOLE') readPad();
+
+  // keyboard
+  let kx=0,ky=0;
+  if(keys['a'])kx-=1; if(keys['d'])kx+=1;
+  if(keys['w'])ky-=1; if(keys['s'])ky+=1;
+  if(keys['arrowleft'])look-=dt*2.1; if(keys['arrowright'])look+=dt*2.1;
+  let ix=mv.x+kx, iy=mv.y+ky;
+  const im=Math.hypot(ix,iy); if(im>1){ix/=im;iy/=im;}
+
+  state.pa+=look; look=0;
+
+  if(!state.hidden){
+    let spd=state.crouch?1.45:2.65;
+    if(state.beat==='CHASE'||state.beat==='BASEMENT') spd*=1.12;
+    const fx=Math.cos(state.pa),fy=Math.sin(state.pa);
+    const dx=(fx*-iy + -fy*ix)*spd*dt;
+    const dy=(fy*-iy +  fx*ix)*spd*dt;
+    const before=state.px+state.py;
+    const p={lv:state.lv,x:state.px,y:state.py};   // moveEnt works on .x/.y
+    moveEnt(p,dx,dy,.26);
+    state.px=p.x; state.py=p.y;
+    const moved=Math.abs(state.px+state.py-before)>0.0005;
+    if(moved){
+      state.bob+=dt*(state.crouch?6:10);
+      state.stepT+=dt*(state.crouch?1.3:2.4);
+      if(state.stepT>1){ state.stepT=0; sfx.step(); }
+    }
+  }
+
+  // crouch eye height
+  const tgt=state.hidden?-0.20:(state.crouch?-0.13:0);
+  state.eyeH += (tgt-state.eyeH)*Math.min(1,dt*8);
+
+  // street → house trigger
+  if(state.beat==='APPROACH'){
+    if(state.lv===STREET && state.py<9.9 && Math.abs(state.px-5.5)<2.2){
+      state.beat='KNOCK';
+      playCine('door',[
+        {t:'*knock*',d:.75,sfx:'knock'},
+        {t:'*knock*',d:.75,sfx:'knock'},
+        {t:'*knock*',d:.95,sfx:'knock'},
+        {t:'"Anyone there?"',d:2.2},
+        {t:'Somewhere inside, a sink faucet runs.',d:2.8,sfx:'faucet'},
+        {t:'The knob turns. It\'s unlocked.',d:2.6,sfx:'creak'}
+      ],()=>{ state.px=5.5; state.py=17.6; state.pa=-Math.PI/2; state.lv=GROUND; flowKey=''; beat('EXPLORE'); });
+    }
+  }
+
+  entityUpdate(dt);
+  beatsUpdate(dt);
+
+  // fear / heartbeat / drone
+  const near = (ent.active&&ent.lv===state.lv) ? Math.max(0,1-Math.hypot(state.px-ent.x,state.py-ent.y)/12) : 0;
+  state.fear += ((ent.state==='CHASE'?1:near)-state.fear)*Math.min(1,dt*2.2);
+  if(droneG) droneG.gain.value = 0.03 + state.fear*0.16;
+  state.heartT-=dt;
+  if(state.heartT<=0 && state.fear>0.18){ sfx.heart(state.fear); state.heartT=1.15-state.fear*0.72; }
+
+  // prompt
+  const it=nearestInteract();
+  if(it){ PROMPT.textContent=it.label; PROMPT.classList.add('show'); }
+  else { PROMPT.classList.remove('show'); PROMPT.textContent=''; }
+
+  if(state.phoneUp) drawFeed(dt);
+  state.hurtFlash=Math.max(0,state.hurtFlash-dt*.8);
+  document.getElementById('hurt').style.opacity = Math.max(state.fear*0.16, state.hurtFlash*0.85);
+}
+
+/* ============================================================
+   14. DRAW
+   ============================================================ */
+function draw(){
+  if(state.mode==='menu'){ vctx.fillStyle='#000'; vctx.fillRect(0,0,VW,VH); return; }
+  if(state.mode==='cine') return;
+  const bobY = Math.sin(state.bob)*0.006*(state.crouch?.5:1);
+  renderView(vctx,VW,VH,{lv:state.lv,x:state.px,y:state.py,a:state.pa},{eyeOff:state.eyeH+bobY});
+  if(state.hidden){
+    vctx.fillStyle='rgba(0,0,0,.55)'; vctx.fillRect(0,0,VW,VH);
+    vctx.fillStyle='#0a0a0c';
+    if(state.hidden==='couch'){ vctx.fillRect(0,VH*.62,VW,VH*.38); }
+    else if(state.hidden==='bed'){ vctx.fillRect(0,0,VW,VH*.30); vctx.fillRect(0,VH*.78,VW,VH*.22); }
+    else { vctx.fillRect(0,0,VW,VH*.18); }
+  }
+  if(ent.screamT>0 && settings.scares){
+    const t=1-ent.screamT/1.2;
+    const img=ESPR[2], s=(0.5+t*1.7);
+    vctx.save(); vctx.globalAlpha=Math.min(1,t*3);
+    vctx.fillStyle='rgba(40,0,0,'+(t*.7)+')'; vctx.fillRect(0,0,VW,VH);
+    const hh=VH*s*1.4, ww=hh*(96/200);
+    vctx.drawImage(img,VW/2-ww/2+Math.sin(t*44)*VW*.02,VH/2-hh/2,ww,hh);
+    vctx.restore();
+  }
+}
+
+/* ============================================================
+   15. MENUS
+   ============================================================ */
+const screens=['mMain','mChapters','mSettings','mPause'];
+function hideAllScreens(){ screens.forEach(s=>document.getElementById(s).classList.add('hide')); }
+function show(id){ hideAllScreens(); document.getElementById(id).classList.remove('hide'); }
+function toMenu(){
+  state.mode='menu'; hideAllScreens(); show('mMain');
+  document.getElementById('hud').classList.add('hide');
+  document.getElementById('death').classList.remove('on');
+  phoneEl.classList.remove('up'); state.phoneUp=false;
+  if(document.pointerLockElement) document.exitPointerLock();
+  document.getElementById('btnResume').disabled = !save.beat;
+}
+function pause(){
+  if(state.mode!=='play') return;
+  state.mode='pause'; show('mPause');
+  document.getElementById('hud').classList.add('hide');
+  if(document.pointerLockElement) document.exitPointerLock();
+  writeSave();
+}
+function unpause(){ hideAllScreens(); state.mode='play'; document.getElementById('hud').classList.remove('hide'); }
+
+const on=(id,fn)=>document.getElementById(id).addEventListener('click',()=>{audioInit();sfx.ui();fn();});
+on('btnResume',()=>{ startChapter1(save.beat||'EXPLORE',true); });
+on('btnChapters',()=>show('mChapters'));
+on('btnSettings',()=>{ mSettingsFrom = state.mode==='pause'?'mPause':'mMain'; show('mSettings'); });
+on('chBack',()=>show('mMain'));
+on('ch1',()=>startChapter1('STREET'));
+let mSettingsFrom='mMain';
+on('setBack',()=>show(mSettingsFrom));
+on('pResume',()=>unpause());
+on('pSettings',()=>{ mSettingsFrom='mPause'; show('mSettings'); });
+on('pQuit',()=>{ writeSave(); toMenu(); });
+on('btnContinue',()=>respawn());
+on('btnQuitDeath',()=>toMenu());
+
+// settings widgets
+const sVol=document.getElementById('sVol');
+sVol.value=settings.vol;
+sVol.addEventListener('input',()=>{ settings.vol=+sVol.value; setVol(); saveSettings(); });
+function segInit(id,val,fn){
+  const box=document.getElementById(id);
+  box.querySelectorAll('button').forEach(b=>{
+    const v=b.dataset.q!==undefined?b.dataset.q:b.dataset.v;
+    b.classList.toggle('on', String(val)===String(v));
+    b.addEventListener('click',()=>{
+      audioInit(); sfx.ui();
+      box.querySelectorAll('button').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on'); fn(v); saveSettings();
+    });
+  });
+}
+segInit('sQual',settings.qual,v=>{settings.qual=v;resize();});
+segInit('sScare',settings.scares,v=>settings.scares=+v);
+segInit('sBlood',settings.blood,v=>settings.blood=+v);
+
+paintPlatNote();
+// on PC/console the keyboard or pad covers everything — drop the thumb buttons
+if(!IS_TOUCH) ['bUse','bCrouch','bPhone'].forEach(id=>document.getElementById(id).style.display='none');
+document.getElementById('btnResume').disabled=!save.beat;
+
+/* ============================================================
+   16. LOOP
+   ============================================================ */
+// exposed for automated smoke tests / debugging
+window.__hg={state,ent,beat,jumpToBeat,startChapter1,doInteract,setObjective,
+             get mv(){return mv;}, CAMS, PROPS, blocked, moveEnt, solid, LEVELS,
+             get keys(){return keys;}};
+
+let last=performance.now();
+function loop(t){
+  const dt=Math.min(.05,(t-last)/1000||0); last=t;
+  update(dt); draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
