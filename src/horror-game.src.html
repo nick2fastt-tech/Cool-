@@ -132,6 +132,8 @@
   <h1 style="font-size:clamp(22px,7vw,40px)">SETTINGS</h1><div class="tag">&nbsp;</div>
   <div class="row"><span>VOLUME</span><input type="range" id="sVol" min="0" max="100" value="70"></div>
   <div class="row"><span>LOOK SPEED</span><input type="range" id="sSens" min="20" max="200" value="100"></div>
+  <div class="row"><span>INVERT LOOK Y</span>
+    <div class="seg" id="sInvY"><button data-v="0">OFF</button><button data-v="1">ON</button></div></div>
   <div class="row"><span>QUALITY</span>
     <div class="seg" id="sQual"><button data-q="low">LOW</button><button data-q="med">MED</button><button data-q="high">HIGH</button></div></div>
   <div class="row"><span>JUMP SCARES</span>
@@ -161,7 +163,7 @@ const T=THREE;
    SETTINGS / SAVE
    ========================================================== */
 const SKEY='hg3_settings_v1', GKEY='hg3_save_v1';
-const settings=Object.assign({vol:70,sens:100,qual:'med',scares:1,blood:1},
+const settings=Object.assign({vol:70,sens:100,qual:'med',scares:1,blood:1,invY:0},
   JSON.parse(localStorage.getItem(SKEY)||'{}'));
 const saveSettings=()=>localStorage.setItem(SKEY,JSON.stringify(settings));
 let save=Object.assign({chapter:0,beat:null,deaths:0,cams:[false,false,false],hasKey:false,doorsLocked:false},
@@ -2050,7 +2052,10 @@ function update(dt){
   let ix=mv.x+kx, iz=mv.y+kz;
   const im=Math.hypot(ix,iz); if(im>1){ix/=im;iz/=im;}
 
-  state.yaw+=lookDX; state.pitch+=lookDY;
+  // three's rotateY(+yaw) swings the view LEFT, so a rightward drag has to
+  // subtract. One place fixes touch, mouse, gamepad and the arrow keys alike.
+  state.yaw-=lookDX;
+  state.pitch+=lookDY*(settings.invY?-1:1);
   state.pitch=Math.max(-1.15,Math.min(1.15,state.pitch));
   lookDX=lookDY=0;
 
@@ -2259,6 +2264,7 @@ function segInit(id,val,fn){
   });
 }
 segInit('sQual',settings.qual,v=>{settings.qual=v;resize();});
+segInit('sInvY',settings.invY,v=>settings.invY=+v);
 segInit('sScare',settings.scares,v=>settings.scares=+v);
 segInit('sBlood',settings.blood,v=>settings.blood=+v);
 paintPlatNote();
