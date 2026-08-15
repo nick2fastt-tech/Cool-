@@ -131,6 +131,7 @@
 <div class="screen hide" id="mSettings">
   <h1 style="font-size:clamp(22px,7vw,40px)">SETTINGS</h1><div class="tag">&nbsp;</div>
   <div class="row"><span>VOLUME</span><input type="range" id="sVol" min="0" max="100" value="70"></div>
+  <div class="row"><span>MUSIC</span><input type="range" id="sMusic" min="0" max="100" value="60"></div>
   <div class="row"><span>LOOK SPEED</span><input type="range" id="sSens" min="20" max="200" value="100"></div>
   <div class="row"><span>INVERT LOOK Y</span>
     <div class="seg" id="sInvY"><button data-v="0">OFF</button><button data-v="1">ON</button></div></div>
@@ -163,7 +164,7 @@ const T=THREE;
    SETTINGS / SAVE
    ========================================================== */
 const SKEY='hg3_settings_v1', GKEY='hg3_save_v1';
-const settings=Object.assign({vol:70,sens:100,qual:'med',scares:1,blood:1,invY:0},
+const settings=Object.assign({vol:70,music:60,sens:100,qual:'med',scares:1,blood:1,invY:0},
   JSON.parse(localStorage.getItem(SKEY)||'{}'));
 const saveSettings=()=>localStorage.setItem(SKEY,JSON.stringify(settings));
 let save=Object.assign({chapter:0,beat:null,deaths:0,cams:[false,false,false],hasKey:false,doorsLocked:false},
@@ -187,7 +188,10 @@ function paintPlatNote(){
 /* ==========================================================
    AUDIO
    ========================================================== */
-let AC=null,master=null,droneG=null;
+let AC=null,master=null,droneG=null,musicEl=null,musicGain=null,sfxGain=null;
+const SCARE_SRC=['<!--AUDIO_SCARE_A-->','<!--AUDIO_SCARE_B-->'];
+const MUSIC_SRC='<!--AUDIO_MUSIC-->';
+const scareBufs=[];                    // decoded jumpscares; empty => synth fallback
 function audioInit(){
   if(AC)return;
   try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){return;}
@@ -197,8 +201,33 @@ function audioInit(){
   o1.type='sawtooth'; o1.frequency.value=36; o2.type='sine'; o2.frequency.value=54.2;
   f.type='lowpass'; f.frequency.value=150;
   o1.connect(f); o2.connect(f); f.connect(droneG); droneG.connect(master); o1.start(); o2.start();
+
+  sfxGain=AC.createGain(); sfxGain.gain.value=1; sfxGain.connect(master);
+  musicGain=AC.createGain(); musicGain.gain.value=settings.music/100*0.55; musicGain.connect(master);
+
+  // background music: stream the element rather than decoding megabytes into RAM
+  try{
+    musicEl=new Audio(); musicEl.src=MUSIC_SRC; musicEl.loop=true; musicEl.preload='auto';
+    musicEl.crossOrigin='anonymous';
+    const ms=AC.createMediaElementSource(musicEl); ms.connect(musicGain);
+    const go=()=>musicEl.play().catch(()=>{});
+    go(); document.addEventListener('pointerdown',go,{once:true});
+  }catch(e){ musicEl=null; }
+
+  // jumpscares: decode up front so they fire with no latency
+  SCARE_SRC.forEach((src,i)=>{
+    // promise form only -- the callback form ALSO rejects its returned promise,
+    // which surfaces as an unhandled rejection when a codec is missing
+    fetch(src).then(r=>r.arrayBuffer())
+      .then(a=>AC.decodeAudioData(a))
+      .then(buf=>{ scareBufs[i]=buf; })
+      .catch(()=>{});          // no AAC -> the synthesised scream still plays
+  });
 }
-const setVol=()=>{ if(master) master.gain.value=settings.vol/100; };
+function setVol(){
+  if(master) master.gain.value=settings.vol/100;
+  if(musicGain) musicGain.gain.value=settings.music/100*0.55;
+}
 function nbuf(d){const n=Math.floor(AC.sampleRate*d),b=AC.createBuffer(1,n,AC.sampleRate),c=b.getChannelData(0);
   for(let i=0;i<n;i++)c[i]=Math.random()*2-1; return b;}
 function sN(d,fq,q,g,ty){ if(!AC)return;
@@ -206,13 +235,13 @@ function sN(d,fq,q,g,ty){ if(!AC)return;
   const f=AC.createBiquadFilter(); f.type=ty||'bandpass'; f.frequency.value=fq; f.Q.value=q||1;
   const gn=AC.createGain(); gn.gain.setValueAtTime(g,AC.currentTime);
   gn.gain.exponentialRampToValueAtTime(1e-4,AC.currentTime+d);
-  s.connect(f); f.connect(gn); gn.connect(master); s.start(); }
+  s.connect(f); f.connect(gn); gn.connect(sfxGain||master); s.start(); }
 function sT(a,b,d,g,ty){ if(!AC)return;
   const o=AC.createOscillator(),gn=AC.createGain();
   o.type=ty||'sine'; o.frequency.setValueAtTime(a,AC.currentTime);
   o.frequency.exponentialRampToValueAtTime(Math.max(1,b),AC.currentTime+d);
   gn.gain.setValueAtTime(g,AC.currentTime); gn.gain.exponentialRampToValueAtTime(1e-4,AC.currentTime+d);
-  o.connect(gn); gn.connect(master); o.start(); o.stop(AC.currentTime+d+.05); }
+  o.connect(gn); gn.connect(sfxGain||master); o.start(); o.stop(AC.currentTime+d+.05); }
 const sfx={
   knock:()=>sN(.16,220,3,.5,'lowpass'), creak:()=>sN(.55,900,7,.14),
   step:(l)=>sN(.09,380+Math.random()*120,4,l||.07),
@@ -220,9 +249,22 @@ const sfx={
   lock:()=>{sN(.1,1400,6,.32); setTimeout(()=>sT(300,120,.12,.3,'square'),90);},
   place:()=>sT(760,1300,.1,.16,'square'),
   pickup:()=>{sT(700,1500,.09,.2,'triangle');setTimeout(()=>sT(1100,1900,.1,.15,'triangle'),80);},
-  ui:()=>sT(500,300,.05,.12,'square'), deny:()=>sT(180,90,.18,.22,'sawtooth'),
+  ui:()=>sT(500,300,.05,.12,'square'),
+  type:()=>sN(.018,2400,6,.045,'bandpass'), deny:()=>sT(180,90,.18,.22,'sawtooth'),
   phone:()=>sN(.2,600,2,.1), heart:(i)=>{sT(64,42,.13,.16*i,'sine'); setTimeout(()=>sT(58,38,.11,.11*i,'sine'),165);},
-  scream:()=>{ sN(1.5,1500,.6,.55); sT(1300,180,1.4,.4,'sawtooth'); sT(660,120,1.5,.25,'square'); },
+  scream:()=>{
+    if(!AC) return;
+    if(!settings.scares){ sT(300,90,.5,.10,'sine'); return; }
+    const have=scareBufs.filter(Boolean);
+    if(have.length){                       // one of the supplied jumpscares
+      const b=have[(Math.random()*have.length)|0];
+      const s=AC.createBufferSource(); s.buffer=b;
+      const g=AC.createGain(); g.gain.value=1.0;
+      s.connect(g); g.connect(sfxGain||master); s.start();
+      return;
+    }
+    sN(1.5,1500,.6,.55); sT(1300,180,1.4,.4,'sawtooth'); sT(660,120,1.5,.25,'square');
+  },
   wake:()=>{ sN(.9,300,2,.3,'lowpass'); sT(90,50,1.1,.2,'sine'); }
 };
 
@@ -682,6 +724,73 @@ function texAttic(seed){
           roughnessMap:grayTex(fbm(S,S,40,3,seed+3),S,S,.7,1.0)};
 }
 
+/* ---- her skin: bloodless grey-white, filthy, with veins showing through ---- */
+function texSkin(seed){
+  const S=512, cv=C(S,S), g=cv.getContext('2d'), rnd=mulberry(seed);
+  const n=fbm(S,S,40,4,seed), n2=fbm(S,S,7,3,seed+1);
+  const img=g.createImageData(S,S), d=img.data;
+  for(let i=0;i<S*S;i++){
+    const v=n[i]*.6+n2[i]*.4, j=i*4;
+    d[j]=138+v*36; d[j+1]=134+v*34; d[j+2]=128+v*32; d[j+3]=255;
+  }
+  g.putImageData(img,0,0);
+  g.strokeStyle='rgba(96,104,120,.20)'; g.lineWidth=1.1;      // veins
+  for(let i=0;i<40;i++){
+    let x=rnd()*S,y=rnd()*S; g.beginPath(); g.moveTo(x,y);
+    for(let k=0;k<5;k++){ x+=(rnd()-.5)*44; y+=(rnd()-.5)*44; g.lineTo(x,y); }
+    g.stroke();
+  }
+  for(let i=0;i<70;i++){                                       // grime
+    const x=rnd()*S,y=rnd()*S,r=6+rnd()*40;
+    const rg=g.createRadialGradient(x,y,1,x,y,r);
+    rg.addColorStop(0,'rgba(78,70,56,'+(.10+rnd()*.28)+')'); rg.addColorStop(1,'rgba(78,70,56,0)');
+    g.fillStyle=rg; g.beginPath(); g.arc(x,y,r,0,6.283); g.fill();
+  }
+  return {map:albedoTex(cv), normalMap:normalTex(n2,S,S,1.4), roughness:.96};
+}
+/* ---- her face, painted into the head sphere's equirect UVs.
+       three's SphereGeometry puts +Z (the face) at u=0.25 and the crown at v=1. ---- */
+function texFace(seed){
+  const W=1024,H=512, cv=C(W,H), g=cv.getContext('2d'), rnd=mulberry(seed);
+  const n=fbm(W,H,50,4,seed);
+  const img=g.createImageData(W,H), d=img.data;
+  for(let i=0;i<W*H;i++){ const v=n[i], j=i*4;
+    d[j]=146+v*34; d[j+1]=141+v*32; d[j+2]=134+v*30; d[j+3]=255; }
+  g.putImageData(img,0,0);
+  const FX=W*0.25;                       // face centre
+  const sm=(x,y,rx,ry,col,a)=>{ const r=g.createRadialGradient(x,y,1,x,y,Math.max(rx,ry));
+    r.addColorStop(0,col.replace('A',a)); r.addColorStop(1,col.replace('A','0'));
+    g.save(); g.translate(x,y); g.scale(1,ry/rx); g.fillStyle=r;
+    g.beginPath(); g.arc(0,0,Math.max(rx,ry),0,6.283); g.fill(); g.restore(); };
+  // sunken eye sockets + hollow cheeks + temple shadows
+  sm(FX-64,H*0.445,54,46,'rgba(58,52,48,A)',.68);
+  sm(FX+64,H*0.445,54,46,'rgba(58,52,48,A)',.68);
+  sm(FX-84,H*0.575,44,66,'rgba(70,62,54,A)',.46);
+  sm(FX+84,H*0.575,44,66,'rgba(70,62,54,A)',.46);
+  sm(FX,H*0.36,120,40,'rgba(70,64,58,A)',.22);
+  // brow ridge highlight and nose
+  g.fillStyle='rgba(210,204,194,.14)';
+  g.beginPath(); g.ellipse(FX,H*0.385,84,13,0,0,6.283); g.fill();
+  sm(FX,H*0.525,16,40,'rgba(66,58,50,A)',.34);
+  // wrinkles: brow, crow's feet, cheek lines
+  g.strokeStyle='rgba(86,78,70,.42)'; g.lineWidth=1.6;
+  for(let i=0;i<7;i++){ const y=H*0.295+i*6;
+    g.beginPath(); for(let x=-84;x<=84;x+=14) g.lineTo(FX+x,y+Math.sin(x*.08+i)*2.4); g.stroke(); }
+  for(const sx of [-1,1]) for(let i=0;i<5;i++){
+    g.beginPath(); g.moveTo(FX+sx*92,H*0.435+i*7);
+    g.lineTo(FX+sx*(126+i*4),H*0.405+i*9); g.stroke(); }
+  for(const sx of [-1,1]){
+    g.beginPath(); g.moveTo(FX+sx*44,H*0.545);
+    g.quadraticCurveTo(FX+sx*70,H*0.635,FX+sx*56,H*0.72); g.stroke(); }
+  // grime over everything, heavier on the body than the face
+  for(let i=0;i<90;i++){
+    const x=rnd()*W,y=rnd()*H,r=8+rnd()*52;
+    const rg=g.createRadialGradient(x,y,1,x,y,r);
+    rg.addColorStop(0,'rgba(76,68,54,'+(.06+rnd()*.22)+')'); rg.addColorStop(1,'rgba(76,68,54,0)');
+    g.fillStyle=rg; g.beginPath(); g.arc(x,y,r,0,6.283); g.fill();
+  }
+  return {map:albedoTex(cv), normalMap:normalTex(fbm(W,H,9,3,seed+2),W,H,1.5), roughness:.95};
+}
 function texFabric(hex,seed,rough){
   const S=256, cv=C(S,S), g=cv.getContext('2d'), rnd=mulberry(seed);
   g.fillStyle=hex; g.fillRect(0,0,S,S);
@@ -718,7 +827,9 @@ function buildTextures(step){
     ['grass',   ()=>texGrass(107)],
     ['couch',   ()=>texFabric('#243a5e',97)],
     ['bedding', ()=>texFabric('#8d8672',101)],
-    ['gown',    ()=>texFabric('#cfc9b6',103,.95)]
+    ['gown',    ()=>texFabric('#a9a496',103,.96)],
+    ['skin',    ()=>texSkin(109)],
+    ['face',    ()=>texFace(113)]
   ];
   let i=0;
   return new Promise(res=>{
@@ -764,6 +875,8 @@ function buildMaterials(){
   MAT.bedding =mkMat(TEX.bedding, [1,1]);
   MAT.gown    =mkMat(TEX.gown,    [1,1]);
   MAT.gown.vertexColors=false;
+  MAT.skinT=mkMat(TEX.skin,[1,1]); MAT.skinT.vertexColors=false;
+  MAT.faceT=mkMat(TEX.face,[1,1]); MAT.faceT.vertexColors=false;
   MAT.couch.vertexColors=false; MAT.bedding.vertexColors=false;
   MAT.sidingP=mkMat(TEX.siding,[3,2]); MAT.sidingP.vertexColors=false;
   MAT.roadP  =mkMat(TEX.asphalt,[6,6]); MAT.roadP.vertexColors=false;
@@ -782,6 +895,7 @@ function buildMaterials(){
   MAT.roof    =plain(0x17171b,.94);
   MAT.kerb    =plain(0x4a4a46,.9);
   MAT.foliage =plain(0x0a1009,.98);
+  MAT.bin     =plain(0x2b2f2b,.85);
 }
 
 /* ==========================================================
@@ -1049,6 +1163,51 @@ function makeHouseShell(cx,cz,W,D,H,rise,seed,litList,col){
   if(rnd()<.7) g.add(box(.7,1.6,.7,MAT.roof,cx+W*.3,H+rise*.6,cz-D*.1)); // chimney
   return g;
 }
+// a car, built pointing +X so traffic just flips rotation.y for the far lane
+function makeCar(col,lit){
+  const g=new T.Group();
+  const bodyM=new T.MeshStandardMaterial({color:col,roughness:.42,metalness:.55});
+  const glassM=new T.MeshStandardMaterial({color:0x0a0e16,roughness:.12,metalness:.7});
+  g.add(box(4.30,.62,1.78,bodyM,0,.70,0));
+  g.add(box(4.10,.22,1.72,bodyM,0,1.06,0));
+  g.add(box(2.30,.56,1.66,glassM,-.15,1.30,0));
+  g.add(box(2.16,.10,1.60,bodyM,-.15,1.59,0));
+  g.add(box(.16,.30,1.80,bodyM,2.14,.72,0));                 // bumpers
+  g.add(box(.16,.30,1.80,bodyM,-2.14,.72,0));
+  const tyre=new T.MeshStandardMaterial({color:0x0d0d10,roughness:.95});
+  for(const x of [1.42,-1.42]) for(const z of [.90,-.90]){
+    const w=new T.Mesh(new T.CylinderGeometry(.36,.36,.26,12),tyre);
+    w.rotation.x=Math.PI/2; w.position.set(x,.36,z); g.add(w);
+  }
+  const hlM=new T.MeshStandardMaterial({color:0x2a2820,roughness:.3,
+    emissive:lit?0xfff0cc:0x161410,emissiveIntensity:lit?3.2:0});
+  const tlM=new T.MeshStandardMaterial({color:0x2a1010,roughness:.3,
+    emissive:lit?0xff2a18:0x180808,emissiveIntensity:lit?2.2:0});
+  for(const z of [.62,-.62]){
+    g.add(box(.10,.22,.34,hlM, 2.18,.78,z));
+    g.add(box(.10,.18,.30,tlM,-2.18,.80,z));
+  }
+  if(lit){
+    const beam=new T.PointLight(0xffe9bf,30,15,2); beam.position.set(4.2,.75,0); g.add(beam);
+    const glow=new T.PointLight(0xff3020,4,4,2); glow.position.set(-2.6,.8,0); g.add(glow);
+  }
+  return g;
+}
+const cars=[];
+function updateTraffic(dt){
+  if(state.lv!==STREET||!cars.length) return;
+  for(const c of cars){
+    if(c.wait>0){ c.wait-=dt; if(c.m.visible) c.m.visible=false; continue; }
+    c.m.visible=true;
+    c.m.position.x+=c.dir*c.speed*dt;
+    if((c.dir>0&&c.m.position.x>62)||(c.dir<0&&c.m.position.x<-46)){
+      c.m.position.x=c.dir>0?-46:62;
+      c.wait=5+Math.random()*13; c.speed=7+Math.random()*6;
+      c.m.visible=false;
+    }
+  }
+}
+
 function makeNeighborhood(){
   const g=new T.Group();
 
@@ -1120,11 +1279,65 @@ function makeNeighborhood(){
     const pl=new T.PointLight(0xffd9a0,44,20,2); pl.position.set(lx+.8,4.6,16.4); g.add(pl);
   }
 
-  /* --- a few bare trees --- */
-  for(const [tx,tz,ts] of [[-1.5,13.0,1.0],[13.5,12.4,.85],[24,14,1.1],[-12,13,.9]]){
-    g.add(cyl(.13*ts,.20*ts,2.6*ts,MAT.darkwood,tx,1.3*ts,tz,7));
-    const crown=new T.Mesh(new T.SphereGeometry(1.5*ts,7,6),MAT.foliage);
-    crown.position.set(tx,3.1*ts,tz); crown.scale.y=.75; g.add(crown);
+  /* --- bare trees: trunk plus forking branches, no foliage blobs --- */
+  for(const [tx,tz,ts,sd] of [[-1.5,12.6,1.0,3],[13.5,12.2,.85,9],[24,13.6,1.1,17],[-12,12.8,.9,23]]){
+    const rnd=mulberry(sd);
+    g.add(cyl(.10*ts,.20*ts,3.0*ts,MAT.darkwood,tx,1.5*ts,tz,7));
+    for(let i=0;i<7;i++){
+      const a=rnd()*Math.PI*2, tilt=.45+rnd()*.55, len=(1.0+rnd()*1.1)*ts;
+      const br=cyl(.028*ts,.055*ts,len,MAT.darkwood,0,len/2,0,5);
+      const pv=new T.Group();
+      pv.position.set(tx,(2.5+rnd()*.9)*ts,tz);
+      pv.rotation.set(Math.cos(a)*tilt,a,Math.sin(a)*tilt);
+      pv.add(br); g.add(pv);
+      for(let k=0;k<2;k++){                       // one fork per branch
+        const l2=len*(.45+rnd()*.3);
+        const b2=cyl(.016*ts,.030*ts,l2,MAT.darkwood,0,l2/2,0,5);
+        const pv2=new T.Group();
+        pv2.position.y=len*(.7+rnd()*.25);
+        pv2.rotation.set((rnd()-.5)*1.1,rnd()*6.283,(rnd()-.5)*1.1);
+        pv2.add(b2); pv.add(pv2);
+      }
+    }
+  }
+
+  /* --- parked cars on the kerb --- */
+  for(const [x,col] of [[-9.5,0x2b3a4e],[16.5,0x3a2b2b],[28,0x243024]]){
+    const c=makeCar(col,false); c.position.set(x,0,17.2); g.add(c);
+  }
+  /* --- traffic: two cars running the road, headlights on --- */
+  cars.length=0;
+  for(const [z,dir,col] of [[18.4,1,0x6e1f1f],[21.0,-1,0x1b2740]]){
+    const m=makeCar(col,true);
+    m.rotation.y=dir>0?0:Math.PI;
+    m.position.set(dir>0?-46:62,0,z); m.visible=false; g.add(m);
+    cars.push({m,dir,speed:7+Math.random()*6,wait:2+Math.random()*8});
+  }
+
+  /* --- kerbside clutter: mailboxes, bins, hedges, power poles --- */
+  for(const mx of [5.5,-8.5,19.5,-20,31]){
+    g.add(cyl(.05,.055,1.05,MAT.darkwood,mx+2.2,.52,15.6,6));
+    g.add(box(.20,.18,.34,MAT.kerb,mx+2.2,1.14,15.6));
+  }
+  for(const [bx,bz] of [[3.0,15.7],[-6.5,15.7],[21.5,15.7]]){
+    g.add(box(.55,.80,.52,MAT.bin,bx,.40,bz));
+    g.add(box(.58,.07,.55,MAT.kerb,bx,.83,bz));
+  }
+  for(let i=0;i<26;i++){                                   // hedge along a neighbour
+    g.add(box(.62,.85,.62,MAT.foliage,-16+i*.55,.42,13.6));
+  }
+  for(const px of [-14,10,34]){                            // power poles + wires
+    g.add(cyl(.14,.19,7.2,MAT.darkwood,px,3.6,16.9,7));
+    g.add(box(1.9,.13,.13,MAT.darkwood,px,6.7,16.9));
+    for(const dz of [-.7,.7]){
+      const wire=new T.Mesh(new T.CylinderGeometry(.022,.022,24,4),MAT.black);
+      wire.rotation.z=Math.PI/2; wire.position.set(px+12,6.62,16.9+dz); g.add(wire);
+    }
+  }
+  /* --- driveways --- */
+  for(const dx of [-9.5,16.5]){
+    const d=new T.Mesh(new T.PlaneGeometry(3.0,6.4),MAT.kerb);
+    d.rotation.x=-Math.PI/2; d.position.set(dx,.015,12.6); g.add(d);
   }
 
   /* --- moon --- */
@@ -1147,175 +1360,197 @@ function makeStairs(up){
    ========================================================== */
 function makeWoman(){
   const root=new T.Group();
+  const SKIN=MAT.skinT||MAT.skin;
 
-  // hips -> chest -> neck -> head, so the spine can lean and counter-rotate
   const hips=new T.Group();  hips.position.y=0.95;  root.add(hips);
   const chest=new T.Group(); chest.position.y=0.36; hips.add(chest);
 
-  // gown hangs off the hips
-  const prof=[[.30,-.63],[.285,-.43],[.265,-.21],[.235,0],[.198,.19],
-              [.206,.31],[.215,.41],[.185,.52],[.135,.59],[.085,.63]]
+  // filthy shift, ragged hem around the shins
+  const prof=[[.224,-.60],[.231,-.50],[.226,-.30],[.216,-.10],[.203,.08],
+              [.192,.22],[.186,.33],[.178,.43],[.152,.53],[.104,.60]]
              .map(p=>new T.Vector2(p[0],p[1]));
-  const gown=new T.Mesh(new T.LatheGeometry(prof,20),new T.MeshStandardMaterial({
-    map:TEX.gown.map,normalMap:TEX.gown.normalMap,roughness:.95,side:T.DoubleSide}));
+  const gownMat=new T.MeshStandardMaterial({
+    map:TEX.gown.map,normalMap:TEX.gown.normalMap,roughness:.96,side:T.DoubleSide});
+  const gown=new T.Mesh(new T.LatheGeometry(prof,22),gownMat);
   gown.castShadow=true; hips.add(gown);
-  chest.add(cyl(.048,.055,.14,MAT.skin,0,.30,0,10));            // neck
+  // torn hem: uneven tabs hanging off the bottom
+  for(let i=0;i<22;i++){
+    const a=i/22*Math.PI*2, len=.05+((i*37)%11)/11*.13;
+    const tab=new T.Mesh(new T.PlaneGeometry(.085,len),gownMat);
+    tab.position.set(Math.sin(a)*.226,-.60-len/2+.01,Math.cos(a)*.226);
+    tab.rotation.y=a; hips.add(tab);
+  }
+  chest.add(cyl(.050,.058,.15,SKIN,0,.30,0,10));                 // neck
 
-  // head
+  /* ---------- head ---------- */
   const head=new T.Group(); head.position.set(0,.44,0); chest.add(head);
-  const skull=new T.Mesh(new T.SphereGeometry(.138,18,16),MAT.skin);
-  skull.scale.set(1,1.20,1.02); skull.castShadow=true; head.add(skull);
-  const eyeW=new T.MeshStandardMaterial({color:0xe9e4d8,roughness:.35});
-  const pup=new T.MeshBasicMaterial({color:0x0d0b09});
+  const skull=new T.Mesh(new T.SphereGeometry(.135,26,20),MAT.faceT||SKIN);
+  skull.scale.set(1,1.20,1.03); skull.castShadow=true; head.add(skull);
+
+  // deep-set eyes: pale iris, dark pinprick pupil, shadowed socket
+  const eyeW=new T.MeshStandardMaterial({color:0xd6d8d2,roughness:.28});
+  const iris=new T.MeshStandardMaterial({color:0x8e9a9c,roughness:.3});
+  const pup =new T.MeshBasicMaterial({color:0x090807});
   for(const sx of [-1,1]){
-    const e=new T.Mesh(new T.SphereGeometry(.030,10,10),eyeW);
-    e.position.set(sx*.052,.026,.115); head.add(e);
-    const p=new T.Mesh(new T.SphereGeometry(.014,8,8),pup);
-    p.position.set(sx*.052,.026,.138); head.add(p);
-  }
-  const jaw=new T.Group(); jaw.position.set(0,-.03,.02); head.add(jaw);
-  const mouth=new T.Mesh(new T.SphereGeometry(.056,12,10),
-    new T.MeshBasicMaterial({color:0x080606}));
-  mouth.scale.set(.8,1.0,.6); mouth.position.set(0,-.048,.094); jaw.add(mouth);
-  const teeth=new T.Mesh(new T.BoxGeometry(.066,.012,.01),
-    new T.MeshStandardMaterial({color:0xb8a558,roughness:.6}));
-  teeth.position.set(0,-.014,.130); jaw.add(teeth);
-  const teeth2=teeth.clone(); teeth2.position.y=-.088; jaw.add(teeth2);
-  const hairMat=MAT.hair;
-  const cap=new T.Mesh(new T.SphereGeometry(.148,16,14,0,6.283,0,1.7),hairMat);
-  cap.position.y=.012; cap.scale.set(1,1.10,1.06); head.add(cap);
-  const curtain=new T.Mesh(
-    new T.CylinderGeometry(.146,.178,.52,18,1,true,0.85,6.283-1.7),hairMat);
-  curtain.position.y=-.20; head.add(curtain);
-  const backFill=new T.Mesh(
-    new T.CylinderGeometry(.150,.150,.30,14,1,true,2.0,2.3),hairMat);
-  backFill.position.y=-.44; head.add(backFill);
-  const locks=[];
-  for(const sx of [-1,1]){
-    const l=box(.055,.34,.030,hairMat,sx*.115,-.24,.085);
-    l.rotation.z=sx*.10; head.add(l); locks.push(l);
+    const e=new T.Mesh(new T.SphereGeometry(.0295,12,12),eyeW);
+    e.position.set(sx*.052,.028,.108); head.add(e);
+    const ir=new T.Mesh(new T.SphereGeometry(.0155,10,10),iris);
+    ir.position.set(sx*.052,.028,.129); head.add(ir);
+    const pp=new T.Mesh(new T.SphereGeometry(.0068,8,8),pup);
+    pp.position.set(sx*.052,.028,.140); head.add(pp);
   }
 
-  // a two-segment limb: root joint -> mid joint -> tip, so it can actually bend
+  // THE mouth: a huge vertical aperture. Rotating a jaw would swing the cavity
+  // back into the skull, so it opens by scaling and the teeth ride its rim.
+  const mouth=new T.Group(); mouth.position.set(0,-.100,.068); head.add(mouth);
+  const MAWR=.082;
+  const maw=new T.Mesh(new T.SphereGeometry(MAWR,16,14),
+    new T.MeshBasicMaterial({color:0x060405}));
+  maw.scale.set(.84,.55,.60); mouth.add(maw);
+  const lipMat=new T.MeshStandardMaterial({color:0x8e8078,roughness:.88});
+  const lip=new T.Mesh(new T.TorusGeometry(MAWR*.86,.0105,8,20),lipMat);
+  lip.position.z=.038; mouth.add(lip);
+  const toothMat=new T.MeshStandardMaterial({color:0xb9a552,roughness:.55});
+  const upT=new T.Group(), loT=new T.Group(); mouth.add(upT); mouth.add(loT);
+  for(let i=0;i<7;i++){
+    const x=(i-3)*.0170, w=.0132, h=.019-Math.abs(i-3)*.0015;
+    upT.add(box(w,h,.011,toothMat,x,-h/2,.040));
+    loT.add(box(w,h*.88,.011,toothMat,x,h*.44,.038));
+  }
+
+  /* ---------- hair: thin stringy locks, parted, forehead showing ---------- */
+  const hairMat=new T.MeshStandardMaterial({color:0x5f594e,roughness:1.0,
+    side:T.DoubleSide,transparent:true,opacity:.96});
+  const scalp=new T.Mesh(new T.SphereGeometry(.140,18,14,0,6.283,0,1.15),hairMat);
+  scalp.position.y=.026; scalp.scale.set(1.02,1.06,1.04); head.add(scalp);
+  const locks=[];
+  for(let i=0;i<86;i++){
+    const a=(i/86)*Math.PI*2 + (i%3)*0.03;
+    const front=Math.cos(a);                              // +Z is the face
+    if(front>0.62 && Math.abs(Math.sin(a))<0.45) continue; // leave the face clear
+    const len=.34+((i*53)%17)/17*.40;
+    const w=.009+((i*29)%7)/7*.010;
+    const strand=new T.Mesh(new T.PlaneGeometry(w,len),hairMat);
+    const rr=.145+((i*17)%5)/5*.018;
+    strand.position.set(Math.sin(a)*rr,-.02-len/2+.05,Math.cos(a)*rr);
+    strand.rotation.y=a;
+    strand.rotation.x=(front>0?0.06:-0.05)+((i*13)%5)/5*.05;
+    strand.rotation.z=Math.sin(a)*.10;
+    head.add(strand); locks.push(strand);
+  }
+
+  /* ---------- limbs ---------- */
   function limb(upLen,loLen,r0,r1,r2,tip){
     const j0=new T.Group();
-    const up=cyl(r0,r1,upLen,MAT.skin,0,-upLen/2,0,8); up.castShadow=true; j0.add(up);
+    const up=cyl(r0,r1,upLen,SKIN,0,-upLen/2,0,8); up.castShadow=true; j0.add(up);
     const j1=new T.Group(); j1.position.y=-upLen; j0.add(j1);
-    const lo=cyl(r1,r2,loLen,MAT.skin,0,-loLen/2,0,8); lo.castShadow=true; j1.add(lo);
+    const lo=cyl(r1,r2,loLen,SKIN,0,-loLen/2,0,8); lo.castShadow=true; j1.add(lo);
     const j2=new T.Group(); j2.position.y=-loLen; j1.add(j2);
     if(tip) j2.add(tip);
     return {j0,j1,j2};
   }
   const hand=()=>{
     const g=new T.Group();
-    g.add(box(.052,.085,.028,MAT.skin,0,-.042,0));
-    for(let i=0;i<4;i++)                                        // long thin fingers
-      g.add(box(.011,.075,.013,MAT.skin,-.019+i*.013,-.118,.004));
-    g.add(box(.012,.05,.014,MAT.skin,.030,-.086,.012));
+    g.add(box(.048,.078,.026,SKIN,0,-.039,0));
+    for(let i=0;i<4;i++) g.add(box(.0105,.070,.012,SKIN,-.017+i*.0118,-.110,.003));
+    g.add(box(.011,.046,.013,SKIN,.028,-.078,.011));
     return g;
   };
-  const foot=()=>box(.075,.045,.17,MAT.skin,0,-.022,.045);
+  const foot=()=>box(.072,.042,.165,SKIN,0,-.021,.044);
 
-  // main arms
-  const armL=limb(.30,.30,.046,.036,.030,hand());
-  const armR=limb(.30,.30,.046,.036,.030,hand());
-  armL.j0.position.set(-.215,.155,.01); armR.j0.position.set(.215,.155,.01);
+  const armL=limb(.29,.30,.043,.033,.028,hand());
+  const armR=limb(.29,.30,.043,.033,.028,hand());
+  armL.j0.position.set(-.172,.148,.005); armR.j0.position.set(.172,.148,.005);
+  for(const a of [armL,armR]){                       // sleeve rides the upper arm
+    const sl=new T.Mesh(new T.CylinderGeometry(.056,.049,.155,10,1,true),gownMat);
+    sl.position.y=-.072; a.j0.add(sl);
+  }
   chest.add(armL.j0); chest.add(armR.j0);
-  // second pair, lower and longer -- these should not be there
-  const armL2=limb(.34,.36,.036,.028,.023,hand());
-  const armR2=limb(.34,.36,.036,.028,.023,hand());
-  armL2.j0.position.set(-.185,-.055,.055); armR2.j0.position.set(.185,-.055,.055);
-  chest.add(armL2.j0); chest.add(armR2.j0);
-  // legs
-  const legL=limb(.30,.28,.062,.048,.040,foot());
-  const legR=limb(.30,.28,.062,.048,.040,foot());
-  legL.j0.position.set(-.095,-.37,0); legR.j0.position.set(.095,-.37,0);
+  const legL=limb(.30,.29,.058,.044,.037,foot());
+  const legR=limb(.30,.29,.058,.044,.037,foot());
+  legL.j0.position.set(-.092,-.37,0); legR.j0.position.set(.092,-.37,0);
   hips.add(legL.j0); hips.add(legR.j0);
 
-  root.userData={hips,chest,head,jaw,gown,locks,
-                 armL,armR,armL2,armR2,legL,legR,t:0,blink:0,lean:0};
+  root.userData={hips,chest,head,gown,locks,mouth,maw,lip,upT,loT,MAWR,
+                 armL,armR,legL,legR,t:0,reach:0,lean:0,lunge:0};
   return root;
 }
 
-// speed drives the whole cycle; scream and chase reshape the pose on top of it
+// speed drives the cycle; scream/chase/lunge reshape the pose on top of it
 function animateWoman(w,dt,speed,scream,chase){
   const u=w.userData;
   const amp=Math.min(1,speed*0.75);
-  const rate=4.0+speed*1.15;
-  u.t+=dt*rate*(0.35+amp*0.65);
+  const run=Math.min(1,Math.max(0,(speed-1.9)/1.5));
+  u.t+=dt*(4.0+speed*1.35)*(0.32+amp*0.68);
   const ph=u.t, sw=Math.sin(ph), co=Math.cos(ph);
   const lerp=(a,b,k)=>a+(b-a)*Math.min(1,k);
 
-  // legs: hip swings, knee bends on the back half of the stride
-  u.legL.j0.rotation.x =  sw*0.66*amp;
-  u.legR.j0.rotation.x = -sw*0.66*amp;
-  u.legL.j1.rotation.x = Math.max(0,-sw)*1.05*amp+0.04;
-  u.legR.j1.rotation.x = Math.max(0, sw)*1.05*amp+0.04;
+  // legs: longer stride and higher knees the faster she moves
+  const stride=0.60+run*0.42;
+  u.legL.j0.rotation.x =  sw*stride*amp;
+  u.legR.j0.rotation.x = -sw*stride*amp;
+  u.legL.j1.rotation.x = Math.max(0,-sw)*(1.00+run*0.55)*amp+0.04;
+  u.legR.j1.rotation.x = Math.max(0, sw)*(1.00+run*0.55)*amp+0.04;
   u.legL.j2.rotation.x = -u.legL.j1.rotation.x*0.45;
   u.legR.j2.rotation.x = -u.legR.j1.rotation.x*0.45;
 
-  // main arms counter-swing the legs, elbows trail
-  const sw2=Math.sin(ph-0.9);
-  let aLx=-sw*0.55*amp,            aRx= sw*0.55*amp;
-  let aLe=-(0.18+Math.max(0, sw)*0.55)*amp-0.10;
-  let aRe=-(0.18+Math.max(0,-sw)*0.55)*amp-0.10;
-  let aLz= 0.11+amp*0.05,          aRz=-0.11-amp*0.05;
-  // the spare pair drag half a beat behind and hang limp
-  let bLx=-sw2*0.34*amp-0.12,      bRx= sw2*0.34*amp-0.12;
-  let bLe=-(0.30+Math.max(0, sw2)*0.40)*amp-0.22;
-  let bRe=-(0.30+Math.max(0,-sw2)*0.40)*amp-0.22;
-  let bLz= 0.34+amp*0.10,          bRz=-0.34-amp*0.10;
+  // arms hang almost limp at a walk, drive harder at a run
+  let aLx=-sw*(0.34+run*0.55)*amp, aRx= sw*(0.34+run*0.55)*amp;
+  let aLe=-(0.10+run*0.35+Math.max(0, sw)*(0.25+run*0.5))*amp-0.06;
+  let aRe=-(0.10+run*0.35+Math.max(0,-sw)*(0.25+run*0.5))*amp-0.06;
+  let aLz= 0.07+amp*0.04, aRz=-0.07-amp*0.04;
 
-  // running you down: blend the swing into a reach. This has to be a stored
-  // blend factor -- lerping the joints directly gets wiped every frame above.
+  // closing in: both arms come up and reach. Needs a stored blend -- the
+  // cycle above rewrites these joints every frame.
   u.reach=lerp(u.reach||0,(chase&&!scream)?1:0,dt*4);
   if(u.reach>0.002){
     const R=u.reach, fl=Math.sin(ph*2.1);
-    const rx=-1.18+fl*0.20, re=-0.38-Math.abs(fl)*0.20;
-    const sx=-0.92-fl*0.26, se=-0.55+fl*0.18;
+    const rx=-1.30+fl*0.24, re=-0.34-Math.abs(fl)*0.22;
     aLx=lerp(aLx,rx,R); aRx=lerp(aRx,rx,R);
     aLe=lerp(aLe,re,R); aRe=lerp(aRe,re,R);
-    aLz=lerp(aLz, 0.30,R); aRz=lerp(aRz,-0.30,R);
-    bLx=lerp(bLx,sx,R); bRx=lerp(bRx,sx,R);
-    bLe=lerp(bLe,se,R); bRe=lerp(bRe,se,R);
-    bLz=lerp(bLz, 0.62,R); bRz=lerp(bRz,-0.62,R);
+    aLz=lerp(aLz,-0.34,R); aRz=lerp(aRz, 0.34,R);
   }
-  u.armL.j0.rotation.x=aLx;  u.armR.j0.rotation.x=aRx;
-  u.armL.j1.rotation.x=aLe;  u.armR.j1.rotation.x=aRe;
-  u.armL.j0.rotation.z=aLz;  u.armR.j0.rotation.z=aRz;
-  u.armL2.j0.rotation.x=bLx; u.armR2.j0.rotation.x=bRx;
-  u.armL2.j1.rotation.x=bLe; u.armR2.j1.rotation.x=bRe;
-  u.armL2.j0.rotation.z=bLz; u.armR2.j0.rotation.z=bRz;
+  u.armL.j0.rotation.x=aLx; u.armR.j0.rotation.x=aRx;
+  u.armL.j1.rotation.x=aLe; u.armR.j1.rotation.x=aRe;
+  u.armL.j0.rotation.z=aLz; u.armR.j0.rotation.z=aRz;
 
-  // torso: bob, sway, and lean into a run
-  u.hips.position.y = 0.95+Math.abs(sw)*0.030*amp;
-  u.hips.rotation.y = -sw*0.10*amp;
-  u.chest.rotation.y =  sw*0.16*amp;
-  u.chest.rotation.z =  co*0.045*amp;
-  u.lean=lerp(u.lean, chase?0.30:(0.05+amp*0.10), dt*3);
+  // torso: bob, counter-rotation, and a forward lean that grows with speed
+  u.hips.position.y = 0.95+Math.abs(sw)*(0.026+run*0.030)*amp;
+  u.hips.rotation.y = -sw*0.11*amp;
+  u.chest.rotation.y =  sw*0.17*amp;
+  u.chest.rotation.z =  co*0.05*amp;
+  u.lean=lerp(u.lean,chase?0.34:(0.05+run*0.16),dt*3);
   u.chest.rotation.x=u.lean;
-  u.head.rotation.x = -u.lean*0.75;
-  u.head.rotation.z = -co*0.07*amp;
-  u.head.rotation.y = -u.chest.rotation.y*0.6;
+  u.head.rotation.x=-u.lean*0.80;
+  u.head.rotation.z=-co*0.07*amp;
+  u.head.rotation.y=-u.chest.rotation.y*0.6;
   for(let i=0;i<u.locks.length;i++)
-    u.locks[i].rotation.x = -sw*0.16*amp;
+    u.locks[i].rotation.x=(u.locks[i].userData.b||0)-sw*0.20*amp;
 
-  // scream: head thrown back, jaw wide, every arm reaching
-  const jawT=scream?0.72:0.05;
-  u.jaw.rotation.x=lerp(u.jaw.rotation.x,jawT,dt*12);
-  if(scream){
-    const k=Math.min(1,dt*9);
-    u.head.rotation.x=lerp(u.head.rotation.x,-0.15,k);
-    u.chest.rotation.x=lerp(u.chest.rotation.x,-0.08,k);
-    for(const a of [u.armL,u.armR,u.armL2,u.armR2]){
-      a.j0.rotation.x=lerp(a.j0.rotation.x,-2.05,k);
-      a.j1.rotation.x=lerp(a.j1.rotation.x,-0.55,k);
+  // scream / jumpscare: jaw yawns open, head thrusts at you, arms fly up.
+  // lunge also drives the whole body forward and up into the camera.
+  const k=Math.min(1,dt*11);
+  u.open=lerp(u.open||0,scream?1:0,k);
+  const sy=0.55+u.open*1.70;                       // maw half-height multiplier
+  u.maw.scale.y=sy;
+  u.lip.scale.set(1,sy*1.06,1);
+  const rim=u.MAWR*sy;
+  u.upT.position.y= rim-.010;
+  u.loT.position.y=-rim+.010;
+  u.lunge=lerp(u.lunge,scream?1:0,dt*(scream?14:6));
+  if(u.lunge>0.002){
+    const L=u.lunge, tr=Math.sin(u.t*33)*0.012*L;      // tremor
+    u.head.rotation.x=lerp(u.head.rotation.x,0.24,L)+tr;
+    u.chest.rotation.x=lerp(u.chest.rotation.x,0.30,L);
+    u.hips.position.y=lerp(u.hips.position.y,1.02,L);
+    w.position.y=tr*2.0;
+    for(const a of [u.armL,u.armR]){
+      a.j0.rotation.x=lerp(a.j0.rotation.x,-1.95,L);
+      a.j1.rotation.x=lerp(a.j1.rotation.x,-0.72,L);
     }
-    u.armL.j0.rotation.z=lerp(u.armL.j0.rotation.z, 0.55,k);
-    u.armR.j0.rotation.z=lerp(u.armR.j0.rotation.z,-0.55,k);
-    u.armL2.j0.rotation.z=lerp(u.armL2.j0.rotation.z, 0.95,k);
-    u.armR2.j0.rotation.z=lerp(u.armR2.j0.rotation.z,-0.95,k);
-  }
+    u.armL.j0.rotation.z=lerp(u.armL.j0.rotation.z,-0.66,L);
+    u.armR.j0.rotation.z=lerp(u.armR.j0.rotation.z, 0.66,L);
+  } else w.position.y=0;
 }
 
 /* ==========================================================
@@ -2039,12 +2274,13 @@ paintTabs();
    CUTSCENES  (real camera moves)
    ========================================================== */
 const cineEl=document.getElementById('cine'), subEl=document.getElementById('sub');
-let cineQ=[],cineI=0,cineT=0,cineDone=null,cineRig=null;
+let cineQ=[],cineI=0,cineT=0,cineDone=null,cineRig=null,typed=0;
+const CPS=30;   // typed characters per second
 function playCine(rig,lines,done){
   cineRig=rig; cineQ=lines; cineI=0; cineT=0; cineDone=done;
   state.mode='cine'; cineEl.classList.add('on');
   document.getElementById('hud').classList.add('hide');
-  subEl.textContent=lines[0]?lines[0].t:'';
+  typed=0; subEl.textContent='';
 }
 function skipCine(){ if(state.mode==='cine') endCine(); }
 document.getElementById('skip').addEventListener('click',skipCine);
@@ -2060,9 +2296,17 @@ function cineUpdate(dt){
   if(!cur){ endCine(); return; }
   if(cur.sfx&&!cur._p){ cur._p=1; (sfx[cur.sfx]||(()=>{}))(); }
   if(cineRig) cineRig(totalCineT()+dt);
+  // type the line out a character at a time, with a cursor while it runs
+  const full=cur.t||'';
+  const want=Math.min(full.length,Math.floor(cineT*CPS));
+  if(want>typed){
+    if(full[want-1]&&full[want-1]!==' ') sfx.type();
+    typed=want;
+  }
+  subEl.textContent = full ? full.slice(0,typed)+(typed<full.length?'\u258c':'') : '';
   if(cineT>cur.d){
-    cineT=0; cineI++;
-    const n=cineQ[cineI]; subEl.textContent=n?n.t:'';
+    cineT=0; cineI++; typed=0;
+    const n=cineQ[cineI]; subEl.textContent='';
     if(!n){ endCine(); return; }
   }
   cineTotal+=dt;
@@ -2281,7 +2525,7 @@ function syncCamera(dt){
       L.visible=true;
     } else { L.visible=false; L.intensity=0; }
   }
-  updateDoors(dt);
+  updateDoors(dt); updateTraffic(dt);
   if(keyObj&&keyObj.visible) keyObj.rotation.y+=dt*1.6;
   camMeshes.forEach(m=>{ if(m.visible&&m.userData.led)
     m.userData.led.material.color.setHex(((performance.now()%1400)<700)?0xff2020:0x400808); });
@@ -2369,6 +2613,8 @@ on('btnContinue',()=>respawn());
 on('btnQuitDeath',()=>toMenu());
 const sVol=document.getElementById('sVol'); sVol.value=settings.vol;
 sVol.addEventListener('input',()=>{settings.vol=+sVol.value;setVol();saveSettings();});
+const sMusic=document.getElementById('sMusic'); sMusic.value=settings.music;
+sMusic.addEventListener('input',()=>{settings.music=+sMusic.value;setVol();saveSettings();});
 const sSens=document.getElementById('sSens'); sSens.value=settings.sens;
 sSens.addEventListener('input',()=>{settings.sens=+sSens.value;saveSettings();});
 function segInit(id,val,fn){
@@ -2410,7 +2656,8 @@ function loop(t){
   document.getElementById('btnResume').disabled=!save.beat;
   show('mMain');
   window.__hg={state,ent,beat,jumpToBeat,startChapter1,doInteract,setObjective,
-               blocked,slide,solid,LEVELS,CAMS,camMeshes,doors,
+               blocked,slide,solid,LEVELS,CAMS,camMeshes,doors,cars,
+               get music(){return musicEl;}, get scares(){return scareBufs;},
                get mv(){return mv;}, get keys(){return keys;},
                scene:()=>scene, renderer:()=>renderer, showLevel, togglePhone};
   requestAnimationFrame(loop);
