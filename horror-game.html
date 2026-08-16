@@ -332,13 +332,13 @@ const F1=[
 "#......#....#........#","#......#....#........#","#......#....#........#","########....####.#####",
 "########....#........#","########....#........#","########.............D","########....#........#",
 "########....#........#","########....######.###","#...........#........#","#...........#........#",
-"#....................#","#...........#........#","#...........#.....U..#","#####F################"];
+"#....................#","#...........#........#","#...........#........#","#####F################"];
 const F2=[
 "######################","######################","######################","######################",
 "######################","######################","######################","######################",
 "#############........#","#############........#","#############........#","#############........#",
-"#############........#","################.#####","#...........#........#","#...........#....vv..#",
-"#................vv..#","#...........#....vv..#","#...........#.....d..#","######################"];
+"#############........#","################.#####","#...........#........#","#...........#........#",
+"#....................#","#...........#........#","#...........#........#","######################"];
 const F3=[
 "######################","######################","######################","######################",
 "######################","######################","######################","######################",
@@ -356,6 +356,21 @@ const LEVELS=[F1,F2,F3,FS];
 const COLS=22, ROWS=20, WALL_H=2.6;
 const GROUND=0, UPSTAIRS=1, BASEMENT=2, STREET=3;
 
+// The staircase is a walkable ramp on the ground level. Walk far enough up it
+// and you hand off to the upper level; step back into it from above and you
+// hand back down. Hysteresis on the two trigger lines stops it ping-ponging.
+const STAIR={x0:17.10,x1:18.90,zBot:18.55,zTop:15.50,rise:WALL_H,
+             upAt:15.70,downAt:15.55,upTo:15.30,downTo:15.85};
+// Zero outside the run in BOTH directions. Returning `rise` for everything past
+// the top meant the whole kitchen column counted as "top of the stairs".
+function stairHeight(lv,x,z){
+  if(lv!==GROUND) return 0;
+  if(x<STAIR.x0||x>STAIR.x1) return 0;
+  if(z>=STAIR.zBot||z<=STAIR.zTop) return 0;
+  return STAIR.rise*(STAIR.zBot-z)/(STAIR.zBot-STAIR.zTop);
+}
+const onStair=(x,z)=>x>=STAIR.x0&&x<=STAIR.x1;
+
 const solid=(lv,c,r)=>{
   if(c<0||r<0||c>=COLS||r>=ROWS) return true;
   const ch=LEVELS[lv][r][c];
@@ -363,7 +378,7 @@ const solid=(lv,c,r)=>{
   return ch==='#'||ch==='F'||ch==='P';
 };
 const tileAt=(lv,c,r)=>(c<0||r<0||c>=COLS||r>=ROWS)?'#':LEVELS[lv][r][c];
-const walkable=(lv,c,r)=>{const t=tileAt(lv,c,r);return t!=='#'&&t!=='F'&&t!=='P'&&t!=='v';};
+const walkable=(lv,c,r)=>{const t=tileAt(lv,c,r);return t!=='#'&&t!=='F'&&t!=='P';};
 
 const ROOMS=[
   [0,1,6,1,6,'BEDROOM'],[0,8,11,1,13,'HALLWAY'],[0,13,20,1,6,'KITCHEN'],
@@ -1040,13 +1055,14 @@ function buildLevel(lv){
     if(!walkable(lv,c,r)) continue;
     const x0=c,x1=c+1,z0=r,z1=r+1;
 
-    // floor
+    // floor (skipped over the stairwell so the flight below shows through)
+    if(lv===UPSTAIRS&&c>=17&&c<=18&&r>=16&&r<=17) continue;
     const fk=floorKindAt(lv,c,r);
     const fa=[aoAt(lv,x0,z0,.1),aoAt(lv,x0,z1,.1),aoAt(lv,x1,z1,.1),aoAt(lv,x1,z0,.1)];
     B(fk).quad([x0,0,z0],[x0,0,z1],[x1,0,z1],[x1,0,z0],
                [[c,r],[c,r+1],[c+1,r+1],[c+1,r]],fa);
     // ceiling (not outdoors, and open over the stairwell)
-    const stairVoid=(lv===GROUND&&c>=17&&c<=18&&r>=15&&r<=17);
+    const stairVoid=(lv===GROUND&&c>=17&&c<=18&&r>=15&&r<=18);
     if(!isStreet&&!stairVoid){
       B('ceiling').quad([x0,H,z0],[x1,H,z0],[x1,H,z1],[x0,H,z1],
         [[c,r],[c+1,r],[c+1,r+1],[c,r+1]],[.75,.75,.75,.75]);
@@ -1061,7 +1077,6 @@ function buildLevel(lv){
     ];
     for(const [dx,dz,v] of sides){
       if(!solid(lv,c+dx,r+dz)) continue;
-      if(tileAt(lv,c+dx,r+dz)==='v') continue;      // open onto the stairwell
       // outdoors the map edges are invisible bounds -- the house is real geometry
       if(isStreet) continue;
       // canvas top == v1 (flipY), and the wallpaper art has the paper up top and
@@ -1465,8 +1480,9 @@ function makeRug(w,d,seed){
   for(let i=0;i<90;i++){ c.fillStyle='rgba(20,12,10,'+(rnd()*.35)+')';
     c.fillRect(rnd()*128,rnd()*128,3+rnd()*14,2+rnd()*10); }
   const m=new T.Mesh(new T.PlaneGeometry(w,d),
-    new T.MeshStandardMaterial({map:albedoTex(cv),roughness:.98}));
-  m.rotation.x=-Math.PI/2; m.position.y=.012; return m;
+    new T.MeshStandardMaterial({map:albedoTex(cv),roughness:.98,
+      polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-3}));
+  m.rotation.x=-Math.PI/2; m.position.y=.035; m.renderOrder=1; return m;
 }
 function makeBulb(){
   const g=new T.Group();
@@ -1535,11 +1551,11 @@ function makeStairShaft(){
   const wall=new T.MeshStandardMaterial({color:0x6e6854,roughness:.95});
   const dark=new T.MeshStandardMaterial({color:0x3a3527,roughness:.95});
   const Y0=WALL_H, H=1.7, cy=Y0+H/2;
-  g.add(box(.07,H,3.0,wall,17.0,cy,16.5));
-  g.add(box(.07,H,3.0,wall,19.0,cy,16.5));
+  g.add(box(.07,H,4.0,wall,17.0,cy,17.0));
+  g.add(box(.07,H,4.0,wall,19.0,cy,17.0));
   g.add(box(2.0,H,.07,wall,18.0,cy,15.0));
-  g.add(box(2.0,H,.07,wall,18.0,cy,18.0));
-  g.add(box(2.06,.08,3.06,dark,18.0,Y0+H,16.5));
+  g.add(box(2.0,H,.07,wall,18.0,cy,19.0));
+  g.add(box(2.06,.08,4.06,dark,18.0,Y0+H,17.0));
   return g;
 }
 // railing around the upstairs opening so you do not just walk into a hole
@@ -1872,8 +1888,8 @@ function buildWorld(){
   // ground floor
   put(0,makeBed(),2.9,2.6,0);
   put(0,makeNightstand(),5.4,2.5,0);
-  put(0,makeCouch(),3.4,16.4,0);
-  put(0,makeTV(),3.4,14.7,Math.PI);
+  put(0,makeCouch(),3.1,17.15,Math.PI);
+  put(0,makeTV(),3.1,14.55,0);
   put(0,makeSink(),14.4,1.5,0);
   put(0,makeBoxes(),19.4,11.6,0);
   put(0,makeDoor(),21.0,10.5,Math.PI/2);        // basement door
@@ -1884,7 +1900,6 @@ function buildWorld(){
   put(1,makeToilet(),14.4,11.5,0);
   put(1,makeBoxes(),3.0,16.0,.4);
   put(1,makeBoxes(),8.4,15.2,-.3);
-  P[1].add(makeStairwellRail());
   put(1,makeStaircase(),18.0,18.85,0,-WALL_H);
   // basement
   put(2,makeBoxes(),8.0,11.0,.2);
@@ -1921,8 +1936,8 @@ function buildWorld(){
   addLight(3,11.0,14.0,3.2,0x6f7fbf,0.9,14);   // streetlamp
 
   // ---- interior dressing ----
-  put(0,makeRug(3.4,2.6),5.6,16.6);
-  put(0,makeRug(2.2,1.8),9.6,9.0);
+  put(0,makeRug(3.4,2.2),3.1,15.9);
+  put(0,makeRug(2.0,1.7),9.7,9.2);
   put(0,makeDresser(),1.6,5.6,Math.PI/2);
   put(0,makeCounter(4.6),16.6,1.45,0);
   put(0,makeCounter(2.4),20.2,4.4,Math.PI/2);
@@ -2014,7 +2029,7 @@ function updateDoors(dt){
 
 let keyObj=null; const camMeshes=[];
 const CAMS=[
-  {lv:0,x:9.6,y:2.15,z:15.4,ry:Math.PI*0.78,name:'LIVING'},
+  {lv:0,x:10.4,y:2.15,z:15.2,ry:Math.PI*0.72,name:'LIVING'},
   {lv:0,x:18.5,y:2.15,z:2.4,ry:Math.PI*0.88,name:'KITCHEN'},
   {lv:1,x:16.5,y:2.15,z:9.4,ry:Math.PI*0.30,name:'BATH'}
 ];
@@ -2072,7 +2087,7 @@ const state={
   crouch:false, run:false, eyeY:1.55, bob:0, stepT:0,
   hidden:null, hasKey:false, camsPlaced:[false,false,false], camsLeft:3,
   basementOpen:false, doorsLocked:false,
-  phoneUp:false, phoneCam:0, phoneT:0,
+  phoneUp:false, phoneCam:0, phoneT:0, floorY:0, floorYT:0,
   beatT:0, exploreRooms:{}, fear:0, heartT:0, hurt:0
 };
 const ent={lv:0,x:4.6,z:4.4,a:0,state:'SLEEP',seeT:0,lostT:0,anim:0,wakeT:0,
@@ -2083,9 +2098,9 @@ const PATROL=[{x:9.8,z:9.5},{x:16.5,z:3.5},{x:17.0,z:10.5},{x:6.0,z:16.0},{x:9.8
 /* ---- collision ---- */
 const BLOCKERS=[
   {lv:0,x:2.9,z:2.6,hw:1.05,hh:1.3},{lv:0,x:5.4,z:2.5,hw:.34,hh:.3},
-  {lv:0,x:3.4,z:16.4,hw:1.2,hh:.55},{lv:0,x:3.4,z:14.7,hw:.55,hh:.3},
+  {lv:0,x:3.1,z:17.15,hw:1.22,hh:.56},{lv:0,x:3.1,z:14.55,hw:.56,hh:.3},
   {lv:0,x:14.4,z:1.5,hw:.7,hh:.35},
-  {lv:0,x:18.0,z:16.6,hw:1.02,hh:1.80},   // the staircase itself{lv:1,x:18.5,z:11.4,hw:.95,hh:.46}
+  {lv:1,x:18.5,z:11.4,hw:.95,hh:.46}
 ];
 function blocked(lv,x,z,rad,ignoreProps){
   for(let oz=-1;oz<=1;oz++)for(let ox=-1;ox<=1;ox++){
@@ -2331,7 +2346,7 @@ function beatsUpdate(dt){
    ========================================================== */
 const PROMPT=document.getElementById('prompt');
 const HIDES=[
-  {lv:0,x:3.4,z:17.5,k:'couch',lab:'HIDE BEHIND THE COUCH'},
+  {lv:0,x:3.1,z:18.15,k:'couch',lab:'HIDE BEHIND THE COUCH'},
   {lv:0,x:2.9,z:3.9,k:'bed',lab:'HIDE UNDER THE BED'},
   {lv:1,x:6.0,z:16.4,k:'attic',lab:'HIDE IN THE ATTIC'}
 ];
@@ -2340,8 +2355,6 @@ function nearestInteract(){
   const c=state.px|0,r=state.pz|0;
   for(const [dc,dr] of [[0,0],[1,0],[-1,0],[0,1],[0,-1]]){
     const t=tileAt(state.lv,c+dc,r+dr);
-    if(t==='U') return {kind:'up',label:'GO UPSTAIRS'};
-    if(t==='d') return {kind:'down',label:'GO DOWNSTAIRS'};
     if(t==='F') return {kind:'front',label:'FRONT DOOR'};
     if(t==='D') return {kind:'bdoor',label:state.hasKey?'UNLOCK THE BASEMENT':'LOCKED · NEEDS A KEY'};
     if(t==='O') return {kind:'out',label:'GET OUT'};
@@ -2376,8 +2389,6 @@ function doInteract(){
   const it=nearestInteract(); if(!it) return;
   switch(it.kind){
     case 'unhide': state.hidden=null; sfx.creak(); break;
-    case 'up': changeLevel(UPSTAIRS,17.5,18.5); break;
-    case 'down': changeLevel(GROUND,17.5,18.5); break;
     case 'front': sfx.deny(); setObjective(state.doorsLocked?'SHE LOCKED IT':'BOARDED FROM THE OUTSIDE'); break;
     case 'bdoor':
       if(state.hasKey){ state.basementOpen=true; sfx.lock(); flowKey='';
@@ -2403,7 +2414,7 @@ function rebuildLevel(lv){
 }
 function disposeGroup(g){ g.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); }
 function changeLevel(lv,x,z){
-  state.lv=lv; state.px=x; state.pz=z; flowKey=''; sfx.creak();
+  state.lv=lv; state.px=x; state.pz=z; state.floorY=state.floorYT=0; flowKey=''; sfx.creak();
   showLevel(lv);
 }
 
@@ -2665,6 +2676,7 @@ function resetRun(){
   state.lv=GROUND; state.crouch=false; state.run=false; state.hidden=null; state.hasKey=false;
   state.camsPlaced=[false,false,false]; state.camsLeft=3; state.basementOpen=false;
   state.doorsLocked=false; state.phoneUp=false; state.fear=0; state.hurt=0; state.pitch=0;
+  state.floorY=0; state.floorYT=0; state.roll=0; state.reading=false; state.placing=null;
   tabsEl.classList.remove('on');
   if(phoneMesh) phoneMesh.visible=false;
   ent.active=false; ent.state='SLEEP'; ent.lv=0; ent.x=BED.x; ent.z=BED.z; ent.screamT=0;
@@ -2839,6 +2851,21 @@ function update(dt){
       if(state.stepT>1){ state.stepT=0; sfx.step(running?.10:.07); }
     }
   }
+  // walking the stairs: ride the ramp, and swap levels at the top / bottom
+  if(!state.hidden){
+    if(state.lv===GROUND&&onStair(state.px,state.pz)&&state.pz<=STAIR.upAt
+       &&state.floorY>STAIR.rise*0.80){
+      state.lv=UPSTAIRS; state.pz=STAIR.upTo; state.floorY=0; state.floorYT=0;
+      flowKey=''; showLevel(UPSTAIRS); sfx.creak();
+    } else if(state.lv===UPSTAIRS&&onStair(state.px,state.pz)&&state.pz>=STAIR.downAt){
+      state.lv=GROUND; state.pz=STAIR.downTo;
+      state.floorY=state.floorYT=stairHeight(GROUND,state.px,state.pz);
+      flowKey=''; showLevel(GROUND); sfx.creak();
+    }
+  }
+  state.floorYT=stairHeight(state.lv,state.px,state.pz);
+  state.floorY+=(state.floorYT-state.floorY)*Math.min(1,dt*14);
+
   // approach trigger
   if(state.beat==='APPROACH'&&state.lv===STREET&&state.pz<9.9&&Math.abs(state.px-5.5)<2.2){
     state.beat='KNOCK'; cineTotal=0;
@@ -2899,7 +2926,7 @@ function syncCamera(dt){
   state.eyeY+=(tgt-state.eyeY)*Math.min(1,dt*8);
   const bob=Math.sin(state.bob)*0.022*(state.crouch?.5:1);
   const sway=Math.cos(state.bob*.5)*0.012;
-  camera.position.set(state.px+sway*Math.cos(state.yaw),state.eyeY+bob,state.pz-sway*Math.sin(state.yaw));
+  camera.position.set(state.px+sway*Math.cos(state.yaw),(state.floorY||0)+state.eyeY+bob,state.pz-sway*Math.sin(state.yaw));
   camera.rotation.set(0,0,0);
   camera.rotateY(state.yaw); camera.rotateX(-state.pitch);
   if(state.roll) camera.rotateZ(state.roll);
