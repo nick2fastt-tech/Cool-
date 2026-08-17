@@ -81,6 +81,10 @@
   #death h2{font-size:clamp(26px,8vw,48px);letter-spacing:8px;color:#8e1616;text-shadow:0 0 30px rgba(200,0,0,.7)}
   #death p{font-size:12px;letter-spacing:3px;color:#6a5a52;margin:14px 0 30px}
 
+  #slot{position:absolute;inset:0;z-index:14;pointer-events:none;opacity:0;transition:opacity .35s}
+  #slot .sb{position:absolute;left:0;right:0;background:#000;height:0;transition:height .5s}
+  #slot .sb.t{top:0;box-shadow:0 14px 26px 6px rgba(0,0,0,.95)}
+  #slot .sb.b{bottom:0;box-shadow:0 -14px 26px 6px rgba(0,0,0,.95)}
   #crack{position:absolute;inset:0;width:100%;height:100%;z-index:15;pointer-events:none;opacity:0;
     transition:opacity .12s}
   #noteView{position:absolute;inset:0;z-index:17;display:flex;align-items:center;justify-content:center;
@@ -125,6 +129,7 @@
   <div id="sub"></div><div id="skip">SKIP</div>
 </div>
 
+<div id="slot"><div class="sb t"></div><div class="sb b"></div></div>
 <canvas id="crack"></canvas>
 <div id="noteView">
   <div id="notePaper"><div id="noteText"></div></div>
@@ -1273,7 +1278,7 @@ function makeCar(col,lit){
   return g;
 }
 const cars=[];
-let barryCar=null;
+let barryCar=null;   // exposed so the car cutscene can hide the shell
 const CAR={x:10.6,z:16.7};
 function updateTraffic(dt){
   if(state.lv!==STREET||!cars.length) return;
@@ -1433,6 +1438,20 @@ function makeNeighborhood(){
 }
 // A real flight: 13 treads with risers, cut stringers, newel posts, handrail
 // and balusters. Rises the full 2.6m into the stairwell void above.
+function makeInteriorWindow(){
+  const g=new T.Group();
+  const frame=new T.MeshStandardMaterial({color:0x6b6350,roughness:.85});
+  const glass=new T.MeshStandardMaterial({color:0x0a0f1c,roughness:.08,metalness:.55});
+  g.add(box(1.26,1.56,.09,frame,0,0,0));
+  g.add(box(1.06,1.36,.04,glass,0,0,.04));
+  g.add(box(.07,1.36,.07,frame,0,0,.05));
+  g.add(box(1.06,.07,.07,frame,0,0,.05));
+  g.add(box(1.42,.10,.22,frame,0,-.82,.05));            // sill
+  const cur=new T.MeshStandardMaterial({color:0x4a4336,roughness:1,side:T.DoubleSide});
+  for(const sx of [-1,1]) g.add(box(.30,1.52,.03,cur,sx*.50,.02,.10));
+  g.add(box(1.44,.08,.05,frame,0,.80,.10));             // rail
+  return g;
+}
 function makePicture(w,h,seed){
   const g=new T.Group(), rnd=mulberry(seed);
   g.add(box(w+.06,h+.06,.045,MAT.darkwood,0,0,0));
@@ -1929,6 +1948,15 @@ function buildWorld(){
     put(lv,makeBulb(),x,z,0,WALL_H);
   put(1,makeRug(2.4,2.0),6.0,16.4);
 
+  // the front door, from the inside, and windows on the outside walls
+  put(0,makeDoor(),5.5,18.96,Math.PI);
+  put(0,box(1.30,2.30,.10,MAT.trim,0,0,0),5.5,18.99,Math.PI,1.15);
+  for(const [x,z,ry] of [[3.5,1.04,0],[17.6,1.04,0],[20.96,4.5,-Math.PI/2],
+                         [1.04,16.4,Math.PI/2],[9.2,18.96,Math.PI]])
+    put(0,makeInteriorWindow(),x,z,ry,1.55);
+  put(1,makeInteriorWindow(),18.6,8.04,0,1.55);
+  put(1,makeInteriorWindow(),1.04,16.4,Math.PI/2,1.55);
+
   buildDoors(P);
   buildNotes(P);
 
@@ -1936,29 +1964,34 @@ function buildWorld(){
   woman=makeWoman(); woman.visible=false; scene.add(woman);
 
   buildPhone();
+  carRig=buildCarRig(); camera.add(carRig);
 }
 
 /* ---- notes nailed up around the house. USE to read one. ---- */
 const NOTES=[
-  {lv:0,x:9.05,z:6.4, ry: Math.PI/2, t:
+  {lv:0,x:8.045,z:6.4, ry: Math.PI/2, t:
    "NOTICE OF RENT DUE\n\n$340 for the month.\nDue the 1st. No exceptions.\n\nSlide it under the office\ndoor like always.\n\n- M. HALSTEAD, LANDLORD"},
-  {lv:0,x:13.05,z:5.7, ry: Math.PI/2, t:
+  {lv:0,x:13.045,z:5.7, ry: Math.PI/2, t:
    "SECOND NOTICE\n\nYou are three months\nbehind now.\n\nI knocked Tuesday. I heard\nsomeone moving in there.\nAnswer the door.\n\n- M. HALSTEAD"},
-  {lv:0,x:5.0,z:13.95,ry: 0, t:
+  {lv:0,x:5.0,z:14.045,ry: 0, t:
    "FINAL NOTICE\n\nVacate the property by the\n14th or the sheriff will\nremove you.\n\nThis is the last letter I\nam going to write."},
-  {lv:0,x:1.06,z:3.5, ry:-Math.PI/2, t:
+  {lv:0,x:1.045,z:3.5, ry: Math.PI/2, t:
    "they keep pushing these\nthrough the door\n\ni stopped reading them\n\nnobody is coming\nnobody has come in a\nvery long time"},
-  {lv:1,x:13.06,z:10.5,ry:-Math.PI/2, scrawl:1, t:"I KILLED\nTHEM ALL"}
+  {lv:1,x:13.045,z:10.5,ry: Math.PI/2, scrawl:1, t:"I KILLED\nTHEM ALL"}
 ];
 const noteMeshes=[];
 function buildNotes(P){
   NOTES.forEach((n,i)=>{
     const tex=texNote(200+i*17,!!n.scrawl);
-    const m=new T.Mesh(new T.PlaneGeometry(.26,.33),
+    const grp=new T.Group();
+    const m=new T.Mesh(new T.PlaneGeometry(.30,.38),
       new T.MeshStandardMaterial({map:tex,roughness:.95,side:T.DoubleSide}));
-    m.position.set(n.x,1.52,n.z); m.rotation.y=n.ry;
-    m.rotation.z=(i%2?1:-1)*0.045;
-    P[n.lv].add(m); noteMeshes.push(m);
+    grp.add(m);
+    const nail=new T.Mesh(new T.SphereGeometry(.011,6,6),MAT.metal);
+    nail.position.set(0,.165,.006); grp.add(nail);
+    grp.position.set(n.x,1.48,n.z); grp.rotation.y=n.ry;
+    grp.rotation.z=(i%2?1:-1)*0.05;
+    P[n.lv].add(grp); noteMeshes.push(grp);
   });
 }
 const noteView=()=>document.getElementById('noteView');
@@ -2014,11 +2047,41 @@ const CAMS=[
 /* ---- the phone, held in hand ---- */
 function buildPhone(){
   phoneMesh=new T.Group();
-  const bodyM=new T.MeshStandardMaterial({color:0x121216,roughness:.45,metalness:.55});
-  phoneMesh.add(box(.100,.200,.009,bodyM,0,0,0));
-  const bez=box(.093,.187,.004,new T.MeshStandardMaterial({color:0x000000,roughness:.3}),0,0,.006);
-  phoneMesh.add(bez);
-  phoneScreen=new T.Mesh(new T.PlaneGeometry(.087,.178),new T.ShaderMaterial({
+  const W=.0715, H=.1475, D=.0083, R=.012;               // roughly a 15 Pro
+  const ti=new T.MeshStandardMaterial({color:0x8e8f8c,roughness:.28,metalness:.95});
+  const back=new T.MeshStandardMaterial({color:0x2b2d31,roughness:.35,metalness:.6});
+  const blk=new T.MeshStandardMaterial({color:0x050506,roughness:.25,metalness:.4});
+
+  // rounded shell: a core plus edge rails and corner posts
+  phoneMesh.add(box(W-2*R,H,D,back,0,0,0));
+  phoneMesh.add(box(W,H-2*R,D,back,0,0,0));
+  for(const sx of [-1,1]) for(const sy of [-1,1]){
+    const c=new T.Mesh(new T.CylinderGeometry(R,R,D,10),back);
+    c.rotation.x=Math.PI/2; c.position.set(sx*(W/2-R),sy*(H/2-R),0); phoneMesh.add(c);
+  }
+  for(const sx of [-1,1]) phoneMesh.add(box(.0016,H-2*R,D+.0012,ti,sx*(W/2),0,0));
+  for(const sy of [-1,1]) phoneMesh.add(box(W-2*R,.0016,D+.0012,ti,0,sy*(H/2),0));
+  for(const sx of [-1,1]) for(const sy of [-1,1]){
+    const c=new T.Mesh(new T.CylinderGeometry(R+.0009,R+.0009,D+.0012,10,1,true),ti);
+    c.rotation.x=Math.PI/2; c.position.set(sx*(W/2-R),sy*(H/2-R),0); phoneMesh.add(c);
+  }
+  // side buttons
+  phoneMesh.add(box(.0022,.0165,.0052,ti,-(W/2)-.0006,.030,0));   // action button
+  phoneMesh.add(box(.0022,.0230,.0052,ti,-(W/2)-.0006,-.002,0));  // volume
+  phoneMesh.add(box(.0022,.0230,.0052,ti,-(W/2)-.0006,-.030,0));
+  phoneMesh.add(box(.0022,.0290,.0052,ti, (W/2)+.0006,.010,0));   // side button
+  // camera plateau on the back
+  const plat=box(.0345,.0345,.0028,back,-.0155,.0505,-D/2-.0014); phoneMesh.add(plat);
+  for(const [lx,ly] of [[-.0075,.0080],[.0075,.0080],[0,-.0085]]){
+    const ring=new T.Mesh(new T.CylinderGeometry(.0068,.0068,.0026,12),ti);
+    ring.rotation.x=Math.PI/2; ring.position.set(-.0155+lx,.0505+ly,-D/2-.0030); phoneMesh.add(ring);
+    const lens=new T.Mesh(new T.CylinderGeometry(.0048,.0048,.0016,12),
+      new T.MeshStandardMaterial({color:0x0a0d14,roughness:.06,metalness:.9}));
+    lens.rotation.x=Math.PI/2; lens.position.set(-.0155+lx,.0505+ly,-D/2-.0040); phoneMesh.add(lens);
+  }
+  // black bezel then the display
+  phoneMesh.add(box(W-.0045,H-.0045,.0012,blk,0,0,D/2+.0006));
+  phoneScreen=new T.Mesh(new T.PlaneGeometry(W-.0085,H-.0085),new T.ShaderMaterial({
     uniforms:{tFeed:{value:null},uTime:{value:0},uOn:{value:0},uGlitch:{value:0}},
     vertexShader:'varying vec2 vUv; void main(){vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
     fragmentShader:`
@@ -2026,29 +2089,34 @@ function buildPhone(){
       float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
       void main(){
         vec2 uv=vUv;
-        if(uOn<0.5){                                  // no signal: static
+        if(uOn<0.5){
           float s=hash(uv*vec2(320.,240.)+fract(uTime*8.0)*99.);
           gl_FragColor=vec4(vec3(s*0.16),1.); return;
         }
-        float roll=fract(uTime*0.35);
-        uv.y=fract(uv.y+roll*0.0);
         float tear=step(0.995-uGlitch*0.05,hash(vec2(floor(uv.y*60.),floor(uTime*12.))));
         uv.x+=tear*(hash(vec2(floor(uv.y*60.),1.))-0.5)*0.12;
         vec3 c=texture2D(tFeed,uv).rgb;
         float l=dot(c,vec3(0.34,0.52,0.14));
-        l=pow(l,0.75)*2.4;                            // CCTV gain: lift the dim rooms
-        c=vec3(l*0.42,l*1.0,l*0.38);                  // green phosphor
-        c*=0.86+0.14*sin(uv.y*110.0);                 // scanlines
+        l=pow(l,0.75)*2.4;
+        c=vec3(l*0.42,l*1.0,l*0.38);
+        c*=0.86+0.14*sin(uv.y*110.0);
         c+=(hash(uv*vec2(140.,220.)+fract(uTime*13.0)*77.)-0.5)*0.05;
         float band=smoothstep(0.03,0.0,abs(fract(uv.y+uTime*0.22)-0.5));
         c+=band*0.04;
-        c*=smoothstep(1.25,0.35,length(uv-0.5)*1.4);  // lens vignette
+        c*=smoothstep(1.25,0.35,length(uv-0.5)*1.4);
         gl_FragColor=vec4(c,1.0);
       }`
   }));
-  // the bezel box spans z 0.004..0.008, so the screen must sit clear in front of it
-  phoneScreen.position.z=.0105; phoneMesh.add(phoneScreen);
-  phoneMesh.position.set(.035,-.115,-.36);      // held up: inside the portrait frustum
+  phoneScreen.position.z=D/2+.0015; phoneMesh.add(phoneScreen);
+  // Dynamic Island
+  const isl=new T.Mesh(new T.PlaneGeometry(.0210,.0072),
+    new T.MeshBasicMaterial({color:0x000000}));
+  isl.position.set(0,H/2-.0135,D/2+.0022); phoneMesh.add(isl);
+  for(const sx of [-1,1]){
+    const cap=new T.Mesh(new T.CircleGeometry(.0036,10),new T.MeshBasicMaterial({color:0x000000}));
+    cap.position.set(sx*.0105,H/2-.0135,D/2+.0022); phoneMesh.add(cap);
+  }
+  phoneMesh.position.set(.035,-.115,-.36);
   phoneMesh.rotation.set(-.18,-.10,.04);
   phoneMesh.visible=false;
   camera.add(phoneMesh);
@@ -2155,11 +2223,14 @@ function canSeePlayer(){
   if(d>range) return false;
   const ang=Math.atan2(dx,dz);
   const diff=Math.abs(((ang-ent.a+Math.PI*3)%(Math.PI*2))-Math.PI);
-  if(d>1.6&&diff>1.05) return false;
+  if(d>1.6&&diff>0.82) return false;
   return los(ent.lv,ent.x,ent.z,state.px,state.pz);
 }
 function spot(){
-  if(ent.state==='CHASE'){ ent.seeT=3; return; }
+  if(ent.state==='CHASE'){ ent.seeT=2; return; }
+  ent.notice=(ent.notice||0)+1/60;
+  if(ent.notice<0.45) return;          // slow on the uptake
+  ent.notice=0;
   ent.state='CHASE'; ent.seeT=3; ent.lostT=0; sfx.scream(); state.fear=1;
 }
 function grab(){
@@ -2173,6 +2244,7 @@ function entityUpdate(dt){
   if(state.noAI) return;            // held still so poses can be inspected
   if(ent.screamT>0){ ent.screamT-=dt; ent.speed=0; return; }
   if(!ent.active){ ent.speed=0; return; }
+  if(!canSeePlayer()) ent.notice=0;
   ent.speed=0;
   switch(ent.state){
     case 'SLEEP': break;
@@ -2229,9 +2301,9 @@ function entityUpdate(dt){
       if(canSeePlayer()) spot(); break;
     case 'CHASE': {
       if(ent.lv!==state.lv){ ent.lostT+=dt; if(ent.lostT>3) ent.state='HUNT'; } else ent.lostT=0;
-      stepToward(ent,state.px,state.pz,3.3,dt);
+      stepToward(ent,state.px,state.pz,3.0,dt);
       if(!state.hidden&&Math.hypot(state.px-ent.x,state.pz-ent.z)<0.75) grab();
-      if(!canSeePlayer()){ ent.seeT-=dt; if(ent.seeT<=0) ent.state='HUNT'; } else ent.seeT=3;
+      if(!canSeePlayer()){ ent.seeT-=dt; if(ent.seeT<=0) ent.state='HUNT'; } else ent.seeT=2;
       break;
     }
   }
@@ -2323,10 +2395,14 @@ function beatsUpdate(dt){
    ========================================================== */
 const PROMPT=document.getElementById('prompt');
 const HIDES=[
-  {lv:0,x:3.1,z:18.15,k:'couch',lab:'HIDE BEHIND THE COUCH'},
-  {lv:0,x:2.9,z:3.9,k:'bed',lab:'HIDE UNDER THE BED'},
-  {lv:1,x:6.0,z:16.4,k:'attic',lab:'HIDE IN THE ATTIC'}
+  {lv:0,x:3.1,z:18.15,k:'couch',lab:'HIDE UNDER THE COUCH',
+   to:{x:3.1,z:17.15},eye:0.26,slotT:38,slotB:30},
+  {lv:0,x:2.9,z:3.9,k:'bed',lab:'HIDE UNDER THE BED',
+   to:{x:2.9,z:2.7},eye:0.20,slotT:42,slotB:34},
+  {lv:1,x:6.0,z:16.4,k:'attic',lab:'HIDE IN THE ATTIC',
+   to:{x:6.0,z:16.4},eye:0.62,slotT:22,slotB:16}
 ];
+const hideDef=k=>HIDES.find(h=>h.k===k);
 function nearestInteract(){
   if(state.hidden) return {kind:'unhide',label:'COME OUT'};
   const c=state.px|0,r=state.pz|0;
@@ -2365,7 +2441,13 @@ function doInteract(){
   if(state.reading){ closeNote(); return; }
   const it=nearestInteract(); if(!it) return;
   switch(it.kind){
-    case 'unhide': state.hidden=null; sfx.creak(); break;
+    case 'unhide': {
+      if(state.hideAnim) break;      // already crawling -- don't restart it
+      const h=hideDef(state.hidden)||HIDES[0];
+      state.hideAnim={k:state.hidden,t:0,dir:-1,fx:state.px,fz:state.pz,tx:h.x,tz:h.z};
+      sfx.creak();
+      break;
+    }
     case 'front': sfx.deny(); setObjective(state.doorsLocked?'SHE LOCKED IT':'BOARDED FROM THE OUTSIDE'); break;
     case 'bdoor':
       if(state.hasKey){ state.basementOpen=true; sfx.lock(); flowKey='';
@@ -2382,7 +2464,13 @@ function doInteract(){
       break;
     case 'note': openNote(it.note); break;
     case 'door': it.door.open=!it.door.open; sfx.creak(); break;
-    case 'couch': case 'bed': case 'attic': state.hidden=it.kind; sfx.creak(); break;
+    case 'couch': case 'bed': case 'attic': {
+      if(state.hideAnim) break;
+      const h=hideDef(it.kind);
+      state.hideAnim={k:it.kind,t:0,dir:1,fx:state.px,fz:state.pz,tx:h.to.x,tz:h.to.z};
+      state.hidden=it.kind; sfx.creak();
+      break;
+    }
   }
 }
 function rebuildLevel(lv){
@@ -2654,6 +2742,7 @@ function resetRun(){
   state.camsPlaced=[false,false,false]; state.camsLeft=3; state.basementOpen=false;
   state.doorsLocked=false; state.phoneUp=false; state.fear=0; state.hurt=0; state.pitch=0;
   state.floorY=0; state.floorYT=0; state.roll=0; state.reading=false; state.placing=null;
+  state.hideAnim=null; state.slot=0;
   tabsEl.classList.remove('on');
   if(phoneMesh) phoneMesh.visible=false;
   ent.active=false; ent.state='SLEEP'; ent.lv=0; ent.x=BED.x; ent.z=BED.z; ent.screamT=0;
@@ -2674,6 +2763,58 @@ function respawn(){
   save.cams=state.camsPlaced.slice(); save.hasKey=state.hasKey; save.doorsLocked=state.doorsLocked;
   document.getElementById('death').classList.remove('on');
   resetRun(); jumpToBeat(b,true);
+}
+let carRig=null;
+function buildCarRig(){
+  const g=new T.Group();
+  const dash=new T.MeshStandardMaterial({color:0x1b1b1f,roughness:.9});
+  const trim=new T.MeshStandardMaterial({color:0x2a2a2e,roughness:.75});
+  const skin=MAT.skin;
+  const cloth=new T.MeshStandardMaterial({color:0x2e3138,roughness:.98});
+  // dashboard set back and low so the windscreen is most of the view
+  g.add(box(1.70,.26,.46,dash,0,-.46,-.86));
+  g.add(box(1.70,.09,.14,trim,0,-.33,-1.06));
+  g.add(box(.36,.11,.04,trim,-.30,-.42,-1.075));
+  g.add(box(.24,.09,.04,trim, .34,-.42,-1.075));
+  for(const vx of [-.10,.10]) g.add(box(.14,.06,.035,trim,vx,-.40,-1.075));
+  const col=cyl(.030,.030,.24,trim,0,-.50,-.70,10); col.rotation.x=1.20; g.add(col);
+  // steering wheel, just below the sight line
+  const wheel=new T.Group(); wheel.position.set(-.01,-.36,-.62); wheel.rotation.x=-0.38;
+  const rim=new T.Mesh(new T.TorusGeometry(.150,.017,8,22),
+    new T.MeshStandardMaterial({color:0x16161a,roughness:.6}));
+  wheel.add(rim);
+  wheel.add(box(.25,.025,.020,trim,0,0,.004));
+  wheel.add(box(.025,.115,.020,trim,0,-.062,.004));
+  const hub=new T.Mesh(new T.CylinderGeometry(.040,.040,.018,10),trim);
+  hub.rotation.x=Math.PI/2; wheel.add(hub);
+  g.add(wheel); g.userData.wheel=wheel;
+  // pillars, roof lip and mirror frame the glass
+  for(const sx of [-1,1]) g.add(box(.075,.90,.075,dash,sx*.78,.16,-.84));
+  g.add(box(1.72,.09,.26,dash,0,.60,-.72));
+  g.add(box(.17,.065,.040,trim,.09,.50,-.86));
+  // driver's door card
+  g.add(box(.06,.55,.85,dash,-.78,-.34,-.18));
+  g.add(box(.05,.09,.52,trim,-.775,-.06,-.18));
+  // the seat you're in
+  g.add(box(.52,.09,.46,cloth,0,-.66,.10));
+  // Barry's arms, up on the wheel
+  const arm=(sx)=>{
+    const a=new T.Group();
+    a.add(cyl(.042,.036,.30,skin,0,-.15,0,8));
+    const fore=new T.Group(); fore.position.y=-.30; a.add(fore);
+    fore.add(cyl(.036,.030,.26,skin,0,-.13,0,8));
+    const hand=new T.Group(); hand.position.y=-.26; fore.add(hand);
+    hand.add(box(.048,.075,.026,skin,0,-.035,0));
+    for(let i=0;i<4;i++) hand.add(box(.010,.052,.012,skin,-.016+i*.011,-.088,.004));
+    a.position.set(sx*.175,-.20,.06);
+    a.rotation.set(-1.16,0,sx*0.20);
+    fore.rotation.set(0.60,0,-sx*0.26);
+    hand.rotation.set(0.44,0,0);
+    return a;
+  };
+  g.add(arm(-1)); g.add(arm(1));
+  g.visible=false;
+  return g;
 }
 function drawCrack(){
   const cv=document.getElementById('crack');
@@ -2704,7 +2845,16 @@ function drawCrack(){
   rg.addColorStop(0,'rgba(228,238,255,.55)'); rg.addColorStop(1,'rgba(228,238,255,0)');
   g.fillStyle=rg; g.beginPath(); g.arc(ox,oy,150,0,6.283); g.fill();
 }
+let escDoor=null;
 function playEscape(){
+  if(!escDoor){
+    escDoor=new T.Group();
+    const d=makeDoor(); d.position.x=0.47; escDoor.add(d);
+    escDoor.position.set(1.35,0,11.55); escDoor.rotation.y=-Math.PI/2;
+    escDoor.userData.base=escDoor.rotation.y;
+    propGroups[STREET].add(escDoor);
+  }
+  escDoor.visible=true;
   state.lv=STREET; showLevel(STREET); flowKey='';
   state.px=1.9; state.pz=12.0; state.yaw=-1.15; state.pitch=0.05; state.roll=0;
   state.hidden=null; state.hasKey=true;
@@ -2712,6 +2862,7 @@ function playEscape(){
   ent.state='LOOK'; ent.speed=0; ent.screamT=0;
   cineTotal=0;
   let slammed=false,b1=false,b2=false,b3=false;
+  const dBase=escDoor.userData.base;
   playCine(t=>{
     if(t<2.2){                                   // out, and you nearly go over
       const k=t/2.2;
@@ -2719,17 +2870,29 @@ function playEscape(){
       state.yaw=-1.15+k*0.30;
       const st=Math.max(0,1-Math.abs(t-1.25)/0.55);
       state.pitch=0.05+st*0.60; state.roll=st*0.34;
+      // the door is flung wide as you come through, then she runs into it
+      if(t<1.45){ escDoor.rotation.y=dBase-Math.min(1.5,t*1.6); }
+      else {
+        const j=Math.max(0,1-(t-1.45)/0.45);
+        escDoor.rotation.y=dBase-j*0.34+Math.sin((t-1.45)*46)*0.05*j;
+        ent.active=true; ent.lv=STREET; ent.state='LOOK';
+        ent.x=1.55; ent.z=11.75; ent.a=-0.7; ent.speed=0;
+        ent.screamT=(t<1.75)?99:0;                // she rebounds off it
+      }
       if(t>1.45&&!slammed){ slammed=true; sfx.slam(); state.hurt=.30; }
     }else{                                       // hands on knees, getting air
       state.px=4.6; state.pz=13.8; state.roll=Math.sin(t*1.6)*0.035;
       state.pitch=0.36+Math.sin(t*2.3)*0.10;
       state.yaw=-0.85;
+      escDoor.rotation.y=dBase;
+      ent.active=false; ent.screamT=0;
       if(t>2.6&&!b1){b1=true;sfx.breath();}
       if(t>3.5&&!b2){b2=true;sfx.breath();}
       if(t>4.4&&!b3){b3=true;sfx.breath();}
     }
   },[{t:'',d:2.2},{t:'',d:3.1}],()=>{
     state.roll=0; state.pitch=0.04;
+    escDoor.rotation.y=dBase-1.45;               // she comes back through it
     ent.active=true; ent.state='CHASE'; ent.seeT=99;
     ent.x=2.2; ent.z=11.8; ent.lv=STREET;
     sfx.slam(); sfx.scream(); state.fear=1;
@@ -2738,6 +2901,11 @@ function playEscape(){
 }
 function playCarCine(){
   cineTotal=0;
+  if(carRig) carRig.visible=true;
+  // the camera sits inside the parked car's shell; the interior rig replaces it
+  if(barryCar) barryCar.visible=false;
+  if(phoneMesh) phoneMesh.visible=false;
+  state.phoneUp=false; tabsEl.classList.remove('on');
   const sx=state.px, sz=state.pz, sy=state.yaw;
   let shut=false,punch=false,started=false,revd=false;
   const crack=document.getElementById('crack');
@@ -2761,10 +2929,15 @@ function playCarCine(){
       }
       if(punch){ state.roll=Math.sin(t*44)*0.020; state.pitch=0.05+Math.sin(t*37)*0.016; }
     }else{                                       // engine, and go
+      // she doesn't tick during a cutscene, so retire the scream by hand or the
+      // red flash it drives stays up for the whole drive-off
+      ent.screamT=0; state.hurt=Math.max(0,0.5-(t-3.6)*0.6); state.fear=Math.max(0,1-(t-3.6)*0.5);
       if(!started){ started=true; sfx.engine(); }
       if(t>4.1&&!revd){ revd=true; sfx.rev(); }
       const k=Math.min(1,(t-3.6)/3.4), e=k*k;
       state.px=CAR.x-0.75+e*46;
+      if(carRig&&carRig.userData.wheel)
+        carRig.userData.wheel.rotation.z=Math.sin(t*1.7)*0.30-0.18;
       state.roll=Math.sin(t*8)*0.012*(1-k);
       state.pitch=0.05;
       crack.style.opacity=String(0.92*(1-k*0.35));
@@ -2772,6 +2945,9 @@ function playCarCine(){
   },[{t:'',d:1.5},{t:'',d:2.1},{t:'"...I never even got upstairs."',d:3.4},
      {t:'TO BE CONTINUED',d:2.6},{t:'CHAPTER 2',d:2.4}],()=>{
     crack.style.opacity='0'; state.roll=0; ent.screamT=0;
+    if(carRig) carRig.visible=false;
+    if(barryCar) barryCar.visible=true;
+    if(escDoor) escDoor.visible=false;
     save.chapter=1; save.beat=null; writeSave();
     toMenu();
   });
@@ -2809,7 +2985,7 @@ function update(dt){
   state.pitch=Math.max(-1.15,Math.min(1.15,state.pitch));
   lookDX=lookDY=0;
 
-  if(!state.hidden&&!state.reading&&!state.placing){
+  if(!state.hidden&&!state.reading&&!state.placing&&!state.hideAnim){
     // once she's after you, moving at all means sprinting -- no button to hold
     const fleeing=(state.beat==='CHASE'||state.beat==='BASEMENT'||ent.state==='CHASE');
     let spd=state.crouch?1.35:((running||fleeing)?4.2:2.5);
@@ -2855,6 +3031,29 @@ function update(dt){
             showLevel(GROUND); flowKey=''; beat('EXPLORE'); });
   }
 
+  // crawling under the couch / bed: three seconds, and your view narrows to a slit
+  if(state.hideAnim){
+    const A=state.hideAnim; A.t+=dt;
+    const k=Math.min(1,A.t/3), e=k*k*(3-2*k);
+    state.px=A.fx+(A.tx-A.fx)*e; state.pz=A.fz+(A.tz-A.fz)*e;
+    if(A.t>=3){
+      if(A.dir<0){ state.hidden=null; }
+      state.hideAnim=null;
+    }
+  }
+  {
+    const h=state.hidden?hideDef(state.hidden):null;
+    const want=h?(state.hideAnim&&state.hideAnim.dir<0
+                    ? 1-Math.min(1,state.hideAnim.t/3)
+                    : (state.hideAnim?Math.min(1,state.hideAnim.t/3):1)):0;
+    state.slot=(state.slot||0)+((want)-(state.slot||0))*Math.min(1,dt*6);
+    const sl=document.getElementById('slot');
+    sl.style.opacity=state.slot>0.02?'1':'0';
+    const tb=h?h.slotT:0, bb=h?h.slotB:0;
+    sl.children[0].style.height=(tb*state.slot)+'%';
+    sl.children[1].style.height=(bb*state.slot)+'%';
+  }
+
   // mounting a camera: three seconds of fumbling with the bracket
   if(state.placing){
     const P=state.placing; P.t+=dt;
@@ -2897,9 +3096,11 @@ function syncCamera(dt){
   // eye height, crouch and hiding
   let tgt=1.55;
   if(state.crouch) tgt=0.95;
-  if(state.hidden==='couch') tgt=0.62;
-  if(state.hidden==='bed') tgt=0.32;
-  if(state.hidden==='attic') tgt=0.85;
+  if(state.hidden){
+    const h=hideDef(state.hidden);
+    if(h) tgt=h.eye;
+  }
+  if(carRig&&carRig.visible) tgt=1.16;
   state.eyeY+=(tgt-state.eyeY)*Math.min(1,dt*8);
   const bob=Math.sin(state.bob)*0.022*(state.crouch?.5:1);
   const sway=Math.cos(state.bob*.5)*0.012;
@@ -2958,6 +3159,12 @@ function syncCamera(dt){
   }
   updateDoors(dt); updateTraffic(dt);
   if(keyObj&&keyObj.visible) keyObj.rotation.y+=dt*1.6;
+  for(let i=0;i<camMeshes.length;i++){
+    const m=camMeshes[i]; if(!m.visible) continue;
+    const sweep=Math.sin(performance.now()*0.00042+i*2.1)*0.62;
+    m.rotation.y=CAMS[i].ry+sweep;
+    CAMS[i].pan=sweep;
+  }
   camMeshes.forEach(m=>{ if(m.visible&&m.userData.led)
     m.userData.led.material.color.setHex(((performance.now()%1400)<700)?0xff2020:0x400808); });
 }
@@ -2977,7 +3184,7 @@ function render(dt){
     if(on&&(feedTick++%2===0)){
       const d=CAMS[i], c=camObjs[i];
       c.position.set(d.x,d.y,d.z); c.rotation.set(0,0,0);
-      c.rotateY(d.ry); c.rotateX(-0.22);
+      c.rotateY(d.ry+(d.pan||0)); c.rotateX(-0.22);
       // the feed shows the level the camera is on
       const prev=state.lv;
       for(const k in levelGroups) levelGroups[k].visible=(+k===d.lv);
