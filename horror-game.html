@@ -2037,7 +2037,7 @@ function buildWorld(){
   woman=makeWoman(); woman.visible=false; scene.add(woman);
 
   buildPhone();
-  carRig=buildCarRig(); camera.add(carRig);
+  carRig=buildCarRig(); carRig.position.set(0,0.145,0); camera.add(carRig);
 }
 
 /* ---- notes nailed up around the house. USE to read one. ---- */
@@ -2865,45 +2865,94 @@ function buildCarRig(){
   // dashboard set back and low so the windscreen is most of the view
   g.add(box(1.70,.26,.46,dash,0,-.46,-.86));
   g.add(box(1.70,.09,.14,trim,0,-.33,-1.06));
-  g.add(box(.36,.11,.04,trim,-.30,-.42,-1.075));
-  g.add(box(.24,.09,.04,trim, .34,-.42,-1.075));
-  for(const vx of [-.10,.10]) g.add(box(.14,.06,.035,trim,vx,-.40,-1.075));
+  g.add(box(1.72,.05,.30,dash,0,-.325,-.90));                 // top pad
+  // instrument binnacle with faintly lit dials
+  const gauge=new T.MeshStandardMaterial({color:0x0d0f12,roughness:.4,
+    emissive:0x1d2a1a,emissiveIntensity:1.1});
+  g.add(box(.40,.14,.05,gauge,-.02,-.40,-.905));
+  g.add(box(.44,.04,.07,trim,-.02,-.30,-.905));
+  for(const gx of [-.11,.07]){
+    const d1=new T.Mesh(new T.CylinderGeometry(.048,.048,.012,14),gauge);
+    d1.rotation.x=Math.PI/2; d1.position.set(gx-.02,-.40,-.918); g.add(d1);
+    const nd=box(.004,.038,.006,new T.MeshStandardMaterial({color:0xd8442a,
+      emissive:0xd8442a,emissiveIntensity:2.2}),gx-.02,-.386,-.925);
+    nd.rotation.z=gx<0?0.5:-0.7; g.add(nd);
+  }
+  // centre stack: radio, vents, heater dials
+  g.add(box(.30,.13,.05,trim,.30,-.42,-1.02));
+  g.add(box(.24,.05,.04,new T.MeshStandardMaterial({color:0x101318,roughness:.3,
+    emissive:0x2a5a34,emissiveIntensity:1.4}),.30,-.395,-1.045));
+  for(const hx of [.24,.30,.36]){
+    const k=new T.Mesh(new T.CylinderGeometry(.016,.016,.02,10),trim);
+    k.rotation.x=Math.PI/2; k.position.set(hx,-.468,-1.045); g.add(k);
+  }
+  for(const vx of [-.34,-.10,.10]) g.add(box(.15,.055,.035,trim,vx,-.352,-1.055));
   const col=cyl(.030,.030,.24,trim,0,-.50,-.70,10); col.rotation.x=1.20; g.add(col);
+  g.add(box(.015,.11,.015,trim,-.10,-.42,-.70));              // stalks
+  g.add(box(.015,.09,.015,trim, .09,-.44,-.70));
+
   // steering wheel, just below the sight line
   const wheel=new T.Group(); wheel.position.set(-.01,-.36,-.62); wheel.rotation.x=-0.38;
-  const rim=new T.Mesh(new T.TorusGeometry(.150,.017,8,22),
-    new T.MeshStandardMaterial({color:0x16161a,roughness:.6}));
+  const rim=new T.Mesh(new T.TorusGeometry(.150,.018,10,26),
+    new T.MeshStandardMaterial({color:0x16161a,roughness:.55}));
   wheel.add(rim);
-  wheel.add(box(.25,.025,.020,trim,0,0,.004));
-  wheel.add(box(.025,.115,.020,trim,0,-.062,.004));
-  const hub=new T.Mesh(new T.CylinderGeometry(.040,.040,.018,10),trim);
+  wheel.add(box(.25,.026,.020,trim,0,0,.004));
+  wheel.add(box(.026,.115,.020,trim,0,-.062,.004));
+  const hub=new T.Mesh(new T.CylinderGeometry(.042,.042,.020,12),trim);
   hub.rotation.x=Math.PI/2; wheel.add(hub);
+  const badge=new T.Mesh(new T.CylinderGeometry(.016,.016,.004,10),
+    new T.MeshStandardMaterial({color:0x8b8d92,roughness:.3,metalness:.9}));
+  badge.rotation.x=Math.PI/2; badge.position.z=.013; wheel.add(badge);
   g.add(wheel); g.userData.wheel=wheel;
-  // pillars, roof lip and mirror frame the glass
+
+  // pillars, roof lip, visors and mirror
   for(const sx of [-1,1]) g.add(box(.075,.90,.075,dash,sx*.78,.16,-.84));
   g.add(box(1.72,.09,.26,dash,0,.60,-.72));
-  g.add(box(.17,.065,.040,trim,.09,.50,-.86));
-  // driver's door card
+  for(const sx of [-1,1]) g.add(box(.52,.03,.20,trim,sx*.34,.545,-.80));
+  const mstem=box(.02,.05,.02,trim,.09,.53,-.85); g.add(mstem);
+  g.add(box(.20,.070,.028,trim,.09,.485,-.845));
+  g.add(box(.185,.055,.010,new T.MeshStandardMaterial({color:0x14161c,roughness:.1,
+    metalness:.8}),.09,.485,-.860));
+  // driver's door: card, glass frame, handle, winder
   g.add(box(.06,.55,.85,dash,-.78,-.34,-.18));
   g.add(box(.05,.09,.52,trim,-.775,-.06,-.18));
-  // the seat you're in
+  g.add(box(.05,.055,.13,trim,-.772,-.20,-.36));
+  const wind=new T.Mesh(new T.CylinderGeometry(.020,.020,.02,10),trim);
+  wind.rotation.z=Math.PI/2; wind.position.set(-.770,-.30,-.12); g.add(wind);
+  // gear lever and handbrake
+  g.add(box(.07,.05,.16,trim,.20,-.60,-.26));
+  const lev=cyl(.014,.014,.20,trim,.20,-.50,-.28,8); lev.rotation.x=0.22; g.add(lev);
+  g.add(new T.Mesh(new T.SphereGeometry(.028,10,8),
+    new T.MeshStandardMaterial({color:0x1a1a1e,roughness:.5}))).position.set(.20,-.405,-.30);
+  const hb=box(.035,.035,.22,trim,.34,-.60,-.16); hb.rotation.x=-0.30; g.add(hb);
+  // seat
   g.add(box(.52,.09,.46,cloth,0,-.66,.10));
-  // Barry's arms, up on the wheel
+  g.add(box(.50,.42,.08,cloth,0,-.44,.32));
+
+  // Barry's arms: hands closed on the rim at ten and two
   const arm=(sx)=>{
     const a=new T.Group();
-    a.add(cyl(.042,.036,.30,skin,0,-.15,0,8));
-    const fore=new T.Group(); fore.position.y=-.30; a.add(fore);
-    fore.add(cyl(.036,.030,.26,skin,0,-.13,0,8));
-    const hand=new T.Group(); hand.position.y=-.26; fore.add(hand);
-    hand.add(box(.048,.075,.026,skin,0,-.035,0));
-    for(let i=0;i<4;i++) hand.add(box(.010,.052,.012,skin,-.016+i*.011,-.088,.004));
-    a.position.set(sx*.175,-.20,.06);
-    a.rotation.set(-1.16,0,sx*0.20);
-    fore.rotation.set(0.60,0,-sx*0.26);
-    hand.rotation.set(0.44,0,0);
+    a.position.set(sx*.128,-.292,-.650);
+    // hand wrapped over the rim
+    a.add(box(.050,.046,.082,skin,0,0,0));
+    for(let i=0;i<4;i++) a.add(box(.011,.030,.017,skin,-.017+i*.0115,-.024,.030));
+    a.add(box(.015,.038,.021,skin,sx*.028,-.004,-.018));
+    // forearm running back to the lap
+    const fore=cyl(.033,.040,.30,skin,0,0,0,8);
+    fore.position.set(sx*.052,-.108,.132);
+    fore.rotation.set(1.22,0,-sx*0.30); a.add(fore);
+    // short sleeve at the elbow
+    const sl=new T.Mesh(new T.CylinderGeometry(.052,.046,.10,10,1,true),
+      new T.MeshStandardMaterial({color:0x3c4450,roughness:.95,side:T.DoubleSide}));
+    sl.position.set(sx*.098,-.212,.258); sl.rotation.set(1.22,0,-sx*0.30); a.add(sl);
+    // upper arm
+    const up=cyl(.045,.038,.24,skin,0,0,0,8);
+    up.position.set(sx*.126,-.300,.318);
+    up.rotation.set(0.92,0,-sx*0.46); a.add(up);
     return a;
   };
   g.add(arm(-1)); g.add(arm(1));
+
   g.visible=false;
   return g;
 }
@@ -2995,6 +3044,7 @@ function playCarCine(){
   if(carRig) carRig.visible=true;
   // the camera sits inside the parked car's shell; the interior rig replaces it
   if(barryCar) barryCar.visible=false;
+  cars.forEach(c=>{ c.m.visible=false; c.wait=999; });   // keep the lane clear
   if(phoneMesh) phoneMesh.visible=false;
   state.phoneUp=false; tabsEl.classList.remove('on');
   const sx=state.px, sz=state.pz, sy=state.yaw;
@@ -3027,19 +3077,26 @@ function playCarCine(){
       ent.screamT=0; state.hurt=Math.max(0,0.6-(t-4.0)*0.6); state.fear=Math.max(0,1-(t-4.0)*0.4);
       if(!started&&t>4.2){ started=true; sfx.engine(); }
       if(t>5.0&&!revd){ revd=true; sfx.rev(); }
-      const d=Math.max(0,t-5.0), a=Math.min(1,d/3.2), e2=a*a;
-      state.px=CAR.x-0.75+e2*52;
+      // pull out into the empty lane first -- the parked cars sit on the kerb
+      // at z 17.2, so driving straight down z 16.7 went through them
+      const d=Math.max(0,t-5.0), a=Math.min(1,d/3.4), e2=a*a;
+      const pull=Math.min(1,d/1.3);
+      state.px=CAR.x-0.75+e2*54;
+      state.pz=CAR.z+(19.55-CAR.z)*(pull*pull*(3-2*pull));
       state.roll=Math.sin(t*9)*0.014*(1-a);
       state.pitch=0.04;
       if(carRig&&carRig.userData.wheel)
         carRig.userData.wheel.rotation.z=Math.sin(t*1.6)*0.26-0.14;
       crack.style.opacity=String(0.92*(1-a*0.30));
     }
-  },[{t:'',d:1.6},{t:'',d:2.4},{t:'"...I never even got upstairs."',d:3.8},
+  },[{t:'',d:1.6},{t:'',d:2.4},
+     {t:'"Oh I\u2019m never going here again."',d:3.2},
+     {t:'"I quit this job."',d:2.8},
      {t:'TO BE CONTINUED',d:2.6},{t:'CHAPTER 2',d:2.4}],()=>{
     crack.style.opacity='0'; state.roll=0; ent.screamT=0;
     if(carRig) carRig.visible=false;
     if(barryCar) barryCar.visible=true;
+    cars.forEach(c=>{ c.wait=4+Math.random()*8; });
     if(escDoor) escDoor.visible=false;
     save.chapter=1; save.beat=null; writeSave();
     toMenu();
