@@ -778,6 +778,22 @@ function texAttic(seed){
 }
 
 /* ---- her skin: bloodless grey-white, filthy, with veins showing through ---- */
+function texHair(seed){
+  const W=64,H=256, cv=C(W,H), g=cv.getContext('2d'), rnd=mulberry(seed);
+  g.clearRect(0,0,W,H);
+  for(let i=0;i<7;i++){
+    const x0=6+rnd()*(W-12), amp=3+rnd()*7, len=H*(0.55+rnd()*0.45);
+    g.lineWidth=1.4+rnd()*2.6; g.lineCap='round';
+    for(let y=0;y<len;y+=3){
+      const a=1-Math.pow(y/len,1.7);
+      const sh=96+rnd()*46;
+      g.strokeStyle='rgba('+(sh|0)+','+((sh*0.96)|0)+','+((sh*0.88)|0)+','+(a*0.95).toFixed(3)+')';
+      const x=x0+Math.sin(y*0.035+i)*amp;
+      g.beginPath(); g.moveTo(x,y); g.lineTo(x0+Math.sin((y+3)*0.035+i)*amp,y+3.4); g.stroke();
+    }
+  }
+  const t=new T.CanvasTexture(cv); t.colorSpace=T.SRGBColorSpace; return t;
+}
 function texSkin(seed){
   const S=512, cv=C(S,S), g=cv.getContext('2d'), rnd=mulberry(seed);
   const n=fbm(S,S,40,4,seed), n2=fbm(S,S,7,3,seed+1);
@@ -911,7 +927,8 @@ function buildTextures(step){
     ['bedding', ()=>texFabric('#8d8672',101)],
     ['gown',    ()=>texFabric('#a9a496',103,.96)],
     ['skin',    ()=>texSkin(109)],
-    ['face',    ()=>texFace(113)]
+    ['face',    ()=>texFace(113)],
+    ['hair',    ()=>texHair(127)]
   ];
   let i=0;
   return new Promise(res=>{
@@ -1126,9 +1143,14 @@ function makeTV(){
 function makeNightstand(){
   const g=new T.Group();
   g.add(box(.56,.62,.46,MAT.darkwood,0,.31,0));
-  g.add(box(.5,.16,.02,MAT.trim,0,.44,.235));
+  const drawer=new T.Group();                       // the one she keeps the key in
+  drawer.add(box(.50,.17,.42,MAT.darkwood,0,0,0));
+  drawer.add(box(.50,.17,.02,MAT.trim,0,0,.215));
+  drawer.add(cyl(.018,.018,.05,MAT.brass,0,0,.235,8));
+  drawer.position.set(0,.44,.02); g.add(drawer);
+  g.userData.drawer=drawer;
   g.add(box(.5,.16,.02,MAT.trim,0,.22,.235));
-  g.add(cyl(.02,.02,.05,MAT.brass,0,.44,.25,8));
+  g.add(cyl(.02,.02,.05,MAT.brass,0,.22,.25,8));
   return g;
 }
 function makeSink(){
@@ -1629,25 +1651,53 @@ function makeWoman(){
     loT.add(box(w,h*.88,.011,toothMat,x,h*.44,.038));
   }
 
-  /* ---------- hair: thin stringy locks, parted, forehead showing ---------- */
-  const hairMat=new T.MeshStandardMaterial({color:0x5f594e,roughness:1.0,
-    side:T.DoubleSide,transparent:true,opacity:.96});
-  const scalp=new T.Mesh(new T.SphereGeometry(.140,18,14,0,6.283,0,1.15),hairMat);
-  scalp.position.y=.026; scalp.scale.set(1.02,1.06,1.04); head.add(scalp);
+  /* ---------- hair: wispy strips, parted, forehead showing ---------- */
+  const hairMat=new T.MeshStandardMaterial({map:TEX.hair,transparent:true,alphaTest:0.10,
+    depthWrite:false,roughness:1.0,side:T.DoubleSide,color:0xa39c90});
+  const scalpMat=new T.MeshStandardMaterial({color:0x2c2822,roughness:1.0});
+  const scalp=new T.Mesh(new T.SphereGeometry(.139,18,14,0,6.283,0,1.05),scalpMat);
+  scalp.position.y=.030; scalp.scale.set(1.02,1.02,1.04); head.add(scalp);
   const locks=[];
-  for(let i=0;i<86;i++){
-    const a=(i/86)*Math.PI*2 + (i%3)*0.03;
-    const front=Math.cos(a);                              // +Z is the face
-    if(front>0.62 && Math.abs(Math.sin(a))<0.45) continue; // leave the face clear
-    const len=.34+((i*53)%17)/17*.40;
-    const w=.009+((i*29)%7)/7*.010;
+  for(let i=0;i<30;i++){
+    const a=(i/30)*Math.PI*2+((i%3)-1)*0.04;
+    const front=Math.cos(a);
+    if(front>0.66&&Math.abs(Math.sin(a))<0.42) continue;    // part it off the face
+    const len=.40+((i*53)%17)/17*.46;
+    const w=.055+((i*29)%7)/7*.045;
+    const rr=.140+((i*17)%5)/5*.020;
     const strand=new T.Mesh(new T.PlaneGeometry(w,len),hairMat);
-    const rr=.145+((i*17)%5)/5*.018;
-    strand.position.set(Math.sin(a)*rr,-.02-len/2+.05,Math.cos(a)*rr);
+    strand.position.set(Math.sin(a)*rr,.045-len/2,Math.cos(a)*rr);
     strand.rotation.y=a;
-    strand.rotation.x=(front>0?0.06:-0.05)+((i*13)%5)/5*.05;
-    strand.rotation.z=Math.sin(a)*.10;
+    strand.rotation.x=(front>0?0.10:-0.06);
+    strand.rotation.z=Math.sin(a)*0.13;
+    strand.renderOrder=2;
     head.add(strand); locks.push(strand);
+  }
+  // a second layer over the crown and down the back so she isn't bald on top
+  for(let i=0;i<22;i++){
+    const a=(i/22)*Math.PI*2;
+    const front=Math.cos(a);
+    if(front>0.72&&Math.abs(Math.sin(a))<0.34) continue;
+    const len=.30+((i*31)%13)/13*.34;
+    const w=.062+((i*23)%5)/5*.040;
+    const strand=new T.Mesh(new T.PlaneGeometry(w,len),hairMat);
+    strand.position.set(Math.sin(a)*.098,.118-len/2,Math.cos(a)*.098);
+    strand.rotation.y=a;
+    strand.rotation.x=(front>0?0.42:-0.34);
+    strand.renderOrder=2;
+    head.add(strand); locks.push(strand);
+  }
+  for(let i=0;i<8;i++){                                     // crown cover
+    const a=(i/8)*Math.PI*2;
+    const cap=new T.Mesh(new T.PlaneGeometry(.10,.20),hairMat);
+    cap.position.set(Math.sin(a)*.055,.150,Math.cos(a)*.055);
+    cap.rotation.set(-1.15,a,0); cap.renderOrder=2;
+    head.add(cap); locks.push(cap);
+  }
+  for(const sx of [-1,1]){                                  // two strays across the face
+    const f=new T.Mesh(new T.PlaneGeometry(.038,.34),hairMat);
+    f.position.set(sx*.052,-.055,.128); f.rotation.z=sx*0.16; f.renderOrder=3;
+    head.add(f); locks.push(f);
   }
 
   /* ---------- limbs ---------- */
@@ -1883,7 +1933,7 @@ function buildWorld(){
 
   // ground floor
   put(0,makeBed(),2.9,2.6,0);
-  put(0,makeNightstand(),5.4,2.5,0);
+  nightstand=put(0,makeNightstand(),5.4,2.5,0);
   put(0,makeCouch(),3.1,17.15,Math.PI);
   put(0,makeTV(),3.1,14.55,0);
   put(0,makeSink(),14.4,1.5,0);
@@ -1938,7 +1988,7 @@ function buildWorld(){
   put(0,makeCounter(4.6),16.6,1.45,0);
   put(0,makeCounter(2.4),20.2,4.4,Math.PI/2);
   for(const [x,z,ry,w,h,sd] of [
-      [8.06,3.2,Math.PI/2,.52,.66,5],[8.06,9.4,Math.PI/2,.62,.46,9],
+      [8.06,9.4,Math.PI/2,.62,.46,9],
       [11.94,6.2,-Math.PI/2,.46,.60,13],[1.06,16.0,-Math.PI/2,.70,.52,17],
       [11.94,11.6,-Math.PI/2,.52,.52,21]])
     put(0,makePicture(w,h,sd),x,z,ry,1.62);
@@ -1975,8 +2025,6 @@ const NOTES=[
    "SECOND NOTICE\n\nYou are three months\nbehind now.\n\nI knocked Tuesday. I heard\nsomeone moving in there.\nAnswer the door.\n\n- M. HALSTEAD"},
   {lv:0,x:5.0,z:14.045,ry: 0, t:
    "FINAL NOTICE\n\nVacate the property by the\n14th or the sheriff will\nremove you.\n\nThis is the last letter I\nam going to write."},
-  {lv:0,x:1.045,z:3.5, ry: Math.PI/2, t:
-   "they keep pushing these\nthrough the door\n\ni stopped reading them\n\nnobody is coming\nnobody has come in a\nvery long time"},
   {lv:1,x:13.045,z:10.5,ry: Math.PI/2, scrawl:1, t:"I KILLED\nTHEM ALL"}
 ];
 const noteMeshes=[];
@@ -2022,7 +2070,7 @@ function buildDoors(P){
     else            { hinge.position.set(d.c+.02,0,d.r+.5); hinge.rotation.y=0; }
     hinge.userData.base=hinge.rotation.y;
     P[d.lv].add(hinge);
-    doors.push({lv:d.lv,c:d.c,r:d.r,name:d.name,hinge,open:false,t:0});
+    doors.push({lv:d.lv,c:d.c,r:d.r,name:d.name,hinge,open:false,t:0,locked:false});
   }
 }
 const doorAt=(lv,c,r)=>{
@@ -2030,6 +2078,14 @@ const doorAt=(lv,c,r)=>{
   return null;
 };
 function updateDoors(dt){
+  // the bedroom stays shut and locked while she is in there
+  const bd=doors[0];
+  if(bd){
+    const inRoom=ent.active&&ent.lv===0&&
+      (ent.state==='ABED'||ent.state==='BEDROOM_IDLE'||ent.state==='SLEEP'||ent.state==='WAKE');
+    bd.locked=inRoom&&state.beat!=='SHE_WAKES';
+    if(bd.locked) bd.open=false;
+  }
   for(const d of doors){
     const want=d.open?1:0;
     d.t+=(want-d.t)*Math.min(1,dt*6);
@@ -2037,7 +2093,7 @@ function updateDoors(dt){
   }
 }
 
-let keyObj=null; const camMeshes=[];
+let keyObj=null,nightstand=null; const camMeshes=[];
 const CAMS=[
   {lv:0,x:10.4,y:2.15,z:15.2,ry:Math.PI*0.72,name:'LIVING'},
   {lv:0,x:18.5,y:2.15,z:2.4,ry:Math.PI*0.88,name:'KITCHEN'},
@@ -2138,6 +2194,13 @@ const state={
 const ent={lv:0,x:4.6,z:4.4,a:0,state:'SLEEP',seeT:0,lostT:0,anim:0,wakeT:0,
            patrolI:0,waitT:0,roamT:0,screamT:0,active:false,stepA:0,speed:0};
 const BED={x:4.6,z:4.4};
+// drawer -> front door -> basement door -> back to the drawer
+const LOCK_STEPS=[
+  {x:5.4,z:3.3, act:'drawer', wait:1.5},
+  {x:5.5,z:17.9,act:'slam',   wait:1.3},
+  {x:19.9,z:10.5,act:'slam',  wait:1.3},
+  {x:5.4,z:3.3, act:'putback',wait:1.5}
+];
 const PATROL=[{x:9.8,z:9.5},{x:16.5,z:3.5},{x:17.0,z:10.5},{x:6.0,z:16.0},{x:9.8,z:15.5}];
 
 /* ---- collision ---- */
@@ -2309,7 +2372,7 @@ function entityUpdate(dt){
   }
   // she shoves doors open as she reaches them
   for(const d of doors){
-    if(d.lv!==ent.lv||d.open) continue;
+    if(d.lv!==ent.lv||d.open||d.locked) continue;
     if(Math.hypot(ent.x-(d.c+.5),ent.z-(d.r+.5))<1.35){
       d.open=true;
       if(Math.hypot(state.px-ent.x,state.pz-ent.z)<14) sfx.creak();
@@ -2344,7 +2407,9 @@ function beat(b){
       ent.active=true; ent.state='WAKE'; ent.wakeT=2.6; ent.lv=0; ent.x=BED.x; ent.z=BED.z;
       sfx.wake(); setObjective('SOMETHING GOT UP. HIDE BEHIND THE COUCH'); break;
     case 'HIDDEN_WAIT': setObjective('STAY DOWN'); break;
-    case 'SHE_LOCKS': sfx.lock(); state.doorsLocked=true; setObjective('SHE LOCKED THE DOORS'); break;
+    case 'SHE_LOCKS':
+      ent.lockI=0; ent.lockWait=0; ent.state='LOCKING'; ent.active=true;
+      setObjective('SHE IS LOCKING THE HOUSE'); break;
     case 'CAMERAS': state.hidden=null; setObjective('SET UP 3 CAMERAS · LIVING ROOM · KITCHEN · BATHROOM'); break;
     case 'WAIT_PHONE':
       ent.active=true; ent.state='BEDROOM_IDLE'; ent.roamT=6+Math.random()*5;
@@ -2365,8 +2430,8 @@ function beatsUpdate(dt){
       if(state.beatT>46||Object.keys(state.exploreRooms).length>=5) beat('SHE_WAKES');
       break;
     case 'SHE_WAKES': if(state.hidden==='couch') beat('HIDDEN_WAIT'); break;
-    case 'HIDDEN_WAIT': if(state.beatT>5.5){ beat('SHE_LOCKS'); ent.state='RETURN'; } break;
-    case 'SHE_LOCKS': if(state.beatT>2&&ent.state==='SLEEP') beat('CAMERAS'); break;
+    case 'HIDDEN_WAIT': if(state.beatT>5.5){ beat('SHE_LOCKS'); } break;
+    case 'SHE_LOCKS': if(state.beatT>3&&ent.state==='SLEEP') beat('CAMERAS'); break;
     case 'CAMERAS': if(state.camsPlaced.every(v=>v)) beat('WAIT_PHONE'); break;
     case 'WAIT_PHONE':
       if(ent.state==='ROAM'&&roomOf(0,ent.x,ent.z)!=='BEDROOM'&&state.phoneUp) beat('GET_KEY');
@@ -2428,8 +2493,10 @@ function nearestInteract(){
   }
   for(const d of doors){
     if(d.lv!==state.lv) continue;
-    if(Math.hypot(state.px-(d.c+.5),state.pz-(d.r+.5))<1.45)
+    if(Math.hypot(state.px-(d.c+.5),state.pz-(d.r+.5))<1.45){
+      if(d.locked) return {kind:'lockeddoor',label:'LOCKED FROM THE INSIDE'};
       return {kind:'door',door:d,label:(d.open?'CLOSE THE ':'OPEN THE ')+d.name};
+    }
   }
   for(const h of HIDES){
     if(h.lv!==state.lv) continue;
@@ -2462,6 +2529,7 @@ function doInteract(){
       state.placing={i:it.cam,t:0}; sfx.place();
       document.getElementById('mount').classList.add('on');
       break;
+    case 'lockeddoor': sfx.deny(); setObjective('SHE KEEPS IT SHUT'); break;
     case 'note': openNote(it.note); break;
     case 'door': it.door.open=!it.door.open; sfx.creak(); break;
     case 'couch': case 'bed': case 'attic': {
@@ -2909,40 +2977,42 @@ function playCarCine(){
   const sx=state.px, sz=state.pz, sy=state.yaw;
   let shut=false,punch=false,started=false,revd=false;
   const crack=document.getElementById('crack');
+  const FWD=-Math.PI/2, LEFT=-Math.PI;      // facing along the road, and out the door glass
   playCine(t=>{
-    if(t<1.5){                                   // scramble into the driver's seat
-      const k=Math.min(1,t/1.5), e=k*k*(3-2*k);
+    if(t<1.6){                                   // scramble in, door shut, face the road
+      const k=Math.min(1,t/1.6), e=k*k*(3-2*k);
       state.px=sx+(CAR.x-0.75-sx)*e; state.pz=sz+(CAR.z-sz)*e;
-      state.yaw=sy+(( -0.15)-sy)*e; state.pitch=0.05;
-      if(t>1.25&&!shut){ shut=true; sfx.slam(); }
-      ent.x=2.2+ (CAR.x-4.4-2.2)*e; ent.z=11.8+(CAR.z-1.3-11.8)*e; ent.a=Math.PI/2;
-    }else if(t<3.6){                             // she reaches the glass and swings
-      const k=(t-1.5)/2.1;
-      ent.x=CAR.x-4.4+(CAR.x-1.05-(CAR.x-4.4))*Math.min(1,k*1.5);
-      ent.z=CAR.z-1.3+(CAR.z-0.95-(CAR.z-1.3))*Math.min(1,k*1.5);
-      ent.a=Math.PI/2; ent.speed=3.2;
-      state.yaw=-0.15+Math.sin(t*2.0)*0.05;
-      if(t>2.55&&!punch){
-        punch=true; ent.speed=0; ent.screamT=99;
+      state.yaw=sy+(FWD-sy)*e; state.pitch=0.04;
+      if(t>1.30&&!shut){ shut=true; sfx.slam(); }
+      ent.x=CAR.x-5.2+(CAR.x-2.6-(CAR.x-5.2))*e; ent.z=CAR.z+2.2; ent.a=-Math.PI/2; ent.speed=3.2;
+    }else if(t<4.0){                             // she arrives at your window and swings
+      const k=Math.min(1,(t-1.6)/1.1), e=k*k*(3-2*k);
+      state.yaw=FWD+(LEFT-FWD)*e;                // turn and look straight at her
+      const m=Math.min(1,(t-1.6)/1.5);
+      ent.x=CAR.x-2.6+((CAR.x-0.92)-(CAR.x-2.6))*m;
+      ent.z=CAR.z+2.2+((CAR.z+1.06)-(CAR.z+2.2))*m;
+      ent.a=-Math.PI/2; ent.speed=(m<1)?3.2:0;
+      if(t>3.05&&!punch){
+        punch=true; ent.screamT=99;
         sfx.glass(); sfx.scream(); state.hurt=1; state.fear=1;
         drawCrack(); crack.style.opacity='0.92';
       }
-      if(punch){ state.roll=Math.sin(t*44)*0.020; state.pitch=0.05+Math.sin(t*37)*0.016; }
-    }else{                                       // engine, and go
-      // she doesn't tick during a cutscene, so retire the scream by hand or the
-      // red flash it drives stays up for the whole drive-off
-      ent.screamT=0; state.hurt=Math.max(0,0.5-(t-3.6)*0.6); state.fear=Math.max(0,1-(t-3.6)*0.5);
-      if(!started){ started=true; sfx.engine(); }
-      if(t>4.1&&!revd){ revd=true; sfx.rev(); }
-      const k=Math.min(1,(t-3.6)/3.4), e=k*k;
-      state.px=CAR.x-0.75+e*46;
+      if(punch){ state.roll=Math.sin(t*44)*0.022; state.pitch=0.04+Math.sin(t*37)*0.018; }
+    }else{                                       // face front, crank it, and go
+      const k=Math.min(1,(t-4.0)/0.9), e=k*k*(3-2*k);
+      state.yaw=LEFT+(FWD-LEFT)*e;
+      ent.screamT=0; state.hurt=Math.max(0,0.6-(t-4.0)*0.6); state.fear=Math.max(0,1-(t-4.0)*0.4);
+      if(!started&&t>4.2){ started=true; sfx.engine(); }
+      if(t>5.0&&!revd){ revd=true; sfx.rev(); }
+      const d=Math.max(0,t-5.0), a=Math.min(1,d/3.2), e2=a*a;
+      state.px=CAR.x-0.75+e2*52;
+      state.roll=Math.sin(t*9)*0.014*(1-a);
+      state.pitch=0.04;
       if(carRig&&carRig.userData.wheel)
-        carRig.userData.wheel.rotation.z=Math.sin(t*1.7)*0.30-0.18;
-      state.roll=Math.sin(t*8)*0.012*(1-k);
-      state.pitch=0.05;
-      crack.style.opacity=String(0.92*(1-k*0.35));
+        carRig.userData.wheel.rotation.z=Math.sin(t*1.6)*0.26-0.14;
+      crack.style.opacity=String(0.92*(1-a*0.30));
     }
-  },[{t:'',d:1.5},{t:'',d:2.1},{t:'"...I never even got upstairs."',d:3.4},
+  },[{t:'',d:1.6},{t:'',d:2.4},{t:'"...I never even got upstairs."',d:3.8},
      {t:'TO BE CONTINUED',d:2.6},{t:'CHAPTER 2',d:2.4}],()=>{
     crack.style.opacity='0'; state.roll=0; ent.screamT=0;
     if(carRig) carRig.visible=false;
@@ -3158,6 +3228,11 @@ function syncCamera(dt){
     } else { L.visible=false; L.intensity=0; }
   }
   updateDoors(dt); updateTraffic(dt);
+  if(nightstand&&nightstand.userData.drawer){
+    const d=nightstand.userData.drawer;
+    const want=(state.drawerOpen?0.30:0.02);
+    d.position.z=d.position.z+(want-d.position.z)*Math.min(1,dt*6);
+  }
   if(keyObj&&keyObj.visible) keyObj.rotation.y+=dt*1.6;
   for(let i=0;i<camMeshes.length;i++){
     const m=camMeshes[i]; if(!m.visible) continue;
