@@ -1324,7 +1324,7 @@ function makeCar(col,lit){
 }
 const cars=[];
 let barryCar=null;   // exposed so the car cutscene can hide the shell
-const CAR={x:10.6,z:16.7};
+const CAR={x:14.6,z:16.7};
 function updateTraffic(dt){
   if(state.lv!==STREET||!cars.length) return;
   for(const c of cars){
@@ -1369,15 +1369,37 @@ function makeNeighborhood(){
   lampG.position.set(5.5,2.35,9.25); g.add(lampG);
 
   /* --- neighbours up and down the street --- */
-  g.add(makeHouseShell(-8.5, 4.0, 10.0,8.0,4.6,2.3, 3,[1],0xffb257));
-  g.add(makeHouseShell(-20.0,5.5, 9.0, 7.5,4.4,2.1, 7,[],0));
-  g.add(makeHouseShell( 19.5,4.5, 10.5,8.0,4.8,2.4, 11,[3],0x9fd0ff));
-  g.add(makeHouseShell( 31.0,5.5, 9.5, 7.5,4.4,2.2, 13,[],0));
-  // across the road, facing back at us (rotate 180 so their fronts face -Z)
-  for(const [x,s,l] of [[-4,17,[0]],[9,19,[]],[22,23,[2]]]){
-    const h=makeHouseShell(0,0,10.0,8.0,4.6,2.3,s,l,0xffb257);
-    h.rotation.y=Math.PI; h.position.set(x,0,27.5); g.add(h);
+  // every front sits on the same building line as ours (z = 9)
+  const plot=(cx,W,D,H,rise,sd,lit,col)=>{
+    const cz=9-D/2;
+    g.add(makeHouseShell(cx,cz,W,D,H,rise,sd,lit,col));
+    g.add(box(2.6,.16,1.5,MAT.darkwood,cx,.08,9.75));         // stoop
+    g.add(box(2.7,.10,.16,MAT.darkwood,cx,.02,10.45));
+    for(const px of [cx-1.2,cx+1.2]){                          // porch posts + roof
+      g.add(box(.14,2.3,.14,MAT.darkwood,px,1.15,10.35));
+    }
+    g.add(box(2.9,.18,1.8,MAT.roof,cx,2.42,9.90));
+    const path=new T.Mesh(new T.PlaneGeometry(1.4,5.0),MAT.kerb);
+    path.rotation.x=-Math.PI/2; path.position.set(cx,.02,12.9); g.add(path);
+    for(let x=cx-4.6;x<cx+4.7;x+=0.42){                        // plot fence
+      if(Math.abs(x-cx)<0.9) continue;
+      g.add(box(.08,.85,.05,MAT.darkwood,x,.43,15.2));
+    }
+  };
+  plot(-8.6, 10.0,8.0,4.6,2.3,  3,[1],0xffb257);
+  plot(-20.2, 9.0,7.5,4.4,2.1,  7,[],0);
+  plot( 19.6,10.5,8.0,4.8,2.4, 11,[3],0x9fd0ff);
+  plot( 31.2, 9.5,7.5,4.4,2.2, 13,[],0);
+  // across the road, fronts on z = 24, facing back at us
+  for(const [x,sd,l,c] of [[-4,17,[0],0xffb257],[9,19,[],0],[22,23,[2],0xffb257]]){
+    const h=makeHouseShell(0,0,10.0,8.0,4.6,2.3,sd,l,c);
+    h.rotation.y=Math.PI; h.position.set(x,0,28.0); g.add(h);
+    g.add(box(2.6,.16,1.5,MAT.darkwood,x,.08,23.3));
+    g.add(box(2.9,.18,1.8,MAT.roof,x,2.42,23.1));
+    for(const px of [x-1.2,x+1.2]) g.add(box(.14,2.3,.14,MAT.darkwood,px,1.15,22.8));
   }
+  // a low garden wall down our own boundary
+  for(let z=9.6;z<15.0;z+=0.6) g.add(box(.24,.52,.6,MAT.kerb,11.6,.26,z));
 
   /* --- road, kerbs, path --- */
   const road=new T.Mesh(new T.PlaneGeometry(110,7.5),MAT.roadP);
@@ -1392,12 +1414,12 @@ function makeNeighborhood(){
   path.rotation.x=-Math.PI/2; path.position.set(5.5,.02,13.2); g.add(path);
 
   /* --- picket fence along the lawn, with a gap for the path --- */
-  for(let x=-6;x<20;x+=0.42){
+  for(let x=-2.0;x<13.0;x+=0.42){
     if(Math.abs(x-5.5)<1.4) continue;
     g.add(box(.09,.95,.05,MAT.darkwood,x,.48,15.2));
   }
-  g.add(box(26,.07,.07,MAT.darkwood,7,.86,15.2));
-  g.add(box(26,.07,.07,MAT.darkwood,7,.42,15.2));
+  g.add(box(15,.07,.07,MAT.darkwood,5.5,.86,15.2));
+  g.add(box(15,.07,.07,MAT.darkwood,5.5,.42,15.2));
 
   /* --- streetlamps --- */
   for(const lx of [-3.5,15.5,34]){
@@ -1437,7 +1459,7 @@ function makeNeighborhood(){
   barryCar.position.set(CAR.x,0,CAR.z); barryCar.rotation.y=0; g.add(barryCar);
 
   /* --- parked cars on the kerb --- */
-  for(const [x,col] of [[-9.5,0x2b3a4e],[16.5,0x3a2b2b],[28,0x243024]]){
+  for(const [x,col] of [[-9.5,0x2b3a4e],[22.5,0x3a2b2b],[33,0x243024]]){
     const c=makeCar(col,false); c.position.set(x,0,17.2); g.add(c);
   }
   /* --- traffic: two cars running the road, headlights on --- */
@@ -1461,7 +1483,7 @@ function makeNeighborhood(){
   for(let i=0;i<26;i++){                                   // hedge along a neighbour
     g.add(box(.62,.85,.62,MAT.foliage,-16+i*.55,.42,13.6));
   }
-  for(const px of [-14,10,34]){                            // power poles + wires
+  for(const px of [-14,24,38]){                            // power poles + wires
     g.add(cyl(.14,.19,7.2,MAT.darkwood,px,3.6,16.9,7));
     g.add(box(1.9,.13,.13,MAT.darkwood,px,6.7,16.9));
     for(const dz of [-.7,.7]){
@@ -2106,7 +2128,12 @@ function updateDoors(dt){
   if(bd){
     const inRoom=ent.active&&ent.lv===0&&
       (ent.state==='ABED'||ent.state==='BEDROOM_IDLE'||ent.state==='SLEEP'||ent.state==='WAKE');
-    bd.locked=inRoom&&state.beat!=='SHE_WAKES';
+    const lock=inRoom&&state.beat!=='SHE_WAKES';
+    if(lock&&!bd.locked&&state.mode==='play'&&state.beat!=='EXPLORE'){
+      sfx.lock();                                  // the bolt going across
+      setObjective('SHE LOCKED HERSELF IN');
+    }
+    bd.locked=lock;
     if(bd.locked) bd.open=false;
   }
   for(const d of doors){
@@ -2552,7 +2579,7 @@ function doInteract(){
       state.placing={i:it.cam,t:0}; sfx.place();
       document.getElementById('mount').classList.add('on');
       break;
-    case 'lockeddoor': sfx.deny(); setObjective('SHE KEEPS IT SHUT'); break;
+    case 'lockeddoor': doorScare(); break;
     case 'note': openNote(it.note); break;
     case 'door': it.door.open=!it.door.open; sfx.creak(); break;
     case 'couch': case 'bed': case 'attic': {
@@ -2563,6 +2590,23 @@ function doInteract(){
       break;
     }
   }
+}
+// Rattle her handle while she is inside and she opens it herself.
+function doorScare(){
+  if(state.mode!=='play') return;
+  const d=doors[0];
+  if(!d||!d.locked){ sfx.deny(); return; }
+  // she only answers the handle once she's locked up for the night
+  if(state.beat!=='CAMERAS'&&state.beat!=='WAIT_PHONE'&&state.beat!=='GET_KEY'){
+    sfx.deny(); setObjective('HER DOOR WON\u2019T OPEN'); return;
+  }
+  d.locked=false; d.open=true; d.t=1;              // flung wide
+  ent.active=true; ent.lv=0; ent.state='CHASE'; ent.seeT=6;
+  ent.x=6.55; ent.z=3.35;
+  ent.a=Math.atan2(state.px-ent.x,state.pz-ent.z);
+  ent.speed=0; ent.screamT=1.5;
+  sfx.slam(); state.fear=1;
+  grab();
 }
 function rebuildLevel(lv){
   if(levelGroups[lv]){ scene.remove(levelGroups[lv]); disposeGroup(levelGroups[lv]); }
@@ -2933,10 +2977,16 @@ function buildCarRig(){
   const arm=(sx)=>{
     const a=new T.Group();
     a.position.set(sx*.128,-.292,-.650);
-    // hand wrapped over the rim
-    a.add(box(.050,.046,.082,skin,0,0,0));
-    for(let i=0;i<4;i++) a.add(box(.011,.030,.017,skin,-.017+i*.0115,-.024,.030));
-    a.add(box(.015,.038,.021,skin,sx*.028,-.004,-.018));
+    // palm across the rim, fingers curling over the front of it
+    const palm=box(.042,.036,.062,skin,0,.004,0);
+    palm.rotation.set(0,0,sx*0.18); a.add(palm);
+    for(let i=0;i<4;i++){
+      const f=box(.0095,.012,.040,skin,-.0135+i*.0090,-.014,.026);
+      f.rotation.x=-0.85; a.add(f);
+    }
+    const th=box(.011,.030,.014,skin,sx*.022,.006,-.016);
+    th.rotation.z=sx*0.5; a.add(th);
+    a.add(cyl(.026,.030,.055,skin,0,.030,.020,8));            // wrist
     // forearm running back to the lap
     const fore=cyl(.033,.040,.30,skin,0,0,0,8);
     fore.position.set(sx*.052,-.108,.132);
