@@ -1601,10 +1601,15 @@ function makeNeighborhood(){
 }
 // A real flight: 13 treads with risers, cut stringers, newel posts, handrail
 // and balusters. Rises the full 2.6m into the stairwell void above.
-function makeInteriorWindow(){
+function makeInteriorWindow(day){
   const g=new T.Group();
   const frame=new T.MeshStandardMaterial({color:0x6b6350,roughness:.85});
-  const glass=new T.MeshStandardMaterial({color:0x0a0f1c,roughness:.08,metalness:.55});
+  // chapter 2 happens in daylight -- night glass in a morning room reads as a
+  // hole in the wall
+  const glass=day
+    ? new T.MeshStandardMaterial({color:0xb6c6d8,roughness:.22,metalness:.1,
+        emissive:0xa8bcd4,emissiveIntensity:1.6})
+    : new T.MeshStandardMaterial({color:0x0a0f1c,roughness:.08,metalness:.55});
   g.add(box(1.26,1.56,.09,frame,0,0,0));
   g.add(box(1.06,1.36,.04,glass,0,0,.04));
   g.add(box(.07,1.36,.07,frame,0,0,.05));
@@ -1745,19 +1750,36 @@ function makePerson(o){
   const shoe=new T.MeshStandardMaterial({color:0x1a1a1c,roughness:.85});
   const S=H/1.78;
   const root=new T.Group();
-  const hips=new T.Group(); hips.position.y=0.95*S; root.add(hips);
+  // a lathe gives a silhouette a stack of cylinders never will: shoulders wide,
+  // waist narrow, and no seam where one primitive meets the next
+  const lathe=(prof,mat,zsq)=>{
+    const pts=prof.map(q=>new T.Vector2(Math.max(.0008,q[0])*S,q[1]*S));
+    const m=new T.Mesh(new T.LatheGeometry(pts,18),mat);
+    m.scale.z=zsq||1; m.castShadow=true; m.receiveShadow=true; return m;
+  };
+  const ball=(r,mat,x,y,z,sy,sz)=>{
+    const m=new T.Mesh(new T.SphereGeometry(r*S,10,8),mat);
+    m.position.set(x*S,y*S,z*S); m.scale.set(1,sy||1,sz||1);
+    m.castShadow=true; return m;
+  };
+  const hips=new T.Group(); hips.position.y=0.825*S; root.add(hips);
   const chest=new T.Group(); chest.position.y=0.34*S; hips.add(chest);
-  // torso
-  const t1=cyl(.150*S*build,.166*S*build,.46*S,shirt,0,.12*S,0,12); chest.add(t1);
-  chest.add(box(.40*S*build,.13*S,.20*S,shirt,0,.30*S,0));          // shoulders
-  chest.add(cyl(.052*S,.060*S,.13*S,skin,0,.40*S,0,10));            // neck
-  hips.add(cyl(.148*S,.124*S,.21*S,pants,0,-.10*S,0,12));           // hips
+  // torso: waist -> ribs -> chest -> shoulders, flattened front to back
+  const t1=lathe([[0,-.175],[.112,-.170],[.126,-.130],[.132,-.040],[.148,.060],
+                  [.164,.170],[.174,.258],[.168,.310],[.116,.358],[0,.372]],shirt,.70);
+  t1.scale.x=build; chest.add(t1);
+  chest.add(cyl(.050*S,.060*S,.13*S,skin,0,.392*S,0,10));           // neck
+  // pelvis, overlapping the waist so there is no gap at the belt
+  const pv=lathe([[0,-.255],[.086,-.250],[.118,-.215],[.138,-.120],[.146,-.030],
+                  [.138,.070],[.124,.170],[0,.190]],pants,.74);
+  pv.scale.x=build; hips.add(pv);
   // head
-  const head=new T.Group(); head.position.set(0,.52*S,0); chest.add(head);
-  const skull=new T.Mesh(new T.SphereGeometry(.115*S,18,16),skin);
-  skull.scale.set(1,1.16,1.02); head.add(skull);
-  const cap=new T.Mesh(new T.SphereGeometry(.121*S,16,14,0,6.283,0,1.25),hair);
-  cap.position.y=.014*S; head.add(cap);
+  const head=new T.Group(); head.position.set(0,.528*S,0); chest.add(head);
+  const skull=new T.Mesh(new T.SphereGeometry(.113*S,18,16),skin);
+  skull.scale.set(1,1.18,1.04); head.add(skull);
+  head.add(ball(.078,skin,0,-.056,.014,.88,1.0));                    // jaw
+  const cap=new T.Mesh(new T.SphereGeometry(.120*S,16,14,0,6.283,0,1.22),hair);
+  cap.position.y=.016*S; head.add(cap);
   if(o.longHair){
     for(let i=0;i<16;i++){
       const a=(i/16)*Math.PI*2;
@@ -1768,53 +1790,71 @@ function makePerson(o){
   }
   const eyeW=new T.MeshStandardMaterial({color:0xe8e4da,roughness:.3});
   const pup=new T.MeshBasicMaterial({color:0x120e0a});
+  const brow=new T.MeshStandardMaterial({color:hr,roughness:1});
   for(const sx of [-1,1]){
-    const e=new T.Mesh(new T.SphereGeometry(.024*S,10,10),eyeW);
-    e.position.set(sx*.044*S,.016*S,.096*S); head.add(e);
-    const q=new T.Mesh(new T.SphereGeometry(.011*S,8,8),pup);
-    q.position.set(sx*.044*S,.016*S,.113*S); head.add(q);
+    const e=new T.Mesh(new T.SphereGeometry(.019*S,10,10),eyeW);
+    e.position.set(sx*.042*S,.014*S,.090*S); e.scale.set(1,.78,.62); head.add(e);
+    const q=new T.Mesh(new T.SphereGeometry(.0085*S,8,8),pup);
+    q.position.set(sx*.042*S,.014*S,.102*S); head.add(q);
+    const bw=box(.040*S,.010*S,.014*S,brow,sx*.043*S,.042*S,.098*S);
+    bw.rotation.z=sx*.10; head.add(bw);                             // brow
   }
-  const mouth=new T.Group(); mouth.position.set(0,-.048*S,.100*S); head.add(mouth);
-  const lips=new T.Mesh(new T.SphereGeometry(.030*S,10,8),
+  head.add(ball(.016,skin,0,-.012,.098,1.15,1.0));                  // nose
+  head.add(ball(.026,skin,-.108,-.010,.006,1.2,.7));                // ears
+  head.add(ball(.026,skin, .108,-.010,.006,1.2,.7));
+  const mouth=new T.Group(); mouth.position.set(0,-.052*S,.094*S); head.add(mouth);
+  const lips=new T.Mesh(new T.SphereGeometry(.028*S,10,8),
     new T.MeshStandardMaterial({color:0x7d5347,roughness:.8}));
   lips.scale.set(1.15,.42,.55); mouth.add(lips);
-  const gap=new T.Mesh(new T.SphereGeometry(.024*S,10,8),
+  const gap=new T.Mesh(new T.SphereGeometry(.022*S,10,8),
     new T.MeshBasicMaterial({color:0x140d0c}));
   gap.scale.set(1.0,.30,.5); gap.position.z=.006*S; mouth.add(gap);
   // a smile is a curve, and a squashed sphere will never read as one -- swap the
   // whole mouth for an arc when someone actually smiles
-  const smile=new T.Mesh(new T.TorusGeometry(.038*S,.0085*S,6,14,Math.PI),
+  const smile=new T.Mesh(new T.TorusGeometry(.036*S,.0080*S,6,14,Math.PI),
     new T.MeshStandardMaterial({color:0x6b3f36,roughness:.85}));
-  smile.rotation.z=Math.PI; smile.position.set(0,-.030*S,.104*S);
+  smile.rotation.z=Math.PI; smile.position.set(0,-.034*S,.098*S);
   smile.visible=false; head.add(smile);
-  // limbs
+  // limbs: two segments with a ball at the joint, so a bent elbow or knee keeps
+  // its volume instead of opening a wedge
   const limb=(uL,lL,r0,r1,r2,mat,tip)=>{
     const j0=new T.Group();
-    j0.add(cyl(r0,r1,uL,mat,0,-uL/2,0,8));
+    j0.add(cyl(r0,r1,uL,mat,0,-uL/2,0,9));
+    j0.add(ball(r1/S*1.02,mat,0,-uL/S,0));
     const j1=new T.Group(); j1.position.y=-uL; j0.add(j1);
-    j1.add(cyl(r1,r2,lL,mat,0,-lL/2,0,8));
+    j1.add(cyl(r1,r2,lL,mat,0,-lL/2,0,9));
     const j2=new T.Group(); j2.position.y=-lL; j1.add(j2);
     if(tip) j2.add(tip);
     return {j0,j1,j2};
   };
   const hand=()=>{
     const g=new T.Group();
-    g.add(box(.042*S,.072*S,.026*S,skin,0,-.036*S,0));
-    for(let i=0;i<4;i++) g.add(box(.0095*S,.060*S,.012*S,skin,-.015*S+i*.010*S,-.100*S,.003*S));
+    g.add(box(.040*S,.070*S,.026*S,skin,0,-.035*S,0));
+    g.add(ball(.020,skin,0,-.014,0,1.0,.72));
+    for(let i=0;i<4;i++) g.add(box(.0090*S,.056*S,.012*S,skin,-.014*S+i*.0095*S,-.096*S,.003*S));
+    g.add(box(.012*S,.038*S,.014*S,skin,-.024*S,-.052*S,.010*S));   // thumb
     return g;
   };
-  const foot=()=>box(.078*S,.048*S,.185*S,shoe,0,-.024*S,.048*S);
-  const armL=limb(.28*S,.28*S,.048*S*build,.038*S,.031*S,skin,hand());
-  const armR=limb(.28*S,.28*S,.048*S*build,.038*S,.031*S,skin,hand());
-  armL.j0.position.set(-.205*S*build,.28*S,0); armR.j0.position.set(.205*S*build,.28*S,0);
+  const foot=()=>{
+    const g=new T.Group();
+    g.add(box(.076*S,.046*S,.170*S,shoe,0,-.023*S,.044*S));
+    g.add(ball(.038,shoe,0,-.026,.122,.60,.55));                    // toe
+    g.add(box(.070*S,.030*S,.052*S,shoe,0,-.012*S,-.030*S));        // heel
+    return g;
+  };
+  const armL=limb(.28*S,.27*S,.049*S*build,.037*S,.030*S,skin,hand());
+  const armR=limb(.28*S,.27*S,.049*S*build,.037*S,.030*S,skin,hand());
+  armL.j0.position.set(-.192*S*build,.268*S,0); armR.j0.position.set(.192*S*build,.268*S,0);
   for(const a of [armL,armR]){                                  // t-shirt sleeve
-    const sl=new T.Mesh(new T.CylinderGeometry(.062*S,.052*S,.16*S,10,1,true),shirt);
-    sl.position.y=-.07*S; a.j0.add(sl);
+    const sl=new T.Mesh(new T.CylinderGeometry(.070*S,.055*S,.17*S,12,1,true),shirt);
+    sl.position.y=-.075*S; a.j0.add(sl);
+    const dl=new T.Mesh(new T.SphereGeometry(.070*S,12,10),shirt); // deltoid cap
+    dl.scale.set(1,.92,.90); a.j0.add(dl);
   }
   chest.add(armL.j0); chest.add(armR.j0);
-  const legL=limb(.30*S,.30*S,.070*S,.052*S,.042*S,pants,foot());
-  const legR=limb(.30*S,.30*S,.070*S,.052*S,.042*S,pants,foot());
-  legL.j0.position.set(-.095*S,-.20*S,0); legR.j0.position.set(.095*S,-.20*S,0);
+  const legL=limb(.30*S,.29*S,.078*S,.055*S,.044*S,pants,foot());
+  const legR=limb(.30*S,.29*S,.078*S,.055*S,.044*S,pants,foot());
+  legL.j0.position.set(-.088*S,-.185*S,0); legR.j0.position.set(.088*S,-.185*S,0);
   hips.add(legL.j0); hips.add(legR.j0);
   root.userData={hips,chest,head,mouth,smile,armL,armR,legL,legR,S,t:0,talk:0};
   return root;
@@ -1833,7 +1873,7 @@ function animPerson(w,dt,speed,talking){
   u.armL.j1.rotation.x=-(0.16+Math.max(0, sw)*0.32)*amp-0.12;
   u.armR.j1.rotation.x=-(0.16+Math.max(0,-sw)*0.32)*amp-0.12;
   u.armL.j0.rotation.z= 0.09; u.armR.j0.rotation.z=-0.09;
-  u.hips.position.y=0.95*u.S+Math.abs(sw)*0.026*amp;
+  u.hips.position.y=0.825*u.S+Math.abs(sw)*0.026*amp;
   u.chest.rotation.y= sw*0.12*amp; u.hips.rotation.y=-sw*0.08*amp;
   u.head.rotation.z=-co*0.05*amp;
   u.talk+=(talking?1:0-u.talk)*Math.min(1,dt*8);
@@ -2067,7 +2107,7 @@ let renderer,scene,camera,levelGroups={},propGroups={},woman,phoneMesh,phoneScre
 let rtScene=null,postScene=null,postCam=null,postMat=null;
 const camRT=[];                       // render targets for the 3 wall cameras
 const camObjs=[];
-let lights=[],ambLight=null,moon=null;// the fixed pool we reposition each frame
+let lights=[],ambLight=null,moon=null,hemiLight=null;// the fixed pool we reposition each frame
 const LIGHT_DEFS=[];                  // per-level virtual lights
 const LIGHT_GAIN=34;                  // candela scale for the physical light units
 
@@ -2091,7 +2131,7 @@ function initThree(){
   // three r155+ uses physical light units, so point lights need candela-scale
   // intensities -- single digits read as pitch black.
   ambLight=new T.AmbientLight(0x3a3c50,2.6); scene.add(ambLight);
-  const hemi=new T.HemisphereLight(0x3a3c52,0x181008,0.9); scene.add(hemi);
+  hemiLight=new T.HemisphereLight(0x3a3c52,0x181008,0.9); scene.add(hemiLight);
   moon=new T.DirectionalLight(0x93a9d6,0); moon.position.set(-6,12,9); scene.add(moon);
 
   // fixed pool of point lights, repositioned to the nearest active sources
@@ -2270,12 +2310,12 @@ function buildWorld(){
       new T.MeshStandardMaterial({color:0x9fb0bd,roughness:.06,metalness:.92}));
     mir.position.set(2.6,1.72,1.06); P[4].add(mir);
     const frame=box(1.00,1.15,.05,MAT.trim,2.6,1.72,1.03); P[4].add(frame);
-    put(4,makeInteriorWindow(),5.0,1.04,0,1.60);
+    put(4,makeInteriorWindow(true),5.0,1.04,0,1.60);
   }
   // kitchen
   put(4,makeCounter(5.0),11.0,1.45,0);
   put(4,makeCounter(3.2),20.0,3.6,Math.PI/2);
-  put(4,makeInteriorWindow(),13.5,1.04,0,1.55);
+  put(4,makeInteriorWindow(true),13.5,1.04,0,1.55);
   {
     const fridge=box(.86,1.86,.78,new T.MeshStandardMaterial({color:0xb9bcbd,roughness:.35,metalness:.5}),
       17.4,.93,1.55); P[4].add(fridge);
@@ -2961,8 +3001,16 @@ function showLevel(lv){
   scene.fog.density = lv===HOME?0.006:(lv===STREET?0.045:(lv===BASEMENT?0.16:0.13));
   scene.fog.color.setHex(lv===HOME?0xb9c8d8:(lv===STREET?0x0a1020:0x05060a));
   renderer.setClearColor(lv===HOME?0xb9c8d8:(lv===STREET?0x0a1020:0x000000),1);
-  if(moon) moon.intensity = lv===HOME?5.2:(lv===STREET?2.3:0);
-  if(ambLight) ambLight.intensity = lv===HOME?13.0:(lv===STREET?4.8:2.6);
+  // chapter 2 is a morning, so HOME gets daylight colours rather than the cold
+  // blue the night levels are graded around
+  const day=lv===HOME;
+  if(moon){ moon.intensity = day?7.4:(lv===STREET?2.3:0);
+            moon.color.setHex(day?0xdfe2d4:0x93a9d6); }
+  if(ambLight){ ambLight.intensity = day?9.0:(lv===STREET?4.8:2.6);
+                ambLight.color.setHex(day?0x93a0ad:0x3a3c50); }
+  if(hemiLight){ hemiLight.intensity = day?2.6:0.9;
+                 hemiLight.color.setHex(day?0xaec4dc:0x3a3c52);
+                 hemiLight.groundColor.setHex(day?0x4d463c:0x181008); }
 }
 
 /* ==========================================================
@@ -3218,8 +3266,9 @@ function startChapter2(){
       const m=Math.min(1,(t-26.6)/4.0);
       const e=m*m*(3-2*m);
       nbKid.position.set(18.0-e*2.6,0,21.2-e*3.8);
-      const kx=nbKid.position.x, kz=nbKid.position.z;
-      shot(kx-2.04,kz-1.39,1.42, kx,1.02,kz);   // retreating ahead of him
+      // static: he walks almost straight into the lens, and a camera that tracked
+      // him would have to drive through her car to do it
+      shot(15.60,15.90,1.52, 16.60,1.10,19.20);
       animPerson(nbKid,0.016,m<1?1.05:0,(t>26.8&&t<28.9));
       animPerson(nbWoman,0.016,0,false);
     }
