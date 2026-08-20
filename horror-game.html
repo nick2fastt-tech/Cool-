@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#000000">
-<title>HORROR GAME</title>
+<title>Presence</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;
     user-select:none;-webkit-user-select:none;touch-action:none}
@@ -16,12 +16,49 @@
   .screen{position:absolute;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;
     text-align:center;padding:28px;background:radial-gradient(ellipse at 50% 40%,#141210 0%,#050404 70%,#000 100%)}
   .hide{display:none!important}
-  h1{font-size:clamp(30px,10vw,64px);letter-spacing:10px;color:#c8b98e;text-shadow:0 0 26px rgba(150,30,20,.55);margin-bottom:6px}
+  h1{font-size:clamp(34px,12vw,72px);letter-spacing:14px;color:#cdbd8e;margin-bottom:6px;
+    text-shadow:0 0 28px rgba(150,30,20,.5),0 0 70px rgba(120,20,14,.28);
+    animation:breathe 5.5s ease-in-out infinite}
+  @keyframes breathe{0%,100%{opacity:.86;letter-spacing:14px}50%{opacity:1;letter-spacing:16px}}
   .tag{font-size:clamp(10px,3vw,14px);letter-spacing:6px;color:#6b6152;margin-bottom:38px}
-  .mbtn{display:block;width:min(320px,80vw);margin:9px auto;padding:15px 10px;background:rgba(20,17,14,.6);
-    border:1px solid #4a4034;color:#d2c7ab;font-family:inherit;font-size:clamp(14px,4vw,18px);letter-spacing:5px;cursor:pointer;transition:.18s}
-  .mbtn:active,.mbtn:hover{background:rgba(90,25,20,.45);border-color:#a05038;color:#fff}
-  .mbtn[disabled]{opacity:.32;pointer-events:none}
+
+  .mbtn{position:relative;display:block;width:min(340px,82vw);margin:10px auto;padding:16px 12px;
+    background:rgba(16,14,12,.62);border:1px solid #453b30;color:#cfc4a8;font-family:inherit;
+    font-size:clamp(14px,4vw,18px);letter-spacing:5px;cursor:pointer;overflow:hidden;
+    transition:color .2s,border-color .25s,letter-spacing .25s,transform .12s}
+  .mbtn::before{content:'';position:absolute;inset:0;background:
+    linear-gradient(90deg,rgba(150,26,18,0),rgba(150,26,18,.55),rgba(150,26,18,0));
+    transform:translateX(-101%);transition:transform .38s ease}
+  .mbtn::after{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:#8e1a12;
+    transform:scaleY(0);transition:transform .28s ease}
+  .mbtn>*{position:relative;z-index:1}
+  .mbtn:hover,.mbtn:focus-visible{color:#fff;border-color:#8e5a3c;letter-spacing:7px}
+  .mbtn:hover::before{transform:translateX(101%)}
+  .mbtn:hover::after,.mbtn:active::after{transform:scaleY(1)}
+  .mbtn:active{transform:scale(.975);color:#fff;border-color:#b6432c}
+  .mbtn[disabled]{opacity:.30;pointer-events:none}
+  .mbtn.locked .ct{color:#6b6152}
+  .mbtn .cn{display:block;font-size:10px;letter-spacing:6px;color:#7d7060;margin-bottom:5px}
+  .mbtn .ct{display:block;font-size:clamp(15px,4.4vw,20px);letter-spacing:7px}
+
+  /* screens deal their contents in rather than snapping on */
+  .screen:not(.hide) h1{animation:breathe 5.5s ease-in-out infinite,riseIn .5s ease both}
+  .screen:not(.hide) .tag{animation:riseIn .5s .06s ease both}
+  .screen:not(.hide) .mbtn{animation:riseIn .42s ease both}
+  .screen:not(.hide) .mbtn:nth-of-type(1){animation-delay:.10s}
+  .screen:not(.hide) .mbtn:nth-of-type(2){animation-delay:.17s}
+  .screen:not(.hide) .mbtn:nth-of-type(3){animation-delay:.24s}
+  .screen:not(.hide) .mbtn:nth-of-type(4){animation-delay:.31s}
+  .screen:not(.hide) .row{animation:riseIn .42s ease both}
+  .screen:not(.hide) .row:nth-of-type(1){animation-delay:.08s}
+  .screen:not(.hide) .row:nth-of-type(2){animation-delay:.13s}
+  .screen:not(.hide) .row:nth-of-type(3){animation-delay:.18s}
+  .screen:not(.hide) .row:nth-of-type(4){animation-delay:.23s}
+  .screen:not(.hide) .row:nth-of-type(5){animation-delay:.28s}
+  @keyframes riseIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+
+  #fx{position:absolute;inset:0;width:100%;height:100%;z-index:40;pointer-events:none;display:none}
+  #fx.on{display:block;pointer-events:auto}
   .row{display:flex;align-items:center;justify-content:space-between;width:min(360px,86vw);margin:11px auto;
     font-size:clamp(12px,3.4vw,15px);letter-spacing:2px;color:#a99d86}
   .seg{display:flex;gap:6px}
@@ -131,6 +168,7 @@
 
 <div id="slot"><div class="sb t"></div><div class="sb b"></div></div>
 <canvas id="crack"></canvas>
+<canvas id="fx"></canvas>
 <div id="noteView">
   <div id="notePaper"><div id="noteText"></div></div>
   <div id="noteHint">TAP TO PUT IT BACK</div>
@@ -143,7 +181,7 @@
 </div>
 
 <div class="screen hide" id="mMain">
-  <h1>HORROR GAME</h1>
+  <h1 id="gameTitle">PRESENCE</h1>
   <div class="tag">150 YEARS &nbsp;·&nbsp; 2:03 AM</div>
   <button class="mbtn" id="btnResume">CONTINUE</button>
   <button class="mbtn" id="btnChapters">CHAPTERS</button>
@@ -153,9 +191,9 @@
 
 <div class="screen hide" id="mChapters">
   <h1 style="font-size:clamp(22px,7vw,40px)">CHAPTERS</h1><div class="tag">SELECT</div>
-  <button class="mbtn" id="ch1">CHAPTER 1 — THE INSPECTION</button>
-  <button class="mbtn" disabled>CHAPTER 2 — LOCKED</button>
-  <button class="mbtn" disabled>CHAPTER 3 — LOCKED</button>
+  <button class="mbtn" id="ch1"><span class="cn">CHAPTER I</span><span class="ct">RUINATION</span></button>
+  <button class="mbtn locked" disabled><span class="cn">CHAPTER II</span><span class="ct">EVADE</span></button>
+  <button class="mbtn locked" disabled><span class="cn">CHAPTER III</span><span class="ct">— — —</span></button>
   <button class="mbtn" id="chBack">BACK</button>
 </div>
 
@@ -3183,7 +3221,7 @@ function playCarCine(){
   },[{t:'',d:1.6},{t:'',d:2.4},
      {t:'"Oh I\u2019m never going here again."',d:3.2},
      {t:'"I quit this job."',d:2.8},
-     {t:'TO BE CONTINUED',d:2.6},{t:'CHAPTER 2',d:2.4}],()=>{
+     {t:'TO BE CONTINUED',d:2.6},{t:'CHAPTER II \u2014 EVADE',d:2.6}],()=>{
     crack.style.opacity='0'; state.roll=0; ent.screamT=0;
     if(carRig) carRig.visible=false;
     if(barryCar) barryCar.visible=true;
@@ -3198,7 +3236,7 @@ function finishChapter(){
   playCine(t=>{ state.pitch=Math.min(.35,t*.09); state.yaw+=0.0016; },
   [{t:'The basement door gives. Cold air. Grass.',d:3.4},
    {t:'"...I never even got upstairs."',d:3.6},
-   {t:'CHAPTER 1 COMPLETE',d:3.0}],()=>toMenu());
+   {t:'RUINATION \u2014 COMPLETE',d:3.0}],()=>toMenu());
 }
 
 /* ==========================================================
@@ -3477,6 +3515,112 @@ function render(dt){
 }
 
 /* ==========================================================
+   MENU TRANSITIONS
+   ========================================================== */
+const fxCv=document.getElementById('fx'), fxCtx=fxCv.getContext('2d');
+let fxRun=null;
+function fxSize(){
+  const d=Math.min(window.devicePixelRatio||1,2);
+  fxCv.width=Math.floor(window.innerWidth*d);
+  fxCv.height=Math.floor(window.innerHeight*d);
+}
+// blood runs down the screen, covers it, then drains off the bottom
+function drawBlood(g,W,H,p,phase){
+  g.clearRect(0,0,W,H);
+  const cols=30, cw=W/cols, rnd=mulberry(4242);
+  const ease=x=>x*x*(3-2*x);
+  const drain=phase==='out'?ease(p):0;
+  const grow=phase==='in'?ease(p):1;
+  g.save();
+  g.translate(0,drain*H*1.15);
+  for(let i=0;i<cols;i++){
+    const speed=0.55+rnd()*0.95, wob=rnd()*6.283;
+    const head=Math.min(H*1.05,grow*H*speed*1.5);
+    const x=i*cw, w=cw+1.2;
+    const grd=g.createLinearGradient(0,0,0,head||1);
+    grd.addColorStop(0,'#5e0a08'); grd.addColorStop(.55,'#7d0f0b'); grd.addColorStop(1,'#3d0605');
+    g.fillStyle=grd; g.fillRect(x,-2,w,head);
+    if(head>4){                                    // bulging head of the run
+      g.beginPath();
+      g.ellipse(x+cw*0.5,head,cw*0.62,cw*(0.42+0.25*Math.sin(wob+p*7)),0,0,6.283);
+      g.fill();
+    }
+    if(grow>0.12&&rnd()<0.5){                      // a rivulet running ahead
+      const rh=Math.min(H*1.1,head+cw*(2.2+rnd()*5.5));
+      g.fillStyle='#6b0c09';
+      g.fillRect(x+cw*(0.25+rnd()*0.45),-2,Math.max(1.4,cw*0.16),rh);
+    }
+  }
+  g.restore();
+  if(grow>0.72){                                   // final wash so it fully covers
+    const a=Math.min(1,(grow-0.72)/0.28)*(1-drain);
+    g.fillStyle='rgba(74,7,6,'+a.toFixed(3)+')'; g.fillRect(0,0,W,H);
+  }
+}
+// four slashes tear the screen open and black it out
+function drawSlash(g,W,H,p,phase){
+  g.clearRect(0,0,W,H);
+  const ease=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
+  const k=phase==='in'?ease(p):1-ease(p);
+  const D=Math.hypot(W,H), ang=-0.62;
+  const nx=Math.cos(ang), ny=Math.sin(ang);
+  const rnd=mulberry(99);
+  for(let i=0;i<4;i++){
+    const off=(i-1.5)*(H*0.30)+H*0.10;
+    const wMax=H*(0.44+rnd()*0.26);
+    const w=k*wMax*(0.75+0.25*Math.sin(p*9+i));
+    if(w<=0.5) continue;
+    g.save();
+    g.translate(W/2,H/2); g.rotate(ang);
+    g.fillStyle='#000';
+    g.beginPath();
+    g.moveTo(-D,off-w*0.5);
+    for(let t=-1;t<=1;t+=0.125){                   // ragged edges
+      g.lineTo(t*D,off-w*0.5+Math.sin(t*9+i*2)*w*0.10);
+    }
+    for(let t=1;t>=-1;t-=0.125){
+      g.lineTo(t*D,off+w*0.5+Math.sin(t*7-i*3)*w*0.10);
+    }
+    g.closePath(); g.fill();
+    g.strokeStyle='rgba(190,40,26,'+(0.5*k).toFixed(3)+')';
+    g.lineWidth=2.2; g.stroke();
+    g.restore();
+  }
+  if(k>0.80){
+    const a=Math.min(1,(k-0.80)/0.20);
+    g.fillStyle='rgba(0,0,0,'+a.toFixed(3)+')'; g.fillRect(0,0,W,H);
+  }
+}
+// run a cover -> swap -> reveal transition
+function fxTransition(kind,onCover,done){
+  if(fxRun) return;
+  audioInit();
+  fxSize(); fxCv.classList.add('on');
+  const draw=kind==='blood'?drawBlood:drawSlash;
+  const W=fxCv.width,H=fxCv.height;
+  const COVER=kind==='blood'?820:520, HOLD=kind==='blood'?140:90, OUT=kind==='blood'?680:420;
+  if(kind==='blood') sN(.9,300,1.1,.20,'lowpass'); else sN(.35,2600,1.6,.30,'highpass');
+  const t0=performance.now();
+  let swapped=false;
+  fxRun=()=>{
+    const el=performance.now()-t0;
+    if(el<COVER){ draw(fxCtx,W,H,el/COVER,'in'); }
+    else if(el<COVER+HOLD){
+      draw(fxCtx,W,H,1,'in');
+      if(!swapped){ swapped=true; if(onCover) onCover(); }
+    } else if(el<COVER+HOLD+OUT){
+      draw(fxCtx,W,H,(el-COVER-HOLD)/OUT,'out');
+    } else {
+      fxCtx.clearRect(0,0,W,H); fxCv.classList.remove('on'); fxRun=null;
+      if(done) done(); return;
+    }
+    requestAnimationFrame(fxRun);
+  };
+  requestAnimationFrame(fxRun);
+}
+window.addEventListener('resize',()=>{ if(fxRun) fxSize(); });
+
+/* ==========================================================
    MENUS
    ========================================================== */
 const screens=['mMain','mChapters','mSettings','mPause'];
@@ -3501,13 +3645,13 @@ function unpause(){ hideAllScreens(); state.mode='play'; document.getElementById
 const on=(id,fn)=>document.getElementById(id).addEventListener('click',()=>{audioInit();sfx.ui();fn();});
 let settingsFrom='mMain';
 on('btnResume',()=>startChapter1(save.beat||'EXPLORE',true));
-on('btnChapters',()=>show('mChapters'));
-on('btnSettings',()=>{settingsFrom='mMain';show('mSettings');});
-on('chBack',()=>show('mMain'));
+on('btnChapters',()=>fxTransition('slash',()=>show('mChapters')));
+on('btnSettings',()=>fxTransition('blood',()=>{settingsFrom='mMain';show('mSettings');}));
+on('chBack',()=>fxTransition('slash',()=>show('mMain')));
 on('ch1',()=>startChapter1('STREET'));
-on('setBack',()=>show(settingsFrom));
+on('setBack',()=>fxTransition('blood',()=>show(settingsFrom)));
 on('pResume',()=>unpause());
-on('pSettings',()=>{settingsFrom='mPause';show('mSettings');});
+on('pSettings',()=>fxTransition('blood',()=>{settingsFrom='mPause';show('mSettings');}));
 on('pQuit',()=>{writeSave();toMenu();});
 on('btnContinue',()=>respawn());
 on('btnQuitDeath',()=>toMenu());
