@@ -297,7 +297,13 @@ function sT(a,b,d,g,ty){ if(!AC)return;
   gn.gain.setValueAtTime(g,AC.currentTime); gn.gain.exponentialRampToValueAtTime(1e-4,AC.currentTime+d);
   o.connect(gn); gn.connect(sfxGain||master); o.start(); o.stop(AC.currentTime+d+.05); }
 const sfx={
-  knock:()=>sN(.16,220,3,.5,'lowpass'), creak:()=>sN(.55,900,7,.14),
+  knock:()=>{                                   // knuckle on old wood
+    sN(.045,1800,1.2,.42,'highpass');
+    sN(.22,190,2.4,.75,'lowpass');
+    sT(168,72,.20,.42,'sine');
+    sT(92,54,.30,.30,'triangle');
+    setTimeout(()=>sN(.10,320,3,.16,'lowpass'),34);
+  }, creak:()=>sN(.55,900,7,.14),
   step:(l)=>sN(.09,380+Math.random()*120,4,l||.07),
   faucet:()=>sN(1.6,2600,.8,.10,'highpass'),
   lock:()=>{sN(.1,1400,6,.32); setTimeout(()=>sT(300,120,.12,.3,'square'),90);},
@@ -1240,12 +1246,32 @@ function makeCamera(){
 }
 function makeDoor(mat){
   const g=new T.Group();
-  g.add(box(.94,2.05,.07,mat||MAT.darkwood,0,1.02,0));
-  for(const [y,h] of [[1.5,.62],[.62,.72]]){
-    const p=box(.62,h,.02,MAT.trim,0,y,.045); g.add(p);
+  const wood=mat||MAT.darkwood;
+  g.add(box(.94,2.05,.07,wood,0,1.02,0));
+  // raised panels, both faces
+  for(const [y,h] of [[1.50,.62],[.62,.72]]){
+    for(const zz of [.045,-.045]){
+      g.add(box(.66,h,.018,MAT.trim,0,y,zz));
+      g.add(box(.58,h-.08,.026,wood,0,y,zz));
+    }
   }
-  const kn=new T.Mesh(new T.SphereGeometry(.045,10,8),MAT.brass);
-  kn.position.set(.36,1.0,.07); g.add(kn);
+  g.add(box(.94,.06,.075,MAT.trim,0,1.12,0));            // lock rail
+  // knob, rose and keyhole on BOTH sides
+  for(const zz of [1,-1]){
+    const rose=new T.Mesh(new T.CylinderGeometry(.052,.052,.012,12),MAT.brass);
+    rose.rotation.x=Math.PI/2; rose.position.set(.34,1.00,zz*.042); g.add(rose);
+    const stem=new T.Mesh(new T.CylinderGeometry(.014,.014,.05,8),MAT.brass);
+    stem.rotation.x=Math.PI/2; stem.position.set(.34,1.00,zz*.068); g.add(stem);
+    const kn=new T.Mesh(new T.SphereGeometry(.046,12,10),MAT.brass);
+    kn.position.set(.34,1.00,zz*.098); g.add(kn);
+    const esc=box(.045,.075,.010,MAT.brass,.34,.905,zz*.040); g.add(esc);
+    g.add(box(.012,.024,.012,MAT.black,.34,.912,zz*.046));
+  }
+  for(const hy of [.30,1.02,1.74]){                       // hinges
+    g.add(box(.028,.115,.085,MAT.metal,-.462,hy,0));
+    g.add(new T.Mesh(new T.CylinderGeometry(.014,.014,.13,8),MAT.metal))
+      .position.set(-.474,hy,0);
+  }
   return g;
 }
 /* ---------- the neighbourhood ---------- */
@@ -1697,51 +1723,46 @@ function makeWoman(){
   }
 
   /* ---------- hair: wispy strips, parted, forehead showing ---------- */
-  const hairMat=new T.MeshStandardMaterial({map:TEX.hair,transparent:true,alphaTest:0.10,
-    depthWrite:false,roughness:1.0,side:T.DoubleSide,color:0xa39c90});
-  const scalpMat=new T.MeshStandardMaterial({color:0x2c2822,roughness:1.0});
-  const scalp=new T.Mesh(new T.SphereGeometry(.139,18,14,0,6.283,0,1.05),scalpMat);
-  scalp.position.y=.030; scalp.scale.set(1.02,1.02,1.04); head.add(scalp);
+  // alphaTest only (no blending) so the cards sort correctly and don't read
+  // as solid slabs; blended cards with depthWrite off looked like a hat.
+  const hairMat=new T.MeshStandardMaterial({map:TEX.hair,transparent:false,alphaTest:0.42,
+    depthWrite:true,roughness:1.0,side:T.DoubleSide,color:0x9c958a});
+  const scalpMat=new T.MeshStandardMaterial({color:0x241f1a,roughness:1.0});
+  const scalp=new T.Mesh(new T.SphereGeometry(.136,20,16,0,6.283,0,1.30),scalpMat);
+  scalp.position.y=.020; scalp.scale.set(1.03,1.05,1.05); head.add(scalp);
   const locks=[];
-  for(let i=0;i<30;i++){
-    const a=(i/30)*Math.PI*2+((i%3)-1)*0.04;
-    const front=Math.cos(a);
-    if(front>0.66&&Math.abs(Math.sin(a))<0.42) continue;    // part it off the face
-    const len=.40+((i*53)%17)/17*.46;
-    const w=.055+((i*29)%7)/7*.045;
-    const rr=.140+((i*17)%5)/5*.020;
-    const strand=new T.Mesh(new T.PlaneGeometry(w,len),hairMat);
-    strand.position.set(Math.sin(a)*rr,.045-len/2,Math.cos(a)*rr);
-    strand.rotation.y=a;
-    strand.rotation.x=(front>0?0.10:-0.06);
-    strand.rotation.z=Math.sin(a)*0.13;
-    strand.renderOrder=2;
-    head.add(strand); locks.push(strand);
+  const addLock=(a,rr,y0,len,w,tiltX,tiltZ)=>{
+    const st=new T.Mesh(new T.PlaneGeometry(w,len),hairMat);
+    st.position.set(Math.sin(a)*rr,y0-len/2,Math.cos(a)*rr);
+    st.rotation.y=a; st.rotation.x=tiltX; st.rotation.z=tiltZ;
+    head.add(st); locks.push(st); return st;
+  };
+  // long outer curtain, parted off the face
+  for(let i=0;i<34;i++){
+    const a=(i/34)*Math.PI*2+((i%3)-1)*0.035;
+    if(Math.cos(a)>0.68&&Math.abs(Math.sin(a))<0.40) continue;
+    addLock(a,.142+((i*17)%5)/5*.016,.055,
+            .44+((i*53)%17)/17*.48,
+            .052+((i*29)%7)/7*.040,
+            (Math.cos(a)>0?0.09:-0.05), Math.sin(a)*0.12);
   }
-  // a second layer over the crown and down the back so she isn't bald on top
-  for(let i=0;i<22;i++){
-    const a=(i/22)*Math.PI*2;
-    const front=Math.cos(a);
-    if(front>0.72&&Math.abs(Math.sin(a))<0.34) continue;
-    const len=.30+((i*31)%13)/13*.34;
-    const w=.062+((i*23)%5)/5*.040;
-    const strand=new T.Mesh(new T.PlaneGeometry(w,len),hairMat);
-    strand.position.set(Math.sin(a)*.098,.118-len/2,Math.cos(a)*.098);
-    strand.rotation.y=a;
-    strand.rotation.x=(front>0?0.42:-0.34);
-    strand.renderOrder=2;
-    head.add(strand); locks.push(strand);
+  // shorter inner layer starting higher, hanging DOWN over the crown
+  for(let i=0;i<26;i++){
+    const a=(i/26)*Math.PI*2+0.12;
+    if(Math.cos(a)>0.74&&Math.abs(Math.sin(a))<0.30) continue;
+    addLock(a,.092+((i*23)%4)/4*.020,.150,
+            .30+((i*31)%13)/13*.26,
+            .058+((i*19)%5)/5*.034,
+            (Math.cos(a)>0?0.22:-0.16), Math.sin(a)*0.08);
   }
-  for(let i=0;i<8;i++){                                     // crown cover
-    const a=(i/8)*Math.PI*2;
-    const cap=new T.Mesh(new T.PlaneGeometry(.10,.20),hairMat);
-    cap.position.set(Math.sin(a)*.055,.150,Math.cos(a)*.055);
-    cap.rotation.set(-1.15,a,0); cap.renderOrder=2;
-    head.add(cap); locks.push(cap);
+  // a few over the very top so the crown isn't bare, still hanging downward
+  for(let i=0;i<12;i++){
+    const a=(i/12)*Math.PI*2+0.3;
+    addLock(a,.050,.185,.26,.060,(Math.cos(a)>0?0.30:-0.24),Math.sin(a)*0.05);
   }
   for(const sx of [-1,1]){                                  // two strays across the face
-    const f=new T.Mesh(new T.PlaneGeometry(.038,.34),hairMat);
-    f.position.set(sx*.052,-.055,.128); f.rotation.z=sx*0.16; f.renderOrder=3;
+    const f=new T.Mesh(new T.PlaneGeometry(.036,.32),hairMat);
+    f.position.set(sx*.050,-.050,.130); f.rotation.z=sx*0.15;
     head.add(f); locks.push(f);
   }
 
@@ -1994,6 +2015,17 @@ function buildWorld(){
   put(1,makeStaircase(),18.0,18.85,0,-WALL_H);
   // basement
   put(2,makeBoxes(),8.0,11.0,.2);
+  basementBulb=new T.Group();
+  {
+    const cord=cyl(.006,.006,.50,MAT.black,0,-.25,0,4); basementBulb.add(cord);
+    const glow=new T.Mesh(new T.SphereGeometry(.055,12,10),
+      new T.MeshStandardMaterial({color:0xffe6b0,roughness:.2,
+        emissive:0xffcf6e,emissiveIntensity:3.0}));
+    glow.position.y=-.545; basementBulb.add(glow);
+    basementBulb.userData.glow=glow;
+    basementBulb.position.set(11.0,WALL_H,10.5);
+    P[2].add(basementBulb);
+  }
   put(2,makeDoor(),1.05,10.5,-Math.PI/2);
   // street: the facade plane is z=9, so the door sits just proud of it
   put(3,makeDoor(),5.5,9.04,0);
@@ -2020,9 +2052,7 @@ function buildWorld(){
   addLight(1,16.5,10.5,2.3,0xd9e2ff,1.2,8);    // bathroom (cold)
   addLight(1,6.0,16.0,2.3,0xff9c40,0.7,7);     // attic (weak)
   addLight(1,17.0,16.0,2.3,0xffa040,0.9,7);
-  addLight(2,10.0,10.5,2.3,0xfff0c0,1.0,9);    // basement bulb
-  addLight(2,3.0,10.5,2.3,0xfff0c0,0.8,8);
-  addLight(2,17.6,10.5,2.3,0xffe0a0,0.9,9);   // lights her up when you look back
+  addLight(2,11.0,10.5,2.35,0xffcf6e,2.6,26); // the one bulb down there
   addLight(3,5.5,9.6,2.4,0xffcc80,1.1,6);      // porch light
   addLight(3,11.0,14.0,3.2,0x6f7fbf,0.9,14);   // streetlamp
 
@@ -2143,7 +2173,7 @@ function updateDoors(dt){
   }
 }
 
-let keyObj=null,nightstand=null; const camMeshes=[];
+let keyObj=null,nightstand=null,basementBulb=null; const camMeshes=[];
 const CAMS=[
   {lv:0,x:10.4,y:2.15,z:15.2,ry:Math.PI*0.72,name:'LIVING'},
   {lv:0,x:18.5,y:2.15,z:2.4,ry:Math.PI*0.88,name:'KITCHEN'},
@@ -2626,23 +2656,34 @@ function playBasementCine(){
   ent.active=false; ent.lv=BASEMENT; ent.x=18.7; ent.z=10.5; ent.a=-Math.PI/2;
   ent.state='LOOK'; ent.speed=0; ent.screamT=0;
   sfx.creak(); cineTotal=0;
-  let seen=false, screamed=false, lastStep=-1;
+  let seen=false, screamed=false, lastStep=-1, gasp=false, stumb=false;
   playCine(t=>{
     if(t<2.7){                                   // down the steps, into the dark
       const k=t/2.7;
       state.px=19.4+(15.0-19.4)*k; state.pz=10.5;
-      state.yaw=Math.PI/2; state.pitch=Math.sin(t*5.2)*0.014;
-      if(t-lastStep>0.42){ lastStep=t; sfx.step(.09); }
+      state.yaw=Math.PI/2;
+      // heavier tread coming down, and a slip halfway
+      const trip=Math.max(0,1-Math.abs(t-1.55)/0.35);
+      state.pitch=Math.sin(t*5.2)*0.020+trip*0.22;
+      state.roll=Math.sin(t*2.6)*0.014-trip*0.16;
+      if(t>1.5&&!stumb){ stumb=true; sfx.step(.16); }
+      if(t-lastStep>0.38){ lastStep=t; sfx.step(.10); }
+      if(basementBulb) basementBulb.rotation.z=Math.sin(t*2.2)*0.10;
     } else if(t<4.8){                            // look back over your shoulder
       const k=(t-2.7)/2.1, e=k*k*(3-2*k);
       state.px=15.0; state.pz=10.5;
       state.yaw=Math.PI/2-Math.PI*e;
-      state.pitch=0.02;
+      state.pitch=0.02+Math.sin(t*3.1)*0.012;
+      state.roll=Math.sin(t*2.0)*0.010;
+      if(t>2.95&&!gasp){ gasp=true; sfx.breath(); }
       if(t>3.1&&!seen){ seen=true; ent.active=true; }
+      if(basementBulb) basementBulb.rotation.z=Math.sin(t*2.6)*0.14;
     } else {                                     // she sees you
       if(!screamed){ screamed=true; ent.screamT=99; sfx.scream(); state.fear=1; state.hurt=.35; }
-      state.yaw=-Math.PI/2+Math.sin(t*41)*0.014; // flinch
-      state.pitch=0.02+Math.sin(t*33)*0.011;
+      state.yaw=-Math.PI/2+Math.sin(t*41)*0.016;
+      state.pitch=0.02+Math.sin(t*33)*0.013;
+      state.roll=Math.sin(t*27)*0.012;
+      if(basementBulb) basementBulb.rotation.z=Math.sin(t*9)*0.22;
     }
   },[{t:'',d:2.7},{t:'',d:2.1},{t:'',d:2.2}],()=>{
     ent.screamT=0.9;                             // she's rooted for a beat -- go
@@ -3343,6 +3384,22 @@ function syncCamera(dt){
     phoneMesh.rotation.set(-.18-t*.55,-.10,.04+t*.22);
     phoneMesh.visible=t<0.985;
   }
+  // the single basement bulb stutters harder the nearer the way out you get
+  if(state.lv===BASEMENT){
+    const d=Math.hypot(state.px-1.6,state.pz-10.5);
+    const rate=3.2+Math.max(0,(16-d))*1.35;
+    const tt=performance.now()*0.001;
+    const a=Math.sin(tt*rate), b=Math.sin(tt*rate*2.7+1.1), c=Math.sin(tt*rate*0.6);
+    const v=a*0.5+b*0.3+c*0.2;
+    const dip=Math.max(0,(16-d))/16;
+    state.flick=(v>-0.10-dip*0.34)?1:(0.06+Math.random()*0.10);
+    if(basementBulb){
+      basementBulb.rotation.z=Math.sin(tt*1.3)*0.05+Math.sin(tt*rate*0.5)*0.02*dip;
+      const em=basementBulb.userData.glow;
+      if(em) em.material.emissiveIntensity=3.0*state.flick;
+    }
+  } else state.flick=1;
+
   // pick the nearest lights for the fixed pool
   const act=LIGHT_DEFS.filter(l=>l.lv===state.lv)
     .map(l=>({l,d:(l.x-state.px)**2+(l.z-state.pz)**2}))
@@ -3353,7 +3410,7 @@ function syncCamera(dt){
     if(i<n&&i<act.length){
       const s=act[i].l;
       L.position.set(s.x,s.y,s.z); L.color.setHex(s.col);
-      L.distance=s.d; L.intensity=s.i*LIGHT_GAIN*(1+state.fear*0.12);
+      L.distance=s.d; L.intensity=s.i*LIGHT_GAIN*(1+state.fear*0.12)*(state.lv===BASEMENT?(state.flick||1):1);
       L.visible=true;
     } else { L.visible=false; L.intensity=0; }
   }
