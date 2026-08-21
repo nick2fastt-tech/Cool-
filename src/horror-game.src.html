@@ -105,12 +105,15 @@
   #camTabs button.sel{background:#1f3a1f;border-color:#4e8a4e;color:#adf0ad}
   #camTabs button[disabled]{opacity:.3}
 
+  #cfade{position:absolute;inset:0;z-index:15;background:#000;opacity:0;pointer-events:none}
   #cine{position:absolute;inset:0;z-index:16;pointer-events:none;opacity:0;transition:opacity .6s}
   #cine.on{opacity:1;pointer-events:auto}
   .bar{position:absolute;left:0;right:0;height:11%;background:#000;z-index:2;pointer-events:none}
   .bar.t{top:0} .bar.b{bottom:0}
   #sub{position:absolute;bottom:15%;left:0;right:0;text-align:center;padding:0 24px;z-index:3;
     font-size:clamp(13px,3.8vw,19px);letter-spacing:1px;color:#ded2b4;text-shadow:0 3px 12px #000;line-height:1.6}
+  #sub.card{bottom:47%;font-size:clamp(15px,5.2vw,27px);letter-spacing:6px;color:#cfc3a2;
+    text-shadow:0 0 24px rgba(0,0,0,.9)}
   #skip{position:absolute;bottom:calc(16px + env(safe-area-inset-bottom));right:18px;z-index:4;font-size:10px;
     letter-spacing:3px;color:#6a6153;border:1px solid #3a352c;padding:9px 15px;pointer-events:auto;cursor:pointer}
 
@@ -163,6 +166,7 @@
   <button data-c="0">LIVING</button><button data-c="1">KITCHEN</button><button data-c="2">BATH</button>
 </div>
 
+<div id="cfade"></div>
 <div id="cine">
   <div class="bar t"></div><div class="bar b"></div>
   <div id="sub"></div><div id="skip">SKIP</div>
@@ -350,7 +354,19 @@ const sfx={
     }
     sN(1.5,1500,.6,.55); sT(1300,180,1.4,.4,'sawtooth'); sT(660,120,1.5,.25,'square');
   },
-  wake:()=>{ sN(.9,300,2,.3,'lowpass'); sT(90,50,1.1,.2,'sine'); }
+  wake:()=>{ sN(.9,300,2,.3,'lowpass'); sT(90,50,1.1,.2,'sine'); },
+  // --- chapter II ---
+  water:()=>{ sN(2.2,3200,.6,.045,'highpass'); sN(2.2,700,.9,.020,'bandpass'); },
+  wipe:()=>{ sN(.34,1100,1.1,.09,'lowpass'); sT(520,300,.30,.05,'sine'); },
+  keys:()=>{ for(let i=0;i<5;i++) setTimeout(()=>sT(2100+Math.random()*1900,
+                1400,.07,.055,'triangle'),i*42); },
+  paper:()=>sN(.26,2400,1.3,.07,'highpass'),
+  bird:()=>{ const n=2+((Math.random()*2)|0);
+    for(let i=0;i<n;i++) setTimeout(()=>sT(2400+Math.random()*900,
+      3300+Math.random()*800,.07,.030,'sine'),i*95); },
+  cardoor:()=>{ sN(.16,220,1.6,.34,'lowpass'); sT(150,60,.14,.20,'square'); },
+  tick:()=>sT(1500,900,.035,.06,'square'),
+  mug:()=>sT(900,620,.08,.07,'sine')
 };
 
 /* ==========================================================
@@ -935,6 +951,106 @@ function texFace(seed){
   }
   return {map:albedoTex(cv), normalMap:normalTex(fbm(W,H,9,3,seed+2),W,H,1.5), roughness:.95};
 }
+function texNewspaper(){
+  const W=320,H=228, cv=C(W,H), g=cv.getContext('2d');
+  g.fillStyle='#c6bda6'; g.fillRect(0,0,W,H);
+  for(let i=0;i<30;i++){                              // age spots
+    const x=Math.random()*W,y=Math.random()*H,r=6+Math.random()*30;
+    const rg=g.createRadialGradient(x,y,1,x,y,r);
+    rg.addColorStop(0,'rgba(104,86,52,.16)'); rg.addColorStop(1,'rgba(104,86,52,0)');
+    g.fillStyle=rg; g.beginPath(); g.arc(x,y,r,0,6.283); g.fill();
+  }
+  g.fillStyle='#201c16'; g.textAlign='center';
+  g.font='bold 15px Georgia,serif';
+  g.fillText('THE COUNTY LEDGER',W/2,24);
+  g.fillRect(16,32,W-32,1.4);
+  g.font='bold 25px Georgia,serif';
+  g.fillText('SEARCH CALLED OFF',W/2,64);
+  g.font='bold 21px Georgia,serif';
+  g.fillText('AT ORCHARD ROW',W/2,90);
+  g.font='11px Georgia,serif'; g.fillStyle='#3a3229';
+  g.fillText('Three still missing. House sealed pending review.',W/2,110);
+  g.fillStyle='#4a4236'; g.fillRect(20,124,124,74);   // photo of the house
+  g.fillStyle='#2b2620';
+  g.fillRect(34,150,96,44); g.fillStyle='#12100d';
+  g.beginPath(); g.moveTo(28,152); g.lineTo(82,126); g.lineTo(136,152); g.fill();
+  g.fillStyle='#0f0d0a'; g.fillRect(52,168,16,26); g.fillRect(96,166,18,16);
+  g.strokeStyle='rgba(38,32,24,.62)'; g.lineWidth=1.6; g.lineCap='round';
+  for(let l=0;l<12;l++){                              // column of body text
+    const y=132+l*5.6; g.beginPath(); g.moveTo(158,y);
+    g.lineTo(158+(120*(l%4===3?.52:.94)),y); g.stroke();
+  }
+  return albedoTex(cv);
+}
+function texCalendar(){
+  const W=176,H=224, cv=C(W,H), g=cv.getContext('2d');
+  g.fillStyle='#d8d2c2'; g.fillRect(0,0,W,H);
+  g.fillStyle='#5c2320'; g.fillRect(0,0,W,58);
+  g.fillStyle='#e8e2d2'; g.textAlign='center';
+  g.font='bold 25px Georgia,serif'; g.fillText('AUGUST',W/2,32);
+  g.font='15px Georgia,serif'; g.fillText('2 0 0 2',W/2,50);
+  g.fillStyle='#2a2620'; g.font='9px monospace';
+  const d=['S','M','T','W','T','F','S'];
+  for(let i=0;i<7;i++) g.fillText(d[i],14+i*24.5,74);
+  let n=1;
+  for(let r=0;r<5;r++) for(let c=0;c<7;c++){
+    if(r===0&&c<4) continue;
+    if(n>31) continue;
+    g.fillStyle=(n===28)?'#7a1512':'#2a2620';
+    g.font=(n===28?'bold 12px monospace':'10px monospace');
+    g.fillText(String(n),14+c*24.5,92+r*26); n++;
+  }
+  g.strokeStyle='#7a1512'; g.lineWidth=2.2;            // ringed round the 28th
+  g.beginPath(); g.ellipse(112,114,12,10,0,0,6.283); g.stroke();
+  for(let i=0;i<2;i++){ g.fillStyle='#22201c';
+    g.beginPath(); g.arc(52+i*72,8,3,0,6.283); g.fill(); }
+  return albedoTex(cv);
+}
+// Condensation on the bathroom mirror, wiped away by an arc of a hand.
+function makeFogPane(w,h){
+  const W=128,H=160, cv=C(W,H), g=cv.getContext('2d');
+  const paint=()=>{
+    g.globalCompositeOperation='source-over';
+    g.clearRect(0,0,W,H);
+    g.fillStyle='rgba(222,231,236,.90)'; g.fillRect(0,0,W,H);
+    for(let i=0;i<70;i++){                            // uneven, like real steam
+      const x=Math.random()*W,y=Math.random()*H,r=4+Math.random()*22;
+      const rg=g.createRadialGradient(x,y,1,x,y,r);
+      rg.addColorStop(0,'rgba(255,255,255,.30)'); rg.addColorStop(1,'rgba(255,255,255,0)');
+      g.fillStyle=rg; g.beginPath(); g.arc(x,y,r,0,6.283); g.fill();
+    }
+    g.globalCompositeOperation='destination-out';     // a few dried runs
+    g.lineWidth=2.4; g.lineCap='round';
+    for(let i=0;i<5;i++){
+      const x=10+Math.random()*(W-20); let y=Math.random()*40;
+      g.strokeStyle='rgba(0,0,0,.5)'; g.beginPath(); g.moveTo(x,y);
+      for(let k=0;k<7;k++){ y+=12+Math.random()*10; g.lineTo(x+(Math.random()-.5)*5,y); }
+      g.stroke();
+    }
+    g.globalCompositeOperation='source-over';
+  };
+  paint();
+  const tex=new T.CanvasTexture(cv);
+  if(T.SRGBColorSpace) tex.colorSpace=T.SRGBColorSpace;
+  const m=new T.Mesh(new T.PlaneGeometry(w,h),
+    new T.MeshStandardMaterial({map:tex,transparent:true,roughness:.92,
+      depthWrite:false,side:T.DoubleSide}));
+  let last=0;
+  const at=u=>[W*(0.09+0.82*u), H*(0.50-0.13*Math.sin(u*Math.PI))];
+  return {mesh:m,
+    wipe(p){
+      p=Math.min(1,Math.max(0,p));
+      if(p<=last) return;
+      g.globalCompositeOperation='destination-out';
+      g.strokeStyle='rgba(0,0,0,1)'; g.lineWidth=40; g.lineCap='round'; g.lineJoin='round';
+      g.beginPath(); let q=at(last); g.moveTo(q[0],q[1]);
+      for(let u=last;u<=p;u+=0.02){ q=at(u); g.lineTo(q[0],q[1]); }
+      q=at(p); g.lineTo(q[0],q[1]); g.stroke();
+      g.globalCompositeOperation='source-over';
+      last=p; tex.needsUpdate=true;
+    },
+    reset(){ paint(); last=0; tex.needsUpdate=true; }};
+}
 function texNote(seed,scrawl){
   const W=256,H=320, cv=C(W,H), g=cv.getContext('2d'), rnd=mulberry(seed);
   g.fillStyle='#b7ae98'; g.fillRect(0,0,W,H);
@@ -1152,8 +1268,17 @@ function buildLevel(lv){
     ];
     for(const [dx,dz,v] of sides){
       if(!solid(lv,c+dx,r+dz)) continue;
-      // outdoors the map edges are invisible bounds -- houses are real geometry
-      if(outside||isOutdoor(lv,c+dx,r+dz)) continue;
+      const nc=c+dx, nr=r+dz, nOut=isOutdoor(lv,nc,nr);
+      if(outside){
+        // On HOME the house IS the grid, so seen from the street its walls have
+        // to be built as well -- but never the invisible bounds round the map,
+        // which would ring the road in siding.
+        if(lv!==HOME||nOut||nc<1||nc>COLS-2||nr<1||nr>ROWS-2) continue;
+        B('sidingP').quad(v[0],v[1],v[2],v[3],[[0,0],[1,0],[1,1],[0,1]],
+                          [.92,.92,.74,.74]);
+        continue;
+      }
+      if(nOut) continue;
       // canvas top == v1 (flipY), and the wallpaper art has the paper up top and
       // the wainscot down the bottom, so the floor edge must be v0.
       const uv=[[0,0],[1,0],[1,1],[0,1]];
@@ -2283,10 +2408,11 @@ function buildWorld(){
   put(4,makeSink(),2.6,1.5,0);
   put(4,makeToilet(),5.2,4.4,Math.PI);
   {
+    P[4].add(box(.96,1.10,.17,MAT.trim,2.6,1.72,1.125));      // medicine cabinet
     const mir=new T.Mesh(new T.PlaneGeometry(.90,1.05),
       new T.MeshStandardMaterial({color:0x9fb0bd,roughness:.06,metalness:.92}));
-    mir.position.set(2.6,1.72,1.06); P[4].add(mir);
-    const frame=box(1.00,1.15,.05,MAT.trim,2.6,1.72,1.03); P[4].add(frame);
+    mir.position.set(2.6,1.72,1.216); P[4].add(mir);
+    const frame=box(1.00,1.15,.05,MAT.trim,2.6,1.72,1.188); P[4].add(frame);
     put(4,makeInteriorWindow(true),5.0,1.04,0,1.60);
   }
   // kitchen
@@ -2308,6 +2434,53 @@ function buildWorld(){
     // chaining .position onto add() moves the whole prop group instead.
     { const rug=makeRug(2.2,1.6); rug.position.set(9.5,.035,5.6); P[4].add(rug); }
   }
+  {                              // the things chapter II's camera lingers on
+    // three-month-old paper still on the kitchen table
+    const paper=new T.Mesh(new T.PlaneGeometry(.58,.41),
+      new T.MeshStandardMaterial({map:texNewspaper(),roughness:.96}));
+    paper.rotation.set(-Math.PI/2,0,.16); paper.position.set(11.84,.836,4.60);
+    P[4].add(paper);
+    ch2Mug=cyl(.043,.038,.105,MAT.porcelain,12.66,.887,4.34,10); P[4].add(ch2Mug);
+    P[4].add(cyl(.030,.030,.004,MAT.porcelain,12.66,.939,4.34,10));
+    // AUGUST 2002, the 28th ringed
+    const cal=new T.Mesh(new T.PlaneGeometry(.42,.53),
+      new T.MeshStandardMaterial({map:texCalendar(),roughness:.95}));
+    cal.position.set(15.4,1.66,1.085); P[4].add(cal);
+    // key hook by the front door
+    P[4].add(box(.24,.045,.03,MAT.darkwood,5.75,1.44,7.96));
+    for(const hx of [-.07,.07]) P[4].add(cyl(.006,.006,.05,MAT.brass,5.75+hx,1.40,7.94,6));
+    ch2Keys=new T.Group();
+    ch2Keys.add(cyl(.016,.016,.005,MAT.brass,0,0,0,10));
+    for(const [kx,kr] of [[-.022,-.34],[.004,.02],[.026,.36]]){
+      const k=box(.013,.066,.003,MAT.brass,kx,-.048,0); k.rotation.z=kr; ch2Keys.add(k);
+    }
+    ch2Keys.position.set(5.68,1.375,7.93); P[4].add(ch2Keys);
+    // running tap, steam, and the condensation on the mirror
+    ch2Water=cyl(.009,.013,.24,new T.MeshStandardMaterial({color:0xc4dced,
+      transparent:true,opacity:.5,roughness:.08,metalness:.2}),2.6,1.045,1.40,7);
+    ch2Water.visible=false; P[4].add(ch2Water);
+    ch2Steam=new T.Group();
+    const stM=new T.MeshBasicMaterial({color:0xdfe8ee,transparent:true,opacity:.055,
+      depthWrite:false,side:T.DoubleSide});
+    for(let i=0;i<4;i++){
+      const q=new T.Mesh(new T.PlaneGeometry(.5+i*.14,.5+i*.12),stM);
+      q.position.set(2.6+(i-1.5)*.08,1.18+i*.20,1.36); ch2Steam.add(q);
+    }
+    ch2Steam.visible=false; P[4].add(ch2Steam);
+    ch2Fog=makeFogPane(.88,1.03);
+    ch2Fog.mesh.position.set(2.6,1.72,1.228); ch2Fog.mesh.visible=false;
+    P[4].add(ch2Fog.mesh);
+    // morning dust in the kitchen air
+    {
+      const gp=new T.BufferGeometry(), n=150, a=new Float32Array(n*3);
+      for(let i=0;i<n;i++){ a[i*3]=9+Math.random()*10; a[i*3+1]=.4+Math.random()*2.0;
+                            a[i*3+2]=1.4+Math.random()*5.0; }
+      gp.setAttribute('position',new T.BufferAttribute(a,3));
+      ch2Dust=new T.Points(gp,new T.PointsMaterial({color:0xd8cfae,size:.022,
+        transparent:true,opacity:.5,depthWrite:false}));
+      ch2Dust.visible=false; P[4].add(ch2Dust);
+    }
+  }
   {                                                   // his front door, on a hinge
     homeDoor=new T.Group();
     const panel=makeDoor(); panel.position.x=0.47; homeDoor.add(panel);
@@ -2328,6 +2501,13 @@ function buildWorld(){
     g.add(box(90,.16,.5,MAT.kerb,10,.08,19.85));
     const drive=new T.Mesh(new T.PlaneGeometry(3.2,4.6),MAT.kerb);
     drive.rotation.x=-Math.PI/2; drive.position.set(1.9,.02,10.9); g.add(drive);
+    gableRoof(g,11.0,5.0,20.4,8.4,WALL_H,1.75,MAT.roof);   // over his own house
+    g.add(box(20.6,.16,.24,MAT.darkwood,11.0,WALL_H-.06,9.06));   // fascia
+    for(const px of [3.1,6.0]){                            // porch over the door
+      g.add(cyl(.06,.07,2.34,MAT.darkwood,px,1.17,10.42,7));
+    }
+    g.add(box(3.5,.14,2.9,MAT.roof,4.55,2.36,9.74));
+    g.add(box(3.5,.10,.16,MAT.darkwood,4.55,2.27,11.16));
     for(const [x,sd,l] of [[-6,31,[1]],[6,37,[]],[18,41,[2]],[30,43,[]]]){
       const h=makeHouseShell(0,0,10.0,8.0,4.6,2.3,sd,l,0xffd9a0);
       h.rotation.y=Math.PI; h.position.set(x,0,25.5); g.add(h);
@@ -2455,6 +2635,7 @@ function updateDoors(dt){
 
 let keyObj=null,nightstand=null,basementBulb=null; const camMeshes=[];
 let barry=null,nbWoman=null,nbKid=null,nbCar=null,homeDoor=null;
+let ch2Keys=null,ch2Water=null,ch2Steam=null,ch2Fog=null,ch2Dust=null,ch2Mug=null;
 const CAMS=[
   {lv:0,x:10.4,y:2.15,z:15.2,ry:Math.PI*0.72,name:'LIVING'},
   {lv:0,x:18.5,y:2.15,z:2.4,ry:Math.PI*0.88,name:'KITCHEN'},
@@ -3140,6 +3321,7 @@ function cineUpdate(dt){
     if(full[want-1]&&full[want-1]!==' ') sfx.type();
     typed=want;
   }
+  subEl.classList.toggle('card',!!cur.card);
   subEl.textContent = full ? full.slice(0,typed)+(typed<full.length?'\u258c':'') : '';
   if(cineT>cur.d){
     cineT=0; cineI++; typed=0;
@@ -3165,6 +3347,26 @@ function shot(x,z,eye,tx,ty,tz){
   state.px=x; state.pz=z; state.cineEye=eye; state.roll=0;
   aimAt(tx,ty,tz);
 }
+/* ---- cinematography helpers ---------------------------------------- */
+const cfadeEl=document.getElementById('cfade');
+function cfade(a){ cfadeEl.style.opacity=String(Math.min(1,Math.max(0,a))); }
+// a locked-off shot still breathes; without this every frame looks like a
+// screenshot of a level rather than a piece of film
+function handheld(t,amt,seed){
+  const s=seed||0, a=amt===undefined?1:amt;
+  state.px  += (Math.sin(t*1.73+s)*0.011+Math.sin(t*0.61+s*2.3)*0.017)*a;
+  state.pz  += (Math.cos(t*1.29+s)*0.011+Math.cos(t*0.47+s*3.1)*0.015)*a;
+  state.yaw += (Math.sin(t*0.87+s*1.4)*0.0042+Math.sin(t*2.31+s)*0.0013)*a;
+  state.pitch+= (Math.sin(t*1.11+s*1.9)*0.0034+Math.sin(t*2.7+s)*0.0009)*a;
+  state.roll = (state.roll||0)+Math.sin(t*0.73+s*2.1)*0.0035*a;
+}
+function shotH(x,z,eye,tx,ty,tz,t,amt,seed){
+  shot(x,z,eye,tx,ty,tz); handheld(t,amt,seed);
+}
+const ez=u=>{ u=Math.min(1,Math.max(0,u)); return u*u*(3-2*u); };
+const cl=(u,a,b)=>Math.min(1,Math.max(0,(u-a)/(b-a)));
+const lerp3=(a,b,u)=>[a[0]+(b[0]-a[0])*u,a[1]+(b[1]-a[1])*u,a[2]+(b[2]-a[2])*u];
+
 let glitchUntil=0, cineWoman=false;
 function startChapter2(){
   resetRun();
@@ -3175,206 +3377,365 @@ function startChapter2(){
   barry.visible=false; nbWoman.visible=false; nbKid.visible=false;
   document.getElementById('hud').classList.add('hide');
   cineTotal=0;
-  const CARX=13.5, CARZ=18.6;                          // her car, kerbed opposite
-  const WX=CARX-0.6, WZ=CARZ-1.35;                     // where she stands at the door
-  const BX=7.4, BZ=11.6;                              // Barry, out on his own lawn
-  let f=0;                                             // one-shot flags
-  const once=(i,fn)=>{ if(!(f&(1<<i))){ f|=1<<i; fn(); } };
-  // she keeps jabbing the key at the lock all through the beat
+  const CARX=13.5, CARZ=18.6;                    // her car, kerbed opposite
+  const WX=CARX-0.6, WZ=CARZ-1.35;               // where she stands at the door
+  const BX=7.4,  BZ=11.6;                        // Barry, out on his own lawn
+  const DX=CARX-1.35, DZ=CARZ-1.25;              // her driver's door
+  const SINKX=2.6, SINKZ=1.5;                    // his bathroom
+  const KEYS=[5.72,1.38,7.93];                   // hook by the front door
+  if(ch2Fog){ ch2Fog.reset(); ch2Fog.mesh.visible=false; }
+  if(ch2Water) ch2Water.visible=false;
+  if(ch2Steam) ch2Steam.visible=false;
+  if(ch2Dust)  ch2Dust.visible=false;
+  if(ch2Keys)  ch2Keys.visible=true;
+  if(homeDoor) homeDoor.rotation.y=0;
+  if(nbCar) nbCar.position.set(CARX,0,CARZ);
+  const fired={};
+  const once=(k,fn)=>{ if(!fired[k]){ fired[k]=1; fn(); } };
+  const every=(k,gap,fn)=>{                      // repeating cue, e.g. footsteps
+    const n=Math.floor(cineTotal/gap);
+    if(fired[k]!==n){ fired[k]=n; fn(); }
+  };
+  const u=()=>barry.userData;
+  // she keeps jabbing the key at the lock
   const workLock=t=>{
     const j=Math.sin(t*9)*0.05;
-    nbWoman.userData.armR.j0.rotation.x=-0.72+j;      // hand down at the lock
+    nbWoman.userData.armR.j0.rotation.x=-0.72+j;
     nbWoman.userData.armR.j1.rotation.x=-0.62-Math.abs(j)*2;
     nbWoman.userData.armR.j0.rotation.z=-0.16;
   };
+  const reach=(w,ax,a0,a1,az)=>{                 // pose an arm after animPerson
+    const a=w.userData[ax];
+    a.j0.rotation.x=a0; a.j1.rotation.x=a1; a.j0.rotation.z=az||0;
+  };
+
   playCine(t=>{
-    // --- 0-6.0 : black cards ---
-    if(t<6.0){ state.px=4.0; state.pz=3.0; state.cineEye=1.5; state.yaw=0; state.pitch=0;
-      blackCard(true); return; }
-    blackCard(false);
-    // --- 6.0-11.0 : his bathroom, slow push toward the mirror ---
-    if(t<11.0){
-      const k=(t-6.0)/5.0;
-      shot(2.6+Math.sin(k*1.4)*0.10, 3.9-k*1.5, 1.62, 2.6,1.72,1.06);
-      state.roll=Math.sin(k*2.0)*0.006;
-    }
-    // --- 11.0-16.0 : cut to the kitchen, drifting across it ---
-    else if(t<16.0){
-      const k=(t-11.0)/5.0;
-      shot(9.4+k*2.6, 5.6-k*0.5, 1.60, 14.5,1.35,2.2);
-      once(0,()=>sfx.ui());
-    }
-    // --- 16.0-22.0 : out through the hall and the front door ---
-    else if(t<22.0){
-      const A=[11.0,6.0],B=[8.6,7.45],C=[4.62,7.45],D=[4.55,11.9];
-      const ez=u=>u*u*(3-2*u), cl=u=>Math.min(1,Math.max(0,u)),
-            lp=(a,b,u)=>[a[0]+(b[0]-a[0])*u,a[1]+(b[1]-a[1])*u];
-      let pos,out=0;
-      if(t<18.4)      pos=lp(A,B,ez((t-16.0)/2.4));
-      else if(t<19.9) pos=lp(B,C,(t-18.4)/1.5);
-      else { out=ez((t-19.9)/2.1); pos=lp(C,D,out); }
-      // look down the hall first and only swing to the doorway at the end of it,
-      // or the aim cuts diagonally through the front wall
-      const turn=ez(cl((t-19.2)/0.7));
-      const tx=4.00+turn*0.55+out*3.05, tz=7.60+turn*1.90+out*5.50;
-      shot(pos[0],pos[1],1.62+Math.sin(t*1.7)*0.012, tx,1.30-out*0.10,tz);
-      if(homeDoor) homeDoor.rotation.y=-1.30*Math.min(1,Math.max(0,(t-17.2)/1.4));
-      if(t>17.2) once(11,()=>sfx.creak());
-    }
-    // --- 22.0-26.6 : cut across the street. Her key will not work ---
-    else if(t<26.6){
-      once(1,()=>{
-        nbWoman.visible=true; nbWoman.position.set(WX,0,WZ); nbWoman.rotation.y=-0.15;
-        nbKid.visible=true; nbKid.position.set(18.0,0,21.2); nbKid.rotation.y=-2.54;
+    /* ================= staging ================= */
+    if(t>=6.8&&t<19.0) once('bathIn',()=>{
+      barry.visible=true; barry.position.set(SINKX,0,SINKZ+0.48); barry.rotation.y=Math.PI;
+      if(ch2Water) ch2Water.visible=true;
+      if(ch2Steam) ch2Steam.visible=true;
+      if(ch2Fog) ch2Fog.mesh.visible=true;
+    });
+    if(t>=19.0) once('bathOut',()=>{
+      barry.visible=false; barry.userData.chest.rotation.x=0; barry.userData.head.rotation.x=0;
+      if(ch2Water) ch2Water.visible=false;
+      if(ch2Steam) ch2Steam.visible=false;
+      if(ch2Dust) ch2Dust.visible=true;
+    });
+    if(t>=28.4) once('hallIn',()=>{
+      barry.visible=true; barry.position.set(6.34,0,7.66); barry.rotation.y=-0.30;
+      if(ch2Dust) ch2Dust.visible=false;
+    });
+    if(t>=37.0) once('streetIn',()=>{
+      barry.visible=false;                       // held back for his reveal
+      nbWoman.visible=true; nbWoman.position.set(WX,0,WZ); nbWoman.rotation.y=-0.15;
+      nbKid.visible=true;  nbKid.position.set(18.0,0,21.2); nbKid.rotation.y=-2.54;
+      if(ch2Fog) ch2Fog.mesh.visible=false;
+    });
+    if(t>=57.0) once('barryIn',()=>{
+      barry.visible=true; barry.position.set(BX,0,BZ); barry.rotation.y=-0.9;
+    });
+    // the steam keeps climbing while the tap runs
+    if(ch2Steam&&ch2Steam.visible){
+      ch2Steam.children.forEach((q,i)=>{
+        q.position.y=1.18+i*0.20+((t*0.10+i*0.31)%0.5);
+        q.material.opacity=0.055*(1-((t*0.10+i*0.31)%0.5)/0.5);
+        q.rotation.z=Math.sin(t*0.4+i)*0.10;
       });
-      const k=(t-22.0)/4.6;
-      // side on, so the car reads behind her and the arm working the lock is clear
-      shot(10.10+k*0.45, 16.55+k*0.17, 1.60, WX-0.05,1.26,WZ+0.05);
-      // she gives up on the lock and turns out to the street, which is the only
-      // angle this shot can catch her face from
-      const turn=Math.min(1,Math.max(0,(t-24.2)/1.1));
-      nbWoman.rotation.y=-0.15-turn*0.85;
-      animPerson(nbWoman,0.016,0,(t>22.1&&t<24.1)||(t>24.3&&t<26.5));
-      if(turn<0.05) workLock(t);                 // after animPerson, which resets it
+    }
+    if(ch2Dust&&ch2Dust.visible) ch2Dust.rotation.y=t*0.012;
+
+    /* ================= 0.0-6.8 : title cards ================= */
+    if(t<6.8){
+      state.px=SINKX; state.pz=SINKZ+1.4; state.cineEye=1.5; state.yaw=0; state.pitch=0;
+      cfade(t<6.3?1:1-(t-6.3)/0.5);
+      return;
+    }
+    /* ================= 6.8-11.0 : the basin ================= */
+    if(t<11.0){
+      const k=cl(t,6.8,11.0);
+      shotH(3.88-k*0.26, 3.00-k*0.34, 1.52-k*0.07, 2.70,1.005,1.60, t,1.0,0);
+      animPerson(barry,0.016,0,false);
+      // chest.rotation.x is positive-backwards for someone facing -Z
+      u().chest.rotation.x=-0.30;                // stooped over the sink
+      u().head.rotation.x=0.26;
+      reach(barry,'armL',-0.45,-0.30, 0.22);     // both hands on the rim
+      reach(barry,'armR',-0.45,-0.30,-0.22);
+      every('tap',1.9,()=>sfx.water());
+      cfade(k<0.10?1-k/0.10:0);
+    }
+    /* ================= 11.0-15.4 : up to the mirror ================= */
+    else if(t<15.4){
+      const e=ez(cl(t,11.4,14.6));
+      const a=lerp3([2.70,1.00,1.58],[2.60,1.730,1.22],e);
+      shotH(3.58,3.14,1.50+e*0.14, a[0],a[1],a[2], t,0.9,7);
+      animPerson(barry,0.016,0,false);
+      u().chest.rotation.x=-0.30+e*0.24;         // straightening up
+      u().head.rotation.x=0.26-e*0.30;
+      reach(barry,'armL',-0.45+e*0.22,-0.30+e*0.14, 0.22);
+      reach(barry,'armR',-0.45+e*0.22,-0.30+e*0.14,-0.22);
+      every('tap',1.9,()=>sfx.water());
+    }
+    /* ================= 15.4-19.0 : the wipe ================= */
+    else if(t<19.0){
+      const p=cl(t,16.0,17.4);
+      const q=ez(cl(t,15.4,19.0));
+      shotH(3.46-q*0.14, 3.34-q*0.24, 1.72, 2.60,1.715,1.22, t,0.75,3);
+      animPerson(barry,0.016,0,false);
+      u().chest.rotation.x=-0.16; u().head.rotation.x=0.02;
+      // his hand goes up to the glass and drags across it
+      const up=ez(cl(t,15.6,16.05));
+      reach(barry,'armL',-2.15*up-0.08, -0.30*up-0.14, (1.10-p*1.45)*up);
+      reach(barry,'armR',-0.10,-0.16,0.06);
+      if(ch2Fog&&p>0){ ch2Fog.wipe(p); once('wipeSfx',()=>sfx.wipe()); }
+      every('tap',1.9,()=>sfx.water());
+      cfade(cl(t,18.4,19.0));                    // dip to black on the cut
+    }
+    /* ================= 19.0-24.0 : the paper on the table ============ */
+    else if(t<24.0){
+      const e=ez(cl(t,19.2,24.0));
+      shotH(11.86-e*0.02, 6.20-e*0.86, 1.74-e*0.17, 11.84,0.845,4.60, t,0.85,11);
+      once('paperSfx',()=>sfx.paper());
+      cfade(1-cl(t,19.0,19.6));
+    }
+    /* ================= 24.0-28.4 : the kitchen, and the date ========= */
+    else if(t<28.4){
+      const e=ez(cl(t,24.0,28.4));
+      shotH(9.55+e*0.85, 6.15-e*0.75, 1.60, 14.9-e*0.7,1.52-e*0.02,1.35, t,1.0,19);
+      once('mugSfx',()=>sfx.mug());
+    }
+    /* ================= 28.4-32.6 : his keys off the hook ============= */
+    else if(t<32.6){
+      const e=ez(cl(t,28.4,32.6));
+      shotH(3.30+e*0.55, 7.45, 1.58, KEYS[0]-0.30,KEYS[1]-0.06,KEYS[2]+0.01, t,0.9,23);
+      animPerson(barry,0.016,0,false);
+      const g=ez(cl(t,29.9,31.1));               // reaching for them
+      reach(barry,'armL',-1.30*g-0.08,-0.10*g-0.10,-0.81*g);
+      if(t>31.1) once('keySfx',()=>{ sfx.keys(); if(ch2Keys) ch2Keys.visible=false; });
+      if(t>31.1){                                // and brings them down
+        const d=ez(cl(t,31.2,32.4));
+        reach(barry,'armL',-1.38+d*1.20,-0.20+d*0.06,-0.81+d*0.75);
+      }
+    }
+    /* ================= 32.6-37.0 : out through the front door ======== */
+    else if(t<37.0){
+      const A=[7.20,7.30],B=[5.10,7.46],C=[4.60,7.48],D=[4.55,11.70];
+      const lp=(a,b,x)=>[a[0]+(b[0]-a[0])*x,a[1]+(b[1]-a[1])*x];
+      let pos,out=0;
+      if(t<34.1)      pos=lp(A,B,ez(cl(t,32.6,34.1)));
+      else if(t<34.9) pos=lp(B,C,cl(t,34.1,34.9));
+      else { out=ez(cl(t,34.9,37.0)); pos=lp(C,D,out); }
+      // look down the hall first, only swinging to the doorway at the end of it
+      const turn=ez(cl(t,34.3,34.9));
+      shotH(pos[0],pos[1],1.62, 4.00+turn*0.55+out*3.05, 1.30-out*0.10,
+            7.60+turn*1.90+out*5.50, t,1.15,29);
+      // Barry goes out ahead of the lens
+      const w=ez(cl(t,32.8,36.2));
+      barry.position.set(6.34+(4.55-6.34)*w,0,7.66+(10.90-7.66)*w);
+      barry.rotation.y=w<0.06?-0.30:Math.atan2(4.55-6.34,10.90-7.66);
+      animPerson(barry,0.016,w>0.02&&w<0.99?1.25:0,false);
+      if(homeDoor) homeDoor.rotation.y=-1.30*ez(cl(t,33.0,34.3));
+      if(t>33.0) once('doorSfx',()=>sfx.creak());
+      if(t>32.9&&t<36.3) every('stepOut',0.42,()=>sfx.step(0.05));
+      if(t>35.4) once('birds',()=>sfx.bird());
+    }
+    /* ================= 37.0-39.4 : the street, wide ================== */
+    else if(t<39.4){
+      const e=ez(cl(t,37.0,39.4));
+      shotH(4.86+e*0.30, 11.92+e*0.16, 1.66, 11.9+e*1.5,1.34,17.3, t,1.2,31);
+      animPerson(nbWoman,0.016,0,false); workLock(t);
       animPerson(nbKid,0.016,0,false);
+      once('birds2',()=>sfx.bird());
     }
-    // --- 26.6-31.0 : her boy comes off the porch, walking into camera ---
-    else if(t<31.0){
-      const m=Math.min(1,(t-26.6)/4.0);
-      const e=m*m*(3-2*m);
-      nbKid.position.set(18.0-e*2.6,0,21.2-e*3.8);
-      // static: he walks almost straight into the lens, and a camera that tracked
-      // him would have to drive through her car to do it
-      shot(15.60,15.90,1.52, 16.60,1.10,19.20);
-      animPerson(nbKid,0.016,m<1?1.05:0,(t>26.8&&t<28.9));
+    /* ================= 39.4-44.4 : her key will not work ============= */
+    else if(t<44.4){
+      const k=cl(t,39.4,44.4);
+      shotH(10.10+k*0.50, 16.55+k*0.20, 1.60, WX-0.05,1.26,WZ+0.05, t,1.0,37);
+      // she gives up and turns out to the street -- the only angle this shot
+      // can catch her face from
+      const turn=ez(cl(t,41.9,43.0));
+      nbWoman.rotation.y=-0.15-turn*0.85;
+      animPerson(nbWoman,0.016,0,(t>39.5&&t<41.5)||(t>41.9&&t<44.3));
+      if(turn<0.05) workLock(t);
+      else reach(nbWoman,'armR',-0.10,-0.18,-0.08);
+      animPerson(nbKid,0.016,0,false);
+      if(t<41.7) every('jab',0.62,()=>sfx.deny());
+    }
+    /* ================= 44.4-47.0 : her boy on the porch ============== */
+    else if(t<47.0){
+      const m=ez(cl(t,44.4,49.7));
+      nbKid.position.set(18.0-m*2.6,0,21.2-m*3.8);
+      shotH(15.60,15.90,1.52, 16.60,1.10,19.20, t,0.9,41);
+      animPerson(nbKid,0.016,m<0.99?1.05:0,(t>44.5&&t<46.9));
       animPerson(nbWoman,0.016,0,false);
+      if(t<48.5) every('kidStep',0.44,()=>sfx.step(0.045));
     }
-    // --- 31.0-31.5 : SHE cuts in ---
-    else if(t<31.5){
-      once(2,()=>{
+    /* ================= 47.0-49.2 : she answers ======================= */
+    else if(t<49.2){
+      const m=ez(cl(t,44.4,49.7));
+      nbKid.position.set(18.0-m*2.6,0,21.2-m*3.8);
+      shotH(10.62,16.24,1.62, WX,1.30,WZ, t,0.9,43);
+      animPerson(nbWoman,0.016,0,t<49.0);
+      animPerson(nbKid,0.016,m<0.99?1.05:0,false);
+    }
+    /* ================= 49.2-49.7 : SHE cuts in ======================= */
+    else if(t<49.7){
+      once('glitch',()=>{
         if(woman){
           cineWoman=true; woman.visible=true;
           woman.position.set(state.px+Math.sin(state.yaw+Math.PI)*0.95,0,
                              state.pz+Math.cos(state.yaw+Math.PI)*0.95);
-          woman.rotation.set(0,state.yaw,0);              // square on to the lens
+          woman.rotation.set(0,state.yaw,0);
           ent.screamT=99; ent.speed=0;
         }
         glitchUntil=performance.now()+520;
         sfx.scream(); state.hurt=1;
       });
-      if(woman){                                          // hold her face, shaking
+      if(woman){
         state.cineEye=1.46;
         aimAt(woman.position.x,1.55,woman.position.z);
         state.pitch+=Math.sin(t*77)*0.03;
       }
       state.roll=Math.sin(t*90)*0.05;
     }
-    // --- 31.5-36 : back to normal, she explains ---
-    else if(t<36.0){
-      once(3,()=>{ cineWoman=false; if(woman) woman.visible=false;
-                   ent.screamT=0; state.hurt=0; });
-      once(10,()=>{ nbWoman.rotation.y=1.45; nbKid.rotation.y=-1.63; });
-      shot(17.60,15.60,1.60, WX+1.25,1.22,WZ+0.07);   // past the boy, on to her
-      animPerson(nbWoman,0.016,0,t<34.6);
+    /* ================= 49.7-54.2 : she explains ====================== */
+    else if(t<54.2){
+      once('glitchOut',()=>{ cineWoman=false; if(woman) woman.visible=false;
+                             ent.screamT=0; state.hurt=0;
+                             nbWoman.rotation.y=1.45; nbKid.rotation.y=-1.63; });
+      shotH(17.60,15.60,1.60, WX+1.25,1.22,WZ+0.07, t,0.95,47);
+      animPerson(nbWoman,0.016,0,t<53.9);
       animPerson(nbKid,0.016,0,false);
     }
-    // --- 36-41 : Barry's legs, camera rising to his face ---
-    else if(t<41.0){
-      once(4,()=>{
-        barry.visible=true; barry.position.set(BX,0,BZ); barry.rotation.y=-0.9;
-      });
-      const k=(t-36.0)/5.0, e=k*k*(3-2*k);
+    /* ================= 54.2-57.0 : and the boy answers =============== */
+    else if(t<57.0){
+      shotH(12.60,15.00,1.44, 15.35,1.05,17.35, t,0.9,53);
+      animPerson(nbKid,0.016,0,t<56.7);
+      animPerson(nbWoman,0.016,0,false);
+    }
+    /* ================= 57.0-62.0 : legs, then Barry ================== */
+    else if(t<62.0){
+      const k=cl(t,57.0,62.0), e=ez(k);
       // up the back of his legs, then round to his face -- a reveal that never
       // comes off the back of a head isn't a reveal
-      const o=Math.min(1,Math.max(0,(k-0.45)/0.55)), oe=o*o*(3-2*o);
-      const a=-0.9+Math.PI-oe*2.35, r=1.9-oe*0.32;
-      state.px=BX+Math.sin(a)*r;
-      state.pz=BZ+Math.cos(a)*r;
+      const o=ez(cl(k,0.45,1.0));
+      const a=-0.9+Math.PI-o*2.35, r=1.9-o*0.32;
+      state.px=BX+Math.sin(a)*r; state.pz=BZ+Math.cos(a)*r;
       state.cineEye=0.22+e*1.55;
       aimAt(BX,0.30+e*1.42,BZ);
-      state.roll=0;
+      state.roll=0; handheld(t,0.55,59);
       animPerson(barry,0.016,0,false);
-      barry.userData.head.rotation.y=-oe*0.30;
+      u().head.rotation.y=-o*0.30;
+      animPerson(nbWoman,0.016,0,false); animPerson(nbKid,0.016,0,false);
     }
-    // --- 41-46 : he calls over and pops the lock with a card ---
-    else if(t<46.0){
-      const k=(t-41.0)/5.0, e=k<0.12?0:Math.min(1,(k-0.12)/0.80);
-      const DX=CARX-1.35, DZ=CARZ-1.25;                 // the driver's door
-      once(5,()=>{ barry.rotation.y=Math.atan2(DX-BX,DZ-BZ); });
+    /* ================= 62.0-64.6 : "yeah, I got it" ================== */
+    else if(t<64.6){
+      const a=-0.9+Math.PI-2.35, r=2.30-ez(cl(t,62.0,64.6))*0.22;
+      state.px=BX+Math.sin(a)*r; state.pz=BZ+Math.cos(a)*r;
+      state.cineEye=1.66; aimAt(BX,1.40,BZ); state.roll=0; handheld(t,0.6,61);
+      animPerson(barry,0.016,0,t<64.4);
+      u().head.rotation.y=-0.30;
+      const wv=ez(cl(t,62.1,62.7))*(1-ez(cl(t,63.6,64.4)));
+      reach(barry,'armR',-2.05*wv-0.10,-0.20-0.30*wv,-0.30*wv);
+      animPerson(nbWoman,0.016,0,false); animPerson(nbKid,0.016,0,false);
+    }
+    /* ================= 64.6-67.4 : across the road =================== */
+    else if(t<67.4){
+      const e=ez(cl(t,64.7,67.3));
+      once('cross',()=>{ barry.rotation.y=Math.atan2(DX-BX,DZ-BZ);
+                         u().head.rotation.y=0; });
       barry.position.set(BX+(DX-BX)*e,0,BZ+(DZ-BZ)*e);
-      animPerson(barry,0.016,e>0&&e<1?1.5:0,t<43.7);
-      // from his own porch, watching him cross the road
-      shot(8.0,9.55,1.66, barry.position.x,1.12,barry.position.z);
+      animPerson(barry,0.016,e>0.01&&e<0.99?1.5:0,false);
+      shotH(8.0,9.55,1.66, barry.position.x,1.12,barry.position.z, t,1.1,67);
+      every('crossStep',0.40,()=>sfx.step(0.05));
+      animPerson(nbWoman,0.016,0,false); animPerson(nbKid,0.016,0,false);
     }
-    // --- 46-51.4 : the card in the door, and the advice ---
-    else if(t<51.4){
-      once(6,()=>{
-        barry.position.set(CARX-1.35,0,CARZ-1.25); barry.rotation.y=0.72;
+    /* ================= 67.4-75.6 : the card, and the advice ========== */
+    else if(t<75.6){
+      once('atDoor',()=>{
+        barry.position.set(DX,0,DZ); barry.rotation.y=0.72;
         nbWoman.position.set(CARX-1.0,0,CARZ-2.9); nbWoman.rotation.y=-0.21;
-        nbKid.position.set(CARX-1.7,0,CARZ-3.2); nbKid.rotation.y=-0.21;
+        nbKid.position.set(CARX-1.7,0,CARZ-3.2);  nbKid.rotation.y=-0.21;
       });
       // clear of the car's rear quarter, so nothing crosses him at the door
-      shot(CARX-4.2,CARZ-2.2,1.58, CARX-1.30,1.20,CARZ-1.25);
-      const u=barry.userData;
-      // working the card down the door frame, then round to face her
-      const done=Math.min(1,Math.max(0,(t-48.6)/0.9));
+      shotH(CARX-4.2,CARZ-2.2,1.58, CARX-1.30,1.20,CARZ-1.25, t,0.85,71);
+      const done=ez(cl(t,70.2,71.1));
       barry.rotation.y=0.72+done*(-2.48);
-      animPerson(barry,0.016,0,(t>48.9&&t<51.3));
-      u.armR.j0.rotation.x=(-1.35+Math.sin(t*7)*0.10)*(1-done);
-      u.armR.j1.rotation.x=-0.42*(1-done);
-      animPerson(nbWoman,0.016,0,false);
-      once(7,()=>sfx.lock());
+      animPerson(barry,0.016,0,(t>70.4&&t<75.4));
+      // working the card down the door frame, then round to face her
+      reach(barry,'armR',(-1.35+Math.sin(t*7)*0.10)*(1-done),-0.42*(1-done),0);
+      animPerson(nbWoman,0.016,0,false); animPerson(nbKid,0.016,0,false);
+      if(t<70.0) every('card',0.55,()=>sfx.step(0.03));
+      if(t>69.9) once('pop',()=>sfx.lock());
     }
-    // --- 51.4-57.5 : thank you, and they pull away ---
-    else if(t<57.5){
-      const k=(t-51.4)/6.1;
-      animPerson(nbWoman,0.016,k<0.4?1.2:0,k<0.35);
-      once(8,()=>{ barry.position.set(CARX-3.6,0,CARZ-2.4); barry.rotation.y=1.75; });
-      if(k<0.45){
-        nbWoman.position.set(CARX-1.0+k*0.89,0,CARZ-2.9+k*3.33);
-        nbKid.position.set(CARX-1.7+k*0.89,0,CARZ-3.2+k*3.56);
-      } else { nbWoman.visible=false; nbKid.visible=false; }
-      if(k>0.5){
-        once(9,()=>{ sfx.engine(); });
-        const d=(k-0.5)/0.5;
-        nbCar.position.x=CARX+d*d*26;
+    /* ================= 75.6-83.0 : thank you, and away =============== */
+    else if(t<83.0){
+      const k=cl(t,75.6,83.0);
+      once('stepBack',()=>{ barry.position.set(CARX-3.6,0,CARZ-2.4); barry.rotation.y=1.75; });
+      animPerson(nbWoman,0.016,k<0.34?1.2:0,k<0.30);
+      if(k<0.38){
+        nbWoman.position.set(CARX-1.0+k*1.05,0,CARZ-2.9+k*3.95);
+        nbKid.position.set(CARX-1.7+k*1.05,0,CARZ-3.2+k*4.20);
+        animPerson(nbKid,0.016,1.1,false);
+      } else {
+        once('boardSfx',()=>sfx.cardoor());
+        nbWoman.visible=false; nbKid.visible=false;
       }
-      shot(CARX-6.5,CARZ-3.7,1.62, CARX+4.5,1.25,CARZ-0.2);
+      if(k>0.46){
+        once('engine',()=>sfx.engine());
+        if(t<80.6) every('ind',0.62,()=>sfx.tick());
+        const d=(k-0.46)/0.54;
+        nbCar.position.x=CARX+d*d*30;
+      }
+      shotH(CARX-6.5,CARZ-3.7,1.62, CARX+4.5,1.25,CARZ-0.2, t,1.0,73);
       animPerson(barry,0.016,0,false);
     }
-    // --- 57.5 on : Barry watching them go, and a smile ---
-    else {
-      const k=Math.min(1,(t-57.5)/5.0);
-      shot(barry.position.x+1.55,barry.position.z-1.75,1.60,
-           barry.position.x,1.50,barry.position.z);
+    /* ================= 83.0-86.0 : and he smiles ===================== */
+    else if(t<86.0){
+      const k=cl(t,83.0,86.0);
+      shotH(barry.position.x+1.55,barry.position.z-1.75,1.60,
+            barry.position.x,1.50,barry.position.z, t,0.7,79);
       barry.rotation.y=1.75;
-      const u=barry.userData;
-      u.head.rotation.y=0.16*Math.sin(k*2.4);
       animPerson(barry,0.016,0,false);
-      u.mouth.visible=false; u.smile.visible=true;      // the smile
-      u.smile.scale.set(0.7+k*0.45,0.55+k*0.5,1);
+      u().head.rotation.y=0.14*Math.sin(k*2.4);
+      u().mouth.visible=false; u().smile.visible=true;
+      u().smile.scale.set(0.7+k*0.45,0.55+k*0.5,1);
+      cfade(cl(t,85.2,86.0));
     }
+    /* ================= 86.0+ : the chapter card ====================== */
+    else cfade(1);
   },[
-    {t:'3 MONTHS AFTER THE INCIDENT',d:3.2},
-    {t:'AUGUST 28, 2002',d:2.8},
-    {t:'',d:5.0},{t:'',d:5.0},{t:'',d:6.0},
-    {t:'"Damn it!"',d:2.2},
-    {t:'"Not again!"',d:2.4},
-    {t:'"I\u2019m ready!"',d:2.3},
-    {t:'',d:2.1},
+    {t:'3 MONTHS AFTER THE INCIDENT',d:3.6,card:1},
+    {t:'AUGUST 28, 2002',d:3.2,card:1},
+    {t:'',d:4.2},{t:'',d:4.4},{t:'',d:3.6},
+    {t:'SEARCH CALLED OFF AT ORCHARD ROW.',d:5.0},
+    {t:'',d:4.4},{t:'',d:4.2},{t:'',d:4.4},{t:'',d:2.4},
+    {t:'"Damn it!"',d:2.4},
+    {t:'"Not again!"',d:2.6},
+    {t:'"Mom! I’m ready!"',d:2.6},
+    {t:'"One second, baby."',d:2.2},
     {t:'',d:0.5},
-    {t:'"Okay \u2014 but we can\u2019t drive the car, I don\u2019t have the right key."',d:4.5},
+    {t:'"Okay — but we can’t drive the car, I don’t have the right key."',d:4.5},
+    {t:'"So we’re walking?"',d:2.8},
     {t:'',d:5.0},
-    {t:'"Yeah, I got it!"',d:2.6},
-    {t:'',d:2.4},
-    {t:'"If you want to replace your car key I recommend going to the dealership four miles ahead."',d:5.4},
-    {t:'"Thank you \u2014 thank you!"',d:2.6},
-    {t:'',d:2.4},
-    {t:'',d:5.0}
+    {t:'"Yeah — I got it!"',d:2.6},
+    {t:'',d:2.8},{t:'',d:2.8},
+    {t:'"If you want to replace your car key, I’d go to the dealership four miles ahead."',d:5.4},
+    {t:'"Thank you — thank you!"',d:2.6},
+    {t:'',d:4.8},{t:'',d:3.0},
+    {t:'CHAPTER II — EVADE',d:3.0,card:1}
   ],()=>{
     state.cineEye=null; state.roll=0; glitchUntil=0; cineWoman=false;
+    cfade(0);
     if(woman) woman.visible=false;
-    if(barry){ barry.userData.mouth.visible=true; barry.userData.smile.visible=false; }
+    if(barry){ barry.userData.mouth.visible=true; barry.userData.smile.visible=false;
+               barry.userData.chest.rotation.x=0; barry.userData.head.rotation.x=0;
+               barry.userData.head.rotation.y=0; }
+    if(ch2Fog){ ch2Fog.mesh.visible=false; ch2Fog.reset(); }
+    if(ch2Water) ch2Water.visible=false;
+    if(ch2Steam) ch2Steam.visible=false;
+    if(ch2Dust)  ch2Dust.visible=false;
     save.chapter=2; save.beat='CH2_START'; writeSave();
     document.getElementById('hud').classList.remove('hide');
     state.mode='play'; setObjective('EVADE');
@@ -3713,12 +4074,12 @@ function playCarCine(){
     if(barryCar) barryCar.visible=true;
     cars.forEach(c=>{ c.wait=4+Math.random()*8; });
     if(escDoor) escDoor.visible=false;
-    save.chapter=1; save.beat=null; writeSave();
+    save.chapter=1; save.beat=null; save.ch1done=1; writeSave();
     toMenu();
   });
 }
 function finishChapter(){
-  save.chapter=1; save.beat=null; writeSave(); cineTotal=0;
+  save.chapter=1; save.beat=null; save.ch1done=1; writeSave(); cineTotal=0;
   playCine(t=>{ state.pitch=Math.min(.35,t*.09); state.yaw+=0.0016; },
   [{t:'The basement door gives. Cold air. Grass.',d:3.4},
    {t:'"...I never even got upstairs."',d:3.6},
@@ -4228,7 +4589,7 @@ on('btnChapters',()=>fxTransition('slash',()=>{ show('mChapters'); paintChapters
   // wait for the tear to finish before the padlock gives way, or the fx
   // canvas is still busy and the lock animation is dropped
   ()=>{
-    if(save.chapter>=1&&!save.ch2seen){
+    if(save.ch1done&&!save.ch2seen){
       playLockBreak(()=>{ save.ch2=1; save.ch2seen=1; writeSave(); paintChapters(); });
     }
   }));
