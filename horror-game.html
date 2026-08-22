@@ -389,7 +389,17 @@ const sfx={
       3300+Math.random()*800,.07,.030,'sine'),i*95); },
   cardoor:()=>{ sN(.16,220,1.6,.34,'lowpass'); sT(150,60,.14,.20,'square'); },
   tick:()=>sT(1500,900,.035,.06,'square'),
-  mug:()=>sT(900,620,.08,.07,'sine')
+  mug:()=>sT(900,620,.08,.07,'sine'),
+  fridge:()=>{ sN(.30,170,1.7,.24,'lowpass'); sT(130,72,.22,.10,'sine'); },
+  crackCan:()=>{ sT(1900,820,.05,.11,'square');
+                 setTimeout(()=>sN(.65,3400,.8,.075,'highpass'),40); },
+  sip:()=>sN(.38,680,1.5,.055,'bandpass'),
+  msgIn:()=>{ sT(760,1180,.10,.085,'sine');
+              setTimeout(()=>sT(1180,1560,.08,.055,'sine'),90); },
+  msgOut:()=>{ sT(1240,1880,.09,.065,'sine'); },
+  tap:()=>sT(2600,1700,.018,.028,'square'),
+  whoosh:()=>{ sN(.55,520,.8,.13,'bandpass'); sN(.35,1600,.6,.05,'highpass'); },
+  road:()=>{ sN(1.8,240,.5,.045,'lowpass'); }
 };
 
 /* ==========================================================
@@ -974,6 +984,150 @@ function texFace(seed){
   }
   return {map:albedoTex(cv), normalMap:normalTex(fbm(W,H,9,3,seed+2),W,H,1.5), roughness:.95};
 }
+function rrect(g,x,y,w,h,r){
+  g.beginPath();
+  g.moveTo(x+r,y); g.lineTo(x+w-r,y); g.quadraticCurveTo(x+w,y,x+w,y+r);
+  g.lineTo(x+w,y+h-r); g.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  g.lineTo(x+r,y+h); g.quadraticCurveTo(x,y+h,x,y+h-r);
+  g.lineTo(x,y+r); g.quadraticCurveTo(x,y,x+r,y); g.closePath();
+}
+// His phone: a messages thread drawn to a canvas and mapped onto the screen.
+function makePhoneScreen(){
+  const W=360,H=740, cv=C(W,H), g=cv.getContext('2d');
+  const tex=new T.CanvasTexture(cv);
+  if(T.SRGBColorSpace) tex.colorSpace=T.SRGBColorSpace;
+  const wrap=(txt,max)=>{
+    const words=txt.split(' '), out=[]; let line='';
+    for(const w of words){
+      const t=line?line+' '+w:w;
+      if(g.measureText(t).width>max&&line){ out.push(line); line=w; } else line=t;
+    }
+    if(line) out.push(line); return out;
+  };
+  const draw=(msgs,typing)=>{
+    g.fillStyle='#0a0a0c'; g.fillRect(0,0,W,H);
+    g.fillStyle='#e8e8ec'; g.font='500 19px -apple-system,Helvetica,sans-serif';
+    g.textAlign='left';  g.fillText('9:12',22,34);
+    g.textAlign='right'; g.fillText('4G',W-64,34);
+    g.fillStyle='#8a8a92'; g.fillRect(W-52,20,26,15);
+    g.fillStyle='#e8e8ec'; g.fillRect(W-50,22,19,11);
+    g.fillStyle='#141418'; g.fillRect(0,48,W,86);        // header
+    g.fillStyle='#2f6bd8'; g.font='400 30px -apple-system,Helvetica,sans-serif';
+    g.textAlign='left'; g.fillText('\u2039',20,102);
+    g.fillStyle='#3a3a42'; g.beginPath(); g.arc(W/2,80,21,0,6.283); g.fill();
+    g.fillStyle='#9a9aa2'; g.font='600 20px -apple-system,Helvetica,sans-serif';
+    g.textAlign='center'; g.fillText('A',W/2,87);
+    g.fillStyle='#f0f0f4'; g.font='600 21px -apple-system,Helvetica,sans-serif';
+    g.fillText('Alan',W/2,120);
+    g.fillStyle='#6d6d76'; g.font='400 14px -apple-system,Helvetica,sans-serif';
+    g.fillText('cousin',W/2,138);
+    g.fillStyle='#26262c'; g.fillRect(0,152,W,1);
+    let y=180;
+    g.font='400 23px -apple-system,Helvetica,sans-serif';
+    for(const m of msgs){
+      const lines=wrap(m.t,232), bw=Math.max(70,
+        Math.min(252,Math.max.apply(null,lines.map(l=>g.measureText(l).width))+34));
+      const bh=lines.length*31+22;
+      const x=m.me?W-bw-18:18;
+      g.fillStyle=m.me?'#2f6bd8':'#2a2a30';
+      rrect(g,x,y,bw,bh,17); g.fill();
+      g.fillStyle='#f4f4f8'; g.textAlign='left';
+      lines.forEach((l,i)=>g.fillText(l,x+17,y+34+i*31));
+      y+=bh+14;
+    }
+    if(typing){                                          // the three dots
+      g.fillStyle='#2a2a30'; rrect(g,18,y,86,50,17); g.fill();
+      const ph=Math.floor(performance.now()/260)%3;
+      for(let i=0;i<3;i++){ g.fillStyle=i===ph?'#c8c8d0':'#63636c';
+        g.beginPath(); g.arc(38+i*21,y+25,6,0,6.283); g.fill(); }
+    }
+    g.fillStyle='#141418'; g.fillRect(0,H-74,W,74);      // input bar
+    g.strokeStyle='#3a3a42'; g.lineWidth=1.4;
+    rrect(g,18,H-58,W-88,42,21); g.stroke();
+    g.fillStyle='#5c5c66'; g.font='400 19px -apple-system,Helvetica,sans-serif';
+    g.textAlign='left'; g.fillText('iMessage',34,H-30);
+    g.fillStyle='#2f6bd8'; g.beginPath(); g.arc(W-38,H-37,19,0,6.283); g.fill();
+    g.fillStyle='#fff'; g.font='600 22px -apple-system,Helvetica,sans-serif';
+    g.textAlign='center'; g.fillText('\u2191',W-38,H-29);
+    tex.needsUpdate=true;
+  };
+  draw([],false);
+  const body=new T.Group();
+  const shell=new T.MeshStandardMaterial({color:0x1b1c20,roughness:.34,metalness:.65});
+  body.add(box(.079,.158,.010,shell,0,0,0));
+  const scr=new T.Mesh(new T.PlaneGeometry(.070,.144),
+    new T.MeshBasicMaterial({map:tex}));
+  scr.position.z=.0055; body.add(scr);
+  return {group:body,draw};
+}
+// A stretch of night motorway, built once and parked far from the neighbourhood.
+const HWX=0, HWZ=-500;
+function buildHighway(){
+  const g=new T.Group(); g.position.set(HWX,0,HWZ); g.visible=false;
+  const tar=new T.MeshStandardMaterial({color:0x14151a,roughness:.98});
+  const road=new T.Mesh(new T.PlaneGeometry(17,760),tar);
+  road.rotation.x=-Math.PI/2; road.position.y=.01; g.add(road);
+  const verge=new T.MeshStandardMaterial({color:0x101408,roughness:1});
+  for(const sx of [-1,1]){
+    const v=new T.Mesh(new T.PlaneGeometry(40,760),verge);
+    v.rotation.x=-Math.PI/2; v.position.set(sx*28.5,0,0); g.add(v);
+  }
+  const paint=new T.MeshStandardMaterial({color:0xb9b7a6,roughness:.9,
+    emissive:0x2a2a24,emissiveIntensity:1});
+  for(const sx of [-1,1]){                                  // edge lines
+    g.add(box(.16,.02,760,paint,sx*7.7,.03,0));
+    g.add(box(.12,.44,760,new T.MeshStandardMaterial({color:0x2a2c30,roughness:.7,
+      metalness:.5}),sx*8.5,.52,0));                        // guardrail
+  }
+  g.add(box(.14,.02,760,paint,0,.03,0));                    // centre line
+  const dashes=[], poles=[];
+  for(let i=0;i<76;i++){
+    for(const sx of [-1,1]){
+      const d=box(.14,.02,3.0,paint,sx*3.85,.03,-380+i*10);
+      g.add(d); dashes.push(d);
+    }
+  }
+  const lamp=new T.MeshStandardMaterial({color:0xffe6b4,
+    emissive:0xffd98c,emissiveIntensity:5.2});
+  const post=new T.MeshStandardMaterial({color:0x24262a,roughness:.8});
+  for(let i=0;i<19;i++){
+    const pz=-380+i*40, pg=new T.Group(); pg.position.z=pz;
+    for(const sx of [-1,1]){
+      pg.add(cyl(.08,.12,7.4,post,sx*9.2,3.7,0,7));
+      pg.add(box(1.5,.10,.10,post,sx*8.5,7.32,0));
+      pg.add(box(.52,.14,.26,lamp,sx*7.85,7.20,0));
+    }
+    g.add(pg); poles.push(pg);
+  }
+  // traffic: our lanes at -2.2 / -5.7, oncoming at +2.2 / +5.7
+  hwCars=[];
+  const cols=[0x2b3a4e,0x6d6a60,0x3a2b2b,0x243024,0x4a4a52,0x5a2a2a,0x2f3f46,0x38343c];
+  for(let i=0;i<9;i++){
+    const same=i<4;
+    const m=makeCar(cols[i%cols.length],true,true);
+    m.rotation.y=same?Math.PI/2:-Math.PI/2;                 // -Z travel / +Z travel
+    const x=same?(i%2?-2.2:-5.7):(i%2?2.2:5.7);
+    m.position.set(x,0,-320+i*84);
+    g.add(m);
+    hwCars.push({m,same,spd:same?18+Math.random()*8:24+Math.random()*9});
+  }
+  // his own car, and the cabin the camera sits in
+  const hero=makeCar(0x6d6a60,true,true);
+  hero.rotation.y=Math.PI/2; hero.position.set(-2.2,0,0);
+  hero.traverse(o=>{                                        // see him through the glass
+    if(o.material&&o.material.color&&o.material.color.getHexString()==='0a0e16'){
+      o.material=new T.MeshStandardMaterial({color:0x121820,roughness:.10,
+        metalness:.5,transparent:true,opacity:.34});
+    }
+  });
+  g.add(hero);
+  hwCabin=buildCarRig();                         // a cabin we can look INTO
+  hwCabin.userData.arms.forEach(a=>a.visible=false);
+  hwCabin.position.set(-2.62,1.41,-0.45); hwCabin.visible=false; g.add(hwCabin);
+  g.userData={dashes,poles,hero};
+  scene.add(g);
+  return g;
+}
 function texNewspaper(){
   const W=320,H=228, cv=C(W,H), g=cv.getContext('2d');
   g.fillStyle='#c6bda6'; g.fillRect(0,0,W,H);
@@ -1464,8 +1618,10 @@ function makeDoor(mat){
   }
   for(const hy of [.30,1.02,1.74]){                       // hinges
     g.add(box(.028,.115,.085,MAT.metal,-.462,hy,0));
-    g.add(new T.Mesh(new T.CylinderGeometry(.014,.014,.13,8),MAT.metal))
-      .position.set(-.474,hy,0);
+    // add() returns the PARENT -- chaining .position here moved the whole door,
+    // which is why every one of them hung 1.74m up in the air
+    const pin=new T.Mesh(new T.CylinderGeometry(.014,.014,.13,8),MAT.metal);
+    pin.position.set(-.474,hy,0); g.add(pin);
   }
   return g;
 }
@@ -1514,7 +1670,7 @@ function makeHouseShell(cx,cz,W,D,H,rise,seed,litList,col){
   return g;
 }
 // a car, built pointing +X so traffic just flips rotation.y for the far lane
-function makeCar(col,lit){
+function makeCar(col,lit,noLights){
   const g=new T.Group();
   const bodyM=new T.MeshStandardMaterial({color:col,roughness:.42,metalness:.55});
   const glassM=new T.MeshStandardMaterial({color:0x0a0e16,roughness:.12,metalness:.7});
@@ -1537,7 +1693,7 @@ function makeCar(col,lit){
     g.add(box(.10,.22,.34,hlM, 2.18,.78,z));
     g.add(box(.10,.18,.30,tlM,-2.18,.80,z));
   }
-  if(lit){
+  if(lit&&!noLights){
     const beam=new T.PointLight(0xffe9bf,30,15,2); beam.position.set(4.2,.75,0); g.add(beam);
     const glow=new T.PointLight(0xff3020,4,4,2); glow.position.set(-2.6,.8,0); g.add(glow);
   }
@@ -2443,16 +2599,37 @@ function buildWorld(){
   put(4,makeCounter(3.2),20.0,3.6,Math.PI/2);
   put(4,makeInteriorWindow(true),13.5,1.04,0,1.55);
   {
-    const fridge=box(.86,1.86,.78,new T.MeshStandardMaterial({color:0xb9bcbd,roughness:.35,metalness:.5}),
-      17.4,.93,1.55); P[4].add(fridge);
-    P[4].add(box(.05,1.10,.03,MAT.metal,16.98,1.20,1.16));
+    // a fridge he can actually open: hollow shell, shelves, and a hinged door
+    const fm=new T.MeshStandardMaterial({color:0xb9bcbd,roughness:.35,metalness:.5});
+    const fin=new T.MeshStandardMaterial({color:0xd6dbdd,roughness:.6,
+      emissive:0x2a2f31,emissiveIntensity:1});
+    P[4].add(box(.86,.06,.78,fm,17.4,1.86,1.55));        // top
+    P[4].add(box(.86,.06,.78,fm,17.4,0.03,1.55));        // bottom
+    P[4].add(box(.86,1.86,.06,fin,17.4,.93,1.19));       // back
+    P[4].add(box(.06,1.86,.78,fin,17.00,.93,1.55));      // sides
+    P[4].add(box(.06,1.86,.78,fin,17.80,.93,1.55));
+    for(const sy of [.62,1.06,1.48]) P[4].add(box(.72,.03,.62,fin,17.4,sy,1.53));
+    for(const [cx,cy,cz,cc] of [[17.16,.70,1.42,0xa8231f],[17.28,.70,1.62,0xa8231f],
+                                [17.58,1.14,1.48,0x2a5b34],[17.24,1.56,1.50,0xc8a83a]])
+      P[4].add(cyl(.033,.033,.115,new T.MeshStandardMaterial({color:cc,roughness:.5,
+        metalness:.35}),cx,cy+.058,cz,10));
+    ch2Fridge=new T.Group(); ch2Fridge.position.set(16.99,0,1.945);
+    ch2Fridge.add(box(.84,1.84,.055,fm,.42,.93,0));
+    ch2Fridge.add(box(.045,1.06,.05,MAT.metal,.755,1.16,.05));
+    P[4].add(ch2Fridge);
     const table=box(1.7,.09,1.0,MAT.darkwood,12.0,.78,4.6); P[4].add(table);
     for(const [dx,dz] of [[-.72,-.38],[.72,-.38],[-.72,.38],[.72,.38]])
       P[4].add(box(.09,.78,.09,MAT.darkwood,12.0+dx,.39,4.6+dz));
     for(const cx of [10.9,13.1]){
       P[4].add(box(.44,.06,.44,MAT.darkwood,cx,.48,4.6));
       P[4].add(box(.44,.52,.06,MAT.darkwood,cx,.74,4.6+(cx<12?-.2:.2)));
+      for(const [lx,lz] of [[-.18,-.18],[.18,-.18],[-.18,.18],[.18,.18]])
+        P[4].add(box(.05,.46,.05,MAT.darkwood,cx+lx,.23,4.6+lz));
     }
+    P[4].add(box(.44,.06,.44,MAT.darkwood,12.0,.48,5.45));   // the one he uses
+    P[4].add(box(.44,.52,.06,MAT.darkwood,12.0,.74,5.65));
+    for(const [lx,lz] of [[-.18,-.18],[.18,-.18],[-.18,.18],[.18,.18]])
+      P[4].add(box(.05,.46,.05,MAT.darkwood,12.0+lx,.23,5.45+lz));
     // Object3D.add returns the parent, so the rug has to be positioned by hand --
     // chaining .position onto add() moves the whole prop group instead.
     { const rug=makeRug(2.2,1.6); rug.position.set(9.5,.035,5.6); P[4].add(rug); }
@@ -2493,6 +2670,14 @@ function buildWorld(){
     ch2Fog=makeFogPane(.88,1.03);
     ch2Fog.mesh.position.set(2.6,1.72,1.228); ch2Fog.mesh.visible=false;
     P[4].add(ch2Fog.mesh);
+    ch2Can=new T.Group();
+    ch2Can.add(cyl(.033,.033,.115,new T.MeshStandardMaterial({color:0xa8231f,
+      roughness:.42,metalness:.4}),0,.058,0,12));
+    ch2Can.add(cyl(.030,.030,.008,MAT.metal,0,.118,0,12));
+    ch2Can.visible=false; P[4].add(ch2Can);
+    ch2Root=P[4];
+    ch2Phone=makePhoneScreen();
+    ch2Phone.group.visible=false; P[4].add(ch2Phone.group);
     // morning dust in the kitchen air
     {
       const gp=new T.BufferGeometry(), n=150, a=new Float32Array(n*3);
@@ -2616,7 +2801,8 @@ const DOOR_DEFS=[
   {lv:0,c:12,r:10,axis:'x',name:'DOOR'},
   {lv:0,c:12,r:16,axis:'x',name:'DOOR'},
   {lv:1,c:16,r:13,axis:'z',name:'BATHROOM DOOR'},
-  {lv:1,c:12,r:16,axis:'x',name:'ATTIC DOOR'}
+  {lv:1,c:12,r:16,axis:'x',name:'ATTIC DOOR'},
+  {lv:4,c:6, r:3, axis:'x',name:'BATHROOM DOOR'}
 ];
 const doors=[];
 function buildDoors(P){
@@ -2659,6 +2845,8 @@ function updateDoors(dt){
 let keyObj=null,nightstand=null,basementBulb=null; const camMeshes=[];
 let barry=null,nbWoman=null,nbKid=null,nbCar=null,homeDoor=null;
 let ch2Keys=null,ch2Water=null,ch2Steam=null,ch2Fog=null,ch2Dust=null,ch2Mug=null;
+let ch2Fridge=null,ch2Can=null,ch2Phone=null,ch2Root=null;
+let highway=null,hwCars=[],hwCabin=null,hwBeam=false;
 const CAMS=[
   {lv:0,x:10.4,y:2.15,z:15.2,ry:Math.PI*0.72,name:'LIVING'},
   {lv:0,x:18.5,y:2.15,z:2.4,ry:Math.PI*0.88,name:'KITCHEN'},
@@ -3411,6 +3599,13 @@ function startChapter2(){
   if(ch2Steam) ch2Steam.visible=false;
   if(ch2Dust)  ch2Dust.visible=false;
   if(ch2Keys)  ch2Keys.visible=true;
+  if(ch2Can)   ch2Can.visible=false;
+  if(ch2Fridge)ch2Fridge.rotation.y=0;
+  if(ch2Phone){ ch2Phone.group.visible=false; ch2Phone.draw([],false); }
+  if(!highway) highway=buildHighway();
+  highway.visible=false;
+  if(carRig) carRig.visible=false;
+  hwBeam=false;
   if(homeDoor) homeDoor.rotation.y=0;
   if(nbCar) nbCar.position.set(CARX,0,CARZ);
   const fired={};
@@ -3430,6 +3625,30 @@ function startChapter2(){
   const reach=(w,ax,a0,a1,az)=>{                 // pose an arm after animPerson
     const a=w.userData[ax];
     a.j0.rotation.x=a0; a.j1.rotation.x=a1; a.j0.rotation.z=az||0;
+  };
+  // animPerson stands everyone up again every frame, so sitting is a pose you
+  // re-apply after it
+  const seat=w=>{
+    const q=w.userData;
+    q.legL.j0.rotation.x=-1.42; q.legR.j0.rotation.x=-1.42;
+    q.legL.j1.rotation.x= 1.36; q.legR.j1.rotation.x= 1.36;
+    q.legL.j0.rotation.z= 0.10; q.legR.j0.rotation.z=-0.10;
+    q.hips.position.y=0.52*q.S;
+    q.chest.rotation.x=0;
+  };
+  const seatIn=(w,x,y,z,ry)=>{ w.visible=true; w.position.set(x,y,z); w.rotation.y=ry; };
+  const P4add=o=>{ if(ch2Root) ch2Root.add(o); };
+  let hwPrev=0;
+  const hwStep=t=>{                              // scroll the motorway past us
+    const dt=Math.min(0.06,Math.max(0,t-hwPrev)); hwPrev=t;
+    const V=27, d=highway.userData;
+    for(const q of d.dashes){ q.position.z+=V*dt; if(q.position.z>380) q.position.z-=760; }
+    for(const q of d.poles ){ q.position.z+=V*dt; if(q.position.z>380) q.position.z-=760; }
+    for(const c of hwCars){
+      c.m.position.z+=(c.same?(V-c.spd):(V+c.spd))*dt;
+      if(c.m.position.z> 340){ c.m.position.z-=680; sfx.whoosh(); }
+      if(c.m.position.z<-340)  c.m.position.z+=680;
+    }
   };
 
   playCine(t=>{
@@ -3722,11 +3941,154 @@ function startChapter2(){
       barry.rotation.y=1.75;
       animPerson(barry,0.016,0,false);
       u().head.rotation.y=0.14*Math.sin(k*2.4);
-      u().mouth.visible=false; u().smile.visible=true;
+      u().mouth.visible=false; u().smile.visible=true; u().smile.rotation.z=Math.PI;
       u().smile.scale.set(0.7+k*0.45,0.55+k*0.5,1);
-      cfade(cl(t,85.2,86.0));
     }
-    /* ================= 86.0+ : the chapter card ====================== */
+    /* ================= 86.0-90.5 : back up his own path ============== */
+    else if(t<90.5){
+      once('backIn',()=>{ u().mouth.visible=true; u().smile.visible=false;
+                          barry.rotation.y=Math.atan2(4.55-barry.position.x,
+                                                      10.60-barry.position.z); });
+      const e=ez(cl(t,86.1,90.0));
+      const sx=CARX-3.6, sz=CARZ-2.4;
+      barry.position.set(sx+(4.55-sx)*e,0,sz+(10.60-sz)*e);
+      animPerson(barry,0.016,e>0.01&&e<0.99?1.2:0,false);
+      shotH(barry.position.x-2.35, barry.position.z-1.05, 1.64,
+            barry.position.x,1.16,barry.position.z, t,1.0,83);
+      every('walkHome',0.44,()=>sfx.step(0.05));
+      if(t>89.6) once('doorShut',()=>sfx.creak());
+      if(homeDoor) homeDoor.rotation.y=-1.30*(1-ez(cl(t,89.4,90.4)));
+    }
+    /* ================= 90.5-95.0 : something to drink ================ */
+    else if(t<95.0){
+      once('fridgeIn',()=>{
+        barry.visible=true; barry.position.set(17.35,0,2.62); barry.rotation.y=Math.PI;
+        if(ch2Dust) ch2Dust.visible=true;
+      });
+      const op=ez(cl(t,91.0,92.1));                // the door swings open
+      if(ch2Fridge) ch2Fridge.rotation.y=-1.24*op*(1-ez(cl(t,94.0,94.9)));
+      if(t>91.0) once('fridgeSfx',()=>sfx.fridge());
+      const take=ez(cl(t,92.4,93.4));
+      animPerson(barry,0.016,0,false);
+      reach(barry,'armL',-1.05*take-0.10,-0.55*take-0.12,-0.30*take);
+      if(t>93.3) once('canOut',()=>{
+        sfx.pickup();
+        if(ch2Can){ ch2Can.visible=true; barry.userData.armL.j2.add(ch2Can);
+                    ch2Can.position.set(0,-0.06,0.03); ch2Can.rotation.set(0.4,0,0); }
+      });
+      if(t>93.3){ const d=ez(cl(t,93.4,94.6));
+                  reach(barry,'armL',-1.15+d*0.95,-0.67+d*0.42,-0.30+d*0.24); }
+      shotH(19.05-ez(cl(t,90.5,95.0))*0.45, 3.95, 1.62, 17.32,1.16,2.05, t,0.95,87);
+    }
+    /* ================= 95.0-99.0 : sat down with it ================== */
+    else if(t<99.0){
+      once('sitDown',()=>{
+        barry.position.set(12.0,0,5.42); barry.rotation.y=Math.PI;
+        if(ch2Can&&ch2Can.parent) ch2Can.parent.remove(ch2Can);
+        if(ch2Can){ P4add(ch2Can); ch2Can.position.set(12.42,0.83,4.92);
+                    ch2Can.rotation.set(0,0,0); }
+        if(ch2Phone){ ch2Phone.group.visible=true;
+                      ch2Phone.group.position.set(12.02,0.905,4.80);
+                      ch2Phone.group.rotation.set(-1.02,0.10,0); }
+      });
+      // seated at the table
+      animPerson(barry,0.016,0,false);
+      seat(barry); barry.userData.chest.rotation.x=-0.20;
+      reach(barry,'armR',-0.85,-0.55,-0.18);
+      reach(barry,'armL',-0.85,-0.55, 0.18);
+      if(t>95.4) once('crackSfx',()=>sfx.crackCan());
+      if(t>96.6) once('sipSfx',()=>sfx.sip());
+      shotH(10.05,7.15,1.52, 12.05,1.06,5.20, t,0.85,91);
+    }
+    /* ================= 99.0-116.0 : the thread with Alan ============= */
+    else if(t<116.0){
+      const M=[];
+      if(t>=103.2) M.push({t:'party at my place tonight. 9 PM sharp'});
+      if(t>=107.7) M.push({t:'make sure you bring snacks and soda'});
+      if(t>=112.6) M.push({t:'oh alright will do',me:1});
+      const typing=(t>100.6&&t<103.2)||(t>106.0&&t<107.7)||(t>111.0&&t<112.6);
+      if(ch2Phone) ch2Phone.draw(M,typing);
+      once('phoneUp',()=>{});
+      if(t>103.2) once('m1',()=>sfx.msgIn());
+      if(t>107.7) once('m2',()=>sfx.msgIn());
+      if(t>112.6) once('m3',()=>sfx.msgOut());
+      if(t>111.0&&t<112.6) every('typeTap',0.16,()=>sfx.tap());
+      animPerson(barry,0.016,0,false);
+      seat(barry); barry.userData.chest.rotation.x=-0.20;
+      reach(barry,'armR',-0.85,-0.55,-0.18);
+      reach(barry,'armL',-0.85,-0.55, 0.18);
+      // in tight on the screen, easing back out at the end
+      const back=ez(cl(t,114.4,116.0));
+      shotH(12.02+back*1.9, 5.02+back*2.2, 1.10+back*0.46,
+            12.02,0.95,4.81, t,0.55,97);
+      cfade(cl(t,115.4,116.0));
+    }
+    /* ================= 116.0-122.0 : night, and the motorway ========= */
+    else if(t<122.0){
+      once('hwIn',()=>{
+        highway.visible=true; barry.visible=false;
+        if(ch2Phone) ch2Phone.group.visible=false;
+        if(ch2Dust) ch2Dust.visible=false;
+        renderer.setClearColor(0x090c15,1);
+        scene.fog.color.setHex(0x090c15); scene.fog.density=0.013;
+        if(ambLight){ ambLight.intensity=1.9; ambLight.color.setHex(0x39435c); }
+        if(hemiLight){ hemiLight.intensity=0.7; hemiLight.color.setHex(0x3d4a66); }
+        if(moon){ moon.intensity=1.4; moon.color.setHex(0x7a8cb4); }
+        hwBeam=true;
+        highway.userData.hero.visible=true;
+        if(hwCabin) hwCabin.visible=false;
+        seatIn(barry,HWX-2.62,0.02,HWZ-0.45,Math.PI);
+      });
+      hwStep(t);
+      cfade(1-cl(t,116.0,116.9));
+      // behind and above, his car running with the traffic
+      shotH(HWX-4.30,HWZ+7.20,2.55, HWX-2.30,1.10,HWZ-1.40, t,1.25,101);
+      every('hwHum',1.7,()=>sfx.road());
+    }
+    /* ================= 122.0-128.0 : and he is furious =============== */
+    else if(t<128.0){
+      once('hwFace',()=>{
+        barry.visible=true;
+        // shooting through the shell's tinted glass buried him, so drop the
+        // shell and put the camera in the passenger seat instead
+        highway.userData.hero.visible=false;
+        if(hwCabin) hwCabin.visible=true;
+        if(ambLight) ambLight.intensity=6.4;
+        const q=barry.userData;
+        q.mouth.visible=false; q.smile.visible=true;
+        q.smile.rotation.z=0;                     // the arc upside down: a scowl
+        q.smile.scale.set(1.18,0.98,1);
+        q.head.rotation.x=0.17;
+      });
+      hwStep(t);
+      animPerson(barry,0.016,0,false);
+      seat(barry);
+      reach(barry,'armR',-1.28,-0.66,-0.16);
+      reach(barry,'armL',-1.24,-0.70, 0.18);
+      barry.userData.head.rotation.x=0.17;
+      barry.userData.head.rotation.y=-0.55+Math.sin(t*0.7)*0.05;
+      shotH(HWX-1.88,HWZ-0.68,1.42, HWX-2.62,1.40,HWZ-0.45, t,1.5,103);
+      every('hwHum',1.7,()=>sfx.road());
+    }
+    /* ================= 128.0-134.0 : his own eyes on the road ======== */
+    else if(t<134.0){
+      once('hwPov',()=>{
+        barry.visible=false;
+        highway.userData.hero.visible=false;
+        if(hwCabin) hwCabin.visible=false;
+        if(carRig) carRig.visible=true;
+        if(ambLight) ambLight.intensity=2.6;
+      });
+      hwStep(t);
+      state.px=HWX-2.62; state.pz=HWZ-0.55; state.cineEye=1.34;
+      state.yaw=0; state.pitch=-0.015; state.roll=0;
+      handheld(t,1.6,107);
+      if(carRig&&carRig.userData.wheel)
+        carRig.userData.wheel.rotation.z=Math.sin(t*0.9)*0.10-0.03;
+      every('hwHum',1.7,()=>sfx.road());
+      cfade(cl(t,133.3,134.0));
+    }
+    /* ================= 134.0+ : the chapter card ===================== */
     else cfade(1);
   },[
     {t:'3 MONTHS AFTER THE INCIDENT',d:3.6,card:1},
@@ -3747,6 +4109,11 @@ function startChapter2(){
     {t:'"If you want to replace your car key, I’d go to the dealership four miles ahead."',d:5.4},
     {t:'"Thank you — thank you!"',d:2.6},
     {t:'',d:4.8},{t:'',d:3.0},
+    {t:'',d:4.5},{t:'',d:4.5},{t:'',d:4.0},{t:'',d:4.2},
+    {t:'ALAN — “party at my place tonight. 9 PM sharp”',d:4.5},
+    {t:'ALAN — “make sure you bring snacks and soda”',d:4.9},
+    {t:'BARRY — “oh alright will do”',d:3.4},
+    {t:'',d:6.0},{t:'',d:6.0},{t:'',d:6.0},
     {t:'CHAPTER II — EVADE',d:3.0,card:1}
   ],()=>{
     state.cineEye=null; state.roll=0; glitchUntil=0; cineWoman=false;
@@ -3759,6 +4126,16 @@ function startChapter2(){
     if(ch2Water) ch2Water.visible=false;
     if(ch2Steam) ch2Steam.visible=false;
     if(ch2Dust)  ch2Dust.visible=false;
+    if(ch2Phone) ch2Phone.group.visible=false;
+    if(ch2Can){ ch2Can.visible=false; if(ch2Can.parent!==ch2Root&&ch2Root){
+                  ch2Can.parent.remove(ch2Can); ch2Root.add(ch2Can); } }
+    if(highway) highway.visible=false;
+    if(hwCabin) hwCabin.visible=false;
+    hwBeam=false;
+    if(carRig) carRig.visible=false;
+    if(barry){ barry.userData.smile.rotation.z=Math.PI;
+               barry.userData.hips.position.y=0.825*barry.userData.S; }
+    showLevel(state.lv);                       // restores fog, sky and the lights
     save.chapter=2; save.beat='CH2_START'; writeSave();
     document.getElementById('hud').classList.remove('hide');
     state.mode='play'; setObjective('EVADE');
@@ -3915,8 +4292,9 @@ function buildCarRig(){
   // gear lever and handbrake
   g.add(box(.07,.05,.16,trim,.20,-.60,-.26));
   const lev=cyl(.014,.014,.20,trim,.20,-.50,-.28,8); lev.rotation.x=0.22; g.add(lev);
-  g.add(new T.Mesh(new T.SphereGeometry(.028,10,8),
-    new T.MeshStandardMaterial({color:0x1a1a1e,roughness:.5}))).position.set(.20,-.405,-.30);
+  const knob=new T.Mesh(new T.SphereGeometry(.028,10,8),
+    new T.MeshStandardMaterial({color:0x1a1a1e,roughness:.5}));
+  knob.position.set(.20,-.405,-.30); g.add(knob);
   const hb=box(.035,.035,.22,trim,.34,-.60,-.16); hb.rotation.x=-0.30; g.add(hb);
   // seat
   g.add(box(.52,.09,.46,cloth,0,-.66,.10));
@@ -3950,7 +4328,8 @@ function buildCarRig(){
     up.rotation.set(0.92,0,-sx*0.46); a.add(up);
     return a;
   };
-  g.add(arm(-1)); g.add(arm(1));
+  const aL=arm(-1), aR=arm(1); g.add(aL); g.add(aR);
+  g.userData.arms=[aL,aR];
 
   g.visible=false;
   return g;
@@ -4311,6 +4690,16 @@ function syncCamera(dt){
     }
   } else state.flick=1;
 
+  // on the motorway one pool light becomes his headlights -- adding a new light
+  // would recompile every shader mid-cutscene
+  if(hwBeam){
+    const L=lights[0];
+    L.position.set(state.px+Math.sin(state.yaw+Math.PI)*11.0,1.1,
+                   state.pz+Math.cos(state.yaw+Math.PI)*11.0);
+    L.color.setHex(0xffe8c4); L.distance=40; L.intensity=120; L.visible=true;
+    for(let i=1;i<lights.length;i++){ lights[i].visible=false; lights[i].intensity=0; }
+    updateDoors(dt); updateTraffic(dt); return;
+  }
   // pick the nearest lights for the fixed pool
   const act=LIGHT_DEFS.filter(l=>l.lv===state.lv)
     .map(l=>({l,d:(l.x-state.px)**2+(l.z-state.pz)**2}))
