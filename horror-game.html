@@ -106,6 +106,10 @@
   #camTabs button[disabled]{opacity:.3}
 
   #cfade{position:absolute;inset:0;z-index:15;background:#000;opacity:0;pointer-events:none}
+  #lids{position:absolute;inset:0;z-index:15;pointer-events:none}
+  #lids .ld{position:absolute;left:0;right:0;height:0;background:#000;
+    box-shadow:0 0 26px 14px #000}
+  #lids .ld.t{top:0} #lids .ld.b{bottom:0}
   #cine{position:absolute;inset:0;z-index:16;pointer-events:none;opacity:0;transition:opacity .6s}
   #cine.on{opacity:1;pointer-events:auto}
   .bar{position:absolute;left:0;right:0;height:11%;background:#000;z-index:2;pointer-events:none}
@@ -167,6 +171,7 @@
 </div>
 
 <div id="cfade"></div>
+<div id="lids"><div class="ld t"></div><div class="ld b"></div></div>
 <div id="cine">
   <div class="bar t"></div><div class="bar b"></div>
   <div id="sub"></div><div id="skip">SKIP</div>
@@ -399,7 +404,12 @@ const sfx={
   msgOut:()=>{ sT(1240,1880,.09,.065,'sine'); },
   tap:()=>sT(2600,1700,.018,.028,'square'),
   whoosh:()=>{ sN(.55,520,.8,.13,'bandpass'); sN(.35,1600,.6,.05,'highpass'); },
-  road:()=>{ sN(1.8,240,.5,.045,'lowpass'); }
+  road:()=>{ sN(1.8,240,.5,.045,'lowpass'); },
+  blink:()=>sN(.05,900,2,.022,'lowpass'),
+  drone:()=>{ sT(58,44,2.6,.10,'sine'); sN(2.4,150,.6,.05,'lowpass'); },
+  screech:()=>{ sN(1.1,2200,3.2,.30,'bandpass'); sT(900,620,1.0,.14,'sawtooth'); },
+  impact:()=>{ sN(.5,90,1.1,.9,'lowpass'); sT(150,34,.5,.6,'square');
+               setTimeout(()=>sN(.7,2600,.8,.45,'highpass'),30); }
 };
 
 /* ==========================================================
@@ -1102,15 +1112,17 @@ function buildHighway(){
   // traffic: our lanes at -2.2 / -5.7, oncoming at +2.2 / +5.7
   hwCars=[];
   const cols=[0x2b3a4e,0x6d6a60,0x3a2b2b,0x243024,0x4a4a52,0x5a2a2a,0x2f3f46,0x38343c];
-  for(let i=0;i<9;i++){
-    const same=i<4;
+  // Nothing else runs in his lane except one car well ahead holding station, so
+  // the wrap can never drop a car on top of him.
+  const lanes=[[-2.2,1,-58,27],[-5.7,1,-150,21],[-5.7,1,60,23.5],[-5.7,1,-300,19],
+               [2.2,0,-260,26],[5.7,0,-130,29],[2.2,0,40,25],[5.7,0,190,28],
+               [2.2,0,300,24]];
+  lanes.forEach(([x,same,z,spd],i)=>{
     const m=makeCar(cols[i%cols.length],true,true);
     m.rotation.y=same?Math.PI/2:-Math.PI/2;                 // -Z travel / +Z travel
-    const x=same?(i%2?-2.2:-5.7):(i%2?2.2:5.7);
-    m.position.set(x,0,-320+i*84);
-    g.add(m);
-    hwCars.push({m,same,spd:same?18+Math.random()*8:24+Math.random()*9});
-  }
+    m.position.set(x,0,z); g.add(m);
+    hwCars.push({m,same:!!same,spd,lane:x});
+  });
   // his own car, and the cabin the camera sits in
   const hero=makeCar(0x6d6a60,true,true);
   hero.rotation.y=Math.PI/2; hero.position.set(-2.2,0,0);
@@ -1124,7 +1136,79 @@ function buildHighway(){
   hwCabin=buildCarRig();                         // a cabin we can look INTO
   hwCabin.userData.arms.forEach(a=>a.visible=false);
   hwCabin.position.set(-2.62,1.41,-0.45); hwCabin.visible=false; g.add(hwCabin);
+  // the pole at the end of it
+  hwPole=new T.Group();
+  hwPole.add(cyl(.13,.17,7.6,new T.MeshStandardMaterial({color:0x2a2c30,roughness:.8}),
+    0,3.8,0,9));
+  hwPole.add(box(1.6,.11,.11,new T.MeshStandardMaterial({color:0x2a2c30,roughness:.8}),
+    -.7,7.5,0));
+  hwPole.add(box(.54,.15,.28,lamp,-1.45,7.38,0));
+  hwPole.add(box(.9,.9,.9,new T.MeshStandardMaterial({color:0x30323a,roughness:.9}),
+    0,.45,0));                                              // concrete base
+  const band=new T.MeshStandardMaterial({color:0xf0eee4,
+    emissive:0xb9b2a0,emissiveIntensity:1.6});
+  hwPole.add(box(.30,.34,.30,band,0,1.32,0));
+  hwPole.add(box(.30,.34,.30,band,0,2.00,0));
+  hwPole.position.set(-8.6,0,-70); hwPole.visible=false; g.add(hwPole);
   g.userData={dashes,poles,hero};
+  scene.add(g);
+  return g;
+}
+// The room the player could never open in chapter one, remembered from inside.
+const SRX=-140, SRZ=-500;
+function buildSecretRoom(){
+  const g=new T.Group(); g.position.set(SRX,0,SRZ); g.visible=false;
+  const wall=new T.MeshStandardMaterial({color:0x6a6355,roughness:1});
+  const flr =new T.MeshStandardMaterial({color:0x2e2820,roughness:1});
+  const W=4.4,H=2.5;
+  const f=new T.Mesh(new T.PlaneGeometry(W,W),flr);
+  f.rotation.x=-Math.PI/2; g.add(f);
+  const c=new T.Mesh(new T.PlaneGeometry(W,W),wall);
+  c.rotation.x=Math.PI/2; c.position.y=H; g.add(c);
+  g.add(box(W,H,.12,wall,0,H/2,-W/2));
+  g.add(box(W,H,.12,wall,0,H/2, W/2));
+  g.add(box(.12,H,W,wall,-W/2,H/2,0));
+  g.add(box(.12,H,W,wall, W/2,H/2,0));
+  // bulb on a flex
+  g.add(cyl(.006,.006,.55,MAT.metal,0,H-.28,0,6));
+  const bulb=new T.Mesh(new T.SphereGeometry(.055,10,8),
+    new T.MeshStandardMaterial({color:0xfff0cc,emissive:0xffd89a,emissiveIntensity:6}));
+  bulb.position.set(0,H-.56,0); g.add(bulb);
+  // a mattress on the floor, and what is on it
+  g.add(box(1.9,.16,1.0,new T.MeshStandardMaterial({color:0x8a8272,roughness:1}),
+    -1.35,.08,-.55));
+  g.add(box(1.5,.06,.7,new T.MeshStandardMaterial({color:0x6d4b40,roughness:1}),
+    -1.35,.17,-.50));
+  // a chair, and the rope on it
+  g.add(box(.46,.06,.46,MAT.darkwood,.55,.46,-1.45));
+  g.add(box(.46,.60,.06,MAT.darkwood,.55,.76,-1.67));
+  for(const [lx,lz] of [[-.19,-.19],[.19,-.19],[-.19,.19],[.19,.19]])
+    g.add(box(.05,.46,.05,MAT.darkwood,.55+lx,.23,-1.45+lz));
+  const rope=new T.MeshStandardMaterial({color:0x8a7a58,roughness:1});
+  const r1=cyl(.018,.018,.34,rope,.36,.50,-1.45,6);
+  r1.rotation.z=Math.PI/2; g.add(r1);
+  g.add(box(.036,.05,.30,rope,.55,.44,-1.35));
+  // tally scratches, gouged into one wall
+  for(let i=0;i<34;i++){
+    const gx=-1.9+(i%17)*.22, gy=1.05+Math.floor(i/17)*.34;
+    const m=box(.012,.24,.012,new T.MeshStandardMaterial({color:0x3a3128,roughness:1}),
+      gx,gy,-W/2+.07);
+    m.rotation.z=(Math.random()-.5)*.16; g.add(m);
+  }
+  // photographs pinned up, faces scratched out
+  for(let i=0;i<6;i++){
+    const px=-1.5+i*.6;
+    const ph=box(.006,.28,.22,new T.MeshStandardMaterial({color:0xb9ae95,roughness:.95}),
+      -W/2+.07,1.62,px);
+    ph.rotation.x=(Math.random()-.5)*.18; g.add(ph);
+    const sc=box(.004,.19,.17,new T.MeshStandardMaterial({color:0x241d18,roughness:1}),
+      -W/2+.078,1.64,px);
+    sc.rotation.x=ph.rotation.x; g.add(sc);
+  }
+  // the door, bolted from the outside
+  const d=makeDoor(); d.position.set(-1.0,0,-W/2+.10); d.rotation.y=0; g.add(d);
+  g.add(box(.30,.07,.05,MAT.metal,-.55,1.10,-W/2+.16));
+  g.add(box(.09,.13,.05,MAT.metal,-.40,1.10,-W/2+.16));
   scene.add(g);
   return g;
 }
@@ -2846,7 +2930,8 @@ let keyObj=null,nightstand=null,basementBulb=null; const camMeshes=[];
 let barry=null,nbWoman=null,nbKid=null,nbCar=null,homeDoor=null;
 let ch2Keys=null,ch2Water=null,ch2Steam=null,ch2Fog=null,ch2Dust=null,ch2Mug=null;
 let ch2Fridge=null,ch2Can=null,ch2Phone=null,ch2Root=null;
-let highway=null,hwCars=[],hwCabin=null,hwBeam=false;
+let highway=null,hwCars=[],hwCabin=null,hwPole=null,secretRoom=null;
+let cineLight=null;
 const CAMS=[
   {lv:0,x:10.4,y:2.15,z:15.2,ry:Math.PI*0.72,name:'LIVING'},
   {lv:0,x:18.5,y:2.15,z:2.4,ry:Math.PI*0.88,name:'KITCHEN'},
@@ -3561,6 +3646,13 @@ function shot(x,z,eye,tx,ty,tz){
 /* ---- cinematography helpers ---------------------------------------- */
 const cfadeEl=document.getElementById('cfade');
 function cfade(a){ cfadeEl.style.opacity=String(Math.min(1,Math.max(0,a))); }
+const lidT=document.querySelector('#lids .ld.t'), lidB=document.querySelector('#lids .ld.b');
+// 0 = eyes open, 1 = shut
+function lids(p){
+  p=Math.min(1,Math.max(0,p));
+  const h=(p*52).toFixed(2)+'%';
+  lidT.style.height=h; lidB.style.height=h;
+}
 // a locked-off shot still breathes; without this every frame looks like a
 // screenshot of a level rather than a piece of film
 function handheld(t,amt,seed){
@@ -3605,7 +3697,7 @@ function startChapter2(){
   if(!highway) highway=buildHighway();
   highway.visible=false;
   if(carRig) carRig.visible=false;
-  hwBeam=false;
+  cineLight=null; lids(0);
   if(homeDoor) homeDoor.rotation.y=0;
   if(nbCar) nbCar.position.set(CARX,0,CARZ);
   const fired={};
@@ -3638,6 +3730,49 @@ function startChapter2(){
   };
   const seatIn=(w,x,y,z,ry)=>{ w.visible=true; w.position.set(x,y,z); w.rotation.y=ry; };
   const P4add=o=>{ if(ch2Root) ch2Root.add(o); };
+  const pov=(t,shake)=>{
+    state.px=HWX-2.62; state.pz=HWZ-0.55; state.cineEye=1.34;
+    state.yaw=0; state.pitch=-0.015; state.roll=0;
+    handheld(t,shake,107);
+    if(carRig&&carRig.userData.wheel)
+      carRig.userData.wheel.rotation.z=Math.sin(t*0.9)*0.10-0.03;
+  };
+  const beam=()=>{ cineLight={x:state.px+Math.sin(state.yaw+Math.PI)*11.0,y:1.1,
+    z:state.pz+Math.cos(state.yaw+Math.PI)*11.0,col:0xffe8c4,d:40,i:120}; };
+  const nightGrade=()=>{
+    renderer.setClearColor(0x090c15,1);
+    scene.fog.color.setHex(0x090c15); scene.fog.density=0.013;
+    if(ambLight){ ambLight.intensity=1.9; ambLight.color.setHex(0x39435c); }
+    if(hemiLight){ hemiLight.intensity=0.7; hemiLight.color.setHex(0x3d4a66); }
+    if(moon){ moon.intensity=1.4; moon.color.setHex(0x7a8cb4); }
+  };
+  const showOnly=lv=>{
+    for(const k in levelGroups) levelGroups[k].visible=(+k===lv);
+    for(const k in propGroups)  propGroups[k].visible=(+k===lv);
+  };
+  // A memory: lids shut, the world is swapped underneath them, lids open ONTO
+  // the memory, hold, then the same in reverse. Playing it behind shut lids
+  // just shows a black screen, which is what the first cut of this did.
+  const mem=(t,at,dur)=>{
+    const e=t-at, S=0.15;
+    if(e<0)           return {p:0,in:false};
+    if(e<S)           return {p:e/S,in:false};
+    if(e<S*2)         return {p:1,in:true};
+    if(e<S*3)         return {p:1-(e-S*2)/S,in:true};
+    if(e<dur-S*3)     return {p:0,in:true};
+    if(e<dur-S*2)     return {p:(e-(dur-S*3))/S,in:true};
+    if(e<dur-S)       return {p:1,in:false};
+    if(e<dur)         return {p:1-(e-(dur-S))/S,in:false};
+    return {p:0,in:false};
+  };
+  // one blink: shut, hold, open -- returns 0..1 lid closure
+  const blink=(t,at,shut,hold,open)=>{
+    if(t<at) return 0;
+    if(t<at+shut) return (t-at)/shut;
+    if(t<at+shut+hold) return 1;
+    if(t<at+shut+hold+open) return 1-(t-at-shut-hold)/open;
+    return 0;
+  };
   let hwPrev=0;
   const hwStep=t=>{                              // scroll the motorway past us
     const dt=Math.min(0.06,Math.max(0,t-hwPrev)); hwPrev=t;
@@ -4034,12 +4169,11 @@ function startChapter2(){
         if(ambLight){ ambLight.intensity=1.9; ambLight.color.setHex(0x39435c); }
         if(hemiLight){ hemiLight.intensity=0.7; hemiLight.color.setHex(0x3d4a66); }
         if(moon){ moon.intensity=1.4; moon.color.setHex(0x7a8cb4); }
-        hwBeam=true;
         highway.userData.hero.visible=true;
         if(hwCabin) hwCabin.visible=false;
         seatIn(barry,HWX-2.62,0.02,HWZ-0.45,Math.PI);
       });
-      hwStep(t);
+      hwStep(t); beam();
       cfade(1-cl(t,116.0,116.9));
       // behind and above, his car running with the traffic
       shotH(HWX-4.30,HWZ+7.20,2.55, HWX-2.30,1.10,HWZ-1.40, t,1.25,101);
@@ -4055,12 +4189,10 @@ function startChapter2(){
         if(hwCabin) hwCabin.visible=true;
         if(ambLight) ambLight.intensity=6.4;
         const q=barry.userData;
-        q.mouth.visible=false; q.smile.visible=true;
-        q.smile.rotation.z=0;                     // the arc upside down: a scowl
-        q.smile.scale.set(1.18,0.98,1);
+        q.mouth.visible=true; q.smile.visible=false;
         q.head.rotation.x=0.17;
       });
-      hwStep(t);
+      hwStep(t); beam();
       animPerson(barry,0.016,0,false);
       seat(barry);
       reach(barry,'armR',-1.28,-0.66,-0.16);
@@ -4070,8 +4202,8 @@ function startChapter2(){
       shotH(HWX-1.88,HWZ-0.68,1.42, HWX-2.62,1.40,HWZ-0.45, t,1.5,103);
       every('hwHum',1.7,()=>sfx.road());
     }
-    /* ================= 128.0-134.0 : his own eyes on the road ======== */
-    else if(t<134.0){
+    /* ================= 128.0-131.0 : his own eyes on the road ======== */
+    else if(t<131.0){
       once('hwPov',()=>{
         barry.visible=false;
         highway.userData.hero.visible=false;
@@ -4079,17 +4211,116 @@ function startChapter2(){
         if(carRig) carRig.visible=true;
         if(ambLight) ambLight.intensity=2.6;
       });
-      hwStep(t);
-      state.px=HWX-2.62; state.pz=HWZ-0.55; state.cineEye=1.34;
-      state.yaw=0; state.pitch=-0.015; state.roll=0;
-      handheld(t,1.6,107);
-      if(carRig&&carRig.userData.wheel)
-        carRig.userData.wheel.rotation.z=Math.sin(t*0.9)*0.10-0.03;
+      hwStep(t); beam(); pov(t,1.6);
       every('hwHum',1.7,()=>sfx.road());
-      cfade(cl(t,133.3,134.0));
+      cfade(cl(t,130.4,131.0));
     }
-    /* ================= 134.0+ : the chapter card ===================== */
-    else cfade(1);
+    /* ================= 131.0-134.6 : he cannot keep them open ======== */
+    else if(t<134.6){
+      hwStep(t); beam(); pov(t,1.9);
+      cfade(1-cl(t,131.0,131.7));
+      // five of them, each one a little longer than the last
+      let p=0;
+      for(const [at,sh,ho,op] of [[131.9,.10,.05,.12],[132.5,.10,.08,.13],
+                                  [133.1,.11,.13,.14],[133.7,.12,.20,.15],
+                                  [134.2,.13,.26,.16]]){
+        p=Math.max(p,blink(t,at,sh,ho,op));
+        if(t>at) once('bl'+at,()=>sfx.blink());
+      }
+      lids(p);
+      every('hwHum',1.7,()=>sfx.road());
+    }
+    /* ================= 134.6-136.6 : the house ======================= */
+    else if(t<136.6){
+      const m=mem(t,134.6,2.0); lids(m.p);
+      if(m.in){                                    // behind his eyes
+        if(carRig) carRig.visible=false;
+        once('mem1',()=>{ showOnly(STREET); state.lv=STREET; showLevel(STREET);
+                          cineLight=null; sfx.drone(); });
+        const e=ez(cl(t,134.9,136.2));
+        shotH(5.60,17.4-e*2.2,1.66, 5.5,2.10,9.0, t,0.5,131);
+      } else {
+        if(fired['mem1']) once('mem1out',()=>{ state.lv=HOME; showLevel(HOME); showOnly(HOME); nightGrade(); });
+        if(carRig) carRig.visible=true;
+        hwStep(t); beam(); pov(t,2.1);
+      }
+    }
+    /* ================= 136.6-138.6 : and her ======================== */
+    else if(t<138.6){
+      const m=mem(t,136.6,2.0); lids(m.p);
+      if(m.in){
+        if(carRig) carRig.visible=false;
+        once('mem2',()=>{
+          showOnly(GROUND); state.lv=GROUND; showLevel(GROUND);
+          cineLight={x:9.8,y:2.3,z:9.5,col:0xffb257,d:11,i:70};
+          if(woman){ cineWoman=true; woman.visible=true;
+                     woman.position.set(9.8,0,10.9); woman.rotation.set(0,0,0);
+                     ent.screamT=99; ent.speed=0; }
+          sfx.scream(); state.hurt=1;
+        });
+        shotH(9.80,12.55,1.62, 9.8,1.52,10.9, t,1.1,137);
+        state.roll=Math.sin(t*40)*0.02;
+      } else {
+        if(fired['mem2']) once('mem2out',()=>{ cineWoman=false; if(woman) woman.visible=false;
+                             ent.screamT=0; state.hurt=0;
+                             state.lv=HOME; showLevel(HOME); showOnly(HOME); nightGrade(); });
+        if(carRig) carRig.visible=true;
+        hwStep(t); beam(); pov(t,2.3);
+      }
+    }
+    /* ================= 138.6-141.0 : the room he was never shown ==== */
+    else if(t<141.0){
+      const m=mem(t,138.6,2.4); lids(m.p);
+      if(m.in){
+        if(carRig) carRig.visible=false;
+        once('mem3',()=>{
+          if(!secretRoom) secretRoom=buildSecretRoom();
+          secretRoom.visible=true; showOnly(-1);
+          cineLight={x:SRX,y:SRZ*0+1.94,z:SRZ,col:0xffcf96,d:8,i:46};
+          renderer.setClearColor(0x000000,1); scene.fog.color.setHex(0x000000);
+          scene.fog.density=0.10;
+          if(ambLight) ambLight.intensity=1.2;
+          sfx.drone(); sfx.heart(1);
+        });
+        const e=ez(cl(t,139.0,140.6));
+        shotH(SRX+1.74-e*0.62,SRZ+1.74-e*0.62,1.56, SRX-0.30,0.70,SRZ-0.85, t,0.7,139);
+        every('mem3b',0.9,()=>sfx.heart(0.8));
+      } else {
+        if(fired['mem3']) once('mem3out',()=>{ if(secretRoom) secretRoom.visible=false;
+                             state.lv=HOME; showLevel(HOME); showOnly(HOME); nightGrade(); });
+        if(carRig) carRig.visible=true;
+        hwStep(t); beam(); pov(t,2.5);
+      }
+    }
+    /* ================= 141.0-144.0 : the pole ======================= */
+    else if(t<144.0){
+      once('pole',()=>{
+        if(hwPole){ hwPole.visible=true; hwPole.position.set(-8.6,0,-74); }
+        // he crosses the next lane over on his way to the pole, so clear it --
+        // the one thing this shot must not do is put him through another car
+        hwCars.forEach(c=>{ if(Math.abs(c.m.position.z)<70)
+          c.m.position.z+=(c.m.position.z<0?-300:300); });
+        cineWoman=false; if(woman) woman.visible=false;
+        ent.screamT=0; state.hurt=0; lids(0);
+      });
+      hwStep(t); beam();
+      const k=cl(t,141.0,142.55);
+      if(hwPole) hwPole.position.z=HWZ*0+(-74+k*k*72.6);   // rushing up at him
+      pov(t,1.4+k*5.0);
+      if(t>141.35) once('screech',()=>sfx.screech());
+      if(carRig&&carRig.userData.wheel)
+        carRig.userData.wheel.rotation.z=-0.05-k*k*1.5;    // wrenching it over
+      state.roll=(state.roll||0)-k*k*0.16;
+      state.px=HWX-2.62-k*k*5.92;
+      if(t>142.5){
+        once('bang',()=>{ sfx.impact(); state.hurt=1;
+                          if(musicGain) musicGain.gain.value=0.02; });
+        cfade(Math.min(1,(t-142.5)/0.22));
+        lids(Math.min(1,(t-142.5)/0.30));
+      } else cfade(0);
+    }
+    /* ================= 144.0+ : the chapter card ==================== */
+    else { cfade(1); lids(0); }
   },[
     {t:'3 MONTHS AFTER THE INCIDENT',d:3.6,card:1},
     {t:'AUGUST 28, 2002',d:3.2,card:1},
@@ -4113,7 +4344,8 @@ function startChapter2(){
     {t:'ALAN — “party at my place tonight. 9 PM sharp”',d:4.5},
     {t:'ALAN — “make sure you bring snacks and soda”',d:4.9},
     {t:'BARRY — “oh alright will do”',d:3.4},
-    {t:'',d:6.0},{t:'',d:6.0},{t:'',d:6.0},
+    {t:'',d:6.0},{t:'',d:6.0},{t:'',d:3.0},
+    {t:'',d:3.6},{t:'',d:2.0},{t:'',d:2.0},{t:'',d:2.4},{t:'',d:3.0},
     {t:'CHAPTER II — EVADE',d:3.0,card:1}
   ],()=>{
     state.cineEye=null; state.roll=0; glitchUntil=0; cineWoman=false;
@@ -4131,11 +4363,13 @@ function startChapter2(){
                   ch2Can.parent.remove(ch2Can); ch2Root.add(ch2Can); } }
     if(highway) highway.visible=false;
     if(hwCabin) hwCabin.visible=false;
-    hwBeam=false;
+    if(secretRoom) secretRoom.visible=false;
+    cineLight=null; lids(0);
     if(carRig) carRig.visible=false;
     if(barry){ barry.userData.smile.rotation.z=Math.PI;
                barry.userData.hips.position.y=0.825*barry.userData.S; }
     showLevel(state.lv);                       // restores fog, sky and the lights
+    if(musicGain) musicGain.gain.value=settings.music/100*0.55;
     save.chapter=2; save.beat='CH2_START'; writeSave();
     document.getElementById('hud').classList.remove('hide');
     state.mode='play'; setObjective('EVADE');
@@ -4690,13 +4924,12 @@ function syncCamera(dt){
     }
   } else state.flick=1;
 
-  // on the motorway one pool light becomes his headlights -- adding a new light
-  // would recompile every shader mid-cutscene
-  if(hwBeam){
-    const L=lights[0];
-    L.position.set(state.px+Math.sin(state.yaw+Math.PI)*11.0,1.1,
-                   state.pz+Math.cos(state.yaw+Math.PI)*11.0);
-    L.color.setHex(0xffe8c4); L.distance=40; L.intensity=120; L.visible=true;
+  // a cutscene can take one of the fixed pool for itself -- headlights, a bare
+  // bulb -- because adding a real light would recompile every shader mid-shot
+  if(cineLight){
+    const L=lights[0], q=cineLight;
+    L.position.set(q.x,q.y,q.z); L.color.setHex(q.col);
+    L.distance=q.d; L.intensity=q.i; L.visible=true;
     for(let i=1;i<lights.length;i++){ lights[i].visible=false; lights[i].intensity=0; }
     updateDoors(dt); updateTraffic(dt); return;
   }
