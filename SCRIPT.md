@@ -2,8 +2,9 @@
 
 Short film. Seven girls, 14–15 years old. One sunny afternoon.
 
-The chapter list in `player.html` mirrors these parts — once the film is cut,
-put the real start times into the `CHAPTERS` array and set `FILM` to the video path.
+`run-from-zombies.html` is this script, built as a real-time 3D film. The shot
+list in that file follows these parts in order; the timings below are where each
+part falls in the finished 5:20 cut.
 
 ---
 
