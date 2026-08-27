@@ -1,0 +1,3083 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#040a18">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="Track Stars V1.0 - a mobile-first 3D track and field prototype.">
+<title>TRACK STARS</title>
+<style>
+/* ============================================================
+   TRACK STARS V1.0 - STYLE
+   Identity: dark blue / white / aura-electric blue
+   Mobile-first, minimal, no scrolling, safe-area aware.
+   ============================================================ */
+:root{
+  --navy-0:#03070f;
+  --navy-1:#040c1c;
+  --navy-2:#0a1730;
+  --navy-3:#122748;
+  --line:#1d3a68;
+  --aura:#3fe0ff;
+  --aura-2:#0aa7e6;
+  --aura-soft:rgba(63,224,255,.16);
+  --white:#e9f4ff;
+  --muted:#8ea6c6;
+  --grey:#9aa7b8;
+  --ok:#48e08a;
+  --warn:#ffb547;
+  --bad:#ff5f70;
+  --gold:#ffd75e;
+  --r:14px;
+  --tap:46px;
+  --sat:env(safe-area-inset-top,0px);
+  --sab:env(safe-area-inset-bottom,0px);
+  --sal:env(safe-area-inset-left,0px);
+  --sar:env(safe-area-inset-right,0px);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;position:fixed;
+  touch-action:none;background:var(--navy-0);color:var(--white);
+  font-family:"Segoe UI Variable","SF Pro Display",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+  font-size:15px;line-height:1.25}
+#app{position:fixed;inset:0;overflow:hidden}
+canvas#cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.hidden{display:none!important}
+.mono{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+
+/* ---------- shared bits ---------- */
+.card{background:linear-gradient(180deg,rgba(10,23,48,.94),rgba(4,12,28,.96));
+  border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:0 12px 40px rgba(0,0,0,.55),inset 0 1px 0 rgba(120,200,255,.09)}
+.h-label{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.btn{appearance:none;border:1px solid var(--line);background:rgba(13,32,66,.85);color:var(--white);
+  border-radius:11px;min-height:var(--tap);padding:0 16px;font:inherit;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;font-size:12px;cursor:pointer;transition:transform .09s ease,background .16s,border-color .16s}
+.btn:active{transform:scale(.96)}
+.btn.primary{background:linear-gradient(180deg,var(--aura),var(--aura-2));border-color:#7ceaff;color:#02121c;
+  box-shadow:0 6px 22px rgba(63,224,255,.32)}
+.btn.ghost{background:rgba(255,255,255,.04)}
+.btn:disabled{opacity:.45}
+.btn.lock{color:var(--grey)}
+
+/* ---------- loading ---------- */
+#loading{position:absolute;inset:0;z-index:400;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:26px;background:
+  radial-gradient(120% 80% at 50% 18%,#0d2a55 0%,#061127 45%,#03070f 100%);
+  transition:opacity .55s ease,visibility .55s}
+#loading.done{opacity:0;visibility:hidden;pointer-events:none}
+#loading .ring{position:absolute;width:min(90vw,560px);aspect-ratio:1;border-radius:50%;
+  border:1px solid rgba(63,224,255,.13);animation:pulse 3.4s ease-in-out infinite}
+#loading .ring:nth-child(2){width:min(62vw,380px);animation-delay:.5s}
+@keyframes pulse{0%,100%{transform:scale(.94);opacity:.35}50%{transform:scale(1.05);opacity:.85}}
+#brand{position:relative;text-align:center;z-index:2}
+#brand .t1{font-size:clamp(34px,11vw,64px);font-weight:900;letter-spacing:.14em;line-height:1;
+  background:linear-gradient(180deg,#ffffff 30%,var(--aura) 130%);-webkit-background-clip:text;background-clip:text;
+  color:transparent;filter:drop-shadow(0 0 22px rgba(63,224,255,.45))}
+#brand .t2{margin-top:12px;font-size:11px;letter-spacing:.55em;color:var(--aura);opacity:.85;text-transform:uppercase}
+#loadWrap{position:relative;z-index:2;width:min(78vw,340px);text-align:center}
+#loadBarOuter{height:6px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden}
+#loadBar{height:100%;width:0%;border-radius:6px;background:linear-gradient(90deg,var(--aura-2),var(--aura));
+  box-shadow:0 0 16px rgba(63,224,255,.7);transition:width .22s ease}
+#loadTxt{margin-top:12px;font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);min-height:14px}
+#loadPct{margin-top:6px;font-size:10px;letter-spacing:.2em;color:var(--aura);opacity:.75}
+#tapStart{position:absolute;inset:0;z-index:3;display:flex;align-items:flex-end;justify-content:center;
+  padding-bottom:calc(56px + var(--sab));font-size:12px;letter-spacing:.3em;color:var(--white);
+  text-transform:uppercase;animation:blink 1.5s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:.35}50%{opacity:1}}
+
+/* ---------- HUD ---------- */
+#hud{position:absolute;inset:0;pointer-events:none;z-index:50}
+#hud.race-mode{opacity:0;pointer-events:none;transition:opacity .35s ease}
+#hud>*{pointer-events:none}
+.ui-block{pointer-events:auto}
+
+#topbar{position:absolute;top:calc(8px + var(--sat));left:50%;transform:translateX(-50%);
+  display:flex;flex-direction:column;align-items:center;gap:5px;width:min(94vw,460px)}
+#clockRow{display:flex;align-items:center;gap:9px;padding:6px 14px;border-radius:999px;
+  background:rgba(4,12,28,.72);border:1px solid var(--line);backdrop-filter:blur(8px)}
+#clockTime{font-size:14px;font-weight:800;letter-spacing:.06em}
+#clockPhase{font-size:9px;letter-spacing:.2em;color:var(--aura);text-transform:uppercase}
+#nextEvent{display:flex;align-items:center;gap:8px;padding:5px 13px;border-radius:999px;
+  background:rgba(4,12,28,.6);border:1px solid rgba(63,224,255,.24);font-size:10px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted);backdrop-filter:blur(8px)}
+#nextEvent b{color:var(--white);letter-spacing:.1em}
+#nextEvent .cd{color:var(--aura);font-weight:800}
+#nextEvent.open{border-color:var(--ok);}
+#nextEvent.open .cd{color:var(--ok)}
+
+/* left rail: level/xp (middle-left) + buttons */
+#leftRail{position:absolute;left:calc(8px + var(--sal));top:50%;transform:translateY(-50%);
+  display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+#lvlPanel{width:132px;padding:9px 10px;border-radius:12px;background:rgba(4,12,28,.74);
+  border:1px solid var(--line);backdrop-filter:blur(8px)}
+#lvlTop{display:flex;justify-content:space-between;align-items:baseline}
+#lvlNum{font-size:15px;font-weight:900;letter-spacing:.08em}
+#lvlNum span{color:var(--aura)}
+#xpPct{font-size:10px;color:var(--muted);font-weight:700}
+#xpOuter{margin-top:6px;height:5px;border-radius:4px;background:rgba(255,255,255,.09);overflow:hidden}
+#xpBar{height:100%;width:0%;background:linear-gradient(90deg,var(--aura-2),var(--aura));
+  box-shadow:0 0 10px rgba(63,224,255,.6);transition:width .4s ease}
+#pName{margin-top:6px;font-size:9px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rail{display:flex;flex-direction:column;gap:7px}
+.railBtn{width:var(--tap);height:var(--tap);border-radius:13px;border:1px solid var(--line);
+  background:rgba(4,12,28,.74);display:flex;align-items:center;justify-content:center;
+  backdrop-filter:blur(8px);cursor:pointer;position:relative;transition:transform .09s,border-color .18s,background .18s}
+.railBtn:active{transform:scale(.93)}
+.railBtn svg{width:21px;height:21px}
+.railBtn.accent{border-color:rgba(63,224,255,.42);background:rgba(10,35,66,.8)}
+.railBtn .badge{position:absolute;top:-3px;right:-3px;min-width:16px;height:16px;border-radius:9px;
+  background:var(--aura);color:#02121c;font-size:9px;font-weight:900;display:flex;align-items:center;
+  justify-content:center;padding:0 4px;box-shadow:0 0 10px rgba(63,224,255,.7)}
+.railBtn .lockdot{position:absolute;bottom:-2px;right:-2px;width:15px;height:15px;border-radius:50%;
+  background:var(--navy-3);border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
+.railBtn .lockdot svg{width:9px;height:9px}
+
+/* stamina - bottom center */
+#staminaWrap{position:absolute;bottom:calc(10px + var(--sab));left:50%;transform:translateX(-50%);
+  width:min(56vw,230px);text-align:center}
+#stamRow{display:flex;align-items:center;gap:7px;justify-content:center;margin-bottom:4px}
+#stamRow .h-label{font-size:9px}
+#stamVal{font-size:9px;color:var(--aura);font-weight:800;letter-spacing:.1em}
+#stamOuter{height:8px;border-radius:6px;background:rgba(4,12,28,.8);border:1px solid var(--line);
+  overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.4)}
+#stamBar{height:100%;width:100%;border-radius:5px;
+  background:linear-gradient(90deg,var(--aura-2),var(--aura));box-shadow:0 0 12px rgba(63,224,255,.5);
+  transition:width .12s linear,background .3s}
+#stamBar.low{background:linear-gradient(90deg,#c9522f,var(--warn));box-shadow:0 0 12px rgba(255,181,71,.5)}
+
+/* action / prompt */
+#prompt{position:absolute;bottom:calc(52px + var(--sab));left:50%;transform:translateX(-50%);
+  padding:9px 16px;border-radius:11px;background:rgba(4,12,28,.86);border:1px solid rgba(63,224,255,.4);
+  font-size:11px;letter-spacing:.14em;text-transform:uppercase;text-align:center;
+  box-shadow:0 0 26px rgba(63,224,255,.16);animation:floaty 2s ease-in-out infinite}
+@keyframes floaty{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,-4px)}}
+#prompt b{color:var(--aura)}
+
+/* joystick */
+#stick{position:absolute;width:118px;height:118px;border-radius:50%;border:1px solid rgba(63,224,255,.3);
+  background:radial-gradient(circle,rgba(10,30,60,.5),rgba(4,12,28,.24));display:none;z-index:40;
+  transform:translate(-50%,-50%)}
+#stick.on{display:block}
+#knob{position:absolute;left:50%;top:50%;width:50px;height:50px;border-radius:50%;transform:translate(-50%,-50%);
+  background:radial-gradient(circle at 40% 35%,rgba(63,224,255,.95),rgba(10,120,180,.75));
+  box-shadow:0 0 22px rgba(63,224,255,.55)}
+#stickHint{position:absolute;left:calc(14px + var(--sal));bottom:calc(14px + var(--sab));font-size:9px;
+  letter-spacing:.18em;color:rgba(233,244,255,.30);text-transform:uppercase;z-index:39;
+  transition:opacity .6s ease}
+#stickHint.gone{opacity:0}
+#hud.chatting #staminaWrap{opacity:.22;transition:opacity .25s}
+
+/* ---------- RACE UI ---------- */
+#raceHud{position:absolute;inset:0;z-index:60;pointer-events:none;opacity:0;transition:opacity .35s ease}
+#raceHud.on{opacity:1}
+#raceTop{position:absolute;top:calc(10px + var(--sat));left:50%;transform:translateX(-50%);text-align:center}
+#raceDist{font-size:10px;letter-spacing:.36em;color:var(--aura);text-transform:uppercase}
+#raceTime{font-size:clamp(30px,10vw,46px);font-weight:900;letter-spacing:.03em;line-height:1.05;
+  text-shadow:0 4px 24px rgba(0,0,0,.6)}
+#raceSplit{font-size:10px;letter-spacing:.2em;color:var(--muted)}
+#racePos{position:absolute;top:calc(14px + var(--sat));left:calc(12px + var(--sal));text-align:center;
+  padding:7px 11px;border-radius:12px;background:rgba(4,12,28,.62);border:1px solid var(--line)}
+#racePosNum{font-size:24px;font-weight:900;line-height:1}
+#racePosNum small{font-size:11px}
+#racePosLbl{font-size:8px;letter-spacing:.2em;color:var(--muted)}
+#raceMeta{position:absolute;top:calc(14px + var(--sat));right:calc(12px + var(--sar));text-align:right;
+  padding:7px 11px;border-radius:12px;background:rgba(4,12,28,.62);border:1px solid var(--line)}
+#raceSpd{font-size:20px;font-weight:900;line-height:1}
+#raceSpd small{font-size:9px;color:var(--muted)}
+#raceLeft{font-size:9px;letter-spacing:.14em;color:var(--aura);margin-top:2px}
+
+/* cadence meter */
+#cadWrap{position:absolute;bottom:calc(96px + var(--sab));left:50%;transform:translateX(-50%);width:min(70vw,300px)}
+#cadLbls{display:flex;justify-content:space-between;font-size:8px;letter-spacing:.18em;color:var(--muted);
+  text-transform:uppercase;margin-bottom:3px}
+#cadTrack{position:relative;height:10px;border-radius:6px;background:rgba(4,12,28,.85);
+  border:1px solid var(--line);overflow:hidden}
+#cadZone{position:absolute;top:0;bottom:0;background:rgba(72,224,138,.24);border-left:1px solid rgba(72,224,138,.6);
+  border-right:1px solid rgba(72,224,138,.6);transition:left .3s,width .3s}
+#cadFill{position:absolute;top:0;bottom:0;left:0;width:0%;background:linear-gradient(90deg,var(--aura-2),var(--aura));
+  opacity:.55}
+#cadNeedle{position:absolute;top:-3px;bottom:-3px;width:3px;border-radius:2px;background:var(--white);
+  box-shadow:0 0 12px rgba(255,255,255,.9);transition:left .06s linear}
+#rhythmRow{display:flex;justify-content:space-between;align-items:center;margin-top:5px}
+#rhythmTxt{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+#rhythmTxt b{color:var(--aura)}
+#raceStam{position:absolute;bottom:calc(72px + var(--sab));left:50%;transform:translateX(-50%);
+  width:min(70vw,300px);height:6px;border-radius:5px;background:rgba(4,12,28,.85);border:1px solid var(--line);overflow:hidden}
+#raceStamBar{height:100%;width:100%;background:linear-gradient(90deg,var(--aura-2),var(--aura));transition:width .12s linear}
+#raceStamBar.low{background:linear-gradient(90deg,#c9522f,var(--warn))}
+
+/* tap zones */
+#tapZones{position:absolute;inset:0;z-index:55;display:none}
+#tapZones.on{display:block}
+.tz{position:absolute;top:0;bottom:0;width:50%;display:flex;align-items:flex-end;justify-content:center;
+  padding-bottom:calc(16px + var(--sab));pointer-events:auto}
+#tzL{left:0}#tzR{right:0}
+.tz .tzTag{font-size:10px;letter-spacing:.3em;color:rgba(233,244,255,.28);text-transform:uppercase;
+  padding:8px 14px;border-radius:10px;border:1px solid rgba(63,224,255,.14);transition:.12s}
+.tz.flash .tzTag{color:#02121c;background:var(--aura);border-color:var(--aura);
+  box-shadow:0 0 26px rgba(63,224,255,.6)}
+.tz.next .tzTag{border-color:rgba(63,224,255,.55);color:var(--aura)}
+#tzMid{position:absolute;left:50%;top:22%;bottom:22%;width:1px;background:linear-gradient(180deg,
+  transparent,rgba(63,224,255,.22),transparent)}
+#dipBtn{position:absolute;bottom:calc(120px + var(--sab));left:50%;transform:translateX(-50%);
+  z-index:58;padding:14px 26px;border-radius:14px;font-size:14px;letter-spacing:.24em;font-weight:900;
+  background:linear-gradient(180deg,var(--gold),#e29b12);color:#241a00;border:none;
+  box-shadow:0 0 34px rgba(255,215,94,.5);animation:dipPulse .6s ease-in-out infinite;display:none}
+#dipBtn.on{display:block}
+@keyframes dipPulse{0%,100%{transform:translateX(-50%) scale(1)}50%{transform:translateX(-50%) scale(1.07)}}
+
+/* big centered race text */
+#bigText{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);z-index:70;text-align:center;
+  pointer-events:none;opacity:0}
+#bigText.show{animation:bigIn .5s cubic-bezier(.2,.9,.25,1) forwards}
+@keyframes bigIn{0%{opacity:0;transform:translate(-50%,-50%) scale(1.35)}
+  18%{opacity:1;transform:translate(-50%,-50%) scale(1)}80%{opacity:1}100%{opacity:0}}
+#bigText .bt{font-size:clamp(28px,10vw,52px);font-weight:900;letter-spacing:.16em;text-transform:uppercase;
+  text-shadow:0 0 34px rgba(63,224,255,.55),0 6px 20px rgba(0,0,0,.6)}
+#bigText .bs{margin-top:6px;font-size:11px;letter-spacing:.3em;color:var(--muted);text-transform:uppercase}
+#bigText.go .bt{color:var(--aura)}
+#bigText.bad .bt{color:var(--bad)}
+
+/* ---------- RESULTS ---------- */
+#results{position:absolute;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;
+  padding:calc(14px + var(--sat)) 14px calc(14px + var(--sab));background:rgba(2,7,16,.82);backdrop-filter:blur(10px)}
+#resCard{width:min(94vw,400px);max-height:100%;overflow:auto;padding:20px 18px;text-align:center;
+  animation:resIn .45s cubic-bezier(.2,.9,.25,1)}
+@keyframes resIn{0%{opacity:0;transform:translateY(24px) scale(.96)}100%{opacity:1;transform:none}}
+#resTitle{font-size:11px;letter-spacing:.42em;color:var(--aura);text-transform:uppercase}
+#resPos{margin-top:8px;font-size:clamp(38px,13vw,58px);font-weight:900;line-height:1}
+#resPos small{font-size:16px;color:var(--muted)}
+#resPbTag{display:none;margin:10px auto 0;padding:7px 14px;border-radius:9px;font-size:11px;font-weight:900;
+  letter-spacing:.2em;background:linear-gradient(90deg,var(--gold),#f0a52c);color:#241a00;
+  box-shadow:0 0 26px rgba(255,215,94,.45)}
+#resPbTag.on{display:inline-block;animation:pbPop .6s ease}
+@keyframes pbPop{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}
+#resTime{margin-top:14px;font-size:clamp(30px,11vw,44px);font-weight:900;letter-spacing:.02em;color:var(--white)}
+#resTimeLbl{font-size:9px;letter-spacing:.26em;color:var(--muted);text-transform:uppercase}
+.resGrid{margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.resCell{padding:9px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid var(--line)}
+.resCell .k{font-size:8px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase}
+.resCell .v{margin-top:3px;font-size:15px;font-weight:800}
+.resCell .v.up{color:var(--aura)}
+#resTable{margin-top:14px;text-align:left}
+#resTable .row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;font-size:12px}
+#resTable .row.me{background:rgba(63,224,255,.13);border:1px solid rgba(63,224,255,.35)}
+#resTable .row .p{width:22px;font-weight:900;color:var(--muted)}
+#resTable .row.me .p{color:var(--aura)}
+#resTable .row .n{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#resTable .row .t{font-weight:800;letter-spacing:.02em}
+#resXpBarOuter{margin-top:12px;height:6px;border-radius:5px;background:rgba(255,255,255,.08);overflow:hidden}
+#resXpBar{height:100%;width:0%;background:linear-gradient(90deg,var(--aura-2),var(--aura));transition:width .9s cubic-bezier(.2,.9,.25,1)}
+#resLvlTxt{margin-top:5px;font-size:9px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase}
+#resBtns{margin-top:16px;display:flex;gap:8px}
+#resBtns .btn{flex:1}
+
+/* ---------- MODALS ---------- */
+.modal{position:absolute;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;
+  padding:calc(12px + var(--sat)) 12px calc(12px + var(--sab));background:rgba(2,7,16,.7);backdrop-filter:blur(8px)}
+.sheet{width:min(94vw,430px);max-height:100%;display:flex;flex-direction:column;overflow:hidden;
+  animation:sheetIn .28s cubic-bezier(.2,.9,.25,1)}
+@keyframes sheetIn{0%{opacity:0;transform:translateY(20px)}100%{opacity:1;transform:none}}
+.sheetHead{display:flex;align-items:center;gap:10px;padding:14px 15px;border-bottom:1px solid var(--line)}
+.sheetHead .ttl{flex:1;font-size:13px;font-weight:900;letter-spacing:.22em;text-transform:uppercase}
+.sheetHead .sub{font-size:9px;letter-spacing:.16em;color:var(--muted);text-transform:uppercase}
+.xBtn{width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.05);
+  display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--muted);cursor:pointer}
+.xBtn:active{transform:scale(.92)}
+.sheetBody{padding:13px 15px 16px;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y}
+.rowItem{display:flex;align-items:center;gap:11px;padding:11px;border-radius:12px;background:rgba(255,255,255,.035);
+  border:1px solid var(--line);margin-bottom:8px}
+.rowItem .ico{width:40px;height:40px;border-radius:11px;background:rgba(63,224,255,.11);
+  display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:var(--aura);flex:0 0 auto}
+.rowItem .mid{flex:1;min-width:0}
+.rowItem .nm{font-size:13px;font-weight:800;letter-spacing:.06em}
+.rowItem .dt{font-size:9px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase;margin-top:2px}
+.rowItem .rt{text-align:right;flex:0 0 auto}
+.rowItem .cd2{font-size:13px;font-weight:900;color:var(--aura)}
+.rowItem.live{border-color:rgba(72,224,138,.5);background:rgba(72,224,138,.07)}
+.rowItem.live .cd2{color:var(--ok)}
+.pill{display:inline-block;padding:3px 8px;border-radius:7px;font-size:8px;letter-spacing:.16em;font-weight:900;
+  text-transform:uppercase;border:1px solid var(--line);color:var(--muted)}
+.pill.live{background:var(--ok);color:#032b13;border-color:var(--ok)}
+.pill.open{background:rgba(63,224,255,.2);color:var(--aura);border-color:rgba(63,224,255,.5)}
+.tabs{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;padding-bottom:2px;touch-action:pan-x}
+.tab{flex:0 0 auto;padding:8px 13px;border-radius:9px;border:1px solid var(--line);background:rgba(255,255,255,.03);
+  font-size:11px;font-weight:800;letter-spacing:.1em;color:var(--muted);cursor:pointer}
+.tab.on{background:rgba(63,224,255,.16);border-color:rgba(63,224,255,.5);color:var(--aura)}
+.lbRow{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;margin-bottom:5px;
+  background:rgba(255,255,255,.03);border:1px solid transparent;font-size:13px}
+.lbRow.me{background:rgba(63,224,255,.14);border-color:rgba(63,224,255,.45);box-shadow:0 0 20px rgba(63,224,255,.14)}
+.lbRow .rk{width:26px;font-weight:900;color:var(--muted);font-size:12px}
+.lbRow.me .rk{color:var(--aura)}
+.lbRow .rk.g1{color:var(--gold)}.lbRow .rk.g2{color:#cfd8e6}.lbRow .rk.g3{color:#d09a63}
+.lbRow .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
+.lbRow .tm{font-weight:900;letter-spacing:.02em}
+.setRow{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid rgba(29,58,104,.55)}
+.setRow:last-child{border-bottom:none}
+.setRow .lbl{flex:1}
+.setRow .lbl .n{font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+.setRow .lbl .d{font-size:9px;color:var(--muted);letter-spacing:.06em;margin-top:2px}
+.seg{display:flex;gap:4px;background:rgba(0,0,0,.28);padding:3px;border-radius:10px;border:1px solid var(--line)}
+.seg button{border:none;background:transparent;color:var(--muted);font:inherit;font-size:10px;font-weight:800;
+  letter-spacing:.08em;text-transform:uppercase;padding:8px 10px;border-radius:8px;cursor:pointer;min-height:34px}
+.seg button.on{background:rgba(63,224,255,.2);color:var(--aura)}
+input[type=range]{-webkit-appearance:none;appearance:none;width:112px;height:22px;background:transparent}
+input[type=range]::-webkit-slider-runnable-track{height:5px;border-radius:4px;background:rgba(255,255,255,.14)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:19px;height:19px;border-radius:50%;
+  background:var(--aura);margin-top:-7px;box-shadow:0 0 12px rgba(63,224,255,.7)}
+input[type=range]::-moz-range-track{height:5px;border-radius:4px;background:rgba(255,255,255,.14)}
+input[type=range]::-moz-range-thumb{width:19px;height:19px;border:none;border-radius:50%;background:var(--aura)}
+.soonBox{text-align:center;padding:26px 16px}
+.soonBox .big{font-size:14px;font-weight:900;letter-spacing:.24em;color:var(--aura);text-transform:uppercase}
+.soonBox .sm{margin-top:9px;font-size:11px;color:var(--muted);line-height:1.6}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.distBtn{padding:14px 6px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.04);
+  text-align:center;cursor:pointer;transition:.15s}
+.distBtn:active{transform:scale(.96)}
+.distBtn .d1{font-size:19px;font-weight:900;letter-spacing:.04em}
+.distBtn .d2{font-size:8px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;margin-top:3px}
+.distBtn .d3{font-size:10px;color:var(--aura);margin-top:4px;font-weight:800}
+.note{margin-top:10px;font-size:9px;line-height:1.6;color:var(--muted);letter-spacing:.04em;text-align:center}
+
+/* ---------- CHAT ---------- */
+#chatPanel{position:absolute;left:calc(8px + var(--sal));bottom:calc(8px + var(--sab));z-index:70;
+  width:min(74vw,300px);display:flex;flex-direction:column;gap:6px}
+#chatLog{max-height:min(34vh,190px);overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  touch-action:pan-y;display:flex;flex-direction:column;gap:4px;padding:9px;border-radius:12px;
+  background:rgba(3,9,22,.76);border:1px solid var(--line);backdrop-filter:blur(8px)}
+#chatLog::-webkit-scrollbar{width:0}
+.msg{font-size:11px;line-height:1.42;word-break:break-word}
+.msg .who{font-weight:900;letter-spacing:.04em}
+.msg .who.me{color:var(--aura)}
+.msg .who.sys{color:var(--warn)}
+.msg .tx{color:#cfe0f4}
+.msg.sys .tx{color:var(--warn);opacity:.9;font-style:italic}
+#chatInputRow{display:flex;gap:6px}
+#chatInput{flex:1;min-width:0;height:40px;border-radius:11px;border:1px solid var(--line);
+  background:rgba(3,9,22,.85);color:var(--white);padding:0 11px;font:inherit;font-size:13px;outline:none;
+  -webkit-user-select:text;user-select:text}
+#chatInput::placeholder{color:#5f7a9b}
+#chatSend{width:44px;height:40px;border-radius:11px;border:none;background:rgba(63,224,255,.2);
+  color:var(--aura);font-size:16px;cursor:pointer}
+#chatFloat{position:absolute;left:calc(8px + var(--sal));bottom:calc(108px + var(--sab));z-index:69;
+  width:min(74vw,300px);display:flex;flex-direction:column;gap:3px;pointer-events:none}
+.floatMsg{font-size:11px;padding:5px 9px;border-radius:9px;background:rgba(3,9,22,.62);
+  border:1px solid rgba(29,58,104,.7);align-self:flex-start;max-width:100%;
+  animation:fadeUp .35s ease;backdrop-filter:blur(6px)}
+@keyframes fadeUp{0%{opacity:0;transform:translateY(8px)}100%{opacity:1;transform:none}}
+
+/* ---------- TOAST ---------- */
+#toastWrap{position:absolute;top:calc(76px + var(--sat));left:50%;transform:translateX(-50%);z-index:110;
+  display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none;width:min(90vw,380px)}
+.toast{padding:9px 15px;border-radius:11px;background:rgba(6,18,38,.92);border:1px solid rgba(63,224,255,.35);
+  font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:800;text-align:center;
+  box-shadow:0 8px 28px rgba(0,0,0,.5);animation:tIn .3s ease}
+.toast.good{border-color:rgba(72,224,138,.5);color:var(--ok)}
+.toast.warn{border-color:rgba(255,181,71,.5);color:var(--warn)}
+@keyframes tIn{0%{opacity:0;transform:translateY(-10px)}100%{opacity:1;transform:none}}
+
+/* ---------- FIRST RUN / NAME ---------- */
+#nameCard{width:min(92vw,360px);padding:22px 18px;text-align:center}
+#nameCard .t{font-size:13px;font-weight:900;letter-spacing:.24em;text-transform:uppercase}
+#nameCard .s{margin-top:8px;font-size:11px;color:var(--muted);line-height:1.6}
+#nameInput{margin-top:15px;width:100%;height:46px;border-radius:12px;border:1px solid var(--line);
+  background:rgba(3,9,22,.9);color:var(--white);text-align:center;font:inherit;font-size:16px;
+  font-weight:800;letter-spacing:.12em;outline:none;-webkit-user-select:text;user-select:text}
+#nameInput:focus{border-color:var(--aura)}
+#gBtn{margin-top:9px;width:100%;opacity:.6}
+#nameGo{margin-top:9px;width:100%}
+.fine{margin-top:12px;font-size:9px;color:var(--grey);line-height:1.6;letter-spacing:.02em}
+#fpsTag{position:absolute;right:calc(8px + var(--sar));bottom:calc(8px + var(--sab));z-index:45;
+  font-size:9px;letter-spacing:.1em;color:rgba(233,244,255,.3);pointer-events:none}
+@media (max-height:560px){
+  #leftRail{top:auto;bottom:calc(64px + var(--sab));transform:none}
+  #lvlPanel{width:118px}
+  .railBtn{width:40px;height:40px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="cv"></canvas>
+
+  <!-- ============ HUD (hidden during races) ============ -->
+  <div id="hud">
+    <div id="topbar">
+      <div id="clockRow" class="ui-block">
+        <div id="clockTime" class="mono">--:--</div>
+        <div id="clockPhase">day</div>
+      </div>
+      <div id="nextEvent" class="ui-block"><b id="neName">--</b><span class="cd mono" id="neCd">--:--:--</span></div>
+    </div>
+
+    <div id="leftRail">
+      <div id="lvlPanel" class="ui-block">
+        <div id="lvlTop"><div id="lvlNum">LVL <span>1</span></div><div id="xpPct">0%</div></div>
+        <div id="xpOuter"><div id="xpBar"></div></div>
+        <div id="pName">RUNNER</div>
+      </div>
+      <div class="rail">
+        <div class="railBtn ui-block accent" id="btnRace" aria-label="Events">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#3fe0ff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 3v18"/><path d="M5 4h11l-2 3 2 3H5"/><circle cx="17" cy="17" r="3"/></svg>
+        </div>
+        <div class="railBtn ui-block" id="btnBoard" aria-label="Leaderboards">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#e9f4ff" stroke-width="1.9" stroke-linecap="round">
+            <path d="M4 20V11"/><path d="M12 20V4"/><path d="M20 20v-6"/></svg>
+        </div>
+        <div class="railBtn ui-block" id="btnChat" aria-label="Chat">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#e9f4ff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>
+          <div class="badge hidden" id="chatBadge">1</div>
+        </div>
+        <div class="railBtn ui-block" id="btnInv" aria-label="Inventory (coming soon)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#9aa7b8" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 8h18v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M8 8V6a4 4 0 0 1 8 0v2"/></svg>
+          <div class="lockdot"><svg viewBox="0 0 24 24" fill="none" stroke="#9aa7b8" stroke-width="2.6">
+            <rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+        </div>
+        <div class="railBtn ui-block" id="btnSet" aria-label="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#9aa7b8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3.1"/>
+            <path d="M19.4 15a1.6 1.6 0 0 0 .32 1.77l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.6 1.6 0 0 0-1.77-.32 1.6 1.6 0 0 0-.97 1.47V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1.05-1.47 1.6 1.6 0 0 0-1.77.32l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.6 1.6 0 0 0 .32-1.77 1.6 1.6 0 0 0-1.47-.97H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.47-1.05 1.6 1.6 0 0 0-.32-1.77l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.6 1.6 0 0 0 1.77.32H9a1.6 1.6 0 0 0 .97-1.47V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 .97 1.47 1.6 1.6 0 0 0 1.77-.32l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.6 1.6 0 0 0-.32 1.77V9a1.6 1.6 0 0 0 1.47.97H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5.97z"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <div id="staminaWrap">
+      <div id="stamRow"><div class="h-label">Stamina</div><div id="stamVal" class="mono">100</div></div>
+      <div id="stamOuter"><div id="stamBar"></div></div>
+    </div>
+
+    <div id="prompt" class="hidden ui-block"></div>
+    <div id="stickHint">Drag here to move</div>
+  </div>
+
+  <div id="stick"><div id="knob"></div></div>
+  <div id="fpsTag" class="mono"></div>
+  <div id="chatFloat"></div>
+
+  <!-- ============ RACE UI (only race-essential info) ============ -->
+  <div id="raceHud">
+    <div id="raceTop">
+      <div id="raceDist">100M</div>
+      <div id="raceTime" class="mono">0.00</div>
+      <div id="raceSplit" class="mono">READY</div>
+    </div>
+    <div id="racePos"><div id="racePosNum" class="mono">1<small>st</small></div><div id="racePosLbl">Pos</div></div>
+    <div id="raceMeta"><div id="raceSpd" class="mono">0.0<small> m/s</small></div><div id="raceLeft" class="mono">100 m</div></div>
+    <div id="cadWrap">
+      <div id="cadLbls"><span>Cadence</span><span id="cadNum" class="mono">0.0</span></div>
+      <div id="cadTrack"><div id="cadZone"></div><div id="cadFill"></div><div id="cadNeedle"></div></div>
+      <div id="rhythmRow"><div id="rhythmTxt">Rhythm <b>--</b></div><div id="phaseTxt" class="h-label">DRIVE</div></div>
+    </div>
+    <div id="raceStam"><div id="raceStamBar"></div></div>
+  </div>
+
+  <div id="tapZones">
+    <div class="tz" id="tzL"><div class="tzTag">TAP L</div></div>
+    <div class="tz" id="tzR"><div class="tzTag">TAP R</div></div>
+    <div id="tzMid"></div>
+  </div>
+  <button id="dipBtn">DIP</button>
+  <div id="bigText"><div class="bt"></div><div class="bs"></div></div>
+
+  <!-- ============ RESULTS ============ -->
+  <div id="results" class="hidden">
+    <div id="resCard" class="card">
+      <div id="resTitle">Race Complete</div>
+      <div id="resPos" class="mono">1<small>st</small></div>
+      <div id="resPbTag">NEW PERSONAL BEST!</div>
+      <div id="resTimeLbl">Official Time</div>
+      <div id="resTime" class="mono">0.00</div>
+      <div class="resGrid">
+        <div class="resCell"><div class="k">Event</div><div class="v" id="resEvent">100M</div></div>
+        <div class="resCell"><div class="k">XP Gained</div><div class="v up" id="resXp">+0</div></div>
+        <div class="resCell"><div class="k">Personal Best</div><div class="v" id="resPb">--</div></div>
+        <div class="resCell"><div class="k">Top Speed</div><div class="v" id="resTop">0.0</div></div>
+      </div>
+      <div id="resTable"></div>
+      <div id="resXpBarOuter"><div id="resXpBar"></div></div>
+      <div id="resLvlTxt">LVL 1 - 0 / 100 XP</div>
+      <div id="resBtns">
+        <button class="btn ghost" id="resExit">Exit</button>
+        <button class="btn primary" id="resAgain">Race Again</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ EVENTS / RACE ENTRY ============ -->
+  <div class="modal hidden" id="mEvents">
+    <div class="sheet card">
+      <div class="sheetHead">
+        <div><div class="ttl">Events</div><div class="sub" id="evClock">Local time --:--</div></div>
+        <div class="xBtn" data-close="mEvents">&#10005;</div>
+      </div>
+      <div class="sheetBody">
+        <div class="h-label" style="margin-bottom:8px">Scheduled - Live Clock</div>
+        <div id="evList"></div>
+        <div class="h-label" style="margin:14px 0 8px">Open Track - Race Any Distance</div>
+        <div class="grid2" id="distGrid"></div>
+        <div class="note">Scheduled events award bonus XP. Open track races are always available for practice.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ LEADERBOARD ============ -->
+  <div class="modal hidden" id="mBoard">
+    <div class="sheet card">
+      <div class="sheetHead">
+        <div><div class="ttl">Leaderboards</div><div class="sub">Track Stars - Facility Records</div></div>
+        <div class="xBtn" data-close="mBoard">&#10005;</div>
+      </div>
+      <div class="sheetBody">
+        <div class="tabs" id="lbTabs"></div>
+        <div id="lbList"></div>
+        <div class="note" id="lbNote">Local records. Online leaderboards arrive with the Track Stars server update.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SETTINGS ============ -->
+  <div class="modal hidden" id="mSet">
+    <div class="sheet card">
+      <div class="sheetHead">
+        <div><div class="ttl">Settings</div><div class="sub">Track Stars v1.0</div></div>
+        <div class="xBtn" data-close="mSet">&#10005;</div>
+      </div>
+      <div class="sheetBody">
+        <div class="setRow">
+          <div class="lbl"><div class="n">Sounds</div><div class="d">Master volume</div></div>
+          <input type="range" id="setVol" min="0" max="100" step="1">
+        </div>
+        <div class="setRow">
+          <div class="lbl"><div class="n">Graphics</div><div class="d">Visual quality</div></div>
+          <div class="seg" id="setGfx"><button data-v="low">Low</button><button data-v="med">Med</button><button data-v="high">High</button></div>
+        </div>
+        <div class="setRow">
+          <div class="lbl"><div class="n">Optimizations</div><div class="d">Frame target &amp; effects</div></div>
+          <div class="seg" id="setOpt"><button data-v="battery">Battery</button><button data-v="balanced">Balanced</button><button data-v="perf">Max FPS</button></div>
+        </div>
+        <div class="setRow">
+          <div class="lbl"><div class="n">Crowd</div><div class="d">Stadium spectators</div></div>
+          <div class="seg" id="setCrowd"><button data-v="off">Off</button><button data-v="on">On</button></div>
+        </div>
+        <div class="setRow">
+          <div class="lbl"><div class="n">FPS Counter</div><div class="d">Show performance</div></div>
+          <div class="seg" id="setFps"><button data-v="off">Off</button><button data-v="on">On</button></div>
+        </div>
+        <div class="setRow">
+          <div class="lbl"><div class="n">Athlete</div><div class="d" id="setNameCur">RUNNER</div></div>
+          <button class="btn ghost" id="setRename" style="min-height:38px">Rename</button>
+        </div>
+        <div class="setRow">
+          <div class="lbl"><div class="n">Save Data</div><div class="d">Progress is stored on this device</div></div>
+          <button class="btn ghost" id="setWipe" style="min-height:38px;border-color:#5d2632;color:#ff8f9c">Reset</button>
+        </div>
+        <div class="note">Track Stars V1.0 prototype - progression saves locally via localStorage. Online accounts, servers and cloud saves arrive in a future update.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ INVENTORY (LOCKED) ============ -->
+  <div class="modal hidden" id="mInv">
+    <div class="sheet card">
+      <div class="sheetHead">
+        <div><div class="ttl">Inventory</div><div class="sub">Locked</div></div>
+        <div class="xBtn" data-close="mInv">&#10005;</div>
+      </div>
+      <div class="sheetBody">
+        <div class="soonBox">
+          <svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="#3fe0ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:.8">
+            <rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+          <div class="big" style="margin-top:14px">Coming Soon</div>
+          <div class="sm">Spikes, kits and athlete gear are not part of V1.0.<br>Keep racing - your progression carries over.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ CHAT ============ -->
+  <div id="chatPanel" class="hidden">
+    <div id="chatLog" class="ui-block"></div>
+    <div id="chatInputRow" class="ui-block">
+      <input id="chatInput" type="text" maxlength="90" placeholder="Say something..." autocomplete="off" autocorrect="off" spellcheck="false">
+      <button id="chatSend">&#10148;</button>
+    </div>
+  </div>
+
+  <div id="toastWrap"></div>
+
+  <!-- ============ FIRST RUN IDENTITY ============ -->
+  <div class="modal hidden" id="mName">
+    <div id="nameCard" class="card">
+      <div class="t">Create Athlete</div>
+      <div class="s">Pick a name for the track. This V1.0 prototype uses a local athlete profile stored on this device.</div>
+      <input id="nameInput" type="text" maxlength="14" placeholder="ATHLETE" autocomplete="off" autocorrect="off" spellcheck="false">
+      <button class="btn primary" id="nameGo">Enter The Track</button>
+      <button class="btn ghost lock" id="gBtn" disabled>Continue with Google - Coming Soon</button>
+      <div class="fine">No password is ever requested or stored. Google sign-in will be added once Track Stars has a real backend; your local profile will migrate to it.</div>
+    </div>
+  </div>
+
+  <!-- ============ LOADING ============ -->
+  <div id="loading">
+    <div class="ring"></div><div class="ring"></div>
+    <div id="brand">
+      <div class="t1">TRACK STARS</div>
+      <div class="t2">Athletics</div>
+    </div>
+    <div id="loadWrap">
+      <div id="loadBarOuter"><div id="loadBar"></div></div>
+      <div id="loadTxt">Booting...</div>
+      <div id="loadPct" class="mono">0%</div>
+    </div>
+    <div id="tapStart" class="hidden">Tap to enter</div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ==================================================================
+   TRACK STARS V1.0
+   Single-file mobile track & field prototype.
+
+   SYSTEM MAP
+     CFG / Util .......... constants + math helpers
+     SaveSystem .......... localStorage persistence (backend-ready shape)
+     Account ............. local athlete identity (Google OAuth ready)
+     Audio ............... WebAudio generated SFX (no external assets)
+     TimeSystem .......... real device clock -> day/night lighting
+     Track ............... oval geometry + lane path math
+     World ............... static stadium geometry build
+     Renderer ............ custom 3D projection + painter renderer (Canvas2D)
+     AnimationSystem ..... procedural runner skeleton & pose blending
+     Entity/Player/Bot ... athletes in the world
+     Net ................. multiplayer abstraction (local sim -> WebSocket later)
+     Race ................ start sequence, tap physics, finishing, results
+     EventSystem ......... real-clock scheduled events
+     Leaderboard ......... per-distance records
+     Chat ................ player + contextual bot dialogue
+     Input ............... touch/mouse/keyboard
+     UI .................. HUD + panels
+     Game ................ the loop
+   ================================================================== */
+
+/* ========== 1. CONFIG + UTIL ========================================= */
+const CFG = {
+  VERSION: '1.0.0',
+  SAVE_KEY: 'trackstars_save_v1',
+  DISTANCES: [60, 100, 200, 300, 400, 500],
+  TRACK: { STRAIGHT: 100, INNER_R: 31.83, LANE_W: 1.22, LANES: 8 },
+  MAX_BOTS: 12,          // world population (2-20 player server target)
+  FAR: 260,              // draw distance (m)
+  RUN: {
+    IDEAL_LO: 3.6, IDEAL_HI: 5.0,   // steps/sec sweet spot at top speed
+    STRIDE: 2.28,                   // metres per step at perfect form
+    V_CAP: 12.2                     // hard speed ceiling (m/s)
+  }
+};
+
+const TAU = Math.PI * 2;
+const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+const lerp = (a, b, t) => a + (b - a) * t;
+/** frame-rate independent smoothing */
+const damp = (a, b, l, dt) => lerp(a, b, 1 - Math.exp(-l * dt));
+const rand = (a, b) => a + Math.random() * (b - a);
+const randi = (a, b) => Math.floor(a + Math.random() * (b - a + 1));
+const pick = a => a[(Math.random() * a.length) | 0];
+const chance = p => Math.random() < p;
+
+function fmtRaceTime(s) {
+  if (s == null || !isFinite(s)) return '--.--';
+  if (s < 60) return s.toFixed(2);
+  const m = Math.floor(s / 60);
+  const r = s - m * 60;
+  return m + ':' + (r < 10 ? '0' : '') + r.toFixed(2);
+}
+function fmtCountdown(ms) {
+  if (ms < 0) ms = 0;
+  const t = Math.floor(ms / 1000);
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+  const p = n => (n < 10 ? '0' : '') + n;
+  return (h > 0 ? p(h) + ':' : '') + p(m) + ':' + p(s);
+}
+const ORD = n => (n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th');
+
+/* colour helper: colours are [r,g,b] with an id for cache keys */
+let _cid = 0;
+function C(r, g, b) { const a = [r, g, b]; a.id = _cid++; return a; }
+const _cssCache = new Map();
+function rgbCSS(r, g, b) {
+  const k = (r << 16) | (g << 8) | b;
+  let s = _cssCache.get(k);
+  if (!s) { if (_cssCache.size > 6000) _cssCache.clear(); s = 'rgb(' + r + ',' + g + ',' + b + ')'; _cssCache.set(k, s); }
+  return s;
+}
+
+/* ========== 2. SAVE SYSTEM ==========================================
+   Local persistence for the standalone prototype. The payload shape is
+   deliberately backend-shaped (profile / records / settings) so a real
+   server sync can replace load()/save() without touching game code.     */
+const SaveSystem = {
+  data: null,
+  defaults() {
+    return {
+      version: CFG.VERSION,
+      profile: { id: null, name: null, authProvider: 'local', level: 1, xp: 0, created: Date.now(), races: 0, wins: 0, podiums: 0, distanceRun: 0 },
+      records: {},          // { '100': seconds }
+      history: [],          // last 25 races
+      leaderboards: null,   // seeded local boards
+      settings: { volume: 0.6, gfx: 'med', opt: 'balanced', crowd: 'on', fps: 'off' },
+      lastSeen: Date.now()
+    };
+  },
+  load() {
+    let d = null;
+    try {
+      const raw = localStorage.getItem(CFG.SAVE_KEY);
+      if (raw) d = JSON.parse(raw);
+    } catch (e) { d = null; }
+    const def = this.defaults();
+    if (!d || typeof d !== 'object') d = def;
+    // shallow migration - keep unknown/legacy keys harmless
+    d.profile = Object.assign(def.profile, d.profile || {});
+    d.settings = Object.assign(def.settings, d.settings || {});
+    d.records = d.records || {};
+    d.history = Array.isArray(d.history) ? d.history : [];
+    d.version = CFG.VERSION;
+    this.data = d;
+    return d;
+  },
+  save() {
+    if (!this.data) return;
+    this.data.lastSeen = Date.now();
+    try { localStorage.setItem(CFG.SAVE_KEY, JSON.stringify(this.data)); }
+    catch (e) { /* private mode / quota - game still runs this session */ }
+  },
+  wipe() { try { localStorage.removeItem(CFG.SAVE_KEY); } catch (e) {} }
+};
+
+/* ========== 3. ACCOUNT =============================================
+   V1.0 uses a local athlete identity. Nothing is sent anywhere and no
+   password is ever requested. signInWithGoogle() is a stub with the
+   exact call-site a future OAuth flow plugs into.                      */
+const Account = {
+  get profile() { return SaveSystem.data.profile; },
+  isNew() { return !this.profile.name; },
+  createLocal(name) {
+    const p = this.profile;
+    p.name = (name || 'ATHLETE').trim().slice(0, 14).toUpperCase() || 'ATHLETE';
+    p.id = p.id || ('local-' + Math.random().toString(36).slice(2, 10));
+    p.authProvider = 'local';
+    SaveSystem.save();
+  },
+  rename(name) { this.createLocal(name); },
+  /** FUTURE: replace with Google Identity Services token exchange.
+      The server would return { id, name, provider:'google' } and the
+      local profile above would migrate to it. Never collect passwords. */
+  signInWithGoogle() { return Promise.reject(new Error('Google sign-in requires the Track Stars backend (not available in the standalone prototype).')); },
+  xpForLevel(l) { return Math.round(200 + (l - 1) * 140 + Math.pow(l - 1, 1.7) * 30); },
+  addXP(amount) {
+    const p = this.profile;
+    p.xp += amount;
+    let leveled = 0;
+    while (p.xp >= this.xpForLevel(p.level)) { p.xp -= this.xpForLevel(p.level); p.level++; leveled++; }
+    SaveSystem.save();
+    return leveled;
+  },
+  levelProgress() {
+    const p = this.profile, need = this.xpForLevel(p.level);
+    return { have: p.xp, need, pct: clamp(p.xp / need, 0, 1) };
+  }
+};
+
+/* ========== 4. AUDIO ================================================
+   All effects are generated with WebAudio - no external files, so the
+   game stays a single portable HTML document.                          */
+const Audio2 = {
+  ctx: null, master: null, ready: false, vol: 0.6, noiseBuf: null,
+  init() {
+    if (this.ready) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    try {
+      this.ctx = new AC();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = this.vol;
+      this.master.connect(this.ctx.destination);
+      // small reusable noise buffer (footsteps, gun, crowd)
+      const n = this.ctx.sampleRate * 0.5;
+      this.noiseBuf = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
+      const d = this.noiseBuf.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      this.ready = true;
+    } catch (e) { this.ready = false; }
+  },
+  resume() { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); },
+  setVolume(v) { this.vol = clamp(v, 0, 1); if (this.master) this.master.gain.value = this.vol; },
+  tone(freq, dur, type, gain, slideTo) {
+    if (!this.ready || this.vol <= 0) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+    o.type = type || 'sine';
+    o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.001, gain || 0.2), t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(this.master);
+    o.start(t); o.stop(t + dur + 0.02);
+  },
+  noise(dur, gain, filterHz, q) {
+    if (!this.ready || this.vol <= 0) return;
+    const t = this.ctx.currentTime;
+    const s = this.ctx.createBufferSource(); s.buffer = this.noiseBuf;
+    const f = this.ctx.createBiquadFilter(); f.type = 'bandpass';
+    f.frequency.value = filterHz || 900; f.Q.value = q || 1;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(gain || 0.2, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    s.connect(f); f.connect(g); g.connect(this.master);
+    s.start(t); s.stop(t + dur + 0.02);
+  },
+  click() { this.tone(660, 0.05, 'triangle', 0.10); },
+  back() { this.tone(330, 0.06, 'triangle', 0.08); },
+  step(power) { this.noise(0.07, 0.05 + 0.09 * (power || 0.5), 320 + 380 * (power || 0.5), 1.1); },
+  badTap() { this.tone(150, 0.09, 'square', 0.07, 90); },
+  marks() { this.tone(392, 0.24, 'sine', 0.14); },
+  set() { this.tone(523, 0.24, 'sine', 0.15); },
+  gun() { this.noise(0.24, 0.42, 1500, 0.6); this.tone(120, 0.22, 'square', 0.2, 45); },
+  finish() { this.tone(660, 0.16, 'triangle', 0.16); setTimeout(() => this.tone(880, 0.3, 'triangle', 0.16), 110); },
+  pb() { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => this.tone(f, 0.28, 'triangle', 0.15), i * 95)); },
+  levelUp() { [440, 587, 880].forEach((f, i) => setTimeout(() => this.tone(f, 0.34, 'sine', 0.16), i * 110)); },
+  crowd(intensity) { this.noise(1.1, 0.05 * (intensity || 1), 700, 0.4); }
+};
+
+/* ========== 5. TIME SYSTEM ==========================================
+   Uses the device's real local clock. Drives sky, lighting and events. */
+const TimeSystem = {
+  now: new Date(),
+  hourF: 12,
+  phase: 'day',
+  light: { r: 1, g: 1, b: 1 },
+  sky: { top: [12, 30, 66], bot: [40, 90, 150] },
+  sunY: 1, floods: 0,
+  // keyframes: hour, lightMul, skyTop, skyBottom
+  KEYS: [
+    { h: 0,  l: [0.30, 0.36, 0.55], t: [4, 8, 24],    b: [10, 20, 46] },
+    { h: 5,  l: [0.34, 0.38, 0.58], t: [6, 12, 34],   b: [26, 34, 66] },
+    { h: 6.5,l: [0.72, 0.62, 0.68], t: [26, 44, 92],  b: [190, 118, 96] },
+    { h: 8,  l: [1.00, 0.98, 0.94], t: [30, 74, 150], b: [130, 176, 224] },
+    { h: 12, l: [1.12, 1.10, 1.06], t: [26, 84, 172], b: [150, 196, 240] },
+    { h: 16, l: [1.06, 1.00, 0.92], t: [28, 78, 158], b: [166, 190, 226] },
+    { h: 18.5,l:[0.86, 0.68, 0.62], t: [30, 40, 96],  b: [216, 122, 84] },
+    { h: 20, l: [0.46, 0.44, 0.62], t: [10, 18, 52],  b: [58, 48, 92] },
+    { h: 22, l: [0.32, 0.36, 0.56], t: [5, 10, 30],   b: [16, 26, 56] },
+    { h: 24, l: [0.30, 0.36, 0.55], t: [4, 8, 24],    b: [10, 20, 46] }
+  ],
+  update() {
+    const d = new Date();
+    this.now = d;
+    this.hourF = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+    const h = this.hourF, K = this.KEYS;
+    let i = 0;
+    while (i < K.length - 2 && K[i + 1].h <= h) i++;
+    const a = K[i], b = K[i + 1];
+    const t = clamp((h - a.h) / (b.h - a.h), 0, 1);
+    this.light.r = lerp(a.l[0], b.l[0], t);
+    this.light.g = lerp(a.l[1], b.l[1], t);
+    this.light.b = lerp(a.l[2], b.l[2], t);
+    for (let k = 0; k < 3; k++) {
+      this.sky.top[k] = Math.round(lerp(a.t[k], b.t[k], t));
+      this.sky.bot[k] = Math.round(lerp(a.b[k], b.b[k], t));
+    }
+    // floodlights fade in at dusk / out at dawn, and lift the track's light floor
+    const dark = clamp((0.85 - (this.light.r + this.light.g) * 0.5) / 0.45, 0, 1);
+    this.floods = dark;
+    if (dark > 0) {
+      this.light.r = Math.max(this.light.r, 0.30 + 0.30 * dark);
+      this.light.g = Math.max(this.light.g, 0.34 + 0.32 * dark);
+      this.light.b = Math.max(this.light.b, 0.42 + 0.34 * dark);
+    }
+    this.phase = h < 5 ? 'night' : h < 8 ? 'sunrise' : h < 17 ? 'day' : h < 20 ? 'evening' : 'night';
+    this.sunY = Math.sin((h - 6) / 12 * Math.PI); // >0 daytime
+  },
+  clockText() {
+    const d = this.now, hh = d.getHours(), mm = d.getMinutes();
+    return (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm;
+  }
+};
+
+/* ========== 6. TRACK GEOMETRY =======================================
+   A 400m oval: two 100m straights + two semicircles. The finish line
+   sits at the end of the home straight so every lane finishes on the
+   same line; curved-race starts are naturally staggered.               */
+const Track = {
+  S: CFG.TRACK.STRAIGHT,
+  R0: CFG.TRACK.INNER_R,
+  LW: CFG.TRACK.LANE_W,
+  N: CFG.TRACK.LANES,
+  get outerR() { return this.R0 + this.LW * this.N; },
+  laneR(l) { return this.R0 + this.LW * (l + 0.5); },
+  laneLen(l) { return 2 * this.S + TAU * this.laneR(l); },
+  FINISH_D() { return this.S; },   // path distance of the finish line
+
+  /** position + heading on a lane at path-distance d (metres) */
+  at(lane, d, out) {
+    out = out || { x: 0, z: 0, dx: 0, dz: 1 };
+    const R = this.laneR(lane), S = this.S, Cc = Math.PI * R, total = 2 * S + 2 * Cc;
+    d = ((d % total) + total) % total;
+    if (d < S) {                       // home straight, running +x
+      out.x = -S / 2 + d; out.z = R; out.dx = 1; out.dz = 0;
+    } else if (d < S + Cc) {           // turn 1 (right-hand end)
+      const a = (d - S) / R;
+      out.x = S / 2 + R * Math.sin(a); out.z = R * Math.cos(a);
+      out.dx = Math.cos(a); out.dz = -Math.sin(a);
+    } else if (d < 2 * S + Cc) {       // back straight, running -x
+      out.x = S / 2 - (d - S - Cc); out.z = -R; out.dx = -1; out.dz = 0;
+    } else {                           // turn 2 (left-hand end)
+      const a = (d - 2 * S - Cc) / R;
+      out.x = -S / 2 - R * Math.sin(a); out.z = -R * Math.cos(a);
+      out.dx = -Math.cos(a); out.dz = Math.sin(a);
+    }
+    return out;
+  },
+  /** start path-distance for a race so it finishes on the finish line */
+  startD(lane, dist) { return this.FINISH_D() - dist; },
+  /** closed outline of the oval at a radius - index-matched across radii */
+  outline(r, nS, nC) {
+    const S = this.S, p = [];
+    for (let i = 0; i < nS; i++) p.push({ x: -S / 2 + S * (i / nS), z: r });
+    for (let i = 0; i < nC; i++) { const a = Math.PI * i / nC; p.push({ x: S / 2 + r * Math.sin(a), z: r * Math.cos(a) }); }
+    for (let i = 0; i < nS; i++) p.push({ x: S / 2 - S * (i / nS), z: -r });
+    for (let i = 0; i < nC; i++) { const a = Math.PI * i / nC; p.push({ x: -S / 2 - r * Math.sin(a), z: -r * Math.cos(a) }); }
+    return p;
+  },
+  /** true if a world point is on the infield (inside the inner kerb) */
+  inField(x, z) {
+    const S = this.S, R = this.R0 - 0.6;
+    if (Math.abs(x) <= S / 2) return Math.abs(z) <= R;
+    const dx = Math.abs(x) - S / 2;
+    return dx * dx + z * z <= R * R;
+  },
+  /** keeps a free-roaming athlete inside the facility */
+  clampPos(p) {
+    const S = this.S, lim = this.outerR + 12;
+    let cx = clamp(p.x, -S / 2, S / 2);
+    const dx = p.x - cx, d = Math.hypot(dx, p.z);
+    if (d > lim) { const k = lim / d; p.x = cx + dx * k; p.z = p.z * k; }
+    return p;
+  }
+};
+
+/* ========== 7. PALETTE + WORLD ====================================== */
+const PAL = {
+  trackBlue: C(24, 74, 138),
+  trackBlue2: C(20, 62, 118),
+  lane: C(232, 244, 255),
+  kerb: C(214, 226, 240),
+  grass: C(38, 96, 60),
+  grass2: C(44, 108, 68),
+  pitch: C(46, 112, 70),
+  pitch2: C(40, 100, 62),
+  chalk: C(236, 246, 255),
+  apron: C(26, 38, 62),
+  standSide: C(14, 30, 58),
+  standTop: C(20, 42, 78),
+  standFront: C(10, 22, 44),
+  standTrim: C(63, 224, 255),
+  pole: C(70, 88, 112),
+  lampOn: C(255, 246, 214),
+  board: C(8, 18, 36),
+  boardLit: C(63, 224, 255),
+  skin: [C(232, 190, 158), C(198, 148, 110), C(150, 100, 66), C(96, 62, 44), C(246, 214, 186), C(122, 80, 52)],
+  kits: [C(63, 224, 255), C(255, 92, 108), C(255, 215, 94), C(120, 240, 160), C(196, 130, 255), C(255, 150, 70),
+         C(240, 248, 255), C(90, 130, 255), C(80, 220, 210), C(255, 120, 190)],
+  shorts: C(16, 30, 58),
+  shadow: C(0, 0, 0)
+};
+
+const World = {
+  ground: [],   // {p:[4 pts], c, b}  flat quads
+  marks: [],    // {a,b,c,w} 3D chalk segments
+  props: [],    // {p:[pts], c, b} upright geometry
+  lamps: [],    // {x,y,z} floodlight glow points
+  crowd: [],    // {x,y,z,c}
+  spawns: [],   // free-roam spawn points
+
+  q(list, ax, az, bx, bz, cx2, cz2, dx2, dz2, y, col, b) {
+    list.push({ p: [{ x: ax, y: y, z: az }, { x: bx, y: y, z: bz }, { x: cx2, y: y, z: cz2 }, { x: dx2, y: y, z: dz2 }], c: col, b: b });
+  },
+  line(ax, az, bx, bz, col, w, y) {
+    this.marks.push({ a: { x: ax, y: y || 0.02, z: az }, b: { x: bx, y: y || 0.02, z: bz }, c: col, w: w || 0.06 });
+  },
+  box(cx, cy, cz, sx, sy, sz, col, rot) {
+    // axis-aligned-ish box (optionally yaw-rotated) -> 5 visible faces
+    const c = Math.cos(rot || 0), s = Math.sin(rot || 0);
+    const P = (ox, oy, oz) => ({ x: cx + ox * c - oz * s, y: cy + oy, z: cz + ox * s + oz * c });
+    const x0 = -sx / 2, x1 = sx / 2, z0 = -sz / 2, z1 = sz / 2, y0 = 0, y1 = sy;
+    const A = P(x0, y1, z0), B = P(x1, y1, z0), Cc = P(x1, y1, z1), D = P(x0, y1, z1);
+    const a = P(x0, y0, z0), b = P(x1, y0, z0), cc = P(x1, y0, z1), d = P(x0, y0, z1);
+    this.props.push({ p: [A, B, Cc, D], c: col, b: 1.15 });   // top
+    this.props.push({ p: [A, B, b, a], c: col, b: 0.80 });    // -z face
+    this.props.push({ p: [D, Cc, cc, d], c: col, b: 0.72 });  // +z face
+    this.props.push({ p: [a, A, D, d], c: col, b: 0.92 });    // -x face
+    this.props.push({ p: [b, B, Cc, cc], c: col, b: 0.86 });  // +x face
+  },
+
+  build(quality) {
+    this.ground.length = 0; this.marks.length = 0; this.props.length = 0;
+    this.lamps.length = 0; this.crowd.length = 0; this.spawns.length = 0;
+    const S = Track.S, R0 = Track.R0, OR = Track.outerR;
+    const nS = quality === 'low' ? 5 : 9, nC = quality === 'low' ? 9 : 15;
+
+    // --- outer apron ring ---
+    const oA = Track.outline(OR + 0.5, nS, nC), oB = Track.outline(OR + 30, nS, nC);
+    for (let i = 0; i < oA.length; i++) {
+      const j = (i + 1) % oA.length;
+      this.q(this.ground, oA[i].x, oA[i].z, oA[j].x, oA[j].z, oB[j].x, oB[j].z, oB[i].x, oB[i].z,
+        -0.02, PAL.apron, i % 2 ? 0.95 : 1.0);
+    }
+    // --- blue track band ---
+    const tA = Track.outline(R0, nS, nC), tB = Track.outline(OR, nS, nC);
+    for (let i = 0; i < tA.length; i++) {
+      const j = (i + 1) % tA.length;
+      this.q(this.ground, tA[i].x, tA[i].z, tA[j].x, tA[j].z, tB[j].x, tB[j].z, tB[i].x, tB[i].z,
+        0, i % 2 ? PAL.trackBlue : PAL.trackBlue2, 1);
+    }
+    // --- infield grass (triangle fan from centre) ---
+    const g = Track.outline(R0 - 0.35, nS, nC);
+    for (let i = 0; i < g.length; i++) {
+      const j = (i + 1) % g.length;
+      this.ground.push({ p: [{ x: 0, y: 0.005, z: 0 }, { x: g[i].x, y: 0.005, z: g[i].z },
+        { x: g[j].x, y: 0.005, z: g[j].z }], c: i % 2 ? PAL.grass : PAL.grass2, b: 1 });
+    }
+    // --- football pitch (mown stripes) ---
+    const PW = 90, PH = 55, stripes = 10;
+    for (let i = 0; i < stripes; i++) {
+      const x0 = -PW / 2 + PW * i / stripes, x1 = -PW / 2 + PW * (i + 1) / stripes;
+      this.q(this.ground, x0, -PH / 2, x1, -PH / 2, x1, PH / 2, x0, PH / 2, 0.01,
+        i % 2 ? PAL.pitch : PAL.pitch2, 1);
+    }
+    // pitch chalk
+    const CH = PAL.chalk;
+    this.line(-PW / 2, -PH / 2, PW / 2, -PH / 2, CH, 0.14, 0.02);
+    this.line(-PW / 2, PH / 2, PW / 2, PH / 2, CH, 0.14, 0.02);
+    this.line(-PW / 2, -PH / 2, -PW / 2, PH / 2, CH, 0.14, 0.02);
+    this.line(PW / 2, -PH / 2, PW / 2, PH / 2, CH, 0.14, 0.02);
+    this.line(0, -PH / 2, 0, PH / 2, CH, 0.14, 0.02);
+    for (let i = 0; i < 22; i++) {                                     // centre circle
+      const a1 = TAU * i / 22, a2 = TAU * (i + 1) / 22, r = 9.15;
+      this.line(Math.cos(a1) * r, Math.sin(a1) * r, Math.cos(a2) * r, Math.sin(a2) * r, CH, 0.12, 0.02);
+    }
+    [-1, 1].forEach(sg => {                                            // penalty boxes + goals
+      const bx = sg * PW / 2, bw = 16.5, bh = 40.3;
+      this.line(bx, -bh / 2, bx - sg * bw, -bh / 2, CH, 0.12, 0.02);
+      this.line(bx, bh / 2, bx - sg * bw, bh / 2, CH, 0.12, 0.02);
+      this.line(bx - sg * bw, -bh / 2, bx - sg * bw, bh / 2, CH, 0.12, 0.02);
+      this.line(bx, -3.7, bx - sg * 1.2, -3.7, CH, 0.14, 0.06);
+      this.line(bx, 3.7, bx - sg * 1.2, 3.7, CH, 0.14, 0.06);
+      this.props.push({ p: [{ x: bx, y: 0, z: -3.7 }, { x: bx, y: 2.44, z: -3.7 },
+        { x: bx, y: 2.44, z: 3.7 }, { x: bx, y: 0, z: 3.7 }], c: PAL.chalk, b: 0.85 });
+    });
+    // --- lane lines + kerbs ---
+    for (let k = 0; k <= Track.N; k++) {
+      const r = R0 + k * Track.LW;
+      const o = Track.outline(r, nS * 2, nC * 2);
+      const col = (k === 0 || k === Track.N) ? PAL.kerb : PAL.lane;
+      for (let i = 0; i < o.length; i++) {
+        const j = (i + 1) % o.length;
+        this.line(o[i].x, o[i].z, o[j].x, o[j].z, col, k === 0 ? 0.13 : 0.07, 0.015);
+      }
+    }
+    // --- finish line + distance start lines ---
+    const fp = [];
+    for (let k = 0; k <= Track.N; k++) fp.push(R0 + k * Track.LW);
+    this.q(this.ground, S / 2 - 0.25, fp[0], S / 2 + 0.25, fp[0], S / 2 + 0.25, fp[Track.N],
+      S / 2 - 0.25, fp[Track.N], 0.02, PAL.chalk, 1);
+    const tmp = { x: 0, z: 0, dx: 0, dz: 0 };
+    [100, 200, 400].forEach(dist => {
+      for (let l = 0; l < Track.N; l++) {
+        Track.at(l, Track.startD(l, dist), tmp);
+        const nx = -tmp.dz, nz = tmp.dx;
+        this.line(tmp.x - nx * 0.55, tmp.z - nz * 0.55, tmp.x + nx * 0.55, tmp.z + nz * 0.55, PAL.chalk, 0.11, 0.02);
+      }
+    });
+
+    // --- grandstands ---
+    // Each tier emits only the two faces a spectator-side camera can see
+    // (inward front + walkway top) instead of a full box: same look, ~60% fewer polys.
+    const segs = quality === 'low' ? 5 : 8, csegs = quality === 'low' ? 8 : 13;
+    const so = Track.outline(OR + 9, segs, csegs);
+    const tier = (mx, mz, dirx, dirz, ang, len, push, h, col) => {
+      const tx = Math.cos(ang) * len / 2, tz = Math.sin(ang) * len / 2;
+      const ix = mx + dirx * (push - 1.6), iz = mz + dirz * (push - 1.6);
+      const ox = mx + dirx * (push + 1.6), oz = mz + dirz * (push + 1.6);
+      this.props.push({ p: [{ x: ix - tx, y: 0, z: iz - tz }, { x: ix + tx, y: 0, z: iz + tz },
+        { x: ix + tx, y: h, z: iz + tz }, { x: ix - tx, y: h, z: iz - tz }], c: col, b: 0.78 });
+      this.props.push({ p: [{ x: ix - tx, y: h, z: iz - tz }, { x: ix + tx, y: h, z: iz + tz },
+        { x: ox + tx, y: h, z: oz + tz }, { x: ox - tx, y: h, z: oz - tz }], c: col, b: 1.12 });
+    };
+    for (let i = 0; i < so.length; i++) {
+      const j = (i + 1) % so.length;
+      const a = so[i], b2 = so[j];
+      const mx = (a.x + b2.x) / 2, mz = (a.z + b2.z) / 2;
+      const len = Math.hypot(b2.x - a.x, b2.z - a.z) * 1.04;
+      const ang = Math.atan2(b2.z - a.z, b2.x - a.x);
+      const out = Math.hypot(mx, mz) || 1;
+      const dirx = mx / out, dirz = mz / out;
+      for (let t = 0; t < 3; t++) {
+        const push = 2.4 + t * 3.2, h = 2.1 + t * 2.4;
+        tier(mx, mz, dirx, dirz, ang, len, push, h, t === 0 ? PAL.standFront : t === 1 ? PAL.standSide : PAL.standTop);
+      }
+      // aura-blue rail along the top tier - the facility's signature line
+      const railH = 2.1 + 2 * 2.4 + 0.12, railPush = 2.4 + 2 * 3.2 - 1.6;
+      const rtx = Math.cos(ang) * len / 2, rtz = Math.sin(ang) * len / 2;
+      this.props.push({ p: [
+        { x: mx + dirx * railPush - rtx, y: railH, z: mz + dirz * railPush - rtz },
+        { x: mx + dirx * railPush + rtx, y: railH, z: mz + dirz * railPush + rtz },
+        { x: mx + dirx * (railPush + 0.5) + rtx, y: railH, z: mz + dirz * (railPush + 0.5) + rtz },
+        { x: mx + dirx * (railPush + 0.5) - rtx, y: railH, z: mz + dirz * (railPush + 0.5) - rtz }], c: PAL.standTrim, b: 1 });
+      // spectators dotted across the tiers
+      const nC2 = quality === 'low' ? 3 : 6;
+      for (let cI = 0; cI < nC2; cI++) {
+        const t = cI % 3, push = 2.4 + t * 3.2, h = 2.1 + t * 2.4;
+        const f = (cI / nC2) - 0.42;
+        this.crowd.push({
+          x: mx + dirx * push + Math.cos(ang) * len * f,
+          y: h + 0.30,
+          z: mz + dirz * push + Math.sin(ang) * len * f,
+          c: PAL.kits[(i * 7 + cI) % PAL.kits.length],
+          ph: Math.random() * TAU
+        });
+      }
+    }
+    // --- floodlights ---
+    [[1, 1], [1, -1], [-1, 1], [-1, -1]].forEach(s => {
+      const px = s[0] * (S / 2 + OR * 0.55), pz = s[1] * (OR + 16);
+      this.props.push({ p: [{ x: px - 0.5, y: 0, z: pz }, { x: px - 0.35, y: 20, z: pz },
+        { x: px + 0.35, y: 20, z: pz }, { x: px + 0.5, y: 0, z: pz }], c: PAL.pole, b: 1 });
+      this.box(px, 20, pz, 5.2, 1.9, 0.7, PAL.pole, 0);
+      this.lamps.push({ x: px, y: 21.2, z: pz });
+    });
+    // --- scoreboard ---
+    const bz = -(OR + 20);
+    this.box(0, 0, bz, 3, 9, 3, PAL.pole, 0);
+    this.box(0, 9, bz, 26, 11, 2, PAL.board, 0);
+    this.props.push({ p: [{ x: -11, y: 11.5, z: bz - 1.05 }, { x: 11, y: 11.5, z: bz - 1.05 },
+      { x: 11, y: 17.5, z: bz - 1.05 }, { x: -11, y: 17.5, z: bz - 1.05 }], c: PAL.boardLit, b: 0.55 });
+
+    // --- start-area decoration + equipment ---
+    this.box(-S / 2 - 6, 0, OR + 4, 3.4, 1.0, 1.6, PAL.standSide, 0);   // bench
+    this.box(-S / 2 - 2, 0, OR + 4, 1.2, 1.0, 1.2, PAL.standTrim, 0);   // kit crate
+    this.box(S / 2 + 4, 0, OR + 5, 2.2, 1.1, 1.4, PAL.standSide, 0);
+
+    // --- spawn points spread around the facility ---
+    const spots = [[-S / 2 + 10, OR + 5], [-20, OR + 6], [20, OR + 7], [S / 2 - 8, OR + 4],
+      [0, -(OR + 6)], [-35, -(OR + 5)], [30, -(OR + 6)], [-S / 2 - 10, 0], [S / 2 + 12, 6],
+      [-30, 20], [25, -18], [0, 26]];
+    spots.forEach(s => this.spawns.push({ x: s[0], z: s[1] }));
+  }
+};
+
+/* ========== 8. RENDERER =============================================
+   A compact 3D pipeline on Canvas2D: world -> camera space -> near-plane
+   clip -> perspective projection -> depth-sorted painter draw.
+   No external libraries, no WebGL context loss, fast on phones.        */
+const Renderer = {
+  cv: null, ctx: null, w: 0, h: 0, hw: 0, hh: 0, dpr: 1, f: 600,
+  cam: { x: 0, y: 3, z: -20, yaw: 0, pitch: -0.12, fov: 1.12 },
+  _cy: 1, _sy: 0, _cp: 1, _sp: 0,
+  NEAR: 0.28, FOG: 70,
+  gQ: [], gN: 0, oQ: [], oN: 0, lQ: [], lN: 0,
+  _A: [], _B: [], _sb: [],
+  quality: 'med',
+
+  init(canvas) {
+    this.cv = canvas;
+    this.ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+    for (let i = 0; i < 34; i++) { this._A.push({ x: 0, y: 0, z: 0 }); this._B.push({ x: 0, y: 0, z: 0 }); }
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
+    window.addEventListener('orientationchange', () => setTimeout(() => this.resize(), 250));
+  },
+  setQuality(q) { this.quality = q; this.resize(); },
+  resize() {
+    const capMap = { low: 1.0, med: 1.5, high: 2.0 };
+    const cap = capMap[this.quality] || 1.5;
+    this.dpr = Math.min(window.devicePixelRatio || 1, cap);
+    this.w = Math.round(window.innerWidth * this.dpr);
+    this.h = Math.round(window.innerHeight * this.dpr);
+    this.cv.width = this.w; this.cv.height = this.h;
+    this.cv.style.width = window.innerWidth + 'px';
+    this.cv.style.height = window.innerHeight + 'px';
+    this.hw = this.w / 2; this.hh = this.h / 2;
+    this.f = this.hh / Math.tan(this.cam.fov / 2);
+  },
+  beginFrame() {
+    this.gN = 0; this.oN = 0; this.lN = 0;
+    this._cy = Math.cos(this.cam.yaw); this._sy = Math.sin(this.cam.yaw);
+    this._cp = Math.cos(this.cam.pitch); this._sp = Math.sin(this.cam.pitch);
+    this.f = this.hh / Math.tan(this.cam.fov / 2);
+  },
+  /** world -> camera space */
+  toCam(p, o) {
+    const dx = p.x - this.cam.x, dy = p.y - this.cam.y, dz = p.z - this.cam.z;
+    const X = dx * this._cy - dz * this._sy;
+    const Zf = dx * this._sy + dz * this._cy;
+    o.x = X;
+    o.y = dy * this._cp - Zf * this._sp;
+    o.z = dy * this._sp + Zf * this._cp;
+    return o;
+  },
+  camDist(p) {
+    const dx = p.x - this.cam.x, dy = p.y - this.cam.y, dz = p.z - this.cam.z;
+    return Math.sqrt(dx * dx + dy * dy + dz * dz);
+  },
+  /** shade a base colour by brightness, scene light and distance fog */
+  shade(c, b, depth) {
+    const L = TimeSystem.light;
+    let r = c[0] * b * L.r, g = c[1] * b * L.g, bl = c[2] * b * L.b;
+    if (depth > this.FOG) {
+      const t = clamp((depth - this.FOG) / (CFG.FAR - this.FOG), 0, 1) * 0.82;
+      const s = TimeSystem.sky.bot;
+      r = lerp(r, s[0], t); g = lerp(g, s[1], t); bl = lerp(bl, s[2], t);
+    }
+    return rgbCSS(clamp(r, 0, 255) | 0, clamp(g, 0, 255) | 0, clamp(bl, 0, 255) | 0);
+  },
+  _item(list, n) {
+    let it = list[n];
+    if (!it) { it = { k: 0, d: 0, c: '#fff', a: 1, w: 1, n: 0, p: [], r: 0, t: '' }; list[n] = it; }
+    return it;
+  },
+  /** clip a camera-space polygon against the near plane */
+  _clip(src, n, dst) {
+    let m = 0;
+    const NR = this.NEAR;
+    for (let i = 0; i < n; i++) {
+      const a = src[i], b = src[(i + 1) % n];
+      const ain = a.z >= NR, bin = b.z >= NR;
+      if (ain) { const o = dst[m++]; o.x = a.x; o.y = a.y; o.z = a.z; }
+      if (ain !== bin) {
+        const t = (NR - a.z) / (b.z - a.z), o = dst[m++];
+        o.x = a.x + (b.x - a.x) * t; o.y = a.y + (b.y - a.y) * t; o.z = NR;
+      }
+    }
+    return m;
+  },
+  /** queue a filled polygon (3 or 4 world points) */
+  poly(pts, css, ground, depthBias) {
+    const n = pts.length;
+    if (n > 32) return;
+    let far = 0, sum = 0;
+    for (let i = 0; i < n; i++) {
+      this.toCam(pts[i], this._A[i]);
+      const z = this._A[i].z; sum += z;
+      if (z > far) far = z;
+    }
+    if (far < this.NEAR) return;
+    const avg = sum / n;
+    if (avg > CFG.FAR) return;
+    const m = this._clip(this._A, n, this._B);
+    if (m < 3) return;
+    const list = ground ? this.gQ : this.oQ;
+    const idx = ground ? this.gN++ : this.oN++;
+    const it = this._item(list, idx);
+    it.k = 0; it.c = css; it.a = 1; it.n = m; it.d = avg + (depthBias || 0);
+    const P = it.p;
+    let minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
+    for (let i = 0; i < m; i++) {
+      const q = this._B[i], iz = this.f / q.z;
+      const sx = this.hw + q.x * iz, sy = this.hh - q.y * iz;
+      P[i * 2] = sx; P[i * 2 + 1] = sy;
+      if (sx < minx) minx = sx; if (sx > maxx) maxx = sx;
+      if (sy < miny) miny = sy; if (sy > maxy) maxy = sy;
+    }
+    if (maxx < -8 || minx > this.w + 8 || maxy < -8 || miny > this.h + 8) { // off-screen cull
+      if (ground) this.gN--; else this.oN--;
+    }
+  },
+  /** queue a 3D capsule-ish segment drawn as a thick screen line */
+  seg(a, b, css, radius, ground) {
+    const A = this.toCam(a, this._A[0]), B = this.toCam(b, this._A[1]);
+    let ax = A.x, ay = A.y, az = A.z, bx = B.x, by = B.y, bz = B.z;
+    if (az < this.NEAR && bz < this.NEAR) return;
+    if (az < this.NEAR) { const t = (this.NEAR - az) / (bz - az); ax += (bx - ax) * t; ay += (by - ay) * t; az = this.NEAR; }
+    else if (bz < this.NEAR) { const t = (this.NEAR - bz) / (az - bz); bx += (ax - bx) * t; by += (ay - by) * t; bz = this.NEAR; }
+    const avg = (az + bz) / 2;
+    if (avg > CFG.FAR) return;
+    const list = ground ? this.gQ : this.oQ;
+    const idx = ground ? this.gN++ : this.oN++;
+    const it = this._item(list, idx);
+    const iz1 = this.f / az, iz2 = this.f / bz;
+    it.k = 1; it.c = css; it.d = avg; it.n = 2;
+    it.p[0] = this.hw + ax * iz1; it.p[1] = this.hh - ay * iz1;
+    it.p[2] = this.hw + bx * iz2; it.p[3] = this.hh - by * iz2;
+    it.w = Math.max(this.dpr * 0.7, radius * 2 * this.f / avg);
+    if ((it.p[0] < -20 && it.p[2] < -20) || (it.p[0] > this.w + 20 && it.p[2] > this.w + 20)) { if (ground) this.gN--; else this.oN--; }
+  },
+  /** queue a billboarded disc (heads, glows, shadows) */
+  disc(p, radius, css, ground, alpha, squashY) {
+    const A = this.toCam(p, this._A[0]);
+    if (A.z < this.NEAR || A.z > CFG.FAR) return;
+    const iz = this.f / A.z;
+    const list = ground ? this.gQ : this.oQ;
+    const idx = ground ? this.gN++ : this.oN++;
+    const it = this._item(list, idx);
+    it.k = 2; it.c = css; it.d = A.z; it.a = alpha == null ? 1 : alpha;
+    it.p[0] = this.hw + A.x * iz; it.p[1] = this.hh - A.y * iz;
+    it.r = radius * iz; it.w = squashY == null ? 1 : squashY;
+    if (it.p[0] < -it.r || it.p[0] > this.w + it.r || it.p[1] < -it.r || it.p[1] > this.h + it.r) { if (ground) this.gN--; else this.oN--; }
+  },
+  /** queue screen-space text anchored to a world point */
+  label(p, text, css, size, sub) {
+    const A = this.toCam(p, this._A[0]);
+    if (A.z < 1.2 || A.z > 62) return;
+    const iz = this.f / A.z;
+    const it = this._item(this.lQ, this.lN++);
+    it.k = 3; it.c = css; it.d = A.z; it.t = text;
+    it.p[0] = this.hw + A.x * iz; it.p[1] = this.hh - A.y * iz;
+    it.r = clamp(size * iz, 8 * this.dpr, 22 * this.dpr);
+    it.a = clamp(1 - (A.z - 38) / 24, 0, 1);
+    it.w = sub ? 1 : 0;
+  },
+
+  /* ---------- drawing ---------- */
+  drawSky() {
+    const c = this.ctx, sk = TimeSystem.sky;
+    const hz = this.hh + this.f * Math.tan(this.cam.pitch);
+    const top = rgbCSS(sk.top[0], sk.top[1], sk.top[2]);
+    const bot = rgbCSS(sk.bot[0], sk.bot[1], sk.bot[2]);
+    const gEnd = clamp(hz, 1, this.h);
+    const grd = c.createLinearGradient(0, 0, 0, gEnd);
+    grd.addColorStop(0, top); grd.addColorStop(1, bot);
+    c.fillStyle = grd; c.fillRect(0, 0, this.w, Math.max(0, gEnd));
+    if (gEnd < this.h) { c.fillStyle = rgbCSS(Math.round(sk.bot[0] * 0.5), Math.round(sk.bot[1] * 0.5), Math.round(sk.bot[2] * 0.55)); c.fillRect(0, gEnd, this.w, this.h - gEnd); }
+    // sun / moon
+    const h = TimeSystem.hourF;
+    const el = Math.sin((h - 6) / 12 * Math.PI);
+    const az = (h / 24) * TAU;
+    const day = el > -0.06;
+    const D = 420;
+    const p = { x: this.cam.x + Math.sin(az) * D, y: Math.abs(el) * 210 + 12, z: this.cam.z + Math.cos(az) * D };
+    const col = day ? [255, 244, 214] : [214, 228, 255];
+    const A = this.toCam(p, this._A[0]);
+    if (A.z > 1) {
+      const iz = this.f / A.z;
+      const sx = this.hw + A.x * iz, sy = this.hh - A.y * iz;
+      const r = (day ? 16 : 11) * this.dpr;
+      const gg = c.createRadialGradient(sx, sy, r * 0.2, sx, sy, r * 7);
+      gg.addColorStop(0, 'rgba(' + col[0] + ',' + col[1] + ',' + col[2] + ',0.95)');
+      gg.addColorStop(0.14, 'rgba(' + col[0] + ',' + col[1] + ',' + col[2] + ',0.5)');
+      gg.addColorStop(1, 'rgba(' + col[0] + ',' + col[1] + ',' + col[2] + ',0)');
+      c.fillStyle = gg;
+      c.beginPath(); c.arc(sx, sy, r * 7, 0, TAU); c.fill();
+    }
+  },
+  flush(list, n) {
+    const sb = this._sb;
+    sb.length = n;
+    for (let i = 0; i < n; i++) sb[i] = list[i];
+    sb.sort((a, b) => b.d - a.d);
+    const c = this.ctx;
+    for (let i = 0; i < n; i++) {
+      const it = sb[i], P = it.p;
+      if (it.k === 0) {
+        c.fillStyle = it.c;
+        c.beginPath();
+        c.moveTo(P[0], P[1]);
+        for (let j = 1; j < it.n; j++) c.lineTo(P[j * 2], P[j * 2 + 1]);
+        c.closePath(); c.fill();
+      } else if (it.k === 1) {
+        c.strokeStyle = it.c; c.lineWidth = it.w; c.lineCap = 'round';
+        c.beginPath(); c.moveTo(P[0], P[1]); c.lineTo(P[2], P[3]); c.stroke();
+      } else if (it.k === 2) {
+        if (it.a < 1) { c.globalAlpha = it.a; }
+        c.fillStyle = it.c;
+        c.beginPath();
+        if (it.w !== 1) c.ellipse(P[0], P[1], it.r, it.r * it.w, 0, 0, TAU);
+        else c.arc(P[0], P[1], it.r, 0, TAU);
+        c.fill();
+        if (it.a < 1) c.globalAlpha = 1;
+      }
+    }
+  },
+  drawLabels() {
+    const c = this.ctx;
+    const sb = this._sb; sb.length = this.lN;
+    for (let i = 0; i < this.lN; i++) sb[i] = this.lQ[i];
+    sb.sort((a, b) => b.d - a.d);
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    for (let i = 0; i < this.lN; i++) {
+      const it = sb[i];
+      if (it.a <= 0.02) continue;
+      c.globalAlpha = it.a;
+      c.font = '700 ' + it.r.toFixed(1) + 'px system-ui,-apple-system,sans-serif';
+      const wpx = c.measureText(it.t).width + it.r * 0.9;
+      c.fillStyle = 'rgba(3,9,22,0.55)';
+      c.beginPath();
+      const rr = it.r * 0.62;
+      const x0 = it.p[0] - wpx / 2, y0 = it.p[1] - rr;
+      if (c.roundRect) { c.roundRect(x0, y0, wpx, rr * 2, rr * 0.6); } else { c.rect(x0, y0, wpx, rr * 2); }
+      c.fill();
+      c.fillStyle = it.c;
+      c.fillText(it.t, it.p[0], it.p[1] + it.r * 0.06);
+    }
+    c.globalAlpha = 1;
+  },
+  render() {
+    this.drawSky();
+    this.flush(this.gQ, this.gN);
+    this.flush(this.oQ, this.oN);
+    this.drawLabels();
+  }
+};
+
+/* ========== 9. ANIMATION SYSTEM =====================================
+   Every athlete is a procedural skeleton. Pose parameters (lean, arm
+   swing, knee lift, bounce, crouch...) are blended smoothly between
+   states, and the stride phase is driven by cadence - so the feet keep
+   pace with the ground instead of sliding.                             */
+const SK = { thigh: 0.45, shin: 0.44, foot: 0.19, hipY: 0.94, chestY: 1.44, headY: 1.66,
+  headR: 0.115, shX: 0.185, hipX: 0.10, uArm: 0.30, fArm: 0.28 };
+
+const AnimationSystem = {
+  // amp: hip swing | arm: shoulder swing | knee: knee lift | lean: forward tilt
+  // bob: vertical bounce | elbow: elbow flex | crouch: block crouch | setF: marks->set
+  POSES: {
+    IDLE:    { amp: 0.05, arm: 0.05, knee: 0.10, lean: 0.02, bob: 0.010, elbow: 0.30, crouch: 0, setF: 0 },
+    WALK:    { amp: 0.42, arm: 0.30, knee: 0.55, lean: 0.05, bob: 0.030, elbow: 0.45, crouch: 0, setF: 0 },
+    JOG:     { amp: 0.62, arm: 0.55, knee: 0.95, lean: 0.12, bob: 0.050, elbow: 1.15, crouch: 0, setF: 0 },
+    DRIVE:   { amp: 0.86, arm: 1.05, knee: 1.55, lean: 0.46, bob: 0.062, elbow: 1.55, crouch: 0, setF: 0 },
+    MAX:     { amp: 0.95, arm: 1.15, knee: 1.85, lean: 0.15, bob: 0.070, elbow: 1.62, crouch: 0, setF: 0 },
+    FATIGUE: { amp: 0.72, arm: 0.72, knee: 1.05, lean: 0.05, bob: 0.055, elbow: 1.25, crouch: 0, setF: 0 },
+    FINISH:  { amp: 0.94, arm: 1.10, knee: 1.75, lean: 0.20, bob: 0.068, elbow: 1.58, crouch: 0, setF: 0 },
+    DIP:     { amp: 0.80, arm: 0.55, knee: 1.30, lean: 1.05, bob: 0.040, elbow: 0.55, crouch: 0, setF: 0 },
+    MARKS:   { amp: 0.00, arm: 0.00, knee: 0.00, lean: 0.00, bob: 0.000, elbow: 0.00, crouch: 1, setF: 0 },
+    SET:     { amp: 0.00, arm: 0.00, knee: 0.00, lean: 0.00, bob: 0.000, elbow: 0.00, crouch: 1, setF: 1 }
+  },
+  newParams() { return Object.assign({}, this.POSES.IDLE); },
+  /** smooth parameter blending - no instant pose snapping */
+  blend(cur, name, rate, dt) {
+    const t = this.POSES[name] || this.POSES.IDLE;
+    for (const k in t) cur[k] = damp(cur[k], t[k], rate, dt);
+  },
+  /** choose an animation state from live race/locomotion values */
+  stateFor(a) {
+    if (a.blockState) return a.blockState;           // MARKS / SET
+    if (a.dipping) return 'DIP';
+    if (a.mode === 'race') {
+      if (a.raceProgress > 0.93) return 'FINISH';
+      if (a.stamina < 22) return 'FATIGUE';
+      if (a.raceProgress < 0.12 && a.speed < a.vTop * 0.86) return 'DRIVE';
+      return a.speed > 4.5 ? 'MAX' : 'JOG';
+    }
+    if (a.speed < 0.2) return 'IDLE';
+    if (a.speed < 2.3) return 'WALK';
+    if (a.speed < 5.2) return 'JOG';
+    return 'MAX';
+  }
+};
+
+/* local-space joint scratch (rebuilt per athlete, per frame) */
+function V(x, y, z) { return { x: x, y: y, z: z }; }
+const _J = {
+  pelvis: V(0, 0, 0), chest: V(0, 0, 0), head: V(0, 0, 0),
+  hipL: V(0, 0, 0), kneeL: V(0, 0, 0), ankL: V(0, 0, 0), toeL: V(0, 0, 0),
+  hipR: V(0, 0, 0), kneeR: V(0, 0, 0), ankR: V(0, 0, 0), toeR: V(0, 0, 0),
+  shL: V(0, 0, 0), elbL: V(0, 0, 0), handL: V(0, 0, 0),
+  shR: V(0, 0, 0), elbR: V(0, 0, 0), handR: V(0, 0, 0)
+};
+const _JC = {}; for (const k in _J) _JC[k] = V(0, 0, 0);   // crouch target
+const _JW = {}; for (const k in _J) _JW[k] = V(0, 0, 0);   // world space
+
+/** direction of a limb rotated forward by angle a (0 = straight down) */
+function limbDir(a, len, o) { o.y = -Math.cos(a) * len; o.z = Math.sin(a) * len; return o; }
+const _d = V(0, 0, 0);
+
+function buildRunPose(p, ph, J) {
+  const bob = -p.bob * Math.cos(2 * ph);
+  const hipY = SK.hipY + bob;
+  J.pelvis.x = 0; J.pelvis.y = hipY; J.pelvis.z = 0;
+  const lean = p.lean;
+  const cl = Math.cos(lean), sl = Math.sin(lean);
+  const up = (h, o) => { o.x = 0; o.y = hipY + h * cl; o.z = h * sl; return o; };
+  up(SK.chestY - SK.hipY, J.chest);
+  up(SK.headY - SK.hipY, J.head);
+  J.shL.x = -SK.shX; J.shL.y = J.chest.y; J.shL.z = J.chest.z;
+  J.shR.x = SK.shX; J.shR.y = J.chest.y; J.shR.z = J.chest.z;
+  J.hipL.x = -SK.hipX; J.hipL.y = hipY; J.hipL.z = 0;
+  J.hipR.x = SK.hipX; J.hipR.y = hipY; J.hipR.z = 0;
+
+  const legLean = lean * 0.42;
+  const leg = (phase, hip, knee, ank, toe) => {
+    const th = p.amp * Math.sin(phase) + legLean;
+    const kb = p.knee * clamp(-Math.sin(phase - 0.7), 0, 1) + 0.16;
+    limbDir(th, SK.thigh, _d);
+    knee.x = hip.x; knee.y = hip.y + _d.y; knee.z = hip.z + _d.z;
+    const sa = th - kb;
+    limbDir(sa, SK.shin, _d);
+    ank.x = knee.x; ank.y = knee.y + _d.y; ank.z = knee.z + _d.z;
+    limbDir(sa + 1.35, SK.foot, _d);
+    toe.x = ank.x; toe.y = ank.y + _d.y * 0.5; toe.z = ank.z + _d.z;
+    if (ank.y < 0.055) { const lift = 0.055 - ank.y; ank.y += lift; knee.y += lift * 0.5; toe.y += lift; }
+  };
+  leg(ph, J.hipL, J.kneeL, J.ankL, J.toeL);
+  leg(ph + Math.PI, J.hipR, J.kneeR, J.ankR, J.toeR);
+
+  const arm = (phase, sh, elb, hand) => {
+    const aa = -p.arm * Math.sin(phase) + lean * 0.45;
+    limbDir(aa, SK.uArm, _d);
+    elb.x = sh.x; elb.y = sh.y + _d.y; elb.z = sh.z + _d.z;
+    limbDir(aa + p.elbow, SK.fArm, _d);
+    hand.x = sh.x; hand.y = elb.y + _d.y; hand.z = elb.z + _d.z;
+  };
+  arm(ph, J.shL, J.elbL, J.handL);
+  arm(ph + Math.PI, J.shR, J.elbR, J.handR);
+}
+
+/** starting-block pose; s = 0 "on your marks" -> 1 "set" */
+function buildBlockPose(s, J) {
+  const py = lerp(0.50, 0.70, s);
+  J.pelvis.x = 0; J.pelvis.y = py; J.pelvis.z = -0.06;
+  J.chest.x = 0; J.chest.y = lerp(0.66, 0.78, s); J.chest.z = 0.40;
+  J.head.x = 0; J.head.y = lerp(0.60, 0.74, s); J.head.z = 0.66;
+  J.shL.x = -SK.shX; J.shL.y = J.chest.y; J.shL.z = J.chest.z;
+  J.shR.x = SK.shX; J.shR.y = J.chest.y; J.shR.z = J.chest.z;
+  J.elbL.x = -0.23; J.elbL.y = lerp(0.34, 0.44, s); J.elbL.z = 0.70;
+  J.elbR.x = 0.23; J.elbR.y = lerp(0.34, 0.44, s); J.elbR.z = 0.70;
+  J.handL.x = -0.25; J.handL.y = 0.05; J.handL.z = 0.90;
+  J.handR.x = 0.25; J.handR.y = 0.05; J.handR.z = 0.90;
+  J.hipL.x = -SK.hipX; J.hipL.y = py; J.hipL.z = -0.06;
+  J.hipR.x = SK.hipX; J.hipR.y = py; J.hipR.z = -0.06;
+  // front (left) leg folded on the block
+  J.kneeL.x = -0.14; J.kneeL.y = lerp(0.30, 0.42, s); J.kneeL.z = 0.30;
+  J.ankL.x = -0.14; J.ankL.y = 0.14; J.ankL.z = 0.02;
+  J.toeL.x = -0.14; J.toeL.y = 0.06; J.toeL.z = 0.18;
+  // back (right) leg - knee down on marks, lifted on set
+  J.kneeR.x = 0.14; J.kneeR.y = lerp(0.09, 0.34, s); J.kneeR.z = -0.10;
+  J.ankR.x = 0.14; J.ankR.y = lerp(0.16, 0.20, s); J.ankR.z = -0.42;
+  J.toeR.x = 0.14; J.toeR.y = 0.06; J.toeR.z = -0.28;
+}
+
+/* ========== 10. ATHLETE ============================================= */
+let _uid = 1;
+class Athlete {
+  constructor(opts) {
+    opts = opts || {};
+    this.id = _uid++;
+    this.name = opts.name || 'RUNNER';
+    this.isPlayer = !!opts.isPlayer;
+    this.isBot = !opts.isPlayer;
+    this.kit = opts.kit || pick(PAL.kits);
+    this.skin = opts.skin || pick(PAL.skin);
+    this.scale = opts.scale || rand(0.95, 1.06);
+    this.x = opts.x || 0; this.z = opts.z || 0; this.y = 0;
+    this.heading = opts.heading || 0;
+    this.targetHeading = this.heading;
+    this.speed = 0; this.targetSpeed = 0;
+    this.phase = Math.random() * TAU;
+    this.params = AnimationSystem.newParams();
+    this.mode = 'roam';           // 'roam' | 'race'
+    this.stamina = 100;
+    this.lane = 0;
+    this.raceD = 0;               // metres covered in the current race
+    this.raceProgress = 0;
+    this.vTop = 10.4;
+    this.blockState = null;       // 'MARKS' | 'SET'
+    this.dipping = false;
+    this.finished = false;
+    this.finishTime = 0;
+    this.place = 0;
+    this.ability = opts.ability || 1;
+    this._pt = { x: 0, z: 0, dx: 0, dz: 1 };
+    this._lastStepPhase = 0;
+  }
+  get pos() { return { x: this.x, y: 0, z: this.z }; }
+  /** locomotion for free-roam movement */
+  moveRoam(dt) {
+    let dh = this.targetHeading - this.heading;
+    while (dh > Math.PI) dh -= TAU;
+    while (dh < -Math.PI) dh += TAU;
+    this.heading += dh * clamp(dt * 9, 0, 1);
+    this.speed = damp(this.speed, this.targetSpeed, 7, dt);
+    if (this.speed > 0.02) {
+      this.x += Math.sin(this.heading) * this.speed * dt;
+      this.z += Math.cos(this.heading) * this.speed * dt;
+      Track.clampPos(this);
+    }
+  }
+  /** advance the stride phase so foot speed matches ground speed */
+  animate(dt, forcedState) {
+    const st = forcedState || AnimationSystem.stateFor(this);
+    AnimationSystem.blend(this.params, st, st === 'DIP' ? 14 : 7, dt);
+    let cad;
+    if (this.mode === 'race' && this.cadence) cad = this.cadence;
+    else {
+      const stride = clamp(0.80 + 0.17 * this.speed, 0.80, 2.35);
+      cad = this.speed / stride;
+    }
+    if (this.blockState) cad = 0;
+    this.phase += Math.PI * cad * dt;
+    if (this.phase > TAU) this.phase -= TAU;
+    // footstep audio for the player + nearby athletes
+    const half = Math.floor(this.phase / Math.PI);
+    if (half !== this._lastStepPhase && this.speed > 1.2) {
+      this._lastStepPhase = half;
+      if (this.isPlayer) Audio2.step(clamp(this.speed / 11, 0.1, 1));
+    }
+    // stride amplitude follows real stride length -> minimal foot sliding
+    if (cad > 0.3) {
+      const strideLen = this.speed / cad;
+      const reach = clamp(strideLen / (2 * (SK.thigh + SK.shin * 0.55)), 0, 0.95);
+      this.params.amp = lerp(this.params.amp, Math.asin(reach), 0.55);
+    }
+  }
+  /** build world-space joints for this frame */
+  buildJoints() {
+    const p = this.params;
+    buildRunPose(p, this.phase, _J);
+    if (p.crouch > 0.01) {
+      buildBlockPose(p.setF, _JC);
+      const t = clamp(p.crouch, 0, 1);
+      for (const k in _J) {
+        _J[k].x = lerp(_J[k].x, _JC[k].x, t);
+        _J[k].y = lerp(_J[k].y, _JC[k].y, t);
+        _J[k].z = lerp(_J[k].z, _JC[k].z, t);
+      }
+    }
+    const s = this.scale, c = Math.cos(this.heading), sn = Math.sin(this.heading);
+    for (const k in _J) {
+      const a = _J[k], o = _JW[k];
+      const lx = a.x * s, ly = a.y * s, lz = a.z * s;
+      // local +z is forward -> rotate into world by heading
+      o.x = this.x + lx * c + lz * sn;
+      o.y = ly;
+      o.z = this.z - lx * sn + lz * c;
+    }
+    return _JW;
+  }
+  render(R) {
+    const dist = R.camDist(this);
+    if (dist > CFG.FAR) return;
+    const J = this.buildJoints();
+    const s = this.scale;
+    const skin = R.shade(this.skin, 1.0, dist);
+    const skinD = R.shade(this.skin, 0.82, dist);
+    const kit = R.shade(this.kit, 1.05, dist);
+    const kitD = R.shade(this.kit, 0.8, dist);
+    const shorts = R.shade(PAL.shorts, 1.0, dist);
+    const shoe = R.shade(PAL.lane, 0.9, dist);
+    // contact shadow
+    R.disc({ x: this.x, y: 0.012, z: this.z }, 0.42 * s, 'rgba(0,0,0,1)', true, 0.24 * (TimeSystem.floods > 0.5 ? 0.6 : 1), 0.42);
+    if (dist > 78) {                                   // far LOD - cheap stick
+      R.seg(J.pelvis, J.chest, kit, 0.13 * s);
+      R.seg(J.hipL, J.ankL, skin, 0.07 * s);
+      R.seg(J.hipR, J.ankR, skin, 0.07 * s);
+      R.disc(J.head, SK.headR * s * 1.05, skin);
+      return;
+    }
+    // legs
+    R.seg(J.hipR, J.kneeR, skinD, 0.082 * s); R.seg(J.kneeR, J.ankR, skinD, 0.062 * s);
+    R.seg(J.ankR, J.toeR, shoe, 0.055 * s);
+    R.seg(J.hipL, J.kneeL, skin, 0.082 * s); R.seg(J.kneeL, J.ankL, skin, 0.062 * s);
+    R.seg(J.ankL, J.toeL, shoe, 0.055 * s);
+    // shorts: a waistband plus short legs, drawn under the vest
+    const wL = { x: J.hipL.x, y: J.hipL.y - 0.055 * s, z: J.hipL.z };
+    const wR = { x: J.hipR.x, y: J.hipR.y - 0.055 * s, z: J.hipR.z };
+    R.seg(wL, wR, shorts, 0.115 * s);
+    R.seg(J.hipL, { x: lerp(J.hipL.x, J.kneeL.x, 0.45), y: lerp(J.hipL.y, J.kneeL.y, 0.45), z: lerp(J.hipL.z, J.kneeL.z, 0.45) }, shorts, 0.095 * s);
+    R.seg(J.hipR, { x: lerp(J.hipR.x, J.kneeR.x, 0.45), y: lerp(J.hipR.y, J.kneeR.y, 0.45), z: lerp(J.hipR.z, J.kneeR.z, 0.45) }, shorts, 0.095 * s);
+    R.poly([J.hipL, J.hipR, J.shR, J.shL], kit, false, -0.02);
+    R.seg(J.pelvis, J.chest, kit, 0.16 * s);
+    R.seg(J.shL, J.shR, kitD, 0.10 * s);
+    // arms
+    R.seg(J.shR, J.elbR, skinD, 0.062 * s); R.seg(J.elbR, J.handR, skinD, 0.05 * s);
+    R.seg(J.shL, J.elbL, skin, 0.062 * s); R.seg(J.elbL, J.handL, skin, 0.05 * s);
+    // head
+    R.seg(J.chest, J.head, skinD, 0.055 * s);
+    R.disc(J.head, SK.headR * s * 1.08, skin);
+    // hair cap: sits high and slightly back so the face stays readable
+    R.disc({ x: J.head.x - Math.sin(this.heading) * 0.045 * s,
+             y: J.head.y + 0.062 * s,
+             z: J.head.z - Math.cos(this.heading) * 0.045 * s },
+      SK.headR * s * 0.82, R.shade(this.kit, 0.45, dist));
+    // nametag
+    if (dist < 60 && !this.isPlayer && Game.mode !== 'race') {
+      R.label({ x: this.x, y: 2.06 * s, z: this.z }, this.name, '#dfefff', 0.44);
+    }
+  }
+}
+
+/* ========== 11. BOTS ===============================================
+   Simulated athletes. They wander, stand, jog laps, stretch, race and
+   talk. Personality drives behaviour + dialogue so the facility does
+   not feel like a room of clones.                                     */
+const BOT_NAMES = ['BLAZE', 'KOFI', 'RIVA', 'NOVA', 'DASH_09', 'TENZIN', 'MARLO', 'SUKI', 'AXEL', 'ZEPH',
+  'JUNO', 'OKONKWO', 'PIP', 'VELO', 'RAYNE', 'SANTI', 'MILA', 'BRECK', 'ODIN', 'TALIA', 'FLETCH', 'KAI_R',
+  'NIKO', 'SERA', 'BOLTZ', 'AMARA', 'QUILL', 'DREW', 'HANA', 'MOSS'];
+const PERSONALITIES = ['competitive', 'friendly', 'quiet', 'excited', 'casual'];
+
+class Bot extends Athlete {
+  constructor(opts) {
+    super(opts);
+    this.personality = opts.personality || pick(PERSONALITIES);
+    this.ability = opts.ability != null ? opts.ability : rand(0.88, 1.13);
+    this.ai = 'idle';
+    this.aiTimer = rand(1, 5);
+    this.tx = this.x; this.tz = this.z;
+    this.lapLane = randi(0, 7);
+    this.lapD = rand(0, 380);
+    this.chatCool = rand(6, 40);
+    this.vTop = 9.4 * this.ability;
+  }
+  /* ---- free-roam behaviour ---- */
+  think() {
+    const p = this.personality;
+    const r = Math.random();
+    if (p === 'competitive') this.ai = r < 0.45 ? 'lap' : r < 0.7 ? 'walk' : r < 0.9 ? 'stretch' : 'idle';
+    else if (p === 'excited') this.ai = r < 0.4 ? 'walk' : r < 0.7 ? 'lap' : 'idle';
+    else if (p === 'quiet') this.ai = r < 0.5 ? 'idle' : r < 0.8 ? 'walk' : 'stretch';
+    else if (p === 'friendly') this.ai = r < 0.35 ? 'approach' : r < 0.7 ? 'walk' : 'idle';
+    else this.ai = r < 0.4 ? 'walk' : r < 0.6 ? 'lap' : 'idle';
+    this.aiTimer = this.ai === 'lap' ? rand(9, 26) : this.ai === 'idle' ? rand(3, 9) : rand(4, 12);
+    if (this.ai === 'walk') {
+      const s = pick(World.spawns);
+      this.tx = s.x + rand(-9, 9); this.tz = s.z + rand(-9, 9);
+    } else if (this.ai === 'approach' && Game.player) {
+      this.tx = Game.player.x + rand(-6, 6); this.tz = Game.player.z + rand(-6, 6);
+    } else if (this.ai === 'lap') {
+      this.lapLane = randi(0, 7);
+    }
+  }
+  updateRoam(dt) {
+    this.aiTimer -= dt;
+    if (this.aiTimer <= 0) this.think();
+    if (this.ai === 'lap') {
+      // jog around a lane, following the track path exactly
+      const spd = this.personality === 'competitive' ? rand(4.4, 4.7) : 3.1;
+      this.lapD += spd * dt;
+      const pt = Track.at(this.lapLane, this.lapD, this._pt);
+      this.x = pt.x; this.z = pt.z;
+      this.targetHeading = Math.atan2(pt.dx, pt.dz);
+      this.heading = this.targetHeading;
+      this.speed = spd;
+      this.stamina = clamp(this.stamina - dt * 1.2, 12, 100);
+    } else if (this.ai === 'walk' || this.ai === 'approach') {
+      const dx = this.tx - this.x, dz = this.tz - this.z;
+      const d = Math.hypot(dx, dz);
+      if (d < 1.1) { this.targetSpeed = 0; this.ai = 'idle'; this.aiTimer = rand(2, 7); }
+      else { this.targetHeading = Math.atan2(dx, dz); this.targetSpeed = this.personality === 'excited' ? 2.9 : 1.55; }
+      this.moveRoam(dt);
+      this.stamina = clamp(this.stamina + dt * 2, 0, 100);
+    } else {
+      this.targetSpeed = 0;
+      if (this.ai === 'stretch') this.targetHeading += dt * 0.5;
+      else if (chance(dt * 0.25)) this.targetHeading = rand(-Math.PI, Math.PI);
+      this.moveRoam(dt);
+      this.stamina = clamp(this.stamina + dt * 3, 0, 100);
+    }
+  }
+  /* ---- race simulation ----
+     Solve a peak speed that lands this bot on its target time, then run
+     an accel + fatigue curve. Produces believable, varied racing.      */
+  prepRace(dist) {
+    const BASE = { 60: 7.55, 100: 11.55, 200: 23.6, 300: 38.2, 400: 52.6, 500: 69.5 };
+    const base = BASE[dist] || (dist / 8.6);
+    this.targetTime = base / this.ability * rand(0.975, 1.03);
+    this.fatK = dist >= 300 ? 0.30 : dist >= 200 ? 0.16 : 0.07;
+    this.react = rand(0.13, 0.24);
+    this.wobble = rand(0.6, 1.5);
+    // binary search peak speed
+    let lo = 4, hi = 16;
+    for (let it = 0; it < 16; it++) {
+      const v = (lo + hi) / 2;
+      let t = 0, d = 0;
+      while (d < dist && t < 200) { d += this._curve(v, t, d / dist) * 0.05; t += 0.05; }
+      if (t > this.targetTime) lo = v; else hi = v;
+    }
+    this.vpeak = (lo + hi) / 2;
+    this.vTop = this.vpeak;
+    this.raceD = 0; this.raceProgress = 0; this.speed = 0;
+    this.finished = false; this.finishTime = 0; this.place = 0;
+    this.cadence = 0; this.dipping = false;
+  }
+  _curve(vpeak, t, prog) {
+    const acc = 1 - Math.exp(-t / 0.85);
+    const fat = 1 - this.fatK * Math.pow(Math.max(0, prog - 0.5), 1.7) * 2.2;
+    return vpeak * acc * clamp(fat, 0.55, 1.2);
+  }
+  updateRace(dt, raceTime, dist) {
+    if (this.finished) { this.speed = damp(this.speed, 0.6, 1.3, dt); this.raceD += this.speed * dt; }
+    else {
+      const t = raceTime - this.react;
+      if (t <= 0) { this.speed = 0; }
+      else {
+        const noise = 1 + Math.sin(raceTime * this.wobble * 2.1 + this.id) * 0.014;
+        this.speed = this._curve(this.vpeak, t, this.raceProgress) * noise;
+        this.raceD += this.speed * dt;
+      }
+      this.raceProgress = clamp(this.raceD / dist, 0, 1);
+      this.stamina = clamp(100 - this.raceProgress * (dist >= 300 ? 78 : 42), 6, 100);
+      if (this.raceProgress > 0.965 && !this.dipping && chance(dt * 5)) this.dipping = true;
+      if (this.raceD >= dist) { this.finished = true; this.finishTime = raceTime; }
+    }
+    this.cadence = clamp(this.speed / 2.2, 0, 5.4);
+    const pt = Track.at(this.lane, Track.startD(this.lane, dist) + this.raceD, this._pt);
+    this.x = pt.x; this.z = pt.z;
+    this.heading = Math.atan2(pt.dx, pt.dz);
+  }
+}
+
+/* ========== 12. NET (MULTIPLAYER ABSTRACTION) =======================
+   The world talks to this layer only. Today it is backed by a local
+   simulation; swapping in a WebSocket transport means implementing the
+   same four hooks (connect / onPlayers / onChat / send) and deleting
+   the simulation - no gameplay code has to change.                     */
+const Net = {
+  backend: 'local-sim',
+  connected: false,
+  roster: [],                       // remote athletes (bots today)
+  handlers: {},
+  on(evt, fn) { (this.handlers[evt] = this.handlers[evt] || []).push(fn); },
+  emit(evt, data) { (this.handlers[evt] || []).forEach(f => f(data)); },
+  connect(count) {
+    // FUTURE: this.ws = new WebSocket(SERVER_URL); this.ws.onmessage = ...
+    this.roster.length = 0;
+    const names = BOT_NAMES.slice();
+    const n = clamp(count, 2, 19);
+    for (let i = 0; i < n; i++) {
+      const nm = names.splice(randi(0, names.length - 1), 1)[0] || ('RUNNER' + i);
+      const sp = World.spawns[(i + randi(0, 3)) % World.spawns.length];
+      const b = new Bot({
+        name: nm, x: sp.x + rand(-7, 7), z: sp.z + rand(-7, 7),
+        heading: rand(-Math.PI, Math.PI), personality: PERSONALITIES[i % PERSONALITIES.length]
+      });
+      this.roster.push(b);
+    }
+    this.connected = true;
+    this.emit('players', this.roster);
+    return this.roster;
+  },
+  disconnect() { this.connected = false; this.roster.length = 0; },
+  send(type, payload) {
+    // FUTURE: this.ws.send(JSON.stringify({type, payload}))
+    if (type === 'chat') this.emit('chat', { from: 'me', text: payload.text });
+  },
+  serverInfo() { return { region: 'LOCAL', players: this.roster.length + 1, cap: 20, backend: this.backend }; }
+};
+
+/* ========== 13. CHAT ================================================ */
+const Chat = {
+  log: [], unread: 0, open: false, nextBot: 8,
+  POOLS: {
+    idle: ['anyone warming up for the next event?', 'track feels quick today', 'lane 4 is mine, dont even try',
+      'just got my spikes dialled in', 'that back straight wind is brutal', 'who is running the 400?',
+      'stretching then hitting some strides', 'new PB attempt today, I can feel it', 'this facility is unreal at night',
+      'coach said to keep it easy... im not going to', 'first time on a blue track, love it'],
+    competitive: ['I am taking the 100m today, no question', 'nobody here beats my drive phase',
+      'post your times, I will beat them', 'lets settle it on the track', 'I have been training all week for this'],
+    friendly: ['good luck out there everyone!', 'nice run just now, seriously', 'welcome to the track!',
+      'if anyone needs a warmup partner im around', 'great rhythm on that last lap'],
+    quiet: ['...', 'yep', 'good session', 'ok'],
+    excited: ['LETS GOOO', 'that was FAST', 'i love this place', 'RACE ME. NOW.', 'my legs feel electric today'],
+    casual: ['might just jog today tbh', 'anyone else here for the vibes', 'nice evening for it',
+      'i show up for the track, not the times'],
+    preRace: ['event is about to start!', 'getting in the blocks now', 'blocks are set, here we go',
+      'this is the one', 'marks in a second, good luck all'],
+    postWin: ['THAT is what I am talking about', 'felt smooth the whole way', 'cadence was perfect that run',
+      'new personal best, lets go'],
+    postLose: ['bad start cost me that one', 'my legs died at 60m', 'need to work on my drive phase',
+      'ran out of stamina, my fault', 'rematch, right now'],
+    toPlayer: ['nice race {p}!', '{p} that was quick', 'good run {p}', '{p} you racing the next one?',
+      'watch out for {p}, they are fast']
+  },
+  init() { this.push('sys', 'Connected to Track Stars world - ' + Net.serverInfo().players + '/20 athletes', true); },
+  push(who, text, sys) {
+    const m = { who, text, sys: !!sys, t: Date.now() };
+    this.log.push(m);
+    if (this.log.length > 60) this.log.shift();
+    UI.renderChat(m);
+    if (!this.open) { this.unread++; UI.chatBadge(this.unread); }
+  },
+  playerSay(text) {
+    text = (text || '').trim().slice(0, 90);
+    if (!text) return;
+    Net.send('chat', { text });
+    this.push(Account.profile.name, text);
+    // a bot may reply to the player
+    if (chance(0.55)) {
+      const b = pick(Net.roster);
+      if (b) setTimeout(() => {
+        const line = pick(this.POOLS.toPlayer).replace('{p}', Account.profile.name);
+        this.push(b.name, chance(0.5) ? line : pick(this.POOLS[b.personality] || this.POOLS.idle));
+      }, rand(900, 2600));
+    }
+  },
+  update(dt) {
+    if (!Net.roster.length) return;
+    this.nextBot -= dt;
+    if (this.nextBot > 0) return;
+    this.nextBot = rand(9, 26);       // realistic intervals, never spam
+    const b = pick(Net.roster);
+    if (!b) return;
+    let pool = this.POOLS.idle;
+    const ev = EventSystem.next();
+    if (Game.mode === 'race') return;                     // quiet during racing
+    if (ev && ev.inMs < 60000 && chance(0.6)) pool = this.POOLS.preRace;
+    else if (chance(0.45)) pool = this.POOLS[b.personality] || this.POOLS.idle;
+    else if (TimeSystem.phase === 'night' && chance(0.25)) pool = ['floodlights on, night session', 'quiet track at this hour, perfect', 'late training pays off'];
+    this.push(b.name, pick(pool));
+  },
+  botRaceReaction(winnerName, playerPlace) {
+    const b = pick(Net.roster);
+    if (!b) return;
+    setTimeout(() => {
+      if (playerPlace === 1) this.push(b.name, pick(this.POOLS.toPlayer).replace('{p}', Account.profile.name));
+      else this.push(b.name, pick(chance(0.5) ? this.POOLS.postWin : this.POOLS.postLose));
+    }, rand(1500, 4000));
+  }
+};
+
+/* ========== 14. EVENT SYSTEM ========================================
+   Driven by the device's real clock: one event every 10 minutes,
+   rotating through the six V1.0 distances.                             */
+const EventSystem = {
+  SLOTS: [{ m: 0, d: 60 }, { m: 10, d: 100 }, { m: 20, d: 200 }, { m: 30, d: 300 }, { m: 40, d: 400 }, { m: 50, d: 500 }],
+  OPEN_MS: 90 * 1000,      // entry window before the gun
+  LIVE_MS: 120 * 1000,     // event stays enterable after it starts
+  list() {
+    const now = Date.now();
+    const out = [];
+    const base = new Date();
+    base.setSeconds(0, 0);
+    for (let hOff = 0; hOff <= 1; hOff++) {
+      for (const s of this.SLOTS) {
+        const d = new Date();
+        d.setMinutes(s.m, 0, 0);
+        d.setHours(d.getHours() + hOff);
+        const at = d.getTime();
+        const inMs = at - now;
+        if (inMs < -this.LIVE_MS) continue;
+        out.push({
+          dist: s.d, at, inMs,
+          status: inMs <= 0 ? 'live' : (inMs <= this.OPEN_MS ? 'open' : 'upcoming'),
+          name: s.d + 'M SPRINT'
+        });
+      }
+    }
+    out.sort((a, b) => a.at - b.at);
+    return out.slice(0, 6);
+  },
+  next() { const l = this.list(); return l[0] || null; },
+  canEnter(ev) { return ev && (ev.status === 'open' || ev.status === 'live'); }
+};
+
+/* ========== 15. LEADERBOARD =========================================
+   Local records today; the same shape a server would return.           */
+const Leaderboard = {
+  boards: null,
+  seed() {
+    const d = SaveSystem.data;
+    if (d.leaderboards && d.leaderboards['100']) { this.boards = d.leaderboards; return; }
+    const BASE = { 60: 7.35, 100: 11.2, 200: 23.1, 300: 37.4, 400: 51.6, 500: 68.4 };
+    const b = {};
+    CFG.DISTANCES.forEach(dist => {
+      const rows = [];
+      const names = BOT_NAMES.slice();
+      for (let i = 0; i < 12; i++) {
+        const nm = names.splice(randi(0, names.length - 1), 1)[0];
+        rows.push({ name: nm, time: +(BASE[dist] * (1 + i * rand(0.012, 0.028))).toFixed(2), me: false });
+      }
+      rows.sort((x, y) => x.time - y.time);
+      b[dist] = rows;
+    });
+    this.boards = b;
+    d.leaderboards = b;
+    SaveSystem.save();
+  },
+  submit(dist, name, time) {
+    // FUTURE: POST to /leaderboard { dist, time, token }
+    const rows = this.boards[dist];
+    if (!rows) return;
+    const mine = rows.find(r => r.me);
+    if (mine) { if (time < mine.time) mine.time = +time.toFixed(2); mine.name = name; }
+    else rows.push({ name, time: +time.toFixed(2), me: true });
+    rows.sort((a, b) => a.time - b.time);
+    if (rows.length > 15) {
+      const idx = rows.findIndex(r => r.me);
+      while (rows.length > 15) {
+        const last = rows.length - 1;
+        if (last === idx) break;
+        rows.pop();
+      }
+    }
+    SaveSystem.data.leaderboards = this.boards;
+    SaveSystem.save();
+  },
+  rankOf(dist) {
+    const rows = this.boards[dist] || [];
+    const i = rows.findIndex(r => r.me);
+    return i < 0 ? null : i + 1;
+  }
+};
+
+/* ========== 16. PLAYER =============================================
+   THE core system: alternating left/right taps drive cadence, cadence
+   drives stride, stride drives speed. Rhythm consistency, correct
+   alternation and stamina management all matter - spamming one side or
+   over-striding the cadence window is punished.                        */
+class Player extends Athlete {
+  constructor(opts) {
+    super(Object.assign({ isPlayer: true }, opts));
+    this.cadence = 0;
+    this.rhythm = 0;
+    this.quality = 0.8;
+    this.lastSide = null;
+    this.lastTapT = 0;
+    this.intervals = [];
+    this.mistaps = 0;
+    this.reaction = null;
+    this.falseStart = false;
+    this.dipBonus = 0;
+    this.topSpeed = 0;
+    this.started = false;
+    this.refreshStats();
+  }
+  /** small, capped progression payoff for levelling up */
+  refreshStats() {
+    const lv = Math.min(Account.profile.level, 25);
+    this.vTop = 10.15 + lv * 0.028;
+    this.staminaMax = 100 + lv * 1.4;
+  }
+  resetRace(dist) {
+    this.dist = dist;
+    this.cadence = 0; this.rhythm = 0; this.quality = 0.8;
+    this.lastSide = null; this.lastTapT = 0; this.intervals.length = 0;
+    this.mistaps = 0; this.reaction = null; this.falseStart = false;
+    this.dipBonus = 0; this.topSpeed = 0; this.started = false;
+    this.raceD = 0; this.raceProgress = 0; this.speed = 0;
+    this.stamina = this.staminaMax;
+    this.finished = false; this.finishTime = 0; this.place = 0;
+    this.dipping = false; this.dipStartD = null;
+    this.freeze = 0;
+    this.refreshStats();
+  }
+  /** the ideal cadence window for the current race phase */
+  idealCadence() {
+    const long = this.dist >= 300;
+    if (this.raceD < 24) return long ? 3.45 : 3.80;      // drive phase: powerful, slower steps
+    if (long && this.raceProgress > 0.55) return 3.75;   // hold form, save stamina
+    return long ? 3.95 : 4.45;                           // top-speed cadence
+  }
+  cadenceWindow() { const i = this.idealCadence(); return [i - 0.55, i + 0.55]; }
+
+  /** a tap on the left or right side of the screen */
+  tap(side, now) {
+    if (Race.phase === 'marks' || Race.phase === 'set') {  // false start detection
+      if (!this.falseStart) {
+        this.falseStart = true;
+        UI.big('HOLD!', 'FALSE START - PENALTY', 'bad');
+        Audio2.badTap();
+        UI.toast('False start - 0.4s penalty', 'warn');
+      }
+      return;
+    }
+    if (Race.phase !== 'running' || this.finished) return;
+    if (this.reaction === null) {
+      this.reaction = Math.max(0.001, now - Race.goAt);
+      // a sharp reaction gives a real launch out of the blocks
+      const bonus = clamp(1 - (this.reaction - 0.13) / 0.5, 0, 1);
+      this.speed += 0.9 + bonus * 1.5;
+      this.started = true;
+    }
+    if (side === this.lastSide) {                          // no spamming one side
+      this.mistaps++;
+      this.quality = Math.max(0.35, this.quality - 0.22);
+      this.speed *= 0.972;
+      this.cadence *= 0.9;
+      this.rhythm = Math.max(0, this.rhythm - 0.3);
+      Audio2.badTap();
+      UI.tapFeedback(side, false);
+      return;
+    }
+    const dt = now - this.lastTapT;
+    this.lastSide = side;
+    this.lastTapT = now;
+    if (dt > 0.055 && dt < 2.5) {
+      const inst = clamp(1 / dt, 0.4, 8);
+      this.cadence = lerp(this.cadence, inst, 0.6);
+      this.intervals.push(dt);
+      if (this.intervals.length > 7) this.intervals.shift();
+      // rhythm = consistency of the last few intervals
+      if (this.intervals.length > 2) {
+        let m = 0; for (const v of this.intervals) m += v; m /= this.intervals.length;
+        let s = 0; for (const v of this.intervals) s += (v - m) * (v - m);
+        s = Math.sqrt(s / this.intervals.length);
+        this.rhythm = clamp(1 - (s / m) * 2.4, 0, 1);
+      }
+      this.speed += 0.10 * this.quality;                   // immediate, tactile response
+      Audio2.step(clamp(this.quality, 0.2, 1));
+    } else if (this.cadence < 0.5) {
+      this.cadence = 2.2;
+    }
+    UI.tapFeedback(side, true);
+  }
+
+  updateRace(dt, raceTime, dist) {
+    if (this.freeze > 0) { this.freeze -= dt; this.speed = damp(this.speed, 0, 6, dt); }
+    if (!this.finished) {
+      // cadence bleeds away when you stop tapping
+      const since = raceTime - this.lastTapT;
+      if (since > 0.30) this.cadence *= Math.exp(-2.6 * dt);
+      const ideal = this.idealCadence();
+      const c = this.cadence;
+      // quality: bell curve around the ideal window, harsher above it
+      const w = c > ideal ? 0.78 : 1.05;
+      const q = Math.exp(-Math.pow((c - ideal) / w, 2));
+      const rhythmMul = 0.90 + 0.17 * this.rhythm;
+      const stamF = clamp(this.stamina / this.staminaMax, 0, 1);
+      const formF = 0.70 + 0.30 * Math.pow(stamF, 0.6);
+      const target = (0.55 + 0.56 * q) * rhythmMul * formF;
+      this.quality = damp(this.quality, clamp(target, 0.3, 1.15), 9, dt);
+      // stride -> speed
+      const stride = CFG.RUN.STRIDE * this.quality;
+      let vTarget = Math.min(stride * c, CFG.RUN.V_CAP);
+      // you physically cannot be at top speed 5m in: accel envelope
+      const tt = Math.max(0, raceTime - (this.reaction || 0.16));
+      const env = this.vTop * (1 - Math.exp(-tt / 1.05)) * (0.88 + 0.25 * this.quality);
+      vTarget = Math.min(vTarget, env);
+      if (this.freeze > 0) vTarget = 0;
+      if (this.dipping) vTarget *= 0.965;                  // dipping costs a little speed
+      const accel = this.raceD < 25 ? 5.2 : 3.6;
+      this.speed = damp(this.speed, vTarget, this.speed > vTarget ? 2.4 : accel, dt);
+      this.speed = Math.max(0, this.speed);
+      if (this.speed > this.topSpeed) this.topSpeed = this.speed;
+      this.raceD += this.speed * dt;
+      this.raceProgress = clamp(this.raceD / dist, 0, 1);
+      // stamina burn scales steeply with cadence
+      const burn = 0.9 + 2.05 * Math.pow(Math.max(c, 0) / 4.4, 2.6);
+      this.stamina = clamp(this.stamina - burn * dt, 0, this.staminaMax);
+      if (this.raceD >= dist) {
+        this.finished = true;
+        this.finishTime = Math.max(0.01, raceTime - this.dipBonus);
+      }
+    } else {
+      this.speed = damp(this.speed, 0.8, 1.1, dt);
+      this.raceD += this.speed * dt;
+      this.cadence = damp(this.cadence, 0.6, 1.4, dt);
+    }
+    const pt = Track.at(this.lane, Track.startD(this.lane, dist) + this.raceD, this._pt);
+    this.x = pt.x; this.z = pt.z;
+    this.heading = Math.atan2(pt.dx, pt.dz);
+  }
+  /** finishing dip - only rewarding when timed near the line */
+  doDip() {
+    if (this.dipping || this.finished || Race.phase !== 'running') return;
+    const left = this.dist - this.raceD;
+    if (left > 12) return;
+    this.dipping = true;
+    this.dipStartD = left;
+    this.dipBonus = left <= 3.2 ? 0.03 : left <= 6 ? 0.01 : 0;
+    Audio2.tone(520, 0.12, 'triangle', 0.12);
+  }
+}
+
+/* ========== 17. RACE ================================================ */
+const Race = {
+  active: false,
+  phase: 'idle',        // walkin | marks | set | go | running | done
+  dist: 100,
+  t: 0, goAt: 0, phaseT: 0, setDelay: 1.6, stall: 0,
+  entrants: [], bots: [], results: [], scheduled: false,
+  finishHold: 0,
+
+  start(dist, scheduled) {
+    const P = Game.player;
+    this.dist = dist;
+    this.scheduled = !!scheduled;
+    this.active = true;
+    this.phase = 'walkin';
+    this.t = 0; this.phaseT = 0; this.goAt = 0; this.finishHold = 0; this.stall = 0;
+    this.results.length = 0;
+    this.setDelay = rand(1.25, 2.25);
+
+    // field: player + up to 7 bots, lanes assigned across the track
+    const pool = Net.roster.slice().sort(() => Math.random() - 0.5).slice(0, 7);
+    this.bots = pool;
+    this.entrants = [P].concat(pool);
+    const lanes = [0, 1, 2, 3, 4, 5, 6, 7].sort(() => Math.random() - 0.5);
+    P.lane = lanes.pop();
+    P.mode = 'race';
+    P.resetRace(dist);
+    P.raceD = -2.4;                       // walk-in distance behind the blocks
+    P.blockState = null;
+    pool.forEach(b => {
+      b.lane = lanes.pop();
+      b.mode = 'race';
+      b.prepRace(dist);
+      b.raceD = -2.4;
+      b.blockState = null;
+      b.dipping = false;
+    });
+    this.entrants.forEach(a => {
+      const pt = Track.at(a.lane, Track.startD(a.lane, dist) + a.raceD, a._pt);
+      a.x = pt.x; a.z = pt.z; a.heading = Math.atan2(pt.dx, pt.dz);
+      a.speed = 1.15; a.params.crouch = 0;
+    });
+    this.rankField();            // seed positions so the HUD never shows 0th
+    Game.mode = 'race';
+    UI.enterRaceMode(dist);
+    Audio2.crowd(1);
+  },
+
+  update(dt) {
+    if (!this.active) return;
+    this.phaseT += dt;
+    const P = Game.player;
+    switch (this.phase) {
+      case 'walkin': {
+        // athletes walk up to their blocks
+        this.entrants.forEach(a => {
+          if (a.raceD < -0.02) {
+            a.speed = 1.25;
+            a.raceD = Math.min(0, a.raceD + a.speed * dt);
+          } else { a.speed = 0; }
+          const pt = Track.at(a.lane, Track.startD(a.lane, this.dist) + a.raceD, a._pt);
+          a.x = pt.x; a.z = pt.z; a.heading = Math.atan2(pt.dx, pt.dz);
+        });
+        if (this.phaseT > 2.3) { this.setPhase('marks'); }
+        break;
+      }
+      case 'marks': {
+        this.entrants.forEach(a => { a.blockState = 'MARKS'; a.speed = 0; });
+        if (this.phaseT > 1.7) this.setPhase('set');
+        break;
+      }
+      case 'set': {
+        this.entrants.forEach(a => { a.blockState = 'SET'; a.speed = 0; });
+        if (this.phaseT > this.setDelay) this.setPhase('go');
+        break;
+      }
+      case 'go': {
+        this.entrants.forEach(a => { a.blockState = null; });
+        this.t = 0;
+        this.goAt = 0;
+        this.phase = 'running';
+        this.phaseT = 0;
+        if (P.falseStart) { P.freeze = 0.4; }
+        break;
+      }
+      case 'running': {
+        this.t += dt;
+        P.updateRace(dt, this.t, this.dist);
+        this.bots.forEach(b => b.updateRace(dt, this.t, this.dist));
+        this.rankField();
+        // everyone home (or 5s after the player) -> results
+        const allDone = this.entrants.every(a => a.finished);
+        if (P.finished) {
+          this.finishHold += dt;
+          if (allDone || this.finishHold > 4.2) this.finishRace();
+        } else {
+          // if the whole field is home, give the player a grace period and
+          // then close the race out rather than hanging on the track
+          const fieldHome = this.bots.every(bt => bt.finished);
+          if (fieldHome) this.stall += dt;
+          if (this.stall > 25 || this.t > this.dist / 1.6 + 25) {
+            P.finished = true;
+            P.finishTime = this.t + (this.dist - P.raceD) / Math.max(1.5, P.speed);
+          }
+        }
+        break;
+      }
+      case 'done': break;
+    }
+    this.entrants.forEach(a => a.animate(dt));
+  },
+  setPhase(p) {
+    this.phase = p; this.phaseT = 0;
+    if (p === 'marks') { UI.big('ON YOUR MARKS', this.dist + 'M', ''); Audio2.marks(); }
+    if (p === 'set') { UI.big('SET', 'HOLD IT', ''); Audio2.set(); }
+    if (p === 'go') { UI.big('GO!', 'ALTERNATE L / R', 'go'); Audio2.gun(); UI.showTapZones(true); }
+  },
+  /** live positions during the race */
+  rankField() {
+    const arr = this.entrants.slice().sort((a, b) => {
+      if (a.finished && b.finished) return a.finishTime - b.finishTime;
+      if (a.finished) return -1;
+      if (b.finished) return 1;
+      return b.raceD - a.raceD;
+    });
+    arr.forEach((a, i) => a.place = i + 1);
+    return arr;
+  },
+  finishRace() {
+    this.phase = 'done';
+    const P = Game.player;
+    // anyone still running is timed out at their projected pace
+    this.entrants.forEach(a => {
+      if (!a.finished) { a.finished = true; a.finishTime = this.t + (this.dist - a.raceD) / Math.max(1.5, a.speed); }
+    });
+    const order = this.entrants.slice().sort((a, b) => a.finishTime - b.finishTime);
+    order.forEach((a, i) => a.place = i + 1);
+    this.results = order.map(a => ({ name: a.isPlayer ? Account.profile.name : a.name, time: a.finishTime, me: !!a.isPlayer, place: a.place }));
+
+    // ----- progression -----
+    const prof = Account.profile;
+    const key = String(this.dist);
+    const prev = SaveSystem.data.records[key];
+    const isPB = prev == null || P.finishTime < prev;
+    if (isPB) SaveSystem.data.records[key] = +P.finishTime.toFixed(2);
+    prof.races++;
+    prof.distanceRun += this.dist;
+    if (P.place === 1) prof.wins++;
+    if (P.place <= 3) prof.podiums++;
+    let xp = 30 + Math.round(this.dist * 0.22);
+    xp += P.place === 1 ? 120 : P.place === 2 ? 80 : P.place === 3 ? 55 : 25;
+    if (isPB) xp += 90;
+    if (P.rhythm > 0.7) xp += 20;
+    if (this.scheduled) xp = Math.round(xp * 1.5);
+    const levels = Account.addXP(xp);
+    SaveSystem.data.history.unshift({ dist: this.dist, time: +P.finishTime.toFixed(2), place: P.place, pb: isPB, at: Date.now() });
+    if (SaveSystem.data.history.length > 25) SaveSystem.data.history.length = 25;
+    Leaderboard.submit(this.dist, prof.name, P.finishTime);
+    SaveSystem.save();
+
+    Audio2.finish();
+    if (isPB) setTimeout(() => Audio2.pb(), 380);
+    if (levels > 0) setTimeout(() => { Audio2.levelUp(); UI.toast('LEVEL UP - LVL ' + prof.level, 'good'); }, 900);
+    UI.showResults({ place: P.place, time: P.finishTime, pb: isPB, prevPb: prev, xp, dist: this.dist,
+      top: P.topSpeed, results: this.results, levels });
+    Chat.botRaceReaction(order[0].name, P.place);
+  },
+  exit() {
+    this.active = false;
+    this.phase = 'idle';
+    const P = Game.player;
+    P.mode = 'roam';
+    P.blockState = null; P.dipping = false; P.cadence = 0;
+    P.stamina = clamp(P.stamina, 35, P.staminaMax);
+    // put the athlete back on the infield apron near the finish
+    P.x = Track.S / 2 - 6; P.z = Track.outerR + 4; P.heading = Math.PI;
+    P.speed = 0; P.targetSpeed = 0;
+    this.bots.forEach(b => {
+      b.mode = 'roam'; b.blockState = null; b.dipping = false;
+      const sp = pick(World.spawns);
+      b.x = sp.x + rand(-6, 6); b.z = sp.z + rand(-6, 6);
+      b.ai = 'idle'; b.aiTimer = rand(1, 5); b.speed = 0; b.params.crouch = 0;
+    });
+    this.entrants.length = 0; this.bots.length = 0;
+    Game.mode = 'roam';
+    UI.exitRaceMode();
+  }
+};
+
+/* ========== 18. INPUT ===============================================
+   Touch first (with mouse + keyboard fallbacks for desktop testing).
+   Racing = alternating taps on the left/right screen halves.
+   Roaming = drag-anywhere joystick on the left, camera drag on the right. */
+const Input = {
+  joyId: null, joyBase: { x: 0, y: 0 }, joy: { x: 0, y: 0 }, joyMag: 0,
+  camId: null, camLast: { x: 0, y: 0 }, camDrag: 0,
+  keys: {},
+  init() {
+    const app = document.getElementById('app');
+    const opt = { passive: false };
+    app.addEventListener('pointerdown', e => this.down(e), opt);
+    app.addEventListener('pointermove', e => this.move(e), opt);
+    app.addEventListener('pointerup', e => this.up(e), opt);
+    app.addEventListener('pointercancel', e => this.up(e), opt);
+    document.addEventListener('touchmove', e => { if (!e.target.closest('.sheetBody,#chatLog,.tabs,input')) e.preventDefault(); }, opt);
+    document.addEventListener('gesturestart', e => e.preventDefault(), opt);
+    document.addEventListener('contextmenu', e => e.preventDefault());
+    window.addEventListener('keydown', e => this.key(e, true));
+    window.addEventListener('keyup', e => this.key(e, false));
+  },
+  isUI(e) { return !!(e.target.closest && e.target.closest('.ui-block,.modal,.railBtn,button,input,#results,.xBtn')); },
+  down(e) {
+    Audio2.init(); Audio2.resume();
+    if (this.isUI(e)) return;
+    if (Game.mode === 'race') {
+      if (Race.phase === 'done') return;
+      const side = (e.clientX < window.innerWidth / 2) ? 'L' : 'R';
+      Game.player.tap(side, Race.t);
+      return;
+    }
+    const w = window.innerWidth, h = window.innerHeight;
+    if (this.joyId === null && e.clientX < w * 0.58 && e.clientY > h * 0.40) {
+      this.joyId = e.pointerId;
+      this.joyBase.x = e.clientX; this.joyBase.y = e.clientY;
+      this.joy.x = 0; this.joy.y = 0; this.joyMag = 0;
+      UI.showStick(e.clientX, e.clientY, 0, 0);
+    } else if (this.camId === null) {
+      this.camId = e.pointerId;
+      this.camLast.x = e.clientX; this.camLast.y = e.clientY;
+      this.camDrag = 0;
+    }
+  },
+  move(e) {
+    if (e.pointerId === this.joyId) {
+      const dx = e.clientX - this.joyBase.x, dy = e.clientY - this.joyBase.y;
+      const R = 58;
+      const d = Math.hypot(dx, dy) || 1;
+      const k = Math.min(1, d / R);
+      this.joy.x = (dx / d) * k; this.joy.y = (dy / d) * k;
+      this.joyMag = k;
+      UI.showStick(this.joyBase.x, this.joyBase.y, this.joy.x * R, this.joy.y * R);
+      e.preventDefault();
+    } else if (e.pointerId === this.camId) {
+      const dx = e.clientX - this.camLast.x, dy = e.clientY - this.camLast.y;
+      this.camLast.x = e.clientX; this.camLast.y = e.clientY;
+      this.camDrag += Math.abs(dx) + Math.abs(dy);
+      Game.camYawUser -= dx * 0.0055;
+      Game.camPitchUser = clamp(Game.camPitchUser - dy * 0.0035, -0.45, 0.30);
+      Game.camManual = 1.6;
+      e.preventDefault();
+    }
+  },
+  up(e) {
+    if (e.pointerId === this.joyId) { this.joyId = null; this.joy.x = 0; this.joy.y = 0; this.joyMag = 0; UI.hideStick(); }
+    if (e.pointerId === this.camId) this.camId = null;
+  },
+  key(e, dn) {
+    const k = e.key.toLowerCase();
+    if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+    this.keys[k] = dn;
+    if (!dn) return;
+    Audio2.init(); Audio2.resume();
+    if (Game.mode === 'race') {
+      if (k === 'arrowleft' || k === 'a') Game.player.tap('L', Race.t);
+      if (k === 'arrowright' || k === 'd') Game.player.tap('R', Race.t);
+      if (k === ' ') Game.player.doDip();
+    }
+    if (k === 'escape') UI.closeAll();
+  },
+  /** keyboard movement vector for desktop roaming */
+  keyVec(out) {
+    let x = 0, y = 0;
+    if (this.keys['w'] || this.keys['arrowup']) y -= 1;
+    if (this.keys['s'] || this.keys['arrowdown']) y += 1;
+    if (this.keys['a'] || this.keys['arrowleft']) x -= 1;
+    if (this.keys['d'] || this.keys['arrowright']) x += 1;
+    const m = Math.hypot(x, y);
+    out.x = m ? x / m : 0; out.y = m ? y / m : 0;
+    return m ? (this.keys['shift'] ? 1 : 0.62) : 0;
+  }
+};
+
+/* ========== 19. UI ================================================== */
+const UI = {
+  el: {}, lastHud: 0, floats: [], lbTab: 100, _bigT: null,
+  init() {
+    const ids = ['hud', 'clockTime', 'clockPhase', 'nextEvent', 'neName', 'neCd', 'lvlNum', 'xpPct', 'xpBar',
+      'pName', 'stamBar', 'stamVal', 'prompt', 'stick', 'knob', 'raceHud', 'raceDist', 'raceTime', 'raceSplit',
+      'racePosNum', 'raceSpd', 'raceLeft', 'cadNeedle', 'cadZone', 'cadFill', 'cadNum', 'rhythmTxt', 'phaseTxt',
+      'raceStamBar', 'tapZones', 'tzL', 'tzR', 'dipBtn', 'bigText', 'results', 'resPos', 'resTime', 'resPbTag',
+      'resEvent', 'resXp', 'resPb', 'resTop', 'resTable', 'resXpBar', 'resLvlTxt', 'chatPanel', 'chatLog',
+      'chatInput', 'chatBadge', 'chatFloat', 'toastWrap', 'evList', 'distGrid', 'evClock', 'lbTabs', 'lbList',
+      'fpsTag', 'stickHint', 'setNameCur', 'mName', 'nameInput', 'loadBar', 'loadTxt', 'loadPct', 'loading'];
+    ids.forEach(i => this.el[i] = document.getElementById(i));
+    this.bind();
+    this.buildDistGrid();
+    this.buildLbTabs();
+    this.syncSettings();
+  },
+  bind() {
+    const b = (id, fn) => { const e = document.getElementById(id); if (e) e.addEventListener('click', ev => { ev.stopPropagation(); Audio2.init(); Audio2.click(); fn(ev); }); };
+    b('btnRace', () => { this.buildEvents(); this.openModal('mEvents'); });
+    b('btnBoard', () => { this.buildBoard(); this.openModal('mBoard'); });
+    b('btnInv', () => this.openModal('mInv'));
+    b('btnSet', () => { this.syncSettings(); this.openModal('mSet'); });
+    b('btnChat', () => this.toggleChat());
+    b('chatSend', () => this.sendChat());
+    b('resExit', () => { this.hideResults(); Race.exit(); });
+    b('resAgain', () => { const d = Race.dist; this.hideResults(); Race.exit(); setTimeout(() => Race.start(d, false), 240); });
+    b('nameGo', () => {
+      const v = this.el.nameInput.value.trim() || 'ATHLETE';
+      Account.createLocal(v);
+      this.closeModal('mName');
+      this.refreshProfile();
+      Chat.push('sys', 'Welcome to Track Stars, ' + Account.profile.name + '!', true);
+    });
+    b('setRename', () => { this.el.nameInput.value = Account.profile.name || ''; this.closeModal('mSet'); this.openModal('mName'); });
+    b('setWipe', () => {
+      SaveSystem.wipe();
+      this.toast('Save data cleared - reloading', 'warn');
+      setTimeout(() => location.reload(), 700);
+    });
+    document.querySelectorAll('[data-close]').forEach(x => x.addEventListener('click', () => { Audio2.back(); this.closeModal(x.dataset.close); }));
+    document.querySelectorAll('.modal').forEach(m => m.addEventListener('click', e => { if (e.target === m) { Audio2.back(); this.closeModal(m.id); } }));
+    this.el.dipBtn.addEventListener('click', e => { e.stopPropagation(); Game.player.doDip(); });
+    this.el.chatInput.addEventListener('keydown', e => { if (e.key === 'Enter') this.sendChat(); });
+    this.el.prompt.addEventListener('click', () => { Audio2.click(); this.buildEvents(); this.openModal('mEvents'); });
+    // settings controls
+    const seg = (id, key, fn) => {
+      const box = document.getElementById(id);
+      box.querySelectorAll('button').forEach(btn => btn.addEventListener('click', () => {
+        Audio2.click();
+        SaveSystem.data.settings[key] = btn.dataset.v;
+        SaveSystem.save(); this.syncSettings(); fn(btn.dataset.v);
+      }));
+    };
+    seg('setGfx', 'gfx', v => { Renderer.setQuality(v); World.build(v); });
+    seg('setOpt', 'opt', v => { Game.fpsCap = v === 'battery' ? 30 : v === 'balanced' ? 60 : 120; });
+    seg('setCrowd', 'crowd', () => {});
+    seg('setFps', 'fps', v => { this.el.fpsTag.style.display = v === 'on' ? 'block' : 'none'; });
+    const vol = document.getElementById('setVol');
+    vol.addEventListener('input', () => {
+      const v = vol.value / 100;
+      SaveSystem.data.settings.volume = v; Audio2.setVolume(v);
+    });
+    vol.addEventListener('change', () => { SaveSystem.save(); Audio2.click(); });
+  },
+  syncSettings() {
+    const s = SaveSystem.data.settings;
+    document.getElementById('setVol').value = Math.round(s.volume * 100);
+    [['setGfx', s.gfx], ['setOpt', s.opt], ['setCrowd', s.crowd], ['setFps', s.fps]].forEach(p => {
+      document.querySelectorAll('#' + p[0] + ' button').forEach(btn => btn.classList.toggle('on', btn.dataset.v === p[1]));
+    });
+    this.el.setNameCur.textContent = Account.profile.name || 'RUNNER';
+    this.el.fpsTag.style.display = s.fps === 'on' ? 'block' : 'none';
+  },
+  /* ---------- modals ---------- */
+  openModal(id) { const m = document.getElementById(id); if (m) m.classList.remove('hidden'); },
+  closeModal(id) { const m = document.getElementById(id); if (m) m.classList.add('hidden'); },
+  closeAll() { document.querySelectorAll('.modal').forEach(m => { if (m.id !== 'mName' || !Account.isNew()) m.classList.add('hidden'); }); },
+  /* ---------- HUD ---------- */
+  refreshProfile() {
+    const p = Account.profile, lp = Account.levelProgress();
+    this.el.lvlNum.innerHTML = 'LVL <span>' + p.level + '</span>';
+    this.el.xpPct.textContent = Math.round(lp.pct * 100) + '%';
+    this.el.xpBar.style.width = (lp.pct * 100).toFixed(1) + '%';
+    this.el.pName.textContent = p.name || 'RUNNER';
+    this.el.setNameCur.textContent = p.name || 'RUNNER';
+  },
+  updateHud() {
+    const now = performance.now();
+    if (now - this.lastHud < 200) return;
+    this.lastHud = now;
+    this.el.clockTime.textContent = TimeSystem.clockText();
+    this.el.clockPhase.textContent = TimeSystem.phase;
+    const ev = EventSystem.next();
+    if (ev) {
+      this.el.neName.textContent = ev.name;
+      this.el.neCd.textContent = ev.status === 'live' ? 'LIVE NOW' : fmtCountdown(ev.inMs);
+      this.el.nextEvent.classList.toggle('open', ev.status !== 'upcoming');
+    }
+    const P = Game.player;
+    if (P) {
+      const pct = clamp(P.stamina / P.staminaMax, 0, 1);
+      this.el.stamBar.style.width = (pct * 100).toFixed(0) + '%';
+      this.el.stamBar.classList.toggle('low', pct < 0.3);
+      this.el.stamVal.textContent = Math.round(pct * 100);
+    }
+  },
+  updateRaceHud() {
+    const P = Game.player;
+    if (!P || !Race.active) return;
+    const e = this.el;
+    e.raceTime.textContent = Race.phase === 'running' || Race.phase === 'done' ? fmtRaceTime(Race.t) : '0.00';
+    e.raceSpd.innerHTML = P.speed.toFixed(1) + '<small> m/s</small>';
+    const left = Math.max(0, Race.dist - P.raceD);
+    e.raceLeft.textContent = left.toFixed(0) + ' m';
+    e.racePosNum.innerHTML = P.place + '<small>' + ORD(P.place) + '</small>';
+    const cad = clamp(P.cadence, 0, 6);
+    const pctC = (cad / 6) * 100;
+    e.cadNeedle.style.left = pctC.toFixed(1) + '%';
+    e.cadFill.style.width = pctC.toFixed(1) + '%';
+    e.cadNum.textContent = cad.toFixed(1);
+    const win = P.cadenceWindow();
+    e.cadZone.style.left = ((win[0] / 6) * 100).toFixed(1) + '%';
+    e.cadZone.style.width = (((win[1] - win[0]) / 6) * 100).toFixed(1) + '%';
+    const rq = P.rhythm;
+    e.rhythmTxt.innerHTML = 'Rhythm <b>' + (rq > 0.78 ? 'PERFECT' : rq > 0.55 ? 'GOOD' : rq > 0.3 ? 'OK' : 'BROKEN') + '</b>';
+    e.phaseTxt.textContent = P.finished ? 'HOME' : P.raceD < 25 ? 'DRIVE' : P.stamina < 22 ? 'FATIGUE' :
+      P.raceProgress > 0.9 ? 'FINISH' : 'TOP SPEED';
+    const sp = clamp(P.stamina / P.staminaMax, 0, 1);
+    e.raceStamBar.style.width = (sp * 100).toFixed(0) + '%';
+    e.raceStamBar.classList.toggle('low', sp < 0.3);
+    e.raceSplit.textContent = Race.phase === 'running' ? (P.reaction ? 'RT ' + P.reaction.toFixed(3) + 's' : 'REACT!') : 'READY';
+    // finishing dip prompt
+    const showDip = Race.phase === 'running' && !P.finished && !P.dipping && left < 10 && left > 0;
+    this.el.dipBtn.classList.toggle('on', showDip);
+  },
+  /* ---------- race mode: hide the world UI ---------- */
+  enterRaceMode(dist) {
+    this.el.hud.classList.add('race-mode');
+    this.el.raceHud.classList.add('on');
+    this.el.raceDist.textContent = dist + 'M';
+    this.el.chatPanel.classList.add('hidden');
+    this.el.chatFloat.classList.add('hidden');
+    this.el.stickHint.classList.add('hidden');
+    Chat.open = false;
+    this.closeAll();
+    this.showTapZones(false);
+    setTimeout(() => this.el.hud.classList.add('hidden'), 380);
+  },
+  exitRaceMode() {
+    this.el.hud.classList.remove('hidden');
+    requestAnimationFrame(() => this.el.hud.classList.remove('race-mode'));
+    this.el.raceHud.classList.remove('on');
+    this.el.chatFloat.classList.remove('hidden');
+    this.el.stickHint.classList.remove('hidden');
+    this.showTapZones(false);
+    this.el.dipBtn.classList.remove('on');
+    this.refreshProfile();
+  },
+  showTapZones(on) { this.el.tapZones.classList.toggle('on', !!on); },
+  tapFeedback(side, ok) {
+    const z = side === 'L' ? this.el.tzL : this.el.tzR;
+    const other = side === 'L' ? this.el.tzR : this.el.tzL;
+    z.classList.add('flash');
+    setTimeout(() => z.classList.remove('flash'), 90);
+    z.classList.remove('next');
+    if (ok) other.classList.add('next');
+  },
+  big(text, sub, cls) {
+    const b = this.el.bigText;
+    b.className = '';
+    b.querySelector('.bt').textContent = text;
+    b.querySelector('.bs').textContent = sub || '';
+    void b.offsetWidth;
+    b.className = 'show ' + (cls || '');
+    clearTimeout(this._bigT);
+    this._bigT = setTimeout(() => { b.className = ''; }, 1400);
+  },
+  toast(msg, type) {
+    const d = document.createElement('div');
+    d.className = 'toast ' + (type || '');
+    d.textContent = msg;
+    this.el.toastWrap.appendChild(d);
+    setTimeout(() => { d.style.transition = 'opacity .4s'; d.style.opacity = '0'; setTimeout(() => d.remove(), 420); }, 2200);
+  },
+  showStick(bx, by, kx, ky) {
+    const s = this.el.stick;
+    s.style.left = bx + 'px'; s.style.top = by + 'px';
+    s.classList.add('on');
+    this.el.knob.style.transform = 'translate(calc(-50% + ' + kx + 'px), calc(-50% + ' + ky + 'px))';
+  },
+  hideStick() { this.el.stick.classList.remove('on'); this.el.knob.style.transform = 'translate(-50%,-50%)'; },
+  setPrompt(text) {
+    const p = this.el.prompt;
+    if (!text) { p.classList.add('hidden'); return; }
+    if (p.innerHTML !== text) p.innerHTML = text;
+    p.classList.remove('hidden');
+  },
+  /* ---------- results ---------- */
+  showResults(r) {
+    const e = this.el;
+    e.resPos.innerHTML = r.place + '<small>' + ORD(r.place) + '</small>';
+    e.resTime.textContent = fmtRaceTime(r.time);
+    e.resEvent.textContent = r.dist + 'M';
+    e.resXp.textContent = '+' + r.xp;
+    e.resTop.textContent = r.top.toFixed(1) + ' m/s';
+    e.resPb.textContent = fmtRaceTime(SaveSystem.data.records[String(r.dist)]);
+    e.resPbTag.classList.toggle('on', !!r.pb);
+    e.resTable.innerHTML = r.results.slice(0, 8).map(x =>
+      '<div class="row' + (x.me ? ' me' : '') + '"><div class="p">' + x.place + '</div>' +
+      '<div class="n">' + x.name + '</div><div class="t mono">' + fmtRaceTime(x.time) + '</div></div>').join('');
+    const lp = Account.levelProgress();
+    e.resXpBar.style.width = '0%';
+    setTimeout(() => { e.resXpBar.style.width = (lp.pct * 100).toFixed(1) + '%'; }, 220);
+    e.resLvlTxt.textContent = 'LVL ' + Account.profile.level + ' - ' + lp.have + ' / ' + lp.need + ' XP' + (r.levels ? '  (LEVEL UP!)' : '');
+    e.results.classList.remove('hidden');
+  },
+  hideResults() { this.el.results.classList.add('hidden'); },
+  /* ---------- events ---------- */
+  buildDistGrid() {
+    this.el.distGrid.innerHTML = CFG.DISTANCES.map(d => {
+      const pb = SaveSystem.data.records[String(d)];
+      return '<div class="distBtn" data-d="' + d + '"><div class="d1">' + d + 'M</div>' +
+        '<div class="d2">' + (d <= 100 ? 'Sprint' : d <= 200 ? 'Long Sprint' : 'Endurance') + '</div>' +
+        '<div class="d3">PB ' + (pb ? fmtRaceTime(pb) : '--') + '</div></div>';
+    }).join('');
+    this.el.distGrid.querySelectorAll('.distBtn').forEach(b => b.addEventListener('click', () => {
+      Audio2.click();
+      this.closeModal('mEvents');
+      setTimeout(() => Race.start(+b.dataset.d, false), 180);
+    }));
+  },
+  buildEvents() {
+    this.buildDistGrid();          // keep the PB labels current
+    const list = EventSystem.list();
+    this.el.evClock.textContent = 'Local time ' + TimeSystem.clockText();
+    this.el.evList.innerHTML = list.map((ev, i) => {
+      const st = ev.status === 'live' ? '<span class="pill live">Live</span>' :
+        ev.status === 'open' ? '<span class="pill open">Entry Open</span>' : '<span class="pill">Upcoming</span>';
+      const t = new Date(ev.at);
+      const hh = (t.getHours() < 10 ? '0' : '') + t.getHours(), mm = (t.getMinutes() < 10 ? '0' : '') + t.getMinutes();
+      return '<div class="rowItem' + (ev.status !== 'upcoming' ? ' live' : '') + '" data-i="' + i + '">' +
+        '<div class="ico">' + ev.dist + '</div>' +
+        '<div class="mid"><div class="nm">' + ev.name + '</div><div class="dt">' + hh + ':' + mm + ' &middot; ' + st + '</div></div>' +
+        '<div class="rt"><div class="cd2 mono" data-cd="' + ev.at + '">' + (ev.status === 'live' ? 'LIVE' : fmtCountdown(ev.inMs)) + '</div>' +
+        (EventSystem.canEnter(ev) ? '<button class="btn primary" style="min-height:32px;margin-top:5px;padding:0 12px" data-enter="' + ev.dist + '">Enter</button>' : '') +
+        '</div></div>';
+    }).join('');
+    this.el.evList.querySelectorAll('[data-enter]').forEach(b => b.addEventListener('click', () => {
+      Audio2.click();
+      this.closeModal('mEvents');
+      setTimeout(() => Race.start(+b.dataset.enter, true), 180);
+    }));
+  },
+  tickEventCountdowns() {
+    if (document.getElementById('mEvents').classList.contains('hidden')) return;
+    const now = Date.now();
+    this.el.evList.querySelectorAll('[data-cd]').forEach(el => {
+      const at = +el.dataset.cd, d = at - now;
+      el.textContent = d <= 0 ? 'LIVE' : fmtCountdown(d);
+    });
+  },
+  /* ---------- leaderboard ---------- */
+  buildLbTabs() {
+    this.el.lbTabs.innerHTML = CFG.DISTANCES.map(d =>
+      '<div class="tab' + (d === this.lbTab ? ' on' : '') + '" data-d="' + d + '">' + d + 'M</div>').join('');
+    this.el.lbTabs.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+      Audio2.click(); this.lbTab = +t.dataset.d; this.buildLbTabs(); this.buildBoard();
+    }));
+  },
+  buildBoard() {
+    const rows = (Leaderboard.boards[this.lbTab] || []).slice(0, 15);
+    this.el.lbList.innerHTML = rows.map((r, i) => {
+      const cls = i === 0 ? 'g1' : i === 1 ? 'g2' : i === 2 ? 'g3' : '';
+      return '<div class="lbRow' + (r.me ? ' me' : '') + '"><div class="rk ' + cls + '">' + (i + 1) + '</div>' +
+        '<div class="nm">' + (r.me ? r.name + ' (YOU)' : r.name) + '</div>' +
+        '<div class="tm mono">' + fmtRaceTime(r.time) + '</div></div>';
+    }).join('') || '<div class="note">No times recorded yet.</div>';
+    const rank = Leaderboard.rankOf(this.lbTab);
+    document.getElementById('lbNote').textContent = rank
+      ? 'Your ' + this.lbTab + 'm rank: ' + rank + ' of ' + (Leaderboard.boards[this.lbTab] || []).length + '. Local records - online boards arrive with the Track Stars server update.'
+      : 'Run the ' + this.lbTab + 'm to place on this board. Local records - online boards arrive with the Track Stars server update.';
+  },
+  /* ---------- chat ---------- */
+  toggleChat() {
+    Chat.open = !Chat.open;
+    this.el.chatPanel.classList.toggle('hidden', !Chat.open);
+    this.el.chatFloat.classList.toggle('hidden', Chat.open);
+    this.el.hud.classList.toggle('chatting', Chat.open);
+    if (Chat.open) { Chat.unread = 0; this.chatBadge(0); this.el.chatLog.scrollTop = this.el.chatLog.scrollHeight; }
+  },
+  chatBadge(n) {
+    const b = this.el.chatBadge;
+    b.classList.toggle('hidden', !n);
+    b.textContent = n > 9 ? '9+' : n;
+  },
+  sendChat() {
+    const v = this.el.chatInput.value;
+    if (!v.trim()) return;
+    this.el.chatInput.value = '';
+    Chat.playerSay(v);
+  },
+  renderChat(m) {
+    const d = document.createElement('div');
+    d.className = 'msg' + (m.sys ? ' sys' : '');
+    const who = m.sys ? '<span class="who sys">SYSTEM</span> ' :
+      '<span class="who' + (m.who === Account.profile.name ? ' me' : '') + '">' + m.who + '</span> ';
+    d.innerHTML = who + '<span class="tx">' + m.text.replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])) + '</span>';
+    this.el.chatLog.appendChild(d);
+    while (this.el.chatLog.children.length > 40) this.el.chatLog.removeChild(this.el.chatLog.firstChild);
+    this.el.chatLog.scrollTop = this.el.chatLog.scrollHeight;
+    // transient floating copy when the chat panel is closed
+    if (!Chat.open && Game.mode !== 'race') {
+      const f = d.cloneNode(true);
+      f.className = 'floatMsg';
+      this.el.chatFloat.appendChild(f);
+      while (this.el.chatFloat.children.length > 3) this.el.chatFloat.removeChild(this.el.chatFloat.firstChild);
+      setTimeout(() => { f.style.transition = 'opacity .5s'; f.style.opacity = '0'; setTimeout(() => f.remove(), 520); }, 7000);
+    }
+  }
+};
+
+/* ========== 20. GAME ================================================ */
+function dampAngle(a, b, l, dt) {
+  let d = b - a;
+  while (d > Math.PI) d -= TAU;
+  while (d < -Math.PI) d += TAU;
+  return a + d * (1 - Math.exp(-l * dt));
+}
+const _tmpV = { x: 0, y: 0, z: 0 };
+const _kv = { x: 0, y: 0 };
+
+const Game = {
+  mode: 'roam',
+  player: null,
+  camYaw: 0, camPitchUser: -0.12, camYawUser: 0, camManual: 0,
+  camPos: { x: 0, y: 4, z: -14 }, moved: false,
+  fpsCap: 60, last: 0, acc: 0, fps: 60, frames: 0, fpsT: 0,
+  running: false, blocks: [],
+
+  init() {
+    const s = SaveSystem.data.settings;
+    Renderer.init(document.getElementById('cv'));
+    Renderer.setQuality(s.gfx);
+    World.build(s.gfx);
+    Audio2.setVolume(s.volume);
+    this.fpsCap = s.opt === 'battery' ? 30 : s.opt === 'balanced' ? 60 : 120;
+    const sp = pick(World.spawns);
+    this.player = new Player({ name: Account.profile.name || 'YOU', x: sp.x, z: sp.z, kit: PAL.kits[0], heading: Math.PI });
+    this.camYawUser = this.player.heading;
+    this.camYaw = this.player.heading;
+    Net.connect(CFG.MAX_BOTS);
+  },
+  start() {
+    this.running = true;
+    this.last = performance.now();
+    requestAnimationFrame(t => this.loop(t));
+  },
+  loop(ts) {
+    if (!this.running) return;
+    requestAnimationFrame(t => this.loop(t));
+    let dt = (ts - this.last) / 1000;
+    if (dt < (1 / this.fpsCap) * 0.92) return;      // frame pacing / battery mode
+    this.last = ts;
+    if (dt > 0.1) dt = 0.1;                          // avoid huge catch-up steps
+    this.frames++; this.fpsT += dt;
+    if (this.fpsT > 0.5) {
+      this.fps = Math.round(this.frames / this.fpsT);
+      this.frames = 0; this.fpsT = 0;
+      if (SaveSystem.data.settings.fps === 'on') UI.el.fpsTag.textContent = this.fps + ' FPS';
+    }
+    this.update(dt);
+    this.render();
+  },
+
+  update(dt) {
+    TimeSystem.update();
+    const P = this.player;
+    if (this.mode === 'race') {
+      Race.update(dt);
+      UI.updateRaceHud();
+    } else {
+      // ---- free roam movement ----
+      let jx = Input.joy.x, jy = Input.joy.y, mag = Input.joyMag;
+      if (mag < 0.03) { const k = Input.keyVec(_kv); if (k > 0) { jx = _kv.x; jy = _kv.y; mag = k; } }
+      if (mag > 0.06) {
+        P.targetHeading = this.camYaw + Math.atan2(jx, -jy);
+        let want = mag < 0.55 ? mag * 3.3 : lerp(1.9, 5.7, (mag - 0.55) / 0.45);
+        if (P.stamina < 6) want = Math.min(want, 2.0);
+        P.targetSpeed = want;
+      } else P.targetSpeed = 0;
+      P.moveRoam(dt);
+      P.mode = 'roam';
+      if (!this.moved && P.speed > 0.6) { this.moved = true; UI.el.stickHint.classList.add('gone'); }
+      if (P.speed > 3.4) P.stamina = clamp(P.stamina - (0.7 + (P.speed - 3.4) * 1.7) * dt, 0, P.staminaMax);
+      else P.stamina = clamp(P.stamina + 7 * dt, 0, P.staminaMax);
+      P.animate(dt);
+      Net.roster.forEach(b => { if (b.mode !== 'race') { b.updateRoam(dt); b.animate(dt); } });
+      this.updatePrompt();
+      Chat.update(dt);
+    }
+    if (this.mode === 'race') Net.roster.forEach(b => { if (b.mode !== 'race') { b.updateRoam(dt); b.animate(dt); } });
+    this.updateCamera(dt);
+    UI.updateHud();
+    UI.tickEventCountdowns();
+  },
+
+  updatePrompt() {
+    const ev = EventSystem.next();
+    const P = this.player;
+    const nearStart = Math.hypot(P.x - (Track.S / 2 - 8), P.z - (Track.outerR + 4)) < 22 ||
+      Math.hypot(P.x + Track.S / 2, P.z - (Track.outerR + 4)) < 22;
+    if (ev && ev.status !== 'upcoming') {
+      UI.setPrompt('<b>' + ev.name + '</b> &middot; ' + (ev.status === 'live' ? 'LIVE' : 'ENTRY OPEN') + ' &middot; TAP TO ENTER');
+    } else if (nearStart) {
+      UI.setPrompt('START AREA &middot; <b>TAP FOR EVENTS</b>');
+    } else UI.setPrompt(null);
+  },
+
+  updateCamera(dt) {
+    const R = Renderer, cam = R.cam, P = this.player;
+    let tx, ty, tz, tyaw, tpitch, tfov;
+    if (this.mode === 'race') {
+      const ph = Race.phase;
+      if (ph === 'walkin' || ph === 'marks' || ph === 'set') {
+        // three-quarter view over the blocks - close to the chase angle so
+        // the swing at the gun is a short, readable move
+        const fwd = P.heading, side = fwd + Math.PI / 2;
+        tx = P.x - Math.sin(fwd) * 3.1 + Math.sin(side) * 2.7;
+        tz = P.z - Math.cos(fwd) * 3.1 + Math.cos(side) * 2.7;
+        ty = 1.30;
+        tyaw = Math.atan2(P.x - tx, P.z - tz);
+        tpitch = -0.06; tfov = 1.05;
+      } else {
+        const back = 5.4 + P.speed * 0.16;
+        tx = P.x - Math.sin(P.heading) * back;
+        tz = P.z - Math.cos(P.heading) * back;
+        ty = 2.05 + P.speed * 0.012;
+        // aim at a point ahead of the athlete: keeps them centred on bends
+        const lx = P.x + Math.sin(P.heading) * 3.4, lz = P.z + Math.cos(P.heading) * 3.4;
+        tyaw = Math.atan2(lx - tx, lz - tz);
+        tpitch = -0.10;
+        tfov = 1.06 + clamp(P.speed / 11, 0, 1) * 0.16;   // speed-rush FOV
+      }
+      const k = ph === 'go' ? 7.0 : (ph === 'running' ? 5.5 : 3.4);
+      cam.x = damp(cam.x, tx, k, dt); cam.y = damp(cam.y, ty, k, dt); cam.z = damp(cam.z, tz, k, dt);
+      cam.yaw = dampAngle(cam.yaw, tyaw, k, dt);
+      cam.pitch = damp(cam.pitch, tpitch, 3, dt);
+      cam.fov = damp(cam.fov, tfov, 2.2, dt);
+      // subtle shake at speed
+      if (P.speed > 6) {
+        const s = (P.speed - 6) * 0.0016;
+        cam.y += Math.sin(P.phase * 2) * s;
+        cam.x += Math.cos(P.phase) * s * 0.5;
+      }
+    } else {
+      this.camManual -= dt;
+      if (this.camManual <= 0 && P.speed > 1.2) this.camYawUser = dampAngle(this.camYawUser, P.heading, 1.8, dt);
+      this.camYaw = this.camYawUser;
+      const back = 6.4, up = 2.7;
+      tx = P.x - Math.sin(this.camYaw) * back;
+      tz = P.z - Math.cos(this.camYaw) * back;
+      ty = up;
+      cam.x = damp(cam.x, tx, 7, dt); cam.y = damp(cam.y, ty, 7, dt); cam.z = damp(cam.z, tz, 7, dt);
+      cam.yaw = dampAngle(cam.yaw, this.camYaw, 9, dt);
+      cam.pitch = damp(cam.pitch, this.camPitchUser, 6, dt);
+      cam.fov = damp(cam.fov, 1.12, 3, dt);
+    }
+    // never let the camera sink under the ground
+    if (cam.y < 0.6) cam.y = 0.6;
+  },
+
+  /* ---------- world rendering ---------- */
+  renderWorld() {
+    const R = Renderer;
+    const centro = q => {
+      if (!q._c) {
+        let x = 0, y = 0, z = 0;
+        for (const p of q.p) { x += p.x; y += p.y; z += p.z; }
+        q._c = { x: x / q.p.length, y: y / q.p.length, z: z / q.p.length };
+      }
+      return q._c;
+    };
+    const drawSet = (arr, ground) => {
+      for (let i = 0; i < arr.length; i++) {
+        const q = arr[i], c = centro(q);
+        const d = R.camDist(c);
+        if (d > CFG.FAR) continue;
+        R.toCam(c, _tmpV);
+        if (_tmpV.z < -14) continue;
+        R.poly(q.p, R.shade(q.c, q.b, d), ground);
+      }
+    };
+    drawSet(World.ground, true);
+    // chalk / lane markings
+    const MK = World.marks;
+    for (let i = 0; i < MK.length; i++) {
+      const m = MK[i];
+      if (!m._m) m._m = { x: (m.a.x + m.b.x) / 2, y: m.a.y, z: (m.a.z + m.b.z) / 2 };
+      const d = R.camDist(m._m);
+      if (d > 110) continue;
+      R.toCam(m._m, _tmpV);
+      if (_tmpV.z < -4) continue;
+      R.seg(m.a, m.b, R.shade(m.c, 1, d), m.w / 2, true);
+    }
+    drawSet(World.props, false);
+    // spectators
+    if (SaveSystem.data.settings.crowd === 'on' && Renderer.quality !== 'low') {
+      const t = performance.now() / 1000;
+      for (let i = 0; i < World.crowd.length; i++) {
+        const c = World.crowd[i];
+        const d = R.camDist(c);
+        if (d > 130) continue;
+        const bob = Math.sin(t * 2 + c.ph) * 0.05;
+        R.disc({ x: c.x, y: c.y + bob, z: c.z }, 0.20, R.shade(c.c, 0.9, d));
+      }
+    }
+    // floodlight glow after dark
+    if (TimeSystem.floods > 0.02) {
+      const a = TimeSystem.floods;
+      World.lamps.forEach(l => {
+        R.disc(l, 1.5, 'rgba(255,248,214,1)', false, 0.55 * a);
+        R.disc(l, 4.2, 'rgba(255,246,200,1)', false, 0.10 * a);
+      });
+    }
+    // starting blocks while the field is on its marks
+    if (Race.active && (Race.phase !== 'running' || Race.t < 2.5)) this.renderBlocks(R);
+  },
+  renderBlocks(R) {
+    const grey = R.shade(PAL.pole, 1.1, 12), white = R.shade(PAL.lane, 1, 12);
+    Race.entrants.forEach(a => {
+      const pt = Track.at(a.lane, Track.startD(a.lane, Race.dist), a._pt);
+      const dx = pt.dx, dz = pt.dz, rx = -dz, rz = dx;
+      const P = (bk, lat, y) => ({ x: pt.x - dx * bk + rx * lat, y: y, z: pt.z - dz * bk + rz * lat });
+      R.seg(P(0.78, 0, 0.04), P(0.06, 0, 0.04), grey, 0.05);
+      R.seg(P(0.50, 0.13, 0.03), P(0.36, 0.13, 0.24), white, 0.055);
+      R.seg(P(0.74, -0.13, 0.03), P(0.58, -0.13, 0.30), white, 0.055);
+    });
+  },
+  render() {
+    const R = Renderer;
+    R.beginFrame();
+    this.renderWorld();
+    // athletes
+    this.player.render(R);
+    for (let i = 0; i < Net.roster.length; i++) Net.roster[i].render(R);
+    R.render();
+  }
+};
+
+/* ========== 21. BOOT ================================================
+   Short, staged loading screen that performs the real setup work.      */
+const BOOT = [
+  ['Loading assets...', 170, () => { SaveSystem.load(); }],
+  ['Loading graphics...', 210, () => { UI.init(); }],
+  ['Loading audio...', 170, () => { Audio2.init(); Audio2.setVolume(SaveSystem.data.settings.volume); }],
+  ['Loading player systems...', 200, () => { Game.init(); }],
+  ['Loading map...', 240, () => { Leaderboard.seed(); }],
+  ['Loading UI...', 160, () => { UI.refreshProfile(); UI.buildDistGrid(); UI.buildLbTabs(); UI.buildBoard(); }],
+  ['Loading animations...', 170, () => { Input.init(); }],
+  ['Connecting to world...', 230, () => { Chat.init(); }],
+  ['Ready!', 220, () => {}]
+];
+
+function boot() {
+  const bar = document.getElementById('loadBar');
+  const txt = document.getElementById('loadTxt');
+  const pct = document.getElementById('loadPct');
+  let i = 0;
+  const step = () => {
+    if (i >= BOOT.length) return finish();
+    const [label, delay, work] = BOOT[i];
+    txt.textContent = label;
+    try { work(); } catch (e) { console.error('boot step failed:', label, e); }
+    i++;
+    const p = Math.round((i / BOOT.length) * 100);
+    bar.style.width = p + '%';
+    pct.textContent = p + '%';
+    setTimeout(step, delay);
+  };
+  const finish = () => {
+    const ld = document.getElementById('loading');
+    ld.classList.add('done');
+    Game.start();
+    setTimeout(() => {
+      ld.style.display = 'none';
+      if (Account.isNew()) {
+        UI.el.nameInput.value = '';
+        UI.openModal('mName');
+      } else {
+        UI.toast('WELCOME BACK, ' + Account.profile.name, 'good');
+        Chat.push('sys', 'Welcome back, ' + Account.profile.name + ' - LVL ' + Account.profile.level, true);
+      }
+    }, 560);
+  };
+  step();
+}
+
+// keep progression safe if the player leaves mid-session
+window.addEventListener('pagehide', () => SaveSystem.save());
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { SaveSystem.save(); }
+  else { Game.last = performance.now(); }
+});
+
+boot();
+</script>
+</body>
+</html>
