@@ -560,13 +560,32 @@ function buildEnvironment(renderer) {
 
 /* vertical gradient used for the sky dome and for background plates */
 function skyTexture(top, mid, bottom) {
-  var c = canvas(8, 256), x = c.getContext("2d");
-  var grd = x.createLinearGradient(0, 0, 0, 256);
+  var W = 1024, H = 256;
+  var c = canvas(W, H), x = c.getContext("2d");
+  var grd = x.createLinearGradient(0, 0, 0, H);
   grd.addColorStop(0, top); grd.addColorStop(.55, mid); grd.addColorStop(1, bottom);
-  x.fillStyle = grd; x.fillRect(0, 0, 8, 256);
+  x.fillStyle = grd; x.fillRect(0, 0, W, H);
+  /* soft cloud banks, thicker toward the horizon */
+  var r = rng(8123);
+  for (var i = 0; i < 22; i++) {
+    var cx = r() * W, cy = 26 + Math.pow(r(), .7) * 74;
+    var flat = inv(26, 100, cy);                       /* squashed near the horizon */
+    var w = 70 + r() * 190, h = (14 + r() * 22) * (1 - flat * .55);
+    var puffs = 6 + Math.floor(r() * 7);
+    for (var k = 0; k < puffs; k++) {
+      var px = cx + (r() - .5) * w, py = cy + (r() - .5) * h;
+      var rad = (h * (.8 + r() * 1.2)) + 6;
+      var g2 = x.createRadialGradient(px, py, 0, px, py, rad);
+      g2.addColorStop(0, "rgba(255,255,255,.46)");
+      g2.addColorStop(.5, "rgba(255,255,255,.18)");
+      g2.addColorStop(1, "rgba(255,255,255,0)");
+      x.fillStyle = g2;
+      x.beginPath(); x.arc(px, py, rad, 0, 6.3); x.fill();
+    }
+  }
   var t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
-  t.wrapS = THREE.ClampToEdgeWrapping;
+  t.wrapS = THREE.RepeatWrapping;
   t.wrapT = THREE.ClampToEdgeWrapping;
   return t;
 }
@@ -600,7 +619,7 @@ function skinMat(hex) {
 function clothMat(hex, rough) {
   return new THREE.MeshStandardMaterial({
     color: hex, roughness: rough === undefined ? .92 : rough, metalness: 0,
-    bumpMap: TEX.weave, bumpScale: .004
+    bumpMap: TEX.weave, bumpScale: .004, side: THREE.DoubleSide
   });
 }
 
@@ -780,16 +799,18 @@ function makeCharacter(cfg) {
   var pelvis = new THREE.Mesh(new THREE.CapsuleGeometry(.105, .1, 3, 12), bot);
   pelvis.scale.set(1.06, 1, .82); pelvis.castShadow = true;
   hips.add(pelvis);
+  var skirtPivot = node(hips, 0, -.02, 0);
   var skirt = new THREE.Mesh(new THREE.CylinderGeometry(.115, .175, .21, 16, 1, true), bot);
-  skirt.position.y = -.06; skirt.castShadow = true;
-  skirt.material = clothMat(cfg.bot);
-  skirt.material.side = THREE.DoubleSide;
-  hips.add(skirt);
+  skirt.position.y = -.04; skirt.castShadow = true;
+  skirtPivot.add(skirt);
 
   var spine = node(hips, 0, .04, 0);
   var torso = new THREE.Mesh(new THREE.CapsuleGeometry(.115, .2, 4, 14), top);
   torso.position.y = .13; torso.scale.set(1.04, 1, .8); torso.castShadow = true;
   spine.add(torso);
+  /* collar */
+  var collar = new THREE.Mesh(new THREE.CylinderGeometry(.062, .07, .035, 14, 1, true), top);
+  collar.position.y = .265; spine.add(collar);
 
   var chest = node(spine, 0, .26, 0);
   var neck = node(chest, 0, .05, 0);
@@ -805,16 +826,26 @@ function makeCharacter(cfg) {
     var upper = bone(sh, .245, .042, skin);
     var el = node(upper, 0, -.245, 0);
     var fore = bone(el, .225, .036, skin);
-    var hand = new THREE.Mesh(new THREE.SphereGeometry(.045, 10, 8), skin);
-    hand.scale.set(.8, 1.1, .55);
-    hand.position.y = -.245;
-    hand.castShadow = true;
-    fore.add(hand);
+    var wrist = node(fore, 0, -.238, 0);
+    var palm = new THREE.Mesh(new THREE.BoxGeometry(.05, .058, .027), skin);
+    palm.position.y = -.029; palm.castShadow = true;
+    wrist.add(palm);
+    var knuckle = node(wrist, 0, -.058, 0);          /* fingers curl here */
+    var fingers = new THREE.Mesh(new THREE.BoxGeometry(.048, .052, .025), skin);
+    fingers.position.y = -.026; fingers.castShadow = true;
+    knuckle.add(fingers);
+    var tip = new THREE.Mesh(new THREE.BoxGeometry(.044, .022, .023), skin);
+    tip.position.y = -.062; tip.castShadow = true;
+    knuckle.add(tip);
+    var thumb = new THREE.Mesh(new THREE.CapsuleGeometry(.0105, .028, 2, 6), skin);
+    thumb.position.set(side * .026, -.03, .011);
+    thumb.rotation.z = side * .75;
+    wrist.add(thumb);
     /* short sleeve */
     var sl = new THREE.Mesh(new THREE.CylinderGeometry(.055, .05, .1, 12, 1, true), top);
-    sl.position.y = -.05; sl.material = clothMat(cfg.top); sl.material.side = THREE.DoubleSide;
+    sl.position.y = -.05;
     upper.add(sl);
-    return { sh: sh, upper: upper, el: el, fore: fore, hand: hand };
+    return { sh: sh, upper: upper, el: el, fore: fore, wrist: wrist, knuckle: knuckle, thumb: thumb };
   }
 
   function leg(side) {
@@ -836,6 +867,7 @@ function makeCharacter(cfg) {
     armL: arm(-1), armR: arm(1),
     legL: leg(-1), legR: leg(1),
     skinMat: skin, topMat: top, botMat: bot,
+    torso: torso, skirt: skirtPivot,
     infected: 0, seed: 0
   };
 
@@ -844,7 +876,7 @@ function makeCharacter(cfg) {
 }
 
 /* the turn: colour drains, eyes go blank, clothes darken */
-var ROT_COLOR = null, _tmpCol = null;   /* built in initGlobals */
+var ROT_COLOR = null, DEAD_EYE = null, _tmpCol = null;   /* built in initGlobals */
 function setInfection(c, amount) {
   amount = clamp(amount, 0, 1);
   if (Math.abs(c.infected - amount) < 0.001) return;
@@ -863,7 +895,7 @@ function setInfection(c, amount) {
   var eyes = c.head.userData.eyes;
   for (var i = 0; i < eyes.length; i++) {
     var p = eyes[i].userData.pupil;
-    p.material.color.setHex(0x241a15).lerp(new THREE.Color(0xd8d8cc), amount);
+    p.material.color.setHex(0x241a15).lerp(DEAD_EYE, amount);
     p.scale.setScalar(lerp(1, .55, amount));
   }
   c.head.userData.hair.userData.mat.color.setHex(HAIRC[c.cfg.hair]).multiplyScalar(lerp(1, .5, amount));
@@ -877,7 +909,12 @@ function setInfection(c, amount) {
    ===================================================================== */
 
 function resetPose(c) {
+  c.airborne = false;
   c.root.rotation.set(0, 0, 0);
+  c.torso.scale.set(1.04, 1, .8);
+  c.skirt.rotation.set(0, 0, 0);
+  c.armL.knuckle.rotation.set(-.22, 0, 0); c.armL.thumb.rotation.z = .75;
+  c.armR.knuckle.rotation.set(-.22, 0, 0); c.armR.thumb.rotation.z = -.75;
   c.body.rotation.set(0, 0, 0);
   c.body.position.set(0, 0, 0);
   c.hips.rotation.set(0, 0, 0);
@@ -897,19 +934,48 @@ function resetPose(c) {
   c.head.userData.brows[0].rotation.z = 0;
   c.head.userData.brows[1].rotation.z = 0;
   c.head.userData.mouth.scale.set(1, .28, .38);
+  var pu = c.head.userData.eyes;
+  pu[0].userData.pupil.position.x = 0; pu[1].userData.pupil.position.x = 0;
   var sw = c.head.userData.hair.userData.swing;
   for (var i = 0; i < sw.length; i++) sw[i].rotation.set(sw[i].userData.rest, 0, 0);
+}
+
+/* fingers close — holding, grabbing, clenching */
+function grip(c, amount, which) {
+  amount = clamp(amount, 0, 1);
+  if (which !== "R") { c.armL.knuckle.rotation.x = -.22 - amount * 1.5; c.armL.thumb.rotation.z = .75 - amount * .55; }
+  if (which !== "L") { c.armR.knuckle.rotation.x = -.22 - amount * 1.5; c.armR.thumb.rotation.z = -.75 + amount * .55; }
+}
+
+/* the chest actually moves — slower and deeper when she is in trouble */
+function breathe(c, t, rate, depth) {
+  var b = Math.sin(t * (rate || 1.7) + c.seed);
+  c.torso.scale.set(1.04 + b * .014 * (depth || 1), 1 + b * .008 * (depth || 1), .8 + b * .016 * (depth || 1));
+  return b;
+}
+
+/* eyes do not sit perfectly still */
+function eyeDart(c, t, amt) {
+  var e = c.head.userData.eyes;
+  var d = Math.round(wob(t * .5, c.seed + 4, .9)) * (amt === undefined ? 1 : amt) * c.head.userData.R * .035;
+  e[0].userData.pupil.position.x = d;
+  e[1].userData.pupil.position.x = d;
 }
 
 /* blinking, on each girl's own rhythm */
 function blink(c, t) {
   var p = (t * .37 + c.seed * .61) % 1;
   var k = p > .93 ? 1 - Math.abs(p - .965) / .035 : 0;
+  /* every so often she blinks twice */
+  if (((t * .37 + c.seed * .61) | 0) % 4 === 1 && p > .86 && p < .92) {
+    k = Math.max(k, 1 - Math.abs(p - .89) / .03);
+  }
   if (k > 0) {
     var s = 1 - k * .92;
     c.head.userData.eyes[0].scale.y = s;
     c.head.userData.eyes[1].scale.y = s;
   }
+  eyeDart(c, t, 1);
 }
 
 /* face: brow lift (-1 worried .. 1 raised), mouth open 0..1, mouth width */
@@ -924,11 +990,14 @@ function face(c, brow, open, wide) {
 }
 
 /* hair trails the motion a little */
-function hairMotion(c, t, amt) {
+function hairMotion(c, t, amt, ph) {
   var sw = c.head.userData.hair.userData.swing;
+  if (!sw.length) return;
+  var bounce = ph === undefined ? Math.sin(t * 5.5 + c.seed) : Math.sin(ph * 2);
   for (var i = 0; i < sw.length; i++) {
-    sw[i].rotation.x = sw[i].userData.rest + Math.sin(t * 5.5 + i * 1.7 + c.seed) * .13 * amt + amt * .22;
-    sw[i].rotation.z = Math.sin(t * 3.9 + i * 2.3 + c.seed) * .09 * amt;
+    var lag = i * .35;
+    sw[i].rotation.x = sw[i].userData.rest + amt * (.20 + bounce * .16) + Math.sin(t * 2.1 + lag + c.seed) * .05;
+    sw[i].rotation.z = Math.sin(t * 3.1 + lag * 2 + c.seed) * (.05 + amt * .12);
   }
 }
 
@@ -949,19 +1018,29 @@ function headLook(c, target, weight) {
 function poseStand(c, t, opts) {
   opts = opts || {};
   var s = c.seed, w = wob(t, s, .6);
-  c.spine.rotation.x = .02 + Math.sin(t * 1.6 + s) * .012;      /* breath */
+  var b = breathe(c, t, 1.65, 1);
+  /* weight drifts slowly from one leg to the other */
+  var shift = wob(t * .35, s + 7, .5);
+  c.spine.rotation.x = .02 + b * .012;
   c.spine.rotation.y = w * .05;
+  c.spine.rotation.z = shift * .03;
   c.chest.rotation.y = w * .04;
-  c.hips.rotation.z = w * .022;
-  c.hips.position.y = .86 + Math.sin(t * 1.6 + s) * .004;
+  c.hips.rotation.z = shift * .05;
+  c.hips.position.y = .86 + b * .004 - Math.abs(shift) * .008;
+  c.legL.hip.rotation.z = .02 + shift * .04;
+  c.legR.hip.rotation.z = -.02 + shift * .04;
+  c.legL.knee.rotation.x = Math.max(0, shift) * .12;
+  c.legR.knee.rotation.x = Math.max(0, -shift) * .12;
   c.armL.sh.rotation.x = w * .07 - .04;
   c.armR.sh.rotation.x = -w * .07 - .04;
-  c.armL.sh.rotation.z = -.11 + w * .02;
-  c.armR.sh.rotation.z = .11 - w * .02;
+  c.armL.sh.rotation.z = -.11 + w * .02 - shift * .03;
+  c.armR.sh.rotation.z = .11 - w * .02 - shift * .03;
   c.armL.el.rotation.x = -.2 - Math.abs(w) * .1;
   c.armR.el.rotation.x = -.2 - Math.abs(w) * .1;
+  grip(c, .12 + Math.abs(w) * .1);
   c.head.rotation.y = wob(t * .7, s + 3, .5) * (opts.still ? .06 : .28);
-  c.head.rotation.x = wob(t * .5, s + 9, .4) * .05;
+  c.head.rotation.x = wob(t * .5, s + 9, .4) * .05 - c.spine.rotation.x * .5;
+  hairMotion(c, t, .06);
   blink(c, t);
   if (!opts.noFace) face(c, .1, 0, 0);
 }
@@ -998,6 +1077,7 @@ function poseLaugh(c, t) {
 
 /* seated on a bed at world height seatY */
 function poseSit(c, t, seatY, lean) {
+  c.airborne = true;
   var s = c.seed, w = wob(t, s, .55);
   c.root.position.y = seatY - .84 * c.cfg.h;
   c.hips.rotation.x = -.12;
@@ -1022,58 +1102,89 @@ function poseSit(c, t, seatY, lean) {
 }
 
 /* ------------------------------------------------------------- gaits */
+/* heel strikes, the foot rolls, the toe pushes off */
+function footRoll(ph) {
+  return -.06 - Math.sin(ph) * .30 + Math.max(0, Math.sin(ph - 2.5)) * .5;
+}
+
 function walkCycle(c, ph, amp, t) {
   amp = amp === undefined ? 1 : amp;
+  t = t || 0;
   var sn = Math.sin(ph), cs = Math.cos(ph);
+  breathe(c, t, 2.0, .8);
   c.legL.hip.rotation.x = -sn * .52 * amp;
   c.legR.hip.rotation.x = sn * .52 * amp;
   c.legL.knee.rotation.x = (.08 + Math.max(0, Math.sin(ph + 1.5)) * .95) * amp;
   c.legR.knee.rotation.x = (.08 + Math.max(0, Math.sin(ph + 1.5 + Math.PI)) * .95) * amp;
-  c.legL.foot.rotation.x = -.12 + sn * .2;
-  c.legR.foot.rotation.x = -.12 - sn * .2;
+  c.legL.foot.rotation.x = footRoll(ph) * amp;
+  c.legR.foot.rotation.x = footRoll(ph + Math.PI) * amp;
+  c.legL.hip.rotation.z = .02; c.legR.hip.rotation.z = -.02;
+  /* the pelvis drops on the swinging side, the chest counter-rotates */
   c.hips.position.y = .86 + (Math.abs(cs) - .5) * .028 * amp;
   c.hips.rotation.y = -sn * .13 * amp;
-  c.hips.rotation.z = cs * .05 * amp;
-  c.chest.rotation.y = sn * .16 * amp;
+  c.hips.rotation.z = cs * .055 * amp;
+  c.chest.rotation.y = sn * .17 * amp;
+  c.chest.rotation.z = -cs * .03 * amp;
   c.spine.rotation.x = .05;
   c.armL.sh.rotation.x = sn * .46 * amp - .05;
   c.armR.sh.rotation.x = -sn * .46 * amp - .05;
-  c.armL.sh.rotation.z = -.12;
-  c.armR.sh.rotation.z = .12;
-  c.armL.el.rotation.x = -.32 - Math.max(0, sn) * .3;
-  c.armR.el.rotation.x = -.32 - Math.max(0, -sn) * .3;
-  c.head.rotation.y = wob(t || 0, c.seed + 2, .8) * .18;
-  blink(c, t || 0);
+  c.armL.sh.rotation.z = -.12 - Math.max(0, sn) * .04;
+  c.armR.sh.rotation.z = .12 + Math.max(0, -sn) * .04;
+  c.armL.el.rotation.x = -.32 - Math.max(0, sn) * .35;
+  c.armR.el.rotation.x = -.32 - Math.max(0, -sn) * .35;
+  grip(c, .18);
+  c.skirt.rotation.x = -sn * .11 * amp;
+  c.skirt.rotation.z = cs * .05 * amp;
+  /* the head stays level while the body works underneath it */
+  c.head.rotation.y = wob(t, c.seed + 2, .8) * .18 - c.chest.rotation.y * .55;
+  c.head.rotation.x = -c.spine.rotation.x * .6 - (Math.abs(cs) - .5) * .05 * amp;
+  c.head.rotation.z = -c.chest.rotation.z * .5;
+  hairMotion(c, t, .28 * amp, ph);
+  blink(c, t);
 }
 
 function runCycle(c, ph, amp, t) {
   amp = amp === undefined ? 1 : amp;
+  t = t || 0;
+  c.airborne = true;          /* a run has a flight phase — do not plant it */
   var sn = Math.sin(ph), cs = Math.cos(ph);
+  breathe(c, t, 4.4, 1.6);
   c.legL.hip.rotation.x = -sn * .95 * amp;
   c.legR.hip.rotation.x = sn * .95 * amp;
   c.legL.knee.rotation.x = (.35 + Math.max(0, Math.sin(ph + 1.1)) * 1.5) * amp;
   c.legR.knee.rotation.x = (.35 + Math.max(0, Math.sin(ph + 1.1 + Math.PI)) * 1.5) * amp;
-  c.legL.foot.rotation.x = -.25 + sn * .3;
-  c.legR.foot.rotation.x = -.25 - sn * .3;
-  c.hips.position.y = .86 + (Math.abs(cs) - .45) * .055 * amp;
+  c.legL.foot.rotation.x = (-.2 - sn * .34 + Math.max(0, Math.sin(ph - 2.2)) * .55) * amp;
+  c.legR.foot.rotation.x = (-.2 + sn * .34 + Math.max(0, Math.sin(ph + Math.PI - 2.2)) * .55) * amp;
+  c.legL.hip.rotation.z = .035; c.legR.hip.rotation.z = -.035;
+  /* both feet leave the ground at the top of each stride */
+  c.hips.position.y = .86 + (Math.abs(cs) - .45) * .055 * amp + Math.max(0, -Math.cos(ph * 2)) * .022 * amp;
   c.hips.rotation.y = -sn * .2 * amp;
+  c.hips.rotation.z = cs * .07 * amp;
   c.spine.rotation.x = .26 * amp;
-  c.chest.rotation.y = sn * .26 * amp;
+  c.chest.rotation.y = sn * .28 * amp;
   c.chest.rotation.x = .08;
+  c.chest.rotation.z = -cs * .05 * amp;
   c.armL.sh.rotation.x = sn * .95 * amp - .25;
   c.armR.sh.rotation.x = -sn * .95 * amp - .25;
-  c.armL.sh.rotation.z = -.2;
-  c.armR.sh.rotation.z = .2;
-  c.armL.el.rotation.x = -1.5;
-  c.armR.el.rotation.x = -1.5;
-  c.head.rotation.x = -.14;
-  blink(c, t || 0);
+  c.armL.sh.rotation.z = -.2 - Math.max(0, sn) * .07;
+  c.armR.sh.rotation.z = .2 + Math.max(0, -sn) * .07;
+  c.armL.el.rotation.x = -1.35 - Math.max(0, sn) * .35;
+  c.armR.el.rotation.x = -1.35 - Math.max(0, -sn) * .35;
+  grip(c, .55);
+  c.skirt.rotation.x = -sn * .22 * amp - .1 * amp;
+  c.skirt.rotation.z = cs * .1 * amp;
+  c.head.rotation.x = -.14 - c.spine.rotation.x * .45;
+  c.head.rotation.y = -c.chest.rotation.y * .6;
+  c.head.rotation.z = -c.chest.rotation.z * .5;
+  hairMotion(c, t, .75 * amp, ph);
+  blink(c, t);
 }
 
 /* the sick walk: heavy, uneven, listing to one side */
 function sickWalk(c, ph, sick, t) {
   walkCycle(c, ph, 1 - sick * .45, t);
   var s = c.seed;
+  breathe(c, t, 1.1 + sick * 1.6, 1 + sick * 2.2);
   var drift = Math.sin(t * .9 + s) * sick;
   c.spine.rotation.x = .05 + sick * .3;
   c.spine.rotation.z = drift * .18;
@@ -1084,6 +1195,8 @@ function sickWalk(c, ph, sick, t) {
   c.armL.sh.rotation.x = lerp(c.armL.sh.rotation.x, -.55, sick);
   c.armL.el.rotation.x = lerp(c.armL.el.rotation.x, -1.5, sick);   /* clutching her chest */
   c.armR.sh.rotation.x *= 1 - sick * .5;
+  grip(c, .2 + sick * .55);
+  hairMotion(c, t, .12);
   face(c, -.5 * sick, .35 * sick, 0);
 }
 
@@ -1106,6 +1219,7 @@ function poseCough(c, u, t) {
 
 /* the stumble and the catch */
 function poseStumble(c, u, t) {
+  c.airborne = true;
   var k = smooth(clamp(u, 0, 1));
   var f = Math.sin(clamp(u, 0, 1) * Math.PI);
   c.root.rotation.z = -f * .32;
@@ -1139,6 +1253,7 @@ function poseCatch(c, u, t) {
 
 /* going down: knees, then forward onto the ground */
 function poseCollapse(c, u, t) {
+  c.airborne = true;
   u = clamp(u, 0, 1);
   var kneel = smooth(inv(0, .42, u));
   var fall = smoother(inv(.38, .85, u));
@@ -1160,6 +1275,7 @@ function poseCollapse(c, u, t) {
 
 /* lying face down, barely moving */
 function poseProne(c, t, twitch) {
+  c.airborne = true;
   c.root.rotation.x = 1.42;
   c.root.position.y += .04;
   c.hips.position.y = .44;
@@ -1207,6 +1323,9 @@ function poseScream(c, t, k) {
   c.head.rotation.x = -.3 * k;
   c.armL.sh.rotation.x = -2.5 * k; c.armL.sh.rotation.z = -.55; c.armL.el.rotation.x = -1.1;
   c.armR.sh.rotation.x = -2.45 * k; c.armR.sh.rotation.z = .55; c.armR.el.rotation.x = -1.05;
+  grip(c, .1);
+  breathe(c, t, 5.5, 2.2);
+  hairMotion(c, t, .5);
   c.legL.knee.rotation.x = .25; c.legR.knee.rotation.x = .2;
   c.hips.position.y = .86 - .03 * k;
   var e = c.head.userData.eyes;
@@ -1216,6 +1335,7 @@ function poseScream(c, t, k) {
 
 /* the turn: up off the ground and forward */
 function poseLunge(c, u, t) {
+  c.airborne = true;
   u = clamp(u, 0, 1);
   var rise = smoother(inv(0, .45, u));
   var strike = smoother(inv(.4, 1, u));
@@ -1236,6 +1356,8 @@ function poseLunge(c, u, t) {
   c.armR.sh.rotation.z = .4 - reach * .12;
   c.armL.el.rotation.x = -1.0 + reach * .75;
   c.armR.el.rotation.x = -.95 + reach * .7;
+  grip(c, .25 + reach * .55);
+  hairMotion(c, t, .45);
   face(c, -1, .9, -.15);
 }
 
@@ -1259,6 +1381,13 @@ function zombieWalk(c, ph, t, agg) {
   c.head.rotation.x = -.1;
   c.head.rotation.z = .28 + Math.sin(t * .7 + s) * .08;
   c.head.rotation.y = Math.sin(t * .5 + s * 2) * .2;
+  /* fingers hooked, foot dragging */
+  grip(c, .42 + Math.sin(t * .9 + s) * .12);
+  c.legR.foot.rotation.x = .3 + Math.max(0, Math.sin(ph)) * .25;
+  c.legL.foot.rotation.x = .1;
+  c.skirt.rotation.x = -Math.sin(ph) * .06;
+  breathe(c, t, .7, .5);
+  hairMotion(c, t, .16);
   var e = c.head.userData.eyes;
   e[0].scale.y = 1.15; e[1].scale.y = 1.15;
   face(c, -.3, .45, .15);
@@ -1278,6 +1407,9 @@ function zombieStare(c, t) {
   c.armL.el.rotation.x = -.3; c.armR.el.rotation.x = -.28;
   c.head.rotation.z = .16 + Math.sin(t * .27 + s) * .04;
   c.head.rotation.x = -.06;
+  grip(c, .3);
+  breathe(c, t, .45, .35);
+  hairMotion(c, t, .04);
   var e = c.head.userData.eyes;
   e[0].scale.y = 1.2; e[1].scale.y = 1.2;
   face(c, -.2, .3, .1);
@@ -1657,12 +1789,15 @@ function buildPark() {
   });
   /* ladder on the far side */
   var lad = new THREE.Group(); lad.position.set(0, 0, -1.05); slide.add(lad);
+  var LEAN = .2;
   [-.32, .32].forEach(function (x) {
     var s = cyl(.04, .04, 2.1, 8, metalM, x, .95, 0, lad);
-    s.rotation.x = -.2;
+    s.rotation.x = -LEAN;
   });
+  /* the rungs have to follow the lean of the rails, or they float free of it */
   for (var i = 0; i < 5; i++) {
-    var rr = cyl(.03, .03, .68, 8, metalM, 0, .28 + i * .34, -.08 - i * .02, lad);
+    var ry2 = .30 + i * .34;
+    var rr = cyl(.028, .028, .70, 8, metalM, 0, ry2, -(ry2 - .95) * Math.sin(LEAN), lad);
     rr.rotation.z = Math.PI / 2;
   }
   /* the chute */
@@ -1778,6 +1913,26 @@ function buildPark() {
     g.add(t3);
   });
 
+  /* tufts of longer grass outside the worn circle */
+  var tuftMat = mat({ map: TEX.leaves, roughness: .96, side: THREE.DoubleSide, flatShading: true });
+  var tufts = new THREE.InstancedMesh(new THREE.ConeGeometry(.1, .36, 4, 1, true), tuftMat, 560);
+  var m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), e4 = new THREE.Euler();
+  var tr = rng(4242), placed = 0, guard = 0;
+  while (placed < 560 && guard++ < 6000) {
+    var ta = tr() * Math.PI * 2, trad = 10.5 + tr() * 15;
+    var tx = Math.cos(ta) * trad, tz = Math.sin(ta) * trad;
+    if (Math.abs(tz) > 18.5 || Math.abs(tx) > 25) continue;
+    e4.set(0, tr() * 6.28, (tr() - .5) * .3);
+    q4.setFromEuler(e4);
+    var sc = .7 + tr() * .8;
+    m4.compose(new THREE.Vector3(tx, .17 * sc, tz), q4, new THREE.Vector3(sc, sc, sc));
+    tufts.setMatrixAt(placed++, m4);
+  }
+  tufts.count = placed;
+  tufts.instanceMatrix.needsUpdate = true;
+  tufts.receiveShadow = true;
+  g.add(tufts);
+
   /* the gate the girls come in through */
   var gate = new THREE.Group(); gate.position.set(3.5, 0, 20); g.add(gate);
   [-1.5, 1.5].forEach(function (x) {
@@ -1800,6 +1955,40 @@ function buildPark() {
   g.userData.sun = sun;
   g.userData.hemi = hemi;
   return g;
+}
+
+/* -------------------------------------------------------------- birds */
+function makeBirds() {
+  var g = new THREE.Group();
+  var m = new THREE.MeshBasicMaterial({ color: 0x2c333c, fog: false });
+  var wing = new THREE.BoxGeometry(1.5, .06, .34);
+  var list = [], r = rng(555);
+  for (var i = 0; i < 10; i++) {
+    var b = new THREE.Group();
+    var wl = new THREE.Mesh(wing, m); wl.position.x = -.75;
+    var wr = new THREE.Mesh(wing, m); wr.position.x = .75;
+    b.add(wl); b.add(wr);
+    b.userData = {
+      wl: wl, wr: wr, a: r() * 6.28, rad: 16 + r() * 18,
+      y: 8 + r() * 9, sp: .11 + r() * .09, flap: 2.6 + r() * 2.4
+    };
+    g.add(b); list.push(b);
+  }
+  g.userData.list = list;
+  return g;
+}
+function updateBirds(g, t, presence) {
+  g.visible = presence > .02;
+  if (!g.visible) return;
+  var L = g.userData.list;
+  for (var i = 0; i < L.length; i++) {
+    var d = L[i].userData;
+    var a = d.a + t * d.sp;
+    L[i].position.set(Math.cos(a) * d.rad, 7 + d.y * presence, Math.sin(a) * d.rad);
+    L[i].rotation.y = -a;
+    var f = Math.sin(t * d.flap + d.a) * .75;
+    d.wl.rotation.z = f; d.wr.rotation.z = -f;
+  }
 }
 
 /* ------------------------------------------------------------ the gun */
@@ -1856,6 +2045,22 @@ function hideAll() {
 }
 function show(i) { CAST_OBJ[i].root.visible = true; }
 
+/* Put the lower foot on the ground. Poses that are genuinely in the air
+   (a running stride, a fall, a lunge, sitting) opt out with c.airborne. */
+var _fp = null;
+function plantFeet(c) {
+  if (c.airborne || !c.root.visible) return;
+  if (!_fp) _fp = new THREE.Vector3();
+  var lo = Infinity;
+  var feet = [c.legL.foot, c.legR.foot];
+  for (var i = 0; i < 2; i++) {
+    feet[i].updateWorldMatrix(true, false);
+    _fp.setFromMatrixPosition(feet[i].matrixWorld);
+    if (_fp.y < lo) lo = _fp.y;
+  }
+  if (isFinite(lo)) c.root.position.y += (O.y + .029) - lo;
+}
+
 /* ---------------------------------------------------------- polylines */
 function poly(pts) {
   var seg = [], total = 0;
@@ -1885,7 +2090,7 @@ function walkAlong(c, path, s, t, opt) {
   var ca = Math.cos(p.ang), sa = Math.sin(p.ang);
   stage(c, p.x + ox * ca - oz * sa, p.z - ox * sa - oz * ca, p.ang + (opt.turn || 0));
   var dist = s * path.len + (opt.phaseOffset || 0);
-  var stride = opt.stride || 1.42;
+  var stride = opt.stride || (opt.run ? 1.95 : 1.42);
   var ph = dist / stride * Math.PI * 2 + c.seed;
   if (opt.run) runCycle(c, ph, opt.amp === undefined ? 1 : opt.amp, t);
   else if (opt.sick) sickWalk(c, ph, opt.sick, t);
@@ -1945,6 +2150,38 @@ function cutAt(u, cuts) {
 function cutU(u, cuts, i) {
   var a = cuts[i], b = i + 1 < cuts.length ? cuts[i + 1] : 1;
   return inv(a, b, u);
+}
+
+/* ---------------------------------------------------------------- dust */
+var dust = null;
+function makeDust() {
+  var N = 260;
+  var geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+  dust = new THREE.Points(geo, new THREE.PointsMaterial({
+    color: 0xdccbaa, size: .09, transparent: true, opacity: .3,
+    depthWrite: false, sizeAttenuation: true
+  }));
+  dust.frustumCulled = false;
+  dust.visible = false;
+  dust.userData.N = N;
+  return dust;
+}
+/* each mote is pinned to where a runner was a fraction of a second ago */
+function updateDust(t, params) {
+  var pos = dust.geometry.attributes.position.array, N = dust.userData.N;
+  var r = rng(9182), n = params.length;
+  for (var i = 0; i < N; i++) {
+    var p = params[i % n];
+    var jx = r() - .5, jy = r(), jz = r() - .5;
+    var age = ((t * 1.6 + i * .1637) % 1) * .95;
+    if (age > .78) { pos[i * 3 + 1] = -60; continue; }
+    var ang = (t - age) * p.w + p.ph;
+    pos[i * 3] = p.cx + p.rx * Math.sin(ang) + jx * (.16 + age * .95);
+    pos[i * 3 + 1] = .03 + age * .40 + jy * .05;
+    pos[i * 3 + 2] = p.cz + p.rz * Math.sin(2 * ang + p.q) + jz * (.16 + age * .95);
+  }
+  dust.geometry.attributes.position.needsUpdate = true;
 }
 
 /* ------------------------------------------------------------ droplets */
@@ -2372,13 +2609,34 @@ var TAGP = [
   { cx: .1, cz: 4.0, rx: 4.0, rz: 2.6, w: .55, ph: 5.5, q: 4.0 },
   { cx: .7, cz: 3.5, rx: 3.5, rz: 3.0, w: .5, ph: 6.1, q: 1.4 }
 ];
+/* Their speed round the loop is not constant, so a fixed cadence made the
+   feet skate. Integrate the path once and drive the stride off distance. */
+function tagArc(p) {
+  if (p._arc) return p._arc;
+  var T0 = 86, dt = 1 / 30, n = Math.round(36 / dt) + 1;
+  var a = new Float32Array(n), px = 0, pz = 0;
+  for (var k = 0; k < n; k++) {
+    var tt = T0 + k * dt, ang = tt * p.w + p.ph;
+    var x = p.cx + p.rx * Math.sin(ang);
+    var z = p.cz + p.rz * Math.sin(2 * ang + p.q);
+    if (k > 0) a[k] = a[k - 1] + Math.sqrt((x - px) * (x - px) + (z - pz) * (z - pz));
+    px = x; pz = z;
+  }
+  p._arc = { T0: T0, dt: dt, a: a };
+  return p._arc;
+}
+function tagDist(p, t) {
+  var A = tagArc(p), f = clamp((t - A.T0) / A.dt, 0, A.a.length - 1);
+  var k = f | 0, k2 = Math.min(k + 1, A.a.length - 1);
+  return lerp(A.a[k], A.a[k2], f - k);
+}
 function freeRun(c, t, p, amp) {
   var a = t * p.w + p.ph;
   var x = p.cx + p.rx * Math.sin(a);
   var z = p.cz + p.rz * Math.sin(2 * a + p.q);
   var dx = p.rx * p.w * Math.cos(a), dz = 2 * p.rz * p.w * Math.cos(2 * a + p.q);
   stage(c, x, z, Math.atan2(dx, dz));
-  runCycle(c, t * 9.2 + c.seed * 2, amp === undefined ? 1 : amp, t);
+  runCycle(c, tagDist(p, t) / 1.9 * Math.PI * 2 + c.seed * 2, amp === undefined ? 1 : amp, t);
   face(c, .4, .45, .8);
   return { x: x, z: z };
 }
@@ -2387,7 +2645,7 @@ function poseTalkOverlay(t, list) {
 }
 
 S(9, {                                                    /* tag, wide */
-  set: "park",
+  set: "park", dust: 1,
   cam: function (u) {
     camKeys(u, [{ p: [10.5, 3.4, 12.5], l: [-1, 1.2, 2], f: 40 },
                 { p: [7.5, 2.9, 10.5], l: [-1.5, 1.1, 2], f: 38 }]);
@@ -2399,7 +2657,7 @@ S(9, {                                                    /* tag, wide */
 });
 
 S(8, {                                                    /* in among them */
-  set: "park",
+  set: "park", dust: 1,
   cam: function (u, t) {
     var p = TAGP[MARA], a = t * p.w + p.ph;
     var x = p.cx + p.rx * Math.sin(a), z = p.cz + p.rz * Math.sin(2 * a + p.q);
@@ -2413,7 +2671,7 @@ S(8, {                                                    /* in among them */
 });
 
 S(6, {                                                    /* she stops */
-  set: "park",
+  set: "park", dust: 1,
   cam: function (u) {
     var g = senaGround();
     camKeys(u, [{ p: [g.x + 3.5, 1.85, g.z + 4.8], l: [g.x - .2, 1.25, g.z + .8], f: 42 },
@@ -2431,7 +2689,7 @@ S(6, {                                                    /* she stops */
       freeRun(G(i), tt, TAGP[i]);
       if (kk > .02) {
         blend(G(i), kk,
-          (function (cc, t2) { return function () { runCycle(cc, t2 * 9.2 + cc.seed * 2, 1, t2); }; })(G(i), tt),
+          (function (cc, t2, pp) { return function () { runCycle(cc, tagDist(pp, t2) / 1.9 * Math.PI * 2 + cc.seed * 2, 1, t2); }; })(G(i), tt, TAGP[i]),
           (function (cc) { return function () { poseStand(cc, t, { still: true }); face(cc, -.75, .35, 0); }; })(G(i)));
         if (kk > .35) faceTo(G(i), g.x, g.z);
       }
@@ -2864,10 +3122,10 @@ S(9, {                                                    /* regrouping */
       show(i);
       stage(G(i), BATH.x + f[1], BATH.z + f[2], .35 + Math.PI * .04);
       poseCrouch(G(i), t, 1);
-      G(i).hips.position.y = .86 - .30;
-      G(i).legL.knee.rotation.x = 1.55; G(i).legR.knee.rotation.x = 1.48;
-      G(i).legL.hip.rotation.x = -1.15; G(i).legR.hip.rotation.x = -1.20;
-      G(i).spine.rotation.x = .30;
+      G(i).hips.position.y = .86 - .34;
+      G(i).legL.knee.rotation.x = 1.90; G(i).legR.knee.rotation.x = 1.95;
+      G(i).legL.hip.rotation.x = -1.25; G(i).legR.hip.rotation.x = -1.32;
+      G(i).spine.rotation.x = .34;
       if (k === 1) poseTalk(G(i), t, .7);
       face(G(i), -.9, .35, 0);
       headLook(G(i), headPos(G(MARA)), .35);
@@ -2891,17 +3149,17 @@ S(7, {                                                    /* the water gun */
       show(i);
       stage(G(i), BATH.x + f[1], BATH.z + f[2], .35);
       poseCrouch(G(i), t, 1);
-      G(i).hips.position.y = .86 - .30;
-      G(i).legL.knee.rotation.x = 1.55; G(i).legR.knee.rotation.x = 1.48;
-      G(i).legL.hip.rotation.x = -1.15; G(i).legR.hip.rotation.x = -1.20;
-      G(i).spine.rotation.x = .30;
+      G(i).hips.position.y = .86 - .34;
+      G(i).legL.knee.rotation.x = 1.90; G(i).legR.knee.rotation.x = 1.95;
+      G(i).legL.hip.rotation.x = -1.25; G(i).legR.hip.rotation.x = -1.32;
+      G(i).spine.rotation.x = .34;
       headLook(G(i), headPos(G(TOVA)), .8);
       face(G(i), -.4, .3, .1);
     });
     poseTalk(G(TOVA), t, .9);
-    G(TOVA).hips.position.y = .86 - .30;
-    G(TOVA).legL.knee.rotation.x = 1.55; G(TOVA).legR.knee.rotation.x = 1.48;
-    G(TOVA).legL.hip.rotation.x = -1.15; G(TOVA).legR.hip.rotation.x = -1.20;
+    G(TOVA).hips.position.y = .86 - .34;
+    G(TOVA).legL.knee.rotation.x = 1.90; G(TOVA).legR.knee.rotation.x = 1.95;
+    G(TOVA).legL.hip.rotation.x = -1.25; G(TOVA).legR.hip.rotation.x = -1.32;
     var lift = smooth(inv(.3, .7, u));
     G(TOVA).armR.sh.rotation.x = -.6 - lift * 1.1;
     G(TOVA).armR.el.rotation.x = -.9 - lift * .4;
@@ -2925,16 +3183,16 @@ S(6, {                                                    /* maybe they hate it 
       show(i);
       stage(G(i), BATH.x + f[1], BATH.z + f[2], .35);
       poseCrouch(G(i), t, 1);
-      G(i).hips.position.y = .86 - .30;
-      G(i).legL.knee.rotation.x = 1.55; G(i).legR.knee.rotation.x = 1.48;
-      G(i).legL.hip.rotation.x = -1.15; G(i).legR.hip.rotation.x = -1.20;
-      G(i).spine.rotation.x = .30;
+      G(i).hips.position.y = .86 - .34;
+      G(i).legL.knee.rotation.x = 1.90; G(i).legR.knee.rotation.x = 1.95;
+      G(i).legL.hip.rotation.x = -1.25; G(i).legR.hip.rotation.x = -1.32;
+      G(i).spine.rotation.x = .34;
       face(G(i), -.2, .3, .2);
     });
     if (u > .3) poseTalk(G(WREN), t, .8);
-    G(WREN).hips.position.y = .86 - .30;
-    G(WREN).legL.knee.rotation.x = 1.55; G(WREN).legR.knee.rotation.x = 1.48;
-    G(WREN).legL.hip.rotation.x = -1.15; G(WREN).legR.hip.rotation.x = -1.20;
+    G(WREN).hips.position.y = .86 - .34;
+    G(WREN).legL.knee.rotation.x = 1.90; G(WREN).legR.knee.rotation.x = 1.95;
+    G(WREN).legL.hip.rotation.x = -1.25; G(WREN).legR.hip.rotation.x = -1.32;
     gunTo(G(TOVA), true);
     G(TOVA).armR.sh.rotation.x = -1.5; G(TOVA).armR.el.rotation.x = -1.2; G(TOVA).armR.sh.rotation.z = .3;
     [MARA, ODILE, TOVA].forEach(function (i) { headLook(G(i), headPos(G(WREN)), .75); });
@@ -2947,14 +3205,15 @@ S(8, {                                                    /* filling it */
   set: "park",
   cam: function (u) {
     var TX = -9.0, TZ = -6.5;
-    camKeys(u, [{ p: [TX + 3.0, 1.60, TZ + 2.7], l: [TX + .25, .95, TZ + .25], f: 36 },
-                { p: [TX + 2.3, 1.32, TZ + 2.1], l: [TX + .15, .88, TZ + .15], f: 32 }]);
+    camKeys(u, [{ p: [TX + 3.2, 1.45, TZ - 1.2], l: [TX + .1, .95, TZ + .15], f: 36 },
+                { p: [TX + 2.6, 1.25, TZ - .8], l: [TX + .05, .90, TZ + .12], f: 32 }]);
     CAM.shake = .34;
   },
   act: function (t, u) {
     var TX = -9.0, TZ = -6.5;
     show(MARA); show(TOVA); show(ODILE); show(WREN);
-    stage(G(MARA), TX + .55, TZ + .75, -2.4);
+    stage(G(MARA), TX + .62, TZ + .18, 0);
+    faceTo(G(MARA), TX, TZ);
     poseCrouch(G(MARA), t, .5);
     G(MARA).hips.position.y = .86 - .1;
     G(MARA).legL.knee.rotation.x = .55; G(MARA).legR.knee.rotation.x = .5;
@@ -2963,7 +3222,7 @@ S(8, {                                                    /* filling it */
     G(MARA).armL.sh.rotation.x = -1.2; G(MARA).armL.el.rotation.x = -1.1;
     gunTo(G(MARA), true);
     face(G(MARA), -.5, .2, 0);
-    [[TOVA, 1.55, -1.05], [ODILE, 2.25, -.35], [WREN, .35, -1.45]].forEach(function (f) {
+    [[TOVA, 1.15, 1.55], [ODILE, 2.05, 1.05], [WREN, .05, 1.85]].forEach(function (f) {
       stage(G(f[0]), TX + f[1], TZ + f[2], Math.atan2(TX - (TX + f[1]), TZ - (TZ + f[2])));
       poseStand(G(f[0]), t, { still: true });
       headLook(G(f[0]), worldOf(G(MARA), 1.0), .8);
@@ -3294,6 +3553,7 @@ function gunTo(c, held) {
   gun.translateY(-.24);
   gun.rotateZ(-Math.PI / 2);
   gun.translateY(-.02);
+  grip(c, .92, "R");
 }
 function gunNozzle(c) {
   gun.updateMatrixWorld(true);
@@ -3497,6 +3757,7 @@ function audioFrame(t, playing, dt) {
    ===================================================================== */
 function initGlobals() {
   ROT_COLOR = new THREE.Color(0x9aa892);
+  DEAD_EYE = new THREE.Color(0xd8d8cc);
   _tmpCol = new THREE.Color();
   _v1 = new THREE.Vector3(); _v2 = new THREE.Vector3(); _q1 = new THREE.Quaternion();
   _cA = new THREE.Color(); _cB = new THREE.Color(); _cC = new THREE.Color();
@@ -3508,7 +3769,7 @@ function initGlobals() {
   CAM.look = new THREE.Vector3();
 }
 
-var renderer, scene, camera, sets = {}, dome, ui = null, ready = false;
+var renderer, scene, camera, sets = {}, dome, birds, ui = null, ready = false;
 
 function boot(_THREE, canvas, uiRefs) {
   THREE = _THREE;
@@ -3554,6 +3815,9 @@ function boot(_THREE, canvas, uiRefs) {
   gun = makeWaterGun();
   scene.add(gun);
   scene.add(makeSpray());
+  scene.add(makeDust());
+  birds = makeBirds();
+  scene.add(birds);
 
   ready = true;
   return api;
@@ -3591,10 +3855,16 @@ function frame(t, playing) {
   hideAll();
   gun.visible = false;
   spray.visible = false;
+  dust.visible = false;
+  /* the birds are gone from the moment she gets up off the ground */
+  birds.position.copy(O);
+  updateBirds(birds, t, sh.set === "bedroom" ? 0 : 1 - smooth(inv(115, 127, t)));
   CAM.roll = 0; CAM.shake = .2; CAM.shakeFreq = 1;
 
   sh.cam.call(sh, u, t);
   sh.act(t, u);
+  for (var f = 0; f < 7; f++) plantFeet(CAST_OBJ[f]);
+  if (sh.dust) { dust.visible = true; updateDust(t, TAGP); }
 
   /* handheld: deterministic, so a scrub lands on the same frame */
   var amt = CAM.shake * .009, f = CAM.shakeFreq;
