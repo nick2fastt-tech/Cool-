@@ -367,7 +367,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
   <div id="menuTop">
     <div class="title">INFECTOR</div>
     <div class="subtitle">Run. Hide. Survive the outbreak.</div>
-    <div style="font-size:10px;letter-spacing:3px;color:#7fd4a0;margin-top:5px">V1.23 · CHARACTER POLISH</div>
+    <div style="font-size:10px;letter-spacing:3px;color:#7fd4a0;margin-top:5px">V1.24 · MOTION & MAPS</div>
   </div>
   <div id="menuBtns">
     <button class="btn green wide" data-nav="quickplay">▶ Play</button>
@@ -379,7 +379,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
     <button class="btn ghost" data-nav="settings">⚙ Settings</button>
     <button class="btn ghost" data-nav="credits" style="grid-column:1/-1">★ Credits</button>
   </div>
-  <div class="footNote" id="verNote">V1.23 · 4 difficulties · 15 servers</div>
+  <div class="footNote" id="verNote">V1.24 · 4 difficulties · 15 servers</div>
 </div>
 
 <!-- ================= SERVERS ================= -->
@@ -502,6 +502,25 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
         <div class="opt"><div><div class="optL">Audio</div><div class="optD">Fully synthesized via Web Audio: wind, birds, growls, footsteps, adaptive score</div></div></div>
         <div class="opt"><div><div class="optL">Netcode</div><div class="optD">Authoritative round simulation with snapshot interpolation &amp; client prediction</div></div></div>
         <div class="opt"><div><div class="optL">Maps</div><div class="optD">Playground, Neighborhood &amp; the three-storey Hotel — procedurally assembled</div></div></div>
+      </div>
+      <h3 style="margin:18px 0 6px;font-size:15px;letter-spacing:2px;color:#8ef07a">V1.24 — MOTION &amp; MAPS</h3>
+      <div class="muted" style="line-height:1.75">
+        <b style="color:#cfe6ff">Jumping, rebuilt.</b> The old jump threw both arms up and forward until the
+        hands met in front of the face, with the legs left dangling straight — a cringe, not a leap. Now the
+        arms swing up and <i>open</i>, the lead knee drives up while the trailing leg keeps its push-off
+        extension, and a running jump leans and twists into the arc. Coming down, the legs reach for the ground
+        and the arms drop and spread for balance.<br><br>
+        <b style="color:#cfe6ff">Zombies jump like zombies.</b> They were borrowing the human airborne clips.
+        They now have their own: arms still reaching forward instead of swinging up, legs trailing stiffly with
+        only a token fold, a heavier landing that pitches the torso and bends deeper.<br><br>
+        <b style="color:#cfe6ff">The last two gaits.</b> The Walker limp and the Sprinter run were the only
+        cycles never converted to the geometric pelvis solve — they still lifted the hips exactly when the legs
+        spread. Both now drop correctly, with stride rates derived per class so nothing skates.<br><br>
+        <b style="color:#cfe6ff">Maps.</b> All three are in place and verified. Neighborhood had
+        <b>44 of 100</b> spawn and navigation points buried inside houses and cars — players started the round
+        wedged in geometry with the camera jammed against a wall. Every map's spawn, navigation and line-up
+        positions are now swept at load and moved to clear ground, and the chase camera no longer slides
+        inside car roofs and porches.
       </div>
       <h3 style="margin:18px 0 6px;font-size:15px;letter-spacing:2px;color:#8ef07a">V1.23 — HUMAN CHARACTER POLISH</h3>
       <div class="muted" style="line-height:1.75">
@@ -3119,6 +3138,69 @@ const MapDefs={playground:{label:'Playground',build:buildPlayground},
                 neighborhood:{label:'Neighborhood',build:buildNeighborhood},
                 hotel:{label:'Hotel',build:buildHotel}};
 let World=null;
+/* Spawn and navigation points are scattered procedurally, so some of them land
+   inside a house, a car or a bed. Standing a player there wedges them in the
+   geometry with the camera jammed against a wall. Sweep every point once the
+   world is loaded: take the position collision pushes it to, and if that is
+   still not clear, spiral outward for somewhere that is. Points that cannot be
+   freed are dropped rather than left as traps. */
+function clearMapPoints(w){
+  const o={};
+  const free=(x,z,y)=>{
+    const r=resolveCollision(x,z,y+.9,.34,o);
+    return (Math.abs(r.x-x)<.06&&Math.abs(r.z-z)<.06&&Math.abs(r.ground-y)<.5);
+  };
+  const fix=(pt)=>{
+    const y=pt.y||w.floorY||0;
+    if(free(pt.x,pt.z,y))return true;
+    // first try wherever the collision resolver wants to put it
+    const r=resolveCollision(pt.x,pt.z,y+.9,.34,o);
+    if(free(r.x,r.z,y)){pt.x=r.x;pt.z=r.z;return true;}
+    // then spiral out, a metre at a time
+    for(let ring=1;ring<=6;ring++){
+      for(let i=0;i<12;i++){
+        const a=i/12*TAU+ring*.37;
+        const nx=pt.x+Math.cos(a)*ring*1.15, nz=pt.z+Math.sin(a)*ring*1.15;
+        if(w.bounds&&(nx<w.bounds.x0||nx>w.bounds.x1||nz<w.bounds.z0||nz>w.bounds.z1))continue;
+        if(free(nx,nz,y)){pt.x=nx;pt.z=nz;return true;}
+      }
+    }
+    return false;
+  };
+  let moved=0,dropped=0;
+  for(const key of ['spawns','nav']){
+    const list=w[key];
+    if(!list)continue;
+    const keep=[];
+    for(const pt of list){
+      const before=pt.x+','+pt.z;
+      if(fix(pt)){if(before!==pt.x+','+pt.z)moved++;keep.push(pt);}
+      else dropped++;
+    }
+    // never empty the list — a map with no spawns cannot start a round
+    w[key]=keep.length?keep:list;
+  }
+  // the line-up is where every player stands at the start of a round, so it
+  // gets the same treatment
+  if(w.lineup){
+    const c=w.lineup, y=c.y||w.floorY||0;
+    const dirX=Math.cos(c.yaw||0), dirZ=-Math.sin(c.yaw||0);
+    let slide=0;
+    for(let step=0;step<10;step++){
+      let ok=true;
+      for(let i=0;i<10;i++){
+        const off=(i-4.5)*1.35;
+        if(!free(c.x+dirX*off,c.z+dirZ*off,y)){ok=false;break;}
+      }
+      if(ok)break;
+      // shuffle the whole line toward the middle of the map and retry
+      slide+=1.4;
+      c.x-=Math.sign(c.x||1)*1.4;c.z-=Math.sign(c.z||1)*1.4;
+    }
+    w.lineupSlide=slide;
+  }
+  w.pointsMoved=moved;w.pointsDropped=dropped;
+}
 function loadMap(key){
   if(World&&World.meshes)World.meshes.forEach(m=>m.free());
   World=MapDefs[key].build();
@@ -3134,6 +3216,7 @@ function loadMap(key){
   R.sun.set(World.sun);
   const l=Math.hypot(R.sun[0],R.sun[1],R.sun[2]);
   R.sun[0]/=l;R.sun[1]/=l;R.sun[2]/=l;
+  clearMapPoints(World);
   R.fogCol.set(World.fog);R.skyCol.set(World.sky);
   // indoor maps swap the sunlit palette for a warm, mostly-ambient interior
   if(World.indoor){
@@ -3647,27 +3730,83 @@ const CLIP={
    o[J.spine]=.34*k;o[J.headP]=.12*k;o[J.shrug]=-.4*k;o[J.eye]=1;
  },
  /* jump: push off, tuck, then reach for the ground */
+ /* Take-off and rise. The arms swing up and OUT to the sides rather than
+    converging in front of the face, and the legs split — the lead knee tucks
+    while the trailing leg keeps the push-off extension before folding under.
+    A running jump leans into the arc; a standing one stays upright. */
  jump(o,t,c){
-   const a=clamp(c.airT/.55,0,1);
    const push=1-clamp(c.airT/.16,0,1);        // legs still extending
-   const tuck=Math.min(1,c.airT/.22);
-   o[J.lHipP]=-.62*tuck+.34*push;o[J.rHipP]=-.5*tuck+.34*push;
-   o[J.lKnee]=1.25*tuck+.15;o[J.rKnee]=.95*tuck+.15;
-   o[J.lAnk]=-.35*push;o[J.rAnk]=-.35*push;
-   o[J.lShP]=-2.35+push*.9;o[J.rShP]=-2.35+push*.9;
-   o[J.lShR]=.4;o[J.rShR]=.4;o[J.lElb]=.3;o[J.rElb]=.32;
-   // longer, faster jumps lean into the arc
-   o[J.lean]=-.12+push*.16+clamp((c.speed||0)*.048,0,.36)*tuck;
-   o[J.spine]=-.06;o[J.headP]=-.18;
-   o[J.shrug]=.8;o[J.eye]=1.12;o[J.mouth]=.22;
+   const tuck=Math.min(1,c.airT/.24);
+   const fast=clamp((c.speed||0)/6.5,0,1);
+   o[J.lHipP]=-1.02*tuck+.42*push;            // lead knee drives up
+   o[J.rHipP]=(.24+.5*fast)*tuck+.40*push;    // trailing leg stays back
+   o[J.lKnee]=1.42*tuck+.12;
+   o[J.rKnee]=(.55+.75*fast)*tuck+.12;
+   o[J.lAnk]=-.42*push-.12*tuck;o[J.rAnk]=-.5*push+.2*tuck;
+   o[J.lHipR]=.07*tuck;o[J.rHipR]=-.06*tuck;
+   // arms: up and open, elbows soft, wrists trailing
+   o[J.lShP]=-1.62+push*.55;o[J.rShP]=-1.5+push*.5;
+   o[J.lShR]=.52+tuck*.24;o[J.rShR]=.5+tuck*.22;
+   o[J.lShY]=-.22;o[J.rShY]=.22;
+   o[J.lElb]=.62+tuck*.22;o[J.rElb]=.58+tuck*.2;
+   o[J.lWri]=-.28;o[J.rWri]=-.26;o[J.handGrip]=.2;
+   o[J.lean]=-.1+push*.14+.42*fast*tuck;
+   o[J.twist]=.1*fast*tuck;o[J.side]=-.04*tuck;
+   o[J.spine]=-.05;o[J.headP]=-.2+.12*fast;
+   o[J.shrug]=.7;o[J.eye]=1.12;o[J.mouth]=.22;
  },
+ /* Coming down: the legs reach for the ground and the arms drop and open for
+    balance instead of staying pinned overhead. */
  fall(o,t,c){
-   const w=Math.sin(t*9)*.12;
-   o[J.lHipP]=-.2+w;o[J.rHipP]=-.35-w;o[J.lKnee]=.6;o[J.rKnee]=.4;
-   o[J.lAnk]=.25;o[J.rAnk]=.25;
-   o[J.lShP]=-1.5;o[J.rShP]=-1.5;o[J.lShR]=1.05+w;o[J.rShR]=1.05-w;
-   o[J.lElb]=.55;o[J.rElb]=.55;
-   o[J.lean]=.06;o[J.eye]=1.25;o[J.mouth]=.35;o[J.brow]=.28;
+   const w=Math.sin(t*9)*.1;
+   const reach=clamp((c.airT||0)/.5,0,1);
+   o[J.lHipP]=-.46+.3*reach+w;o[J.rHipP]=-.3+.24*reach-w;
+   o[J.lKnee]=.72-.42*reach;o[J.rKnee]=.5-.3*reach;
+   o[J.lAnk]=.1+.28*reach;o[J.rAnk]=.08+.26*reach;
+   o[J.lShP]=-1.05-w*.4;o[J.rShP]=-1.0+w*.4;
+   o[J.lShR]=.88+w;o[J.rShR]=.84-w;
+   o[J.lShY]=-.3;o[J.rShY]=.3;
+   o[J.lElb]=.7;o[J.rElb]=.68;o[J.lWri]=-.3;o[J.rWri]=-.28;
+   o[J.handGrip]=.15;
+   o[J.lean]=.05;o[J.eye]=1.25;o[J.mouth]=.35;o[J.brow]=.28;
+ },
+ /* A zombie in the air has none of the athleticism: the arms stay reaching
+    forward, the legs trail stiffly and only fold a little. */
+ zjump(o,t,c){
+   const push=1-clamp(c.airT/.18,0,1);
+   const tuck=Math.min(1,c.airT/.3);
+   o[J.lHipP]=-.62*tuck+.36*push;o[J.rHipP]=.34*tuck+.34*push;
+   o[J.lKnee]=.78*tuck+.2;o[J.rKnee]=.42*tuck+.2;
+   o[J.lAnk]=-.3*push;o[J.rAnk]=-.34*push;
+   o[J.lShP]=-1.32-tuck*.2;o[J.rShP]=-1.26-tuck*.18;   // still reaching
+   o[J.lShR]=.4;o[J.rShR]=.38;o[J.lElb]=.72;o[J.rElb]=.8;
+   o[J.lShY]=.16;o[J.rShY]=-.16;o[J.handGrip]=.62;
+   o[J.lean]=.24;o[J.spine]=.2;o[J.headP]=-.26;
+   o[J.shrug]=1.0;o[J.eye]=1.15;o[J.mouth]=.6;
+ },
+ zfall(o,t,c){
+   const w=Math.sin(t*7)*.16;
+   const reach=clamp((c.airT||0)/.5,0,1);
+   o[J.lHipP]=-.28+.24*reach+w;o[J.rHipP]=-.16+.2*reach-w;
+   o[J.lKnee]=.5-.28*reach;o[J.rKnee]=.4-.22*reach;
+   o[J.lAnk]=.14+.2*reach;o[J.rAnk]=.12+.2*reach;
+   o[J.lShP]=-1.5-w*.5;o[J.rShP]=-1.45+w*.5;
+   o[J.lShR]=.52+w;o[J.rShR]=.5-w;
+   o[J.lElb]=.6;o[J.rElb]=.66;o[J.handGrip]=.7;
+   o[J.lean]=.3;o[J.spine]=.24;o[J.headP]=-.12;
+   o[J.eye]=1.2;o[J.mouth]=.7;
+ },
+ /* Zombies land heavily — deeper absorb, no arm control, torso pitches. */
+ zland(o,t,c){
+   const k=clamp(c.landT/(c.landDur||.2),0,1);
+   o[J.crouch]=(c.landHard?.72:.52)*k;
+   o[J.lKnee]=(c.landHard?1.5:1.15)*k+.14;o[J.rKnee]=(c.landHard?1.35:1.0)*k+.14;
+   o[J.lHipP]=.5*k;o[J.rHipP]=.44*k;o[J.lAnk]=-.34*k;o[J.rAnk]=-.3*k;
+   o[J.lShP]=-1.15*k;o[J.rShP]=-1.05*k;o[J.lElb]=.5*k;o[J.rElb]=.58*k;
+   o[J.lShR]=.46*k;o[J.rShR]=.42*k;o[J.handGrip]=.7;
+   o[J.spine]=.44*k;o[J.headP]=.24*k;o[J.shrug]=.9*k;
+   o[J.side]=Math.sin(t*13)*.05*k;
+   o[J.eye]=1.05;o[J.mouth]=.5;
  },
  land(o,t,c){
    const k=clamp(c.landT/(c.landDur||.2),0,1);
@@ -3807,15 +3946,17 @@ const CLIP={
    const p=c.phase,s=Math.sin(p),cs=Math.cos(p);
    // uneven gait: the left leg drags, giving a limp
    const limp=Math.max(0,-s);
-   o[J.lHipP]=s*.44;o[J.rHipP]=-s*.6;
-   o[J.lKnee]=Math.max(0,-s)*.62+.34;o[J.rKnee]=Math.max(0,s)*.9+.14;
-   o[J.lAnk]=-s*.1;o[J.rAnk]=s*.22;
+   const thL=s*.44, thR=-s*.6;
+   o[J.lHipP]=thL;o[J.rHipP]=thR;
+   const knL=Math.max(0,-s)*.62+.34, knR=Math.max(0,s)*.9+.14;
+   o[J.lKnee]=knL;o[J.rKnee]=knR;
+   const anL=-s*.1+Math.max(0,s)*.2-Math.max(0,-s)*.24;
+   const anR=s*.22+Math.max(0,-s)*.2-Math.max(0,s)*.24;
+   o[J.lAnk]=anL;o[J.rAnk]=anR;
    o[J.lShP]=-.72-s*.26;o[J.rShP]=-.6+s*.3;     // relaxed swing
    o[J.lElb]=.62;o[J.rElb]=.82;o[J.lShR]=.24;o[J.rShR]=.2;
    o[J.lHipR]=.05+cs*.04;o[J.rHipR]=-.05+cs*.04;
-   o[J.lAnk]+=Math.max(0,s)*.2-Math.max(0,-s)*.24;
-   o[J.rAnk]+=Math.max(0,-s)*.2-Math.max(0,s)*.24;
-   o[J.bob]=Math.abs(Math.sin(p))*.05+limp*.02;
+   o[J.bob]=hipBob(thL,knL,anL,thR,knR,anR)+.01+limp*.015;
    o[J.side]=-cs*.13-limp*.05;
    o[J.spine]=.36+limp*.05;
    o[J.twist]=cs*.1;
@@ -3849,14 +3990,21 @@ const CLIP={
  sWalk(o,t,c){CLIP.zwalk(o,t,c);o[J.lean]=.2;o[J.shrug]=.85;},
  sRun(o,t,c){
    const p=c.phase,s=Math.sin(p),cs=Math.cos(p);
-   o[J.lHipP]=s*1.28;o[J.rHipP]=-s*1.28;        // long, powerful strides
-   o[J.lKnee]=Math.max(0,-s)*1.85+.2;o[J.rKnee]=Math.max(0,s)*1.85+.2;
-   o[J.lAnk]=-s*.34;o[J.rAnk]=s*.34;
+   const A=1.16;
+   const thL=s*A, thR=-s*A;                     // long, powerful strides
+   o[J.lHipP]=thL;o[J.rHipP]=thR;
+   const swL=Math.max(0,cs),swR=Math.max(0,-cs);
+   const knL=.2+swL*1.8+Math.max(0,-s)*.4, knR=.2+swR*1.8+Math.max(0,s)*.4;
+   o[J.lKnee]=knL;o[J.rKnee]=knR;
+   const anL=Math.max(0,s)*.16-Math.max(0,-s)*.54+swL*.38;
+   const anR=Math.max(0,-s)*.16-Math.max(0,s)*.54+swR*.38;
+   o[J.lAnk]=anL;o[J.rAnk]=anR;
    o[J.lShP]=-s*1.15+.35;o[J.rShP]=s*1.15+.35;  // arms pumping hard
    o[J.lElb]=1.25+Math.max(0,s)*.5;o[J.rElb]=1.25+Math.max(0,-s)*.5;
    o[J.lShR]=.34;o[J.rShR]=.34;
    o[J.lShY]=-.22;o[J.rShY]=.22;
-   o[J.bob]=Math.abs(Math.sin(p))*.085;
+   o[J.lWri]=-.22-cs*.22;o[J.rWri]=-.22+cs*.22;
+   o[J.bob]=hipBob(thL,knL,anL,thR,knR,anR)+Math.max(0,Math.abs(cs)-.45)*.18+.095;
    o[J.lean]=.6;                                 // aggressive forward pitch
    o[J.side]=-cs*.09-clamp((c.turnRate||0)*.05,-.18,.18);
    o[J.twist]=cs*.22;
@@ -5802,8 +5950,9 @@ class Simulation{
     if(e.hiding)return e.speed>0.3?'hideMove':'hideIdle';
     if(e.climb)return e.climb.vault?'vault':'mantle';
     if(e.jumpPrep>0)return 'jumpPrep';
-    if(!e.grounded)return e.vy>1?'jump':'fall';
-    if(e.landT>0)return 'land';
+    // zombies get their own airborne set — stiffer, still reaching
+    if(!e.grounded)return e.vy>1?(z?'zjump':'jump'):(z?'zfall':'fall');
+    if(e.landT>0)return z?'zland':'land';
     const cw=z&&variantOf(e).crawl;
     if(e.downed)return 'pinned';
     const sp=z&&variantOf(e).burst;
@@ -5833,7 +5982,12 @@ class Simulation{
     // so one half-cycle covers exactly the ground the feet cover. Running adds
     // a flight allowance because the body keeps travelling with both feet off.
     let stride;
-    if(z)stride=e.speed>4.7?stepLen(SW.zRun)*1.3:stepLen(SW.zWalk);
+    if(z){
+      const V=variantOf(e);
+      // each class swings a different amount, so each needs its own stride
+      if(e.speed>4.7)stride=stepLen(V.burst?1.16:SW.zRun)*1.3;
+      else stride=stepLen(V.burst?SW.zWalk:.44);
+    }
     else stride=e.speed>6.1?stepLen(SW.sprint)*1.42
               :(e.speed>4.2?stepLen(SW.run)*1.3:stepLen(SW.walk));
     e.phase+=(e.speed*dt)*(PI/stride);
@@ -6542,7 +6696,12 @@ const Cam={
       const px=this.tx-dirx*k,pz=this.tz-dirz*k,py=this.ty+diry*k;
       // probe with a fat radius so the near plane never pokes through a wall
       const r=resolveCollision(px,pz,py-1.55,.62,_col2);
-      if(Math.abs(r.x-px)>.02||Math.abs(r.z-pz)>.02){d=Math.max(climbing?2.05:1.5,k-.42);break;}
+      // shortened by a wall pushing the probe out, OR by the probe ending up
+      // underneath a standable top — car roofs and porches never push, so the
+      // boom used to slide straight inside them
+      if(Math.abs(r.x-px)>.02||Math.abs(r.z-pz)>.02||r.ground>py-.25){
+        d=Math.max(climbing?2.05:1.5,k-.42);break;
+      }
     }
     this.dist=damp(this.dist,d,d<this.dist?26:7,dt);
     if(this.dist<1.9)this.ty+=(1.9-this.dist)*.16;
@@ -8447,7 +8606,7 @@ function boot(){
       Game.state='menu';
       if(!Save.seenTutorial){UI.tutStep=0;UI.buildTutorial();UI.show('tutorialScreen');}
       else UI.show('menu');
-      $('#verNote').textContent='V1.23 · '+Servers.length+' servers · Easy → Insane';
+      $('#verNote').textContent='V1.24 · '+Servers.length+' servers · Easy → Insane';
     },260);
   },140);
   addEventListener('resize',()=>{R.resize();});

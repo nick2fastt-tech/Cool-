@@ -1,6 +1,6 @@
 # Cool-
 
-## Infector — V1.23 "Human Character Polish"
+## Infector — V1.24 "Motion & Maps"
 
 An online 3D multiplayer infection-survival game that runs from a **single HTML file** —
 no build step, no engine, no downloads. Open `infector.html` in any browser (desktop or
@@ -94,6 +94,13 @@ shoves it open — loudly.
 
 ### Version history
 
+- **V1.24 — Motion & Maps.** Rebuilt the jump: arms swing up and open instead of meeting
+  in front of the face, the lead knee drives up while the trailing leg keeps its push-off,
+  and the fall reaches for the ground. Zombies got their own airborne and landing clips
+  instead of borrowing the human ones. Converted the last two gaits (Walker limp,
+  Sprinter run) to the geometric pelvis solve. Fixed Neighborhood, where 44 of 100 spawn
+  and navigation points sat inside houses and cars — every map's points are now swept to
+  clear ground at load, and the camera no longer slides inside car roofs.
 - **V1.23 — Human Character Polish.** Fixed elbows, which bent backwards in every clip
   in the game. Rebuilt the hands: five separate digits, each two segments with a
   knuckle, graded finger lengths, a thumb rotated out of the palm plane, a relaxed
