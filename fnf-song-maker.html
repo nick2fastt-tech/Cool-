@@ -1000,7 +1000,54 @@ async function analyzeTrack(buffer, onProg){
     }
   }
   if (onProg) onProg(1);
-  return { flux, rms, centroid, rolloff, lowRatio, fps: sr / HOP, dur: buffer.duration };
+  return { flux, rms, centroid, rolloff, lowRatio, mono: data, sr,
+           fps: sr / HOP, dur: buffer.duration };
+}
+
+/* ------------------------- pitch -------------------------
+   Lane choice was following spectral centroid, which is really vowel
+   brightness — a bright "ee" on a low note outranks a dark "oo" on a high
+   one, so the melody the chart traced was not quite the melody sung. This
+   is YIN: the difference function with cumulative mean normalisation, run
+   only at onsets rather than every frame, which keeps it affordable. */
+function estimateF0(data, sr, centerSample){
+  const W = 1024;
+  const minHz = 70, maxHz = 620;
+  const maxLag = Math.min(Math.floor(sr / minHz), W - 1);
+  const minLag = Math.max(2, Math.floor(sr / maxHz));
+  const start = clamp(Math.round(centerSample - W * 0.25), 0, Math.max(0, data.length - W - 1));
+  if (data.length < W + 2 || maxLag <= minLag) return 0;
+  const span = W - maxLag;
+  if (span < 64) return 0;
+
+  const cmnd = new Float32Array(maxLag + 1);
+  let running = 0, best = -1;
+
+  for (let lag = minLag; lag <= maxLag; lag++){
+    let sum = 0;
+    for (let i = 0; i < span; i++){
+      const diff = data[start + i] - data[start + i + lag];
+      sum += diff * diff;
+    }
+    running += sum;
+    cmnd[lag] = running > 1e-12 ? sum * (lag - minLag + 1) / running : 1;
+    // first dip under the threshold that is also a local minimum wins —
+    // taking the global minimum instead lands on an octave error
+    if (best < 0 && cmnd[lag] < 0.14 && lag > minLag && cmnd[lag] > cmnd[lag-1]) best = lag - 1;
+  }
+  if (best < 0){
+    let bv = Infinity;
+    for (let lag = minLag; lag <= maxLag; lag++) if (cmnd[lag] < bv){ bv = cmnd[lag]; best = lag; }
+    if (bv > 0.55) return 0;                    // no periodicity worth trusting
+  }
+  // parabolic refinement on the dip
+  let lag = best;
+  if (lag > minLag && lag < maxLag){
+    const a = cmnd[lag-1], b = cmnd[lag], c = cmnd[lag+1];
+    const den = a - 2*b + c;
+    if (den > 1e-9) lag += clamp(0.5 * (a - c) / den, -0.5, 0.5);
+  }
+  return lag > 0 ? sr / lag : 0;
 }
 
 /* normalise an envelope to 0..1 */
@@ -1375,16 +1422,33 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
       kept = thinned;
     }
 
-    const cents = kept.map(o => {
+    // What the singer actually sang, in semitones. Where the note is not
+    // pitched enough to measure — a consonant, a shout, a breath — fall back
+    // to centroid so the note still lands somewhere sensible.
+    const rawCent = kept.map(o => {
       const A = o.A || instA;
       const i = clamp(Math.round(o.t * A.fps), 0, A.centroid.length - 1);
       return A.centroid[i];
+    });
+    const f0s = kept.map((o, i) => {
+      const A = o.A;
+      if (!A || !A.mono) return 0;
+      return estimateF0(A.mono, A.sr, Math.round((o.t + 0.045) * A.sr));
+    });
+    const voiced = f0s.filter(f => f > 0);
+    const haveP = voiced.length >= Math.max(4, kept.length * 0.35);
+    // put both on one scale: semitones for pitch, and centroid mapped through
+    // the same log so the fallback sits in the same units
+    const cents = kept.map((o, i) => {
+      if (haveP && f0s[i] > 0) return 12 * Math.log2(f0s[i] / 55);
+      return 12 * Math.log2(Math.max(60, rawCent[i]) / 55) - (haveP ? 12 : 0);
     });
     const sorted = cents.slice().sort((a,b) => a-b);
     const qt = p => sorted[clamp(Math.floor(sorted.length*p), 0, sorted.length-1)];
     const c1 = qt(0.25), c2 = qt(0.5), c3 = qt(0.75);
     const spread = Math.max(1e-6, qt(0.85) - qt(0.15));
-    const STEP_UP = spread * 0.10;
+    // a step of about a tone reads as melodic movement
+    const STEP_UP = Math.max(1.2, spread * 0.10);
     const quartOf = c => c < c1 ? 0 : c < c2 ? 1 : c < c3 ? 2 : 3;
 
     // strong attacks, used to decide where a jump is earned
@@ -1424,6 +1488,20 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
 
     const rnd = seeded(hashName(side) ^ kept.length ^ Math.round(tempo.bpm * 7));
     const recent = [];              // pattern names of the last few runs
+    // When a hook comes back around, a hand-made chart plays it the same way.
+    // A gesture is remembered by its melody and its rhythm — the intervals
+    // between its notes in semitones, and the gaps between them in grid steps
+    // — so the same phrase sung again gets the same lanes back.
+    const memory = new Map();
+    const signature = run => {
+      if (run.length < 3) return null;
+      const parts = [];
+      for (let k = 1; k < run.length; k++){
+        parts.push(Math.round(cents[run[k]] - cents[run[k-1]]) + ":" +
+                   Math.round((kept[run[k]].t - kept[run[k-1]].t) / step));
+      }
+      return parts.join(",");
+    };
     const laneHist = [];            // every lane emitted on this side, in order
     let lastJump = -1e9;
 
@@ -1448,7 +1526,9 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
       // follow the line — variety must not cost the melody.
       if (n <= 2)                     choices = ["single"];
       else if (flatness > 0.6)        choices = ["alt", "jack", "single"];
-      else if (directed > 0.55)       choices = ["stair", "roll"];
+      // A climb longer than the board cannot stair without piling up at the
+      // top, so a long one-way line rolls and a short one steps.
+      else if (directed > 0.55)       choices = n > 4 ? ["roll", "stair"] : ["stair", "roll"];
       else                            choices = ["stair", "stream"];
       choices = choices.filter(p => D.patterns.indexOf(p) >= 0);
       if (!choices.length) choices = ["single"];
@@ -1457,6 +1537,16 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
       if (recent.length > 3) recent.shift();
 
       // ---- lay the run out ----
+      const sig = signature(run);
+      const remembered = sig ? memory.get(sig) : null;
+      if (remembered){
+        // same phrase as before — play it the same way
+        const lanes = remembered.slice();
+        emitRun(run, lanes);
+        for (const l of lanes){ laneHist.push(l); if (laneHist.length > 8) laneHist.shift(); }
+        continue;
+      }
+
       const lanes = [];
       let altA = quartOf(cents[run[0]]);
       let altB = (altA + 1 + Math.floor(rnd() * 3)) % 4;
@@ -1509,7 +1599,12 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
         if (laneHist.length > 8) laneHist.shift();
       }
 
-      // ---- emit, with the occasional earned jump ----
+      if (sig) memory.set(sig, lanes.slice());
+      emitRun(run, lanes);
+    }
+
+    function emitRun(run, lanes){
+      const n = run.length;
       for (let k = 0; k < n; k++){
         const i = run[k], o = kept[i];
         const lane = lanes[k];
@@ -2392,6 +2487,11 @@ function drawChar(g, def, poseName, blend, bop, poseTable){
   g.save();
   g.translate(bx, by);
   g.rotate(tilt);
+  // build reshapes the silhouette before anything is drawn
+  if (def.build){
+    const B = { tall:[1, 1.12], short:[1.06, 0.84], thin:[0.84, 1.03], big:[1.22, 0.97] }[def.build];
+    if (B) g.scale(B[0], B[1]);
+  }
   g.lineJoin = "round";
   g.lineCap = "round";
 
@@ -2485,30 +2585,102 @@ function drawChar(g, def, poseName, blend, bop, poseTable){
   g.save();
   g.translate(headX, headY);
 
-  // hair — tall forward-swept spikes
-  g.beginPath();
-  if (def.spiky){
-    g.moveTo(-31, 2);
-    g.lineTo(-33, -20);
-    g.lineTo(-21, -13);
-    g.lineTo(-17, -40);
-    g.lineTo(-4, -19);
-    g.lineTo(4, -44);
-    g.lineTo(15, -20);
-    g.lineTo(26, -34);
-    g.lineTo(30, -10);
-    g.quadraticCurveTo(35, 8, 27, 14);
-    g.lineTo(-27, 14);
-    g.quadraticCurveTo(-35, 9, -31, 2);
-  } else {
-    g.moveTo(-32, 2);
-    g.quadraticCurveTo(-34, -32, 0, -34);
-    g.quadraticCurveTo(34, -32, 32, 2);
-    g.lineTo(30, 16); g.lineTo(-30, 16);
+  const style = def.hairStyle || (def.spiky ? "spiky" : "round");
+
+  // ---- hair behind the head ----
+  if (style === "long" || style === "afro" || style === "curly"){
+    g.beginPath();
+    if (style === "afro"){
+      g.arc(0, -6, 40, 0, Math.PI*2);
+    } else if (style === "curly"){
+      for (let a = 0; a < Math.PI*2; a += Math.PI/7){
+        g.arc(Math.cos(a)*30, -6 + Math.sin(a)*28, 13, 0, Math.PI*2);
+      }
+    } else {                                  // long hair falling past the jaw
+      g.moveTo(-30, -4);
+      g.quadraticCurveTo(-42, 34, -30, 50);
+      g.lineTo(-19, 50);
+      g.quadraticCurveTo(-26, 26, -24, 2);
+      g.lineTo(24, 2);
+      g.quadraticCurveTo(26, 26, 19, 50);
+      g.lineTo(30, 50);
+      g.quadraticCurveTo(42, 34, 30, -4);
+      g.quadraticCurveTo(0, -40, -30, -4);
+    }
+    g.closePath();
+    g.fillStyle = def.hairDark; g.fill();
+    g.lineWidth = 3; g.strokeStyle = L; g.stroke();
   }
-  g.closePath();
-  g.fillStyle = def.hair; g.fill();
-  g.lineWidth = 3.2; g.strokeStyle = L; g.stroke();
+  if (style === "ponytail"){
+    g.beginPath();
+    g.moveTo(24, -12);
+    g.quadraticCurveTo(58, -18, 52, 22);
+    g.quadraticCurveTo(46, 40, 34, 30);
+    g.quadraticCurveTo(44, 6, 22, 2);
+    g.closePath();
+    g.fillStyle = def.hairDark; g.fill();
+    g.lineWidth = 3; g.strokeStyle = L; g.stroke();
+  }
+
+  // ---- the cap of hair over the skull ----
+  if (style !== "bald"){
+    g.beginPath();
+    if (style === "spiky"){
+      g.moveTo(-31, 2);
+      g.lineTo(-33, -20); g.lineTo(-21, -13);
+      g.lineTo(-17, -40); g.lineTo(-4, -19);
+      g.lineTo(4, -44);   g.lineTo(15, -20);
+      g.lineTo(26, -34);  g.lineTo(30, -10);
+      g.quadraticCurveTo(35, 8, 27, 14);
+      g.lineTo(-27, 14);
+      g.quadraticCurveTo(-35, 9, -31, 2);
+    } else if (style === "mohawk"){
+      g.moveTo(-13, 8);
+      g.lineTo(-15, -14); g.lineTo(-7, -22);
+      g.lineTo(-9, -44);  g.lineTo(-2, -30);
+      g.lineTo(0, -62);   g.lineTo(4, -30);
+      g.lineTo(11, -46);  g.lineTo(9, -21);
+      g.lineTo(15, -13);  g.lineTo(13, 8);
+      g.quadraticCurveTo(0, 15, -13, 8);
+    } else {
+      g.moveTo(-32, 2);
+      g.quadraticCurveTo(-34, -32, 0, -34);
+      g.quadraticCurveTo(34, -32, 32, 2);
+      g.lineTo(30, 16); g.lineTo(-30, 16);
+    }
+    g.closePath();
+    g.fillStyle = def.hair; g.fill();
+    g.lineWidth = 3.2; g.strokeStyle = L; g.stroke();
+  }
+
+  // ---- animal ears, behind the face ----
+  if (def.ears){
+    for (const s2 of [-1, 1]){
+      g.beginPath();
+      g.moveTo(s2*13, -22);
+      g.lineTo(s2*30, -52);
+      g.lineTo(s2*33, -20);
+      g.closePath();
+      g.fillStyle = def.earColor || def.hair; g.fill();
+      g.lineWidth = 3; g.strokeStyle = L; g.stroke();
+      g.beginPath();
+      g.moveTo(s2*18, -25); g.lineTo(s2*28, -44); g.lineTo(s2*29, -24);
+      g.closePath();
+      g.fillStyle = def.skinShade || "#e0ab7e"; g.fill();
+    }
+  }
+
+  // ---- horns ----
+  if (def.horns){
+    for (const s2 of [-1, 1]){
+      g.beginPath();
+      g.moveTo(s2*22, -22); g.quadraticCurveTo(s2*36, -42, s2*25, -50);
+      g.quadraticCurveTo(s2*27, -35, s2*15, -26);
+      g.closePath();
+      g.fillStyle = def.hornColor || def.hairDark; g.fill();
+      g.lineWidth = 2.8; g.strokeStyle = L; g.stroke();
+    }
+  }
 
   // face
   g.beginPath();
@@ -2516,29 +2688,47 @@ function drawChar(g, def, poseName, blend, bop, poseTable){
   g.fillStyle = def.skin; g.fill();
   g.lineWidth = 3.2; g.strokeStyle = L; g.stroke();
 
-  // a fringe of hair overlapping the brow, so the face sits under the spikes
-  g.save();
-  g.beginPath(); g.ellipse(0, 7, 27, 26, 0, 0, Math.PI*2); g.clip();
-  g.beginPath();
-  g.moveTo(-28, -20);
-  g.quadraticCurveTo(-10, -2, 4, -12);
-  g.quadraticCurveTo(16, -1, 28, -18);
-  g.lineTo(28, -30); g.lineTo(-28, -30);
-  g.closePath();
-  g.fillStyle = def.hair; g.fill();
-  g.lineWidth = 2.8; g.strokeStyle = L; g.stroke();
-  g.restore();
+  // a fringe of hair overlapping the brow, so the face sits under the hair
+  if (style !== "bald" && style !== "mohawk"){
+    g.save();
+    g.beginPath(); g.ellipse(0, 7, 27, 26, 0, 0, Math.PI*2); g.clip();
+    g.beginPath();
+    g.moveTo(-28, -20);
+    g.quadraticCurveTo(-10, -2, 4, -12);
+    g.quadraticCurveTo(16, -1, 28, -18);
+    g.lineTo(28, -30); g.lineTo(-28, -30);
+    g.closePath();
+    g.fillStyle = def.hair; g.fill();
+    g.lineWidth = 2.8; g.strokeStyle = L; g.stroke();
+    g.restore();
+  }
 
-  // horns for the opponent
-  if (!def.spiky){
-    for (const s2 of [-1, 1]){
-      g.beginPath();
-      g.moveTo(s2*22, -22); g.quadraticCurveTo(s2*34, -40, s2*24, -46);
-      g.quadraticCurveTo(s2*26, -34, s2*16, -26);
-      g.closePath();
-      g.fillStyle = def.hairDark; g.fill();
-      g.lineWidth = 2.6; g.strokeStyle = L; g.stroke();
-    }
+  // ---- a hood, sitting round the neck the way a hoodie does ----
+  if (def.hood){
+    g.beginPath();
+    g.moveTo(-30, 18);
+    g.quadraticCurveTo(0, 44, 30, 18);
+    g.quadraticCurveTo(34, 34, 22, 40);
+    g.lineTo(-22, 40);
+    g.quadraticCurveTo(-34, 34, -30, 18);
+    g.closePath();
+    g.fillStyle = def.shirtShade; g.fill();
+    g.lineWidth = 3; g.strokeStyle = L; g.stroke();
+  }
+
+  // ---- hat or cap ----
+  if (def.cap){
+    g.beginPath();
+    g.moveTo(-30, -12);
+    g.quadraticCurveTo(0, -46, 30, -12);
+    g.lineTo(30, -6); g.lineTo(-30, -6);
+    g.closePath();
+    g.fillStyle = def.cap; g.fill();
+    g.lineWidth = 3; g.strokeStyle = L; g.stroke();
+    g.beginPath();                            // the peak
+    roundRectPath(g, -38, -10, 56, 9, 4);
+    g.fillStyle = shade(def.cap, -0.2); g.fill();
+    g.lineWidth = 2.8; g.strokeStyle = L; g.stroke();
   }
 
   // eyes
@@ -2560,6 +2750,25 @@ function drawChar(g, def, poseName, blend, bop, poseTable){
       g.arc(s2, ey + (p.eyes === "up" ? -2 : p.eyes === "down" ? 2 : 0), 3, 0, Math.PI*2);
       g.fillStyle = "#1b2a5e"; g.fill();
     }
+  }
+
+  // ---- glasses, over the eyes ----
+  if (def.glasses){
+    g.save();
+    g.strokeStyle = L; g.lineWidth = 3;
+    g.fillStyle = def.lensColor || "rgba(190,225,245,.55)";
+    for (const s2 of [-11, 11]){
+      g.beginPath();
+      roundRectPath(g, s2 - 11, ey - 9, 22, 18, 6);
+      g.fill(); g.stroke();
+    }
+    g.beginPath();
+    g.moveTo(0, ey); g.lineTo(0, ey);
+    g.moveTo(-0.5, ey - 1); g.lineTo(0.5, ey - 1);
+    g.stroke();
+    g.beginPath(); g.moveTo(-22, ey - 2); g.lineTo(-27, ey - 4);
+    g.moveTo(22, ey - 2); g.lineTo(27, ey - 4); g.stroke();
+    g.restore();
   }
 
   // mouth
@@ -2637,7 +2846,33 @@ const COLOR_WORDS = {
   pink:"#f07cb0", rose:"#e86d92",
   black:"#22242c", white:"#f6f7fb", grey:"#8f96a3", gray:"#8f96a3",
   silver:"#c3c9d4", brown:"#8a5a34", tan:"#c9a274", beige:"#e2cfae",
-  peach:"#f7c9a4", cream:"#f3e6cf"
+  peach:"#f7c9a4", cream:"#f3e6cf",
+  indigo:"#4b3fa8", aqua:"#38d6d6", coral:"#f0785e", salmon:"#f09a86",
+  charcoal:"#3a3f48", ivory:"#f4efe2", bronze:"#b07a3c", copper:"#c1703c",
+  ruby:"#c22040", jade:"#2aa46a", plum:"#7a3d68", mustard:"#d8ab2a",
+  blonde:"#e8c86a", blond:"#e8c86a", ginger:"#d1642a", auburn:"#8d3a24",
+  raven:"#20222b", platinum:"#e6e8ee", neon:"#39ff88"
+};
+
+// hairstyles, read straight off the description
+// Checked in order, so a named cut wins over a loose vibe word: "punk with a
+// neon mohawk" is a mohawk, not generic spikes.
+const HAIR_STYLES = [
+  ["mohawk",   ["mohawk","mohican","liberty spikes"]],
+  ["afro",     ["afro","puffy","fro"]],
+  ["ponytail", ["ponytail","pony tail","pigtail","pigtails","tied back","bun"]],
+  ["bald",     ["bald","shaved head","no hair","hairless"]],
+  ["curly",    ["curly","curls","wavy","ringlets"]],
+  ["long",     ["long","flowing","shoulder length","waist length"]],
+  ["spiky",    ["spiky","spikey","spiked","punk","messy","wild","anime"]]
+];
+
+// build changes the whole silhouette, not just a colour
+const BUILDS = {
+  tall:  ["tall","lanky","towering","long-limbed"],
+  short: ["short","tiny","small","little","stubby","chibi"],
+  thin:  ["thin","skinny","slim","slender","scrawny"],
+  big:   ["big","buff","muscular","chunky","broad","stocky","heavy"]
 };
 
 // which part of the character a word refers to
@@ -2649,7 +2884,9 @@ const SLOTS = [
   { key:"shoes", words:["shoes","sneakers","trainers","boots","kicks","sandals","heels"] },
   { key:"skin",  words:["skin","skinned","complexion","fur","scales"] },
   { key:"eyes",  words:["eyes","eyed"] },
-  { key:"cap",   words:["hat","cap","beanie","helmet","hood","crown","headband"] }
+  { key:"cap",   words:["hat","cap","beanie","helmet","hood","crown","headband"] },
+  { key:"horns", words:["horn","horns","horned","antlers"] },
+  { key:"ears",  words:["ears","ear"] }
 ];
 
 const FEATURE_WORDS = {
@@ -2695,6 +2932,8 @@ function parseSprite(text){
     else if (slot === "skin"){ def.skin = hex; def.skinShade = shade(hex, -0.16); }
     else if (slot === "eyes"){ def.eyeColor = hex; }
     else if (slot === "cap"){ def.cap = hex; }
+    else if (slot === "horns"){ def.hornColor = hex; def.horns = true; }
+    else if (slot === "ears"){ def.earColor = hex; def.ears = true; }
   };
 
   // First bind every colour that names what it colours, so "teal jacket" wins
@@ -2726,6 +2965,30 @@ function parseSprite(text){
   }
 
   const blob = words.join(" ");
+
+  // A style word only counts if it is actually talking about the hair —
+  // "long purple hair" never contains the literal phrase "long hair", so
+  // look for the word near hair rather than glued to it.
+  const hairIdx = [];
+  words.forEach((w, i) => { if (/^(hair|haired|locks|fringe|mane)$/.test(w)) hairIdx.push(i); });
+  const nearHair = word => {
+    const at = words.indexOf(word);
+    if (at < 0) return false;
+    return hairIdx.some(h => Math.abs(h - at) <= 4);
+  };
+  for (const [style, keys] of HAIR_STYLES){
+    const hit = keys.some(k => k.indexOf(" ") >= 0
+      ? blob.indexOf(k) >= 0
+      : (nearHair(k) || (hairIdx.length === 0 && blob.indexOf(k) >= 0)));
+    if (hit){ def.hairStyle = style; break; }
+  }
+  if (!def.hairStyle) def.hairStyle = "round";
+  for (const [build, keys] of Object.entries(BUILDS)){
+    if (keys.some(k => new RegExp("\\b" + k + "\\b").test(blob))){ def.build = build; break; }
+  }
+  if (/\bhoodie|hoody|hooded|sweatshirt\b/.test(blob)) def.hood = true;
+  if (/\bsunglasses|shades\b/.test(blob)) def.lensColor = "rgba(30,34,44,.82)";
+
   for (const [feat, keys] of Object.entries(FEATURE_WORDS)){
     if (keys.some(k => blob.indexOf(k) >= 0)){
       if (feat === "stick") def.style = "stick";
@@ -2733,6 +2996,7 @@ function parseSprite(text){
       else def[feat] = true;
     }
   }
+  if (def.hairStyle === "spiky") def.spiky = true;
   if (def.style === "stick"){ def.line = def.hair; def.lineDark = def.hairDark; }
   if (blob.indexOf("no mic") >= 0 || blob.indexOf("without a mic") >= 0) def.mic = false;
   return def;
@@ -2861,9 +3125,13 @@ function describeParse(def, poses){
     bits.push('<span class="swatch" style="background:' + def[k] + '"></span>' + label);
   }
   const feats = [];
+  if (def.hairStyle && def.hairStyle !== "round") feats.push(def.hairStyle + " hair");
+  if (def.build) feats.push(def.build + " build");
+  if (def.hood) feats.push("hood");
+  if (def.cap) feats.push("hat");
   if (def.horns) feats.push("horns");
-  if (def.ears) feats.push("ears");
-  if (def.glasses) feats.push("glasses");
+  if (def.ears) feats.push("animal ears");
+  if (def.glasses) feats.push(def.lensColor && def.lensColor.indexOf("30,34") > 0 ? "sunglasses" : "glasses");
   if (def.style === "stick") feats.push("stick figure");
   if (!def.mic) feats.push("no mic");
   const moved = ["left","down","up","right","idle"].filter(k =>
