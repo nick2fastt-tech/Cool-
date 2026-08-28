@@ -418,6 +418,7 @@
         <div class="stat"><div class="k">Difficulty</div><div class="v" id="stDiff">—</div></div>
       </div>
       <div class="note" id="readyNote"></div>
+      <p class="center-note" id="readyCheck" style="margin:-6px 0 14px"></p>
       <button class="btn green" id="playBtn"><span class="ic">▶</span>Play Chart</button>
       <button class="btn ghost" id="saveSongBtn"><span class="ic">💾</span>Save to My Mod</button>
       <button class="btn ghost" id="exportBtn"><span class="ic">⬇</span>Export Chart (.json)</button>
@@ -1274,39 +1275,115 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
 
     // A vocal stem is mostly silence between lines, and what fills that
     // silence — breaths, room tone, bleed from the backing track — still
-    // throws flux peaks that look like onsets. Measure how loud this track is
-    // when it is actually singing, and ignore anything well below that.
-    const loud = Array.from(rmsN).filter(v => v > 0.02).sort((a,b) => a-b);
-    const ref = loud.length ? loud[Math.floor(loud.length * 0.75)] : 0;
-    const floor = ref * 0.22;
+    // throws flux peaks that look like onsets.
+    //
+    // Both tests here are LOCAL. A quiet verse judged against a loud chorus
+    // fails every threshold the chorus sets, which is how whole sections
+    // used to come back empty; judged against its own neighbourhood it
+    // charts just like the chorus does.
+    const cands = pickOnsets(env, tr.A.fps, DIFF.sens);
     const ahead = Math.max(1, Math.round(tr.A.fps * 0.12));
 
-    // Hitting a new note is a far bigger event than the wobble partway
-    // through a held vowel, so judge each peak against the typical peak on
-    // this track and drop the runts.
-    const cands = pickOnsets(env, tr.A.fps, DIFF.sens);
-    const strengths = cands.map(c => c.v).sort((a,b) => a-b);
-    const minV = strengths.length ? strengths[strengths.length >> 1] * DIFF.detail : 0;
+    // rolling median onset strength over a few seconds either side
+    const localV = new Float64Array(cands.length);
+    {
+      let lo = 0, hi = 0;
+      const scratch = [];
+      for (let i = 0; i < cands.length; i++){
+        const t = cands[i].t;
+        while (lo < i && t - cands[lo].t > 4) lo++;
+        while (hi < cands.length - 1 && cands[hi + 1].t - t < 4) hi++;
+        scratch.length = 0;
+        for (let k = lo; k <= hi; k++) scratch.push(cands[k].v);
+        scratch.sort((a, b) => a - b);
+        localV[i] = scratch[scratch.length >> 1] || 0;
+      }
+    }
 
-    for (const cand of cands){
-      if (cand.v < minV) continue;
+    // and a local loudness reference, so a soft passage sets its own bar
+    const rmsWin = Math.max(1, Math.round(tr.A.fps * 3));
+    const localPeak = t => {
+      const c = clamp(Math.round(t * tr.A.fps), 0, rmsN.length - 1);
+      let mx = 0;
+      for (let k = Math.max(0, c - rmsWin); k < Math.min(rmsN.length, c + rmsWin); k++){
+        if (rmsN[k] > mx) mx = rmsN[k];
+      }
+      return mx;
+    };
+
+    for (let ci = 0; ci < cands.length; ci++){
+      const cand = cands[ci];
+      if (cand.v < localV[ci] * DIFF.detail) continue;
       const t = cand.t;
       const i = clamp(Math.round(t * tr.A.fps), 0, rmsN.length - 1);
-      // the detected frame can land just before the vowel, so peek forward
       let peak = 0;
       for (let k = i; k < Math.min(rmsN.length, i + ahead); k++){
         if (rmsN[k] > peak) peak = rmsN[k];
       }
-      if (peak < floor) continue;
+      if (peak < localPeak(t) * 0.20) continue;
       onsets.push({ t, src:"voc", side: tr.side, A: tr.A, rmsN, v: cand.v });
     }
   }
   onsets.sort((a,b) => a.t - b.t);
 
-  // Nothing but the voices charts a note. The instrumental is read for tempo
-  // and nothing else — drums and synth stabs are not something anyone sings,
-  // so turning them into notes only ever added things to hit that are not in
-  // the vocal line.
+  // ---- instrumental events, where nobody is singing ----
+  // The voices lead. But an intro, a break or an outro with nobody singing
+  // used to come back as dead air, and a chart with a seven-second hole in it
+  // is not a chart. So the instrumental fills those stretches — and only
+  // those — from its own transients, kept only where they land on the beat
+  // grid, which is what separates a drum hit from a cymbal wash or noise.
+  {
+    const instEnv = normalise(instA.flux);
+    const instRms = normalise(instA.rms);
+    const cands = pickOnsets(instEnv, instA.fps, 1.45);
+    const eighth = tempo.beatLen / 2;
+
+    const BUCKET = 0.1, REACH = 12;                 // 1.2 s either side of a voice
+    const vocBuckets = new Set(onsets.map(o => Math.round(o.t / BUCKET)));
+    const sungNear = t => {
+      const b = Math.round(t / BUCKET);
+      for (let d = -REACH; d <= REACH; d++) if (vocBuckets.has(b + d)) return true;
+      return false;
+    };
+
+    // how hard the band is playing right here, so a quiet intro gets fewer
+    // notes than a climax does
+    const energyAt = t => {
+      const c = clamp(Math.round(t * instA.fps), 0, instRms.length - 1);
+      const w = Math.round(instA.fps * 1.5);
+      let mx = 0;
+      for (let k = Math.max(0, c - w); k < Math.min(instRms.length, c + w); k++){
+        if (instRms[k] > mx) mx = instRms[k];
+      }
+      return mx;
+    };
+
+    const strengths = cands.map(c => c.v).slice().sort((a,b) => a-b);
+    const midV = strengths.length ? strengths[strengths.length >> 1] : 0;
+
+    let lastFill = -1e9, side = false;
+    for (const cand of cands){
+      const t = cand.t;
+      if (t < 1.0 || t > duration - 0.35) continue;
+      if (sungNear(t)) continue;
+      if (cand.v < midV * 0.85) continue;             // the hits, not the wash
+
+      // must sit on an eighth of the detected grid
+      const off = Math.abs(((t - tempo.offset) % eighth + eighth) % eighth);
+      if (Math.min(off, eighth - off) > eighth * 0.22) continue;
+
+      // busier where the band is louder, sparser where it is not
+      const spacing = tempo.beatLen * (energyAt(t) > 0.55 ? 0.5 : 1);
+      if (t - lastFill < spacing - 1e-6) continue;
+
+      // the two sides trade the fill a bar at a time
+      side = Math.floor((t - tempo.offset) / (tempo.beatLen * 4)) % 2 === 0;
+      onsets.push({ t, src:"inst", side: side ? "plr" : "opp", A: instA, rmsN: null, v: cand.v });
+      lastFill = t;
+    }
+    onsets.sort((a,b) => a.t - b.t);
+  }
+
 
   // ---- snap everything to the grid; de-duplication happens per side ----
   const step = gridStep(tempo.beatLen);
@@ -1443,12 +1520,17 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
       if (haveP && f0s[i] > 0) return 12 * Math.log2(f0s[i] / 55);
       return 12 * Math.log2(Math.max(60, rawCent[i]) / 55) - (haveP ? 12 : 0);
     });
-    const sorted = cents.slice().sort((a,b) => a-b);
+    // The melodic scale is set by the singing alone. Bass notes from the
+    // instrumental fill sit an octave and a half below any vocal line, and
+    // letting them into the spread stretches it until real vocal steps read as
+    // flat — which turned sung climbs into alternating patterns.
+    const melodic = cents.filter((_, i) => kept[i].src === "voc");
+    const sorted = (melodic.length >= 4 ? melodic : cents).slice().sort((a,b) => a-b);
     const qt = p => sorted[clamp(Math.floor(sorted.length*p), 0, sorted.length-1)];
     const c1 = qt(0.25), c2 = qt(0.5), c3 = qt(0.75);
     const spread = Math.max(1e-6, qt(0.85) - qt(0.15));
     // a step of about a tone reads as melodic movement
-    const STEP_UP = Math.max(1.2, spread * 0.10);
+    const STEP_UP = clamp(spread * 0.10, 1.2, 3);
     const quartOf = c => c < c1 ? 0 : c < c2 ? 1 : c < c3 ? 2 : 3;
 
     // strong attacks, used to decide where a jump is earned
@@ -1463,7 +1545,11 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
     const rawRuns = [];
     let cur = [0];
     for (let i = 1; i < kept.length; i++){
-      if (kept[i].t - kept[i-1].t > 0.5){ rawRuns.push(cur); cur = []; }
+      // A gesture is one voice or the band, never a mix. Instrumental fill has
+      // no pitch to speak of, and letting it into a sung run drags the melodic
+      // contour around with numbers that do not describe a melody.
+      const broke = kept[i].t - kept[i-1].t > 0.5 || kept[i].src !== kept[i-1].src;
+      if (broke){ rawRuns.push(cur); cur = []; }
       cur.push(i);
     }
     rawRuns.push(cur);
@@ -1620,7 +1706,7 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
             if (len < step * 2) len = 0;
           }
         }
-        notes.push({ t:o.t, lane, mustHit: side === "plr", len });
+        notes.push({ t:o.t, lane, mustHit: side === "plr", len, src:o.src });
 
         // A jump is two notes at once. It has to be earned: a hard attack, on
         // a beat, opening a phrase, and never twice in quick succession —
@@ -1631,7 +1717,7 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
             (o.v || 0) >= strongV && onBeat && len === 0 &&
             o.t - lastJump > tempo.beatLen * 6 && rnd() < D.jumpRate){
           let jl = (lane + 2) % 4;                 // the opposite hand
-          notes.push({ t:o.t, lane:jl, mustHit: side === "plr", len:0 });
+          notes.push({ t:o.t, lane:jl, mustHit: side === "plr", len:0, src:o.src });
           lastJump = o.t;
         }
       }
@@ -1664,12 +1750,52 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
     }
   }
 
+  // ---- validation pass ----
+  // Everything above is heuristic, so before the chart is handed over it gets
+  // read back and checked against the song it came from. Anything wrong is
+  // corrected here rather than shipped.
+  const report = { outOfRange:0, malformed:0, thinned:0, longestGap:0, notes:0 };
+  let checked = [];
+  for (const n of clean){
+    if (!isFinite(n.t) || !isFinite(n.len) || !(n.lane >= 0 && n.lane <= 3)){ report.malformed++; continue; }
+    if (n.t < 0.4 || n.t > duration - 0.12){ report.outOfRange++; continue; }
+    if (n.len < 0 || n.t + n.len > duration - 0.05) n.len = 0;   // a hold running off the end
+    checked.push(n);
+  }
+
+  // Runaway density: a stretch nobody could play is a bug in the analysis,
+  // not a hard chart. Cap each side per second and drop the weakest extras.
+  const CAP = 13;
+  for (const side of [false, true]){
+    const mine = checked.filter(n => n.mustHit === side);
+    const doomed = new Set();
+    for (let i = 0; i < mine.length; i++){
+      let j = i, count = 0;
+      while (j < mine.length && mine[j].t - mine[i].t < 1) { count++; j++; }
+      if (count > CAP){
+        const window = mine.slice(i, j).filter(n => !doomed.has(n));
+        window.sort((a,b) => (a.len > 0 ? 1 : 0) - (b.len > 0 ? 1 : 0));
+        for (let k = 0; k < count - CAP && k < window.length; k++) doomed.add(window[k]);
+      }
+    }
+    report.thinned += doomed.size;
+    checked = checked.filter(n => !doomed.has(n));
+  }
+  checked.sort((a,b) => a.t - b.t);
+
+  for (let i = 1; i < checked.length; i++){
+    const g = checked[i].t - checked[i-1].t;
+    if (g > report.longestGap) report.longestGap = g;
+  }
+  report.notes = checked.length;
+
   return {
     bpm: tempo.bpm,
     offset: tempo.offset,
     beatLen: tempo.beatLen,
     duration,
-    notes: clean,
+    notes: checked,
+    validation: report,
     sections,
     difficulty: difficulty || "normal",
     stems: tracks.length,           // 2 = each character had their own vocal track
@@ -1680,11 +1806,15 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
 
 /* ------------------------- charting flow ------------------------- */
 const STAGES = [
-  "Reading audio...",
-  "Detecting beats...",
+  "Analyzing song...",
+  "Detecting BPM...",
+  "Analyzing rhythm...",
   "Detecting vocals...",
-  "Creating notes...",
-  "Finalizing chart..."
+  "Detecting musical events...",
+  "Building patterns...",
+  "Synchronizing notes...",
+  "Validating chart...",
+  "Complete"
 ];
 let shownPct = 0;
 function setProgress(pct, stage, sub){
@@ -1708,6 +1838,16 @@ function paintReady(chart){
     : chart.singerSplit ? "One combined vocal track: <b>two voices told apart</b> and given a side each."
     : "One combined vocal track with a single voice, so phrases trade back and forth between you and the opponent.")
     + " You sing " + mine + " of " + chart.notes.length + " notes, snapped to the detected beat grid.";
+  const v = chart.validation;
+  if (v){
+    const fixes = [];
+    if (v.outOfRange) fixes.push(v.outOfRange + " outside the song");
+    if (v.malformed) fixes.push(v.malformed + " malformed");
+    if (v.thinned) fixes.push(v.thinned + " where the density was unplayable");
+    $("#readyCheck").textContent = "Validation: " +
+      (fixes.length ? "corrected " + fixes.join(", ") + ". " : "nothing to correct. ") +
+      "Longest gap without a note " + v.longestGap.toFixed(1) + "s.";
+  }
 }
 
 function readFile(file){
@@ -1762,23 +1902,25 @@ $("#autoChartBtn").addEventListener("click", async () => {
     }
 
     if (instBuf.duration > 8 * 60) throw new Error("Song is longer than 8 minutes. Please use a shorter track.");
-    setProgress(20, STAGES[1]);
+    setProgress(18, STAGES[1]);
 
-    const instA = await analyzeTrack(instBuf, p => setProgress(20 + p*30, STAGES[1]));
+    const instA = await analyzeTrack(instBuf, p => setProgress(18 + p*22, STAGES[2]));
     if (chartCancelled) throw new Error("cancelled");
 
-    setProgress(50, STAGES[2]);
+    setProgress(42, STAGES[3]);
     for (let i = 0; i < stems.length; i++){
-      const base = 50 + (i / stems.length) * 22;
+      const base = 42 + (i / stems.length) * 22;
       stems[i].A = await analyzeTrack(stems[i].buf,
-        p => setProgress(base + (p / stems.length) * 22, STAGES[2]));
+        p => setProgress(base + (p / stems.length) * 22, STAGES[3]));
       if (chartCancelled) throw new Error("cancelled");
     }
 
-    setProgress(72, STAGES[3]);
+    setProgress(66, STAGES[1]);
     await nextFrame();
     const tempo = detectTempo(normalise(instA.flux), instA.fps);
-    setProgress(84, STAGES[3]);
+    setProgress(74, STAGES[4]);
+    await nextFrame();
+    setProgress(82, STAGES[5]);
     await nextFrame();
 
     let duration = instBuf.duration;
@@ -1787,7 +1929,9 @@ $("#autoChartBtn").addEventListener("click", async () => {
     const chart = buildChart(instA, stems.map(s => ({ A: s.A, side: s.side })), tempo, duration, settings.difficulty);
     if (!chart.notes.length) throw new Error("No notes could be detected. Try a louder or less compressed track.");
 
-    setProgress(93, STAGES[4]);
+    setProgress(90, STAGES[6]);
+    await nextFrame();
+    setProgress(95, STAGES[7]);
     await nextFrame();
     SONG = {
       instBuf,
@@ -1797,7 +1941,7 @@ $("#autoChartBtn").addEventListener("click", async () => {
       // keep the encoded files around so the song can be stored and replayed
       sourceFiles: { inst: picked.inst, opp: picked.oppVoc, plr: picked.plrVoc }
     };
-    setProgress(100, STAGES[4], "Done");
+    setProgress(100, STAGES[8], "Done");
     await new Promise(r => setTimeout(r, 380));
 
     paintReady(chart);
