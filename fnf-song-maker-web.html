@@ -1813,19 +1813,43 @@ $("#autoChartBtn").addEventListener("click", async () => {
   }
 });
 
-$("#exportBtn").addEventListener("click", () => {
+$("#exportBtn").addEventListener("click", async () => {
   if (!SONG) return;
   const c = SONG.chart;
   const data = {
     song: SONG.name, bpm: +c.bpm.toFixed(2), offset: +c.offset.toFixed(4),
-    duration: +c.duration.toFixed(3), generator: "FNF Song Maker V1.00",
+    duration: +c.duration.toFixed(3), difficulty: c.difficulty || "normal",
+    generator: "FNF Song Maker V1.50",
     notes: c.notes.map(n => ({ time:+n.t.toFixed(4), lane:n.lane, mustHit:n.mustHit, length:+n.len.toFixed(4) }))
   };
-  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], {type:"application/json"}));
+  const text = JSON.stringify(data, null, 1);
+  const filename = (SONG.name.replace(/[^\w\- ]+/g, "").trim().slice(0, 60) || "chart") + "-chart.json";
+  const btn = $("#exportBtn");
+  const done = msg => { btn.innerHTML = msg; setTimeout(() => {
+    btn.innerHTML = '<span class="ic">\u2b07</span>Export Chart (.json)'; }, 2200); };
+
+  // On the hosted page a plain download link is inert — the viewer never
+  // grants the frame download permission — so the file has to go through the
+  // viewer's own save prompt when one is available.
+  let saver = null;
+  try{ saver = (window.claude && claude.use) ? await claude.use("downloads") : null; }catch(e){ saver = null; }
+  if (saver){
+    try{
+      await saver.save({ filename, data: text });
+      done('<span class="ic">\u2713</span>Chart saved');
+    }catch(err){
+      if (err && err.code === "declined") done('<span class="ic">\u2b07</span>Export Chart (.json)');
+      else done('<span class="ic">\u26a0</span>Could not save');
+    }
+    return;
+  }
+
+  const url = URL.createObjectURL(new Blob([text], {type:"application/json"}));
   const a = document.createElement("a");
-  a.href = url; a.download = SONG.name + "-chart.json";
+  a.href = url; a.download = filename;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
+  done('<span class="ic">\u2713</span>Chart exported');
 });
 
 /* =====================================================================
