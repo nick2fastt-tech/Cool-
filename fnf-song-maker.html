@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#ffffff">
-<title>FNF Song Maker — V1.50 Beta</title>
+<title>FNF Song Maker — V1.60</title>
 <style>
   :root{
     --bg:#ffffff;
@@ -235,6 +235,26 @@
   #pauseOverlay h2{font-size:26px;font-weight:900;margin:0 0 22px;letter-spacing:-.8px}
   #pauseOverlay .btn{max-width:300px}
 
+  /* --- weeks --- */
+  .weekhead{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+  .weeknav{
+    width:46px;height:46px;flex:0 0 46px;border-radius:15px;border:1.5px solid var(--line);
+    background:#fff;font-size:19px;color:var(--ink);cursor:pointer;
+    transition:transform .14s ease,background .14s ease;
+  }
+  .weeknav:active{transform:scale(.92);background:#f4f5f9}
+  .weekid{flex:1;text-align:center;min-width:0}
+  #weekNum{font-size:11.5px;font-weight:900;letter-spacing:2px;color:var(--muted)}
+  #weekName{font-size:24px;font-weight:900;letter-spacing:-.6px;line-height:1.15}
+  .dots{display:flex;justify-content:center;gap:7px;margin-bottom:12px}
+  .dot{width:7px;height:7px;border-radius:99px;background:var(--line)}
+  .dot.on{background:var(--accent);width:20px}
+  .weekmap{
+    width:100%;height:210px;border-radius:var(--radius);border:1.5px solid var(--line);
+    display:block;background:#fff;
+  }
+  .weeksong{width:100%;justify-content:flex-start;margin-bottom:8px;text-align:left}
+
   /* --- mod maker --- */
   .cover{
     width:100%;aspect-ratio:16/9;border-radius:var(--radius);border:2px dashed var(--line);
@@ -315,11 +335,12 @@
     <div id="menuInner">
       <div class="menu-sub">FNF SONG MAKER</div>
       <button class="menu-item" data-go="editorScreen">EDITOR</button>
+      <button class="menu-item" id="openWeeks">WEEKS</button>
       <button class="menu-item" id="openMod">MOD MAKER</button>
       <button class="menu-item" data-go="spritesScreen">SPRITES</button>
       <button class="menu-item" data-go="settingsScreen">OPTIONS</button>
     </div>
-    <div class="corner" id="verTag">V1.50 BETA</div>
+    <div class="corner" id="verTag">V1.60</div>
     <div class="corner" id="credTag">Credits: Nick</div>
   </section>
 
@@ -425,6 +446,30 @@
       <button class="btn ghost" data-go="settingsScreen"><span class="ic">⚙️</span>Gameplay Settings</button>
       <div class="spacer"></div>
       <p class="center-note" id="readyMode"></p>
+    </div>
+  </section>
+
+  <!-- ============ WEEKS ============ -->
+  <section class="screen" id="weeksScreen">
+    <div class="wrap">
+      <header class="top"><button class="back" data-go="menuScreen">←</button><h2>Weeks</h2></header>
+
+      <div class="weekhead">
+        <button class="weeknav" id="weekPrev" aria-label="Previous week">←</button>
+        <div class="weekid">
+          <div id="weekNum">WEEK 1</div>
+          <div id="weekName">Tutorial</div>
+        </div>
+        <button class="weeknav" id="weekNext" aria-label="Next week">→</button>
+      </div>
+      <div id="weekDots" class="dots"></div>
+
+      <canvas id="weekCanvas" class="weekmap"></canvas>
+      <p class="hint" id="weekSub" style="text-align:center;margin:10px 0 14px"></p>
+
+      <div class="lbl">Songs</div>
+      <div id="weekSongs"></div>
+      <p class="center-note" id="weekHint" style="margin-top:10px"></p>
     </div>
   </section>
 
@@ -594,7 +639,7 @@
           <span class="name">Stage</span>
           <span style="display:flex;align-items:center;gap:10px">
             <div class="seg" id="stageSel" style="padding:4px">
-              <button data-stage="bedroom">Bedroom</button>
+              <button data-stage="bedroom">Week stage</button>
               <button data-stage="white">White</button>
             </div>
           </span>
@@ -684,6 +729,7 @@ function show(id){
   currentScreen = id;
   if (id === "spritesScreen") startPreviewLoop(); else stopPreviewLoop();
   if (id === "menuScreen") requestAnimationFrame(drawMenuBg);
+  if (id === "weeksScreen") startWeekLoop(); else stopWeekLoop();
 }
 $$("[data-go]").forEach(b => b.addEventListener("click", () => show(b.dataset.go)));
 
@@ -805,7 +851,8 @@ function paintSettings(){
   $("#sMusic").value = settings.music; $("#vMusic").textContent = settings.music + "%";
   $("#sVocal").value = settings.vocal; $("#vVocal").textContent = settings.vocal + "%";
   $("#sSpeed").value = settings.speed; $("#vSpeed").textContent = (settings.speed/10).toFixed(1) + "x";
-  $$("#stageSel button").forEach(b => b.classList.toggle("on", b.dataset.stage === settings.stage));
+  $$("#stageSel button").forEach(b => b.classList.toggle("on",
+    b.dataset.stage === "white" ? settings.stage === "white" : settings.stage !== "white"));
   $("#tFps").classList.toggle("on", settings.fps);
   $("#tSplash").classList.toggle("on", settings.splash);
   $("#readyMode").textContent = settings.mode === "pc"
@@ -820,7 +867,8 @@ $("#sMusic").addEventListener("input", e => { settings.music = +e.target.value; 
 $("#sVocal").addEventListener("input", e => { settings.vocal = +e.target.value; saveSettings(); paintSettings(); applyLiveVolumes(); });
 $("#sSpeed").addEventListener("input", e => { settings.speed = +e.target.value; saveSettings(); paintSettings(); });
 $$("#stageSel button").forEach(b => b.addEventListener("click", () => {
-  settings.stage = b.dataset.stage; stageCache = null; saveSettings(); paintSettings();
+  settings.stage = b.dataset.stage === "white" ? "white" : (currentStage || "bedroom");
+  stageCaches = {}; saveSettings(); paintSettings();
 }));
 $("#tFps").addEventListener("click", () => { settings.fps = !settings.fps; saveSettings(); paintSettings(); });
 $("#tSplash").addEventListener("click", () => { settings.splash = !settings.splash; saveSettings(); paintSettings(); });
@@ -1962,7 +2010,7 @@ $("#exportBtn").addEventListener("click", async () => {
   const data = {
     song: SONG.name, bpm: +c.bpm.toFixed(2), offset: +c.offset.toFixed(4),
     duration: +c.duration.toFixed(3), difficulty: c.difficulty || "normal",
-    generator: "FNF Song Maker V1.50",
+    generator: "FNF Song Maker V1.60",
     notes: c.notes.map(n => ({ time:+n.t.toFixed(4), lane:n.lane, mustHit:n.mustHit, length:+n.len.toFixed(4) }))
   };
   const text = JSON.stringify(data, null, 1);
@@ -2515,8 +2563,8 @@ const CHARS = {
     sleeve:"#d43a52",                        // red cuffs on the tee
     pants:"#3b4a86", pantsShade:"#2d3a6b",
     shoes:"#e8443f", shoeSole:"#ffffff",
-    cap:"#2f2f38",
-    line:"#141418", mic:true, spiky:true
+    cap:"#20232e", capBackwards:true,
+    line:"#141418", mic:true, spiky:true, hands:true
   },
   demo: {
     name:"Demo Opponent",
@@ -2722,6 +2770,18 @@ function drawChar(g, def, poseName, blend, bop, poseTable){
   const shoulderY = torsoTop + 14;
   for (const [sx, ang] of [[-23, al], [23, ar]]){
     capsule(g, sx, shoulderY, ang, 42, 17, def.skin, L);
+    // a fist at the end, so the arm reads as an arm rather than a tube
+    if (def.hands !== false){
+      const hxp = sx + Math.cos(ang) * 44, hyp = shoulderY + Math.sin(ang) * 44;
+      g.beginPath();
+      g.ellipse(hxp, hyp, 11, 10.5, ang, 0, Math.PI*2);
+      g.fillStyle = def.skin; g.fill();
+      g.lineWidth = 3; g.strokeStyle = L; g.stroke();
+      g.beginPath();
+      g.moveTo(hxp - Math.cos(ang)*3 - Math.sin(ang)*6, hyp - Math.sin(ang)*3 + Math.cos(ang)*6);
+      g.lineTo(hxp + Math.cos(ang)*5 - Math.sin(ang)*6, hyp + Math.sin(ang)*5 + Math.cos(ang)*6);
+      g.lineWidth = 2; g.strokeStyle = def.skinShade || "#e0ab7e"; g.stroke();
+    }
     if (def.sleeve){
       g.save();
       g.translate(sx, shoulderY); g.rotate(ang);
@@ -2884,19 +2944,42 @@ function drawChar(g, def, poseName, blend, bop, poseTable){
     g.lineWidth = 3; g.strokeStyle = L; g.stroke();
   }
 
-  // ---- hat or cap ----
+  // ---- cap ----
   if (def.cap){
-    g.beginPath();
-    g.moveTo(-30, -12);
-    g.quadraticCurveTo(0, -46, 30, -12);
-    g.lineTo(30, -6); g.lineTo(-30, -6);
-    g.closePath();
-    g.fillStyle = def.cap; g.fill();
-    g.lineWidth = 3; g.strokeStyle = L; g.stroke();
-    g.beginPath();                            // the peak
-    roundRectPath(g, -38, -10, 56, 9, 4);
-    g.fillStyle = shade(def.cap, -0.2); g.fill();
-    g.lineWidth = 2.8; g.strokeStyle = L; g.stroke();
+    if (def.capBackwards){
+      // worn backwards: the dome sits over the crown, the brim juts out
+      // behind, and the strap gap shows at the front
+      g.beginPath();
+      roundRectPath(g, 14, -28, 26, 10, 5);
+      g.fillStyle = shade(def.cap, -0.22); g.fill();
+      g.lineWidth = 2.8; g.strokeStyle = L; g.stroke();
+      // sits back on the crown, so the spikes still read in front of it
+      g.beginPath();
+      g.moveTo(-25, -19);
+      g.quadraticCurveTo(-28, -46, 0, -48);
+      g.quadraticCurveTo(28, -46, 25, -19);
+      g.closePath();
+      g.fillStyle = def.cap; g.fill();
+      g.lineWidth = 3.2; g.strokeStyle = L; g.stroke();
+      g.beginPath();                                    // the strap
+      roundRectPath(g, -22, -25, 22, 8, 4);
+      g.fillStyle = shade(def.cap, 0.18); g.fill();
+      g.lineWidth = 2.4; g.strokeStyle = L; g.stroke();
+      g.beginPath(); g.arc(0, -46, 3.2, 0, Math.PI*2);   // button
+      g.fillStyle = shade(def.cap, 0.3); g.fill();
+    } else {
+      g.beginPath();
+      g.moveTo(-30, -12);
+      g.quadraticCurveTo(0, -46, 30, -12);
+      g.lineTo(30, -6); g.lineTo(-30, -6);
+      g.closePath();
+      g.fillStyle = def.cap; g.fill();
+      g.lineWidth = 3; g.strokeStyle = L; g.stroke();
+      g.beginPath();
+      roundRectPath(g, -38, -10, 56, 9, 4);
+      g.fillStyle = shade(def.cap, -0.2); g.fill();
+      g.lineWidth = 2.8; g.strokeStyle = L; g.stroke();
+    }
   }
 
   // eyes
@@ -2911,12 +2994,15 @@ function drawChar(g, def, poseName, blend, bop, poseTable){
     }
   } else {
     for (const s2 of [-11, 11]){
-      g.beginPath(); g.ellipse(s2, ey, 6.2, 7, 0, 0, Math.PI*2);
+      g.beginPath(); g.ellipse(s2, ey, 6.6, 7.4, 0, 0, Math.PI*2);
       g.fillStyle = "#fff"; g.fill();
       g.lineWidth = 2.4; g.strokeStyle = L; g.stroke();
-      g.beginPath();
-      g.arc(s2, ey + (p.eyes === "up" ? -2 : p.eyes === "down" ? 2 : 0), 3, 0, Math.PI*2);
-      g.fillStyle = "#1b2a5e"; g.fill();
+      const px2 = s2 + (p.eyes === "left" ? -1.4 : p.eyes === "right" ? 1.4 : 0);
+      const py2 = ey + (p.eyes === "up" ? -2.2 : p.eyes === "down" ? 2.2 : 0);
+      g.beginPath(); g.arc(px2, py2, 3.2, 0, Math.PI*2);
+      g.fillStyle = def.eyeColor || "#1b2a5e"; g.fill();
+      g.beginPath(); g.arc(px2 - 1.2, py2 - 1.4, 1.15, 0, Math.PI*2);   // catchlight
+      g.fillStyle = "#ffffff"; g.fill();
     }
   }
 
@@ -2975,7 +3061,10 @@ function drawCharCached(g, def, id, poseName, blend, bop, x, y, scale, dpr, pose
     spriteCacheScale = scale; spriteCacheDpr = dpr;
   }
   // 5 blend buckets is enough to read as a smooth transition
-  const bucket = Math.round(clamp(blend, 0, 1) * 4);
+  // smoothstep, so the pose accelerates out of rest and settles into place
+  const bl = clamp(blend, 0, 1);
+  const eased = bl * bl * (3 - 2 * bl);
+  const bucket = Math.round(eased * 8);
   const key = id + "|" + poseName + "|" + bucket;
 
   let cv = spriteCache.get(key);
@@ -2989,7 +3078,7 @@ function drawCharCached(g, def, id, poseName, blend, bop, x, y, scale, dpr, pose
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
     c.translate(-CHAR_BOX.x * scale, -CHAR_BOX.y * scale);
     c.scale(scale, scale);
-    drawChar(c, def, poseName, bucket / 4, 0, poseTable);   // bop is applied at blit time
+    drawChar(c, def, poseName, bucket / 8, 0, poseTable);   // bop is applied at blit time
     spriteCache.set(key, cv);
   }
   g.drawImage(cv, x + CHAR_BOX.x * scale, y + (CHAR_BOX.y + bop) * scale,
@@ -3549,7 +3638,7 @@ function layout(s){
     // notes falling into them. A press lands anywhere down a column.
     s.laneW      = w / 4;
     s.playerGap  = s.laneW;
-    s.playerSize = clamp(Math.min(s.laneW * 0.72, h * 0.17), 32, 104);
+    s.playerSize = clamp(Math.min(s.laneW * 0.80, h * 0.19), 34, 116);
     s.playerX    = s.laneW * 0.5;
     s.colTop     = 0;
     s.colBottom  = h - s.hudH + 6;
@@ -3609,13 +3698,14 @@ function startGame(){
     accSum: 0, accTotal: 0,
     held: [false,false,false,false],
     pressGlow: [0,0,0,0],
+    laneFlash: [0,0,0,0],
     confirm: [0,0,0,0],
     oppConfirm: [0,0,0,0],
     splashes: [],
     popups: [],
     vocalMuted: false,
-    bfPose: "idle", bfBlend: 0, bfHold: 0,
-    opPose: "idle", opBlend: 0, opHold: 0,
+    bfPose: "idle", bfBlend: 0, bfHold: 0, bfTarget: 0,
+    opPose: "idle", opBlend: 0, opHold: 0, opTarget: 0,
     fpsSamples: [], lastFrame: performance.now(),
     countdown: 3
   };
@@ -3710,14 +3800,22 @@ function press(lane){
   if (!game || game.paused || game.over) return;
   game.held[lane] = true;
   game.pressGlow[lane] = 1;
+  game.laneFlash[lane] = 1;
+
+  // Judge against where the audio actually is right now. game.time is only
+  // refreshed once a frame, so using it threw away up to 16ms of accuracy on
+  // every tap — enough to turn a SICK into a GOOD at 60fps, and worse when
+  // the device is dropping frames.
+  let now = game.time;
+  try{ now = audioCtx.currentTime - game.startedAt; }catch(e){}
 
   // nearest un-hit player note in this lane inside the miss window
   let best = null, bestD = 1e9;
   for (let i = game.head; i < game.notes.length; i++){
     const n = game.notes[i];
-    if (n.t - game.time > MISS_WINDOW + 0.02) break;
+    if (n.t - now > MISS_WINDOW + 0.02) break;
     if (!n.mustHit || n.hit || n.gone || n.lane !== lane) continue;
-    const d = Math.abs(n.t - game.time);
+    const d = Math.abs(n.t - now);
     if (d < bestD){ bestD = d; best = n; }
   }
   if (best && bestD <= MISS_WINDOW){
@@ -3767,8 +3865,18 @@ function unmuteVocals(){ if (game && game.vocalMuted){ game.vocalMuted = false; 
 
 function setPose(who, pose, hold){
   if (!game) return;
-  if (who === "bf"){ game.bfPose = pose; game.bfBlend = 1; game.bfHold = hold || 0.20; }
-  else { game.opPose = pose; game.opBlend = 1; game.opHold = hold || 0.20; }
+  // The blend is a target, not a jump. Snapping it to 1 is what made the cast
+  // look like it was flicking between stills; it now travels there over about
+  // 70ms, which is fast enough to feel on the beat and slow enough to read as
+  // movement. Changing to a different pose restarts from part-way rather than
+  // from nothing, so quick alternating notes stay fluid.
+  if (who === "bf"){
+    if (game.bfPose !== pose) game.bfBlend = Math.min(game.bfBlend, 0.35);
+    game.bfPose = pose; game.bfTarget = 1; game.bfHold = hold || 0.20;
+  } else {
+    if (game.opPose !== pose) game.opBlend = Math.min(game.opBlend, 0.35);
+    game.opPose = pose; game.opTarget = 1; game.opHold = hold || 0.20;
+  }
 }
 function addPopup(text, color){
   game.popups.push({ text, color, life: 0.55 });
@@ -4011,6 +4119,325 @@ document.addEventListener("keydown", e => {
   if (e.code === "Escape"){ e.preventDefault(); $("#deathQuit").click(); }
 });
 
+/* =====================================================================
+   WEEKS
+   Six stages, each drawn rather than sprited, each with its own palette,
+   scenery and one thing that moves. Rasterised per size like the bedroom
+   was, so an animated element costs one blit and a couple of shapes.
+   ===================================================================== */
+const WEEKS = [
+  { n:1, name:"Tutorial",  stage:"bedroom",  sub:"Where it starts",
+    songs:["Tutorial","Bopeebo","Fresh","Dad Battle"] },
+  { n:2, name:"Spooky",    stage:"graveyard", sub:"Two in the dark",
+    songs:["Spookeez","South","Monster"] },
+  { n:3, name:"Pico",      stage:"street",   sub:"Rooftops and traffic",
+    songs:["Pico","Philly Nice","Blammed"] },
+  { n:4, name:"Mommy",     stage:"highway",  sub:"On the limo",
+    songs:["Satin Panties","High","Milf"] },
+  { n:5, name:"Christmas", stage:"mall",     sub:"Snow in the mall",
+    songs:["Cocoa","Eggnog","Winter Horrorland"] },
+  { n:6, name:"Senpai",    stage:"school",   sub:"Pixels and daylight",
+    songs:["Senpai","Roses","Thorns"] }
+];
+
+const STAGE_PALETTE = {
+  // wash is how far the scenery is pushed back so notes stay the brightest
+  // thing on screen — a dark stage needs far less of it than a pale one
+  bedroom:   { wall:"#efe7f6", floor:"#e3c9a6", floorLine:"#d8bb95", accent:"#b9a6e8", wash:0.40 },
+  graveyard: { wall:"#2b2f4a", floor:"#3c4160", floorLine:"#333855", accent:"#8fe3c0", wash:0.10 },
+  street:    { wall:"#3a4a63", floor:"#4a4f58", floorLine:"#41454d", accent:"#f0a93a", wash:0.12 },
+  highway:   { wall:"#2d2a52", floor:"#3a3550", floorLine:"#332f47", accent:"#ff5c9a", wash:0.10 },
+  mall:      { wall:"#dfe9f4", floor:"#c9d6e6", floorLine:"#bccbdd", accent:"#e0554f", wash:0.34 },
+  school:    { wall:"#bfe4ff", floor:"#7fc06a", floorLine:"#73b160", accent:"#ffd94a", wash:0.30 }
+};
+
+let stageCaches = {};        // scenery bitmap per stage+size
+let currentStage = "bedroom";
+
+function buildStageArt(kind, w, h, dpr){
+  const key = kind + "|" + w + "x" + h + "@" + dpr;
+  if (stageCaches[key]) return stageCaches[key];
+  stageCaches = {};                                  // only one size is ever live
+  const P = STAGE_PALETTE[kind] || STAGE_PALETTE.bedroom;
+  const cv = document.createElement("canvas");
+  cv.width = Math.max(1, Math.ceil(w * dpr));
+  cv.height = Math.max(1, Math.ceil(h * dpr));
+  const g = cv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const floorY = h * 0.74;
+  const u = clamp(Math.min(w, h) / 420, 0.5, 1.9);
+
+  g.fillStyle = P.wall;  g.fillRect(0, 0, w, floorY);
+  g.fillStyle = P.floor; g.fillRect(0, floorY, w, h - floorY);
+  g.fillStyle = P.floorLine;
+  for (let x = -h; x < w + h; x += 74){
+    g.beginPath();
+    g.moveTo(x, h); g.lineTo(x + (h - floorY) * 0.5, floorY);
+    g.lineTo(x + (h - floorY) * 0.5 + 3, floorY); g.lineTo(x + 3, h);
+    g.closePath(); g.fill();
+  }
+  g.fillStyle = P.floorLine; g.fillRect(0, floorY - 5, w, 6);
+
+  const box = (x, y, bw, bh, fill, line) => {
+    g.fillStyle = fill; g.fillRect(x, y, bw, bh);
+    if (line){ g.strokeStyle = line; g.lineWidth = 3*u; g.strokeRect(x, y, bw, bh); }
+  };
+
+  if (kind === "bedroom"){
+    const wx = w*0.13, wy = floorY - 210*u, ww = 150*u, wh = 125*u;
+    box(wx, wy, ww, wh, "#2b3566", "#b9a7cd");
+    g.fillStyle = "#f7f3c8";
+    g.beginPath(); g.arc(wx + ww*0.7, wy + wh*0.3, 15*u, 0, Math.PI*2); g.fill();
+    g.strokeStyle = "#b9a7cd"; g.lineWidth = 3.5*u;
+    g.beginPath();
+    g.moveTo(wx+ww/2, wy); g.lineTo(wx+ww/2, wy+wh);
+    g.moveTo(wx, wy+wh/2); g.lineTo(wx+ww, wy+wh/2); g.stroke();
+    const bx = w*0.62, by = floorY - 46*u, bw = w*0.34, bh = 78*u;
+    box(bx + bw - 20*u, by - 62*u, 20*u, 62*u, "#8d6a4f");
+    box(bx, by, bw, bh, "#c9d6ef");
+    box(bx, by, bw*0.62, bh, "#7f9ad6");
+    g.fillStyle = "#ffffff";
+    roundRectPath(g, bx + bw - 62*u, by - 16*u, 46*u, 24*u, 7*u); g.fill();
+    box(w*0.66, floorY - 200*u, 78*u, 58*u, "#ffd9e6", "#e79ab6");
+  }
+
+  if (kind === "graveyard"){
+    g.fillStyle = "#1d2138";
+    for (let i = 0; i < 26; i++){
+      const sx = (i*137)%w, sy = (i*89)%(floorY*0.7);
+      g.beginPath(); g.arc(sx, sy, 1.6*u, 0, Math.PI*2); g.fill();
+    }
+    g.fillStyle = "#e8e6d8";
+    g.beginPath(); g.arc(w*0.82, floorY*0.26, 34*u, 0, Math.PI*2); g.fill();
+    g.fillStyle = P.wall;
+    g.beginPath(); g.arc(w*0.86, floorY*0.22, 30*u, 0, Math.PI*2); g.fill();
+    for (const [gx, gs] of [[0.10,1],[0.24,0.8],[0.78,0.9],[0.90,0.7]]){
+      const x = w*gx, hgt = 92*u*gs;
+      g.fillStyle = "#6f7590";
+      roundRectPath(g, x-26*u*gs, floorY-hgt, 52*u*gs, hgt, 24*u*gs); g.fill();
+      g.fillStyle = "#5b6079";
+      g.fillRect(x-6*u*gs, floorY-hgt*0.7, 12*u*gs, 34*u*gs);
+      g.fillRect(x-18*u*gs, floorY-hgt*0.58, 36*u*gs, 11*u*gs);
+    }
+    g.fillStyle = "#232741";
+    for (let i = 0; i < 5; i++){
+      const x = w*(0.34+i*0.09);
+      g.beginPath(); g.moveTo(x, floorY);
+      g.lineTo(x-9*u, floorY-70*u); g.lineTo(x+9*u, floorY-70*u);
+      g.closePath(); g.fill();
+    }
+  }
+
+  if (kind === "street"){
+    g.fillStyle = "#22304a";
+    for (let i = 0; i < 7; i++){
+      const bw2 = w*0.14, x = i*bw2*1.02, bh2 = (80 + ((i*53)%110))*u;
+      g.fillRect(x, floorY-bh2, bw2*0.94, bh2);
+      g.fillStyle = "#f5c451";
+      for (let r = 0; r < Math.floor(bh2/(22*u)); r++)
+        for (let c2 = 0; c2 < 3; c2++)
+          if (((i+r+c2)*7)%3) g.fillRect(x+(8+c2*13)*u, floorY-bh2+(10+r*22)*u, 7*u, 10*u);
+      g.fillStyle = "#22304a";
+    }
+    g.fillStyle = "#5a6070"; g.fillRect(0, floorY-4*u, w, 5*u);
+    g.fillStyle = "#f0a93a";
+    for (let x = 20; x < w; x += 90*u) g.fillRect(x, h-26*u, 46*u, 6*u);
+  }
+
+  if (kind === "highway"){
+    const sky = g.createLinearGradient(0, 0, 0, floorY);
+    sky.addColorStop(0, "#241f45"); sky.addColorStop(1, "#4a3466");
+    g.fillStyle = sky; g.fillRect(0, 0, w, floorY);
+    g.fillStyle = "#ffd36e";
+    g.beginPath(); g.arc(w*0.5, floorY*0.52, 52*u, 0, Math.PI*2); g.fill();
+    g.fillStyle = "#1c1836";
+    for (let i = 0; i < 9; i++){
+      const bw2 = w*0.11, x = i*bw2, bh2 = (60 + ((i*71)%90))*u;
+      g.fillRect(x, floorY-bh2, bw2*0.9, bh2);
+    }
+    g.fillStyle = "#efe6f5";
+    for (let x = 30*u; x < w; x += 120*u) g.fillRect(x, h-34*u, 60*u, 7*u);
+  }
+
+  if (kind === "mall"){
+    g.fillStyle = "#c6d6e8";
+    for (let i = 0; i < 6; i++) g.fillRect(w*0.06 + i*w*0.17, floorY-190*u, 16*u, 190*u);
+    g.fillStyle = "#aebfd4"; g.fillRect(0, floorY-196*u, w, 10*u);
+    // a tree, because it is the christmas one
+    const tx = w*0.5;
+    g.fillStyle = "#6b4a2f"; g.fillRect(tx-9*u, floorY-40*u, 18*u, 40*u);
+    g.fillStyle = "#2f7a45";
+    for (let i = 0; i < 3; i++){
+      const s2 = 1 - i*0.24, yy = floorY - 40*u - i*46*u;
+      g.beginPath(); g.moveTo(tx, yy-84*u*s2);
+      g.lineTo(tx-58*u*s2, yy); g.lineTo(tx+58*u*s2, yy); g.closePath(); g.fill();
+    }
+    g.fillStyle = "#e0554f";
+    for (let i = 0; i < 9; i++)
+      g.fillRect(tx-46*u + (i*11)%92*u, floorY-70*u - (i*13)%110*u, 7*u, 7*u);
+  }
+
+  if (kind === "school"){
+    const sky = g.createLinearGradient(0, 0, 0, floorY);
+    sky.addColorStop(0, "#9fd8ff"); sky.addColorStop(1, "#d9f0ff");
+    g.fillStyle = sky; g.fillRect(0, 0, w, floorY);
+    g.fillStyle = "#fff4b8";
+    g.beginPath(); g.arc(w*0.82, floorY*0.2, 30*u, 0, Math.PI*2); g.fill();
+    g.fillStyle = "#ffffff";
+    for (const [cx, cy, cs] of [[0.2,0.22,1],[0.45,0.14,0.7],[0.68,0.28,0.85]]){
+      for (const [ox, oy, orr] of [[0,0,26],[22,4,20],[-22,4,18]]){
+        g.beginPath(); g.arc(w*cx+ox*u*cs, floorY*cy+oy*u*cs, orr*u*cs, 0, Math.PI*2); g.fill();
+      }
+    }
+    g.fillStyle = "#e8d4a8"; g.fillRect(w*0.08, floorY-170*u, w*0.84, 170*u);
+    g.fillStyle = "#c8b487"; g.fillRect(w*0.08, floorY-178*u, w*0.84, 12*u);
+    g.fillStyle = "#8fd0ff";
+    for (let r = 0; r < 3; r++)
+      for (let c2 = 0; c2 < 6; c2++)
+        g.fillRect(w*0.13 + c2*w*0.128, floorY-150*u + r*46*u, w*0.085, 30*u);
+  }
+
+  g.fillStyle = "rgba(255,255,255," + (P.wash === undefined ? 0.34 : P.wash) + ")";
+  g.fillRect(0, 0, w, h);
+  stageCaches[key] = cv;
+  return cv;
+}
+
+/* the one thing that moves, drawn live over the cached scenery */
+function drawStageMotion(g, kind, w, h, t){
+  const floorY = h * 0.74;
+  const u = clamp(Math.min(w, h) / 420, 0.5, 1.9);
+  g.save();
+  g.globalAlpha = 0.5;
+  if (kind === "graveyard"){
+    g.fillStyle = "#cfe9dd";
+    for (let i = 0; i < 5; i++){
+      const p = ((t*0.06 + i*0.2) % 1);
+      g.globalAlpha = 0.32 * Math.sin(p*Math.PI);
+      g.beginPath();
+      g.ellipse(w*(0.1+i*0.2), floorY - 40*u - p*90*u, 30*u, 12*u, 0, 0, Math.PI*2);
+      g.fill();
+    }
+  } else if (kind === "mall"){
+    g.fillStyle = "#ffffff";
+    for (let i = 0; i < 34; i++){
+      const sp = 0.4 + (i%5)*0.16;
+      const y = ((t*22*sp + i*57) % (h + 30)) - 15;
+      const x = (i*97 + Math.sin(t*0.7 + i)*14) % w;
+      g.globalAlpha = 0.55;
+      g.beginPath(); g.arc(x, y, (1.6 + (i%3)*0.9)*u, 0, Math.PI*2); g.fill();
+    }
+  } else if (kind === "street" || kind === "highway"){
+    g.globalAlpha = 0.5;
+    for (let i = 0; i < 3; i++){
+      const p = ((t*0.18 + i*0.37) % 1.2) - 0.1;
+      const x = p * (w + 120) - 60;
+      g.fillStyle = i%2 ? "#f5d76e" : "#ef8b8b";
+      roundRectPath(g, x, floorY - 26*u, 54*u, 17*u, 6*u); g.fill();
+    }
+  } else if (kind === "school"){
+    g.globalAlpha = 0.4; g.fillStyle = "#ffffff";
+    for (let i = 0; i < 3; i++){
+      const x = ((t*9 + i*380) % (w + 200)) - 100;
+      for (const [ox, oy, orr] of [[0,0,24],[20,4,18],[-20,4,16]]){
+        g.beginPath(); g.arc(x+ox*u, floorY*0.2+oy*u + i*30*u, orr*u, 0, Math.PI*2); g.fill();
+      }
+    }
+  } else if (kind === "bedroom"){
+    g.globalAlpha = 0.20 + 0.06*Math.sin(t*2.2);
+    g.fillStyle = "#fff3b8";
+    g.beginPath(); g.arc(w*0.13 + 52*u, floorY - 150*u, 90*u, 0, Math.PI*2); g.fill();
+  }
+  g.restore();
+}
+
+/* ------------------------- week selection ------------------------- */
+let weekIndex = 0;
+
+function paintWeek(){
+  const wk = WEEKS[weekIndex];
+  currentStage = wk.stage;
+  $("#weekNum").textContent = "WEEK " + wk.n;
+  $("#weekName").textContent = wk.name;
+  $("#weekSub").textContent = wk.sub;
+  $("#weekDots").innerHTML = WEEKS.map((_, i) =>
+    '<span class="dot' + (i === weekIndex ? " on" : "") + '"></span>').join("");
+
+  const host = $("#weekSongs");
+  host.innerHTML = "";
+  wk.songs.forEach(title => {
+    const b = document.createElement("button");
+    b.className = "btn ghost small weeksong";
+    b.textContent = title;
+    b.addEventListener("click", () => pickWeekSong(wk, title));
+    host.appendChild(b);
+  });
+  drawWeekPreview();
+}
+
+let weekRAF = 0, weekT = 0;
+function drawWeekPreview(){
+  const cv = $("#weekCanvas");
+  if (!cv) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (!w || !h) return;
+  if (cv.width !== Math.ceil(w*dpr)){ cv.width = Math.ceil(w*dpr); cv.height = Math.ceil(h*dpr); }
+  const g = cv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const wk = WEEKS[weekIndex];
+  g.drawImage(buildStageArt(wk.stage, w, h, dpr), 0, 0, w, h);
+  drawStageMotion(g, wk.stage, w, h, weekT);
+
+  // the cast, standing on this week's floor
+  const groundY = h * 0.93;
+  const scale = clamp(Math.min(w / 560, h / 260), 0.34, 0.8);
+  const bop = Math.max(0, Math.sin(weekT * 3.4)) * 3;
+  g.save();
+  drawCharCached(g, charFor("opp"), (customSprite && customSprite.slot === "opp") ? "cu-opp" : "demo",
+                 "idle", 0, bop, w*0.22, groundY, scale, dpr, posesFor("opp"));
+  drawCharCached(g, charFor("plr"), (customSprite && customSprite.slot === "plr") ? "cu-plr" : "bf",
+                 "idle", 0, bop, w*0.78, groundY, scale, dpr, posesFor("plr"));
+  g.restore();
+}
+function weekFrame(){
+  weekRAF = requestAnimationFrame(weekFrame);
+  weekT += 1/60;
+  drawWeekPreview();
+}
+function startWeekLoop(){ if (!weekRAF) weekRAF = requestAnimationFrame(weekFrame); }
+function stopWeekLoop(){ if (weekRAF){ cancelAnimationFrame(weekRAF); weekRAF = 0; } }
+
+function stepWeek(d){
+  weekIndex = (weekIndex + d + WEEKS.length) % WEEKS.length;
+  paintWeek();
+}
+$("#weekPrev").addEventListener("click", () => stepWeek(-1));
+$("#weekNext").addEventListener("click", () => stepWeek(1));
+
+async function pickWeekSong(wk, title){
+  // A week slot plays a saved song of that name when the player has charted
+  // one; otherwise it says so rather than pretending to have content.
+  let lib = [];
+  try{ lib = await songsAll(); }catch(e){ lib = []; }
+  const match = lib.find(r => r.name.toLowerCase() === title.toLowerCase());
+  if (!match){
+    $("#weekHint").textContent = 'No song named "' + title + '" in your mod yet. ' +
+      "Chart one in the Editor and save it under that name to fill this slot.";
+    return;
+  }
+  $("#weekHint").textContent = "";
+  settings.stage = wk.stage;
+  saveSettings();
+  stageCaches = {};
+  if (await loadSongById(match.id)){
+    paintReady(SONG.chart);
+    show("readyScreen");
+  }
+}
+
+$("#openWeeks").addEventListener("click", () => { paintWeek(); show("weeksScreen"); });
+
 /* ------------------------- main loop ------------------------- */
 function frame(){
   gameRAF = requestAnimationFrame(frame);
@@ -4107,11 +4534,18 @@ function update(dt){
   }
 
   // pose timers
-  s.bfHold -= dt; if (s.bfHold <= 0){ s.bfBlend = Math.max(0, s.bfBlend - dt * 5); if (s.bfBlend <= 0) s.bfPose = "idle"; }
-  s.opHold -= dt; if (s.opHold <= 0){ s.opBlend = Math.max(0, s.opBlend - dt * 5); if (s.opBlend <= 0) s.opPose = "idle"; }
+  // ease into the pose, hold it, then ease back out
+  const IN = 14, OUT = 5.5;
+  s.bfHold -= dt;
+  if (s.bfHold > 0) s.bfBlend = Math.min(s.bfTarget, s.bfBlend + dt * IN);
+  else { s.bfBlend = Math.max(0, s.bfBlend - dt * OUT); if (s.bfBlend <= 0) s.bfPose = "idle"; }
+  s.opHold -= dt;
+  if (s.opHold > 0) s.opBlend = Math.min(s.opTarget, s.opBlend + dt * IN);
+  else { s.opBlend = Math.max(0, s.opBlend - dt * OUT); if (s.opBlend <= 0) s.opPose = "idle"; }
 
   for (let l = 0; l < 4; l++){
     s.pressGlow[l] = Math.max(0, s.pressGlow[l] - dt * 4);
+    s.laneFlash[l] = Math.max(0, s.laneFlash[l] - dt * 3.2);
     s.confirm[l]   = Math.max(0, s.confirm[l] - dt);
     s.oppConfirm[l]= Math.max(0, s.oppConfirm[l] - dt);
   }
@@ -4247,89 +4681,13 @@ function drawArrow(g, x, y, size, lane, mode, alpha){
   }
 }
 
-/* ------------------------- the bedroom stage -------------------------
-   Drawn flat and pale on purpose: it has to read as a room without ever
-   competing with the notes travelling over it. Rasterised once per size. */
-let stageCache = null, stageKey = "";
-
-function buildStage(w, h, dpr){
-  const key = w + "x" + h + "@" + dpr;
-  if (stageCache && stageKey === key) return stageCache;
-  const cv = document.createElement("canvas");
-  cv.width = Math.max(1, Math.ceil(w * dpr));
-  cv.height = Math.max(1, Math.ceil(h * dpr));
-  const g = cv.getContext("2d");
-  g.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-  const floorY = h * 0.74;
-
-  // wall and floor
-  g.fillStyle = "#efe7f6"; g.fillRect(0, 0, w, floorY);
-  g.fillStyle = "#e3c9a6"; g.fillRect(0, floorY, w, h - floorY);
-  g.fillStyle = "#d8bb95";
-  for (let x = -h; x < w + h; x += 74){    // floorboards, angled for depth
-    g.beginPath();
-    g.moveTo(x, h); g.lineTo(x + (h - floorY) * 0.5, floorY);
-    g.lineTo(x + (h - floorY) * 0.5 + 3, floorY); g.lineTo(x + 3, h);
-    g.closePath(); g.fill();
-  }
-  g.fillStyle = "#cdb08c"; g.fillRect(0, floorY - 5, w, 6);
-
-  const u = clamp(Math.min(w, h) / 420, 0.5, 1.9);   // scene unit
-
-  // window, upper left
-  const wx = w * 0.13, wy = floorY - 210*u, ww = 150*u, wh = 125*u;
-  g.fillStyle = "#2b3566"; g.fillRect(wx, wy, ww, wh);
-  g.fillStyle = "#f7f3c8";                            // moon
-  g.beginPath(); g.arc(wx + ww*0.7, wy + wh*0.3, 15*u, 0, Math.PI*2); g.fill();
-  g.fillStyle = "#ffffff";
-  for (const [sx, sy] of [[0.2,0.25],[0.35,0.55],[0.5,0.2],[0.25,0.75],[0.8,0.65]]){
-    g.beginPath(); g.arc(wx + ww*sx, wy + wh*sy, 1.8*u, 0, Math.PI*2); g.fill();
-  }
-  g.strokeStyle = "#b9a7cd"; g.lineWidth = 5*u;
-  g.strokeRect(wx, wy, ww, wh);
-  g.beginPath();
-  g.moveTo(wx + ww/2, wy); g.lineTo(wx + ww/2, wy + wh);
-  g.moveTo(wx, wy + wh/2); g.lineTo(wx + ww, wy + wh/2);
-  g.lineWidth = 3.5*u; g.stroke();
-
-  // bed, lower right
-  const bx = w * 0.62, by = floorY - 46*u, bw = w * 0.34, bh = 78*u;
-  g.fillStyle = "#8d6a4f";                            // headboard
-  g.fillRect(bx + bw - 20*u, by - 62*u, 20*u, 62*u);
-  g.fillStyle = "#c9d6ef"; g.fillRect(bx, by, bw, bh);      // mattress
-  g.fillStyle = "#7f9ad6"; g.fillRect(bx, by, bw * 0.62, bh); // blanket
-  g.fillStyle = "#ffffff";                             // pillow
-  roundRectPath(g, bx + bw - 62*u, by - 16*u, 46*u, 24*u, 7*u); g.fill();
-  g.fillStyle = "#6b543f";
-  g.fillRect(bx, by + bh, 8*u, 16*u);
-  g.fillRect(bx + bw - 12*u, by + bh, 8*u, 16*u);
-
-  // poster above the bed
-  const px = w * 0.66, py = floorY - 200*u;
-  g.fillStyle = "#ffd9e6"; g.fillRect(px, py, 78*u, 58*u);
-  g.strokeStyle = "#e79ab6"; g.lineWidth = 3*u; g.strokeRect(px, py, 78*u, 58*u);
-  g.fillStyle = "#e2688f";
-  for (let i = 0; i < 3; i++) g.fillRect(px + 10*u, py + (13 + i*15)*u, (52 - i*14)*u, 5*u);
-
-  // rug
-  g.fillStyle = "#d8a5b8";
-  g.beginPath(); g.ellipse(w * 0.34, h * 0.90, w * 0.20, (h - floorY) * 0.30, 0, 0, Math.PI*2); g.fill();
-
-  // wash everything out so notes stay the brightest thing on screen
-  g.fillStyle = "rgba(255,255,255,.46)";
-  g.fillRect(0, 0, w, h);
-
-  stageCache = cv; stageKey = key;
-  return cv;
-}
-
 function render(){
   const s = game;
   const g = G;
   g.setTransform(s.dpr, 0, 0, s.dpr, 0, 0);
-  if (settings.stage === "bedroom"){
-    g.drawImage(buildStage(s.w, s.h, s.dpr), 0, 0, s.w, s.h);
+  if (settings.stage && settings.stage !== "white"){
+    g.drawImage(buildStageArt(settings.stage, s.w, s.h, s.dpr), 0, 0, s.w, s.h);
+    drawStageMotion(g, settings.stage, s.w, s.h, s.time + 4);
   } else {
     g.fillStyle = "#ffffff";
     g.fillRect(0, 0, s.w, s.h);   // opaque, so no clearRect needed first
@@ -4369,10 +4727,22 @@ function render(){
       const x = s.playerX + l * s.playerGap;
       const down = s.held[l];
       g.save();
+      const flash = s.laneFlash[l];
       g.fillStyle = down ? "rgba(56,189,248,.24)" : "rgba(125,211,252,.11)";
       g.fillRect(x - s.laneW/2, s.colTop, s.laneW, s.colBottom - s.colTop);
-      g.strokeStyle = down ? "rgba(14,165,233,.75)" : "rgba(56,189,248,.45)";
-      g.lineWidth = 2.5;
+      if (flash > 0){
+        // a wash of the lane's own colour, brightest at the receptor
+        const grad = g.createLinearGradient(0, s.strumY, 0, s.colTop);
+        grad.addColorStop(0, LANE_COLORS[l]);
+        grad.addColorStop(1, "rgba(255,255,255,0)");
+        g.save();
+        g.globalAlpha = flash * 0.30;
+        g.fillStyle = grad;
+        g.fillRect(x - s.laneW/2, s.colTop, s.laneW, s.colBottom - s.colTop);
+        g.restore();
+      }
+      g.strokeStyle = down ? "rgba(14,165,233,.85)" : "rgba(56,189,248,.55)";
+      g.lineWidth = 3;
       g.beginPath();
       g.moveTo(x - s.laneW/2, s.colTop); g.lineTo(x - s.laneW/2, s.colBottom);
       g.moveTo(x + s.laneW/2, s.colTop); g.lineTo(x + s.laneW/2, s.colBottom);
