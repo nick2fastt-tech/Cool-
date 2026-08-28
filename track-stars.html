@@ -73,7 +73,8 @@ canvas{display:block;touch-action:none}
 #hud{position:absolute;inset:0;pointer-events:none;z-index:50}
 #hud.race-mode{opacity:0;pointer-events:none;transition:opacity .35s ease}
 #hud>*{pointer-events:none}
-.ui-block{pointer-events:auto}
+/* must out-specify #hud>* (1,0,0) or HUD children stay untappable */
+.ui-block,#hud .ui-block{pointer-events:auto}
 
 /* waypoint to the events board - replaces the old clock pill */
 #waypoint{position:absolute;top:calc(10px + var(--sat));left:50%;transform:translateX(-50%);
@@ -187,6 +188,12 @@ canvas{display:block;touch-action:none}
 .tz.next .tzTag{border-color:rgba(63,224,255,.55);color:var(--aura)}
 #tzMid{position:absolute;left:50%;top:22%;bottom:22%;width:1px;
   background:linear-gradient(180deg,transparent,rgba(63,224,255,.22),transparent)}
+#leaveBtn{position:absolute;bottom:calc(16px + var(--sab));left:calc(12px + var(--sal));z-index:58;
+  padding:10px 16px;border-radius:11px;border:1px solid var(--line);background:rgba(4,12,28,.82);
+  color:var(--muted);font:inherit;font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;
+  cursor:pointer;display:none}
+#leaveBtn.on{display:block}
+#leaveBtn:active{transform:scale(.94)}
 #dipBtn{position:absolute;bottom:calc(120px + var(--sab));left:50%;transform:translateX(-50%);z-index:58;
   padding:14px 26px;border-radius:14px;font-size:14px;letter-spacing:.24em;font-weight:900;
   background:linear-gradient(180deg,var(--gold),#e29b12);color:#241a00;border:none;
@@ -462,6 +469,7 @@ input[type=range]::-moz-range-thumb{width:19px;height:19px;border:none;border-ra
     <div id="tzMid"></div>
   </div>
   <button id="dipBtn">DIP</button>
+  <button id="leaveBtn">Leave</button>
   <div id="bigText"><div class="bt"></div><div class="bs"></div></div>
 
   <!-- ============ RESULTS ============ -->
@@ -2923,6 +2931,12 @@ const Race = {
       top: P.topSpeed, results: this.results, levels });
     Chat.botRaceReaction(order[0].name, P.place);
   },
+  /** step out during the intermission - nothing is recorded */
+  abort() {
+    if (!this.active || this.phase !== 'intermission') return;
+    UI.toast('LEFT THE EVENT', 'warn');
+    this.exit();
+  },
   exit() {
     this.active = false; this.phase = 'idle';
     this.clearBlocks();
@@ -2951,7 +2965,7 @@ const Race = {
 /* ========== 19. INPUT =============================================== */
 const Input = {
   joyId: null, joyBase: { x: 0, y: 0 }, joy: { x: 0, y: 0 }, joyMag: 0,
-  camId: null, camLast: { x: 0, y: 0 }, keys: {},
+  camId: null, camLast: { x: 0, y: 0 }, keys: {}, tapX: 0, tapY: 0, tapMoved: 0,
   init() {
     const app = document.getElementById('app'), opt = { passive: false };
     app.addEventListener('pointerdown', e => this.down(e), opt);
@@ -2971,6 +2985,7 @@ const Input = {
     Audio2.init(); Audio2.resume();
     if (this.isUI(e)) return;
     if (Chat.typing) UI.chatBlur();
+    this.tapX = e.clientX; this.tapY = e.clientY; this.tapMoved = 0;
     if (Game.mode === 'race') {
       if (Race.phase === 'done') return;
       Game.player.tap(e.clientX < window.innerWidth / 2 ? 'L' : 'R', Race.t);
@@ -2992,10 +3007,12 @@ const Input = {
       const dx = e.clientX - this.joyBase.x, dy = e.clientY - this.joyBase.y, R = 58;
       const d = Math.hypot(dx, dy) || 1, k = Math.min(1, d / R);
       this.joy.x = (dx / d) * k; this.joy.y = (dy / d) * k; this.joyMag = k;
+      this.tapMoved += Math.abs(dx) + Math.abs(dy);
       UI.showStick(this.joyBase.x, this.joyBase.y, this.joy.x * R, this.joy.y * R);
       e.preventDefault();
     } else if (e.pointerId === this.camId) {
       const dx = e.clientX - this.camLast.x, dy = e.clientY - this.camLast.y;
+      this.tapMoved += Math.abs(dx) + Math.abs(dy);
       this.camLast.x = e.clientX; this.camLast.y = e.clientY;
       Game.camYaw -= dx * 0.0055;
       Game.camPitch = clamp(Game.camPitch - dy * 0.0035, -0.55, 0.42);
@@ -3004,8 +3021,11 @@ const Input = {
     }
   },
   up(e) {
+    const wasWorld = (e.pointerId === this.joyId || e.pointerId === this.camId);
     if (e.pointerId === this.joyId) { this.joyId = null; this.joy.x = 0; this.joy.y = 0; this.joyMag = 0; UI.hideStick(); }
     if (e.pointerId === this.camId) this.camId = null;
+    // a tap (not a drag) on world geometry: see whether it hit the board
+    if (wasWorld && Game.mode !== 'race' && this.tapMoved < 14) Game.pickWorld(e.clientX, e.clientY);
   },
   key(e, dn) {
     const k = e.key.toLowerCase();
@@ -3043,7 +3063,7 @@ const UI = {
     const ids = ['hud', 'waypoint', 'wpArrow', 'wpDist', 'lvlNum', 'xpPct', 'xpBar', 'pName', 'stamBar', 'stamVal',
       'prompt', 'stick', 'knob', 'raceHud', 'raceDist', 'raceTime', 'raceSplit', 'racePosNum', 'raceSpd', 'raceLeft',
       'cadNeedle', 'cadZone', 'cadFill', 'cadNum', 'rhythmTxt', 'phaseTxt', 'raceStamBar', 'tapZones', 'tzL', 'tzR',
-      'dipBtn', 'bigText', 'results', 'resPos', 'resTime', 'resPbTag', 'resEvent', 'resXp', 'resPb', 'resTop',
+      'dipBtn', 'leaveBtn', 'bigText', 'results', 'resPos', 'resTime', 'resPbTag', 'resEvent', 'resXp', 'resPb', 'resTop',
       'resTable', 'resXpBar', 'resLvlTxt', 'toastWrap', 'evList', 'distGrid', 'evClockTime', 'evClockDate',
       'lbTabs', 'lbList', 'fpsTag', 'stickHint', 'setNameCur', 'mName', 'nameInput', 'loadBar', 'loadTxt', 'loadPct',
       'rbx', 'rbxLog', 'rbxInput', 'rbxHint', 'rbxDot', 'rbxWin'];
@@ -3074,6 +3094,7 @@ const UI = {
     document.querySelectorAll('[data-close]').forEach(x => x.addEventListener('click', () => { Audio2.back(); this.closeModal(x.dataset.close); }));
     document.querySelectorAll('.modal').forEach(m => m.addEventListener('click', e => { if (e.target === m) { Audio2.back(); this.closeModal(m.id); } }));
     this.el.dipBtn.addEventListener('click', e => { e.stopPropagation(); Game.player.doDip(); });
+    this.el.leaveBtn.addEventListener('click', e => { e.stopPropagation(); Audio2.back(); Race.abort(); });
     this.el.prompt.addEventListener('click', () => { Audio2.click(); Game.interact(); });
     // Roblox chat behaviour
     this.el.rbx.querySelector('#rbxToggle').addEventListener('click', e => { e.stopPropagation(); Audio2.click(); this.toggleChat(); });
@@ -3173,6 +3194,7 @@ const UI = {
     e.raceSplit.textContent = Race.phase === 'intermission' ? 'INTERMISSION'
       : Race.phase === 'running' ? (P.reaction ? 'RT ' + P.reaction.toFixed(3) + 's' : 'REACT!') : 'READY';
     this.el.dipBtn.classList.toggle('on', Race.phase === 'running' && !P.finished && !P.dipping && left < 10 && left > 0);
+    this.el.leaveBtn.classList.toggle('on', Race.phase === 'intermission');
   },
   enterRaceMode(dist) {
     this.el.hud.classList.add('race-mode');
@@ -3191,6 +3213,7 @@ const UI = {
     this.el.rbx.classList.remove('hidden');
     this.showTapZones(false);
     this.el.dipBtn.classList.remove('on');
+    this.el.leaveBtn.classList.remove('on');
     this.refreshProfile();
   },
   showTapZones(on) { this.el.tapZones.classList.toggle('on', !!on); },
@@ -3284,9 +3307,9 @@ const UI = {
         '</div></div>';
     }).join('');
     this.el.evList.querySelectorAll('[data-enter]').forEach(b => b.addEventListener('click', () => {
-      Audio2.click();
       this.closeModal('mEvents');
-      setTimeout(() => Race.start(+b.dataset.enter, true), 180);
+      const ev = EventSystem.list().find(x => x.dist === +b.dataset.enter && EventSystem.canEnter(x));
+      setTimeout(() => Game.joinEvent(ev || { dist: +b.dataset.enter, at: 0 }), 180);
     }));
   },
   tickEventCountdowns() {
@@ -3369,7 +3392,7 @@ const Game = {
   camYaw: 0, camPitch: 0.20, camManual: 0,
   camPos: null, camLook: null,
   fpsCap: 60, last: 0, fps: 60, frames: 0, fpsT: 0, clockT: 0, skyT: 0, boardT: 0,
-  running: false, moved: false, quality: 'med', shadows: true, nearBoard: false,
+  running: false, moved: false, quality: 'med', shadows: true, nearBoard: false, _joinedAt: 0,
 
   init() {
     const s = SaveSystem.data.settings;
@@ -3510,6 +3533,7 @@ const Game = {
       P.animate(dt);
       Net.roster.forEach(b => { b.updateRoam(dt); b.animate(dt); });
       this.updatePrompt();
+      this.checkAutoJoin();
       Chat.update(dt);
     }
     World.update(dt, t);
@@ -3552,18 +3576,58 @@ const Game = {
   updatePrompt() {
     const P = this.player;
     const d = Math.hypot(P.x - CFG.BOARD.x, P.z - CFG.BOARD.z);
-    this.nearBoard = d < 6.5;
-    if (this.nearBoard) {
-      const ev = EventSystem.next();
-      const extra = ev && ev.status !== 'upcoming' ? ' &middot; <b>' + ev.name + ' ' + (ev.status === 'live' ? 'LIVE' : 'OPEN') + '</b>' : '';
-      UI.setPrompt('EVENTS BOARD &middot; <b>TAP TO OPEN</b>' + extra);
-    } else UI.setPrompt(null);
+    this.nearBoard = d < 7.5;
+    if (!this.nearBoard) { UI.setPrompt(null); return; }
+    const ev = EventSystem.next();
+    if (EventSystem.canEnter(ev)) {
+      // an event is up: one tap joins it and the race runs itself
+      UI.setPrompt('<b>' + ev.name + '</b> ' + (ev.status === 'live' ? 'LIVE' : 'OPEN') + ' &middot; TAP TO JOIN');
+    } else {
+      UI.setPrompt('EVENTS BOARD &middot; <b>TAP TO OPEN</b>');
+    }
   },
+  /** the proximity prompt: join a running event, else open the board */
   interact() {
     if (!this.nearBoard || this.mode === 'race') return;
+    const ev = EventSystem.next();
+    if (EventSystem.canEnter(ev)) this.joinEvent(ev);
+    else this.openBoard();
+  },
+  openBoard() {
+    if (this.mode === 'race') return;
     Audio2.click();
     UI.buildEvents();
     UI.openModal('mEvents');
+  },
+  /** enter a scheduled event - the intermission and race start on their own */
+  joinEvent(ev) {
+    if (!ev || this.mode === 'race') return;
+    Audio2.click();
+    this._joinedAt = ev.at;
+    UI.closeAll();
+    UI.toast('JOINED ' + ev.name, 'good');
+    Race.start(ev.dist, true);
+  },
+  /** standing at the board when an event goes live joins it automatically */
+  checkAutoJoin() {
+    if (this.mode === 'race' || !this.nearBoard) return;
+    const ev = EventSystem.next();
+    if (!ev || ev.status !== 'live' || this._joinedAt === ev.at) return;
+    if (document.querySelector('.modal:not(.hidden)')) return;
+    UI.toast(ev.name + ' IS STARTING', 'good');
+    this.joinEvent(ev);
+  },
+  /** tap-to-interact with world objects (the events board) */
+  pickWorld(sx, sy) {
+    if (!World.boardMesh || this.mode === 'race') return;
+    if (document.querySelector('.modal:not(.hidden)')) return;
+    _ndc.set((sx / window.innerWidth) * 2 - 1, -(sy / window.innerHeight) * 2 + 1);
+    _ray.setFromCamera(_ndc, this.camera);
+    if (!_ray.intersectObject(World.boardMesh, true).length) return;
+    const P = this.player;
+    const d = Math.hypot(P.x - CFG.BOARD.x, P.z - CFG.BOARD.z);
+    if (d > 42) { UI.toast('EVENTS BOARD - ' + Math.round(d) + 'M AWAY', 'warn'); return; }
+    this.openBoard();
   },
 
   updateCamera(dt) {
@@ -3626,6 +3690,8 @@ const Game = {
 };
 const _kv = { x: 0, y: 0 };
 const _v3a = new THREE.Vector3();
+const _ray = new THREE.Raycaster();
+const _ndc = new THREE.Vector2();
 
 /* ========== 22. BOOT ================================================ */
 const BOOT = [
