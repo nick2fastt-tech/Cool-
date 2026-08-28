@@ -380,7 +380,7 @@ input[type=range]::-moz-range-thumb{width:19px;height:19px;border:none;border-ra
   <canvas id="gl"></canvas>
 
   <!-- ============ ROBLOX-STYLE CHAT ============ -->
-  <div id="rbx" class="closed">
+  <div id="rbx">
     <div id="rbxToggle" class="ui-block" aria-label="Chat">
       <svg viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 11.5a8.4 8.4 0 0 1-11.9 7.6L3 21l1.9-5.6A8.4 8.4 0 1 1 21 11.5z"/></svg>
@@ -946,31 +946,57 @@ const Tex = {
     }
     ctx.putImageData(img, 0, 0);
   },
-  /** blue rubberised track: u runs across the 8 lanes, v along the track */
+  /** blue rubberised track: u runs across the 8 lanes, v along the track.
+      Lane lines are baked in so they follow the bends exactly. */
   track() {
-    const W = 512, H = 256, cv = this._cv(W, H), c = cv.getContext('2d');
+    const W = 1024, H = 512, cv = this._cv(W, H), c = cv.getContext('2d');
+    const LANES = 8, lw = W / LANES;
     c.fillStyle = PAL.track; c.fillRect(0, 0, W, H);
-    // subtle lane-to-lane shade variation
-    for (let l = 0; l < 8; l++) {
+    for (let l = 0; l < LANES; l++) {                        // per-lane tone
       c.fillStyle = l % 2 ? PAL.trackDark : PAL.track;
-      c.fillRect((l / 8) * W, 0, W / 8, H);
+      c.fillRect(l * lw, 0, lw, H);
     }
-    this.noise(c, W, H, 26);
-    // rubber crumb speckle
-    for (let i = 0; i < 5200; i++) {
-      c.fillStyle = 'rgba(255,255,255,' + (0.02 + Math.random() * 0.05) + ')';
-      c.fillRect(Math.random() * W, Math.random() * H, 1.4, 1.4);
+    this.noise(c, W, H, 20);
+    // rubber crumb: light flecks over darker pits
+    for (let i = 0; i < 26000; i++) {
+      const g = Math.random();
+      c.fillStyle = g > 0.55 ? 'rgba(190,225,255,' + (0.03 + Math.random() * 0.06) + ')'
+        : 'rgba(0,14,32,' + (0.03 + Math.random() * 0.07) + ')';
+      c.fillRect(Math.random() * W, Math.random() * H, 1.5, 1.5);
     }
-    // lane lines (9 of them, inner + outer edges included)
-    for (let l = 0; l <= 8; l++) {
-      const x = (l / 8) * W;
+    // faint brushed sheen along the running direction
+    for (let i = 0; i < 260; i++) {
+      c.fillStyle = 'rgba(255,255,255,0.012)';
+      c.fillRect(Math.random() * W, 0, 1 + Math.random() * 2, H);
+    }
+    // lane lines: the two boundary lines are inset so they are not
+    // half-clipped by the clamped edge of the strip
+    for (let l = 0; l <= LANES; l++) {
+      let x = l * lw;
+      if (l === 0) x += 3; else if (l === LANES) x -= 3;
+      c.fillStyle = 'rgba(255,255,255,.20)';
+      c.fillRect(x - 6, 0, 12, H);
       c.fillStyle = PAL.lane;
-      c.fillRect(x - 2.5, 0, 5, H);
-      c.fillStyle = 'rgba(255,255,255,.25)';
-      c.fillRect(x - 4, 0, 8, H);
+      c.fillRect(x - 3, 0, 6, H);
     }
     const t = this._finish(cv, 1, 1, 8);
     t.wrapS = THREE.ClampToEdgeWrapping;
+    return t;
+  },
+  /** painted numeral / label decal for the track surface */
+  decal(text, col, w, h) {
+    const key = 'd' + text + col;
+    if (this.cache[key]) return this.cache[key];
+    const cv = this._cv(w || 128, h || 128), c = cv.getContext('2d');
+    c.clearRect(0, 0, cv.width, cv.height);
+    c.fillStyle = col || '#eef6ff';
+    c.font = '900 ' + Math.round(cv.height * 0.78) + 'px system-ui,-apple-system,sans-serif';
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText(text, cv.width / 2, cv.height * 0.54);
+    const t = new THREE.CanvasTexture(cv);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.__keep = true;
+    this.cache[key] = t;
     return t;
   },
   grass() {
@@ -1096,7 +1122,7 @@ const Tex = {
       c.textAlign = 'right';
       c.fillStyle = ev.status === 'upcoming' ? '#3fe0ff' : '#48e08a';
       c.font = '700 22px system-ui,sans-serif';
-      c.fillText(ev.status === 'live' ? 'LIVE NOW' : ev.status === 'open' ? 'ENTRY OPEN' : fmtCountdown(ev.inMs), W - 26, y);
+      c.fillText(ev.status === 'live' ? 'LIVE ' + fmtCountdown(ev.endsIn) : ev.status === 'open' ? 'ENTRY OPEN' : fmtCountdown(ev.inMs), W - 26, y);
       c.textAlign = 'left';
     });
     if (this.boardTex) this.boardTex.needsUpdate = true;
@@ -1192,6 +1218,26 @@ const World = {
     g.setIndex(idx);
     return g;
   },
+  /** vertical band standing on a closed outline (kerb faces, facades) */
+  wall(pts, y0, y1, mat, uRepeat) {
+    const n = pts.length, pos = [], uv = [], idx = [];
+    for (let i = 0; i <= n; i++) {
+      const k = i % n, u = (i / n) * (uRepeat || 1);
+      pos.push(pts[k].x, y0, pts[k].z); uv.push(u, 0);
+      pos.push(pts[k].x, y1, pts[k].z); uv.push(u, 1);
+    }
+    for (let i = 0; i < n; i++) {
+      const a = i * 2;
+      idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    const m = new THREE.Mesh(g, mat);
+    return m;
+  },
   /** the infield "D" shape as a filled surface */
   infieldGeometry(r) {
     const S = Track.S, sh = new THREE.Shape();
@@ -1261,24 +1307,68 @@ const World = {
       root.add(bar);
     });
 
-    /* ---- finish line + start lines ---- */
+    /* ---- raised inner kerb rail ---- */
+    const kerbTop = new THREE.MeshLambertMaterial({ color: 0xf4f8fd, side: THREE.DoubleSide });
+    root.add(new THREE.Mesh(this.ringStrip(Track.outline(R0 - 0.36, nS * 2, nC * 2),
+      Track.outline(R0 - 0.30, nS * 2, nC * 2), 0.055, 8), kerbTop));
+    root.add(this.wall(Track.outline(R0 - 0.30, nS * 2, nC * 2), 0, 0.055, kerbTop));
+    root.add(this.wall(Track.outline(R0 - 0.36, nS * 2, nC * 2), 0, 0.055, kerbTop));
+
+    /* ---- finish line, lane numbers and colour-coded start marks ---- */
     const white = new THREE.MeshLambertMaterial({ color: 0xffffff, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
-    const finish = new THREE.Mesh(new THREE.PlaneGeometry(0.55, Track.LW * 8), white);
+    const decalMat = tex => new THREE.MeshBasicMaterial({ map: tex, transparent: true,
+      polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6, depthWrite: false });
+    const finish = new THREE.Mesh(new THREE.PlaneGeometry(0.60, Track.LW * 8), white);
     finish.rotation.x = -Math.PI / 2;
     finish.rotation.z = Math.PI / 2;
     finish.position.set(S / 2, 0.02, R0 + Track.LW * 4);
     root.add(finish);
-    const markGeo = new THREE.PlaneGeometry(0.4, 1.1);
+    // black run-in bar just before the line, as on a real finish
+    const preBar = new THREE.Mesh(new THREE.PlaneGeometry(0.16, Track.LW * 8),
+      new THREE.MeshLambertMaterial({ color: 0x0b1a33, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5 }));
+    preBar.rotation.x = -Math.PI / 2;
+    preBar.rotation.z = Math.PI / 2;
+    preBar.position.set(S / 2 - 0.55, 0.02, R0 + Track.LW * 4);
+    root.add(preBar);
+    const finishTxt = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 1.0), decalMat(Tex.decal('FINISH', '#eef6ff', 512, 128)));
+    finishTxt.rotation.x = -Math.PI / 2;
+    finishTxt.position.set(S / 2 - 2.6, 0.022, R0 + Track.LW * 8 + 1.6);
+    root.add(finishTxt);
+
     const tmp = { x: 0, z: 0, dx: 0, dz: 0 };
+    // lane numbers painted at the head of the home straight
+    for (let l = 0; l < 8; l++) {
+      const num = new THREE.Mesh(new THREE.PlaneGeometry(0.85, 0.85), decalMat(Tex.decal(String(l + 1), '#eef6ff', 128, 128)));
+      num.rotation.x = -Math.PI / 2;
+      num.rotation.z = -Math.PI / 2;
+      num.position.set(-S / 2 + 2.2, 0.022, Track.laneR(l));
+      root.add(num);
+    }
+    // colour-coded start marks, one per lane per event
+    const EVCOL = { 60: 0xffd75e, 100: 0xffffff, 200: 0x7ef0a4, 300: 0xff9646, 400: 0x3fe0ff, 500: 0xff5c6c };
+    const markGeo = new THREE.PlaneGeometry(0.30, Track.LW * 0.92);
     [60, 100, 200, 300, 400, 500].forEach(dist => {
+      const mat = new THREE.MeshLambertMaterial({ color: EVCOL[dist], polygonOffset: true,
+        polygonOffsetFactor: -5, polygonOffsetUnits: -5 });
+      const parts = [];
       for (let l = 0; l < 8; l++) {
         Track.at(l, Track.startD(l, dist), tmp);
-        const m = new THREE.Mesh(markGeo, white);
-        m.rotation.x = -Math.PI / 2;
-        m.rotation.z = -Math.atan2(tmp.dx, tmp.dz);
-        m.position.set(tmp.x, 0.018, tmp.z);
-        root.add(m);
+        const mm = new THREE.Matrix4();
+        mm.compose(new THREE.Vector3(tmp.x, 0.019, tmp.z),
+          new THREE.Quaternion().setFromEuler(
+            new THREE.Euler(-Math.PI / 2, 0, -Math.atan2(tmp.dx, tmp.dz) + Math.PI / 2, 'XYZ')),
+          new THREE.Vector3(1, 1, 1));
+        parts.push({ g: markGeo.clone(), m: mm });
       }
+      root.add(new THREE.Mesh(mergeGeos(parts), mat));
+      // distance label on the apron beside lane 1
+      Track.at(0, Track.startD(0, dist), tmp);
+      const lab = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.62),
+        decalMat(Tex.decal(dist + 'm', '#' + EVCOL[dist].toString(16).padStart(6, '0'), 256, 96)));
+      lab.rotation.x = -Math.PI / 2;
+      lab.rotation.z = -Math.atan2(tmp.dx, tmp.dz);
+      lab.position.set(tmp.x - tmp.dz * -1.35, 0.022, tmp.z - tmp.dx * 1.35);
+      root.add(lab);
     });
 
     this.buildStands(root, quality);
@@ -1337,23 +1427,7 @@ const World = {
     // front facade wall below the first row
     const facMat = new THREE.MeshLambertMaterial({ map: Tex.facade(), side: THREE.DoubleSide });
     facMat.map.repeat.set(60, 1);
-    const fa = Track.outline(standInner, segS, segC);
-    const fpos = [], fuv = [], fidx = [];
-    for (let i = 0; i <= fa.length; i++) {
-      const k = i % fa.length, u = i / fa.length * 60;
-      fpos.push(fa[k].x, 0, fa[k].z); fuv.push(u, 0);
-      fpos.push(fa[k].x, 0.6, fa[k].z); fuv.push(u, 1);
-    }
-    for (let i = 0; i < fa.length; i++) {
-      const a2 = i * 2;
-      fidx.push(a2, a2 + 2, a2 + 1, a2 + 1, a2 + 2, a2 + 3);
-    }
-    const fg = new THREE.BufferGeometry();
-    fg.setAttribute('position', new THREE.Float32BufferAttribute(fpos, 3));
-    fg.setAttribute('uv', new THREE.Float32BufferAttribute(fuv, 2));
-    fg.setIndex(fidx);
-    fg.computeVertexNormals();
-    root.add(new THREE.Mesh(fg, facMat));
+    root.add(this.wall(Track.outline(standInner, segS, segC), 0, 0.6, facMat, 60));
 
     /* ---- individual seats ----
        One tiny seat (pan + backrest = 4 triangles) instanced thousands
@@ -1666,10 +1740,42 @@ const AnimationSystem = {
 };
 
 /* ========== 10. ATHLETE RIG ========================================= */
-const BONE = { thigh: 0.45, shin: 0.44, foot: 0.20, hip: 0.94, torso: 0.50, neck: 0.17,
-  headR: 0.125, shX: 0.215, hipX: 0.10, uArm: 0.30, fArm: 0.29 };
+/* Athletic build: long legs, broad shoulders tapering to a narrow waist,
+   defined deltoids/quads/calves. Total height ~1.79m. */
+const BONE = { thigh: 0.465, shin: 0.455, foot: 0.21, hip: 0.95, torso: 0.52, neck: 0.155,
+  headR: 0.113, shX: 0.222, hipX: 0.105, uArm: 0.315, fArm: 0.295 };
 
-/** face texture: eyes + brow, drawn once per skin tone */
+/** merge geometries into one buffer so a whole limb costs a single draw call */
+function mergeGeos(items) {
+  const pos = [], nor = [], uv = [];
+  items.forEach(it => {
+    let g = it.g.index ? it.g.toNonIndexed() : it.g.clone();
+    if (it.m) g.applyMatrix4(it.m);
+    const P = g.attributes.position.array, N = g.attributes.normal.array;
+    const U = g.attributes.uv ? g.attributes.uv.array : null;
+    for (let i = 0; i < P.length; i++) pos.push(P[i]);
+    for (let i = 0; i < N.length; i++) nor.push(N[i]);
+    const n = P.length / 3;
+    for (let i = 0; i < n; i++) { uv.push(U ? U[i * 2] : 0, U ? U[i * 2 + 1] : 0); }
+    g.dispose();
+    if (g !== it.g) it.g.dispose();
+  });
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  out.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  out.__shared = true;
+  return out;
+}
+const _mtx = (x, y, z, sx, sy, sz, rx) => {
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(rx || 0, 0, 0));
+  m.compose(new THREE.Vector3(x, y, z), q, new THREE.Vector3(sx == null ? 1 : sx, sy == null ? 1 : sy, sz == null ? 1 : sz));
+  return m;
+};
+
+/** face texture: eyes, brow and mouth, drawn once per skin tone.
+    three's sphere UVs put u = 0.25 at +Z, so the face is drawn there. */
 const _faceCache = {};
 function faceTexture(skinHex) {
   const k = 'f' + skinHex;
@@ -1679,19 +1785,21 @@ function faceTexture(skinHex) {
   const c = cv.getContext('2d');
   c.fillStyle = '#' + skinHex.toString(16).padStart(6, '0');
   c.fillRect(0, 0, 256, 128);
-  // face is centred at u = 0.25 for three's sphere UV layout
-  const cx = 64;
-  c.fillStyle = '#12203a';
-  c.beginPath(); c.ellipse(cx - 15, 58, 6.5, 8, 0, 0, TAU); c.fill();
-  c.beginPath(); c.ellipse(cx + 15, 58, 6.5, 8, 0, 0, TAU); c.fill();
-  c.fillStyle = 'rgba(255,255,255,.85)';
-  c.beginPath(); c.ellipse(cx - 13, 55, 2.2, 2.6, 0, 0, TAU); c.fill();
-  c.beginPath(); c.ellipse(cx + 17, 55, 2.2, 2.6, 0, 0, TAU); c.fill();
-  c.strokeStyle = 'rgba(0,0,0,.30)'; c.lineWidth = 3.4; c.lineCap = 'round';
-  c.beginPath(); c.moveTo(cx - 22, 44); c.lineTo(cx - 8, 42); c.stroke();
-  c.beginPath(); c.moveTo(cx + 8, 42); c.lineTo(cx + 22, 44); c.stroke();
-  c.strokeStyle = 'rgba(0,0,0,.22)'; c.lineWidth = 2.6;
-  c.beginPath(); c.arc(cx, 74, 8, 0.25, Math.PI - 0.25); c.stroke();
+  const cx = 64, ey = 56;
+  c.fillStyle = '#f4f7fb';                                   // eye whites
+  c.beginPath(); c.ellipse(cx - 14, ey, 7.5, 6.4, 0, 0, TAU); c.fill();
+  c.beginPath(); c.ellipse(cx + 14, ey, 7.5, 6.4, 0, 0, TAU); c.fill();
+  c.fillStyle = '#20304d';                                   // irises
+  c.beginPath(); c.ellipse(cx - 13, ey + 0.5, 4.1, 4.6, 0, 0, TAU); c.fill();
+  c.beginPath(); c.ellipse(cx + 15, ey + 0.5, 4.1, 4.6, 0, 0, TAU); c.fill();
+  c.fillStyle = 'rgba(255,255,255,.9)';
+  c.beginPath(); c.ellipse(cx - 11.6, ey - 1.4, 1.5, 1.6, 0, 0, TAU); c.fill();
+  c.beginPath(); c.ellipse(cx + 16.4, ey - 1.4, 1.5, 1.6, 0, 0, TAU); c.fill();
+  c.strokeStyle = 'rgba(20,12,6,.42)'; c.lineWidth = 3.2; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(cx - 22, ey - 12); c.lineTo(cx - 7, ey - 14); c.stroke();
+  c.beginPath(); c.moveTo(cx + 7, ey - 14); c.lineTo(cx + 22, ey - 12); c.stroke();
+  c.strokeStyle = 'rgba(90,40,32,.5)'; c.lineWidth = 2.4;    // mouth
+  c.beginPath(); c.arc(cx + 1, ey + 16, 7.5, 0.32, Math.PI - 0.32); c.stroke();
   const t = new THREE.CanvasTexture(cv);
   t.colorSpace = THREE.SRGBColorSpace;
   t.__keep = true;
@@ -1699,7 +1807,7 @@ function faceTexture(skinHex) {
   return t;
 }
 
-/** nametag sprite (Roblox-ish label above the head) */
+/** floating nametag above an athlete's head */
 function nameSprite(text, color) {
   const cv = document.createElement('canvas');
   cv.width = 256; cv.height = 64;
@@ -1718,26 +1826,89 @@ function nameSprite(text, color) {
   return s;
 }
 
+/** Every athlete shares one set of body geometries - built once. */
+const RigGeo = {
+  built: false,
+  build() {
+    if (this.built) return;
+    this.built = true;
+    const S = (r, w, h, ts, tl, ps, pl) => new THREE.SphereGeometry(r, w || 10, h || 7, ts, tl, ps, pl);
+    const C = (rt, rb, h, seg) => new THREE.CylinderGeometry(rt, rb, h, seg || 10, 1, false);
+
+    // --- hips: running shorts, flared at the hem ---
+    this.pelvis = mergeGeos([
+      { g: C(0.158, 0.150, 0.20, 12), m: _mtx(0, -0.05, 0, 1, 1, 0.82) },
+      { g: C(0.150, 0.168, 0.10, 12), m: _mtx(0, -0.19, 0, 1, 1, 0.86) }
+    ]);
+    // --- torso: V-taper from waist to chest, elliptical cross-section ---
+    const prof = [[0.118, 0.00], [0.140, 0.07], [0.163, 0.17], [0.178, 0.28],
+      [0.180, 0.36], [0.168, 0.43], [0.128, 0.49], [0.072, 0.52]];
+    const lathe = new THREE.LatheGeometry(prof.map(v => new THREE.Vector2(v[0], v[1])), 14);
+    this.torso = mergeGeos([{ g: lathe, m: _mtx(0, 0, 0, 1, 1, 0.74) }]);
+    // --- trapezius / shoulder yoke, part of the chest ---
+    this.yoke = mergeGeos([
+      { g: C(0.062, 0.062, BONE.shX * 2 * 0.86, 8), m: (() => {
+          const m = new THREE.Matrix4();
+          m.compose(new THREE.Vector3(0, -0.035, 0),
+            new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI / 2)),
+            new THREE.Vector3(1, 1, 0.85));
+          return m; })() }
+    ]);
+    this.neck = mergeGeos([{ g: C(0.052, 0.066, 0.11, 8), m: _mtx(0, -0.085, 0) }]);
+    this.skull = S(BONE.headR, 14, 11);
+    this.skull.__shared = true;
+
+    // --- hair: cap with a natural hairline plus coverage down the nape ---
+    const cap = S(BONE.headR * 1.035, 14, 8, 0, TAU, 0, Math.PI * 0.44);
+    const back = S(BONE.headR * 1.035, 14, 8, Math.PI * 0.86, Math.PI * 1.28, Math.PI * 0.30, Math.PI * 0.34);
+    this.hair = mergeGeos([
+      { g: cap, m: _mtx(0, 0.008, -0.011, 0.985, 1.03, 1.02) },
+      { g: back, m: _mtx(0, 0.008, -0.011, 0.985, 1.03, 1.02) }
+    ]);
+
+    // --- arms: deltoid cap, tapered upper arm, forearm, fist ---
+    this.upperArm = mergeGeos([
+      { g: S(0.070, 10, 8), m: _mtx(0, 0.005, 0, 1, 0.92, 1) },
+      { g: C(0.062, 0.046, BONE.uArm - 0.05, 9), m: _mtx(0, -(BONE.uArm - 0.05) / 2 - 0.02, 0) }
+    ]);
+    this.foreArm = mergeGeos([
+      { g: S(0.049, 9, 7), m: _mtx(0, 0, 0) },
+      { g: C(0.050, 0.036, BONE.fArm - 0.05, 9), m: _mtx(0, -(BONE.fArm - 0.05) / 2 - 0.02, 0) },
+      { g: S(0.052, 8, 6), m: _mtx(0, -BONE.fArm, 0, 0.85, 1.15, 0.75) }
+    ]);
+    // --- legs: quad taper, knee, calf belly, ankle ---
+    this.thigh = mergeGeos([
+      { g: S(0.092, 10, 8), m: _mtx(0, 0, 0, 1, 0.95, 1) },
+      { g: C(0.098, 0.070, BONE.thigh - 0.06, 10), m: _mtx(0, -(BONE.thigh - 0.06) / 2 - 0.03, 0) }
+    ]);
+    this.shin = mergeGeos([
+      { g: S(0.070, 10, 8), m: _mtx(0, 0, 0, 1, 0.92, 1) },
+      { g: C(0.072, 0.040, BONE.shin - 0.05, 9), m: _mtx(0, -(BONE.shin - 0.05) / 2 - 0.025, 0) },
+      { g: S(0.062, 9, 7), m: _mtx(0, -0.135, -0.020, 0.95, 1.55, 1.05) }   // calf belly
+    ]);
+    this.shoe = mergeGeos([
+      { g: new THREE.BoxGeometry(0.098, 0.062, BONE.foot * 0.78), m: _mtx(0, -0.035, 0.036) },
+      { g: S(0.049, 8, 6), m: _mtx(0, -0.030, 0.115, 1, 0.72, 1.25) }
+    ]);
+    this.bib = new THREE.PlaneGeometry(0.23, 0.21);
+    this.bib.__shared = true;
+  }
+};
+
 class Rig {
   static HIP_DROP = 0.06;      // leg roots hang this far below the hip origin
   constructor(opts) {
+    RigGeo.build();
     const kit = opts.kit, skin = opts.skin, scale = opts.scale || 1;
-    const detail = opts.detail !== false;
-    this.detail = detail;
     const matSkin = new THREE.MeshLambertMaterial({ color: skin });
     const matFace = new THREE.MeshLambertMaterial({ map: faceTexture(skin) });
     const matKit = new THREE.MeshLambertMaterial({ color: kit });
     const matShorts = new THREE.MeshLambertMaterial({ color: PAL.shorts });
     const matShoe = new THREE.MeshLambertMaterial({ color: 0xf2f7ff });
     const matHair = new THREE.MeshLambertMaterial({ color: opts.hair || 0x241a12 });
-    this.mats = [matSkin, matFace, matKit, matShorts, matShoe, matHair];
+    const matBib = new THREE.MeshLambertMaterial({ map: Tex.bib(1), transparent: true });
+    this.mats = [matSkin, matFace, matKit, matShorts, matShoe, matHair, matBib];
 
-    const cap = (r, len, mat, rad) => {
-      const g = new THREE.CapsuleGeometry(r, len, 3, rad || 6);
-      const m = new THREE.Mesh(g, mat);
-      m.position.y = -len / 2;                  // hang from the joint
-      return m;
-    };
     this.root = new THREE.Group();
     this.body = new THREE.Group();
     this.root.add(this.body);
@@ -1747,27 +1918,18 @@ class Rig {
     this.hips = new THREE.Group();
     this.hips.position.y = BONE.hip;
     this.body.add(this.hips);
-    const pelvis = new THREE.Mesh(new THREE.CapsuleGeometry(0.145, 0.16, 3, 7), matShorts);
-    pelvis.position.y = -0.06;
-    this.hips.add(pelvis);
+    this.hips.add(new THREE.Mesh(RigGeo.pelvis, matShorts));
 
     // spine -> chest
     this.spine = new THREE.Group();
     this.hips.add(this.spine);
-    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.150, 0.30, 3, 8), matKit);
-    torso.position.y = 0.24;
-    torso.scale.z = 0.82;
-    this.spine.add(torso);
+    this.spine.add(new THREE.Mesh(RigGeo.torso, matKit));
     this.chest = new THREE.Group();
     this.chest.position.y = BONE.torso;
     this.spine.add(this.chest);
-    const shoulders = new THREE.Mesh(new THREE.CapsuleGeometry(0.098, 0.30, 3, 7), matKit);
-    shoulders.rotation.z = Math.PI / 2;
-    shoulders.position.y = -0.04;
-    this.chest.add(shoulders);
-    // race bib
-    this.bib = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.22), new THREE.MeshLambertMaterial({ map: Tex.bib(1), transparent: true }));
-    this.bib.position.set(0, -0.16, 0.142);
+    this.chest.add(new THREE.Mesh(RigGeo.yoke, matSkin));
+    this.bib = new THREE.Mesh(RigGeo.bib, matBib);
+    this.bib.position.set(0, 0.30, 0.140);
     this.bib.visible = false;
     this.spine.add(this.bib);
 
@@ -1775,33 +1937,24 @@ class Rig {
     this.head = new THREE.Group();
     this.head.position.y = BONE.neck;
     this.chest.add(this.head);
-    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.07, 0.1, 6), matSkin);
-    neck.position.y = -0.09;
-    this.head.add(neck);
-    const skull = new THREE.Mesh(new THREE.SphereGeometry(BONE.headR, 12, 9), matFace);
-    skull.scale.set(0.94, 1.06, 1.0);
+    this.head.add(new THREE.Mesh(RigGeo.neck, matSkin));
+    const skull = new THREE.Mesh(RigGeo.skull, matFace);
+    skull.scale.set(0.95, 1.06, 1.0);
     this.head.add(skull);
-    if (detail) {
-      const hair = new THREE.Mesh(new THREE.SphereGeometry(BONE.headR * 1.05, 10, 7, 0, TAU, 0, Math.PI * 0.36), matHair);
-      hair.position.y = 0.020;
-      hair.scale.set(0.99, 1.04, 1.02);
-      this.head.add(hair);
-    }
+    const hair = new THREE.Mesh(RigGeo.hair, matHair);
+    hair.scale.set(0.95, 1.06, 1.0);
+    this.head.add(hair);
 
     // arms
     const mkArm = side => {
       const sh = new THREE.Group();
-      sh.position.set(side * BONE.shX, -0.03, 0);
+      sh.position.set(side * BONE.shX, -0.045, 0);
       this.chest.add(sh);
-      sh.add(cap(0.058, BONE.uArm - 0.06, matSkin));
+      sh.add(new THREE.Mesh(RigGeo.upperArm, matSkin));
       const el = new THREE.Group();
       el.position.y = -BONE.uArm;
       sh.add(el);
-      el.add(cap(0.05, BONE.fArm - 0.07, matSkin));
-      const hand = new THREE.Mesh(new THREE.SphereGeometry(0.055, 6, 5), matSkin);
-      hand.position.y = -BONE.fArm;
-      hand.scale.set(0.8, 1.15, 0.7);
-      el.add(hand);
+      el.add(new THREE.Mesh(RigGeo.foreArm, matSkin));
       return { sh, el };
     };
     this.armL = mkArm(-1); this.armR = mkArm(1);
@@ -1811,17 +1964,15 @@ class Rig {
       const hip = new THREE.Group();
       hip.position.set(side * BONE.hipX, -Rig.HIP_DROP, 0);
       this.hips.add(hip);
-      hip.add(cap(0.082, BONE.thigh - 0.09, matSkin, 7));
+      hip.add(new THREE.Mesh(RigGeo.thigh, matSkin));
       const knee = new THREE.Group();
       knee.position.y = -BONE.thigh;
       hip.add(knee);
-      knee.add(cap(0.062, BONE.shin - 0.10, matSkin, 6));
+      knee.add(new THREE.Mesh(RigGeo.shin, matSkin));
       const ankle = new THREE.Group();
       ankle.position.y = -BONE.shin;
       knee.add(ankle);
-      const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.075, BONE.foot), matShoe);
-      shoe.position.set(0, -0.035, 0.045);
-      ankle.add(shoe);
+      ankle.add(new THREE.Mesh(RigGeo.shoe, matShoe));
       return { hip, knee, ankle };
     };
     this.legL = mkLeg(-1); this.legR = mkLeg(1);
@@ -1833,16 +1984,13 @@ class Rig {
     const run = this._runAngles(p, phase, motion || { speed: 0, cadence: 0 });
     const c = clamp(p.crouch, 0, 1);
     let A = run;
-    if (c > 0.001) {
-      const cr = this._crouchAngles(p.setF);
-      A = this._mix(run, cr, c);
-    }
+    if (c > 0.001) A = this._mix(run, this._crouchAngles(p.setF), c);
     // the gait solver already picked a hip height that puts the stance
     // foot exactly on the track, so just smooth it
     this.hipY = dt ? damp(this.hipY, A.hipY, 22, dt) : A.hipY;
     this.hips.position.y = this.hipY + A.bob;
 
-    // the pelvis only rolls; the twist lives in the spine so the planted
+    // the pelvis only rolls; the twist lives in the spine so a planted
     // foot is never dragged sideways by hip rotation
     this.hips.rotation.set(0, 0, A.hipRoll * 0.5);
     // +X rotation tips the torso forward (toward +Z, the facing direction)
@@ -1977,7 +2125,7 @@ class Rig {
     this.root.traverse(o => { if (o.isMesh) o.castShadow = on; });
   }
   dispose() {
-    this.root.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+    this.root.traverse(o => { if (o.geometry && !o.geometry.__shared) o.geometry.dispose(); });
     this.mats.forEach(m => m.dispose());
   }
 }
@@ -2110,6 +2258,17 @@ class Athlete {
     this.bubble = null;
   }
   setVisible(v) { this.object.visible = v; }
+  /** release this athlete's GPU resources (rig, nametag, any bubble) */
+  dispose() {
+    this.clearBubble();
+    if (this.tag) {
+      this.object.remove(this.tag);
+      if (this.tag.material.map) this.tag.material.map.dispose();
+      this.tag.material.dispose();
+      this.tag = null;
+    }
+    this.rig.dispose();
+  }
 }
 
 /* ========== 12. BOTS ================================================ */
@@ -2230,7 +2389,7 @@ const Net = {
   emit(e, d) { (this.handlers[e] || []).forEach(f => f(d)); },
   connect(count, scene) {
     // FUTURE: this.ws = new WebSocket(SERVER_URL); this.ws.onmessage = ...
-    this.roster.forEach(b => { scene.remove(b.object); b.rig.dispose(); });
+    this.roster.forEach(b => { scene.remove(b.object); b.dispose(); });
     this.roster.length = 0;
     const names = BOT_NAMES.slice();
     const n = clamp(count, 2, 19);
@@ -2257,7 +2416,7 @@ const Net = {
    Top-left translucent window, per-user coloured names, click-to-chat
    bar, fade when idle, and speech bubbles over the athlete's head.    */
 const Chat = {
-  log: [], unread: 0, open: false, typing: false, nextBot: 8, idleT: 0,
+  log: [], unread: 0, open: true, typing: false, nextBot: 8, idleT: 0,
   /* Roblox's classic chat name palette */
   COLORS: ['#FD2943', '#01A2FF', '#02B857', '#6B327C', '#DA8541', '#F5CD30', '#E8BAC8', '#D7C59A'],
   colorFor(name) {
@@ -2346,8 +2505,12 @@ const Chat = {
 
 /* ========== 15. EVENT SYSTEM ======================================== */
 const EventSystem = {
-  SLOTS: [{ m: 0, d: 60 }, { m: 10, d: 100 }, { m: 20, d: 200 }, { m: 30, d: 300 }, { m: 40, d: 400 }, { m: 50, d: 500 }],
-  OPEN_MS: 90 * 1000, LIVE_MS: 120 * 1000,
+  // one event every 10 minutes, rotating the six V1.0 distances.
+  // Each stays live for 2-3 minutes so there is time to walk over and enter.
+  SLOTS: [{ m: 0, d: 60, dur: 120 }, { m: 10, d: 100, dur: 135 }, { m: 20, d: 200, dur: 150 },
+    { m: 30, d: 300, dur: 165 }, { m: 40, d: 400, dur: 180 }, { m: 50, d: 500, dur: 180 }],
+  OPEN_MS: 90 * 1000,          // entry opens this long before the gun
+  INTERMISSION: 10,            // seconds between entering an event and the walk-in
   list() {
     const now = Date.now(), out = [];
     for (let hOff = 0; hOff <= 1; hOff++) {
@@ -2356,9 +2519,13 @@ const EventSystem = {
         d.setMinutes(s.m, 0, 0);
         d.setHours(d.getHours() + hOff);
         const at = d.getTime(), inMs = at - now;
-        if (inMs < -this.LIVE_MS) continue;
-        out.push({ dist: s.d, at, inMs, name: s.d + 'M SPRINT',
-          status: inMs <= 0 ? 'live' : (inMs <= this.OPEN_MS ? 'open' : 'upcoming') });
+        const durMs = s.dur * 1000;
+        const endsAt = at + durMs, endsIn = endsAt - now;
+        if (endsIn < 0) continue;                       // event is over
+        out.push({
+          dist: s.d, at, inMs, endsAt, endsIn, durMs, name: s.d + 'M SPRINT',
+          status: inMs <= 0 ? 'live' : (inMs <= this.OPEN_MS ? 'open' : 'upcoming')
+        });
       }
     }
     out.sort((a, b) => a.at - b.at);
@@ -2553,14 +2720,16 @@ class Player extends Athlete {
 /* ========== 18. RACE ================================================ */
 const Race = {
   active: false, phase: 'idle', dist: 100,
-  t: 0, goAt: 0, phaseT: 0, setDelay: 1.6, stall: 0,
+  t: 0, goAt: 0, phaseT: 0, setDelay: 1.6, stall: 0, interT: 0, _beep: 0,
   entrants: [], bots: [], results: [], scheduled: false, finishHold: 0,
   blocks: null,
 
   start(dist, scheduled) {
     const P = Game.player;
     this.dist = dist; this.scheduled = !!scheduled;
-    this.active = true; this.phase = 'walkin';
+    this.active = true; this.phase = 'intermission';
+    this.interT = scheduled ? EventSystem.INTERMISSION : 3;   // events get the full 10s
+    this._beep = Math.ceil(this.interT);
     this.t = 0; this.phaseT = 0; this.goAt = 0; this.finishHold = 0; this.stall = 0;
     this.results.length = 0;
     this.setDelay = rand(1.25, 2.25);
@@ -2571,13 +2740,13 @@ const Race = {
     P.lane = lanes.pop();
     P.mode = 'race';
     P.resetRace(dist);
-    P.raceD = -2.4;
+    P.raceD = -3.4;
     P.blockState = null;
     pool.forEach(b => {
       b.lane = lanes.pop();
       b.mode = 'race';
       b.prepRace(dist);
-      b.raceD = -2.4;
+      b.raceD = -3.4;
       b.blockState = null;
       b.dipping = false;
       b.clearBubble();
@@ -2595,6 +2764,7 @@ const Race = {
     this.rankField();
     Game.mode = 'race';
     UI.enterRaceMode(dist);
+    UI.big('INTERMISSION', 'RACE STARTS IN ' + Math.round(this.interT) + 'S', '');
     Audio2.crowd(1);
   },
 
@@ -2640,6 +2810,20 @@ const Race = {
     this.phaseT += dt;
     const P = Game.player;
     switch (this.phase) {
+      case 'intermission': {
+        this.interT -= dt;
+        // athletes wait behind the blocks; a beep marks each of the last 3s
+        const secs = Math.ceil(this.interT);
+        if (secs < this._beep && secs <= 3 && secs > 0) { this._beep = secs; Audio2.tone(560, 0.09, 'sine', 0.10); }
+        this.entrants.forEach(a => {
+          a.speed = 0;
+          const pt = Track.at(a.lane, Track.startD(a.lane, this.dist) + a.raceD, a._pt);
+          a.x = pt.x; a.z = pt.z;
+          a.heading = Math.atan2(pt.dx, pt.dz);
+        });
+        if (this.interT <= 0) { this.interT = 0; this.setPhase('walkin'); }
+        break;
+      }
       case 'walkin':
         this.entrants.forEach(a => {
           if (a.raceD < -0.02) { a.speed = 1.25; a.raceD = Math.min(0, a.raceD + a.speed * dt); }
@@ -2686,6 +2870,7 @@ const Race = {
   },
   setPhase(p) {
     this.phase = p; this.phaseT = 0;
+    if (p === 'walkin') UI.big('TO YOUR BLOCKS', this.dist + 'M', '');
     if (p === 'marks') { UI.big('ON YOUR MARKS', this.dist + 'M', ''); Audio2.marks(); }
     if (p === 'set') { UI.big('SET', 'HOLD IT', ''); Audio2.set(); }
     if (p === 'go') { UI.big('GO!', 'ALTERNATE L / R', 'go'); Audio2.gun(); UI.showTapZones(true); }
@@ -2965,7 +3150,8 @@ const UI = {
     const P = Game.player;
     if (!P || !Race.active) return;
     const e = this.el;
-    e.raceTime.textContent = (Race.phase === 'running' || Race.phase === 'done') ? fmtRaceTime(Race.t) : '0.00';
+    if (Race.phase === 'intermission') e.raceTime.textContent = Math.ceil(Race.interT).toFixed(0);
+    else e.raceTime.textContent = (Race.phase === 'running' || Race.phase === 'done') ? fmtRaceTime(Race.t) : '0.00';
     e.raceSpd.innerHTML = P.speed.toFixed(1) + '<small> m/s</small>';
     const left = Math.max(0, Race.dist - P.raceD);
     e.raceLeft.textContent = left.toFixed(0) + ' m';
@@ -2984,7 +3170,8 @@ const UI = {
     const sp = clamp(P.stamina / P.staminaMax, 0, 1);
     e.raceStamBar.style.width = (sp * 100).toFixed(0) + '%';
     e.raceStamBar.classList.toggle('low', sp < 0.3);
-    e.raceSplit.textContent = Race.phase === 'running' ? (P.reaction ? 'RT ' + P.reaction.toFixed(3) + 's' : 'REACT!') : 'READY';
+    e.raceSplit.textContent = Race.phase === 'intermission' ? 'INTERMISSION'
+      : Race.phase === 'running' ? (P.reaction ? 'RT ' + P.reaction.toFixed(3) + 's' : 'REACT!') : 'READY';
     this.el.dipBtn.classList.toggle('on', Race.phase === 'running' && !P.finished && !P.dipping && left < 10 && left > 0);
   },
   enterRaceMode(dist) {
@@ -3089,8 +3276,10 @@ const UI = {
       const hh = (t.getHours() < 10 ? '0' : '') + t.getHours(), mm = (t.getMinutes() < 10 ? '0' : '') + t.getMinutes();
       return '<div class="rowItem' + (ev.status !== 'upcoming' ? ' live' : '') + '">' +
         '<div class="ico">' + ev.dist + '</div>' +
-        '<div class="mid"><div class="nm">' + ev.name + '</div><div class="dt">' + hh + ':' + mm + ' &middot; ' + st + '</div></div>' +
-        '<div class="rt"><div class="cd2 mono" data-cd="' + ev.at + '">' + (ev.status === 'live' ? 'LIVE' : fmtCountdown(ev.inMs)) + '</div>' +
+        '<div class="mid"><div class="nm">' + ev.name + '</div><div class="dt">' + hh + ':' + mm +
+        ' &middot; ' + (ev.durMs / 60000).toFixed(1) + ' MIN &middot; ' + st + '</div></div>' +
+        '<div class="rt"><div class="cd2 mono" data-cd="' + ev.at + '" data-end="' + ev.endsAt + '">' +
+        (ev.status === 'live' ? 'ENDS ' + fmtCountdown(ev.endsIn) : fmtCountdown(ev.inMs)) + '</div>' +
         (EventSystem.canEnter(ev) ? '<button class="btn primary" style="min-height:32px;margin-top:5px;padding:0 12px" data-enter="' + ev.dist + '">Enter</button>' : '') +
         '</div></div>';
     }).join('');
@@ -3103,8 +3292,8 @@ const UI = {
   tickEventCountdowns() {
     const now = Date.now();
     this.el.evList.querySelectorAll('[data-cd]').forEach(el => {
-      const d = +el.dataset.cd - now;
-      el.textContent = d <= 0 ? 'LIVE' : fmtCountdown(d);
+      const d = +el.dataset.cd - now, e2 = +el.dataset.end - now;
+      el.textContent = d > 0 ? fmtCountdown(d) : (e2 > 0 ? 'ENDS ' + fmtCountdown(e2) : 'CLOSED');
     });
   },
   buildLbTabs() {
@@ -3169,7 +3358,7 @@ const UI = {
     this.el.rbxLog.appendChild(d);
     while (this.el.rbxLog.children.length > 40) this.el.rbxLog.removeChild(this.el.rbxLog.firstChild);
     this.el.rbxLog.scrollTop = this.el.rbxLog.scrollHeight;
-    if (!Chat.open && !m.sys) { this.el.rbx.classList.remove('closed'); Chat.open = true; }
+
   }
 };
 
@@ -3382,7 +3571,7 @@ const Game = {
     let tx, ty, tz, lx, ly, lz, k = 5;
     if (this.mode === 'race') {
       const ph = Race.phase;
-      if (ph === 'walkin' || ph === 'marks' || ph === 'set') {
+      if (ph === 'intermission' || ph === 'walkin' || ph === 'marks' || ph === 'set') {
         const fwd = P.heading, side = fwd + Math.PI / 2;
         tx = P.x - Math.sin(fwd) * 3.0 + Math.sin(side) * 2.6;
         tz = P.z - Math.cos(fwd) * 3.0 + Math.cos(side) * 2.6;
