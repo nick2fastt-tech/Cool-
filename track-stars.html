@@ -366,6 +366,31 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:19px;heigh
   background:var(--aura);margin-top:-7px;box-shadow:0 0 12px rgba(63,224,255,.7)}
 input[type=range]::-moz-range-track{height:5px;border-radius:4px;background:rgba(255,255,255,.14)}
 input[type=range]::-moz-range-thumb{width:19px;height:19px;border:none;border-radius:50%;background:var(--aura)}
+#logVer{display:flex;align-items:baseline;gap:9px;padding-bottom:10px;margin-bottom:12px;
+  border-bottom:1px solid rgba(29,58,104,.6)}
+#logVerNum{font-size:26px;font-weight:900;letter-spacing:.04em}
+#logVerNum span{color:var(--aura)}
+#logVerTag{font-size:9px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase}
+.logGroup{margin-bottom:14px}
+.logHead{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.logHead .v{font-size:12px;font-weight:900;letter-spacing:.12em;color:var(--aura)}
+.logHead .d{font-size:9px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase}
+.logItem{display:flex;gap:9px;padding:7px 9px;border-radius:9px;background:rgba(255,255,255,.035);
+  border:1px solid var(--line);margin-bottom:5px;font-size:12px;line-height:1.45}
+.logItem .tag{flex:0 0 auto;font-size:8px;font-weight:900;letter-spacing:.1em;padding:3px 6px;border-radius:5px;
+  text-transform:uppercase;height:fit-content}
+.logItem .tag.new{background:rgba(72,224,138,.2);color:var(--ok)}
+.logItem .tag.fix{background:rgba(255,181,71,.18);color:var(--warn)}
+.logItem .tag.chg{background:rgba(63,224,255,.16);color:var(--aura)}
+.logItem .tx{color:#cfe0f4}
+.soonRow{display:flex;align-items:center;gap:11px;padding:11px;border-radius:12px;
+  background:rgba(255,255,255,.03);border:1px dashed rgba(63,224,255,.35);margin-bottom:8px;opacity:.85}
+.soonRow .ico{width:40px;height:40px;border-radius:11px;background:rgba(63,224,255,.09);
+  display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.soonRow .ico svg{width:20px;height:20px}
+.soonRow .mid{flex:1;min-width:0}
+.soonRow .nm{font-size:13px;font-weight:800;letter-spacing:.06em}
+.soonRow .dt{font-size:9px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase;margin-top:2px}
 .soonBox{text-align:center;padding:26px 16px}
 .soonBox .big{font-size:14px;font-weight:900;letter-spacing:.24em;color:var(--aura);text-transform:uppercase}
 .soonBox .sm{margin-top:9px;font-size:11px;color:var(--muted);line-height:1.6}
@@ -482,6 +507,11 @@ input[type=range]::-moz-range-thumb{width:19px;height:19px;border:none;border-ra
           <svg viewBox="0 0 24 24" fill="none" stroke="#e9f4ff" stroke-width="1.9" stroke-linecap="round">
             <path d="M4 20V11"/><path d="M12 20V4"/><path d="M20 20v-6"/></svg>
         </div>
+        <div class="railBtn ui-block" id="btnLog" aria-label="Update log">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#e9f4ff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/>
+            <path d="M14 3v6h6"/><path d="M9 13h6"/><path d="M9 17h6"/></svg>
+        </div>
         <div class="railBtn ui-block" id="btnInv" aria-label="Inventory (coming soon)">
           <svg viewBox="0 0 24 24" fill="none" stroke="#9aa7b8" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
             <path d="M3 8h18v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M8 8V6a4 4 0 0 1 8 0v2"/></svg>
@@ -561,9 +591,56 @@ input[type=range]::-moz-range-thumb{width:19px;height:19px;border:none;border-ra
         </div>
         <div class="h-label" style="margin-bottom:8px">Scheduled Events</div>
         <div id="evList"></div>
+        <div class="soonRow" style="margin-top:12px">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#3fe0ff" stroke-width="1.8"
+            stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/></svg></div>
+          <div class="mid"><div class="nm">Indoor Arena</div><div class="dt">Banked 200m &middot; Indoor season</div></div>
+          <span class="pill">Coming Soon</span>
+        </div>
         <div class="h-label" style="margin:14px 0 8px">Open Track - Practice Any Event</div>
         <div class="grid2" id="distGrid"></div>
         <div class="note">Scheduled events run three heats and a final, and award bonus XP. Practice sessions are a single final.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ UPDATE LOG ============ -->
+  <div class="modal hidden" id="mLog">
+    <div class="sheet card">
+      <div class="sheetHead">
+        <div><div class="ttl">What's New</div><div class="sub">Track Stars Update Log</div></div>
+        <div class="xBtn" data-close="mLog">&#10005;</div>
+      </div>
+      <div class="sheetBody">
+        <div id="logVer"><div id="logVerNum">V<span>1.1</span></div><div id="logVerTag">Current Version</div></div>
+        <div id="logList"></div>
+        <button class="btn primary" id="logGo" style="width:100%;margin-top:6px">Let's Run</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ INDOOR ARENA (COMING SOON) ============ -->
+  <div class="modal hidden" id="mIndoor">
+    <div class="sheet card">
+      <div class="sheetHead">
+        <div><div class="ttl">Indoor Arena</div><div class="sub">Locked</div></div>
+        <div class="xBtn" data-close="mIndoor">&#10005;</div>
+      </div>
+      <div class="sheetBody">
+        <div class="soonBox">
+          <svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="#3fe0ff" stroke-width="1.5"
+            stroke-linecap="round" stroke-linejoin="round" style="opacity:.85">
+            <path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>
+          <div class="big" style="margin-top:14px">Coming Soon</div>
+          <div class="sm">The Track Stars indoor arena is under construction.<br><br>
+            A banked 200m indoor track, indoor 60m and 60m hurdles, and an all-weather
+            season that runs whatever the sky is doing outside.</div>
+        </div>
+        <div class="soonRow">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#3fe0ff" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+          <div class="mid"><div class="nm">Indoor Season</div><div class="dt">Not yet scheduled</div></div>
+          <span class="pill">Soon</span>
+        </div>
       </div>
     </div>
   </div>
@@ -718,13 +795,14 @@ function(t,e){"object"==typeof exports&&"undefined"!=typeof module?e(exports):"f
 
 /* ========== 1. CONFIG + UTIL ========================================= */
 const CFG = {
-  VERSION: '1.0.0',
+  VERSION: '1.1.0',
   SAVE_KEY: 'trackstars_save_v1',
   DISTANCES: [60, 100, 200, 300, 400, 500],   // track sprints (kept for the oval maths)
   TRACK: { STRAIGHT: 100, INNER_R: 31.83, LANE_W: 1.22, LANES: 8 },
   BOTS: { low: 6, med: 10, high: 12 },
   RUN: { STRIDE: 2.28, V_CAP: 12.2 },
   BOARD: { x: 0, z: 26 },         // the events board out on the field
+  INDOOR: { x: -92, z: 0 },       // the indoor arena doors (coming soon)
   LJ: { z: -29, board: 8, len: 34, pit: 9 },      // long jump runway + pit
   HJ: { x: -33, z: 10, span: 4 }                  // high jump uprights
 };
@@ -753,6 +831,27 @@ function fmtMark(e, m) {
   if (!e || e.unit === 'time') return fmtRaceTime(m);
   return m.toFixed(2) + 'm';
 }
+
+/* ---- update log, shown on the first launch of each new version ---- */
+const CHANGELOG = [
+  { v: '1.1', date: 'Aug 2026', items: [
+    ['new', 'Events now run as full meets: three semifinal heats, medals on the combined times, then a final for the best eight.'],
+    ['new', 'Heats you are not in can be watched from a camera on the leader, or skipped.'],
+    ['new', '60m hurdles - five flights, with a HURDLE button on the approach.'],
+    ['new', 'Long jump - build speed down the runway and hit the board without fouling. Three attempts.'],
+    ['new', 'High jump - tap the timing meter to clear the bar. Three misses at a height ends your competition.'],
+    ['chg', 'Scheduled events start on their own now. There is nothing to join - the intermission has a LEAVE button if you want out.'],
+    ['chg', 'Nine events rotate on a slot every five minutes, each live for two to three minutes.'],
+    ['fix', 'The joystick no longer curls you into a circle - every direction, including backwards, now runs dead straight.'],
+    ['fix', 'The events board can be tapped directly, and the proximity prompt actually responds.'],
+    ['fix', 'Athletes rebuilt with athletic proportions and a proper hairline.']
+  ] },
+  { v: '1.0', date: 'Aug 2026', items: [
+    ['new', 'Track Stars: a 400m facility, six sprint distances, blocks, heats of bots and a tap-driven running system.'],
+    ['new', 'Level and XP progression, personal bests, leaderboards and local saves.'],
+    ['new', 'Real-time clock with a day/night cycle, scheduled events and a living world of AI athletes.']
+  ] }
+];
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
@@ -793,6 +892,7 @@ const SaveSystem = {
         races: 0, wins: 0, podiums: 0, distanceRun: 0 },
       records: {}, history: [], leaderboards: null,
       settings: { volume: 0.6, gfx: 'med', opt: 'balanced', shadow: 'on', fps: 'off' },
+      seenVersion: null,
       lastSeen: Date.now()
     };
   },
@@ -1189,6 +1289,25 @@ const Tex = {
     }
     if (this.skyTex) this.skyTex.needsUpdate = true;
   },
+  /** lit signage (indoor arena doors) */
+  sign(line1, line2) {
+    const key = 's' + line1 + line2;
+    if (this.cache[key]) return this.cache[key];
+    const cv = this._cv(512, 128), c = cv.getContext('2d');
+    c.fillStyle = 'rgba(4,14,30,.92)';
+    if (c.roundRect) { c.beginPath(); c.roundRect(0, 0, 512, 128, 14); c.fill(); } else c.fillRect(0, 0, 512, 128);
+    c.strokeStyle = 'rgba(63,224,255,.65)'; c.lineWidth = 4; c.strokeRect(6, 6, 500, 116);
+    c.textAlign = 'center';
+    c.fillStyle = '#3fe0ff'; c.font = '900 44px system-ui,sans-serif';
+    c.fillText(line1, 256, 60);
+    c.fillStyle = 'rgba(233,244,255,.72)'; c.font = '700 24px system-ui,sans-serif';
+    c.fillText(line2, 256, 98);
+    const t = new THREE.CanvasTexture(cv);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.__keep = true;
+    this.cache[key] = t;
+    return t;
+  },
   /** live screen on the events board out in the field */
   boardScreen() {
     const cv = this._cv(512, 256);
@@ -1289,7 +1408,7 @@ const Tex = {
    bowl with individually placed seats (one InstancedMesh, one draw
    call) and spectators sitting in them.                               */
 const World = {
-  root: null, seats: null, crowd: null, crowdHead: null, hjBar: null,
+  root: null, seats: null, crowd: null, crowdHead: null, hjBar: null, indoorMesh: null,
   lamps: [], lampLights: [], boardMesh: null, beacon: null,
   spawns: [], quality: 'med', _crowdT: 0,
 
@@ -1358,7 +1477,8 @@ const World = {
     const root = this.root = new THREE.Group();
     scene.add(root);
     this.lamps.length = 0; this.lampLights.length = 0; this.spawns.length = 0;
-    this.seats = null; this.crowd = null; this.crowdHead = null; this.crowdSlots = null; this.hjBar = null;
+    this.seats = null; this.crowd = null; this.crowdHead = null; this.crowdSlots = null;
+    this.hjBar = null; this.indoorMesh = null;
     const S = Track.S, R0 = Track.R0, OR = Track.outerR;
     const nS = quality === 'low' ? 8 : 16, nC = quality === 'low' ? 16 : 34;
 
@@ -1477,6 +1597,7 @@ const World = {
     this.buildScoreboard(root);
     this.buildEventsBoard(root);
     this.buildFieldVenues(root);
+    this.buildIndoor(root);
     this.buildProps(root);
 
     const spots = [[0, 33], [-24, 30], [22, 31], [-S / 2 + 12, OR + 5], [S / 2 - 10, OR + 5],
@@ -1777,6 +1898,51 @@ const World = {
       new THREE.MeshLambertMaterial({ color: 0x2f5fa8 }));
     mat.position.set(HJ.x + 1.6, 0.28, HJ.z);
     root.add(mat);
+  },
+
+  /** Indoor arena: doors at the west end you can walk up to, with the hall
+      itself rising behind them. Locked for now - the season is coming. */
+  buildIndoor(root) {
+    const I = CFG.INDOOR, g = new THREE.Group();
+    const wall = new THREE.MeshLambertMaterial({ map: Tex.facade(), side: THREE.DoubleSide });
+    wall.map.repeat.set(10, 2);
+    const steel = new THREE.MeshLambertMaterial({ color: PAL.steel });
+    const glow = new THREE.MeshBasicMaterial({ color: 0x3fe0ff });
+    // entrance block
+    const front = new THREE.Mesh(new THREE.BoxGeometry(2.0, 6.0, 16), wall);
+    front.position.set(I.x, 3.0, I.z);
+    front.castShadow = true;
+    g.add(front);
+    // doorway
+    const door = new THREE.Mesh(new THREE.BoxGeometry(0.35, 3.4, 4.6),
+      new THREE.MeshLambertMaterial({ color: 0x081326 }));
+    door.position.set(I.x + 0.95, 1.7, I.z);
+    g.add(door);
+    [-2.5, 2.5].forEach(z => {
+      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 4.2, 8), steel);
+      col.position.set(I.x + 1.0, 2.1, I.z + z);
+      g.add(col);
+    });
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 6.0), glow);
+    lintel.position.set(I.x + 1.0, 4.05, I.z);
+    g.add(lintel);
+    // lit sign over the doors
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(7.4, 1.85),
+      new THREE.MeshBasicMaterial({ map: Tex.sign('INDOOR ARENA', 'COMING SOON'), transparent: true }));
+    sign.position.set(I.x + 1.05, 5.2, I.z);
+    sign.rotation.y = Math.PI / 2;
+    g.add(sign);
+    // the hall behind, big enough to read from the track
+    const hall = new THREE.Mesh(new THREE.BoxGeometry(40, 13, 34), wall);
+    hall.position.set(I.x - 21, 6.5, I.z);
+    g.add(hall);
+    const roof = new THREE.Mesh(new THREE.CylinderGeometry(17.5, 17.5, 40, 16, 1, false, 0, Math.PI),
+      new THREE.MeshLambertMaterial({ color: 0x1a2c4d }));
+    roof.rotation.z = Math.PI / 2;
+    roof.position.set(I.x - 21, 13, I.z);
+    g.add(roof);
+    root.add(g);
+    this.indoorMesh = g;
   },
 
   buildProps(root) {
@@ -3786,11 +3952,23 @@ const Input = {
   },
   move(e) {
     if (e.pointerId === this.joyId) {
-      const dx = e.clientX - this.joyBase.x, dy = e.clientY - this.joyBase.y, R = 58;
-      const d = Math.hypot(dx, dy) || 1, k = Math.min(1, d / R);
-      this.joy.x = (dx / d) * k; this.joy.y = (dy / d) * k; this.joyMag = k;
+      const R = 58, DEAD = 7;
+      let dx = e.clientX - this.joyBase.x, dy = e.clientY - this.joyBase.y;
+      let d = Math.hypot(dx, dy);
+      // drag past the ring and the base follows, so the stick stays under the thumb
+      if (d > R) {
+        this.joyBase.x += (dx / d) * (d - R);
+        this.joyBase.y += (dy / d) * (d - R);
+        dx = e.clientX - this.joyBase.x; dy = e.clientY - this.joyBase.y;
+        d = Math.hypot(dx, dy);
+      }
       this.tapMoved += Math.abs(dx) + Math.abs(dy);
-      UI.showStick(this.joyBase.x, this.joyBase.y, this.joy.x * R, this.joy.y * R);
+      if (d < DEAD) { this.joy.x = 0; this.joy.y = 0; this.joyMag = 0; }
+      else {
+        const k = Math.min(1, (d - DEAD) / (R - DEAD));
+        this.joy.x = (dx / d) * k; this.joy.y = (dy / d) * k; this.joyMag = k;
+      }
+      UI.showStick(this.joyBase.x, this.joyBase.y, (this.joy.x || 0) * R, (this.joy.y || 0) * R);
       e.preventDefault();
     } else if (e.pointerId === this.camId) {
       const dx = e.clientX - this.camLast.x, dy = e.clientY - this.camLast.y;
@@ -3866,12 +4044,15 @@ const UI = {
     };
     b('btnBoard', () => { this.buildBoard(); this.openModal('mBoard'); });
     b('btnInv', () => this.openModal('mInv'));
+    b('btnLog', () => this.showLog());
+    b('logGo', () => { this.closeModal('mLog'); });
     b('btnSet', () => { this.syncSettings(); this.openModal('mSet'); });
     b('nameGo', () => {
       Account.createLocal(this.el.nameInput.value.trim() || 'ATHLETE');
       this.closeModal('mName');
       this.refreshProfile();
-      Chat.push('sys', 'Welcome to Track Stars, ' + Account.profile.name + '! Walk to the events board to race.', true);
+      Chat.push('sys', 'Welcome to Track Stars, ' + Account.profile.name + '! Events start on their own - check the board any time.', true);
+      setTimeout(() => this.showLog(), 400);
     });
     b('setRename', () => { this.el.nameInput.value = Account.profile.name || ''; this.closeModal('mSet'); this.openModal('mName'); });
     b('setWipe', () => { SaveSystem.wipe(); this.toast('Save data cleared - reloading', 'warn'); setTimeout(() => location.reload(), 700); });
@@ -3916,6 +4097,19 @@ const UI = {
     });
     this.el.setNameCur.textContent = Account.profile.name || 'RUNNER';
     this.el.fpsTag.style.display = s.fps === 'on' ? 'block' : 'none';
+  },
+  /** the update log - opened from the rail, and once per new version */
+  showLog() {
+    const TAG = { new: 'New', fix: 'Fix', chg: 'Changed' };
+    document.getElementById('logVerNum').innerHTML = 'V<span>' + CHANGELOG[0].v + '</span>';
+    document.getElementById('logList').innerHTML = CHANGELOG.map((g, gi) =>
+      '<div class="logGroup"><div class="logHead"><div class="v">VERSION ' + g.v + '</div>' +
+      '<div class="d">' + g.date + (gi === 0 ? ' &middot; Latest' : '') + '</div></div>' +
+      g.items.map(it => '<div class="logItem"><span class="tag ' + it[0] + '">' + TAG[it[0]] + '</span>' +
+        '<span class="tx">' + it[1] + '</span></div>').join('') + '</div>').join('');
+    SaveSystem.data.seenVersion = CFG.VERSION;
+    SaveSystem.save();
+    this.openModal('mLog');
   },
   openModal(id) { const m = document.getElementById(id); if (m) m.classList.remove('hidden'); },
   closeModal(id) { const m = document.getElementById(id); if (m) m.classList.add('hidden'); },
@@ -4277,10 +4471,11 @@ const UI = {
 const Game = {
   mode: 'roam', player: null, scene: null, camera: null, renderer: null,
   hemi: null, sun: null, skyMesh: null, sunSprite: null,
-  camYaw: 0, camPitch: 0.20, camManual: 0,
+  camYaw: 0, camPitch: 0.20, camManual: 0, moveIn: { x: 0, y: 0, mag: 0 },
   camPos: null, camLook: null,
   fpsCap: 60, last: 0, fps: 60, frames: 0, fpsT: 0, clockT: 0, skyT: 0, boardT: 0,
-  running: false, moved: false, quality: 'med', shadows: true, nearBoard: false, _joinedAt: 0,
+  running: false, moved: false, quality: 'med', shadows: true, nearBoard: false, nearIndoor: false,
+  _joinedAt: 0, bootAt: 0,
 
   init() {
     const s = SaveSystem.data.settings;
@@ -4374,6 +4569,7 @@ const Game = {
 
   start() {
     this.running = true;
+    this.bootAt = performance.now();
     this.last = performance.now();
     requestAnimationFrame(t => this.loop(t));
   },
@@ -4410,6 +4606,9 @@ const Game = {
     } else {
       let jx = Input.joy.x, jy = Input.joy.y, mag = Input.joyMag;
       if (mag < 0.03) { const k = Input.keyVec(_kv); if (k > 0) { jx = _kv.x; jy = _kv.y; mag = k; } }
+      // Remember the steering vector actually applied this frame (stick OR keys)
+      // so the camera can tell "pushing straight ahead" from "steering".
+      this.moveIn.x = jx; this.moveIn.y = jy; this.moveIn.mag = mag;
       if (mag > 0.06 && !Chat.typing) {
         P.targetHeading = this.camYaw + Math.atan2(jx, -jy);
         let want = mag < 0.55 ? mag * 3.3 : lerp(1.9, 5.7, (mag - 0.55) / 0.45);
@@ -4466,23 +4665,28 @@ const Game = {
 
   updatePrompt() {
     const P = this.player;
+    const di = Math.hypot(P.x - CFG.INDOOR.x, P.z - CFG.INDOOR.z);
+    this.nearIndoor = di < 9;
+    if (this.nearIndoor) {
+      UI.setPrompt('INDOOR ARENA &middot; <b>COMING SOON</b>');
+      this.nearBoard = false;
+      return;
+    }
     const d = Math.hypot(P.x - CFG.BOARD.x, P.z - CFG.BOARD.z);
     this.nearBoard = d < 7.5;
     if (!this.nearBoard) { UI.setPrompt(null); return; }
     const ev = EventSystem.next();
-    if (EventSystem.canEnter(ev)) {
-      // an event is up: one tap joins it and the race runs itself
-      UI.setPrompt('<b>' + ev.name + '</b> ' + (ev.status === 'live' ? 'LIVE' : 'OPEN') + ' &middot; TAP TO JOIN');
+    if (ev && ev.status === 'open') {
+      UI.setPrompt('<b>' + ev.name + '</b> STARTS IN ' + fmtCountdown(ev.inMs) + ' &middot; TAP FOR BOARD');
     } else {
       UI.setPrompt('EVENTS BOARD &middot; <b>TAP TO OPEN</b>');
     }
   },
-  /** the proximity prompt: join a running event, else open the board */
+  /** the proximity prompt at the board, or the indoor arena doors */
   interact() {
-    if (!this.nearBoard || this.mode !== 'roam') return;
-    const ev = EventSystem.next();
-    if (EventSystem.canEnter(ev)) this.joinEvent(ev);
-    else this.openBoard();
+    if (this.mode !== 'roam') return;
+    if (this.nearIndoor) { Audio2.click(); UI.openModal('mIndoor'); return; }
+    if (this.nearBoard) this.openBoard();
   },
   openBoard() {
     if (this.mode !== 'roam') return;
@@ -4491,22 +4695,24 @@ const Game = {
     UI.openModal('mEvents');
   },
   /** enter a scheduled event - the intermission and race start on their own */
-  joinEvent(ev) {
+  joinEvent(ev, auto) {
     if (!ev || this.mode !== 'roam') return;
     Audio2.click();
     this._joinedAt = ev.at;
     UI.closeAll();
-    UI.toast('JOINED ' + ev.name, 'good');
+    if (!auto) UI.toast('ENTERING ' + ev.name, 'good');
     Meet.start(ev.ev || EV[ev.id], true);
   },
-  /** standing at the board when an event goes live joins it automatically */
+  /** Scheduled events start on their own, wherever you are on the facility -
+      there is nothing to join. The intermission still carries a LEAVE button. */
   checkAutoJoin() {
-    if (this.mode !== 'roam' || !this.nearBoard) return;
+    if (this.mode !== 'roam' || Account.isNew()) return;
+    if (performance.now() - this.bootAt < 4000) return;      // let the world settle first
     const ev = EventSystem.next();
     if (!ev || ev.status !== 'live' || this._joinedAt === ev.at) return;
     if (document.querySelector('.modal:not(.hidden)')) return;
     UI.toast(ev.name + ' IS STARTING', 'good');
-    this.joinEvent(ev);
+    this.joinEvent(ev, true);
   },
   /** tap-to-interact with world objects (the events board) */
   pickWorld(sx, sy) {
@@ -4514,8 +4720,13 @@ const Game = {
     if (document.querySelector('.modal:not(.hidden)')) return;
     _ndc.set((sx / window.innerWidth) * 2 - 1, -(sy / window.innerHeight) * 2 + 1);
     _ray.setFromCamera(_ndc, this.camera);
-    if (!_ray.intersectObject(World.boardMesh, true).length) return;
     const P = this.player;
+    if (World.indoorMesh && _ray.intersectObject(World.indoorMesh, true).length) {
+      Audio2.click();
+      UI.openModal('mIndoor');
+      return;
+    }
+    if (!_ray.intersectObject(World.boardMesh, true).length) return;
     const d = Math.hypot(P.x - CFG.BOARD.x, P.z - CFG.BOARD.z);
     if (d > 42) { UI.toast('EVENTS BOARD - ' + Math.round(d) + 'M AWAY', 'warn'); return; }
     this.openBoard();
@@ -4564,7 +4775,13 @@ const Game = {
       }
     } else {
       this.camManual -= dt;
-      if (this.camManual <= 0 && P.speed > 1.2) this.camYaw = dampAngle(this.camYaw, P.heading, 1.8, dt);
+      // Only swing the camera behind the athlete while the stick is pushed
+      // roughly straight ahead (within ~27 degrees). Input is camera-relative,
+      // so chasing the heading during any other push feeds back on itself and
+      // curls the run into a circle - worst of all when holding backward.
+      const mi = this.moveIn;
+      const forwardPush = mi.mag > 0.06 && -mi.y > Math.abs(mi.x) * 2;
+      if (this.camManual <= 0 && P.speed > 1.2 && forwardPush) this.camYaw = dampAngle(this.camYaw, P.heading, 1.8, dt);
       const dist = 6.6, el = this.camPitch;
       tx = P.x - Math.sin(this.camYaw) * dist * Math.cos(el);
       tz = P.z - Math.cos(this.camYaw) * dist * Math.cos(el);
@@ -4636,6 +4853,7 @@ function boot() {
       else {
         UI.toast('WELCOME BACK, ' + Account.profile.name, 'good');
         Chat.push('sys', 'Welcome back, ' + Account.profile.name + ' - LVL ' + Account.profile.level, true);
+        if (SaveSystem.data.seenVersion !== CFG.VERSION) UI.showLog();
       }
     }, 560);
   };
