@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#ffffff">
-<title>FNF Song Maker — V1.60</title>
+<title>FNF Song Maker — V1.61</title>
 <style>
   :root{
     --bg:#ffffff;
@@ -35,13 +35,31 @@
     display:flex;flex-direction:column;
     padding:calc(env(safe-area-inset-top) + 18px) 18px calc(env(safe-area-inset-bottom) + 18px);
     background:var(--bg);
-    opacity:0;transform:translateY(14px);
+    /* Screens slide along the direction of travel: forward pushes in from
+       the right, ← BACK pulls back from the left. Both curves are the same
+       so a fast double-tap never leaves two screens fighting. */
+    opacity:0;transform:translate3d(26px,0,0) scale(.986);
     pointer-events:none;
-    transition:opacity .28s ease, transform .28s ease;
+    transition:opacity .26s cubic-bezier(.22,.8,.3,1), transform .34s cubic-bezier(.22,.8,.3,1);
     overflow-y:auto;-webkit-overflow-scrolling:touch;
+    will-change:opacity,transform;
   }
   .screen.active{opacity:1;transform:none;pointer-events:auto}
-  .screen.behind{opacity:0;transform:translateY(-10px)}
+  .screen.behind{opacity:0;transform:translate3d(-26px,0,0) scale(.986)}
+  .screen.rev{transform:translate3d(-26px,0,0) scale(.986)}
+  .screen.behind.rev{transform:translate3d(26px,0,0) scale(.986)}
+  .screen.active.rev{transform:none}
+  .screen.active .wrap{animation:wrapIn .38s cubic-bezier(.22,.8,.3,1) both}
+  @keyframes wrapIn{from{opacity:.4;transform:translateY(11px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){
+    .screen{transition:opacity .16s linear;transform:none}
+    .screen.behind,.screen.rev,.screen.behind.rev{transform:none}
+    .screen.active .wrap{animation:none}
+  }
+
+  /* Interface Scale, desktop only. The play screen is deliberately left out:
+     the canvas is sized from the window, and zooming it would fight that. */
+  .screen:not(#gameScreen){zoom:var(--ui,1)}
 
   .wrap{width:100%;max-width:560px;margin:0 auto;flex:1;display:flex;flex-direction:column}
 
@@ -50,9 +68,24 @@
   .back{
     width:42px;height:42px;flex:0 0 42px;border-radius:14px;border:1.5px solid var(--line);
     background:#fff;display:grid;place-items:center;font-size:19px;color:var(--ink);
-    cursor:pointer;transition:transform .15s ease,background .15s ease;
+    cursor:pointer;overflow:hidden;
+    transition:transform .16s cubic-bezier(.2,1.4,.5,1),background .15s ease,border-color .15s ease;
   }
-  .back:active{transform:scale(.93);background:#f4f5f9}
+  /* the arrow itself travels, so BACK reads as a direction and not a dot */
+  .back span{display:block;transition:transform .18s cubic-bezier(.2,1.5,.4,1)}
+  @media (hover:hover) and (pointer:fine){
+    .back:hover{background:#f4f5f9;border-color:#c8cddb}
+    .back:hover span{transform:translateX(-3px)}
+  }
+  .back.pressing{transform:scale(.9);background:#eceff6}
+  .back.pressing span{transform:translateX(-6px)}
+  .back:active{transform:scale(.9);background:#eceff6}
+  .screen.active .back{animation:backIn .34s cubic-bezier(.2,1.4,.5,1) both}
+  @keyframes backIn{from{opacity:0;transform:translateX(-14px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){
+    .back,.back span{transition:none}
+    .screen.active .back{animation:none}
+  }
 
   /* ---------- Main menu (FNF style) ---------- */
   #menuScreen{padding:0;background:#f7d94b;overflow:hidden}
@@ -65,17 +98,51 @@
   .menu-item{
     -webkit-appearance:none;appearance:none;border:none;background:none;
     font-family:inherit;font-weight:900;cursor:pointer;
-    font-size:clamp(30px,8.4vw,58px);line-height:1.06;letter-spacing:-.5px;
+    font-size:clamp(26px,7.4vw,50px);line-height:1.06;letter-spacing:-.5px;
     color:#fff;padding:2px 10px;
+    display:flex;align-items:center;gap:clamp(9px,2.4vw,16px);
     text-shadow:
       -4px -4px 0 #000, 4px -4px 0 #000, -4px 4px 0 #000, 4px 4px 0 #000,
       -4px 0 0 #000, 4px 0 0 #000, 0 -4px 0 #000, 0 4px 0 #000,
       0 7px 0 rgba(0,0,0,.55);
-    transition:transform .13s cubic-bezier(.2,1.4,.5,1), color .13s ease;
+    transform-origin:left center;
+    transition:transform .16s cubic-bezier(.2,1.4,.5,1), color .13s ease, filter .13s ease;
   }
-  .menu-item:hover{transform:scale(1.06)}
-  .menu-item:active{transform:scale(.95)}
+  /* the icon chip: its own colour per entry, outlined to match the lettering */
+  .mi-ic{
+    flex:0 0 auto;width:1.02em;height:1.02em;border-radius:.26em;
+    display:grid;place-items:center;font-size:.62em;line-height:1;
+    background:#fff;border:.07em solid #000;box-shadow:0 .09em 0 rgba(0,0,0,.55);
+    text-shadow:none;
+    font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif;
+    transition:transform .18s cubic-bezier(.2,1.5,.4,1), box-shadow .13s ease;
+  }
+  .menu-item:nth-child(2) .mi-ic{background:#c24bff}
+  .menu-item:nth-child(3) .mi-ic{background:#00e0ff}
+  .menu-item:nth-child(4) .mi-ic{background:#12ca5c}
+  .menu-item:nth-child(5) .mi-ic{background:#f5426c}
+  .menu-item:nth-child(6) .mi-ic{background:#ffa41b}
+
+  /* PC: normal → hover → pressed. Hover leans the row out and lifts the icon. */
+  @media (hover:hover) and (pointer:fine){
+    .menu-item:hover{transform:scale(1.07) translateX(6px);filter:brightness(1.06)}
+    .menu-item:hover .mi-ic{transform:translateY(-.09em) rotate(-7deg);box-shadow:0 .17em 0 rgba(0,0,0,.55)}
+  }
+  /* Mobile: normal → press → release. .pressing is held for the whole touch,
+     .released plays a short spring afterwards so the tap has a follow-through. */
+  .menu-item.pressing{transform:scale(.93) translateX(2px);filter:brightness(.94)}
+  .menu-item.pressing .mi-ic{transform:translateY(.06em) scale(.9);box-shadow:0 .03em 0 rgba(0,0,0,.55)}
+  .menu-item.released{animation:menuRelease .34s cubic-bezier(.2,1.5,.4,1)}
+  @keyframes menuRelease{
+    0%{transform:scale(.93)}
+    45%{transform:scale(1.08) translateX(5px)}
+    100%{transform:scale(1)}
+  }
   .menu-item:focus-visible{outline:4px solid #000;outline-offset:4px;border-radius:6px}
+  @media (prefers-reduced-motion:reduce){
+    .menu-item,.mi-ic{transition:none}
+    .menu-item.released{animation:none}
+  }
   .menu-sub{
     font-weight:900;font-size:clamp(12px,3.3vw,17px);letter-spacing:4px;color:#fff;
     text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000,
@@ -146,6 +213,9 @@
     transition:background .18s ease,color .18s ease,box-shadow .18s ease;
   }
   .seg button.on{background:#fff;color:var(--ink);box-shadow:0 2px 6px rgba(20,22,28,.09)}
+  .seg button{white-space:nowrap}
+  @media (hover:hover) and (pointer:fine){ .seg button:not(.on):hover{color:var(--ink);background:rgba(255,255,255,.6)} }
+  .seg button:active{transform:scale(.97)}
 
   .filerow{display:flex;align-items:center;gap:11px;margin-top:12px}
   .filerow .status{
@@ -159,19 +229,42 @@
   .setting:last-child{border-bottom:none}
   .setting .name{font-size:14.5px;font-weight:650}
   .setting .val{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:52px;text-align:right}
+  /* The track fills up to the thumb. --fill is written by JS on every input
+     so the slider reads as an amount and not just as a knob on a rail. */
   input[type=range]{
-    -webkit-appearance:none;appearance:none;width:150px;height:5px;border-radius:99px;background:var(--line);outline:none;
+    -webkit-appearance:none;appearance:none;width:150px;height:6px;border-radius:99px;outline:none;
+    background:linear-gradient(90deg,var(--accent) 0 var(--fill,50%),var(--line) var(--fill,50%) 100%);
+    cursor:pointer;
   }
   input[type=range]::-webkit-slider-thumb{
-    -webkit-appearance:none;width:21px;height:21px;border-radius:50%;background:var(--accent);
-    box-shadow:0 2px 6px rgba(61,90,254,.4);cursor:pointer;
+    -webkit-appearance:none;width:21px;height:21px;border-radius:50%;background:#fff;
+    border:3px solid var(--accent);
+    box-shadow:0 2px 7px rgba(61,90,254,.42);cursor:pointer;
+    transition:transform .13s cubic-bezier(.2,1.5,.4,1),box-shadow .13s ease;
   }
-  input[type=range]::-moz-range-thumb{width:21px;height:21px;border:none;border-radius:50%;background:var(--accent);cursor:pointer}
+  input[type=range]::-moz-range-thumb{
+    width:18px;height:18px;border:3px solid var(--accent);border-radius:50%;background:#fff;cursor:pointer;
+  }
+  input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.12)}
+  input[type=range]:active::-webkit-slider-thumb{transform:scale(1.22);box-shadow:0 2px 12px rgba(61,90,254,.55)}
+  input[type=range]:focus-visible{outline:3px solid var(--accent);outline-offset:5px}
 
-  .switch{width:52px;height:31px;border-radius:99px;background:var(--line);position:relative;cursor:pointer;transition:background .2s ease;flex:0 0 52px}
-  .switch::after{content:"";position:absolute;top:3px;left:3px;width:25px;height:25px;border-radius:50%;background:#fff;box-shadow:0 2px 5px rgba(0,0,0,.2);transition:transform .2s ease}
+  .switch{
+    width:52px;height:31px;border-radius:99px;background:var(--line);position:relative;cursor:pointer;
+    transition:background .22s ease;flex:0 0 52px;
+  }
+  .switch::after{
+    content:"";position:absolute;top:3px;left:3px;width:25px;height:25px;border-radius:50%;background:#fff;
+    box-shadow:0 2px 5px rgba(0,0,0,.2);
+    transition:transform .24s cubic-bezier(.3,1.5,.5,1),width .16s ease;
+  }
   .switch.on{background:var(--green)}
   .switch.on::after{transform:translateX(21px)}
+  /* the knob stretches under a finger, then snaps to its end — the small
+     tell that separates a live switch from a picture of one */
+  .switch:active::after{width:31px}
+  .switch.on:active::after{transform:translateX(15px)}
+  @media (hover:hover) and (pointer:fine){ .switch:hover{filter:brightness(.97)} }
 
   .note{font-size:12px;color:var(--muted);line-height:1.6;background:#f7f8fb;border-radius:14px;padding:12px 14px;margin-bottom:14px}
   .note b{color:var(--ink)}
@@ -179,7 +272,38 @@
   /* ---------- Progress ---------- */
   #progressScreen .wrap{justify-content:center;text-align:center}
   .bar{height:11px;background:var(--line);border-radius:99px;overflow:hidden;margin:22px 0 12px}
-  .bar>i{display:block;height:100%;width:0%;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--pink));transition:width .32s ease}
+  .bar>i{
+    display:block;height:100%;width:0%;border-radius:99px;
+    background:linear-gradient(90deg,var(--accent),var(--pink));
+    transition:width .32s cubic-bezier(.3,.9,.3,1);position:relative;overflow:hidden;
+  }
+  /* a sheen travelling along the filled part, so a long stage still looks
+     like it is doing something even while the percentage sits still */
+  .bar>i::after{
+    content:"";position:absolute;inset:0;
+    background:linear-gradient(100deg,transparent 20%,rgba(255,255,255,.55) 50%,transparent 80%);
+    animation:sheen 1.35s linear infinite;
+  }
+  @keyframes sheen{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+
+  /* the stage checklist: what is done, what is running, what is still to come */
+  #progSteps{list-style:none;margin:20px auto 0;padding:0;max-width:280px;text-align:left}
+  #progSteps li{
+    display:flex;align-items:center;gap:10px;padding:5px 0;
+    font-size:13px;font-weight:650;color:#c3c7d4;transition:color .25s ease;
+  }
+  #progSteps li::before{
+    content:"";flex:0 0 auto;width:16px;height:16px;border-radius:50%;
+    border:2px solid currentColor;transition:background .25s ease,border-color .25s ease;
+  }
+  #progSteps li.done{color:var(--green)}
+  #progSteps li.done::before{background:var(--green);border-color:var(--green)}
+  #progSteps li.now{color:var(--ink)}
+  #progSteps li.now::before{border-color:var(--accent);animation:stepPulse 1s ease-in-out infinite}
+  @keyframes stepPulse{0%,100%{box-shadow:0 0 0 0 rgba(61,90,254,.38)}50%{box-shadow:0 0 0 5px rgba(61,90,254,0)}}
+  @media (prefers-reduced-motion:reduce){
+    .bar>i::after,#progSteps li.now::before{animation:none}
+  }
   #progStage{font-size:16px;font-weight:750;min-height:22px}
   #progPct{font-size:34px;font-weight:900;letter-spacing:-1.4px;font-variant-numeric:tabular-nums}
   #progSub{font-size:12.5px;color:var(--muted);margin-top:6px;min-height:18px}
@@ -322,6 +446,58 @@
   .center-note{text-align:center;color:var(--muted);font-size:12.5px;margin-top:auto;padding-top:18px;line-height:1.6}
   .spacer{flex:1}
   .rank{font-size:52px;font-weight:900;letter-spacing:-2px;text-align:center;margin:4px 0 2px}
+  /* ---------- Mod tabs ---------- */
+  .modtabs{display:flex;flex-wrap:wrap;gap:8px;margin:-6px 0 0}
+  .modtab{
+    -webkit-appearance:none;appearance:none;font-family:inherit;
+    padding:9px 14px;border-radius:12px;border:1.5px solid var(--line);
+    background:#fff;color:var(--ink);font-size:13.5px;font-weight:750;cursor:pointer;
+    display:flex;align-items:center;gap:7px;max-width:100%;
+    transition:transform .15s cubic-bezier(.2,1.4,.5,1),background .15s ease,border-color .15s ease;
+  }
+  .modtab span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .modtab .n{
+    flex:0 0 auto;width:19px;height:19px;border-radius:6px;background:#eef0f6;
+    display:grid;place-items:center;font-size:11px;color:var(--muted)
+  }
+  .modtab.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .modtab.on .n{background:rgba(255,255,255,.25);color:#fff}
+  .modtab.add{border-style:dashed;color:var(--muted)}
+  .modtab.locked{color:var(--muted);opacity:.85}
+  @media (hover:hover) and (pointer:fine){ .modtab:hover{transform:translateY(-2px);border-color:#c8cddb} }
+  .modtab.pressing{transform:scale(.94)}
+
+  /* ---------- Sheets (paywall, ad break) ---------- */
+  .sheet{
+    position:fixed;inset:0;z-index:60;display:grid;place-items:center;
+    background:rgba(16,18,26,.55);backdrop-filter:blur(3px);
+    padding:calc(env(safe-area-inset-top) + 20px) 18px calc(env(safe-area-inset-bottom) + 20px);
+    animation:sheetFade .22s ease both;
+  }
+  .sheet[hidden]{display:none}
+  @keyframes sheetFade{from{opacity:0}to{opacity:1}}
+  .sheet-card{
+    width:100%;max-width:400px;max-height:100%;overflow-y:auto;
+    background:#fff;border-radius:22px;padding:24px 20px 18px;text-align:center;
+    box-shadow:0 24px 60px rgba(16,18,26,.32);
+    animation:sheetRise .3s cubic-bezier(.2,1.2,.4,1) both;
+  }
+  @keyframes sheetRise{from{opacity:0;transform:translateY(22px) scale(.97)}to{opacity:1;transform:none}}
+  .sheet-card h3{margin:12px 0 8px;font-size:20px;font-weight:850;letter-spacing:-.3px}
+  .sheet-card p{margin:0 0 14px;color:var(--muted);font-size:14px;line-height:1.5}
+  .sheet-ic{font-size:38px;line-height:1}
+  .price{
+    font-size:32px;font-weight:900;letter-spacing:-1px;margin:0 0 16px;
+    display:flex;flex-direction:column;align-items:center;gap:2px;
+  }
+  .price small{font-size:11.5px;font-weight:700;letter-spacing:1.2px;color:var(--muted);text-transform:uppercase}
+  .sheet-card.ad{text-align:center;position:relative}
+  .ad-tag{
+    position:absolute;top:12px;left:12px;font-size:10px;font-weight:900;letter-spacing:1.4px;
+    background:#101219;color:#fff;border-radius:6px;padding:3px 7px;
+  }
+  #adArt{width:100%;height:150px;border-radius:14px;display:block;background:#f7d94b}
+
   .rank.s{color:#f5a623}.rank.a{color:var(--green)}.rank.b{color:var(--accent)}
   .rank.c{color:#8b5cf6}.rank.f{color:var(--red)}
 </style>
@@ -334,20 +510,20 @@
     <canvas id="menuBg"></canvas>
     <div id="menuInner">
       <div class="menu-sub">FNF SONG MAKER</div>
-      <button class="menu-item" data-go="editorScreen">EDITOR</button>
-      <button class="menu-item" id="openWeeks">WEEKS</button>
-      <button class="menu-item" id="openMod">MOD MAKER</button>
-      <button class="menu-item" data-go="spritesScreen">SPRITES</button>
-      <button class="menu-item" data-go="settingsScreen">OPTIONS</button>
+      <button class="menu-item" data-go="editorScreen"><span class="mi-ic">🎵</span><span>EDITOR</span></button>
+      <button class="menu-item" id="openWeeks"><span class="mi-ic">🗺️</span><span>WEEKS</span></button>
+      <button class="menu-item" id="openMod"><span class="mi-ic">📦</span><span>MOD MAKER</span></button>
+      <button class="menu-item" data-go="spritesScreen"><span class="mi-ic">🕺</span><span>SPRITES</span></button>
+      <button class="menu-item" data-go="settingsScreen"><span class="mi-ic">⚙️</span><span>SETTINGS</span></button>
     </div>
-    <div class="corner" id="verTag">V1.60</div>
+    <div class="corner" id="verTag">V1.61</div>
     <div class="corner" id="credTag">Credits: Nick</div>
   </section>
 
   <!-- ============ EDITOR ============ -->
   <section class="screen" id="editorScreen">
     <div class="wrap">
-      <header class="top"><button class="back" data-go="menuScreen">←</button><h2>Editor</h2></header>
+      <header class="top"><button class="back" data-go="menuScreen"><span>←</span></button><h2>Editor</h2></header>
 
       <div class="card">
         <h3>Instrumental</h3>
@@ -422,6 +598,7 @@
       <div class="bar"><i id="progBar"></i></div>
       <div id="progStage">Reading audio...</div>
       <div id="progSub"></div>
+      <ol id="progSteps"></ol>
       <div class="spacer"></div>
       <button class="btn ghost" id="cancelChart">Cancel</button>
     </div>
@@ -430,7 +607,7 @@
   <!-- ============ CHART READY ============ -->
   <section class="screen" id="readyScreen">
     <div class="wrap">
-      <header class="top"><button class="back" data-go="editorScreen">←</button><h2>Chart Ready</h2></header>
+      <header class="top"><button class="back" data-go="editorScreen"><span>←</span></button><h2>Chart Ready</h2></header>
       <div class="statgrid">
         <div class="stat"><div class="k">BPM</div><div class="v" id="stBpm">—</div></div>
         <div class="stat"><div class="k">Length</div><div class="v" id="stLen">—</div></div>
@@ -452,7 +629,7 @@
   <!-- ============ WEEKS ============ -->
   <section class="screen" id="weeksScreen">
     <div class="wrap">
-      <header class="top"><button class="back" data-go="menuScreen">←</button><h2>Weeks</h2></header>
+      <header class="top"><button class="back" data-go="menuScreen"><span>←</span></button><h2>Weeks</h2></header>
 
       <div class="weekhead">
         <button class="weeknav" id="weekPrev" aria-label="Previous week">←</button>
@@ -476,7 +653,10 @@
   <!-- ============ MOD MAKER ============ -->
   <section class="screen" id="modScreen">
     <div class="wrap">
-      <header class="top"><button class="back" data-go="menuScreen">←</button><h2>Mod Maker</h2></header>
+      <header class="top"><button class="back" data-go="menuScreen"><span>←</span></button><h2>Mod Maker</h2></header>
+
+      <div class="modtabs" id="modTabs"></div>
+      <p class="hint" id="modSlots" style="color:var(--muted);font-size:12.5px;margin:2px 0 14px"></p>
 
       <div class="cover" id="modCover"><span>No cover<br><small>PNG or JPG</small></span></div>
       <input id="modName" type="text" maxlength="40" placeholder="Mod name">
@@ -490,6 +670,8 @@
       <button class="btn" id="playModBtn" disabled><span class="ic">▶</span>Play Mod</button>
       <button class="btn pink" id="autoModBtn" disabled><span class="ic">✨</span>Auto Mod</button>
       <p class="center-note" style="margin:0 0 18px">Auto Mod writes the dialogue for every song from how that song actually plays.</p>
+
+      <button class="btn ghost small" id="deleteModBtn" style="margin-bottom:18px">Delete this mod</button>
 
       <div class="lbl">In this mod</div>
       <div id="modSongs"></div>
@@ -517,9 +699,9 @@
   <!-- ============ MY MOD ============ -->
   <section class="screen" id="songsScreen">
     <div class="wrap">
-      <header class="top"><button class="back" data-go="editorScreen">←</button><h2>My Mod</h2></header>
+      <header class="top"><button class="back" data-go="editorScreen"><span>←</span></button><h2>My Mod</h2></header>
       <p class="hint" style="color:var(--muted);font-size:12.5px;margin:-8px 0 14px">
-        Charted songs are saved on this device, audio and all. Up to 15.</p>
+        Charted songs are saved on this device, audio and all. Up to 5.</p>
       <div id="songList"></div>
       <p class="center-note" id="songsEmpty" style="display:none">
         Nothing saved yet.<br>Chart a song, then tap <b>Save to My Mod</b>.</p>
@@ -529,7 +711,7 @@
   <!-- ============ SPRITES ============ -->
   <section class="screen" id="spritesScreen">
     <div class="wrap">
-      <header class="top"><button class="back" data-go="menuScreen">←</button><h2>Sprites</h2></header>
+      <header class="top"><button class="back" data-go="menuScreen"><span>←</span></button><h2>Sprites</h2></header>
       <p class="hint" style="color:var(--muted);font-size:12.5px;margin:-8px 0 14px">Choose who appears in the chart.</p>
 
       <canvas class="preview" id="spritePreview"></canvas>
@@ -596,7 +778,7 @@
   <!-- ============ SETTINGS ============ -->
   <section class="screen" id="settingsScreen">
     <div class="wrap">
-      <header class="top"><button class="back" data-go="menuScreen">←</button><h2>Settings</h2></header>
+      <header class="top"><button class="back" data-go="menuScreen"><span>←</span></button><h2>Settings</h2></header>
 
       <div class="card">
         <h3>Gameplay Layout</h3>
@@ -648,6 +830,22 @@
         <div class="setting"><span class="name">Note Splash</span><div class="switch" id="tSplash"></div></div>
       </div>
 
+      <div class="card" id="pcCard">
+        <h3>Desktop</h3>
+        <p class="hint">The window is resizable — the layout follows it. These two are for the rest.</p>
+        <div class="setting">
+          <span class="name">Fullscreen</span><div class="switch" id="tFull"></div>
+        </div>
+        <div class="setting">
+          <span class="name">Interface Scale</span>
+          <span style="display:flex;align-items:center;gap:10px">
+            <input type="range" id="sUi" min="80" max="140" step="5">
+            <span class="val" id="vUi">100%</span>
+          </span>
+        </div>
+        <p class="hint" style="margin:12px 0 0">Fullscreen is also on <b>F11</b>. Interface Scale resizes menus and the HUD; the play area always fills the window.</p>
+      </div>
+
       <button class="btn ghost" id="resetSettings">Reset to Defaults</button>
       <p class="center-note">Settings are saved on this device.</p>
     </div>
@@ -697,12 +895,48 @@
     </div>
   </section>
 
+  <!-- ============ NOTICE ============ -->
+  <div class="sheet" id="notice" hidden>
+    <div class="sheet-card">
+      <div class="sheet-ic" id="noticeIc">⚠️</div>
+      <h3 id="noticeTitle"></h3>
+      <p id="noticeBody"></p>
+      <p class="center-note" id="noticeFix" style="margin:-6px 0 14px"></p>
+      <button class="btn" id="noticeOk">OK</button>
+    </div>
+  </div>
+
+  <!-- ============ EXTRA MOD SLOT ============ -->
+  <div class="sheet" id="payWall" hidden>
+    <div class="sheet-card">
+      <div class="sheet-ic">📦</div>
+      <h3>Extra mod slot</h3>
+      <p id="payBody"></p>
+      <div class="price">$2.00<small>one mod slot</small></div>
+      <button class="btn" id="payBuy"><span class="ic">🔓</span>Unlock a slot — $2</button>
+      <button class="btn ghost" id="payClose">Not now</button>
+      <p class="center-note" id="payNote" style="margin-top:2px"></p>
+    </div>
+  </div>
+
+  <!-- ============ AD BREAK ============ -->
+  <div class="sheet" id="adBreak" hidden>
+    <div class="sheet-card ad">
+      <div class="ad-tag">AD</div>
+      <canvas id="adArt"></canvas>
+      <h3 id="adTitle"></h3>
+      <p id="adBody"></p>
+      <button class="btn" id="adSkip" disabled>Skip in 5</button>
+      <p class="center-note">Your chart is ready and waiting behind this.</p>
+    </div>
+  </div>
+
 </div>
 
 <script>
 "use strict";
 /* =====================================================================
-   FNF Song Maker — V1.00
+   FNF Song Maker — V1.61
    Single-file mobile chart maker + rhythm game.
    ===================================================================== */
 
@@ -716,12 +950,26 @@ const nextFrame = () => new Promise(r => setTimeout(r, 0));
 
 /* ------------------------- screens ------------------------- */
 let currentScreen = "menuScreen";
+/* how deep each screen sits, so a move can tell forward from back and slide
+   the right way round without every call site having to say which it is */
+const SCREEN_DEPTH = {
+  menuScreen: 0,
+  editorScreen: 1, weeksScreen: 1, modScreen: 1, spritesScreen: 1, settingsScreen: 1,
+  songsScreen: 2, progressScreen: 2, readyScreen: 2,
+  dialogueScreen: 3, gameScreen: 3, deathScreen: 4, resultsScreen: 4
+};
 function show(id){
   if (id === currentScreen) return;
   const from = document.getElementById(currentScreen);
   const to   = document.getElementById(id);
-  if (from){ from.classList.remove("active"); from.classList.add("behind"); }
+  const back = (SCREEN_DEPTH[id] ?? 1) < (SCREEN_DEPTH[currentScreen] ?? 1);
+  if (from){
+    from.classList.remove("active");
+    from.classList.toggle("rev", back);
+    from.classList.add("behind");
+  }
   to.classList.remove("behind");
+  to.classList.toggle("rev", back);
   // force reflow so the transition always plays
   void to.offsetWidth;
   to.classList.add("active");
@@ -732,6 +980,35 @@ function show(id){
   if (id === "weeksScreen") startWeekLoop(); else stopWeekLoop();
 }
 $$("[data-go]").forEach(b => b.addEventListener("click", () => show(b.dataset.go)));
+
+/* ---- press feedback ----------------------------------------------------
+   A mouse gets normal → hover → pressed straight from CSS. A finger has no
+   hover, so the press has to be a state we hold for the whole touch and a
+   release we play afterwards; :active alone is dropped the moment the page
+   scrolls, which is why taps used to feel dead. */
+function wirePress(el, pressClass, releaseClass){
+  let down = false;
+  const press = () => {
+    down = true;
+    if (releaseClass) el.classList.remove(releaseClass);
+    el.classList.add(pressClass);
+  };
+  const release = () => {
+    if (!down) return;
+    down = false;
+    el.classList.remove(pressClass);
+    if (releaseClass){
+      el.classList.add(releaseClass);
+      setTimeout(() => el.classList.remove(releaseClass), 360);
+    }
+  };
+  el.addEventListener("pointerdown", press);
+  el.addEventListener("pointerup", release);
+  el.addEventListener("pointercancel", release);
+  el.addEventListener("pointerleave", release);
+}
+$$(".menu-item").forEach(b => wirePress(b, "pressing", "released"));
+$$(".back").forEach(b => wirePress(b, "pressing", ""));
 
 /* ------------------------- menu backdrop -------------------------
    The FNF menu sits on a loose yellow pencil sketch. Drawn rather than
@@ -819,11 +1096,36 @@ function drawMenuBg(){
 }
 window.addEventListener("resize", drawMenuBg);
 
+/* ------------------------- notices -------------------------
+   alert() gives one line of system chrome and no room to say what to do
+   next. Every message the app raises goes through here instead: a title
+   for what happened, a body for why, and a line for the way out. */
+let noticeResolve = null;
+function notify(title, body, opts){
+  const o = opts || {};
+  $("#noticeIc").textContent = o.icon || "⚠️";
+  $("#noticeTitle").textContent = title;
+  $("#noticeBody").textContent = body || "";
+  $("#noticeFix").textContent = o.fix || "";
+  $("#noticeFix").style.display = o.fix ? "" : "none";
+  $("#noticeOk").textContent = o.ok || "OK";
+  $("#notice").hidden = false;
+  return new Promise(res => { noticeResolve = res; });
+}
+function closeNotice(){
+  $("#notice").hidden = true;
+  const r = noticeResolve; noticeResolve = null;
+  if (r) r();
+}
+$("#noticeOk").addEventListener("click", closeNotice);
+$("#notice").addEventListener("click", e => { if (e.target.id === "notice") closeNotice(); });
+
 /* ------------------------- settings ------------------------- */
 /* Scroll speed is stored as tenths and runs 1.5x-3.2x, the range FNF songs
    actually chart within. */
 const SPEED_MIN = 15, SPEED_MAX = 32;
-const DEFAULTS = { difficulty:"normal", mode:"mobile", music:100, vocal:100, speed:20, fps:false, splash:true, stage:"bedroom", botplay:false };
+const DEFAULTS = { difficulty:"normal", mode:"mobile", music:100, vocal:100, speed:20, fps:false, splash:true,
+                   stage:"bedroom", botplay:false, activeMod:"current", extraModSlots:0, uiScale:100 };
 let settings = Object.assign({}, DEFAULTS);
 try{
   const raw = localStorage.getItem("fnfsm_settings");
@@ -843,6 +1145,18 @@ const MODE_HINTS = {
   mobile: "Large touch note tiles designed for phones. For the best experience, tilt your device into landscape mode."
 };
 
+/* A range input cannot colour the part of its track that is behind the
+   thumb, so the fill is a gradient stop the page keeps in step with the
+   value. Cheap, and it makes every slider read at a glance. */
+function paintRangeFill(el){
+  const min = +el.min || 0, max = +el.max || 100;
+  const pct = max > min ? ((+el.value - min) / (max - min)) * 100 : 0;
+  el.style.setProperty("--fill", pct.toFixed(2) + "%");
+}
+document.addEventListener("input", e => {
+  if (e.target && e.target.type === "range") paintRangeFill(e.target);
+}, true);
+
 function paintSettings(){
   $$("#diffSel button").forEach(b => b.classList.toggle("on", b.dataset.diff === settings.difficulty));
   $("#diffHint").textContent = DIFF_HINTS[settings.difficulty];
@@ -855,6 +1169,12 @@ function paintSettings(){
     b.dataset.stage === "white" ? settings.stage === "white" : settings.stage !== "white"));
   $("#tFps").classList.toggle("on", settings.fps);
   $("#tSplash").classList.toggle("on", settings.splash);
+  $("#tFull").classList.toggle("on", isFullscreen());
+  $("#sUi").value = settings.uiScale; $("#vUi").textContent = settings.uiScale + "%";
+  $$("input[type=range]").forEach(paintRangeFill);
+  // The desktop card only means anything with a window to resize and a
+  // keyboard to press F11 with, so a phone never sees it.
+  $("#pcCard").style.display = isDesktop() ? "" : "none";
   $("#readyMode").textContent = settings.mode === "pc"
     ? "PC Mode — keys D F J K or arrow keys."
     : "Mobile Mode — tap the four lanes. Landscape recommended.";
@@ -872,7 +1192,51 @@ $$("#stageSel button").forEach(b => b.addEventListener("click", () => {
 }));
 $("#tFps").addEventListener("click", () => { settings.fps = !settings.fps; saveSettings(); paintSettings(); });
 $("#tSplash").addEventListener("click", () => { settings.splash = !settings.splash; saveSettings(); paintSettings(); });
-$("#resetSettings").addEventListener("click", () => { settings = Object.assign({}, DEFAULTS); saveSettings(); paintSettings(); applyLiveVolumes(); });
+
+/* ---- desktop: fullscreen and interface scale ----
+   Fullscreen has to be asked for from inside a click, so the toggle calls
+   the API directly rather than routing through a state update. The browser
+   is the source of truth for whether we are in it — it can be left with
+   Escape without the page being told — so the switch reads the document. */
+function isDesktop(){
+  return !/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) &&
+         !(navigator.maxTouchPoints > 1 && window.matchMedia("(pointer:coarse)").matches);
+}
+function isFullscreen(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+function toggleFullscreen(){
+  try{
+    if (isFullscreen()){
+      (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    } else {
+      const el = document.documentElement;
+      (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+    }
+  }catch(e){ /* the browser refused — the switch will settle back on its own */ }
+}
+document.addEventListener("fullscreenchange", () => paintSettings());
+document.addEventListener("webkitfullscreenchange", () => paintSettings());
+$("#tFull").addEventListener("click", toggleFullscreen);
+document.addEventListener("keydown", e => {
+  if (e.key === "F11"){ e.preventDefault(); toggleFullscreen(); }
+});
+
+/* Interface scale drives one root variable. The play canvas is sized from
+   the window, not from this, so scaling the menus never shrinks the game. */
+function applyUiScale(){
+  document.documentElement.style.setProperty("--ui", (settings.uiScale / 100).toFixed(3));
+}
+$("#sUi").addEventListener("input", e => {
+  settings.uiScale = clamp(+e.target.value, 80, 140);
+  saveSettings(); applyUiScale(); paintSettings();
+});
+
+$("#resetSettings").addEventListener("click", () => {
+  // the paid slots and the mods themselves are not a setting to reset away
+  const keep = { extraModSlots: settings.extraModSlots || 0, activeMod: settings.activeMod };
+  settings = Object.assign({}, DEFAULTS, keep);
+  saveSettings(); applyUiScale(); paintSettings(); applyLiveVolumes();
+});
+applyUiScale();
 paintSettings();
 
 /* ------------------------- file import ------------------------- */
@@ -1864,12 +2228,35 @@ const STAGES = [
   "Validating chart...",
   "Complete"
 ];
+/* The checklist beside the bar. Charting can sit on one stage for a while
+   on a long song, so showing which of the nine steps are behind you says
+   more than a percentage that has stopped moving. */
+function buildProgSteps(){
+  const host = $("#progSteps");
+  if (!host || host.children.length === STAGES.length - 1) return;
+  host.innerHTML = "";
+  for (let i = 0; i < STAGES.length - 1; i++){        // "Complete" is not a step
+    const li = document.createElement("li");
+    li.textContent = STAGES[i].replace(/\.\.\.$/, "");
+    host.appendChild(li);
+  }
+}
+function markProgStep(stage){
+  const at = STAGES.indexOf(stage);
+  if (at < 0) return;
+  const kids = $("#progSteps").children;
+  for (let i = 0; i < kids.length; i++){
+    kids[i].classList.toggle("done", i < at || at === STAGES.length - 1);
+    kids[i].classList.toggle("now",  i === at);
+  }
+}
+
 let shownPct = 0;
 function setProgress(pct, stage, sub){
   shownPct = Math.max(shownPct, pct);
   $("#progBar").style.width = shownPct.toFixed(1) + "%";
   $("#progPct").textContent = Math.round(shownPct) + "%";
-  if (stage !== undefined) $("#progStage").textContent = stage;
+  if (stage !== undefined){ $("#progStage").textContent = stage; markProgStep(stage); }
   if (sub !== undefined) $("#progSub").textContent = sub;
 }
 
@@ -1923,6 +2310,7 @@ $("#cancelChart").addEventListener("click", () => { chartCancelled = true; show(
 $("#autoChartBtn").addEventListener("click", async () => {
   chartCancelled = false;
   shownPct = 0;
+  buildProgSteps();
   setProgress(0, STAGES[0], "");
   show("progressScreen");
   const started = performance.now();
@@ -1993,10 +2381,13 @@ $("#autoChartBtn").addEventListener("click", async () => {
     await new Promise(r => setTimeout(r, 380));
 
     paintReady(chart);
+    await adBreak();          // one ad per song charted in the Editor
+    if (chartCancelled) throw new Error("cancelled");
     show("readyScreen");
   }catch(err){
     if (!chartCancelled){
-      alert("Charting failed: " + (err && err.message ? err.message : err));
+      await notify("Charting failed", (err && err.message ? err.message : String(err)),
+        { fix:"Your files are still loaded — fix the track and try Auto Chart again." });
       show("editorScreen");
     }
   }finally{
@@ -2004,13 +2395,89 @@ $("#autoChartBtn").addEventListener("click", async () => {
   }
 });
 
+/* =====================================================================
+   AD BREAK
+   Every song charted in the Editor plays one ad before the chart opens.
+   No ad network is loaded — the page fetches nothing and reports nothing,
+   which it could not do and still be a single offline file — so these are
+   house ads for the app itself, drawn on the spot. The break is a real
+   five-second gate, not a fake one: Skip does nothing until it counts out.
+   ===================================================================== */
+const AD_COPY = [
+  { t:"Charting on the bus?",  b:"FNF Song Maker runs entirely on your device. No upload, no account, no signal needed." },
+  { t:"Bring your own song",   b:"Drop in an instrumental and vocal stems and get a four-lane chart that follows the melody." },
+  { t:"Make it yours",         b:"Build a sprite from a description, then watch it sing all four directions." },
+  { t:"Five songs, three mods",b:"Save charts to My Mod, order them into a week, and let Auto Mod write the dialogue." },
+  { t:"Play it your way",      b:"Scroll speed 1.5x to 3.2x, three difficulties, and a botplay toggle when you just want to watch." }
+];
+let adSeq = 0;
+
+function drawAdArt(t){
+  const cv = $("#adArt");
+  if (!cv) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (!w || !h) return;
+  if (cv.width !== Math.ceil(w*dpr)){ cv.width = Math.ceil(w*dpr); cv.height = Math.ceil(h*dpr); }
+  const g = cv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.fillStyle = "#f7d94b"; g.fillRect(0, 0, w, h);
+
+  // four arrows bopping on the beat — the app's own shorthand, drawn with
+  // the same sprite the game uses so the ad cannot drift from the product
+  const s = Math.min(w / 5.4, h / 2.2);
+  for (let i = 0; i < 4; i++){
+    const bx = w/2 + (i - 1.5) * s * 1.2;
+    const by = h/2 + Math.sin(t * 4 - i * 0.55) * s * 0.15;
+    drawArrow(g, bx, by, s, i, "filled", 1);
+  }
+}
+function adFrame(t0){
+  drawAdArt((performance.now() - t0) / 1000);
+  if (!$("#adBreak").hidden) requestAnimationFrame(() => adFrame(t0));
+}
+
+function adBreak(){
+  return new Promise(res => {
+    const copy = AD_COPY[adSeq++ % AD_COPY.length];
+    $("#adTitle").textContent = copy.t;
+    $("#adBody").textContent = copy.b;
+    const skip = $("#adSkip");
+    skip.disabled = true;
+    $("#adBreak").hidden = false;
+    const t0 = performance.now();
+    adFrame(t0);
+
+    let left = 5;
+    skip.textContent = "Skip in " + left;
+    const tick = setInterval(() => {
+      left--;
+      if (left > 0) skip.textContent = "Skip in " + left;
+      else {
+        clearInterval(tick);
+        skip.disabled = false;
+        skip.textContent = "Continue to your chart";
+      }
+    }, 1000);
+
+    const done = () => {
+      if (skip.disabled) return;
+      clearInterval(tick);
+      skip.removeEventListener("click", done);
+      $("#adBreak").hidden = true;
+      res();
+    };
+    skip.addEventListener("click", done);
+  });
+}
+
 $("#exportBtn").addEventListener("click", async () => {
   if (!SONG) return;
   const c = SONG.chart;
   const data = {
     song: SONG.name, bpm: +c.bpm.toFixed(2), offset: +c.offset.toFixed(4),
     duration: +c.duration.toFixed(3), difficulty: c.difficulty || "normal",
-    generator: "FNF Song Maker V1.60",
+    generator: "FNF Song Maker V1.61",
     notes: c.notes.map(n => ({ time:+n.t.toFixed(4), lane:n.lane, mustHit:n.mustHit, length:+n.len.toFixed(4) }))
   };
   const text = JSON.stringify(data, null, 1);
@@ -2049,7 +2516,7 @@ $("#exportBtn").addEventListener("click", async () => {
    survive without the original files. That is far past what localStorage
    holds, hence IndexedDB.
    ===================================================================== */
-const MAX_SONGS = 15;
+const MAX_SONGS = 5;
 const DB_NAME = "fnfsm", DB_STORE = "songs", MOD_STORE = "mod";
 let dbPromise = null;
 
@@ -2129,14 +2596,18 @@ $("#openSongs").addEventListener("click", () => { refreshSongsUI(); show("songsS
 $("#saveSongBtn").addEventListener("click", async () => {
   if (!SONG) return;
   if (!songsSupported() || !SONG.sourceFiles){
-    alert("This song cannot be saved on this device.");
+    await notify("Cannot save here",
+      "This browser has no storage available for songs, so nothing can be kept between visits.",
+      { fix:"Private browsing usually causes this. Export the chart instead to keep it." });
     return;
   }
   const btn = $("#saveSongBtn");
   try{
     const list = await songsAll();
     if (list.length >= MAX_SONGS){
-      alert("Your mod is full (" + MAX_SONGS + " songs). Delete one from My Mod to make room.");
+      await notify("My Mod is full",
+        "You have " + MAX_SONGS + " songs saved, which is the limit on this device.",
+        { icon:"📀", fix:"Delete one from My Mod to make room for this chart." });
       return;
     }
     const name = (prompt("Name this song", SONG.name) || "").trim();
@@ -2156,8 +2627,8 @@ $("#saveSongBtn").addEventListener("click", async () => {
   }catch(err){
     btn.disabled = false;
     btn.innerHTML = '<span class="ic">💾</span>Save to My Mod';
-    alert("Could not save: " + (err && err.message ? err.message : err) +
-          "\n\nThis usually means the browser is out of storage room.");
+    await notify("Could not save that song", (err && err.message ? err.message : String(err)),
+      { icon:"💾", fix:"This is nearly always the browser running out of storage room. Delete a song from My Mod and try again." });
   }
 });
 
@@ -2173,21 +2644,108 @@ async function loadSong(id){
    A mod is an ordered set of saved songs with a name, cover art and,
    once Auto Mod has run, dialogue to play before each one.
    ===================================================================== */
-let MOD = { name:"My Mod", thumb:null, songs:[] };   // songs: {id, thumb, dialogue:[]}
+/* Three mods come with the app; a fourth and beyond is a paid slot. The
+   count of paid slots lives in settings so it survives the mod records
+   being deleted — buying a slot buys the right to a mod, not that mod. */
+const FREE_MODS = 3, MOD_SLOT_PRICE = "$2.00";
+const modSlots = () => FREE_MODS + (settings.extraModSlots || 0);
 
+let MODS = [];                                       // every mod, oldest first
+let MOD = { id:"current", name:"My Mod", thumb:null, songs:[] };   // the open one
+                                                     // songs: {id, thumb, dialogue:[]}
+
+function newModRecord(n){
+  return { id:"mod-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7),
+           name:"Mod " + n, thumb:null, songs:[], created:Date.now() };
+}
 
 async function loadMod(){
   if (!songsSupported()) return;
   try{
-    const rec = await dbTx("readonly", st => st.get("current"), MOD_STORE);
-    if (rec) MOD = { name: rec.name || "My Mod", thumb: rec.thumb || null, songs: rec.songs || [] };
-  }catch(e){ /* first run */ }
+    const all = await dbTx("readonly", st => st.getAll(), MOD_STORE);
+    MODS = (all || []).map(r => ({
+      id: r.id, name: r.name || "My Mod", thumb: r.thumb || null,
+      songs: r.songs || [], created: r.created || 0
+    }));
+    // "current" is the single mod every build before V1.61 wrote; it keeps
+    // its id so an existing mod survives the move to a list
+    MODS.sort((a, b) => (a.id === "current" ? -1 : b.id === "current" ? 1 : a.created - b.created));
+  }catch(e){ MODS = []; /* first run */ }
+  let seeded = false;
+  if (!MODS.length){
+    MODS = [{ id:"current", name:"My Mod", thumb:null, songs:[], created:Date.now() }];
+    seeded = true;
+  }
+  MOD = MODS.find(m => m.id === settings.activeMod) || MODS[0];
+  // The starter mod has to exist on disk from the first run, or it vanishes
+  // the moment a second mod is made and the slot count goes wrong.
+  if (seeded) await saveMod();
 }
 async function saveMod(){
   if (!songsSupported()) return;
-  try{ await dbTx("readwrite", st => st.put({ id:"current", name:MOD.name, thumb:MOD.thumb, songs:MOD.songs }), MOD_STORE); }
+  try{
+    await dbTx("readwrite",
+      st => st.put({ id:MOD.id, name:MOD.name, thumb:MOD.thumb, songs:MOD.songs, created:MOD.created || 0 }),
+      MOD_STORE);
+  }
   catch(e){ /* storage full — the UI still works for this session */ }
 }
+async function switchMod(id){
+  const m = MODS.find(x => x.id === id);
+  if (!m || m === MOD) return;
+  MOD = m;
+  settings.activeMod = id; saveSettings();
+  await renderMod();
+}
+async function addMod(){
+  if (MODS.length >= modSlots()){ openPayWall(); return; }
+  const m = newModRecord(MODS.length + 1);
+  MODS.push(m);
+  MOD = m;
+  settings.activeMod = m.id; saveSettings();
+  await saveMod();
+  await renderMod();
+}
+async function deleteMod(){
+  if (MODS.length <= 1){
+    await notify("That is your only mod",
+      "There has to be at least one mod to put songs into.",
+      { icon:"📦", fix:"Rename it or clear its songs instead of deleting it." });
+    return;
+  }
+  if (!confirm('Delete "' + MOD.name + '"? The songs stay in My Mod — only this mod is removed.')) return;
+  const gone = MOD.id;
+  MODS = MODS.filter(m => m.id !== gone);
+  MOD = MODS[0];
+  settings.activeMod = MOD.id; saveSettings();
+  try{ await dbTx("readwrite", st => st.delete(gone), MOD_STORE); }catch(e){}
+  await renderMod();
+}
+
+/* ---- the paid slot ----
+   There is no payment provider wired into this build, so the gate is real
+   and the checkout is not: the slot is never granted here. grantModSlot()
+   is the single seam a real provider would call once a payment clears. */
+function grantModSlot(){
+  settings.extraModSlots = (settings.extraModSlots || 0) + 1;
+  saveSettings();
+  renderMod();
+}
+function openPayWall(){
+  $("#payBody").textContent =
+    "You are using all " + modSlots() + " of your mod slots. Extra slots are " +
+    MOD_SLOT_PRICE + " each, and each one lets you build one more mod.";
+  $("#payNote").textContent =
+    "This build has no store connected, so nothing can be charged and no slot is added.";
+  $("#payWall").hidden = false;
+}
+$("#payClose").addEventListener("click", () => { $("#payWall").hidden = true; });
+$("#payWall").addEventListener("click", e => { if (e.target.id === "payWall") $("#payWall").hidden = true; });
+$("#payBuy").addEventListener("click", () => {
+  $("#payNote").textContent =
+    "Checkout is not connected in this build — no card is asked for and no charge is made, " +
+    "so the slot stays locked. Delete a mod you are done with to free one up.";
+});
 
 let thumbURLs = [];
 function freeThumbs(){ thumbURLs.forEach(URL.revokeObjectURL); thumbURLs = []; }
@@ -2214,6 +2772,31 @@ async function renderMod(){
 
   freeThumbs();
   $("#modName").value = MOD.name;
+
+  // ---- one tab per mod, then the slot that makes a new one ----
+  const tabs = $("#modTabs");
+  tabs.innerHTML = "";
+  MODS.forEach((m, i) => {
+    const t = document.createElement("button");
+    t.className = "modtab" + (m === MOD ? " on" : "");
+    t.innerHTML = '<i class="n"></i><span></span>';
+    t.querySelector(".n").textContent = String(i + 1);
+    t.querySelector("span").textContent = m.name;
+    t.addEventListener("click", () => switchMod(m.id));
+    wirePress(t, "pressing", "");
+    tabs.appendChild(t);
+  });
+  const add = document.createElement("button");
+  const room = MODS.length < modSlots();
+  add.className = "modtab add" + (room ? "" : " locked");
+  add.textContent = room ? "＋ New mod" : "🔒 New mod — " + MOD_SLOT_PRICE;
+  add.addEventListener("click", addMod);
+  wirePress(add, "pressing", "");
+  tabs.appendChild(add);
+
+  $("#modSlots").textContent = MODS.length + " of " + modSlots() + " mod slots used" +
+    (room ? "" : " — extra slots are " + MOD_SLOT_PRICE + " each.");
+  $("#deleteModBtn").disabled = MODS.length <= 1;
 
   const cover = $("#modCover");
   if (MOD.thumb){
@@ -2306,8 +2889,18 @@ $("#thumbFile").addEventListener("change", async e => {
   const f = e.target.files && e.target.files[0];
   e.target.value = "";
   if (!f) return;
-  if (!/^image\//.test(f.type)){ alert("That is not an image. Pick a PNG or JPG."); return; }
-  if (f.size > 4 * 1024 * 1024){ alert("That image is over 4 MB. Pick a smaller one."); return; }
+  if (!/^image\//.test(f.type)){
+    await notify("That file is not an image", "Cover art has to be a picture file.",
+      { icon:"🖼️", fix:"Pick a PNG, JPG or WebP." });
+    return;
+  }
+  if (f.size > 4 * 1024 * 1024){
+    await notify("That image is too large",
+      "Cover art is stored with the mod, so it is capped at 4 MB. That one is " +
+      (f.size / 1048576).toFixed(1) + " MB.",
+      { icon:"🖼️", fix:"Pick a smaller image, or save it at a lower resolution first." });
+    return;
+  }
   if (thumbTarget < 0) MOD.thumb = f;
   else if (MOD.songs[thumbTarget]) MOD.songs[thumbTarget].thumb = f;
   await saveMod();
@@ -2316,7 +2909,9 @@ $("#thumbFile").addEventListener("change", async e => {
 $("#modName").addEventListener("change", () => {
   MOD.name = $("#modName").value.trim() || "My Mod";
   saveMod();
+  renderMod();               // the tab carries the name, so it has to follow
 });
+$("#deleteModBtn").addEventListener("click", deleteMod);
 
 /* =====================================================================
    AUTO MOD — writes the dialogue
@@ -2545,7 +3140,8 @@ async function loadSongById(id){
              sourceFiles: { inst: rec.inst, opp: rec.opp, plr: rec.plr } };
     return true;
   }catch(err){
-    alert("Could not load that song: " + (err && err.message ? err.message : err));
+    await notify("Could not load that song", (err && err.message ? err.message : String(err)),
+      { fix:"The saved audio may be damaged. Delete it from My Mod and chart it again." });
     return false;
   }
 }
@@ -3506,7 +4102,13 @@ function drawCharCached(g, def, id, poseName, blend, bop, x, y, scale, dpr, pose
   const key = id + "|" + poseName + "|" + bucket;
 
   let cv = spriteCache.get(key);
-  if (!cv){
+  if (cv){
+    // Map iterates in insertion order, so re-inserting a hit moves it to the
+    // back and makes the eviction below a true LRU. Plain FIFO threw away
+    // idle — the most-used pose of all — every time the cache filled.
+    spriteCache.delete(key);
+    spriteCache.set(key, cv);
+  } else {
     const pw = Math.ceil(BOX.w * scale * dpr);
     const ph = Math.ceil(BOX.h * scale * dpr);
     if (pw <= 0 || ph <= 0) return;
@@ -3518,12 +4120,12 @@ function drawCharCached(g, def, id, poseName, blend, bop, x, y, scale, dpr, pose
     c.scale(scale, scale);
     drawChar(c, def, poseName, bucket / 8, 0, poseTable);   // bop is applied at blit time
     // Nine poses (four of them misses) across nine blend buckets per
-    // character is more canvases than a phone should hold, and only the
-    // recent ones are ever re-used. Map keeps insertion order, so evicting
-    // from the front drops the poses that have gone quiet.
-    if (spriteCache.size >= 96){
+    // character is more canvases than a phone should hold. The front of the
+    // Map is now the least recently drawn, so dropping a few from there
+    // costs a re-render of a pose nobody is using.
+    if (spriteCache.size >= 120){
       const it = spriteCache.keys();
-      for (let i = 0; i < 24; i++){
+      for (let i = 0; i < 12; i++){
         const old = it.next();
         if (old.done) break;
         spriteCache.delete(old.value);
@@ -3815,7 +4417,11 @@ let previewSeq = ["idle","left","down","up","right","miss"], previewStep = 0, pr
 function generateSprite(){
   const desc = $("#spriteDesc").value.trim();
   const anim = $("#spriteAnim").value.trim();
-  if (!desc){ alert("Describe the character first — colours, clothes, anything."); return; }
+  if (!desc){
+    notify("Nothing to build from", "The description box is empty.",
+      { icon:"🎨", fix:"Say something about the character — hair colour, clothes, anything." });
+    return;
+  }
   genDef = parseSprite(desc);
   genPoses = parseAnim(anim);
   genDef.name = "Custom";
@@ -3902,7 +4508,9 @@ $("#useSpriteBtn").addEventListener("click", () => {
   stopGenPreview();
   $("#spritePreviewWrap").style.display = "none";
   paintSpriteSlots();
-  alert("Done — your character is now the " + (slot === "opp" ? "opponent" : "player") + ".");
+  notify("Character assigned",
+    "Your sprite is now the " + (slot === "opp" ? "opponent" : "player") + ".",
+    { icon:"✅", ok:"Nice" });
 });
 $("#clearSpriteBtn").addEventListener("click", () => {
   customSprite = null;
