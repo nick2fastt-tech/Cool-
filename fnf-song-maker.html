@@ -1133,7 +1133,7 @@ $("#notice").addEventListener("click", e => { if (e.target.id === "notice") clos
    actually chart within. */
 const SPEED_MIN = 15, SPEED_MAX = 32;
 const DEFAULTS = { difficulty:"normal", mode:"mobile", music:100, vocal:100, speed:20, fps:false, splash:true,
-                   stage:"week1", botplay:false, activeMod:"current", extraModSlots:0, uiScale:100 };
+                   stage:"week1", botplay:false, activeMod:"current", extraModSlots:0, uiScale:100, quality:0 };
 let settings = Object.assign({}, DEFAULTS);
 try{
   const raw = localStorage.getItem("fnfsm_settings");
@@ -3188,6 +3188,11 @@ function bfSpriteActive(){
   return bfReady && !(customSprite && customSprite.slot === "plr");
 }
 
+/* Lane index to direction. Hoisted because the update loop indexes it for
+   every note it touches, and building the array there allocated garbage on
+   every frame of a dense chart. */
+const LANE_DIR = ["left", "down", "up", "right"];
+
 const BF_POSE_KEY = { idle:"idle", left:"left", down:"down", up:"up", right:"right" };
 const BF_MISS_KEY = { left:"missleft", down:"missdown", up:"missup", right:"missright" };
 
@@ -4140,7 +4145,7 @@ function parseAnim(text){
   }
 
   if (globalBig && !globalSmall){
-    for (const k of ["left","down","up","right"]){
+    for (const k of LANE_DIR){
       poses[k].bx *= 1.35; poses[k].by *= 1.2; poses[k].tilt *= 1.35;
     }
   }
@@ -4404,7 +4409,7 @@ function previewFrame(){
   const gy = h - 26;
 
   // Boyfriend has a miss per lane; the preview walks them so all four show
-  const missDir = ["left","down","up","right"][Math.floor(previewT / 1.1) % 4];
+  const missDir = LANE_DIR[Math.floor(previewT / 1.1) % 4];
 
   g.save(); g.translate(w*0.29, gy); g.scale(s*0.92, s*0.92);
   if (oppSpriteActive()){
@@ -4493,25 +4498,46 @@ function applyLiveVolumes(){
    cannot hold its frame budget. The level sticks for the session, so a second
    song starts at the resolution the device already proved it can drive. */
 const MAX_DPR = 2;
-const QUALITY = [1, 0.75, 0.625, 0.5];
-let qualityStep = 0;
+// The last two steps take the backing store below the CSS box on a
+// high-density screen, which is the only lever left once dpr 1 is
+// still too much for the device.
+const QUALITY = [1, 0.75, 0.625, 0.5, 0.375, 0.3];
+// A device that had to shed resolution last time starts near where it landed,
+// so a weak phone is not relearning the same lesson for the first seconds of
+// every song. One step better than it settled at, so a single bad session —
+// a hot phone, something else hogging the CPU — does not leave the game soft
+// for good; if the device still cannot keep up it drops again within a second.
+let qualityStep = clamp((settings.quality | 0) - 1, 0, QUALITY.length - 1);
 // On a device already shedding resolution, the outline pass on every note is
 // the next biggest cost under heavy spam. Drop it rather than drop frames.
 let lowDetail = false;
 
 function effectiveDpr(){
   const base = Math.min(window.devicePixelRatio || 1, MAX_DPR);
-  return clamp(base * QUALITY[qualityStep], 1, MAX_DPR);
+  // The floor used to be 1, which made the whole ladder a no-op on an
+  // ordinary-density display: every step clamped straight back to 1 and the
+  // watchdog could not help the machines that needed it most. Below 1 the
+  // canvas backing store is smaller than its CSS box and the browser scales
+  // it up — softer, but a soft 60fps beats a sharp 30.
+  return clamp(base * QUALITY[qualityStep], 0.55, MAX_DPR);
 }
 
-function dropQuality(){
-  if (qualityStep >= QUALITY.length - 1) return false;
-  qualityStep++;
+function setQuality(step){
+  step = clamp(step, 0, QUALITY.length - 1);
+  if (step === qualityStep) return false;
+  qualityStep = step;
   lowDetail = qualityStep >= 2;
   spriteCache.clear();
   arrowCache.clear();
   resizeCanvas();
+  settings.quality = qualityStep;
+  saveSettings();
   return true;
+}
+function dropQuality(by){
+  const ok = setQuality(qualityStep + (by || 1));
+  if (ok && game) game.qualityFloor = qualityStep;
+  return ok;
 }
 
 function resizeCanvas(){
@@ -4606,7 +4632,9 @@ function startGame(){
   const chart = SONG.chart;
   game = {
     w: window.innerWidth, h: window.innerHeight, dpr: effectiveDpr(),
-    perfAccum: 0, perfFrames: 0, perfStrikes: 0,
+    perfAccum: 0, perfFrames: 0, perfStrikes: 0, perfGood: 0,
+    // the best step this device has already failed at — never climb past it
+    qualityFloor: qualityStep,
     notes: chart.notes.map(n => ({ t:n.t, lane:n.lane, mustHit:n.mustHit, len:n.len, hit:false, gone:false, holdDone:false })),
     head: 0,                       // first note still in play
     time: -3.0,
@@ -4764,7 +4792,7 @@ function judge(note, dist){
   game.accSum += w.acc; game.accTotal++;
   game.health = clamp(game.health + w.health, 0, 2);
   game.confirm[note.lane] = 0.16;
-  setPose("bf", ["left","down","up","right"][note.lane]);
+  setPose("bf", LANE_DIR[note.lane]);
   // The supplied art includes a "hey!" that nothing was playing. Every fifty
   // notes of an unbroken combo he throws it, unless the next note is close
   // enough that it would eat the sing pose.
@@ -4796,7 +4824,7 @@ function missNote(note){
   game.accSum += 0; game.accTotal++;
   game.score = Math.max(0, game.score - 10);
   game.health = clamp(game.health - 0.055, 0, 2);
-  const dir = ["left","down","up","right"][note.lane];
+  const dir = LANE_DIR[note.lane];
   setPose("bf", dir, 0.34, true);
   // the opponent recoils along with the fumble, but only when it is not
   // mid-line itself — its own singing always wins the pose
@@ -5277,17 +5305,33 @@ function frame(){
     while (game.fpsSamples.length && now - game.fpsSamples[0] > 1000) game.fpsSamples.shift();
   }
 
-  // Watchdog: sample a second of real frame times once the song is properly
-  // under way (past the countdown, caches warm), and shed resolution if the
-  // device is missing the 60fps budget two windows running.
-  if (!game.paused && game.time > 0.75 && raw < 500){
+  // Watchdog: sample half a second of real frame times once the song is under
+  // way (past the countdown, caches warm) and shed resolution when the device
+  // is missing the budget. Half-second windows and a single strike react in
+  // about a second instead of nearly three, and a frame time that is badly
+  // over budget sheds two steps at once rather than crawling down one window
+  // at a time while the player is already dropping frames.
+  if (!game.paused && game.time > 0.6 && raw < 500){
     game.perfAccum += raw;
     game.perfFrames++;
-    if (game.perfAccum >= 1000){
+    if (game.perfAccum >= 500){
       const avg = game.perfAccum / game.perfFrames;
-      if (avg > 20){
-        if (++game.perfStrikes >= 2 && dropQuality()) game.perfStrikes = 0;
-      } else game.perfStrikes = 0;
+      // 18.5ms is 54fps — a real miss of the 60fps budget, and the point
+      // where shedding a little resolution buys the frames back
+      if (avg > 18.5){
+        game.perfGood = 0;
+        if (++game.perfStrikes >= (avg > 30 ? 1 : 2)){
+          if (dropQuality(avg > 33 ? 2 : 1)) game.perfStrikes = 0;
+        }
+      } else {
+        game.perfStrikes = 0;
+        // Climbing back is deliberately slower and stops at the best step this
+        // device has ever failed at, so it cannot oscillate between the two.
+        if (avg < 13 && ++game.perfGood >= 6 && qualityStep > game.qualityFloor){
+          setQuality(qualityStep - 1);
+          game.perfGood = 0;
+        }
+      }
       game.perfAccum = 0; game.perfFrames = 0;
     }
   }
@@ -5332,7 +5376,7 @@ function update(dt){
       if (!n.hit && s.time >= n.t){
         n.hit = true;
         s.oppConfirm[n.lane] = 0.16;
-        setPose("op", ["left","down","up","right"][n.lane]);
+        setPose("op", LANE_DIR[n.lane]);
         if (settings.splash && Math.random() < 0.25) addSplash(n.lane, false);
       }
       if (n.hit && s.time > n.t + n.len + 0.4) n.gone = true;
@@ -5350,7 +5394,7 @@ function update(dt){
           s.score += Math.round(140 * dt);
           s.health = clamp(s.health + 0.010 * dt, 0, 2);
           s.confirm[n.lane] = 0.10;
-          setPose("bf", ["left","down","up","right"][n.lane], 0.12);
+          setPose("bf", LANE_DIR[n.lane], 0.12);
         }
       } else n.holdDone = true;
     }
