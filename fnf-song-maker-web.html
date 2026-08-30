@@ -953,6 +953,11 @@ html, body { background: #f7d94b; }
         <p class="hint" id="stageHint" style="margin:11px 0 4px"></p>
         <div class="setting" style="border-top:1px solid var(--line)"><span class="name">FPS Counter</span><div class="switch" id="tFps"></div></div>
         <div class="setting"><span class="name">Note Splash</span><div class="switch" id="tSplash"></div></div>
+        <div class="setting">
+          <span class="name">Band Fills<br><small style="font-weight:600;color:var(--muted);font-size:11.5px">
+            Notes from the instrumental where nobody sings</small></span>
+          <div class="switch" id="tInstFill"></div>
+        </div>
       </div>
 
       <div class="card" id="pcCard">
@@ -1242,7 +1247,7 @@ $("#notice").addEventListener("click", e => { if (e.target.id === "notice") clos
 const SPEED_MIN = 15, SPEED_MAX = 32;
 const DEFAULTS = { difficulty:"normal", mode:"mobile", music:100, vocal:100, speed:20, fps:false, splash:true,
                    stage:"week1", botplay:false, activeMod:"current", extraModSlots:0, uiScale:100, quality:0,
-                   countdown:80, keys:null };
+                   countdown:80, keys:null, instFill:false };
 let settings = Object.assign({}, DEFAULTS);
 try{
   const raw = localStorage.getItem("fnfsm_settings");
@@ -1326,6 +1331,7 @@ function paintSettings(){
   paintStagePicker();
   $("#tFps").classList.toggle("on", settings.fps);
   $("#tSplash").classList.toggle("on", settings.splash);
+  $("#tInstFill").classList.toggle("on", !!settings.instFill);
   $("#tFull").classList.toggle("on", isFullscreen());
   $("#sUi").value = settings.uiScale; $("#vUi").textContent = settings.uiScale + "%";
   const cd = settings.countdown == null ? 80 : settings.countdown;
@@ -1414,6 +1420,7 @@ $("#resetKeys").addEventListener("click", () => {
   paintKeys();
 });
 $("#tSplash").addEventListener("click", () => { settings.splash = !settings.splash; saveSettings(); paintSettings(); });
+$("#tInstFill").addEventListener("click", () => { settings.instFill = !settings.instFill; saveSettings(); paintSettings(); });
 
 /* ---- the stage picker ----
    A stage used to be a yes/no on "the week stage", which said nothing about
@@ -2027,6 +2034,57 @@ const DIFFS = {
   hard:   { keep: 0,    minStep: 1, jumpPct: 0.08, patterns:["single","alt","stair","stream","jack","roll"] }
 };
 
+/* Is there a voice at this instant, or is this the band coming through the
+   stem? Two independent pieces of evidence, either of which is enough:
+
+   a pitch — YIN finds a confident f0 in the range a person sings in. A kick,
+   a snare or a hat has no such f0, so a note that has one was sung.
+
+   a shape — the spectrum sits where a voice sits. A kick is nearly all
+   energy under 500Hz; a hat or a cymbal is nearly all above 4kHz. A voice
+   is in between, with its centre of mass in the mid band. */
+function soundsVoiced(A, instA, t, baseShare){
+  // Is the voice contributing more here than it usually does?
+  // Bleed is a scaled copy of the band: it lifts the stem and the band
+  // together, so their ratio does not move. A syllable is energy the band
+  // does not have, so the stem's share of the total jumps. This is the test
+  // that does the work, because it compares the two things directly rather
+  // than trying to recognise a voice in isolation.
+  const vf = clamp(Math.round(t * A.fps), 0, A.rms.length - 1);
+  const inf = clamp(Math.round(t * instA.fps), 0, instA.rms.length - 1);
+  let v = 0, i = 0;
+  const span = Math.max(1, Math.round(A.fps * 0.09));
+  for (let k = vf; k < Math.min(A.rms.length, vf + span); k++) v = Math.max(v, A.rms[k]);
+  for (let k = inf; k < Math.min(instA.rms.length, inf + span); k++) i = Math.max(i, instA.rms[k]);
+  const rise = v / ((i + 1e-9) * (baseShare + 1e-9));
+  if (rise > 1.5) return true;
+
+
+  // A held pitch lowers that bar but does not replace it. Pitch alone is not
+  // enough on its own: a kick has a fundamental too, and it is steady enough
+  // over 70ms to look held, so trusting pitch by itself let every kick in the
+  // bleed through. It is used here for what it is good for — rescuing a real
+  // but quiet syllable sung underneath a loud band, where the share only
+  // lifts a little. Something with no lift at all is the band, whatever
+  // pitch it has.
+  if (rise > 1.15){
+    const p1 = Math.round((t + 0.04) * A.sr), p2 = Math.round((t + 0.11) * A.sr);
+    if (p1 > 0 && p2 + 1024 < A.mono.length){
+      const a = estimateF0(A.mono, A.sr, p1);
+      const b = estimateF0(A.mono, A.sr, p2);
+      if (a >= 80 && a <= 620 && b >= 80 && b <= 620 &&
+          Math.abs(a - b) / a < 0.06) return true;
+    }
+  }
+  return false;
+}
+
+/* Whether the band may put notes in the stretches nobody sings over. Off by
+   default: every note on a chart should be something a voice did. */
+function instFillEnabled(){
+  return typeof settings !== "undefined" && !!settings.instFill;
+}
+
 /* tracks: [{ A: analysis, side: "opp" | "plr" | null }]
    Two stems means we already know who sings what and nothing has to be
    guessed. One combined stem falls back to splitting it by voice. */
@@ -2034,10 +2092,58 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
   const DIFF = DIFFS[difficulty] || DIFFS.normal;
   const split = tracks.length > 1;
 
+  /* ---- what the band is doing, so the voices can be told from it ----
+     A vocal stem out of a splitter is rarely clean: the drums bleed through,
+     and a kick coming through a "vocals" track throws a flux peak that looks
+     exactly like a syllable. Charting those is how notes end up on the chart
+     that nobody sang. So the instrumental's own transients are collected
+     first, and any vocal onset landing on one has to prove it is a voice. */
+  const instOnsetTimes = (() => {
+    const cands = pickOnsets(normalise(instA.flux), instA.fps, 1.35);
+    return cands.map(c => c.t).sort((a, b) => a - b);
+  })();
+  const nearInstHit = t => {
+    // binary search for a band transient within 55ms
+    let lo = 0, hi = instOnsetTimes.length - 1;
+    while (lo <= hi){
+      const mid = (lo + hi) >> 1;
+      const d = instOnsetTimes[mid] - t;
+      if (Math.abs(d) <= 0.055) return true;
+      if (d < 0) lo = mid + 1; else hi = mid - 1;
+    }
+    return false;
+  };
+
   let onsets = [];
   for (const tr of tracks){
     const env = normalise(tr.A.flux);
     const rmsN = normalise(tr.A.rms);
+
+    // How loud this stem usually is next to the band — measured LOCALLY, in
+    // a window either side of wherever we are asking. A single figure for the
+    // whole song is wrong for the same reason it was wrong everywhere else in
+    // here: a reverb-heavy or heavily bleeding passage raises the stem's
+    // share everywhere at once, and a bar set by the rest of the song then
+    // lets all of it through. Against its own neighbourhood, only a real
+    // syllable stands out.
+    const shareOf = (() => {
+      const n = Math.min(tr.A.rms.length, instA.rms.length);
+      const ratio = new Float32Array(n);
+      for (let k = 0; k < n; k++) ratio[k] = instA.rms[k] > 1e-5 ? tr.A.rms[k] / instA.rms[k] : 0;
+      const W = Math.max(1, Math.round(tr.A.fps * 3));         // 3s either side
+      const cache = new Map();
+      return t => {
+        const c = clamp(Math.round(t * tr.A.fps), 0, n - 1);
+        const key = c >> 4;                                     // one bar per ~0.19s
+        if (cache.has(key)) return cache.get(key);
+        const scratch = [];
+        for (let k = Math.max(0, c - W); k < Math.min(n, c + W); k += 2) scratch.push(ratio[k]);
+        scratch.sort((a, b) => a - b);
+        const med = scratch.length ? scratch[Math.floor(scratch.length * 0.15)] : 0;
+        cache.set(key, med);
+        return med;
+      };
+    })();
 
     // A vocal stem is mostly silence between lines, and what fills that
     // silence — breaths, room tone, bleed from the backing track — still
@@ -2087,18 +2193,31 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
         if (rmsN[k] > peak) peak = rmsN[k];
       }
       if (peak < localPeak(t) * 0.20) continue;
+
+      // Bleed check. An onset that coincides with a band transient is either
+      // a syllable sung on the beat — which is most of them — or the band
+      // leaking through the stem. Only one of those has a voice in it, so it
+      // has to show one: a pitch a human could sing, or a spectrum shaped
+      // like a voice rather than like a drum. Onsets that land between the
+      // band's hits are not asked for proof; nothing is bleeding there.
+      if (nearInstHit(t) && !soundsVoiced(tr.A, instA, t, shareOf(t))) continue;
+
       onsets.push({ t, src:"voc", side: tr.side, A: tr.A, rmsN, v: cand.v });
     }
   }
   onsets.sort((a,b) => a.t - b.t);
 
   // ---- instrumental events, where nobody is singing ----
-  // The voices lead. But an intro, a break or an outro with nobody singing
-  // used to come back as dead air, and a chart with a seven-second hole in it
-  // is not a chart. So the instrumental fills those stretches — and only
-  // those — from its own transients, kept only where they land on the beat
-  // grid, which is what separates a drum hit from a cymbal wash or noise.
-  {
+  // OFF by default, and that is a decision reversed twice.
+  //
+  // It was removed once because instrumental notes read as notes nobody
+  // sang; it came back because a V1.60 requirement said no long empty
+  // stretches, and an instrumental break charted as dead air. It is off
+  // again now, because "the chart should follow the voice" has been the
+  // clearer and more repeated instruction of the two. The cost is real and
+  // worth stating: an intro, a break or an outro with nobody singing has
+  // nothing to play. Turning `instFill` on in Settings gets it back.
+  if (instFillEnabled()){
     const instEnv = normalise(instA.flux);
     const instRms = normalise(instA.rms);
     const cands = pickOnsets(instEnv, instA.fps, 1.45);
