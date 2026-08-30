@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#ffffff">
-<title>FNF Song Maker — V1.65</title>
+<title>FNF Song Maker — V1.70</title>
 <style>
   :root{
     --bg:#ffffff;
@@ -446,6 +446,27 @@
   .center-note{text-align:center;color:var(--muted);font-size:12.5px;margin-top:auto;padding-top:18px;line-height:1.6}
   .spacer{flex:1}
   .rank{font-size:52px;font-weight:900;letter-spacing:-2px;text-align:center;margin:4px 0 2px}
+  /* ---------- Keybinds ---------- */
+  .keyrow{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+  .keyrow:last-child{border-bottom:none}
+  .keyrow .kn{flex:1;font-size:14.5px;font-weight:700;display:flex;align-items:center;gap:8px}
+  .keyrow .kn i{font-style:normal;font-size:17px;color:var(--muted)}
+  .keycap{
+    -webkit-appearance:none;appearance:none;font-family:inherit;cursor:pointer;
+    min-width:56px;padding:9px 11px;border-radius:10px;border:1.5px solid var(--line);
+    background:#fff;font-size:13.5px;font-weight:800;color:var(--ink);
+    box-shadow:0 2px 0 var(--line);
+    transition:transform .13s cubic-bezier(.2,1.4,.5,1),border-color .13s ease,background .13s ease;
+  }
+  @media (hover:hover) and (pointer:fine){ .keycap:hover{border-color:#c8cddb;background:#f8f9fc} }
+  .keycap:active{transform:translateY(2px);box-shadow:none}
+  .keycap.listening{
+    border-color:var(--accent);color:var(--accent);background:#f4f6ff;
+    animation:keyPulse 1s ease-in-out infinite;
+  }
+  @keyframes keyPulse{0%,100%{box-shadow:0 2px 0 var(--line)}50%{box-shadow:0 2px 0 var(--accent)}}
+  .keycap.clash{border-color:var(--red);color:var(--red)}
+
   /* ---------- Stage picker ---------- */
   .stagegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:10px}
   .stagecard{
@@ -582,7 +603,7 @@
       <button class="menu-item" data-go="spritesScreen"><span class="mi-ic">🕺</span><span>SPRITES</span></button>
       <button class="menu-item" data-go="settingsScreen"><span class="mi-ic">⚙️</span><span>SETTINGS</span></button>
     </div>
-    <div class="corner" id="verTag">V1.65</div>
+    <div class="corner" id="verTag">V1.70</div>
     <div class="corner" id="credTag">Credits: Nick</div>
   </section>
 
@@ -650,6 +671,7 @@
         <p class="hint" id="diffHint" style="margin:12px 0 0"></p>
       </div>
 
+      <p class="hint" id="songLen" style="text-align:center;margin:0 0 12px;font-variant-numeric:tabular-nums"></p>
       <button class="btn pink" id="autoChartBtn" disabled><span class="ic">✨</span>Auto Chart Song</button>
       <button class="btn ghost" id="openSongs"><span class="ic">📀</span><span id="songsCount">My Mod</span></button>
       <p class="center-note" id="editorHint">Import the instrumental and at least one vocal track.</p>
@@ -684,6 +706,14 @@
       <div class="note" id="readyNote"></div>
       <p class="center-note" id="readyCheck" style="margin:-6px 0 14px"></p>
       <button class="btn green" id="playBtn"><span class="ic">▶</span>Play Chart</button>
+      <button class="btn" id="rechartBtn"><span class="ic">🔁</span>Rechart Song</button>
+      <div class="seg" id="rechartDiff" style="margin:-4px 0 14px">
+        <button data-diff="easy">Easy</button>
+        <button class="on" data-diff="normal">Normal</button>
+        <button data-diff="hard">Hard</button>
+      </div>
+      <p class="center-note" style="margin:-8px 0 14px">Rechart runs the analysis again on the same files, so you can try a
+        different difficulty without importing anything.</p>
       <button class="btn ghost" id="saveSongBtn"><span class="ic">💾</span>Save to My Mod</button>
       <button class="btn ghost" id="exportBtn"><span class="ic">⬇</span>Export Chart (.json)</button>
       <button class="btn ghost" data-go="settingsScreen"><span class="ic">⚙️</span>Gameplay Settings</button>
@@ -787,7 +817,7 @@
     <div class="wrap">
       <header class="top"><button class="back" data-go="editorScreen"><span>←</span></button><h2>My Mod</h2></header>
       <p class="hint" style="color:var(--muted);font-size:12.5px;margin:-8px 0 14px">
-        Charted songs are saved on this device, audio and all. Up to 5.</p>
+        Charted songs are saved on this device, audio and all — as many as the device has room for.</p>
       <div id="songList"></div>
       <p class="center-note" id="songsEmpty" style="display:none">
         Nothing saved yet.<br>Chart a song, then tap <b>Save to My Mod</b>.</p>
@@ -895,12 +925,27 @@
           </span>
         </div>
         <div class="setting">
+          <span class="name">Countdown Volume</span>
+          <span style="display:flex;align-items:center;gap:10px">
+            <input type="range" id="sCount" min="0" max="100" step="1">
+            <span class="val" id="vCount">80%</span>
+          </span>
+        </div>
+        <div class="setting">
           <span class="name">Scroll Speed</span>
           <span style="display:flex;align-items:center;gap:10px">
             <input type="range" id="sSpeed" min="15" max="32" step="1">
             <span class="val" id="vSpeed">2.0x</span>
           </span>
         </div>
+      </div>
+
+      <div class="card" id="keysCard">
+        <h3>Controls</h3>
+        <p class="hint">Two keys per lane, so a hand on the letters and a hand on the arrows both work. Tap a key to change it.</p>
+        <div id="keyRows"></div>
+        <p class="hint" id="keyHint" style="margin:12px 0 12px"></p>
+        <button class="btn ghost small" id="resetKeys">Reset to Default</button>
       </div>
 
       <div class="card">
@@ -1009,7 +1054,7 @@
 <script>
 "use strict";
 /* =====================================================================
-   FNF Song Maker — V1.65
+   FNF Song Maker — V1.70
    Single-file mobile chart maker + rhythm game.
    ===================================================================== */
 
@@ -1198,7 +1243,8 @@ $("#notice").addEventListener("click", e => { if (e.target.id === "notice") clos
    actually chart within. */
 const SPEED_MIN = 15, SPEED_MAX = 32;
 const DEFAULTS = { difficulty:"normal", mode:"mobile", music:100, vocal:100, speed:20, fps:false, splash:true,
-                   stage:"week1", botplay:false, activeMod:"current", extraModSlots:0, uiScale:100, quality:0 };
+                   stage:"week1", botplay:false, activeMod:"current", extraModSlots:0, uiScale:100, quality:0,
+                   countdown:80, keys:null };
 let settings = Object.assign({}, DEFAULTS);
 try{
   const raw = localStorage.getItem("fnfsm_settings");
@@ -1208,13 +1254,54 @@ settings.speed = clamp(Math.round(settings.speed), SPEED_MIN, SPEED_MAX);  // ol
 const saveSettings = () => { try{ localStorage.setItem("fnfsm_settings", JSON.stringify(settings)); }catch(e){} };
 const scrollPxPerSec = () => (settings.speed / 10) * 235;
 
+/* Keybinds. Two bindings per lane — one letter, one arrow — because that is
+   how people actually play, some with a hand on WASD and some on the arrows.
+   Both are rebindable, and the arrows stay as a second binding unless they are
+   deliberately reassigned, so nobody can strand themselves with no controls. */
+const KEY_DEFAULTS = [
+  { name:"Left",  keys:["KeyA", "ArrowLeft"] },
+  { name:"Down",  keys:["KeyS", "ArrowDown"] },
+  { name:"Up",    keys:["KeyW", "ArrowUp"] },
+  { name:"Right", keys:["KeyD", "ArrowRight"] }
+];
+let KEYBINDS = KEY_DEFAULTS.map(d => d.keys.slice());
+let KEYMAP = {};
+function rebuildKeymap(){
+  KEYMAP = {};
+  KEYBINDS.forEach((keys, lane) => { for (const k of keys) if (k) KEYMAP[k] = lane; });
+}
+function loadKeybinds(){
+  const saved = settings.keys;
+  if (Array.isArray(saved) && saved.length === 4 && saved.every(a => Array.isArray(a))){
+    KEYBINDS = saved.map(a => a.slice(0, 2));
+  } else {
+    KEYBINDS = KEY_DEFAULTS.map(d => d.keys.slice());
+  }
+  rebuildKeymap();
+}
+loadKeybinds();
+
+/* what to call a key on screen */
+function keyLabel(code){
+  if (!code) return "—";
+  if (code.startsWith("Key")) return code.slice(3);
+  if (code.startsWith("Digit")) return code.slice(5);
+  if (code.startsWith("Numpad")) return "Num " + code.slice(6);
+  if (code.startsWith("Arrow")) return { ArrowLeft:"←", ArrowDown:"↓", ArrowUp:"↑", ArrowRight:"→" }[code];
+  return { Space:"Space", ShiftLeft:"L Shift", ShiftRight:"R Shift", ControlLeft:"L Ctrl",
+           ControlRight:"R Ctrl", AltLeft:"L Alt", AltRight:"R Alt", Enter:"Enter",
+           Comma:",", Period:".", Slash:"/", Semicolon:";", Quote:"'",
+           BracketLeft:"[", BracketRight:"]", Backslash:"\\", Minus:"-", Equal:"=" }[code] || code;
+}
+
+
 const DIFF_HINTS = {
   easy:   "Single notes, the strongest syllables only, no jumps.",
   normal: "Alternating runs and stairs, the odd jump on a hard downbeat.",
   hard:   "Streams and rolls, finer vocal detail kept, jumps where they land."
 };
 const MODE_HINTS = {
-  pc: "Traditional four-lane keyboard layout. Use D F J K or the arrow keys.",
+  pc: "Traditional four-lane keyboard layout. Keys are yours to set — see Controls below.",
   mobile: "Large touch note tiles designed for phones. For the best experience, tilt your device into landscape mode."
 };
 
@@ -1243,12 +1330,17 @@ function paintSettings(){
   $("#tSplash").classList.toggle("on", settings.splash);
   $("#tFull").classList.toggle("on", isFullscreen());
   $("#sUi").value = settings.uiScale; $("#vUi").textContent = settings.uiScale + "%";
+  const cd = settings.countdown == null ? 80 : settings.countdown;
+  $("#sCount").value = cd; $("#vCount").textContent = cd + "%";
+  // rebinding is a keyboard idea; a phone has nothing to rebind
+  $("#keysCard").style.display = isDesktop() ? "" : "none";
+  paintKeys();
   $$("input[type=range]").forEach(paintRangeFill);
   // The desktop card only means anything with a window to resize and a
   // keyboard to press F11 with, so a phone never sees it.
   $("#pcCard").style.display = isDesktop() ? "" : "none";
   $("#readyMode").textContent = settings.mode === "pc"
-    ? "PC Mode — keys D F J K or arrow keys."
+    ? "PC Mode — " + KEYBINDS.map(k => keyLabel(k[0])).join(" ") + " or the arrow keys."
     : "Mobile Mode — tap the four lanes. Landscape recommended.";
 }
 $$("#diffSel button").forEach(b => b.addEventListener("click", () => {
@@ -1258,7 +1350,71 @@ $$("#modeSel button").forEach(b => b.addEventListener("click", () => { settings.
 $("#sMusic").addEventListener("input", e => { settings.music = +e.target.value; saveSettings(); paintSettings(); applyLiveVolumes(); });
 $("#sVocal").addEventListener("input", e => { settings.vocal = +e.target.value; saveSettings(); paintSettings(); applyLiveVolumes(); });
 $("#sSpeed").addEventListener("input", e => { settings.speed = +e.target.value; saveSettings(); paintSettings(); });
+$("#sCount").addEventListener("input", e => { settings.countdown = +e.target.value; saveSettings(); paintSettings(); });
 $("#tFps").addEventListener("click", () => { settings.fps = !settings.fps; saveSettings(); paintSettings(); });
+
+/* ---- rebinding ----
+   One key at a time: tapping a cap arms it, the next key pressed takes the
+   slot. A key already used by another lane is refused rather than silently
+   stolen, because two lanes on one key is a chart you cannot pass and a
+   cause that is very hard to see. */
+let listeningFor = null;                    // [lane, slot] while waiting for a key
+function paintKeys(){
+  const host = $("#keyRows");
+  if (!host) return;
+  host.innerHTML = "";
+  KEY_DEFAULTS.forEach((def, lane) => {
+    const row = document.createElement("div");
+    row.className = "keyrow";
+    row.innerHTML = '<span class="kn"><i></i><span></span></span>';
+    row.querySelector("i").textContent = ["←","↓","↑","→"][lane];
+    row.querySelector(".kn span").textContent = def.name + " Note";
+    for (let slot = 0; slot < 2; slot++){
+      const cap = document.createElement("button");
+      cap.className = "keycap";
+      const live = listeningFor && listeningFor[0] === lane && listeningFor[1] === slot;
+      cap.classList.toggle("listening", !!live);
+      cap.textContent = live ? "Press any key…" : keyLabel(KEYBINDS[lane][slot]);
+      cap.addEventListener("click", () => {
+        listeningFor = live ? null : [lane, slot];
+        paintKeys();
+      });
+      row.appendChild(cap);
+    }
+    host.appendChild(row);
+  });
+  $("#keyHint").textContent = listeningFor
+    ? "Press the key you want for " + KEY_DEFAULTS[listeningFor[0]].name + ". Escape cancels."
+    : "Tap a key to change it.";
+}
+document.addEventListener("keydown", e => {
+  if (!listeningFor || currentScreen !== "settingsScreen") return;
+  e.preventDefault();
+  const [lane, slot] = listeningFor;
+  if (e.code === "Escape"){ listeningFor = null; paintKeys(); return; }
+  const clash = KEYBINDS.findIndex((keys, l) => l !== lane && keys.includes(e.code));
+  if (clash >= 0){
+    listeningFor = null;
+    paintKeys();
+    $("#keyHint").textContent = keyLabel(e.code) + " is already the " +
+      KEY_DEFAULTS[clash].name + " note. Pick another, or clear that one first.";
+    return;
+  }
+  KEYBINDS[lane][slot] = e.code;
+  settings.keys = KEYBINDS.map(a => a.slice());
+  saveSettings();
+  rebuildKeymap();
+  listeningFor = null;
+  paintKeys();
+}, true);
+$("#resetKeys").addEventListener("click", () => {
+  KEYBINDS = KEY_DEFAULTS.map(d => d.keys.slice());
+  settings.keys = null;
+  saveSettings();
+  rebuildKeymap();
+  listeningFor = null;
+  paintKeys();
+});
 $("#tSplash").addEventListener("click", () => { settings.splash = !settings.splash; saveSettings(); paintSettings(); });
 
 /* ---- the stage picker ----
@@ -1397,6 +1553,11 @@ wireFormat("plrVocFormat", "plrVocFile");
 function refreshEditor(){
   const vocals = (picked.oppVoc ? 1 : 0) + (picked.plrVoc ? 1 : 0);
   $("#autoChartBtn").disabled = !(picked.inst && vocals > 0);
+  const d = pickedDur.inst;
+  $("#songLen").textContent = picked.inst && d != null
+    ? "Song length: " + fmtTime(d) + " / " + fmtTime(MAX_SONG_SEC)
+    : picked.inst ? "Song length: unknown / " + fmtTime(MAX_SONG_SEC)
+    : "Maximum song length " + fmtTime(MAX_SONG_SEC) + ".";
   $("#editorHint").innerHTML =
     !picked.inst ? "Import the instrumental and at least one vocal track."
     : vocals === 2 ? "Both voices loaded — each one's notes go straight to its own character.<br>Charting usually takes a few seconds, and up to <b>1–3 minutes</b> for a long song on an older phone."
@@ -1404,14 +1565,54 @@ function refreshEditor(){
     : "Import the instrumental and at least one vocal track.";
 }
 
+/* The cap on how long a song may be, and the one place it is written down.
+   Checked when the file is picked rather than after a minute of analysis:
+   telling someone their track is too long only once the work is done is the
+   worst moment to tell them. */
+const MAX_SONG_SEC = 10 * 60;
+const pickedDur = {};
+
+/* Read a duration without decoding the whole file — an <audio> element knows
+   it from the header, which costs nothing next to decodeAudioData. */
+function fileDuration(file){
+  return new Promise(res => {
+    const url = URL.createObjectURL(file);
+    const a = new Audio();
+    let done = false;
+    const finish = d => { if (done) return; done = true; URL.revokeObjectURL(url); res(d); };
+    a.preload = "metadata";
+    a.onloadedmetadata = () => finish(isFinite(a.duration) ? a.duration : null);
+    a.onerror = () => finish(null);
+    setTimeout(() => finish(null), 6000);
+    a.src = url;
+  });
+}
+
 function wirePicker(btnId, inputId, statusId, key){
   $("#" + btnId).addEventListener("click", () => $("#" + inputId).click());
-  $("#" + inputId).addEventListener("change", e => {
+  $("#" + inputId).addEventListener("change", async e => {
     const f = e.target.files && e.target.files[0];
+    e.target.value = "";
     if (!f) return;
-    picked[key] = f;
     const el = $("#" + statusId);
-    el.textContent = f.name + "  (" + (f.size/1048576).toFixed(1) + " MB)";
+    el.textContent = "Reading " + f.name + "…";
+    el.classList.remove("ok");
+
+    const dur = await fileDuration(f);
+    if (dur !== null && dur > MAX_SONG_SEC){
+      picked[key] = null; pickedDur[key] = null;
+      el.textContent = "Too long — " + fmtTime(dur);
+      el.classList.remove("ok");
+      refreshEditor();
+      await notify("That song is too long",
+        "The maximum song length is 10 minutes. " + f.name + " runs " + fmtTime(dur) + ".",
+        { icon:"⏱️", fix:"Trim the track, or pick a shorter one." });
+      return;
+    }
+    picked[key] = f;
+    pickedDur[key] = dur;
+    el.textContent = f.name + "  (" + (f.size/1048576).toFixed(1) + " MB" +
+                     (dur !== null ? " · " + fmtTime(dur) : "") + ")";
     el.classList.add("ok");
     refreshEditor();
   });
@@ -1797,16 +1998,35 @@ function quantise(t, offset, step){
 /* Difficulty is not a speed setting — the song is the song. It decides how
    much of the vocal detail survives into the chart, and which shapes are on
    the table when a run is laid out. */
+/* Onsets are detected ONCE, at the most sensitive setting, and difficulty
+   then chooses how much of that one list to keep. It used to detect
+   differently per difficulty, which meant Hard heard events Normal never
+   did and the three charts were three different readings of the song rather
+   than three views of one. Now every note on every difficulty comes from the
+   same detected event, so easy ⊆ normal ⊆ hard by construction and no
+   setting can invent anything.
+
+   keep is the local strength percentile an onset must clear: 0 keeps every
+   detected event, 0.55 keeps only the stronger half-and-more of whatever is
+   happening right there. Local, so a quiet verse is thinned against itself
+   and not against the loudest chorus. Normal's is deliberately near zero —
+   it exists to shave the weakest few percent, the ones sitting closest to
+   the noise floor, not to drop syllables the singer actually sang. Easy is
+   where the real simplifying happens.
+
+   minStep is the closest two notes may sit, in grid steps, so the same
+   setting means the same thing at 90 BPM and at 180.
+
+   jumpPct is the top fraction of accents allowed to become a double. It
+   replaced a dice roll — a jump used to be `random() < 0.6` on Hard, which
+   is exactly the "random doubles" that put notes on the chart with nothing
+   behind them. A jump now has to be one of the hardest attacks in the song,
+   on a downbeat, or it does not happen. */
+const DETECT = { sens: 1.28, detail: 0.18 };   // one detection pass for all three
 const DIFFS = {
-  // minStep is the closest two notes may sit, counted in grid steps, so the
-  // same setting means the same thing at 90 BPM and at 180.
-  // detail is the onset-strength floor: lower keeps quieter syllables.
-  // sens is the onset peak-picking threshold — lower hears quieter syllables;
-  // detail is the strength floor applied after; minStep is the closest two
-  // notes may sit, counted in grid steps.
-  easy:   { sens: 1.75, minStep: 3, detail: 0.55, jumpRate: 0,    patterns:["single","alt","stair"] },
-  normal: { sens: 1.50, minStep: 1, detail: 0.35, jumpRate: 0.35, patterns:["single","alt","stair","stream","jack"] },
-  hard:   { sens: 1.28, minStep: 1, detail: 0.18, jumpRate: 0.60, patterns:["single","alt","stair","stream","jack","roll"] }
+  easy:   { keep: 0.55, minStep: 3, jumpPct: 0,    patterns:["single","alt","stair"] },
+  normal: { keep: 0.05, minStep: 1, jumpPct: 0.03, patterns:["single","alt","stair","stream","jack"] },
+  hard:   { keep: 0,    minStep: 1, jumpPct: 0.08, patterns:["single","alt","stair","stream","jack","roll"] }
 };
 
 /* tracks: [{ A: analysis, side: "opp" | "plr" | null }]
@@ -1829,7 +2049,7 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
     // fails every threshold the chorus sets, which is how whole sections
     // used to come back empty; judged against its own neighbourhood it
     // charts just like the chorus does.
-    const cands = pickOnsets(env, tr.A.fps, DIFF.sens);
+    const cands = pickOnsets(env, tr.A.fps, DETECT.sens);
     const ahead = Math.max(1, Math.round(tr.A.fps * 0.12));
 
     // rolling median onset strength over a few seconds either side
@@ -1861,7 +2081,7 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
 
     for (let ci = 0; ci < cands.length; ci++){
       const cand = cands[ci];
-      if (cand.v < localV[ci] * DIFF.detail) continue;
+      if (cand.v < localV[ci] * DETECT.detail) continue;
       const t = cand.t;
       const i = clamp(Math.round(t * tr.A.fps), 0, rmsN.length - 1);
       let peak = 0;
@@ -2030,9 +2250,34 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
     }
     if (!kept.length) continue;
 
-    // Difficulty thinning. Easy does not get a slower song, it gets the same
-    // song with the quieter syllables left out — so keep whichever of two
-    // crowded onsets was actually the stronger attack.
+    // Difficulty selection. Every difficulty reads the same detected events;
+    // the easier ones simply keep fewer of them. An onset survives if it is
+    // strong relative to what is happening around it — a local percentile,
+    // not a global one, so a quiet verse keeps its share instead of being
+    // wiped out by a loud chorus elsewhere in the song.
+    if (D.keep > 0 && kept.length > 4){
+      const WIN = 4;                                  // seconds either side
+      const survivors = [];
+      let lo = 0, hi = 0;
+      const scratch = [];
+      for (let i = 0; i < kept.length; i++){
+        const t = kept[i].t;
+        while (lo < i && t - kept[lo].t > WIN) lo++;
+        while (hi < kept.length - 1 && kept[hi + 1].t - t < WIN) hi++;
+        scratch.length = 0;
+        for (let k = lo; k <= hi; k++) scratch.push(kept[k].v || 0);
+        scratch.sort((a, b) => a - b);
+        // the value at the keep percentile of this neighbourhood
+        const cut = scratch[Math.min(scratch.length - 1, Math.floor(scratch.length * D.keep))];
+        // The first note of a phrase is never thinned away: dropping the
+        // attack that opens a line is the one cut a listener always hears.
+        const opensPhrase = i === 0 || t - kept[i-1].t > 1.1;
+        if (opensPhrase || (kept[i].v || 0) >= cut) survivors.push(kept[i]);
+      }
+      if (survivors.length) kept = survivors;
+    }
+
+    // and a floor on how close two notes may sit, so Easy stays playable
     const minGap = step * D.minStep - 1e-6;
     if (D.minStep > 1){
       const thinned = [];
@@ -2081,9 +2326,13 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
     const STEP_UP = clamp(spread * 0.10, 1.2, 3);
     const quartOf = c => c < c1 ? 0 : c < c2 ? 1 : c < c3 ? 2 : 3;
 
-    // strong attacks, used to decide where a jump is earned
+    // The bar a double has to clear: the top jumpPct of attacks on this side.
+    // Infinity when the difficulty allows no jumps at all, so the test below
+    // can never pass rather than relying on a separate flag.
     const vs = kept.map(o => o.v || 0).slice().sort((a,b) => a-b);
-    const strongV = vs.length ? vs[Math.floor(vs.length * 0.80)] : Infinity;
+    const jumpV = (D.jumpPct > 0 && vs.length)
+      ? vs[Math.min(vs.length - 1, Math.floor(vs.length * (1 - D.jumpPct)))]
+      : Infinity;
 
     // ---- split into runs, then into gestures ----
     // A run is notes close enough together to belong to one breath. But a long
@@ -2245,26 +2494,45 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
 
         const nextT = (i + 1 < kept.length) ? kept[i+1].t : duration;
         const gap = nextT - o.t;
+        // A hold is a note the singer actually held. Follow the voice forward
+        // from the attack and stop where it stops — measured against the
+        // loudness of this attack rather than a fixed number, because a fixed
+        // number means a quiet verse never sustains anything while a loud
+        // chorus sustains everything.
         let len = 0;
-        if (o.src === "voc" && o.rmsN && gap > 0.55){
-          const fi = clamp(Math.round((o.t + 0.28) * o.A.fps), 0, o.rmsN.length - 1);
-          if (o.rmsN[fi] > 0.16){
-            len = Math.min(gap - 0.18, tempo.beatLen * 2.5);
-            len = Math.round(len / step) * step;
+        if (o.src === "voc" && o.rmsN && gap > 0.42){
+          const fps = o.A.fps;
+          const at = clamp(Math.round(o.t * fps), 0, o.rmsN.length - 1);
+          let peak = 0;
+          for (let k2 = at; k2 < Math.min(o.rmsN.length, at + Math.round(fps * 0.15)); k2++){
+            if (o.rmsN[k2] > peak) peak = o.rmsN[k2];
+          }
+          const floor = peak * 0.45;
+          const limit = Math.min(gap - 0.14, tempo.beatLen * 4);
+          let held = 0;
+          for (let k2 = at; k2 < Math.min(o.rmsN.length, at + Math.round(limit * fps)); k2++){
+            if (o.rmsN[k2] < floor) break;
+            held = (k2 - at) / fps;
+          }
+          if (held > tempo.beatLen * 0.9){
+            len = Math.round(Math.min(held, limit) / step) * step;
             if (len < step * 2) len = 0;
           }
         }
         notes.push({ t:o.t, lane, mustHit: side === "plr", len, src:o.src });
 
-        // A jump is two notes at once. It has to be earned: a hard attack, on
-        // a beat, opening a phrase, and never twice in quick succession —
-        // otherwise every other note becomes a double and the chart turns to
-        // mush.
-        const onBeat = Math.abs(((o.t - tempo.offset) / tempo.beatLen) % 1) < 0.08;
-        if (D.jumpRate > 0 && k === 0 && n > 2 &&
-            (o.v || 0) >= strongV && onBeat && len === 0 &&
-            o.t - lastJump > tempo.beatLen * 6 && rnd() < D.jumpRate){
-          let jl = (lane + 2) % 4;                 // the opposite hand
+        // A jump is two notes at once, and it has to be earned by the audio.
+        // This used to be a dice roll — 60% of eligible onsets on Hard — which
+        // is how doubles ended up on the chart with nothing behind them.
+        // Now it takes one of the hardest attacks in the song, landing on a
+        // downbeat, with no jump in the previous six beats. Nothing random.
+        const beats = (o.t - tempo.offset) / tempo.beatLen;
+        const onDownbeat = Math.abs(((beats % 4) + 4) % 4) < 0.10 ||
+                           Math.abs(((beats % 4) + 4) % 4 - 4) < 0.10;
+        if (D.jumpPct > 0 && k === 0 && n > 2 && len === 0 &&
+            (o.v || 0) >= jumpV && onDownbeat &&
+            o.t - lastJump > tempo.beatLen * 6){
+          const jl = (lane + 2) % 4;               // the opposite hand
           notes.push({ t:o.t, lane:jl, mustHit: side === "plr", len:0, src:o.src });
           lastJump = o.t;
         }
@@ -2302,7 +2570,8 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
   // Everything above is heuristic, so before the chart is handed over it gets
   // read back and checked against the song it came from. Anything wrong is
   // corrected here rather than shipped.
-  const report = { outOfRange:0, malformed:0, thinned:0, longestGap:0, notes:0 };
+  const report = { outOfRange:0, malformed:0, thinned:0, longestGap:0, notes:0,
+                   offGrid:0, stacked:0, holdsTrimmed:0, holds:0, gridMs:0 };
   let checked = [];
   for (const n of clean){
     if (!isFinite(n.t) || !isFinite(n.len) || !(n.lane >= 0 && n.lane <= 3)){ report.malformed++; continue; }
@@ -2331,6 +2600,66 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
   }
   checked.sort((a,b) => a.t - b.t);
 
+  // On the grid. A note more than half a step off the detected beat is a
+  // note the player will feel as late, so it is pulled back onto the grid
+  // rather than left where the analysis put it.
+  for (const n of checked){
+    const snapped = quantise(n.t, tempo.offset, step);
+    const off = Math.abs(snapped - n.t);
+    if (off > step * 0.5){ report.offGrid++; n.t = snapped; }
+  }
+  checked.sort((a,b) => a.t - b.t);
+
+  // Never more than two notes at one instant on one side: three is not a
+  // pattern anyone plays, it is the analysis firing twice on one attack.
+  {
+    const survivors = [];
+    let i = 0;
+    while (i < checked.length){
+      let j = i;
+      while (j < checked.length && checked[j].t - checked[i].t < 0.012) j++;
+      for (const side of [false, true]){
+        const at = [];
+        for (let k = i; k < j; k++) if (checked[k].mustHit === side) at.push(checked[k]);
+        if (at.length <= 2){ survivors.push(...at); continue; }
+        at.sort((a, b) => (b.len > 0 ? 1 : 0) - (a.len > 0 ? 1 : 0));  // keep the holds
+        survivors.push(at[0], at[1]);
+        report.stacked += at.length - 2;
+      }
+      i = j;
+    }
+    checked = survivors;
+    checked.sort((a,b) => a.t - b.t);
+  }
+
+  // Holds: never running into the next note in their own lane, never shorter
+  // than they are worth drawing.
+  {
+    const lanes = [[],[],[],[],[],[],[],[]];
+    for (const n of checked) lanes[(n.mustHit ? 4 : 0) + n.lane].push(n);
+    for (const arr of lanes){
+      for (let i = 0; i < arr.length; i++){
+        const n = arr[i];
+        if (n.len <= 0) continue;
+        const next = arr[i+1];
+        if (next && n.t + n.len > next.t - step * 0.5){
+          n.len = Math.max(0, next.t - n.t - step);
+          report.holdsTrimmed++;
+        }
+        if (n.len < step * 2) n.len = 0;
+      }
+    }
+    report.holds = checked.filter(n => n.len > 0).length;
+  }
+
+  // What the chart is worth reporting: how far off the beat it sits, and the
+  // longest stretch with nothing to play.
+  let devSum = 0;
+  for (const n of checked){
+    const snapped = quantise(n.t, tempo.offset, step);
+    devSum += Math.abs(snapped - n.t);
+  }
+  report.gridMs = checked.length ? (devSum / checked.length) * 1000 : 0;
   for (let i = 1; i < checked.length; i++){
     const g = checked[i].t - checked[i-1].t;
     if (g > report.longestGap) report.longestGap = g;
@@ -2414,10 +2743,15 @@ function paintReady(chart){
     const fixes = [];
     if (v.outOfRange) fixes.push(v.outOfRange + " outside the song");
     if (v.malformed) fixes.push(v.malformed + " malformed");
+    if (v.offGrid) fixes.push(v.offGrid + " pulled back onto the beat");
+    if (v.stacked) fixes.push(v.stacked + " stacked on one instant");
+    if (v.holdsTrimmed) fixes.push(v.holdsTrimmed + " holds trimmed off the next note");
     if (v.thinned) fixes.push(v.thinned + " where the density was unplayable");
-    $("#readyCheck").textContent = "Validation: " +
-      (fixes.length ? "corrected " + fixes.join(", ") + ". " : "nothing to correct. ") +
-      "Longest gap without a note " + v.longestGap.toFixed(1) + "s.";
+    $("#readyCheck").innerHTML = "<b>Validation:</b> " +
+      (fixes.length ? "corrected " + fixes.join(", ") + "." : "nothing to correct.") +
+      "<br>Notes sit " + v.gridMs.toFixed(0) + "ms off the detected beat on average" +
+      (v.holds ? ", " + v.holds + (v.holds === 1 ? " hold" : " holds") + " from sustained vocals" : "") +
+      ". Longest stretch with nothing to play: " + v.longestGap.toFixed(1) + "s.";
   }
 }
 
@@ -2443,7 +2777,12 @@ async function decode(file){
 
 $("#cancelChart").addEventListener("click", () => { chartCancelled = true; show("editorScreen"); });
 
-$("#autoChartBtn").addEventListener("click", async () => {
+/* One charting run, so Auto Chart and Rechart are the same code path rather
+   than two that drift apart. `files` is whatever pair of stems to read —
+   the ones just imported, or the ones a saved song was built from, which is
+   what lets a chart be regenerated without importing anything again. */
+async function runAutoChart(files, diff, backTo){
+  const picked = files;
   chartCancelled = false;
   shownPct = 0;
   buildProgSteps();
@@ -2473,7 +2812,8 @@ $("#autoChartBtn").addEventListener("click", async () => {
       setProgress(8 + (i+1) / stems.length * 12, STAGES[0]);
     }
 
-    if (instBuf.duration > 8 * 60) throw new Error("Song is longer than 8 minutes. Please use a shorter track.");
+    if (instBuf.duration > MAX_SONG_SEC)
+      throw new Error("This song is too long. The maximum song length is 10 minutes.");
     setProgress(18, STAGES[1]);
 
     const instA = await analyzeTrack(instBuf, p => setProgress(18 + p*22, STAGES[2]));
@@ -2498,7 +2838,7 @@ $("#autoChartBtn").addEventListener("click", async () => {
     let duration = instBuf.duration;
     for (const s of stems) duration = Math.max(duration, s.buf.duration);
 
-    const chart = buildChart(instA, stems.map(s => ({ A: s.A, side: s.side })), tempo, duration, settings.difficulty);
+    const chart = buildChart(instA, stems.map(s => ({ A: s.A, side: s.side })), tempo, duration, diff);
     if (!chart.notes.length) throw new Error("No notes could be detected. Try a louder or less compressed track.");
 
     setProgress(90, STAGES[6]);
@@ -2509,7 +2849,7 @@ $("#autoChartBtn").addEventListener("click", async () => {
       instBuf,
       tracks: stems.map(s => ({ buf: s.buf, side: s.side, combined: stems.length === 1 })),
       chart,
-      name: picked.inst.name.replace(/\.[^.]+$/, ""),
+      name: (picked.name || picked.inst.name.replace(/\.[^.]+$/, "")),
       // keep the encoded files around so the song can be stored and replayed
       sourceFiles: { inst: picked.inst, opp: picked.oppVoc, plr: picked.plrVoc }
     };
@@ -2521,12 +2861,37 @@ $("#autoChartBtn").addEventListener("click", async () => {
   }catch(err){
     if (!chartCancelled){
       await notify("Charting failed", (err && err.message ? err.message : String(err)),
-        { fix:"Your files are still loaded — fix the track and try Auto Chart again." });
-      show("editorScreen");
+        { fix:"Your files are still loaded — fix the track and try again." });
+      show(backTo);
     }
   }finally{
     clearInterval(tick);
   }
+}
+
+$("#autoChartBtn").addEventListener("click", () =>
+  runAutoChart(picked, settings.difficulty, "editorScreen"));
+
+/* ---- Rechart ----
+   The stems a song was charted from are kept with it, so a chart can be
+   thrown away and rebuilt at a different difficulty without going back for
+   the files. */
+let rechartDiff = "normal";
+$$("#rechartDiff button").forEach(b => b.addEventListener("click", () => {
+  $$("#rechartDiff button").forEach(x => x.classList.remove("on"));
+  b.classList.add("on");
+  rechartDiff = b.dataset.diff;
+}));
+$("#rechartBtn").addEventListener("click", async () => {
+  const src = SONG && SONG.sourceFiles;
+  if (!src || !src.inst){
+    await notify("Nothing to rechart",
+      "This chart has no audio kept with it, so it cannot be built again.",
+      { icon:"🔁", fix:"Import the instrumental and vocals in the Editor and chart it there." });
+    return;
+  }
+  await runAutoChart({ inst: src.inst, oppVoc: src.opp, plrVoc: src.plr, name: SONG.name },
+                     rechartDiff, "readyScreen");
 });
 
 $("#exportBtn").addEventListener("click", async () => {
@@ -2535,7 +2900,7 @@ $("#exportBtn").addEventListener("click", async () => {
   const data = {
     song: SONG.name, bpm: +c.bpm.toFixed(2), offset: +c.offset.toFixed(4),
     duration: +c.duration.toFixed(3), difficulty: c.difficulty || "normal",
-    generator: "FNF Song Maker V1.65",
+    generator: "FNF Song Maker V1.70",
     notes: c.notes.map(n => ({ time:+n.t.toFixed(4), lane:n.lane, mustHit:n.mustHit, length:+n.len.toFixed(4) }))
   };
   const text = JSON.stringify(data, null, 1);
@@ -2574,7 +2939,10 @@ $("#exportBtn").addEventListener("click", async () => {
    survive without the original files. That is far past what localStorage
    holds, hence IndexedDB.
    ===================================================================== */
-const MAX_SONGS = 5;
+// No fixed cap any more — the browser's storage quota is the only limit, and
+// it says so itself when it runs out, which is a truer answer than a number
+// picked here.
+const MAX_SONGS = Infinity;
 const DB_NAME = "fnfsm", DB_STORE = "songs", MOD_STORE = "mod";
 let dbPromise = null;
 
@@ -2614,7 +2982,7 @@ async function refreshSongsUI(){
   try{ list = await songsAll(); }catch(e){ list = []; }
   list.sort((a,b) => b.created - a.created);
 
-  $("#songsCount").textContent = "My Mod (" + list.length + "/" + MAX_SONGS + ")";
+  $("#songsCount").textContent = "My Mod (" + list.length + ")";
   const host = $("#songList");
   host.innerHTML = "";
   $("#songsEmpty").style.display = list.length ? "none" : "block";
@@ -2662,12 +3030,6 @@ $("#saveSongBtn").addEventListener("click", async () => {
   const btn = $("#saveSongBtn");
   try{
     const list = await songsAll();
-    if (list.length >= MAX_SONGS){
-      await notify("My Mod is full",
-        "You have " + MAX_SONGS + " songs saved, which is the limit on this device.",
-        { icon:"📀", fix:"Delete one from My Mod to make room for this chart." });
-      return;
-    }
     const name = (prompt("Name this song", SONG.name) || "").trim();
     if (!name) return;
     btn.disabled = true;
@@ -4624,10 +4986,6 @@ const LANE_LIGHT   = ["#e07fc4", "#8fffff", "#7dff6f", "#ff8a8d"];
 const LANE_DARK    = ["#7d2d63", "#00a3ad", "#0a9c03", "#a81f28"];
 const GREY_BASE = "#9aa3ad", GREY_LIGHT = "#cfd6dd", GREY_DARK = "#5f6870";
 const LANE_GLYPH  = ["←", "↓", "↑", "→"];
-const KEYMAP = {
-  KeyD:0, KeyF:1, KeyJ:2, KeyK:3,
-  ArrowLeft:0, ArrowDown:1, ArrowUp:2, ArrowRight:3
-};
 const WINDOWS = [
   { name:"SICK",  ms:45,  score:350, health: 0.023, acc:1.00 },
   { name:"GOOD",  ms:90,  score:200, health: 0.014, acc:0.75 },
@@ -4787,6 +5145,35 @@ function laneX(s, lane, mine){
 }
 function laneY(s, mine){ return mine ? s.strumY : s.oppY; }
 
+/* ---- 3 … 2 … 1 … GO! ----
+   Synthesised rather than shipped as an MP3: a recording would be hundreds of
+   kilobytes of base64 in a file that has to stay one file, and this is
+   scheduled on the same AudioContext clock the song is started on, so the
+   ticks land exactly on the beat the visual countdown draws instead of
+   approximately near it. Three rising ticks, then a brighter GO on the
+   downbeat the song itself begins.
+   ===================================================================== */
+function scheduleCountdown(ctx, songStart){
+  const vol = (settings.countdown == null ? 80 : settings.countdown) / 100;
+  if (vol <= 0) return;
+  const beep = (when, freq, dur, gainPeak) => {
+    if (when < ctx.currentTime) return;
+    const osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(freq, when);
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, gainPeak * vol), when + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+    osc.connect(g); g.connect(ctx.destination);
+    osc.start(when); osc.stop(when + dur + 0.02);
+  };
+  beep(songStart - 3, 440, 0.16, 0.16);   // 3
+  beep(songStart - 2, 554, 0.16, 0.18);   // 2
+  beep(songStart - 1, 659, 0.16, 0.20);   // 1
+  beep(songStart,     880, 0.30, 0.26);   // GO!
+  beep(songStart,     1320, 0.30, 0.11);  // a fifth on top, so GO reads as brighter
+}
+
 function startGame(){
   if (!SONG) return;
   stopAudio();
@@ -4850,6 +5237,7 @@ function startGame(){
   game.startedAt = at;
   nodes.inst.start(at);
   for (const v of nodes.vocals) v.src.start(at);
+  scheduleCountdown(ctx, at);
 
   // landscape recommendation
   if (settings.mode === "mobile" && window.innerHeight > window.innerWidth){
