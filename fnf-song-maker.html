@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#ffffff">
-<title>FNF Song Maker — V1.61</title>
+<title>FNF Song Maker — V1.65</title>
 <style>
   :root{
     --bg:#ffffff;
@@ -475,6 +475,49 @@
   .stagecard.pressing{transform:scale(.96)}
   .stagecard.blank canvas{background:#fff;border-bottom:1px solid var(--line)}
 
+  /* ---------- Week browser ---------- */
+  .weeklist{display:flex;flex-direction:column;gap:11px}
+  .weekcard{
+    -webkit-appearance:none;appearance:none;font-family:inherit;padding:0;cursor:pointer;
+    border:1.5px solid var(--line);border-radius:16px;overflow:hidden;background:#fff;
+    display:flex;align-items:stretch;text-align:left;gap:0;width:100%;
+    transition:transform .16s cubic-bezier(.2,1.4,.5,1),border-color .16s ease,box-shadow .16s ease;
+  }
+  .weekcard canvas{flex:0 0 108px;width:108px;height:76px;display:block;background:#eef0f6}
+  .weekcard .wk{flex:1;min-width:0;padding:11px 13px;display:flex;flex-direction:column;justify-content:center;gap:3px}
+  .weekcard .wk b{font-size:15px;font-weight:800;letter-spacing:-.2px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .weekcard .wk small{font-size:12px;color:var(--muted);font-weight:600}
+  .weekcard .go{
+    flex:0 0 auto;align-self:center;margin-right:12px;width:34px;height:34px;border-radius:50%;
+    background:var(--accent);color:#fff;display:grid;place-items:center;font-size:13px;
+  }
+  @media (hover:hover) and (pointer:fine){ .weekcard:hover{transform:translateY(-2px);border-color:#c8cddb} }
+  .weekcard.pressing{transform:scale(.985)}
+  .badge{
+    display:inline-flex;align-items:center;gap:4px;align-self:flex-start;
+    font-size:10.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;
+    padding:2px 7px;border-radius:6px;background:#eef0f6;color:var(--muted);
+  }
+  .badge.draft{background:#fff3d6;color:#8a6414}
+  .badge.private{background:#eceaff;color:#4b3fbe}
+  .badge.published{background:#dcf7e6;color:#137a3c}
+  .badge.stock{background:#e9edff;color:#3446a8}
+
+  /* ---------- Status picker ---------- */
+  .statusrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:9px}
+  .statuschip{
+    -webkit-appearance:none;appearance:none;font-family:inherit;cursor:pointer;
+    border:2px solid var(--line);border-radius:13px;background:#fff;padding:11px 10px;
+    display:flex;flex-direction:column;gap:3px;text-align:left;
+    transition:transform .15s cubic-bezier(.2,1.4,.5,1),border-color .15s ease,box-shadow .15s ease;
+  }
+  .statuschip b{font-size:13px;font-weight:800}
+  .statuschip small{font-size:11px;color:var(--muted);font-weight:600;line-height:1.35}
+  .statuschip.on{border-color:var(--accent);box-shadow:0 4px 14px rgba(61,90,254,.18)}
+  .statuschip.pressing{transform:scale(.96)}
+  @media (hover:hover) and (pointer:fine){ .statuschip:not(.on):hover{border-color:#c8cddb} }
+
   /* ---------- Mod tabs ---------- */
   .modtabs{display:flex;flex-wrap:wrap;gap:8px;margin:-6px 0 0}
   .modtab{
@@ -539,7 +582,7 @@
       <button class="menu-item" data-go="spritesScreen"><span class="mi-ic">🕺</span><span>SPRITES</span></button>
       <button class="menu-item" data-go="settingsScreen"><span class="mi-ic">⚙️</span><span>SETTINGS</span></button>
     </div>
-    <div class="corner" id="verTag">V1.61</div>
+    <div class="corner" id="verTag">V1.65</div>
     <div class="corner" id="credTag">Credits: Nick</div>
   </section>
 
@@ -652,24 +695,30 @@
   <!-- ============ WEEKS ============ -->
   <section class="screen" id="weeksScreen">
     <div class="wrap">
-      <header class="top"><button class="back" data-go="menuScreen"><span>←</span></button><h2>Weeks</h2></header>
+      <header class="top">
+        <button class="back" id="weekBack"><span>&larr;</span></button>
+        <h2 id="weeksTitle">Weeks</h2>
+      </header>
 
-      <div class="weekhead">
-        <button class="weeknav" id="weekPrev" aria-label="Previous week">←</button>
-        <div class="weekid">
-          <div id="weekNum">WEEK 1</div>
-          <div id="weekName">Tutorial</div>
-        </div>
-        <button class="weeknav" id="weekNext" aria-label="Next week">→</button>
+      <!-- the browser: every week on this device, stock and made here -->
+      <div id="weekBrowser">
+        <p class="hint" style="color:var(--muted);font-size:12.5px;margin:-8px 0 14px">
+          A week is a set of songs played in order. The four that ship with the game are below,
+          along with any you build in Mod Maker.</p>
+        <div class="weeklist" id="weekList"></div>
+        <button class="btn ghost" id="weekToMod" style="margin-top:16px"><span class="ic">&#128230;</span>Build a week in Mod Maker</button>
       </div>
-      <div id="weekDots" class="dots"></div>
 
-      <canvas id="weekCanvas" class="weekmap"></canvas>
-      <p class="hint" id="weekSub" style="text-align:center;margin:10px 0 14px"></p>
-
-      <div class="lbl">Songs</div>
-      <div id="weekSongs"></div>
-      <p class="center-note" id="weekHint" style="margin-top:10px"></p>
+      <!-- one week, opened -->
+      <div id="weekDetail" hidden>
+        <canvas id="weekCanvas" class="weekmap"></canvas>
+        <p class="hint" id="weekSub" style="text-align:center;margin:10px 0 4px"></p>
+        <p class="hint" id="weekBy" style="text-align:center;margin:0 0 14px;font-size:12px"></p>
+        <button class="btn" id="weekPlayAll"><span class="ic">&#9654;</span>Play the whole week</button>
+        <div class="lbl" style="margin-top:6px">Songs</div>
+        <div id="weekSongs"></div>
+        <p class="center-note" id="weekHint" style="margin-top:10px"></p>
+      </div>
     </div>
   </section>
 
@@ -682,7 +731,7 @@
       <p class="hint" id="modSlots" style="color:var(--muted);font-size:12.5px;margin:2px 0 14px"></p>
 
       <div class="cover" id="modCover"><span>No cover<br><small>PNG or JPG</small></span></div>
-      <input id="modName" type="text" maxlength="40" placeholder="Mod name">
+      <input id="modName" type="text" maxlength="40" placeholder="Week name">
       <p class="hint" style="color:var(--muted);font-size:12.5px;margin:0 0 16px" id="modStats"></p>
 
       <div id="autoModWrap">
@@ -690,18 +739,32 @@
         <p class="hint" id="autoModNote" style="margin:6px 0 0"></p>
       </div>
 
-      <button class="btn" id="playModBtn" disabled><span class="ic">▶</span>Play Mod</button>
+      <button class="btn green" id="testModBtn" disabled><span class="ic">🧪</span>Test Week</button>
+      <p class="center-note" style="margin:0 0 14px">Test drops you straight into the week and brings you back here the moment you are done.</p>
+      <button class="btn" id="playModBtn" disabled><span class="ic">▶</span>Play Week</button>
       <button class="btn pink" id="autoModBtn" disabled><span class="ic">✨</span>Auto Mod</button>
       <p class="center-note" style="margin:0 0 18px">Auto Mod writes the dialogue for every song from how that song actually plays.</p>
 
-      <button class="btn ghost small" id="deleteModBtn" style="margin-bottom:18px">Delete this mod</button>
+      <div class="lbl" style="margin-top:4px">Stage</div>
+      <div class="stagegrid" id="modStageSel"></div>
+      <p class="hint" id="modStageHint" style="margin:11px 0 18px"></p>
 
-      <div class="lbl">In this mod</div>
+      <div class="lbl">Status</div>
+      <div class="statusrow" id="modStatusRow">
+        <button class="statuschip" data-status="draft"><b>Draft</b><small>Still building it</small></button>
+        <button class="statuschip" data-status="private"><b>🔒 Private</b><small>Only you can play it</small></button>
+        <button class="statuschip" data-status="published"><b>🌐 Published</b><small>Anyone on this device</small></button>
+      </div>
+      <p class="hint" id="modStatusHint" style="margin:11px 0 18px"></p>
+
+      <button class="btn ghost small" id="deleteModBtn" style="margin-bottom:18px">Delete this week</button>
+
+      <div class="lbl">In this week</div>
       <div id="modSongs"></div>
       <p class="center-note" id="modEmpty" style="display:none;margin:0 0 16px">
         Nothing here yet. Add a saved song below.</p>
 
-      <div class="lbl" style="margin-top:16px">Add a saved song</div>
+      <div class="lbl" style="margin-top:16px">Add a song to this week</div>
       <div id="modPool"></div>
       <p class="center-note" id="poolEmpty" style="display:none"></p>
       <input type="file" id="thumbFile" accept="image/png,image/jpeg,image/webp">
@@ -880,6 +943,7 @@
       <button class="btn" id="resumeBtn">Resume</button>
       <button class="btn ghost" id="botplayBtn">Botplay: Off</button>
       <button class="btn ghost" id="restartBtn">Restart Song</button>
+      <button class="btn ghost" id="pauseToMod" style="display:none">Back to Mod Maker</button>
       <button class="btn ghost" id="quitBtn">Quit to Menu</button>
     </div>
   </section>
@@ -909,7 +973,8 @@
       </div>
       <button class="btn" id="modNextBtn" style="display:none"><span class="ic">▶</span>Next Song</button>
       <button class="btn" id="againBtn">Play Again</button>
-      <button class="btn ghost" data-go="readyScreen">Back to Chart</button>
+      <button class="btn green" id="backToModBtn" style="display:none"><span class="ic">🛠</span>Back to Mod Maker</button>
+      <button class="btn ghost" id="resToChart" data-go="readyScreen">Back to Chart</button>
       <button class="btn ghost" data-go="menuScreen">Main Menu</button>
     </div>
   </section>
@@ -944,7 +1009,7 @@
 <script>
 "use strict";
 /* =====================================================================
-   FNF Song Maker — V1.61
+   FNF Song Maker — V1.65
    Single-file mobile chart maker + rhythm game.
    ===================================================================== */
 
@@ -2470,7 +2535,7 @@ $("#exportBtn").addEventListener("click", async () => {
   const data = {
     song: SONG.name, bpm: +c.bpm.toFixed(2), offset: +c.offset.toFixed(4),
     duration: +c.duration.toFixed(3), difficulty: c.difficulty || "normal",
-    generator: "FNF Song Maker V1.61",
+    generator: "FNF Song Maker V1.65",
     notes: c.notes.map(n => ({ time:+n.t.toFixed(4), lane:n.lane, mustHit:n.mustHit, length:+n.len.toFixed(4) }))
   };
   const text = JSON.stringify(data, null, 1);
@@ -2649,7 +2714,8 @@ let MOD = { id:"current", name:"My Mod", thumb:null, songs:[] };   // the open o
 
 function newModRecord(n){
   return { id:"mod-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7),
-           name:"Mod " + n, thumb:null, songs:[], created:Date.now() };
+           name:"My Week " + n, thumb:null, songs:[], created:Date.now(),
+           stage:"week1", status:"draft" };
 }
 
 async function loadMod(){
@@ -2657,8 +2723,9 @@ async function loadMod(){
   try{
     const all = await dbTx("readonly", st => st.getAll(), MOD_STORE);
     MODS = (all || []).map(r => ({
-      id: r.id, name: r.name || "My Mod", thumb: r.thumb || null,
-      songs: r.songs || [], created: r.created || 0
+      id: r.id, name: r.name || "My Week", thumb: r.thumb || null,
+      songs: r.songs || [], created: r.created || 0,
+      stage: r.stage || "week1", status: r.status || "draft"
     }));
     // "current" is the single mod every build before V1.61 wrote; it keeps
     // its id so an existing mod survives the move to a list
@@ -2666,7 +2733,8 @@ async function loadMod(){
   }catch(e){ MODS = []; /* first run */ }
   let seeded = false;
   if (!MODS.length){
-    MODS = [{ id:"current", name:"My Mod", thumb:null, songs:[], created:Date.now() }];
+    MODS = [{ id:"current", name:"My Week", thumb:null, songs:[], created:Date.now(),
+              stage:"week1", status:"draft" }];
     seeded = true;
   }
   MOD = MODS.find(m => m.id === settings.activeMod) || MODS[0];
@@ -2678,7 +2746,9 @@ async function saveMod(){
   if (!songsSupported()) return;
   try{
     await dbTx("readwrite",
-      st => st.put({ id:MOD.id, name:MOD.name, thumb:MOD.thumb, songs:MOD.songs, created:MOD.created || 0 }),
+      st => st.put({ id:MOD.id, name:MOD.name, thumb:MOD.thumb, songs:MOD.songs,
+                     created:MOD.created || 0, stage:MOD.stage || "week1",
+                     status:MOD.status || "draft" }),
       MOD_STORE);
   }
   catch(e){ /* storage full — the UI still works for this session */ }
@@ -2782,12 +2852,12 @@ async function renderMod(){
   const add = document.createElement("button");
   const room = MODS.length < modSlots();
   add.className = "modtab add" + (room ? "" : " locked");
-  add.textContent = room ? "＋ New mod" : "🔒 New mod — " + MOD_SLOT_PRICE;
+  add.textContent = room ? "＋ New week" : "🔒 New week — " + MOD_SLOT_PRICE;
   add.addEventListener("click", addMod);
   wirePress(add, "pressing", "");
   tabs.appendChild(add);
 
-  $("#modSlots").textContent = MODS.length + " of " + modSlots() + " mod slots used" +
+  $("#modSlots").textContent = MODS.length + " of " + modSlots() + " week slots used" +
     (room ? "" : " — extra slots are " + MOD_SLOT_PRICE + " each.");
   $("#deleteModBtn").disabled = MODS.length <= 1;
 
@@ -2872,7 +2942,76 @@ async function renderMod(){
   }
   $("#playModBtn").disabled = MOD.songs.length === 0;
   $("#autoModBtn").disabled = MOD.songs.length === 0;
+  $("#testModBtn").disabled = MOD.songs.length === 0;
+  paintModStage();
+  paintModStatus();
 }
+
+/* ---- the week's stage ---- */
+let modStageBuilt = false;
+function paintModStage(){
+  const host = $("#modStageSel");
+  if (!host) return;
+  if (!modStageBuilt){
+    modStageBuilt = true;
+    for (const st of STAGE_CHOICES){
+      const b = document.createElement("button");
+      b.className = "stagecard" + (st.id === "white" ? " blank" : "");
+      b.dataset.stage = st.id;
+      b.innerHTML = '<canvas width="264" height="148"></canvas><span class="sn"><b></b><small></small></span>';
+      b.querySelector("b").textContent = st.name;
+      b.querySelector("small").textContent = st.sub;
+      b.addEventListener("click", () => { MOD.stage = st.id; saveMod(); renderMod(); });
+      wirePress(b, "pressing", "");
+      host.appendChild(b);
+    }
+  }
+  for (const b of $$("#modStageSel .stagecard")){
+    b.classList.toggle("on", b.dataset.stage === (MOD.stage || "week1"));
+    const cv = b.querySelector("canvas");
+    if (b.dataset.stage !== "white") weekThumb(cv, b.dataset.stage);
+    else cv.dataset.done = "1";
+  }
+  const st = STAGE_CHOICES.find(x => x.id === (MOD.stage || "week1")) || STAGE_CHOICES[0];
+  $("#modStageHint").textContent = "Songs in this week play on " + st.name +
+    (st.id === "white" ? "." : " — " + st.sub.toLowerCase() + ".");
+}
+
+/* ---- draft / private / published ----
+   Publishing here means the week leaves your drafts and shows up in the Weeks
+   browser for anyone playing on this device. There is no server behind this
+   build, so it cannot reach anyone else's copy, and the confirmation says so
+   rather than implying a reach it does not have. */
+function paintModStatus(){
+  const cur = MOD.songs.length ? (MOD.status || "draft") : "draft";
+  for (const b of $$("#modStatusRow .statuschip")){
+    b.classList.toggle("on", b.dataset.status === cur);
+    b.disabled = !MOD.songs.length && b.dataset.status !== "draft";
+  }
+  const st = WEEK_STATUS[cur];
+  $("#modStatusHint").textContent = !MOD.songs.length
+    ? "Add a song before this week can go anywhere."
+    : st.hint + (cur === "published"
+        ? " You can keep editing it — the published week updates as you go."
+        : "");
+}
+$$("#modStatusRow .statuschip").forEach(b => {
+  wirePress(b, "pressing", "");
+  b.addEventListener("click", async () => {
+    const want = b.dataset.status;
+    if (want === (MOD.status || "draft")) return;
+    if (want === "published"){
+      const ok = confirm('Publish "' + MOD.name + '"?\n\n' +
+        "It will appear in the Weeks browser for anyone playing on this device. " +
+        "This build has no server, so it cannot reach players on other devices. " +
+        "You can keep editing it afterwards.");
+      if (!ok) return;
+    }
+    MOD.status = want;
+    await saveMod();
+    renderMod();
+  });
+});
 
 /* ---- artwork ---- */
 let thumbTarget = -1;                 // -1 = the mod cover, otherwise a song index
@@ -3092,17 +3231,41 @@ function drawPortrait(who){
    PLAYING A MOD
    ===================================================================== */
 let modQueue = [], modPos = 0, inMod = false;
+// Where a run of songs came from, so finishing one goes back there instead of
+// always landing in Mod Maker. Testing is the whole point of the button, and a
+// test that dumps you somewhere else is a test you stop using.
+let modReturn = "modScreen", testing = false;
 
-$("#playModBtn").addEventListener("click", async () => {
+$("#playModBtn").addEventListener("click", () => startWeekRun(false));
+$("#testModBtn").addEventListener("click", () => startWeekRun(true));
+
+function startWeekRun(isTest){
   if (!MOD.songs.length) return;
+  settings.stage = MOD.stage || "week1"; saveSettings(); stageCaches = {};
   modQueue = MOD.songs.slice();
   modPos = 0;
   inMod = true;
+  testing = !!isTest;
+  modReturn = "modScreen";
   playModEntry();
-});
+}
+
+/* Leave a test at any point and land back in Mod Maker, ready to edit. */
+function endTest(){
+  inMod = false; testing = false;
+  modQueue = []; modPos = 0;
+  show("modScreen");
+  renderMod();
+}
 
 async function playModEntry(){
-  if (modPos >= modQueue.length){ inMod = false; show("modScreen"); return; }
+  if (modPos >= modQueue.length){
+    inMod = false; testing = false;
+    show(modReturn);
+    if (modReturn === "weeksScreen") showWeekBrowser();
+    else renderMod();
+    return;
+  }
   const entry = modQueue[modPos];
   const ok = await loadSongById(entry.id);
   if (!ok){ modPos++; return playModEntry(); }
@@ -3110,6 +3273,7 @@ async function playModEntry(){
 }
 
 $("#modNextBtn").addEventListener("click", () => { modPos++; playModEntry(); });
+$("#backToModBtn").addEventListener("click", endTest);
 
 // shared by My Mod and by mod playback
 async function loadSongById(id){
@@ -4743,6 +4907,10 @@ function endGame(died){
     return;
   }
   $("#modNextBtn").style.display = (inMod && modPos < modQueue.length - 1) ? "flex" : "none";
+  // A test run offers the way straight back to the editor; the chart route is
+  // meaningless there, because the song came from the week and not the Editor.
+  $("#backToModBtn").style.display = testing ? "flex" : "none";
+  $("#resToChart").style.display = testing ? "none" : "flex";
   show("resultsScreen");
   game = null;
 }
@@ -4925,12 +5093,15 @@ cv.addEventListener("pointermove", e => {
 function togglePause(){
   if (!game || game.over) return;
   game.paused = !game.paused;
+  if (game.paused) paintPauseExtras();
   $("#pauseOverlay").classList.toggle("show", game.paused);
   const ctx = getCtx();
   if (game.paused) ctx.suspend(); else ctx.resume();
 }
 $("#pauseBtn").addEventListener("click", togglePause);
 $("#resumeBtn").addEventListener("click", togglePause);
+// the test exit only exists during a test
+function paintPauseExtras(){ $("#pauseToMod").style.display = testing ? "flex" : "none"; }
 function paintBotplay(){
   $("#botplayBtn").textContent = "Botplay: " + (settings.botplay ? "On" : "Off");
   $("#botplayBtn").style.color = settings.botplay ? "var(--green)" : "";
@@ -4942,15 +5113,17 @@ $("#botplayBtn").addEventListener("click", () => {
 });
 paintBotplay();
 $("#restartBtn").addEventListener("click", () => { getCtx().resume(); startGame(); });
-$("#quitBtn").addEventListener("click", () => {
+function leaveSong(to){
   inMod = false;
   getCtx().resume();
   stopAudio();
   cancelAnimationFrame(gameRAF); gameRAF = 0;
   game = null;
   $("#pauseOverlay").classList.remove("show");
-  show("menuScreen");
-});
+  if (to === "modScreen"){ endTest(); } else { testing = false; show(to); }
+}
+$("#quitBtn").addEventListener("click", () => leaveSong("menuScreen"));
+$("#pauseToMod").addEventListener("click", () => leaveSong("modScreen"));
 $("#playBtn").addEventListener("click", startGame);
 $("#againBtn").addEventListener("click", startGame);
 
@@ -5186,44 +5359,154 @@ function drawStageMotion(g, kind, w, h, t){
 }
 
 /* ------------------------- week selection ------------------------- */
-let weekIndex = 0;
+/* =====================================================================
+   WEEKS
+   A week is a set of songs played in order. Four ship with the game on the
+   supplied maps; the rest are the ones built in Mod Maker, which is the same
+   thing — a named, ordered, staged list of saved songs. Rather than keep two
+   parallel ideas, a mod IS a week, and this screen browses both.
+   ===================================================================== */
+const WEEK_STATUS = {
+  stock:     { label:"Included",  hint:"Ships with the game." },
+  draft:     { label:"Draft",     hint:"Still being built. Only you can see it." },
+  private:   { label:"Private",   hint:"Finished enough to keep, but not shared." },
+  published: { label:"Published", hint:"Anyone playing on this device can find it." }
+};
 
-function paintWeek(){
-  const wk = WEEKS[weekIndex];
+function weekSongTitles(wk, lib){
+  if (wk.kind === "stock") return wk.songs.slice();
+  return wk.songs.map(e => {
+    const rec = lib.find(r => r.id === e.id);
+    return rec ? rec.name : null;
+  }).filter(Boolean);
+}
+
+/* every week on the device: the four stock maps, then the ones you built */
+function allWeeks(){
+  const stock = WEEKS.map(w => ({
+    kind:"stock", id:"stock-" + w.stage, name:w.name, sub:w.sub,
+    stage:w.stage, songs:w.songs, status:"stock", creator:"Nick"
+  }));
+  const mine = MODS.map(m => ({
+    kind:"mod", id:m.id, name:m.name || "Untitled week",
+    sub:(m.songs.length || 0) + (m.songs.length === 1 ? " song" : " songs"),
+    stage:m.stage || "week1", songs:m.songs, mod:m,
+    status:m.songs.length ? (m.status || "draft") : "draft", creator:"You"
+  }));
+  return stock.concat(mine);
+}
+
+let weekView = "browser", openWeekRef = null, weekLib = [];
+
+function weekThumb(cv, stage){
+  const im = stageImages[stage];
+  if (!im || !im.complete || !im.naturalWidth || cv.dataset.done) return;
+  const g = cv.getContext("2d");
+  const sc = Math.max(cv.width / im.naturalWidth, cv.height / im.naturalHeight);
+  const dw = im.naturalWidth * sc, dh = im.naturalHeight * sc;
+  g.drawImage(im, (cv.width - dw) / 2, cv.height - dh, dw, dh);
+  cv.dataset.done = "1";
+}
+
+async function paintWeekList(){
+  try{ weekLib = await songsAll(); }catch(e){ weekLib = []; }
+  const host = $("#weekList");
+  host.innerHTML = "";
+  for (const wk of allWeeks()){
+    const titles = weekSongTitles(wk, weekLib);
+    const st = WEEK_STATUS[wk.status] || WEEK_STATUS.draft;
+    const b = document.createElement("button");
+    b.className = "weekcard";
+    b.innerHTML = '<canvas width="216" height="152"></canvas>' +
+      '<span class="wk"><span class="badge ' + wk.status + '"></span><b></b><small></small></span>' +
+      '<span class="go">▶</span>';
+    b.querySelector(".badge").textContent = st.label;
+    b.querySelector("b").textContent = wk.name;
+    b.querySelector("small").textContent =
+      (titles.length || 0) + (titles.length === 1 ? " song" : " songs") + " · " + wk.creator;
+    weekThumb(b.querySelector("canvas"), wk.stage);
+    b.addEventListener("click", () => openWeek(wk));
+    wirePress(b, "pressing", "");
+    host.appendChild(b);
+  }
+}
+
+function showWeekBrowser(){
+  weekView = "browser"; openWeekRef = null;
+  $("#weekBrowser").hidden = false;
+  $("#weekDetail").hidden = true;
+  $("#weeksTitle").textContent = "Weeks";
+  stopWeekLoop();
+  paintWeekList();
+}
+
+function openWeek(wk){
+  weekView = "detail"; openWeekRef = wk;
   currentStage = wk.stage;
-  $("#weekNum").textContent = "WEEK " + wk.n;
-  $("#weekName").textContent = wk.name;
-  $("#weekSub").textContent = wk.sub;
-  $("#weekDots").innerHTML = WEEKS.map((_, i) =>
-    '<span class="dot' + (i === weekIndex ? " on" : "") + '"></span>').join("");
+  $("#weekBrowser").hidden = true;
+  $("#weekDetail").hidden = false;
+  $("#weeksTitle").textContent = wk.name;
+  $("#weekSub").textContent = wk.sub || "";
+  const st = WEEK_STATUS[wk.status] || WEEK_STATUS.draft;
+  $("#weekBy").textContent = "By " + wk.creator + " · " + st.label + " — " + st.hint;
+  $("#weekHint").textContent = "";
 
+  const titles = weekSongTitles(wk, weekLib);
+  $("#weekPlayAll").disabled = titles.length === 0;
   const host = $("#weekSongs");
   host.innerHTML = "";
-  wk.songs.forEach(title => {
-    const b = document.createElement("button");
-    b.className = "btn ghost small weeksong";
-    b.textContent = title;
-    b.addEventListener("click", () => pickWeekSong(wk, title));
-    host.appendChild(b);
-  });
+  if (wk.kind === "stock"){
+    wk.songs.forEach(title => {
+      const b = document.createElement("button");
+      b.className = "btn ghost small weeksong";
+      b.textContent = title;
+      b.addEventListener("click", () => pickStockSong(wk, title));
+      host.appendChild(b);
+    });
+  } else {
+    wk.songs.forEach((entry, i) => {
+      const rec = weekLib.find(r => r.id === entry.id);
+      if (!rec) return;
+      const b = document.createElement("button");
+      b.className = "btn ghost small weeksong";
+      b.textContent = (i + 1) + ".  " + rec.name + "   ·   " + fmtTime(rec.chart.duration);
+      b.addEventListener("click", () => playWeekFrom(wk, i));
+      host.appendChild(b);
+    });
+    if (!wk.songs.length){
+      $("#weekHint").textContent = "No songs in this week yet. Add some in Mod Maker.";
+    }
+  }
+  startWeekLoop();
   drawWeekPreview();
 }
+
+$("#weekBack").addEventListener("click", () => {
+  if (weekView === "detail") showWeekBrowser();
+  else show("menuScreen");
+});
+$("#weekToMod").addEventListener("click", async () => {
+  await loadMod(); await renderMod(); show("modScreen");
+});
+$("#weekPlayAll").addEventListener("click", () => {
+  if (openWeekRef) playWeekFrom(openWeekRef, 0);
+});
 
 let weekRAF = 0, weekT = 0;
 const weekBFAnim = makeBFAnim();
 const weekOppAnim = makeOppAnim();
 function drawWeekPreview(){
   const cv = $("#weekCanvas");
-  if (!cv) return;
+  if (!cv || !openWeekRef) return;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const w = cv.clientWidth, h = cv.clientHeight;
   if (!w || !h) return;
   if (cv.width !== Math.ceil(w*dpr)){ cv.width = Math.ceil(w*dpr); cv.height = Math.ceil(h*dpr); }
   const g = cv.getContext("2d");
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const wk = WEEKS[weekIndex];
-  g.drawImage(buildStageArt(wk.stage, w, h, dpr), 0, 0, w, h);
-  drawStageMotion(g, wk.stage, w, h, weekT);
+  const stage = openWeekRef.stage;
+  g.drawImage(buildStageArt(stage, w, h, dpr), 0, 0, w, h);
+  drawStageMotion(g, stage, w, h, weekT);
 
   // the cast, standing on this week's floor
   const groundY = h * 0.93;
@@ -5260,35 +5543,37 @@ function weekFrame(){
 function startWeekLoop(){ if (!weekRAF) weekRAF = requestAnimationFrame(weekFrame); }
 function stopWeekLoop(){ if (weekRAF){ cancelAnimationFrame(weekRAF); weekRAF = 0; } }
 
-function stepWeek(d){
-  weekIndex = (weekIndex + d + WEEKS.length) % WEEKS.length;
-  paintWeek();
-}
-$("#weekPrev").addEventListener("click", () => stepWeek(-1));
-$("#weekNext").addEventListener("click", () => stepWeek(1));
-
-async function pickWeekSong(wk, title){
-  // A week slot plays a saved song of that name when the player has charted
-  // one; otherwise it says so rather than pretending to have content.
-  let lib = [];
-  try{ lib = await songsAll(); }catch(e){ lib = []; }
-  const match = lib.find(r => r.name.toLowerCase() === title.toLowerCase());
+async function pickStockSong(wk, title){
+  // A stock week slot plays a saved song of that name when one has been
+  // charted; otherwise it says so rather than pretending to have content.
+  const match = weekLib.find(r => r.name.toLowerCase() === title.toLowerCase());
   if (!match){
-    $("#weekHint").textContent = 'No song named "' + title + '" in your mod yet. ' +
+    $("#weekHint").textContent = 'No song named "' + title + '" saved yet. ' +
       "Chart one in the Editor and save it under that name to fill this slot.";
     return;
   }
   $("#weekHint").textContent = "";
-  settings.stage = wk.stage;
-  saveSettings();
-  stageCaches = {};
+  settings.stage = wk.stage; saveSettings(); stageCaches = {};
   if (await loadSongById(match.id)){
     paintReady(SONG.chart);
     show("readyScreen");
   }
 }
 
-$("#openWeeks").addEventListener("click", () => { paintWeek(); show("weeksScreen"); });
+/* Playing a week is the mod queue: it walks the songs in order, dialogue and
+   all, and comes back where it started. */
+function playWeekFrom(wk, from){
+  if (wk.kind === "stock"){ return pickStockSong(wk, wk.songs[from]); }
+  if (!wk.songs.length) return;
+  settings.stage = wk.stage; saveSettings(); stageCaches = {};
+  modQueue = wk.songs.slice();
+  modPos = from || 0;
+  inMod = true;
+  modReturn = "weeksScreen";
+  playModEntry();
+}
+
+$("#openWeeks").addEventListener("click", () => { showWeekBrowser(); show("weeksScreen"); });
 
 /* ------------------------- main loop ------------------------- */
 function frame(){
