@@ -1,11 +1,7 @@
-<title>FNF Song Maker — 1.0</title>
+<title>FNF Song Maker</title>
 <style>
-/* The artifact host paints its own ground behind the page, so the app paints
-   its own explicitly rather than inheriting the viewer's theme. The game
-   carries its own light and dark themes and picks between them itself. */
 :root { color-scheme: light dark; }
 html, body { background: var(--menu-bg, #f7d94b); }
-
   :root{
     --bg:#ffffff;
     --ink:#14161c;
@@ -177,6 +173,19 @@ html, body { background: var(--menu-bg, #f7d94b); }
     text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000,
                 -2px 0 0 #000,2px 0 0 #000,0 -2px 0 #000,0 2px 0 #000;
   }
+  #searchBtn{
+    position:absolute;top:calc(env(safe-area-inset-top) + 11px);left:11px;z-index:4;
+    -webkit-appearance:none;appearance:none;font-family:inherit;cursor:pointer;
+    display:flex;align-items:center;gap:7px;padding:9px 14px;border:none;border-radius:13px;
+    background:rgba(255,255,255,.9);color:#14161c;
+    font-size:13px;font-weight:900;letter-spacing:1px;
+    box-shadow:0 3px 0 rgba(0,0,0,.5), 0 6px 16px rgba(0,0,0,.2);
+    transition:transform .15s cubic-bezier(.2,1.4,.5,1);
+  }
+  html[data-dark="1"] #searchBtn{background:rgba(38,42,54,.94);color:#eef0f6}
+  @media (hover:hover) and (pointer:fine){ #searchBtn:hover{transform:translateY(-2px)} }
+  #searchBtn.pressing{transform:translateY(2px);box-shadow:0 1px 0 rgba(0,0,0,.5)}
+
   #verTag{left:11px}
   #credTag{right:11px}
 
@@ -562,6 +571,40 @@ html, body { background: var(--menu-bg, #f7d94b); }
   .stagecard.pressing{transform:scale(.96)}
   .stagecard.blank canvas{background:var(--card);border-bottom:1px solid var(--line)}
 
+  /* ---------- Search ---------- */
+  #searchQ{
+    width:100%;padding:14px 16px;border-radius:14px;border:1.5px solid var(--line);
+    font-family:inherit;font-size:16px;font-weight:650;color:var(--ink);background:var(--field);
+    margin-bottom:11px;-webkit-appearance:none;appearance:none;
+  }
+  #searchQ:focus{outline:none;border-color:var(--accent)}
+  .searchfilters{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+  .searchfilters .seg button{font-size:12.5px;padding:9px 4px}
+  /* a wide screen has room to put the three filters side by side */
+  @media (min-width:760px){
+    .searchfilters{flex-direction:row}
+    .searchfilters .seg{flex:1;min-width:0}
+  }
+  .sresult{
+    display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+    border:1.5px solid var(--line);border-radius:15px;background:var(--card);
+    padding:12px 13px;margin-bottom:10px;cursor:pointer;font-family:inherit;
+    /* a button does not inherit colour, so dark mode needs it said out loud */
+    color:var(--ink);
+    -webkit-appearance:none;appearance:none;
+    transition:transform .15s cubic-bezier(.2,1.4,.5,1),border-color .15s ease;
+  }
+  @media (hover:hover) and (pointer:fine){ .sresult:hover{transform:translateY(-2px);border-color:var(--accent)} }
+  .sresult.pressing{transform:scale(.985)}
+  .sresult .si{
+    flex:0 0 42px;width:42px;height:42px;border-radius:12px;background:var(--field);
+    display:grid;place-items:center;font-size:19px;
+  }
+  .sresult .sm{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+  .sresult .sm b{font-size:14.5px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sresult .sm small{font-size:12px;color:var(--muted);font-weight:600}
+  .sresult .sp{flex:0 0 auto;color:var(--accent);font-size:13px;font-weight:900}
+
   /* ---------- Week browser ---------- */
   .weeklist{display:flex;flex-direction:column;gap:11px}
   .weekcard{
@@ -665,13 +708,15 @@ html, body { background: var(--menu-bg, #f7d94b); }
     <canvas id="menuBg"></canvas>
     <div id="menuInner">
       <div class="menu-sub">FNF SONG MAKER</div>
+      <button class="menu-item" id="openPlay"><span class="mi-ic">▶️</span><span>PLAY</span></button>
       <button class="menu-item" data-go="editorScreen"><span class="mi-ic">🎵</span><span>EDITOR</span></button>
-      <button class="menu-item" id="openWeeks"><span class="mi-ic">🗺️</span><span>WEEKS</span></button>
+      <button class="menu-item" id="openWeeks"><span class="mi-ic">🗺️</span><span>MY WEEKS</span></button>
       <button class="menu-item" id="openMod"><span class="mi-ic">📦</span><span>MOD MAKER</span></button>
       <button class="menu-item" data-go="spritesScreen"><span class="mi-ic">🕺</span><span>SPRITES</span></button>
       <button class="menu-item" data-go="settingsScreen"><span class="mi-ic">⚙️</span><span>SETTINGS</span></button>
     </div>
-    <div class="corner" id="verTag">Version 1.0</div>
+    <button id="searchBtn"><span>🔍</span>SEARCH</button>
+    <div class="corner" id="verTag">Version 1.01</div>
     <div class="corner" id="credTag">Credits: Nick</div>
   </section>
 
@@ -795,15 +840,16 @@ html, body { background: var(--menu-bg, #f7d94b); }
     <div class="wrap">
       <header class="top">
         <button class="back" id="weekBack"><span>&larr;</span></button>
-        <h2 id="weeksTitle">Weeks</h2>
+        <h2 id="weeksTitle">My Weeks</h2>
       </header>
 
       <!-- the browser: every week on this device, stock and made here -->
       <div id="weekBrowser">
         <p class="hint" style="color:var(--muted);font-size:12.5px;margin:-8px 0 14px">
-          A week is a set of songs played in order. The four that ship with the game are below,
-          along with any you build in Mod Maker.</p>
+          A week is a set of songs played in order. These are the ones you have built.</p>
         <div class="weeklist" id="weekList"></div>
+        <p class="center-note" id="weeksEmpty" style="display:none;margin:22px 0 0">
+          You haven&rsquo;t created any Weeks yet.<br>Create a Week in Mod Maker to see it here.</p>
         <button class="btn ghost" id="weekToMod" style="margin-top:16px"><span class="ic">&#128230;</span>Build a week in Mod Maker</button>
       </div>
 
@@ -817,6 +863,38 @@ html, body { background: var(--menu-bg, #f7d94b); }
         <div id="weekSongs"></div>
         <p class="center-note" id="weekHint" style="margin-top:10px"></p>
       </div>
+    </div>
+  </section>
+
+  <!-- ============ SEARCH ============ -->
+  <section class="screen" id="searchScreen">
+    <div class="wrap">
+      <header class="top"><button class="back" data-go="menuScreen"><span>&larr;</span></button><h2>Search</h2></header>
+
+      <div class="note" id="searchScope"></div>
+
+      <input id="searchQ" type="search" placeholder="Search weeks, songs and creators&hellip;" autocomplete="off">
+      <div class="searchfilters">
+        <div class="seg" id="typeSel" style="padding:4px">
+          <button class="on" data-type="all">All</button>
+          <button data-type="week">Weeks</button>
+          <button data-type="song">Songs</button>
+        </div>
+        <div class="seg" id="dseSel" style="padding:4px">
+          <button class="on" data-diff="">Any</button>
+          <button data-diff="easy">Easy</button>
+          <button data-diff="normal">Normal</button>
+          <button data-diff="hard">Hard</button>
+        </div>
+        <div class="seg" id="sortSel" style="padding:4px">
+          <button class="on" data-sort="new">Newest</button>
+          <button data-sort="name">A&ndash;Z</button>
+          <button data-sort="long">Longest</button>
+        </div>
+      </div>
+
+      <div id="searchResults"></div>
+      <p class="center-note" id="searchEmpty" style="display:none;margin-top:18px"></p>
     </div>
   </section>
 
@@ -974,6 +1052,35 @@ html, body { background: var(--menu-bg, #f7d94b); }
           <button class="on" data-mode="mobile">Mobile Mode</button>
         </div>
         <p class="hint" id="modeHint" style="margin:12px 0 0"></p>
+      </div>
+
+      <div class="card">
+        <h3>Note Style</h3>
+        <p class="hint">Which way the notes travel, whether you can see what the opponent is playing,
+          and where your own lane sits.</p>
+        <div class="setting">
+          <span class="name">Scroll Direction</span>
+          <div class="seg" id="scrollSel" style="padding:4px">
+            <button data-scroll="up">Up Scroll</button>
+            <button data-scroll="down">Down Scroll</button>
+          </div>
+        </div>
+        <div class="setting">
+          <span class="name">Opponent Notes</span>
+          <div class="seg" id="oppNoteSel" style="padding:4px">
+            <button data-opp="1">Visible</button>
+            <button data-opp="0">Hidden</button>
+          </div>
+        </div>
+        <div class="setting" style="flex-direction:column;align-items:stretch;gap:9px">
+          <span class="name">Middle Scroll</span>
+          <div class="seg" id="midSel" style="padding:4px">
+            <button data-mid="off">Off</button>
+            <button data-mid="plain">No Underlay</button>
+            <button data-mid="underlay">Underlay</button>
+          </div>
+        </div>
+        <p class="hint" id="noteStyleHint" style="margin:12px 0 0"></p>
       </div>
 
       <div class="card">
@@ -1217,7 +1324,7 @@ let currentScreen = "menuScreen";
    the right way round without every call site having to say which it is */
 const SCREEN_DEPTH = {
   menuScreen: 0,
-  editorScreen: 1, weeksScreen: 1, modScreen: 1, spritesScreen: 1, settingsScreen: 1,
+  editorScreen: 1, weeksScreen: 1, modScreen: 1, spritesScreen: 1, settingsScreen: 1, searchScreen: 1,
   songsScreen: 2, progressScreen: 2, readyScreen: 2, creditsScreen: 2,
   dialogueScreen: 3, gameScreen: 3, deathScreen: 4, resultsScreen: 4
 };
@@ -1398,7 +1505,8 @@ $("#notice").addEventListener("click", e => { if (e.target.id === "notice") clos
    actually chart within. */
 const SPEED_MIN = 15, SPEED_MAX = 32;
 const DEFAULTS = { difficulty:"normal", mode:"mobile", music:100, vocal:100, speed:20, fps:false, splash:true,
-                   stage:"week1", botplay:false, activeMod:"current", extraModSlots:0, uiScale:100, quality:0,
+                   stage:"week1", botplay:false,
+                   scroll:"down", oppNotes:true, middle:"off", activeMod:"current", extraModSlots:0, uiScale:100, quality:0,
                    countdown:80, keys:null, instFill:false,
                    dark:false, opt:[false,false,false,false,false] };
 let settings = Object.assign({}, DEFAULTS);
@@ -1482,6 +1590,14 @@ function paintSettings(){
   $("#sVocal").value = settings.vocal; $("#vVocal").textContent = settings.vocal + "%";
   $("#sSpeed").value = settings.speed; $("#vSpeed").textContent = (settings.speed/10).toFixed(1) + "x";
   paintStagePicker();
+  $$("#scrollSel button").forEach(b => b.classList.toggle("on", b.dataset.scroll === (settings.scroll || "down")));
+  $$("#oppNoteSel button").forEach(b => b.classList.toggle("on", (b.dataset.opp === "1") === (settings.oppNotes !== false)));
+  $$("#midSel button").forEach(b => b.classList.toggle("on", b.dataset.mid === (settings.middle || "off")));
+  $("#noteStyleHint").textContent =
+    (settings.scroll === "up" ? "Notes rise to receptors at the top" : "Notes fall to receptors at the bottom") +
+    (settings.oppNotes !== false ? ", the opponent's beside yours" : ", the opponent's hidden") +
+    (settings.middle === "underlay" ? ", your lane centred on a panel." :
+     settings.middle === "plain"    ? ", your lane centred." : ".");
   $("#tFps").classList.toggle("on", settings.fps);
   $("#tSplash").classList.toggle("on", settings.splash);
   $("#tInstFill").classList.toggle("on", !!settings.instFill);
@@ -1511,6 +1627,17 @@ $$("#diffSel button").forEach(b => b.addEventListener("click", () => {
   settings.difficulty = b.dataset.diff; saveSettings(); paintSettings();
 }));
 $$("#modeSel button").forEach(b => b.addEventListener("click", () => { settings.mode = b.dataset.mode; saveSettings(); paintSettings(); }));
+function relayoutLive(){
+  // A note-style change while a song is up has to take effect now, not next
+  // time — the arrows are cached per size and the layout is computed once.
+  arrowCache.clear();
+  if (game){ layout(game); }
+  saveSettings(); paintSettings();
+}
+$$("#scrollSel button").forEach(b => b.addEventListener("click", () => { settings.scroll = b.dataset.scroll; relayoutLive(); }));
+$$("#oppNoteSel button").forEach(b => b.addEventListener("click", () => { settings.oppNotes = b.dataset.opp === "1"; relayoutLive(); }));
+$$("#midSel button").forEach(b => b.addEventListener("click", () => { settings.middle = b.dataset.mid; relayoutLive(); }));
+
 $("#sMusic").addEventListener("input", e => { settings.music = +e.target.value; saveSettings(); paintSettings(); applyLiveVolumes(); });
 $("#sVocal").addEventListener("input", e => { settings.vocal = +e.target.value; saveSettings(); paintSettings(); applyLiveVolumes(); });
 $("#sSpeed").addEventListener("input", e => { settings.speed = +e.target.value; saveSettings(); paintSettings(); });
@@ -2937,16 +3064,24 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
         if (o.src === "voc" && o.rmsN && gap > 0.42){
           const fps = o.A.fps;
           const at = clamp(Math.round(o.t * fps), 0, o.rmsN.length - 1);
-          let peak = 0;
+          // The onset fires on the flux rise, which is a frame or two ahead of
+          // where the voice is actually up to full. Walking forward from the
+          // attack frame therefore starts below the floor and stops instantly,
+          // which is why nothing ever sustained. Start from the loudest frame
+          // of the attack instead, and measure the length back from the head.
+          let peak = 0, pk = at;
           for (let k2 = at; k2 < Math.min(o.rmsN.length, at + Math.round(fps * 0.15)); k2++){
-            if (o.rmsN[k2] > peak) peak = o.rmsN[k2];
+            if (o.rmsN[k2] > peak){ peak = o.rmsN[k2]; pk = k2; }
           }
           const floor = peak * 0.45;
           const limit = Math.min(gap - 0.14, tempo.beatLen * 4);
-          let held = 0;
-          for (let k2 = at; k2 < Math.min(o.rmsN.length, at + Math.round(limit * fps)); k2++){
-            if (o.rmsN[k2] < floor) break;
-            held = (k2 - at) / fps;
+          // A held note dips — vibrato, a consonant mid-word — without ending.
+          // Only a drop that stays down for 60ms counts as the voice stopping.
+          const slack = Math.max(1, Math.round(fps * 0.06));
+          let held = 0, down = 0;
+          for (let k2 = pk; k2 < Math.min(o.rmsN.length, at + Math.round(limit * fps)); k2++){
+            if (o.rmsN[k2] < floor){ if (++down > slack) break; }
+            else { down = 0; held = (k2 - at) / fps; }
           }
           if (held > tempo.beatLen * 0.9){
             len = Math.round(Math.min(held, limit) / step) * step;
@@ -5591,51 +5726,107 @@ function dismissRotateTipIfLandscape(){
 }
 
 /* lane geometry for the current mode/size */
+/* How the notes are laid out is now the player's choice rather than one
+   arrangement per input mode. Three independent decisions:
+
+     scroll   up or down — which way the notes travel
+     oppNotes whether the opponent's notes scroll at all, or only their
+              receptors light up as they sing
+     middle   off, or the player's lane centred with the opponent pushed
+              aside, with or without a panel behind to read against
+
+   The mobile layout keeps its full-width touch columns; the settings still
+   apply to it, because "which way do the notes come from" is a preference
+   whatever you are playing on. */
+function scrollDir(){ return settings.scroll === "up" ? 1 : -1; }
+function middleMode(){ return settings.middle || "off"; }
+
 function layout(s){
   arrowCache.clear();
   const w = s.w, h = s.h;
   const mobile = settings.mode === "mobile";
-  const landscape = w > h;
+  const mid = middleMode();
 
-  // Both strumlines sit at the top and notes rise to them, exactly as on PC.
-  // The arrows are the judge line, not a button — nobody taps them.
+  s.dir        = scrollDir();
+  s.oppNotes   = settings.oppNotes !== false;
+  s.oppVisible = true;
+  s.hudH       = mobile ? 58 : 72;
+  s.underlay   = mid === "underlay";
+
   s.playerSize = clamp(Math.min(w / 9.6, h / 8.4), 34, 82);
   s.oppSize    = s.playerSize;
   s.playerGap  = s.playerSize * 1.16;
   s.oppGap     = s.playerGap;
-  s.oppX       = w/2 - s.playerGap * 3.5 - 6;
-  s.playerX    = w/2 + s.playerGap * 0.5 + 6;
-  s.strumY     = clamp(h * 0.14, 56, 130);
-  s.oppY       = s.strumY;
-  s.dir        = 1;                          // upscroll
-  s.oppVisible = true;
-  s.oppNotes   = true;
-  s.hudH       = mobile ? 58 : 72;
+
+  // the receptors sit at the end the notes travel towards
+  const near = clamp(h * 0.14, 56, 130);
+  s.strumY = s.dir > 0 ? near : h - s.hudH - s.playerSize * 0.72;
+  s.oppY   = s.strumY;
+
+  if (mid === "off"){
+    // side by side: the opponent on the left, the player on the right
+    s.oppX    = w/2 - s.playerGap * 3.5 - 6;
+    s.playerX = w/2 + s.playerGap * 0.5 + 6;
+  } else {
+    // the player's four lanes centred, the opponent's pushed out to the edge
+    s.playerX = w/2 - s.playerGap * 1.5;
+    s.oppSize = clamp(s.playerSize * 0.62, 20, 54);
+    s.oppGap  = s.oppSize * 1.16;
+    s.oppX    = clamp(w * 0.055, 10, 90) + s.oppSize/2;
+  }
 
   if (mobile){
-    // Four lane columns filling the screen, receptors down at the bottom and
-    // notes falling into them. A press lands anywhere down a column.
-    s.laneW      = w / 4;
-    s.playerGap  = s.laneW;
-    s.playerSize = clamp(Math.min(s.laneW * 0.80, h * 0.19), 34, 116);
-    s.playerX    = s.laneW * 0.5;
-    s.colTop     = 0;
-    s.colBottom  = h - s.hudH + 6;
-    s.strumY     = s.colBottom - s.playerSize * 0.78;
-    s.dir        = -1;                        // downscroll
+    // The pause button sits over the top-right corner and swallows any tap
+    // that lands on it. The player's rightmost lane runs right underneath it,
+    // so a tap near the top of that column paused the song instead of hitting
+    // the note. Start the columns below the button rather than under it.
+    let top = 0;
+    const pb = document.getElementById("pauseBtn");
+    if (pb){
+      const r = pb.getBoundingClientRect();
+      top = (r.height ? r.bottom : 50) + 6;
+    } else top = 56;
+    s.colTop    = Math.min(top, h * 0.12);
+    s.colBottom = h - s.hudH + 6;
 
-    // the opponent keeps a compact row up in the corner that lights as they
-    // sing; scrolling their notes across the player's columns is just noise
-    s.oppSize    = clamp(s.playerSize * 0.40, 18, 38);
-    s.oppGap     = s.oppSize * 1.16;
-    s.oppX       = 12 + s.oppSize / 2;
-    s.oppY       = 13 + s.oppSize / 2;
-    s.oppNotes   = false;
+    if (s.oppNotes){
+      // Both sets of notes have to be readable at once, and four full-width
+      // columns leave nowhere to put the opponent's. So the two strumlines go
+      // side by side across the screen the way they do on a keyboard —
+      // opponent left, player right, clearly separated. Taps still land per
+      // column; the columns are just narrower and sit over the player's half.
+      s.playerSize = clamp(Math.min(w / 10.5, h * 0.11), 26, 64);
+      s.oppSize    = s.playerSize;
+      s.playerGap  = s.playerSize * 1.14;
+      s.oppGap     = s.playerGap;
+      s.laneW      = s.playerGap;
+      s.oppX       = w/2 - s.playerGap * 3.6;
+      s.playerX    = w/2 + s.playerGap * 0.6;
+      s.strumY     = s.dir > 0
+        ? s.colTop + s.playerSize * 0.9
+        : s.colBottom - s.playerSize * 0.9;
+      s.oppY       = s.strumY;
+    } else {
+      // Four lane columns filling the screen. A press lands anywhere down a
+      // column, so the columns are the touch target and the receptors are
+      // only the judge line.
+      s.laneW      = w / 4;
+      s.playerGap  = s.laneW;
+      s.playerSize = clamp(Math.min(s.laneW * 0.80, h * 0.19), 34, 116);
+      s.playerX    = s.laneW * 0.5;
+      s.strumY     = s.dir > 0
+        ? s.colTop + s.playerSize * 0.78
+        : s.colBottom - s.playerSize * 0.78;
+      // a compact row in the corner that lights as the opponent sings
+      s.oppSize = clamp(s.playerSize * 0.40, 18, 38);
+      s.oppGap  = s.oppSize * 1.16;
+      s.oppX    = 12 + s.oppSize / 2;
+      s.oppY    = s.dir > 0 ? h - s.hudH - s.oppSize : 13 + s.oppSize / 2;
+    }
   } else {
     s.laneW = s.colTop = 0;
     s.colBottom = h;
   }
-
 }
 
 function roundRectPath(g, x, y, w, h, r){
@@ -6332,12 +6523,11 @@ function weekSongTitles(wk, lib){
   }).filter(Boolean);
 }
 
-/* every week on the device: the four stock maps, then the ones you built */
+/* The weeks you have made. The four built-in maps used to be listed here as
+   content; they are not — they are stages, and they now live in the stage
+   picker where a stage belongs. This screen is your own work only. */
 function allWeeks(){
-  const stock = WEEKS.map(w => ({
-    kind:"stock", id:"stock-" + w.stage, name:w.name, sub:w.sub,
-    stage:w.stage, songs:w.songs, status:"stock", creator:"Nick"
-  }));
+  const stock = [];
   const mine = MODS.map(m => ({
     kind:"mod", id:m.id, name:m.name || "Untitled week",
     sub:(m.songs.length || 0) + (m.songs.length === 1 ? " song" : " songs"),
@@ -6350,8 +6540,18 @@ function allWeeks(){
 let weekView = "browser", openWeekRef = null, weekLib = [];
 
 function weekThumb(cv, stage){
-  const im = stageImages[stage];
-  if (!im || !im.complete || !im.naturalWidth || cv.dataset.done) return;
+  // an unknown stage name still gets a picture rather than a blank card
+  const im = stageImages[stage] || stageImages.week1;
+  if (!im || cv.dataset.done) return;
+  // On a cold load the stage art may still be decoding. Painting once and
+  // giving up left a permanently blank card, so wait for the image instead.
+  if (!im.complete || !im.naturalWidth){
+    if (!cv.dataset.waiting){
+      cv.dataset.waiting = "1";
+      im.addEventListener("load", () => { cv.dataset.waiting = ""; weekThumb(cv, stage); }, { once:true });
+    }
+    return;
+  }
   const g = cv.getContext("2d");
   const sc = Math.max(cv.width / im.naturalWidth, cv.height / im.naturalHeight);
   const dw = im.naturalWidth * sc, dh = im.naturalHeight * sc;
@@ -6363,7 +6563,10 @@ async function paintWeekList(){
   try{ weekLib = await songsAll(); }catch(e){ weekLib = []; }
   const host = $("#weekList");
   host.innerHTML = "";
-  for (const wk of allWeeks()){
+  const weeks = allWeeks();
+  const empty = $("#weeksEmpty");
+  if (empty) empty.style.display = weeks.length ? "none" : "block";
+  for (const wk of weeks){
     const titles = weekSongTitles(wk, weekLib);
     const st = WEEK_STATUS[wk.status] || WEEK_STATUS.draft;
     const b = document.createElement("button");
@@ -6386,7 +6589,7 @@ function showWeekBrowser(){
   weekView = "browser"; openWeekRef = null;
   $("#weekBrowser").hidden = false;
   $("#weekDetail").hidden = true;
-  $("#weeksTitle").textContent = "Weeks";
+  $("#weeksTitle").textContent = "My Weeks";
   stopWeekLoop();
   paintWeekList();
 }
@@ -6525,6 +6728,137 @@ function playWeekFrom(wk, from){
 }
 
 $("#openWeeks").addEventListener("click", () => { showWeekBrowser(); show("weeksScreen"); });
+
+/* =====================================================================
+   SEARCH
+   Community search wants a server: an account system, a place to upload a
+   week to, and other people's uploads to read back. This build is one HTML
+   file with no back end, so there is nothing to query and no real creators
+   to show. Rather than fill the screen with invented people — which would
+   be a lie dressed as a feature — search runs over the content that
+   genuinely exists on this device: your weeks and your saved songs. The
+   notice at the top says exactly that, so nothing here pretends to be more
+   than it is. When a server exists the query below is the piece that gets
+   pointed at it; the filters, sorting and cards stay as they are.
+   ===================================================================== */
+const SEARCH_SCOPE_NOTE =
+  "Community search needs a server to hold other players' uploads, and this " +
+  "build runs entirely on your device with no account and no connection. So " +
+  "these results are your own content — every week and song you have made here.";
+
+let searchLib = [], searchFilter = { type:"all", diff:"", sort:"new" }, searchWired = false;
+
+function searchDiffOf(rec){ return (rec.chart && rec.chart.difficulty) || "normal"; }
+
+/* Everything on this device, flattened into one shape the card renderer and
+   the sorters can both read. */
+function searchCorpus(){
+  const out = [];
+  for (const wk of allWeeks()){
+    const titles = weekSongTitles(wk, searchLib);
+    const recs = (wk.songs || []).map(e => searchLib.find(r => r.id === (e && e.id))).filter(Boolean);
+    out.push({
+      kind:"week", ref:wk, name:wk.name, creator:wk.creator || "You",
+      icon:"🗺️", created:(wk.mod && wk.mod.created) || 0,
+      length:recs.reduce((a, r) => a + (r.chart.duration || 0), 0),
+      diffs:recs.map(searchDiffOf),
+      sub:(titles.length || 0) + (titles.length === 1 ? " song" : " songs") +
+          " · " + ((WEEK_STATUS[wk.status] || WEEK_STATUS.draft).label)
+    });
+  }
+  for (const rec of searchLib){
+    const d = searchDiffOf(rec);
+    out.push({
+      kind:"song", ref:rec, name:rec.name, creator:"You",
+      icon:"🎵", created:rec.created || 0, length:rec.chart.duration || 0, diffs:[d],
+      sub:d.replace(/^./, c => c.toUpperCase()) + " · " + fmtTime(rec.chart.duration) +
+          " · " + rec.chart.notes.length + " notes"
+    });
+  }
+  return out;
+}
+
+function searchMatches(){
+  const q = ($("#searchQ").value || "").trim().toLowerCase();
+  const f = searchFilter;
+  let rows = searchCorpus();
+  if (f.type !== "all") rows = rows.filter(r => r.kind === f.type);
+  if (f.diff) rows = rows.filter(r => r.diffs.includes(f.diff));
+  if (q){
+    const words = q.split(/\s+/);
+    rows = rows.filter(r => {
+      const hay = (r.name + " " + r.creator + " " + r.sub).toLowerCase();
+      return words.every(w => hay.includes(w));
+    });
+  }
+  if (f.sort === "name") rows.sort((a, b) => a.name.localeCompare(b.name));
+  else if (f.sort === "long") rows.sort((a, b) => b.length - a.length);
+  else rows.sort((a, b) => b.created - a.created);
+  return rows;
+}
+
+function paintSearch(){
+  const host = $("#searchResults");
+  if (!host) return;
+  host.innerHTML = "";
+  const rows = searchMatches();
+  const empty = $("#searchEmpty");
+  if (empty){
+    const q = ($("#searchQ").value || "").trim();
+    empty.style.display = rows.length ? "none" : "block";
+    empty.textContent = rows.length ? "" :
+      q ? 'Nothing here matches "' + q + '".'
+        : "Nothing to search yet. Chart a song in the Editor or build a week in Mod Maker.";
+  }
+  for (const r of rows){
+    const b = document.createElement("button");
+    b.className = "sresult";
+    b.innerHTML = '<span class="si"></span><span class="sm"><b></b><small></small></span><span class="sp">▶</span>';
+    b.querySelector(".si").textContent = r.icon;
+    b.querySelector("b").textContent = r.name;
+    b.querySelector("small").textContent = r.sub + " · by " + r.creator;
+    b.addEventListener("click", () => {
+      if (r.kind === "week"){ weekLib = searchLib; openWeek(r.ref); show("weeksScreen"); }
+      else loadSong(r.ref.id);
+    });
+    wirePress(b, "pressing", "");
+    host.appendChild(b);
+  }
+}
+
+function wireSearchSeg(id, key){
+  const seg = $(id);
+  if (!seg) return;
+  seg.addEventListener("click", e => {
+    const btn = e.target.closest("button");
+    if (!btn || !seg.contains(btn)) return;
+    Array.from(seg.querySelectorAll("button")).forEach(x => x.classList.toggle("on", x === btn));
+    searchFilter[key] = btn.dataset[key] || "";
+    paintSearch();
+  });
+}
+
+async function openSearch(){
+  if (!searchWired){
+    searchWired = true;
+    const note = $("#searchScope");
+    if (note) note.textContent = SEARCH_SCOPE_NOTE;
+    wireSearchSeg("#typeSel", "type");
+    wireSearchSeg("#dseSel", "diff");
+    wireSearchSeg("#sortSel", "sort");
+    const q = $("#searchQ");
+    if (q) q.addEventListener("input", paintSearch);
+  }
+  try{ searchLib = await songsAll(); }catch(e){ searchLib = []; }
+  paintSearch();
+}
+
+$("#searchBtn").addEventListener("click", () => { show("searchScreen"); openSearch(); });
+wirePress($("#searchBtn"), "pressing", "");
+
+/* PLAY goes straight to the saved songs, which is what a player wants from
+   the top of the menu. */
+$("#openPlay").addEventListener("click", () => { refreshSongsUI(); show("songsScreen"); });
 
 /* ------------------------- main loop ------------------------- */
 function frame(){
@@ -6817,10 +7151,15 @@ function render(){
   /* --- characters --- */
   const beatPos = (s.time - SONG.chart.offset) / SONG.chart.beatLen;
   const bop = Math.max(0, Math.sin((beatPos % 1) * Math.PI)) * 3.5;
-  // Stand the cast on the floor of the play area: above the HUD on PC, above
-  // the tile row on mobile. Size them by the headroom that actually remains.
-  const groundY = mobile ? s.strumY - s.playerSize * 0.85 - 10 : s.h - s.hudH;
-  const headroom = mobile ? groundY - 30 : s.h - s.strumY - 120;
+  // Stand the cast on the floor of the play area: above the HUD on PC, clear
+  // of the tile row on mobile. The size comes from the height of the play
+  // area, not from where the receptors happen to be — those move with the
+  // scroll direction now, and keying the cast to them shrank everyone to
+  // nothing the moment downscroll put the strumline near the floor.
+  const groundY = mobile
+    ? (s.dir > 0 ? s.colBottom - 8 : s.strumY - s.playerSize * 0.85 - 10)
+    : s.h - s.hudH;
+  const headroom = mobile ? groundY - 30 : s.h - s.hudH - 40;
   // CAST_HEIGHT plus a little headroom for the arm Boyfriend throws over his
   // head, so the tallest frame of the tallest pose still clears the top
   const charScale = clamp(Math.min(s.w / 470, headroom / 224), 0.42, 1.3) * (mobile ? 0.95 : 1);
@@ -6859,7 +7198,7 @@ function render(){
 
   /* --- mobile lane columns --- */
   // Drawn after the cast so they tint over them, the way the reference does.
-  if (mobile){
+  if (mobile && !s.oppNotes){
     for (let l = 0; l < 4; l++){
       const x = s.playerX + l * s.playerGap;
       const down = s.held[l];
@@ -6893,6 +7232,31 @@ function render(){
     g.restore();
   }
 
+  /* --- middle-scroll underlay --- */
+  // A panel behind the player's four lanes so their notes read against it
+  // instead of against whatever the stage is doing. Deliberately translucent:
+  // the opponent's notes and the characters stay visible through it, which is
+  // the difference between an underlay and a curtain.
+  if (s.underlay){
+    const pad = s.playerGap * 0.34;
+    const x0 = s.playerX - s.playerGap/2 - pad;
+    const wUnder = s.playerGap * 4 + pad * 2;
+    const grd = g.createLinearGradient(0, 0, 0, s.h);
+    grd.addColorStop(0,   "rgba(10,11,18,.34)");
+    grd.addColorStop(0.5, "rgba(10,11,18,.52)");
+    grd.addColorStop(1,   "rgba(10,11,18,.34)");
+    g.save();
+    g.fillStyle = grd;
+    g.fillRect(x0, 0, wUnder, s.h);
+    g.strokeStyle = "rgba(255,255,255,.10)";
+    g.lineWidth = 1.5;
+    g.beginPath();
+    g.moveTo(x0 + .75, 0); g.lineTo(x0 + .75, s.h);
+    g.moveTo(x0 + wUnder - .75, 0); g.lineTo(x0 + wUnder - .75, s.h);
+    g.stroke();
+    g.restore();
+  }
+
   /* --- strum receptors --- */
   for (let l = 0; l < 4; l++){
     const px = laneX(s, l, true), py = laneY(s, true);
@@ -6902,7 +7266,7 @@ function render(){
     drawArrow(g, px, py, s.playerSize, l, on ? "filled" : "outline", 1);
     g.restore();
 
-    if (s.oppVisible && !mobile){
+    if (s.oppVisible && (!mobile || s.oppNotes)){
       const ox = laneX(s, l, false), oy = laneY(s, false);
       const oon = s.oppConfirm[l] > 0;
       g.save();
@@ -6931,8 +7295,8 @@ function render(){
     if (dt < -0.6 && (n.hit || !n.mustHit)) continue;
 
     const mine = n.mustHit;
-    // In Mobile Mode the opponent's row is a top-of-screen indicator that
-    // lights up as they sing; scrolling their notes too would just be clutter.
+    // With the opponent's notes turned off their row is only an indicator
+    // that lights as they sing, so there is nothing to scroll for them.
     if (!mine && !s.oppNotes) continue;
     const size = mine ? s.playerSize : s.oppSize;
     const x = laneX(s, n.lane, mine);
@@ -6975,10 +7339,11 @@ function render(){
 
   g.restore();      // end note-field clip
 
-  /* --- opponent's corner row (mobile) --- */
-  // Notes fall from the top on mobile, right through this corner, so it is
-  // drawn last on its own plate rather than being buried by them.
-  if (mobile && s.oppVisible){
+  /* --- opponent's corner row --- */
+  // Only drawn when their notes are hidden: with the notes on, the opponent
+  // has real receptors of their own and this plate would be a second, smaller
+  // copy of the same information.
+  if (mobile && s.oppVisible && !s.oppNotes){
     const bw = s.oppGap * 3 + s.oppSize + 14, bh = s.oppSize + 14;
     g.save();
     roundRectPath(g, s.oppX - s.oppSize/2 - 7, s.oppY - bh/2, bw, bh, 10);
