@@ -432,6 +432,32 @@ html, body { background: var(--menu-bg, #f7d94b); }
   .cutline .del{flex:0 0 auto}
   .cutplan{margin:9px 0 0;padding-left:20px;font-size:12.5px;line-height:1.7}
   .cutplan li b{color:var(--accent)}
+  #nameInput{
+    width:100%;padding:15px 17px;border-radius:15px;border:1.5px solid var(--line);
+    font-family:inherit;font-size:17px;font-weight:750;color:var(--ink);background:var(--field);
+    -webkit-appearance:none;appearance:none;text-align:center;
+  }
+  #nameInput:focus{outline:none;border-color:var(--accent)}
+  .statrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:9px;margin-top:14px}
+  .statrow div{
+    background:var(--field);border-radius:13px;padding:11px 8px;text-align:center;
+  }
+  .statrow b{display:block;font-size:19px;font-weight:900;letter-spacing:-.5px}
+  .statrow small{display:block;font-size:10.5px;font-weight:700;color:var(--muted);
+    text-transform:uppercase;letter-spacing:.6px;margin-top:3px}
+  .vsrow{
+    display:flex;align-items:center;gap:11px;width:100%;text-align:left;
+    border:1.5px solid var(--line);border-radius:14px;background:var(--card);color:var(--ink);
+    padding:11px 13px;margin-bottom:9px;cursor:pointer;font-family:inherit;
+    -webkit-appearance:none;appearance:none;
+  }
+  .vsrow.pressing{transform:scale(.985)}
+  .vsrow b{font-size:14px;font-weight:800}
+  .vsrow small{display:block;font-size:11.5px;color:var(--muted);font-weight:650}
+  .vsrow .go{margin-left:auto;color:var(--accent);font-weight:900;font-size:13px}
+  .dot{width:9px;height:9px;border-radius:99px;flex:0 0 9px;background:var(--muted)}
+  .dot.on{background:var(--green)}
+  #searchBtn #meChip{max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .spriteops{display:flex;gap:7px;flex-wrap:wrap;margin:-4px 0 14px}
   .spriteops .chip{padding:6px 11px;font-size:11.5px}
   .swatch{
@@ -786,13 +812,14 @@ html, body { background: var(--menu-bg, #f7d94b); }
       <div class="menu-sub">FNF SONG MAKER</div>
       <button class="menu-item" id="openPlay"><span class="mi-ic">▶️</span><span>PLAY</span></button>
       <button class="menu-item" data-go="editorScreen"><span class="mi-ic">🎵</span><span>EDITOR</span></button>
-      <button class="menu-item" id="openWeeks"><span class="mi-ic">🗺️</span><span>MY WEEKS</span></button>
-      <button class="menu-item" id="openMod"><span class="mi-ic">📦</span><span>MOD MAKER</span></button>
+      <button class="menu-item" id="openWeeks"><span class="mi-ic">🗺️</span><span>MY MODS</span></button>
+      <button class="menu-item" id="openSearchMenu"><span class="mi-ic">🔍</span><span>SEARCH</span></button>
+      <button class="menu-item" id="openVs"><span class="mi-ic">⚔️</span><span>1V1</span></button>
       <button class="menu-item" data-go="spritesScreen"><span class="mi-ic">🕺</span><span>SPRITES</span></button>
       <button class="menu-item" data-go="settingsScreen"><span class="mi-ic">⚙️</span><span>SETTINGS</span></button>
     </div>
-    <button id="searchBtn"><span>🔍</span>SEARCH</button>
-    <div class="corner" id="verTag">Version 1.01.1</div>
+    <button id="searchBtn"><span>👤</span><span id="meChip">Player</span></button>
+    <div class="corner" id="verTag">Version 1.02</div>
     <div class="corner" id="credTag">Credits: Nick</div>
   </section>
 
@@ -953,8 +980,10 @@ html, body { background: var(--menu-bg, #f7d94b); }
       <div class="searchfilters">
         <div class="seg" id="typeSel" style="padding:4px">
           <button class="on" data-type="all">All</button>
-          <button data-type="week">Weeks</button>
           <button data-type="song">Songs</button>
+          <button data-type="mod">Mods</button>
+          <button data-type="week">Weeks</button>
+          <button data-type="user">Users</button>
         </div>
         <div class="seg" id="dseSel" style="padding:4px">
           <button class="on" data-diff="">Any</button>
@@ -971,6 +1000,62 @@ html, body { background: var(--menu-bg, #f7d94b); }
 
       <div id="searchResults"></div>
       <p class="center-note" id="searchEmpty" style="display:none;margin-top:18px"></p>
+    </div>
+  </section>
+
+  <!-- ============ WHO ARE YOU ============ -->
+  <section class="screen" id="signinScreen">
+    <div class="wrap" style="justify-content:center">
+      <div class="menu-sub" style="text-align:center;margin-bottom:6px">FNF SONG MAKER</div>
+      <h2 style="text-align:center;margin:0 0 6px">Pick a username</h2>
+      <p class="center-note" style="margin:0 0 18px">
+        Everything you make is saved under this name.</p>
+      <input id="nameInput" type="text" maxlength="18" placeholder="Username" autocomplete="off">
+      <p class="hint" id="nameHint" style="margin:8px 0 16px"></p>
+      <button class="btn green" id="nameGo"><span class="ic">→</span>Start</button>
+      <div class="note" id="signinNote" style="margin-top:20px"></div>
+    </div>
+  </section>
+
+  <!-- ============ PROFILE ============ -->
+  <section class="screen" id="profileScreen">
+    <div class="wrap">
+      <header class="top"><button class="back" data-go="menuScreen"><span>&larr;</span></button><h2>Profile</h2></header>
+      <div class="card">
+        <h3 id="profName">Player</h3>
+        <p class="hint" id="profSince"></p>
+        <div class="statrow" id="profStats"></div>
+      </div>
+      <div class="card">
+        <h3>Account</h3>
+        <p class="hint" id="profAccount"></p>
+        <button class="btn ghost small" id="renameBtn" style="margin-top:12px">Change username</button>
+      </div>
+      <div class="note" id="profNote"></div>
+    </div>
+  </section>
+
+  <!-- ============ 1V1 ============ -->
+  <section class="screen" id="vsScreen">
+    <div class="wrap">
+      <header class="top"><button class="back" data-go="menuScreen"><span>&larr;</span></button><h2>1V1</h2></header>
+
+      <div class="card">
+        <h3>Same screen</h3>
+        <p class="hint">Two people, one device. Player 1 takes the left strumline, player 2 the
+          right. Both play the same song and the higher score wins.</p>
+        <div class="lbl" style="margin-top:12px">Song</div>
+        <div id="vsSongs"></div>
+        <p class="center-note" id="vsEmpty" style="display:none;margin:8px 0 0"></p>
+        <p class="hint" id="vsKeys" style="margin-top:12px"></p>
+      </div>
+
+      <div class="card">
+        <h3>Online</h3>
+        <p class="hint" id="vsOnlineNote"></p>
+        <div id="vsPlayers"></div>
+        <p class="center-note" id="vsNobody" style="margin-top:12px"></p>
+      </div>
     </div>
   </section>
 
@@ -1531,6 +1616,7 @@ const SCREEN_DEPTH = {
   editorScreen: 1, weeksScreen: 1, modScreen: 1, spritesScreen: 1, settingsScreen: 1, searchScreen: 1,
   makerScreen: 2, mineScreen: 2, buildScreen: 3, sprevScreen: 3,
   cutsceneScreen: 2, cutPlayScreen: 3,
+  signinScreen: 0, profileScreen: 1, vsScreen: 1,
   songsScreen: 2, progressScreen: 2, readyScreen: 2, creditsScreen: 2,
   dialogueScreen: 3, gameScreen: 3, deathScreen: 4, resultsScreen: 4
 };
@@ -2681,7 +2767,7 @@ function quantise(t, offset, step){
    on a downbeat, or it does not happen. */
 const DETECT = { sens: 1.28, detail: 0.18 };   // one detection pass for all three
 const DIFFS = {
-  easy:   { keep: 0.55, minStep: 3, jumpPct: 0,    patterns:["single","alt","stair"] },
+  easy:   { keep: 0.55, minStep: 3, jumpPct: 0,    onBeat: 2.2, patterns:["single","alt","stair"] },
   normal: { keep: 0.05, minStep: 1, jumpPct: 0.03, patterns:["single","alt","stair","stream","jack"] },
   hard:   { keep: 0,    minStep: 1, jumpPct: 0.08, patterns:["single","alt","stair","stream","jack","roll"] }
 };
@@ -2740,6 +2826,165 @@ function instFillEnabled(){
 /* tracks: [{ A: analysis, side: "opp" | "plr" | null }]
    Two stems means we already know who sings what and nothing has to be
    guessed. One combined stem falls back to splitting it by voice. */
+  /* ---- read a finished chart back against the audio -------------------
+     Everything above builds the chart forwards, from the audio. This reads it
+     the other way: take the chart as given, go back to the recording, and ask
+     of each note whether the audio agrees. It is the pass that catches a
+     mistake the forward path cannot see, because the forward path has already
+     decided.
+
+     Four questions, each of which has been a real fault at some point:
+     is a note standing on anything? is a hold actually held? is there a
+     stretch of singing with nothing charted over it? and is the whole chart
+     sliding steadily away from the audio?                                  */
+function refineAgainstAudio(checked, tracks, duration, step, report){
+    const byRole = {};
+    for (const tr of tracks){
+      if (!tr.A || !tr.A.rms) continue;
+      const env = normalise(tr.A.flux);
+      byRole[tr.side || "any"] = { A: tr.A, rms: normalise(tr.A.rms), env,
+                                   // the attacks this stem actually has, so a
+                                   // note can be matched to its own one rather
+                                   // than to whatever is loudest nearby
+                                   onsets: pickOnsets(env, tr.A.fps, DETECT.sens).map(o => o.t) };
+    }
+    const roleFor = mustHit => byRole[mustHit ? "plr" : "opp"] || byRole.any ||
+                               byRole.opp || byRole.plr || null;
+    const levelAt = (R, t, span) => {
+      if (!R) return 0;
+      const a = clamp(Math.round(t * R.A.fps), 0, R.rms.length - 1);
+      const b = clamp(Math.round((t + (span || 0.09)) * R.A.fps), 0, R.rms.length - 1);
+      let mx = 0;
+      for (let k = a; k <= b; k++) if (R.rms[k] > mx) mx = R.rms[k];
+      return mx;
+    };
+    // what "loud enough to be a voice" means for each stem, from that stem
+    const floorOf = {};
+    for (const [k, R] of Object.entries(byRole)){
+      const lev = Array.prototype.slice.call(R.rms).sort((a, b) => a - b);
+      floorOf[k] = (lev.length ? lev[Math.floor(lev.length * 0.90)] : 0) * 0.16;
+    }
+    const floorFor = mustHit => floorOf[mustHit ? "plr" : "opp"] !== undefined
+      ? floorOf[mustHit ? "plr" : "opp"] : (floorOf.any || 0);
+
+    // 1. a note standing on nothing
+    const kept2 = [];
+    for (const n of checked){
+      if (n.src !== "voc"){ kept2.push(n); continue; }
+      const R = roleFor(n.mustHit);
+      if (!R){ kept2.push(n); continue; }
+      if (levelAt(R, n.t - 0.02, 0.11) < floorFor(n.mustHit)){ report.unsupported++; continue; }
+      kept2.push(n);
+    }
+    checked = kept2;
+
+    // 2. a hold that is not actually held.
+    // Sampling one point in the middle is not enough: on an eighth-note verse
+    // there is nearly always another syllable under it, so a hold laid over a
+    // row of separate stabs looked perfectly sustained. A sustain is a stretch
+    // that stays sounding, so measure how much of it does.
+    for (const n of checked){
+      if (n.len <= 0) continue;
+      const R = roleFor(n.mustHit);
+      if (!R) continue;
+      const head = levelAt(R, n.t, 0.10);
+      if (!(head > 0)) continue;
+      const a = clamp(Math.round((n.t + 0.05) * R.A.fps), 0, R.rms.length - 1);
+      const z = clamp(Math.round((n.t + n.len) * R.A.fps), 0, R.rms.length - 1);
+      let on = 0, all = 0;
+      for (let k = a; k <= z; k++){ all++; if (R.rms[k] >= head * 0.35) on++; }
+      // A row of separate syllables keeps the level up as reliably as one long
+      // note does, so level alone cannot tell them apart. What separates them
+      // is attacks: a sustain has one, a row of stabs has one per stab.
+      let inside = 0;
+      for (const ot of R.onsets) if (ot > n.t + 0.09 && ot < n.t + n.len - 0.05) inside++;
+      if (all > 2 && (on / all < 0.72 || inside >= 2)){ n.len = 0; report.deadHolds++; }
+    }
+
+    // 3. singing with nothing charted over it.
+    // Walked in fixed windows rather than between notes: a gap that runs from
+    // one side's last note to its next can span both a section where it is
+    // silent and a section where it is singing, and judging the two together
+    // hides the second inside the first.
+    const STEP_W = 0.5, SPAN = 1.0;
+    for (const [role, R] of Object.entries(byRole)){
+      const mustHit = role === "plr";
+      const fl = floorOf[role] || 0;
+      if (!(fl > 0)) continue;
+      const mine = checked.filter(n => role === "any" || n.mustHit === mustHit)
+                          .map(n => n.t).sort((a, b) => a - b);
+      const nearNote = t => {
+        let lo = 0, hi = mine.length - 1, best = Infinity;
+        while (lo <= hi){
+          const m = (lo + hi) >> 1;
+          best = Math.min(best, Math.abs(mine[m] - t));
+          if (mine[m] < t) lo = m + 1; else hi = m - 1;
+        }
+        return best;
+      };
+      let runFrom = -1, runTo = -1;
+      const flush = () => {
+        if (runFrom >= 0 && runTo - runFrom >= 1.6){
+          report.unchartedVocal = +(report.unchartedVocal + (runTo - runFrom)).toFixed(2);
+          report.gaps.push({ t: +runFrom.toFixed(2), len: +(runTo - runFrom).toFixed(2),
+                             side: mustHit ? "player" : "opponent" });
+        }
+        runFrom = runTo = -1;
+      };
+      for (let t = 1.0; t < duration - 0.6; t += STEP_W){
+        let voiced = 0, frames = 0;
+        const a = clamp(Math.round(t * R.A.fps), 0, R.rms.length - 1);
+        const b2 = clamp(Math.round((t + SPAN) * R.A.fps), 0, R.rms.length - 1);
+        for (let k = a; k <= b2; k++){ frames++; if (R.rms[k] > fl) voiced++; }
+        const singing = frames > 0 && voiced / frames > 0.6;
+        if (singing && nearNote(t + SPAN/2) > 1.2){
+          if (runFrom < 0) runFrom = t;
+          runTo = t + SPAN;
+        } else flush();
+      }
+      flush();
+    }
+
+    // 4. a chart that slides away from the audio as it goes
+    {
+      const pts = [];
+      for (const n of checked){
+        if (n.src !== "voc") continue;
+        const R = roleFor(n.mustHit);
+        if (!R) continue;
+        // The attack this note belongs to: the NEAREST one, within a window
+        // wider than a step — drift is precisely the case where the note has
+        // moved further than a step, so a one-step search can never see the
+        // thing it is meant to measure. Nearest rather than loudest, because
+        // in a dense passage the loudest attack within the window is usually
+        // some other note's.
+        let bd = 0.18, best = null;
+        for (const ot of R.onsets){
+          const d = Math.abs(ot - n.t);
+          if (d < bd){ bd = d; best = ot; }
+        }
+        if (best !== null) pts.push([n.t, best - n.t]);
+      }
+      if (pts.length >= 24){
+        const mx = pts.reduce((a2, p) => a2 + p[0], 0) / pts.length;
+        const my = pts.reduce((a2, p) => a2 + p[1], 0) / pts.length;
+        let num = 0, den = 0;
+        for (const [x, y] of pts){ num += (x - mx) * (y - my); den += (x - mx) * (x - mx); }
+        const slope = den ? num / den : 0;
+        const endToEnd = Math.abs(slope) * duration;
+        // Only a drift big enough to be felt is worth touching. Below this the
+        // correction would be noise, and moving a chart for noise is worse
+        // than leaving it where the audio put it.
+        if (endToEnd > 0.020 && endToEnd < 0.5){
+          for (const n of checked) n.t = clamp(n.t + slope * (n.t - mx) + my, 0.4, duration - 0.12);
+          checked.sort((a2, b2) => a2.t - b2.t);
+          report.driftMs = +(endToEnd * 1000).toFixed(1);
+        }
+      }
+    }
+  return checked;
+}
+
 function buildChart(instA, tracks, tempo, duration, difficulty){
   const DIFF = DIFFS[difficulty] || DIFFS.normal;
   const split = tracks.length > 1;
@@ -2771,17 +3016,38 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
     const env = normalise(tr.A.flux);
     const rmsN = normalise(tr.A.rms);
 
-    // How loud this stem usually is next to the band — measured LOCALLY, in
-    // a window either side of wherever we are asking. A single figure for the
-    // whole song is wrong for the same reason it was wrong everywhere else in
-    // here: a reverb-heavy or heavily bleeding passage raises the stem's
-    // share everywhere at once, and a bar set by the rest of the song then
-    // lets all of it through. Against its own neighbourhood, only a real
-    // syllable stands out.
+    // How much of this stem is the band leaking through it, rather than
+    // someone singing. Everything downstream compares a candidate against this
+    // number, so what it measures matters enormously.
+    //
+    // A local low percentile is the natural estimate and it has one bad
+    // failure: where the voice runs continuously — a held note, a long phrase
+    // — the whole neighbourhood is voice, so the "floor" climbs to meet the
+    // singer and real notes stop looking like a rise above it. That emptied a
+    // sustained passage completely, 7.8 seconds of a charted song with nothing
+    // in it.
+    //
+    // So the local figure is capped by what the song looks like where there is
+    // genuinely no voice at all. Bleed does not get quieter because somebody
+    // started singing, so a local estimate above that is measuring the singer,
+    // and the lower of the two is the honest one.
     const shareOf = (() => {
       const n = Math.min(tr.A.rms.length, instA.rms.length);
       const ratio = new Float32Array(n);
       for (let k = 0; k < n; k++) ratio[k] = instA.rms[k] > 1e-5 ? tr.A.rms[k] / instA.rms[k] : 0;
+
+      // frames with no voice in them, judged against how loud this stem gets
+      const lev = Array.prototype.slice.call(tr.A.rms, 0, n).sort((a, b) => a - b);
+      const loud = lev.length ? lev[Math.floor(lev.length * 0.90)] : 0;
+      let cut = loud * 0.18;
+      let have = 0;
+      for (let k = 0; k < n; k++) if (tr.A.rms[k] <= cut) have++;
+      if (have < n * 0.04) cut = lev[Math.floor(lev.length * 0.10)] || 0;
+      const rest = [];
+      for (let k = 0; k < n; k++) if (tr.A.rms[k] <= cut) rest.push(ratio[k]);
+      rest.sort((a, b) => a - b);
+      const ceiling = rest.length ? rest[Math.floor(rest.length * 0.75)] : Infinity;
+
       const W = Math.max(1, Math.round(tr.A.fps * 3));         // 3s either side
       const cache = new Map();
       return t => {
@@ -2791,7 +3057,8 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
         const scratch = [];
         for (let k = Math.max(0, c - W); k < Math.min(n, c + W); k += 2) scratch.push(ratio[k]);
         scratch.sort((a, b) => a - b);
-        const med = scratch.length ? scratch[Math.floor(scratch.length * 0.15)] : 0;
+        const local = scratch.length ? scratch[Math.floor(scratch.length * 0.15)] : 0;
+        const med = Math.min(local, ceiling);
         cache.set(key, med);
         return med;
       };
@@ -3019,6 +3286,24 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
     }
     if (!kept.length) continue;
 
+    // An easier chart is an easier RHYTHM, not merely a shorter one. Thinning
+    // on strength alone leaves as many off-beat notes as on-beat ones, which is
+    // a thinned-out Normal rather than something a beginner can feel. Where a
+    // difficulty asks for it, a note on the beat is worth more than the same
+    // note between two — and BOTH thinning passes below weigh it that way, or
+    // the second one hands back the off-beat notes the first one dropped.
+    // measured against the beat itself, not a subdivision of it: against
+    // half-beats every eighth note counts as on the beat and the weighting
+    // does nothing at all
+    const B = tempo.beatLen;
+    const onBeatBoost = o => {
+      if (!D.onBeat) return 1;
+      const p = Math.abs(((o.t - tempo.offset) % B + B) % B);
+      const off = Math.min(p, B - p) / B;             // 0 on the beat, 0.5 between
+      return off < 0.14 ? D.onBeat : 1 / D.onBeat;
+    };
+    const weight = o => (o.v || 0) * onBeatBoost(o);
+
     // Difficulty selection. Every difficulty reads the same detected events;
     // the easier ones simply keep fewer of them. An onset survives if it is
     // strong relative to what is happening around it — a local percentile,
@@ -3029,19 +3314,24 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
       const survivors = [];
       let lo = 0, hi = 0;
       const scratch = [];
+      // An easier chart is an easier RHYTHM, not merely a shorter one. Thinning
+      // on strength alone leaves as many off-beat notes as on-beat ones, which
+      // is a thinned-out Normal rather than something a beginner can feel. So
+      // where a difficulty asks for it, a note sitting on the beat is worth
+      // more than the same note sitting between two.
       for (let i = 0; i < kept.length; i++){
         const t = kept[i].t;
         while (lo < i && t - kept[lo].t > WIN) lo++;
         while (hi < kept.length - 1 && kept[hi + 1].t - t < WIN) hi++;
         scratch.length = 0;
-        for (let k = lo; k <= hi; k++) scratch.push(kept[k].v || 0);
+        for (let k = lo; k <= hi; k++) scratch.push(weight(kept[k]));
         scratch.sort((a, b) => a - b);
         // the value at the keep percentile of this neighbourhood
         const cut = scratch[Math.min(scratch.length - 1, Math.floor(scratch.length * D.keep))];
         // The first note of a phrase is never thinned away: dropping the
         // attack that opens a line is the one cut a listener always hears.
         const opensPhrase = i === 0 || t - kept[i-1].t > 1.1;
-        if (opensPhrase || (kept[i].v || 0) >= cut) survivors.push(kept[i]);
+        if (opensPhrase || weight(kept[i]) >= cut) survivors.push(kept[i]);
       }
       if (survivors.length) kept = survivors;
     }
@@ -3053,7 +3343,7 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
       for (const o of kept){
         const prev = thinned[thinned.length - 1];
         if (prev && o.t - prev.t < minGap){
-          if ((o.v || 0) > (prev.v || 0)) thinned[thinned.length - 1] = o;
+          if (weight(o) > weight(prev)) thinned[thinned.length - 1] = o;
           continue;
         }
         thinned.push(o);
@@ -3281,15 +3571,20 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
           for (let k2 = at; k2 < Math.min(o.rmsN.length, at + Math.round(fps * 0.15)); k2++){
             if (o.rmsN[k2] > peak){ peak = o.rmsN[k2]; pk = k2; }
           }
-          const floor = peak * 0.45;
-          const limit = Math.min(gap - 0.14, tempo.beatLen * 4);
-          // A held note dips — vibrato, a consonant mid-word — without ending.
-          // Only a drop that stays down for 60ms counts as the voice stopping.
+          // Two floors, because they answer different questions. The higher one
+          // decides whether the voice has stopped — a dip below it that stays
+          // down is the end of the note. The lower one decides where the note
+          // actually ends, which is later: a sung note releases over something
+          // like a tenth of a second, and calling it over the moment it passes
+          // 45% cut every hold short by about the length of its own release.
+          const floor = peak * 0.45, tail = peak * 0.20;
+          const limit = Math.min(gap - 0.06, tempo.beatLen * 4);
           const slack = Math.max(1, Math.round(fps * 0.06));
           let held = 0, down = 0;
           for (let k2 = pk; k2 < Math.min(o.rmsN.length, at + Math.round(limit * fps)); k2++){
             if (o.rmsN[k2] < floor){ if (++down > slack) break; }
-            else { down = 0; held = (k2 - at) / fps; }
+            else down = 0;
+            if (o.rmsN[k2] >= tail) held = (k2 - at) / fps;
           }
           if (held > tempo.beatLen * 0.9){
             len = Math.round(Math.min(held, limit) / step) * step;
@@ -3348,6 +3643,7 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
   // read back and checked against the song it came from. Anything wrong is
   // corrected here rather than shipped.
   const report = { outOfRange:0, malformed:0, thinned:0, longestGap:0, notes:0,
+                   unsupported:0, deadHolds:0, unchartedVocal:0, gaps:[], driftMs:0,
                    offGrid:0, stacked:0, holdsTrimmed:0, holds:0, gridMs:0 };
   let checked = [];
   for (const n of clean){
@@ -3429,6 +3725,7 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
     report.holds = checked.filter(n => n.len > 0).length;
   }
 
+  checked = refineAgainstAudio(checked, tracks, duration, step, report);
   // What the chart is worth reporting: how far off the beat it sits, and the
   // longest stretch with nothing to play.
   let devSum = 0;
@@ -3524,11 +3821,25 @@ function paintReady(chart){
     if (v.stacked) fixes.push(v.stacked + " stacked on one instant");
     if (v.holdsTrimmed) fixes.push(v.holdsTrimmed + " holds trimmed off the next note");
     if (v.thinned) fixes.push(v.thinned + " where the density was unplayable");
+    // what the second pass found when it read the finished chart back
+    // against the recording
+    if (v.unsupported) fixes.push(v.unsupported + " with no voice under them");
+    if (v.deadHolds) fixes.push(v.deadHolds + " holds that were not actually held");
+    if (v.driftMs) fixes.push(v.driftMs.toFixed(0) + "ms of drift pulled back onto the vocal");
+    let extra = "";
+    if (v.unchartedVocal > 0 && v.gaps && v.gaps.length){
+      const g = v.gaps.slice(0, 3).map(x =>
+        fmtTime(x.t) + " (" + x.len.toFixed(1) + "s, " + x.side + ")").join(", ");
+      extra = "<br><b>Singing with nothing charted over it:</b> " +
+              v.unchartedVocal.toFixed(1) + "s at " + g +
+              (v.gaps.length > 3 ? " and " + (v.gaps.length - 3) + " more" : "") +
+              ". Rechart on Hard if you want those in.";
+    }
     $("#readyCheck").innerHTML = "<b>Validation:</b> " +
       (fixes.length ? "corrected " + fixes.join(", ") + "." : "nothing to correct.") +
       "<br>Notes sit " + v.gridMs.toFixed(0) + "ms off the detected beat on average" +
       (v.holds ? ", " + v.holds + (v.holds === 1 ? " hold" : " holds") + " from sustained vocals" : "") +
-      ". Longest stretch with nothing to play: " + v.longestGap.toFixed(1) + "s.";
+      ". Longest stretch with nothing to play: " + v.longestGap.toFixed(1) + "s." + extra;
   }
 }
 
@@ -4395,6 +4706,46 @@ function writeDialogue(rec){
   return lines;
 }
 
+/* Auto Mod builds the whole week rather than only its dialogue: it reads what
+   each song actually turned out to be, picks a stage and a cast to match, writes
+   the dialogue from how the song plays, opens on a cutscene, and then checks the
+   result before handing it back. Every step reads something real — the chart's
+   own numbers — rather than choosing at random. */
+function songMood(rec){
+  const c = rec.chart;
+  const notes = c.notes.length, dur = Math.max(1, c.duration);
+  const density = notes / dur;                       // notes per second
+  const bpm = c.bpm || 120;
+  const mine = c.notes.filter(n => n.mustHit).length;
+  const share = notes ? mine / notes : 0.5;
+  const holds = c.notes.filter(n => n.len > 0).length;
+  return { density, bpm, share, holds, notes, dur,
+           heavy: density > 4.2 || bpm > 165,
+           calm:  density < 1.8 && bpm < 120 };
+}
+function pickStageFor(mood){
+  if (mood.heavy) return "week3";
+  if (mood.calm)  return "week2";
+  return "week1";
+}
+function writeWeekCutscene(lib){
+  const first = MOD.songs.length ? lib.find(r => r.id === MOD.songs[0].id) : null;
+  const mood = first ? songMood(first) : null;
+  const name = MOD.name || "this week";
+  const desc = mood && mood.heavy
+    ? "The opponent walks in and turns to face BF. The opponent points at him. " +
+      "Then BF raises his microphone. The camera zooms in."
+    : "BF walks toward the opponent. The opponent turns around. " +
+      "Then BF raises his microphone and gets ready.";
+  const lines = [
+    { who:"opp", text: mood && mood.heavy ? "You will not keep up with this one."
+                                          : "So you are the one they sent." },
+    { who:"plr", text: first ? "Beep bo bop. " + first.name + "." : "Beep bo bop." },
+    { who:"opp", text: "Then let us hear it." }
+  ];
+  return { desc, dur: mood && mood.heavy ? 13 : 11, lines, name };
+}
+
 $("#autoModBtn").addEventListener("click", async () => {
   const lib = await songsAll();
   const btn = $("#autoModBtn");
@@ -4402,21 +4753,89 @@ $("#autoModBtn").addEventListener("click", async () => {
   const bar = $("#autoModBar"), note = $("#autoModNote");
   $("#autoModWrap").style.display = "block";
 
-  const steps = MOD.songs.length;
-  for (let i = 0; i < steps; i++){
+  const stages = [
+    "Reading the songs",
+    "Choosing a stage",
+    "Casting the characters",
+    "Writing the dialogue",
+    "Building the cutscene",
+    "Checking the week"
+  ];
+  const at = (i, extra) => {
+    note.textContent = stages[i] + (extra ? " — " + extra : "") + "...";
+    bar.style.width = Math.round((i / stages.length) * 100) + "%";
+  };
+  const breathe = () => new Promise(r => setTimeout(r, 160));
+
+  // 1. what these songs actually are
+  at(0);
+  await breathe();
+  const recs = MOD.songs.map(e => lib.find(r => r.id === e.id)).filter(Boolean);
+  const moods = recs.map(songMood);
+  const avg = moods.length
+    ? { density: moods.reduce((a,m)=>a+m.density,0)/moods.length,
+        bpm: moods.reduce((a,m)=>a+m.bpm,0)/moods.length,
+        heavy: moods.filter(m=>m.heavy).length > moods.length/2,
+        calm: moods.filter(m=>m.calm).length > moods.length/2,
+        holds: moods.reduce((a,m)=>a+m.holds,0) }
+    : { density:0, bpm:0, heavy:false, calm:true, holds:0 };
+
+  // 2. a stage that suits them
+  at(1, avg.heavy ? "something harder" : avg.calm ? "something quieter" : "the street");
+  await breathe();
+  MOD.stage = pickStageFor(avg);
+
+  // 3. and a cast. A heavier week gets the second form of the opponent.
+  at(2, avg.heavy ? "Phase 2" : "Phase 1");
+  await breathe();
+  await loadSprites();
+  MOD.opp = avg.heavy ? "p2" : "p1";
+  if (!MOD.plr) MOD.plr = "bf";
+
+  // 4. dialogue, per song, from how that song plays
+  for (let i = 0; i < MOD.songs.length; i++){
     const entry = MOD.songs[i];
     const rec = lib.find(r => r.id === entry.id);
-    note.textContent = "Writing dialogue for " + (rec ? rec.name : "song " + (i+1)) + "...";
-    bar.style.width = Math.round(((i + 0.5) / steps) * 100) + "%";
-    await new Promise(r => setTimeout(r, 220));      // let the UI show each step
+    at(3, rec ? rec.name : "song " + (i+1));
+    bar.style.width = Math.round(((3 + (i+1)/Math.max(1,MOD.songs.length)) / stages.length) * 100) + "%";
+    await breathe();
     if (rec) entry.dialogue = writeDialogue(rec);
   }
+
+  // 5. an opening cutscene
+  at(4);
+  await breathe();
+  if (!MOD.cutscene || !MOD.cutscene.desc) MOD.cutscene = writeWeekCutscene(lib);
+
+  // 6. and a look at what came out, before it is kept
+  at(5);
+  await breathe();
+  const problems = [];
+  if (!recs.length) problems.push("no songs in the week");
+  for (const r of recs){
+    if (!r.chart || !r.chart.notes.length) problems.push(r.name + " has no notes");
+    else if (r.chart.duration > 0 && r.chart.notes.length / r.chart.duration < 0.25)
+      problems.push(r.name + " is very sparse");
+    const v = r.chart && r.chart.validation;
+    if (v && v.unchartedVocal > 4)
+      problems.push(r.name + " leaves " + v.unchartedVocal.toFixed(0) + "s of singing uncharted");
+  }
+  const cut = MOD.cutscene ? planCutscene(MOD.cutscene.desc, MOD.cutscene.dur, MOD.cutscene.lines) : null;
+  if (cut && !cut.beats.length) problems.push("the cutscene has nothing in it");
+
   bar.style.width = "100%";
-  note.textContent = "Done — dialogue written for " + steps + (steps === 1 ? " song." : " songs.");
+  const st = STAGE_CHOICES.find(x => x.id === MOD.stage);
+  note.textContent = problems.length
+    ? "Built, with " + problems.length + " thing" + (problems.length===1?"":"s") +
+      " to look at: " + problems.slice(0,2).join("; ") + "."
+    : "Built: " + (st ? st.name : MOD.stage) + ", " +
+      (MOD.opp === "p2" ? "Phase 2" : "Phase 1") + " opponent, dialogue for " +
+      MOD.songs.length + (MOD.songs.length === 1 ? " song" : " songs") +
+      (cut ? ", and a " + cut.dur + "s cutscene" : "") + ".";
   await saveMod();
   await renderMod();
   btn.disabled = false;
-  setTimeout(() => { $("#autoModWrap").style.display = "none"; bar.style.width = "0%"; }, 2600);
+  setTimeout(() => { $("#autoModWrap").style.display = "none"; bar.style.width = "0%"; }, 4200);
 });
 
 /* =====================================================================
@@ -4572,7 +4991,13 @@ async function loadSongById(id){
   }
 }
 
-$("#openMod").addEventListener("click", async () => { await loadMod(); await renderMod(); show("modScreen"); });
+/* Mod Maker is reached through My Mods now rather than from the main menu —
+   the V1.02 menu has no room for both and they are the same place anyway. The
+   button is only bound if it is there. */
+{
+  const b = $("#openMod");
+  if (b) b.addEventListener("click", async () => { await loadMod(); await renderMod(); show("modScreen"); });
+}
 loadMod();
 
 /* Boyfriend sprite sheets and week backgrounds, embedded so the game
@@ -6561,6 +6986,8 @@ function middleMode(){ return settings.middle || "off"; }
 
 function layout(s){
   arrowCache.clear();
+  // a 1v1 needs both strumlines on screen whatever the note-style setting says
+  if (s.vs) settings = Object.assign({}, settings, { oppNotes: true, middle: "off" });
   const w = s.w, h = s.h;
   const mobile = settings.mode === "mobile";
   const mid = middleMode();
@@ -6720,6 +7147,11 @@ function startGame(){
     laneFlash: [0,0,0,0],
     confirm: [0,0,0,0],
     oppConfirm: [0,0,0,0],
+    // player two's side, only present in a 1v1
+    vs: VS ? { p1:{ score:0, combo:0, best:0, hits:0, miss:0, accSum:0, accTotal:0 },
+               p2:{ score:0, combo:0, best:0, hits:0, miss:0, accSum:0, accTotal:0 } } : null,
+    oppHeld: [false,false,false,false],
+    oppGlow: [0,0,0,0],
     splashes: [],
     popups: [],
     vocalMuted: false,
@@ -6796,6 +7228,40 @@ function endGame(died){
 
   const acc = game.accTotal ? (game.accSum / game.accTotal) * 100 : 0;
   const c = game.counts;
+  // A 1v1 is scored as a race, so the result is who won rather than a rank.
+  const vs = game.vs;
+  if (vs){
+    vs.p1.score = game.score;
+    vs.p1.best = game.maxCombo;
+    const p1 = vs.p1.score, p2 = vs.p2.score;
+    const won = p1 > p2 ? 1 : p2 > p1 ? 2 : 0;
+    $("#resTitle").textContent = won === 0 ? "Dead heat"
+      : won === 1 ? myName() + " wins" : "Player 2 wins";
+    if (PROFILE){
+      PROFILE.stats = PROFILE.stats || { vsPlayed:0, vsWon:0 };
+      PROFILE.stats.vsPlayed++;
+      if (won === 1) PROFILE.stats.vsWon++;
+      saveProfile();
+    }
+    $("#resScore").textContent = p1.toLocaleString() + "  vs  " + p2.toLocaleString();
+    $("#resCombo").textContent = game.maxCombo + " / " + (vs.p2.best || 0);
+    $("#resSick").textContent  = c.SICK;
+    $("#resMiss").textContent  = c.MISS + " / " + vs.p2.miss;
+    const a2 = vs.p2.accTotal ? (vs.p2.accSum / vs.p2.accTotal) * 100 : 0;
+    $("#resAcc").textContent =
+      myName() + " " + acc.toFixed(1) + "%  ·  Player 2 " + a2.toFixed(1) + "%";
+    const el2 = $("#resRank");
+    el2.textContent = won === 0 ? "=" : won === 1 ? "P1" : "P2";
+    el2.className = "rank " + (won === 1 ? "s" : won === 2 ? "b" : "c");
+    VS = null;
+    $("#modNextBtn").style.display = "none";
+    $("#backToModBtn").style.display = "none";
+    $("#resToChart").style.display = "flex";
+    show("resultsScreen");
+    game = null;
+    return;
+  }
+
   $("#resTitle").textContent = died ? "Blue Balled" : "Song Cleared";
   $("#resScore").textContent = game.score.toLocaleString();
   $("#resCombo").textContent = game.maxCombo;
@@ -6861,6 +7327,37 @@ function release(lane){
   if (!game) return;
   game.held[lane] = false;
 }
+
+/* Player two, on the opponent's strumline. Scored the same way as player one
+   but kept on its own tally — the two are racing, so neither one's mistakes
+   may touch the other's score or the shared health bar. */
+function press2(lane){
+  if (!game || game.paused || game.over || !game.vs) return;
+  game.oppHeld[lane] = true;
+  game.oppGlow[lane] = 1;
+  let now = game.time;
+  try{ now = audioCtx.currentTime - game.startedAt; }catch(e){}
+  let best = null, bestD = 1e9;
+  for (let i = game.head; i < game.notes.length; i++){
+    const n = game.notes[i];
+    if (n.t - now > MISS_WINDOW + 0.02) break;
+    if (n.mustHit || n.hit || n.gone || n.lane !== lane) continue;
+    const d = Math.abs(n.t - now);
+    if (d < bestD){ bestD = d; best = n; }
+  }
+  if (!best || bestD > MISS_WINDOW) return;
+  const ms = bestD * 1000;
+  let w = WINDOWS[WINDOWS.length - 1];
+  for (const cand of WINDOWS) if (ms <= cand.ms){ w = cand; break; }
+  best.hit = true;
+  const p = game.vs.p2;
+  p.score += w.score; p.combo++; p.best = Math.max(p.best || 0, p.combo);
+  p.hits++; p.accSum += w.acc; p.accTotal++;
+  game.oppConfirm[lane] = 0.16;
+  setPose("op", LANE_DIR[lane]);
+  if (settings.splash && w.name === "SICK" && !opt(OPT.EFFECTS)) addSplash(lane, false);
+}
+function release2(lane){ if (game && game.oppHeld) game.oppHeld[lane] = false; }
 
 function judge(note, dist){
   const ms = dist * 1000;
@@ -6978,16 +7475,55 @@ document.addEventListener("keydown", e => {
     return;
   }
   if (e.repeat) return;
+  // In a 1v1 the two players need separate keys, so the arrows stop being an
+  // alias for the letters and become player two's own strumline.
+  if (game && game.vs){
+    const p2 = VS_KEYS2[e.code];
+    if (p2 !== undefined){ e.preventDefault(); press2(p2); return; }
+    const p1 = VS_KEYS1[e.code];
+    if (p1 !== undefined){ e.preventDefault(); press(p1); return; }
+    return;
+  }
   const l = KEYMAP[e.code];
   if (l !== undefined){ e.preventDefault(); press(l); }
 });
+/* Player one keeps the letters, player two takes the arrows. Fixed rather than
+   rebindable: the point of the second set is that it cannot collide with the
+   first, and letting both be remapped is how they end up on the same keys. */
+const VS_KEYS1 = { KeyA:0, KeyS:1, KeyW:2, KeyD:3 };
+const VS_KEYS2 = { ArrowLeft:0, ArrowDown:1, ArrowUp:2, ArrowRight:3 };
 document.addEventListener("keyup", e => {
+  if (game && game.vs){
+    const p2 = VS_KEYS2[e.code];
+    if (p2 !== undefined){ release2(p2); return; }
+    const p1 = VS_KEYS1[e.code];
+    if (p1 !== undefined){ release(p1); return; }
+    return;
+  }
   const l = KEYMAP[e.code];
   if (l !== undefined) release(l);
 });
 
 /* touch — a tap anywhere in a lane column counts */
 const pointerLane = new Map();
+/* In a 1v1 on a phone the screen is split down the middle: the opponent's
+   strumline on the left belongs to player two, the player's on the right to
+   player one. Returns which side was touched as well as which lane. */
+function vsLaneFromPoint(x, y){
+  if (!game || !game.vs) return null;
+  const s = game;
+  if (y < s.colTop || y > s.colBottom) return null;
+  const half = s.laneW * 0.5;
+  for (let l = 0; l < 4; l++){
+    if (Math.abs(x - (s.playerX + l * s.playerGap)) <= half) return { who:1, lane:l };
+  }
+  const oh = (s.oppGap || s.laneW) * 0.5;
+  for (let l = 0; l < 4; l++){
+    if (Math.abs(x - (s.oppX + l * (s.oppGap || s.playerGap))) <= oh) return { who:2, lane:l };
+  }
+  return null;
+}
+
 function laneFromPoint(x, y){
   if (!game) return -1;
   const s = game;
@@ -7002,25 +7538,36 @@ function laneFromPoint(x, y){
   }
   return -1;
 }
+const letGo = v => { if (v.who === 2) release2(v.lane); else release(v.lane); };
 cv.addEventListener("pointerdown", e => {
   if (!game || game.paused) return;
   e.preventDefault();
+  if (game.vs){
+    const v = vsLaneFromPoint(e.clientX, e.clientY);
+    if (v){ pointerLane.set(e.pointerId, v); (v.who === 2 ? press2 : press)(v.lane); }
+    return;
+  }
   const l = laneFromPoint(e.clientX, e.clientY);
-  if (l >= 0){ pointerLane.set(e.pointerId, l); press(l); }
+  if (l >= 0){ pointerLane.set(e.pointerId, { who:1, lane:l }); press(l); }
 }, { passive:false });
 cv.addEventListener("pointerup", e => {
-  const l = pointerLane.get(e.pointerId);
-  if (l !== undefined){ release(l); pointerLane.delete(e.pointerId); }
+  const v = pointerLane.get(e.pointerId);
+  if (v !== undefined){ letGo(v); pointerLane.delete(e.pointerId); }
 });
 cv.addEventListener("pointercancel", e => {
-  const l = pointerLane.get(e.pointerId);
-  if (l !== undefined){ release(l); pointerLane.delete(e.pointerId); }
+  const v = pointerLane.get(e.pointerId);
+  if (v !== undefined){ letGo(v); pointerLane.delete(e.pointerId); }
 });
 cv.addEventListener("pointermove", e => {
   if (!game || !pointerLane.has(e.pointerId)) return;
   const old = pointerLane.get(e.pointerId);
-  const l = laneFromPoint(e.clientX, e.clientY);
-  if (l >= 0 && l !== old){ release(old); pointerLane.set(e.pointerId, l); press(l); }
+  const v = game.vs ? vsLaneFromPoint(e.clientX, e.clientY)
+                    : (l => l >= 0 ? { who:1, lane:l } : null)(laneFromPoint(e.clientX, e.clientY));
+  if (v && (v.who !== old.who || v.lane !== old.lane)){
+    letGo(old);
+    pointerLane.set(e.pointerId, v);
+    (v.who === 2 ? press2 : press)(v.lane);
+  }
 }, { passive:true });
 
 /* ------------------------- pause ------------------------- */
@@ -7563,9 +8110,11 @@ $("#openWeeks").addEventListener("click", () => { showWeekBrowser(); show("weeks
    pointed at it; the filters, sorting and cards stay as they are.
    ===================================================================== */
 const SEARCH_SCOPE_NOTE =
-  "Community search needs a server to hold other players' uploads, and this " +
-  "build runs entirely on your device with no account and no connection. So " +
-  "these results are your own content — every week and song you have made here.";
+  "Community search needs a server to hold other players' uploads and to check " +
+  "who they are. This build runs entirely on your device, with no connection and " +
+  "no accounts beyond this one — so rather than fill the page with people who do " +
+  "not exist, these results are the real content on this device: your songs, your " +
+  "mods, and your own profile.";
 
 let searchLib = [], searchFilter = { type:"all", diff:"", sort:"new" }, searchWired = false;
 
@@ -7575,12 +8124,18 @@ function searchDiffOf(rec){ return (rec.chart && rec.chart.difficulty) || "norma
    the sorters can both read. */
 function searchCorpus(){
   const out = [];
+  // the one account this build knows about: the person using it
+  if (PROFILE){
+    out.push({ kind:"user", ref:PROFILE, name:PROFILE.name, creator:PROFILE.name,
+               icon:"👤", created:PROFILE.created || 0, length:0, diffs:[],
+               sub:"you · " + MODS.length + (MODS.length === 1 ? " mod" : " mods") });
+  }
   for (const wk of allWeeks()){
     const titles = weekSongTitles(wk, searchLib);
     const recs = (wk.songs || []).map(e => searchLib.find(r => r.id === (e && e.id))).filter(Boolean);
     out.push({
-      kind:"week", ref:wk, name:wk.name, creator:wk.creator || "You",
-      icon:"🗺️", created:(wk.mod && wk.mod.created) || 0,
+      kind:"week", ref:wk, name:wk.name, creator:myName(),
+      icon:"📦", created:(wk.mod && wk.mod.created) || 0,
       length:recs.reduce((a, r) => a + (r.chart.duration || 0), 0),
       diffs:recs.map(searchDiffOf),
       sub:(titles.length || 0) + (titles.length === 1 ? " song" : " songs") +
@@ -7590,7 +8145,7 @@ function searchCorpus(){
   for (const rec of searchLib){
     const d = searchDiffOf(rec);
     out.push({
-      kind:"song", ref:rec, name:rec.name, creator:"You",
+      kind:"song", ref:rec, name:rec.name, creator:myName(),
       icon:"🎵", created:rec.created || 0, length:rec.chart.duration || 0, diffs:[d],
       sub:d.replace(/^./, c => c.toUpperCase()) + " · " + fmtTime(rec.chart.duration) +
           " · " + rec.chart.notes.length + " notes"
@@ -7603,7 +8158,12 @@ function searchMatches(){
   const q = ($("#searchQ").value || "").trim().toLowerCase();
   const f = searchFilter;
   let rows = searchCorpus();
-  if (f.type !== "all") rows = rows.filter(r => r.kind === f.type);
+  // "mod" and "week" are the same object here — a week IS the mod — so both
+  // filters land on it rather than one of them coming back empty
+  if (f.type !== "all"){
+    rows = rows.filter(r => (f.type === "mod" || f.type === "week")
+      ? r.kind === "week" : r.kind === f.type);
+  }
   if (f.diff) rows = rows.filter(r => r.diffs.includes(f.diff));
   if (q){
     const words = q.split(/\s+/);
@@ -7639,7 +8199,8 @@ function paintSearch(){
     b.querySelector("b").textContent = r.name;
     b.querySelector("small").textContent = r.sub + " · by " + r.creator;
     b.addEventListener("click", () => {
-      if (r.kind === "week"){ weekLib = searchLib; openWeek(r.ref); show("weeksScreen"); }
+      if (r.kind === "user"){ show("profileScreen"); paintProfile(); }
+      else if (r.kind === "week"){ weekLib = searchLib; openWeek(r.ref); show("weeksScreen"); }
       else loadSong(r.ref.id);
     });
     wirePress(b, "pressing", "");
@@ -7674,12 +8235,202 @@ async function openSearch(){
   paintSearch();
 }
 
-$("#searchBtn").addEventListener("click", () => { show("searchScreen"); openSearch(); });
 wirePress($("#searchBtn"), "pressing", "");
 
 /* PLAY goes straight to the saved songs, which is what a player wants from
    the top of the menu. */
 $("#openPlay").addEventListener("click", () => { refreshSongsUI(); show("songsScreen"); });
+
+/* =====================================================================
+   WHO YOU ARE
+   V1.02 asks for Google sign-in before playing, with every account real and
+   every search result attached to one.
+
+   Real Google sign-in cannot be done from here, and it is worth being exact
+   about why rather than approximating it. OAuth needs a registered client, a
+   redirect the provider will accept, and a server to exchange the code for a
+   token. This game is one HTML file: it has none of those, and it has nowhere
+   to keep an account even if it got one. A "Continue with Google" button that
+   did not do all of that would be a picture of a sign-in, and a picture of a
+   sign-in that asks for anything is a phishing page. So there is not one.
+
+   What there is instead does the job an account is actually for: a name that
+   everything you make belongs to, kept on this device. It is not an identity
+   anyone else can check, and the screens say so where it matters. When there
+   is a server to sign in to, this is the seam it attaches to — one profile
+   record, one id, and every mod, song, week and result already pointing at it.
+   ===================================================================== */
+
+const PROFILE_KEY = "fnfsm_profile";
+let PROFILE = null;
+
+function loadProfile(){
+  try{
+    const raw = localStorage.getItem(PROFILE_KEY);
+    if (raw) PROFILE = JSON.parse(raw);
+  }catch(e){ PROFILE = null; }
+  if (PROFILE && !PROFILE.stats) PROFILE.stats = { vsPlayed:0, vsWon:0 };
+  return PROFILE;
+}
+function saveProfile(){
+  try{ localStorage.setItem(PROFILE_KEY, JSON.stringify(PROFILE)); }catch(e){}
+}
+function makeProfile(name){
+  PROFILE = {
+    id: "local-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+    name: name,
+    created: Date.now(),
+    stats: { vsPlayed:0, vsWon:0 }
+  };
+  saveProfile();
+  return PROFILE;
+}
+const myName = () => (PROFILE && PROFILE.name) || "You";
+
+function paintMe(){
+  const chip = $("#meChip");
+  if (chip) chip.textContent = myName();
+}
+
+/* ---- first run ---- */
+function nameProblem(v){
+  const n = (v || "").trim();
+  if (n.length < 2) return "At least two characters.";
+  if (n.length > 18) return "Eighteen characters at most.";
+  if (!/^[A-Za-z0-9 _.-]+$/.test(n)) return "Letters, numbers, spaces, . _ - only.";
+  return "";
+}
+function paintSignin(){
+  const v = $("#nameInput").value;
+  const why = nameProblem(v);
+  $("#nameHint").textContent = v.trim() ? (why || "Looks good.") : "";
+  $("#nameGo").disabled = !!why;
+  $("#signinNote").innerHTML =
+    "<b>This name lives on this device.</b> Signing in with Google needs a server to " +
+    "hand the sign-in to and somewhere to keep the account, and this build is a single " +
+    "file with neither — so rather than show you a Google button that could not really " +
+    "sign you in, there isn't one. Nothing here ever asks for a password.";
+}
+$("#nameInput").addEventListener("input", paintSignin);
+$("#nameInput").addEventListener("keydown", e => { if (e.key === "Enter" && !$("#nameGo").disabled) $("#nameGo").click(); });
+$("#nameGo").addEventListener("click", () => {
+  const n = $("#nameInput").value.trim();
+  if (nameProblem(n)) return;
+  if (PROFILE){ PROFILE.name = n; saveProfile(); }
+  else makeProfile(n);
+  paintMe();
+  show("menuScreen");
+});
+
+/* ---- profile ---- */
+function paintProfile(){
+  if (!PROFILE) return;
+  $("#profName").textContent = PROFILE.name;
+  const d = new Date(PROFILE.created || Date.now());
+  $("#profSince").textContent = "Playing since " + d.toLocaleDateString();
+  const st = PROFILE.stats || { vsPlayed:0, vsWon:0 };
+  const cell = (v, l) => '<div><b>' + v + '</b><small>' + l + '</small></div>';
+  Promise.all([
+    songsSupported() ? songsAll().catch(() => []) : Promise.resolve([]),
+    loadSprites().then(() => MY_SPRITES)
+  ]).then(([songs, sprites]) => {
+    $("#profStats").innerHTML =
+      cell(songs.length, "songs") +
+      cell(MODS.length, "mods") +
+      cell(sprites.length, "sprites") +
+      cell(st.vsPlayed, "1v1 played") +
+      cell(st.vsWon, "1v1 won");
+  });
+  $("#profAccount").textContent =
+    "Local account " + (PROFILE.id || "") + ". Everything you make is filed under it.";
+  $("#profNote").innerHTML =
+    "<b>Not a Google account.</b> There is no server behind this build, so there is nothing " +
+    "to sign in to and nobody else can see this profile. It is here so your work has an " +
+    "owner, and so that when there is a server, everything already belongs to somebody.";
+}
+$("#searchBtn").addEventListener("click", () => { show("profileScreen"); paintProfile(); });
+$("#renameBtn").addEventListener("click", () => {
+  $("#nameInput").value = PROFILE ? PROFILE.name : "";
+  paintSignin();
+  show("signinScreen");
+});
+$("#openSearchMenu").addEventListener("click", () => { show("searchScreen"); openSearch(); });
+
+/* =====================================================================
+   1V1
+   Two real people, and no invented third one.
+
+   Online matchmaking needs a server to hold who is playing, and this build has
+   none — so there is never anybody online, and the screen says exactly that
+   rather than conjuring an opponent to fill the space. What it does offer is
+   the 1v1 that genuinely works without a server: two people at one device,
+   one strumline each.
+   ===================================================================== */
+let VS = null;      // { p1:{score,combo,hits,miss}, p2:{...} } while a match runs
+
+function vsKeyText(){
+  return settings.mode === "pc"
+    ? "Player 1: A S W D. Player 2: the arrow keys."
+    : "On a phone, player 1 taps the left half of the screen and player 2 the right.";
+}
+
+async function paintVs(){
+  $("#vsKeys").textContent = vsKeyText();
+  $("#vsOnlineNote").innerHTML =
+    "Playing someone else's mod against them needs a server to find them through, and to " +
+    "check both of you are who you say you are. This build has no server and no accounts " +
+    "beyond this device, so there is nobody to match you with.";
+  $("#vsPlayers").innerHTML = "";
+  $("#vsNobody").textContent = "No players are currently available for 1V1.";
+
+  const host = $("#vsSongs");
+  host.innerHTML = "";
+  let lib = [];
+  try{ lib = await songsAll(); }catch(e){ lib = []; }
+  const empty = $("#vsEmpty");
+  empty.style.display = lib.length ? "none" : "block";
+  empty.textContent = lib.length ? "" :
+    "No saved songs yet. Chart one in the Editor and it can be played head to head.";
+  for (const rec of lib){
+    const b = document.createElement("button");
+    b.className = "vsrow";
+    b.innerHTML = '<span class="sm"><b></b><small></small></span><span class="go">VS</span>';
+    b.querySelector("b").textContent = rec.name;
+    b.querySelector("small").textContent =
+      Math.round(rec.chart.bpm) + " BPM · " + fmtTime(rec.chart.duration) +
+      " · " + rec.chart.notes.length + " notes";
+    b.addEventListener("click", () => startVersus(rec.id));
+    wirePress(b, "pressing", "");
+    host.appendChild(b);
+  }
+}
+$("#openVs").addEventListener("click", () => { show("vsScreen"); paintVs(); });
+
+/* First run asks for a name before anything else. Not a gate you can fail —
+   there is nothing to authenticate against — just the game finding out what to
+   call you and what to file your work under. */
+loadProfile();
+paintMe();
+if (!PROFILE){
+  const menu = document.getElementById("menuScreen");
+  const sign = document.getElementById("signinScreen");
+  if (menu && sign){
+    menu.classList.remove("active");
+    sign.classList.add("active");
+    currentScreen = "signinScreen";
+    paintSignin();
+    setTimeout(() => { try{ $("#nameInput").focus(); }catch(e){} }, 60);
+  }
+}
+
+async function startVersus(id){
+  const ok = await loadSongById(id);
+  if (!ok) return;
+  VS = { p1:{ score:0, combo:0, hits:0, miss:0 }, p2:{ score:0, combo:0, hits:0, miss:0 } };
+  settings.botplay = false;
+  paintReady(SONG.chart);
+  show("readyScreen");
+}
 
 /* =====================================================================
    CUTSCENES
@@ -8285,6 +9036,17 @@ function update(dt){
     if (s.over) return;               // a miss may have ended the run mid-loop
     if (n.gone) continue;
     if (!n.mustHit){
+      if (s.vs){
+        // somebody is playing these, so they are not free any more
+        if (!n.hit && s.time - n.t > MISS_WINDOW){
+          n.gone = true;
+          s.vs.p2.combo = 0; s.vs.p2.miss++;
+          s.vs.p2.score = Math.max(0, s.vs.p2.score - 10);
+          if (s.opHold <= 0) setPose("op", LANE_DIR[n.lane], 0.26, true);
+        }
+        if (n.hit && s.time > n.t + n.len + 0.6) n.gone = true;
+        continue;
+      }
       // opponent auto-plays
       if (!n.hit && s.time >= n.t){
         n.hit = true;
@@ -8343,6 +9105,7 @@ function update(dt){
     s.laneFlash[l] = Math.max(0, s.laneFlash[l] - dt * 3.2);
     s.confirm[l]   = Math.max(0, s.confirm[l] - dt);
     s.oppConfirm[l]= Math.max(0, s.oppConfirm[l] - dt);
+    if (s.oppGlow) s.oppGlow[l] = Math.max(0, s.oppGlow[l] - dt * 4);
   }
   // prune in place — filter() would allocate two arrays every frame
   prune(s.splashes, dt);
