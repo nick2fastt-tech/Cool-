@@ -173,6 +173,22 @@ footer{padding:30px clamp(16px,4vw,52px);color:var(--faint);font-size:12px;line-
 }
 
 /* ============================ PLAYER ============================ */
+#player.busy #ctl,#player.busy #zones,#player.busy #plate{opacity:0;pointer-events:none}
+#load{position:absolute;inset:0;z-index:40;background:#000;display:none;
+  flex-direction:column;align-items:center;justify-content:center;gap:18px;text-align:center;padding:24px}
+#player.busy #load{display:flex}
+#load .ring{width:46px;height:46px;border-radius:50%;border:3px solid rgba(255,255,255,.16);
+  border-top-color:#e50914;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#load .lt{font-size:13px;letter-spacing:.24em;text-transform:uppercase;color:#fff;font-weight:700}
+#load .ls{font-size:12px;letter-spacing:.08em;color:#8b8b8b;max-width:420px;line-height:1.6}
+#fail{position:absolute;inset:0;z-index:60;background:#000;display:none;
+  flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:28px}
+#fail.on{display:flex}
+#fail h3{font-size:20px;font-weight:800;color:#fff}
+#fail p{font-size:13px;color:#9a9a9a;max-width:520px;line-height:1.7}
+#fail code{display:block;font-size:11px;color:#e07a72;background:#141414;border:1px solid #262626;
+  border-radius:5px;padding:10px 12px;max-width:520px;overflow:auto;text-align:left;white-space:pre-wrap}
 #player{position:fixed;inset:0;z-index:80;background:#000;display:none}
 #player.on{display:block}
 #player.idle{cursor:none}
@@ -415,6 +431,19 @@ footer{padding:30px clamp(16px,4vw,52px);color:var(--faint);font-size:12px;line-
         <svg class="i-fsout" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
       </button>
     </div>
+  </div>
+
+  <div id="load">
+    <div class="ring"></div>
+    <div class="lt" id="loadName"></div>
+    <div class="ls">Building the film &mdash; every set, character and texture is drawn from scratch, so the first few seconds take a moment.</div>
+  </div>
+
+  <div id="fail">
+    <h3 id="failTitle">This film could not start</h3>
+    <p id="failNote"></p>
+    <code id="failMsg"></code>
+    <div class="btnRow"><button class="btn info" id="failBack">Back to browse</button></div>
   </div>
 
   <div id="endPanel">
@@ -10488,11 +10517,20 @@ function runIntro() {
 let THREE = null;
 async function getTHREE() {
   if (THREE) return THREE;
-  const mk = (src) => URL.createObjectURL(new Blob([src], { type: "text/javascript" }));
-  const coreUrl = mk($("three-core").textContent);
-  const mainSrc = $("three-main").textContent.replaceAll("./three.core.min.js", coreUrl);
-  THREE = await import(mk(mainSrc));
-  return THREE;
+  const core = $("three-core").textContent, main = $("three-main").textContent;
+  const blob = (src) => URL.createObjectURL(new Blob([src], { type: "text/javascript" }));
+  const data = (src) => "data:text/javascript;charset=utf-8," + encodeURIComponent(src);
+  /* Blob URLs are the cheap route, but a few browsers refuse to treat one as a
+     module when the page itself came off the filesystem. Fall back to a data:
+     URL rather than leaving the viewer with a black screen. */
+  let err = null;
+  for (const mk of [blob, data]) {
+    try {
+      THREE = await import(mk(main.replaceAll("./three.core.min.js", mk(core))));
+      return THREE;
+    } catch (e) { err = e; }
+  }
+  throw new Error("the 3D renderer could not be loaded in this browser: " + ((err && err.message) || err));
 }
 
 /* grain, generated once */
@@ -10520,22 +10558,47 @@ const uiRefs = () => ({
   line: $("line"), card: $("card"), big: $("big"), canvasEl: films[P.id].canvas
 });
 
-/* Load the film while the intro plays, the way a streaming app hides its
-   buffering behind the brand animation. */
-async function prepare(id) {
+/* A quick look before we commit to anything: without WebGL there is no film
+   to show, and a silent black screen is the worst way to say so. */
+function webglReason() {
+  try {
+    const c = document.createElement("canvas");
+    const gl = c.getContext("webgl2") || c.getContext("webgl") || c.getContext("experimental-webgl");
+    if (!gl) return "This browser has no WebGL context available. The films are rendered in 3D in real time, so WebGL has to be switched on.";
+    return null;
+  } catch (e) {
+    return "WebGL could not be started: " + (e && e.message ? e.message : e);
+  }
+}
+
+function showFail(c, err) {
+  console.error(err);
+  $("failNote").textContent = "\u201c" + c.title + "\u201d did not start on this device. Everything is inside this one file, so nothing is missing \u2014 the renderer stopped.";
+  $("failMsg").textContent = String((err && err.stack) || (err && err.message) || err || "unknown error");
+  $("player").classList.remove("busy");
+  $("fail").classList.add("on");
+}
+
+/* Booting a film builds every set, rig and texture, and that work is
+   synchronous — it would freeze the intro mid-frame if the two overlapped.
+   So: play the intro clean, then show a real loading state and build. */
+function nextFrame() {
+  return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+}
+
+function prepare(id) {
   const c = byId(id);
-  const T = await getTHREE();
   if (!films[id]) {
     const cv = document.createElement("canvas");
     cv.id = "cv-" + id;
     $("stage").appendChild(cv);
     films[id] = { canvas: cv, api: null };
     P.id = id;
-    films[id].api = window[c.mod].boot(T, cv, uiRefs());
+    films[id].api = window[c.mod].boot(THREE, cv, uiRefs());
   }
   P.id = id;
   film = films[id].api;
-  film.boot(T, films[id].canvas, uiRefs());      /* idempotent; rebinds the overlays */
+  film.boot(THREE, films[id].canvas, uiRefs());   /* idempotent; rebinds the overlays */
   Object.values(films).forEach((f) => f.canvas.classList.remove("active"));
   films[id].canvas.classList.add("active");
   P.dur = film.duration();
@@ -10544,14 +10607,26 @@ async function prepare(id) {
 
 async function start(id) {
   const c = byId(id);
-  $("player").classList.add("on");
+  $("player").classList.add("on", "busy");
+  $("fail").classList.remove("on");
   $("endPanel").classList.remove("on");
+  $("loadName").textContent = c.title;
   document.body.classList.add("noscroll");
 
-  const loading = prepare(id).catch((e) => { console.error(e); });
-  await runIntro();
-  await loading;
-  if (!film) return;
+  const why = webglReason();
+  if (why) { showFail(c, why); return; }
+
+  try {
+    await runIntro();
+    await nextFrame();                 /* let the loader paint before we block */
+    if (!THREE) await getTHREE();
+    await nextFrame();
+    prepare(id);
+  } catch (e) {
+    showFail(c, e);
+    return;
+  }
+  if (!film) { showFail(c, "the film module did not return a player"); return; }
 
   const resume = loadProg()[id];
   P.t = resume && resume < P.dur - 20 ? resume : 0;
@@ -10560,17 +10635,21 @@ async function start(id) {
   $("line").textContent = ""; $("line").style.opacity = 0;
   $("nowTitle").textContent = c.title + (c.badge ? " \u00b7 " + c.badge : "");
   $("plateName").textContent = c.title;
-  $("plate").style.opacity = 1;
-  setTimeout(() => { $("plate").style.opacity = 0; }, 4200);
   drawMarks();
   resize();
-  paint();
+  paint();                       /* first frame drawn before the loader clears */
+  await nextFrame();
+  $("player").classList.remove("busy");
+  $("plate").style.opacity = 1;
+  setTimeout(() => { $("plate").style.opacity = 0; }, 4200);
   setPlaying(true);
   if (!loopRunning) { loopRunning = true; requestAnimationFrame(loop); }
 }
 
 function stop() {
   setPlaying(false);
+  $("player").classList.remove("busy");
+  $("fail").classList.remove("on");
   if (film) saveProg(P.id, P.t, P.dur);
   $("player").classList.remove("on");
   $("endPanel").classList.remove("on");
@@ -10579,6 +10658,7 @@ function stop() {
 }
 $("back").onclick = stop;
 $("browseBtn").onclick = stop;
+$("failBack").onclick = stop;
 $("againBtn").onclick = () => { $("endPanel").classList.remove("on"); seekTo(0); setPlaying(true); };
 
 /* ---- loop ---- */
