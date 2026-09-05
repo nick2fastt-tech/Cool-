@@ -25,7 +25,12 @@ body{
 
 #stage{position:fixed;inset:0;background:#000;overflow:hidden}
 #stage.idle{cursor:none}
-#view{position:absolute;inset:0;width:100%;height:100%;display:block;background:#000}
+/* The film is composed for 2.39:1, so the canvas is that shape and the
+   black behind it is the matte. Doing it this way rather than covering a
+   full-bleed canvas with bars means the camera really is a scope camera,
+   and it holds up in any window, portrait phones included. */
+#stage{background:#000}
+#view{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:block;background:#000}
 
 /* ---------- film overlays (part of the picture, not the interface) ---------- */
 .fx{position:absolute;inset:0;pointer-events:none;z-index:2}
@@ -34,9 +39,11 @@ body{
 #grain{opacity:.055;background-repeat:repeat;mix-blend-mode:overlay}
 #black{background:#000;opacity:0;z-index:3}
 
+
 #line{
-  position:absolute;left:0;right:0;bottom:calc(var(--ctl-h) + 26px);
-  text-align:center;padding:0 8%;z-index:4;pointer-events:none;
+  position:absolute;left:0;right:0;
+  bottom:calc(max(var(--ctl-h) + 26px, (100% - (100vw * 0.4184)) / 2 + 22px));
+  text-align:center;padding:0 8%;z-index:7;pointer-events:none;
   font-size:clamp(12px,1.65vw,17px);letter-spacing:.11em;line-height:1.6;
   color:#f2f2ee;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.9);
   opacity:0;transition:opacity .22s ease;
@@ -1425,10 +1432,12 @@ function blink(c, t) {
   eyeDart(c, t, 1);
 }
 
-/* face: brow lift (-1 worried .. 1 raised), mouth open 0..1, mouth width */
+/* face: brow lift (-1 worried .. 1 raised), mouth open 0..1, mouth width.
+   A mouth that only stretches reads as a puppet, so the jaw comes with it:
+   the lower lip swings down and back on a hinge and the chin follows. */
 function face(c, brow, open, wide) {
   var R = c.head.userData.R, b = c.head.userData.brows;
-  var o = open || 0, w = wide || 0;
+  var o = clamp(open || 0, 0, 1), w = wide || 0;
   for (var i = 0; i < 2; i++) {
     b[i].position.y = b[i].userData.baseY + brow * R * .10;
     b[i].rotation.z = b[i].userData.baseZ + (i ? 1 : -1) * brow * .30;
@@ -1437,8 +1446,10 @@ function face(c, brow, open, wide) {
   m.scale.set(1 + w * .45, 1, 1);
   d.inner.scale.set(1, .18 + o * 1.6, .45 + o * .4);
   d.up.position.y = R * (.035 + o * .055);
-  d.low.position.y = -R * (.035 + o * .32);
-  d.low.scale.set(1, .20 + o * .12, .35);
+  d.low.position.y = -R * (.035 + o * .34);
+  d.low.position.z = -o * R * .055;                  /* the jaw swings back */
+  d.low.scale.set(1 - w * .10, .20 + o * .14, .35 + o * .10);
+  c.jawOpen = o;
 }
 
 /* hair trails the motion a little */
@@ -1471,8 +1482,15 @@ function poseStand(c, t, opts) {
   opts = opts || {};
   var s = c.seed, w = wob(t, s, .6);
   var b = breathe(c, t, 1.65, 1);
-  /* weight drifts slowly from one leg to the other */
-  var shift = wob(t * .35, s + 7, .5);
+  /* Weight does not drift continuously. People hold a leg, get tired of it
+     and change over — so the sway is a slow wander plus a stepped transfer
+     that eases across and then sits still on the new side. */
+  var period = 7.5 + (s % 1) * 4.5;
+  var step = (t + s * 3.1) / period;
+  var side = (Math.floor(step) % 2) ? 1 : -1;
+  var cross = smoother(clamp((step - Math.floor(step)) / .22, 0, 1));
+  var settle = side * cross + -side * (1 - cross);
+  var shift = settle * .72 + wob(t * .35, s + 7, .5) * .28;
   c.spine.rotation.x = .02 + b * .012;
   c.spine.rotation.y = w * .05;
   c.spine.rotation.z = shift * .03;
@@ -1571,19 +1589,24 @@ function walkCycle(c, ph, amp, t) {
   c.legL.foot.rotation.x = footRoll(ph) * amp;
   c.legR.foot.rotation.x = footRoll(ph + Math.PI) * amp;
   c.legL.hip.rotation.z = .02; c.legR.hip.rotation.z = -.02;
-  /* the pelvis drops on the swinging side, the chest counter-rotates */
-  c.hips.position.y = .86 + (Math.abs(cs) - .5) * .028 * amp;
+  /* the pelvis drops on the swinging side, the chest counter-rotates, and
+     the whole body compresses a little as each heel takes the load */
+  var strike = Math.max(0, Math.sin(ph * 2 - .5));
+  c.hips.position.y = .86 + (Math.abs(cs) - .5) * .028 * amp - strike * .012 * amp;
   c.hips.rotation.y = -sn * .13 * amp;
   c.hips.rotation.z = cs * .055 * amp;
   c.chest.rotation.y = sn * .17 * amp;
   c.chest.rotation.z = -cs * .03 * amp;
   c.spine.rotation.x = .05;
-  c.armL.sh.rotation.x = sn * .46 * amp - .05;
-  c.armR.sh.rotation.x = -sn * .46 * amp - .05;
-  c.armL.sh.rotation.z = -.12 - Math.max(0, sn) * .04;
-  c.armR.sh.rotation.z = .12 + Math.max(0, -sn) * .04;
-  c.armL.el.rotation.x = -.32 - Math.max(0, sn) * .35;
-  c.armR.el.rotation.x = -.32 - Math.max(0, -sn) * .35;
+  /* arms trail the legs by about a fifth of a stride — swinging them in
+     exact opposition is the tell that a walk was written, not observed */
+  var lag = Math.sin(ph - .55), lagC = Math.cos(ph - .55);
+  c.armL.sh.rotation.x = lag * .46 * amp - .05;
+  c.armR.sh.rotation.x = -lag * .46 * amp - .05;
+  c.armL.sh.rotation.z = -.12 - Math.max(0, lag) * .04;
+  c.armR.sh.rotation.z = .12 + Math.max(0, -lag) * .04;
+  c.armL.el.rotation.x = -.32 - Math.max(0, lag) * .35 - Math.abs(lagC) * .06;
+  c.armR.el.rotation.x = -.32 - Math.max(0, -lag) * .35 - Math.abs(lagC) * .06;
   grip(c, .18);
   c.skirt.rotation.x = -sn * .11 * amp;
   c.skirt.rotation.z = cs * .05 * amp;
@@ -1616,10 +1639,11 @@ function runCycle(c, ph, amp, t) {
   c.chest.rotation.y = sn * .28 * amp;
   c.chest.rotation.x = .08;
   c.chest.rotation.z = -cs * .05 * amp;
-  c.armL.sh.rotation.x = sn * .95 * amp - .25;
-  c.armR.sh.rotation.x = -sn * .95 * amp - .25;
-  c.armL.sh.rotation.z = -.2 - Math.max(0, sn) * .07;
-  c.armR.sh.rotation.z = .2 + Math.max(0, -sn) * .07;
+  var rlag = Math.sin(ph - .42);
+  c.armL.sh.rotation.x = rlag * .95 * amp - .25;
+  c.armR.sh.rotation.x = -rlag * .95 * amp - .25;
+  c.armL.sh.rotation.z = -.2 - Math.max(0, rlag) * .07;
+  c.armR.sh.rotation.z = .2 + Math.max(0, -rlag) * .07;
   c.armL.el.rotation.x = -1.35 - Math.max(0, sn) * .35;
   c.armR.el.rotation.x = -1.35 - Math.max(0, -sn) * .35;
   grip(c, .55);
@@ -2109,24 +2133,49 @@ function poseRally(c, u, t) {
 }
 
 /* working a holographic console */
+/* Working at something with the hands. `height` is where the hands are, in
+   metres off the floor, and the whole body answers to it: crouching to reach
+   the ground, leaning over a desk, or holding something up to the light.
+   It used to take the argument and ignore it, so picking a note off the
+   cobbles looked exactly like reading a file. */
 function poseConsole(c, t, height) {
   var s = c.seed;
   var tap = Math.sin(t * 6.1 + s * 2), tap2 = Math.sin(t * 5.3 + s * 3 + 1.1);
   height = height === undefined ? 1.05 : height;
   breathe(c, t, 1.9, .9);
-  c.hips.position.y = .86 - .02;
-  c.spine.rotation.x = .20;
-  c.chest.rotation.x = .06;
-  c.legL.knee.rotation.x = .12; c.legR.knee.rotation.x = .16;
+
+  var SH = 1.34;                              /* roughly where a shoulder is */
+  var down = clamp((SH - height) / .95, 0, 1.15);   /* how far below shoulder */
+  var up = clamp((height - SH) / .55, 0, 1);        /* and how far above */
+
+  /* the legs and back take the reach, not just the arms */
+  c.hips.position.y = .86 - .02 - down * .17;
+  c.spine.rotation.x = .10 + down * .58 - up * .10;
+  c.chest.rotation.x = .04 + down * .16 - up * .06;
+  c.legL.knee.rotation.x = .10 + down * .62;
+  c.legR.knee.rotation.x = .14 + down * .68;
+  c.legL.hip.rotation.x = -down * .34;
+  c.legR.hip.rotation.x = -down * .30;
   c.legL.hip.rotation.z = .05; c.legR.hip.rotation.z = -.05;
-  c.armL.sh.rotation.x = -1.24 + tap * .06; c.armL.sh.rotation.z = -.34; c.armL.el.rotation.x = -1.05 - tap * .10;
-  c.armR.sh.rotation.x = -1.30 + tap2 * .06; c.armR.sh.rotation.z = .38; c.armR.el.rotation.x = -1.00 - tap2 * .12;
-  grip(c, .25);
-  c.head.rotation.x = .26 + Math.sin(t * .8 + s) * .04;
+  c.legL.foot.rotation.x = down * .26;
+  c.legR.foot.rotation.x = down * .24;
+
+  /* arms: forward and level for a desk, down and in for the floor, raised
+     and closer to the face for something held up */
+  var lift = -1.22 + down * .40 - up * .90;
+  c.armL.sh.rotation.x = lift + tap * .06;
+  c.armR.sh.rotation.x = lift - .06 + tap2 * .06;
+  c.armL.sh.rotation.z = -.34 + down * .10 - up * .16;
+  c.armR.sh.rotation.z = .38 - down * .10 + up * .16;
+  c.armL.el.rotation.x = -1.02 - tap * .10 - up * .55 + down * .22;
+  c.armR.el.rotation.x = -.98 - tap2 * .12 - up * .60 + down * .20;
+  grip(c, .25 + up * .35);
+
+  c.head.rotation.x = .24 + down * .34 - up * .62 + Math.sin(t * .8 + s) * .04;
   c.head.rotation.y = wob(t * .6, s + 5, .8) * .16;
   hairMotion(c, t, .05);
   blink(c, t);
-  face(c, -.15, .05, 0);
+  face(c, -.15 + up * .35, .05, 0);
 }
 
 /* arms folded, unimpressed */
@@ -2276,6 +2325,83 @@ function blend(c, u, f1, f2) {
   c.root.position.x = px; c.root.position.z = pz; c.root.rotation.y = ry;
 }
 
+
+/* =====================================================================
+   DIALOGUE
+   Every line in the film is a string with a speaker on the front, so the
+   mouth can be driven from the words themselves instead of a sine wave.
+   The text is broken into vowel groups; each one opens and closes, wide
+   or round depending on the vowel, with consonant clusters between them
+   holding the mouth nearly shut. It is not phonetic — it is close enough
+   that the picture reads as someone talking rather than chewing.
+   ===================================================================== */
+var _sylCache = {};
+var _VOWELS = "aeiouy";
+/* how far the mouth opens for each vowel, and how wide it spreads */
+var _SHAPE = {
+  a: [1.00, .10], e: [.55, .70], i: [.38, .85], o: [.85, -.35],
+  u: [.45, -.55], y: [.42, .60]
+};
+function syllables(text) {
+  var got = _sylCache[text];
+  if (got) return got;
+  var body = text.replace(/^[A-Z0-9 ]+:\s*/, "").toLowerCase();
+  var out = [], run = null;
+  for (var i = 0; i < body.length; i++) {
+    var ch = body.charAt(i);
+    if (_VOWELS.indexOf(ch) >= 0) {
+      var sh = _SHAPE[ch];
+      if (run) {                                    /* a diphthong, not two beats */
+        run[0] = Math.max(run[0], sh[0]) * .92;
+        run[1] = (run[1] + sh[1]) * .5;
+        run[2] += 1;
+      } else { run = [sh[0], sh[1], 1]; out.push(run); }
+    } else {
+      run = null;
+      /* a hard stop closes the mouth and takes a beat of its own */
+      if (".,!?—".indexOf(ch) >= 0 && out.length) out.push([0, 0, 1]);
+    }
+  }
+  if (!out.length) out = [[.4, .2, 1]];
+  _sylCache[text] = out;
+  return out;
+}
+
+/* mouth shape for a line at progress k (0..1 across the line's window) */
+var _mouth = [0, 0];
+function mouthAt(text, k) {
+  var syl = syllables(text);
+  var pos = clamp(k, 0, 1) * syl.length;
+  var i = Math.min(syl.length - 1, Math.floor(pos)), f = pos - i;
+  var s = syl[i];
+  /* each beat opens and closes; a touch of overlap keeps it from clacking */
+  var env = Math.sin(clamp(f * 1.12, 0, 1) * Math.PI);
+  _mouth[0] = s[0] * env;
+  _mouth[1] = s[1] * env;
+  return _mouth;
+}
+
+/* Put the line in the actor's mouth. Runs after the pose, so it works
+   whichever pose the scene put them in — standing, fighting or falling. */
+function speak(c, text, k, t) {
+  var m = mouthAt(text, k);
+  var open = m[0], wide = m[1];
+  face(c, .12 + open * .22, open * .62, wide * .30);
+  /* the head moves with the voice: a nod on the stressed beats, and the
+     chin lifts a little on the open vowels */
+  c.head.rotation.x -= open * .045;
+  c.head.rotation.y += Math.sin(t * 2.7 + c.seed) * .03;
+  c.chest.rotation.x = (c.chest.rotation.x || 0) - open * .012;
+  blink(c, t);
+}
+
+/* Anyone in shot who is not speaking still reacts: a small settle on the
+   beat, and the eyes flick toward whoever has the line. */
+function listen(c, t, keen) {
+  var k = keen === undefined ? 1 : keen;
+  c.head.rotation.x += Math.sin(t * .9 + c.seed * 2) * .012 * k;
+  eyeDart(c, t, .6 * k);
+}
 
 /* =====================================================================
    SETS — BATTLE WARS, THE COMPLETE FILM
@@ -4418,7 +4544,10 @@ function show(i) { CAST_OBJ[i].root.visible = true; }
 /* Put the lower foot on the ground. Poses that are genuinely in the air
    (a running stride, a fall, a lunge, sitting) opt out with c.airborne. */
 var _fp = null;
-function plantFeet(c) {
+/* Some sets are not standing on their own origin — the tunnel has a steel
+   walkway over the rock and the chamber has a plinth — so the floor the
+   feet meet is passed in rather than assumed to be zero. */
+function plantFeet(c, floorY) {
   if (c.airborne || !c.root.visible) return;
   if (!_fp) _fp = new THREE.Vector3();
   var lo = Infinity;
@@ -4428,7 +4557,34 @@ function plantFeet(c) {
     _fp.setFromMatrixPosition(pts[i].matrixWorld);
     if (_fp.y < lo) lo = _fp.y;
   }
-  if (isFinite(lo)) c.root.position.y += O.y - lo;
+  if (isFinite(lo)) c.root.position.y += O.y + (floorY || 0) - lo;
+}
+
+/* Nobody stands inside anybody else. Two actors staged a metre apart on
+   paper can end up overlapping once a walk cycle carries one of them, and
+   an arm through a shoulder is the fastest way to break the picture — so
+   after everything is staged, push any overlapping pair apart along the
+   line between them. */
+function separate(list, minGap) {
+  var gap = minGap || .56;
+  for (var pass = 0; pass < 2; pass++) {
+    for (var i = 0; i < list.length; i++) {
+      var a = list[i];
+      if (!a.root.visible || a.airborne) continue;
+      for (var j = i + 1; j < list.length; j++) {
+        var b = list[j];
+        if (!b.root.visible || b.airborne) continue;
+        var dx = b.root.position.x - a.root.position.x;
+        var dz = b.root.position.z - a.root.position.z;
+        var d2 = dx * dx + dz * dz;
+        if (d2 >= gap * gap || d2 < 1e-7) continue;
+        var d = Math.sqrt(d2), push = (gap - d) * .5;
+        dx /= d; dz /= d;
+        a.root.position.x -= dx * push; a.root.position.z -= dz * push;
+        b.root.position.x += dx * push; b.root.position.z += dz * push;
+      }
+    }
+  }
 }
 
 /* ---------------------------------------------------------- polylines */
@@ -6522,14 +6678,17 @@ S(17, {                                                        /* 71 */
 });
 
 S(16, {                                                        /* 72 */
-  set: "wreck", dark: 1,
+  set: "wreck",
   cam: function (u, t) {
-    camKeys(u, [{ p: [16, 4.0, 26], l: [0, 1.6, 2], f: 46 },
-                { p: [11, 2.8, 18], l: [0, 1.4, 0], f: 42 }]);
-    CAM.shake = 2.4;
+    /* ride with them: parked at the end of the path they spent most of the
+       shot forty metres away in the dark */
+    var pp = poly([[-7, -15], [0, -4], [6, 14]]);
+    var a = pp.at(clamp(smooth(u) + .14, 0, 1));
+    camSet(a.x + 3.4, 2.25, a.z + 6.2, a.x - .4, 1.45, a.z - 2.5, 40);
+    CAM.shake = 2.0;
   },
   act: function (t, u) {
-    var p = poly([[-10, -26], [0, -6], [6, 16]]);
+    var p = poly([[-7, -15], [0, -4], [6, 14]]);
     var s = smooth(u);
     [KAI, RYDER, JACE, ZANE, MAYA, NOVA, DRE, BLAZE, LEO, ACE].forEach(function (i2, k) {
       walkAlong(G(i2), p, clamp(s - k * .03, 0, 1), t, { ox: ((k % 5) - 2) * 1.4, oz: -Math.floor(k / 5) * 1.5, run: true, phaseOffset: k * .5 });
@@ -7369,14 +7528,14 @@ S(22, {                                        /* 5 — THE RAIN → 1946 */
 S(20, {                                        /* 6 — 1946 CITY */
   set: "alley", era: 1,
   cam: function (u) {
-    camKeys(u, [{ p: [9.0, 4.6, 25.0], l: [-2.4, 1.90, 20.0], f: 44 },
-                { p: [4.4, 2.0, 23.4], l: [-2.6, 1.62, 19.8], f: 36 }]);
+    camKeys(u, [{ p: [3.2, 2.30, 26.8], l: [-1.2, 1.72, 22.6], f: 38 },
+                { p: [1.8, 1.90, 25.8], l: [-1.3, 1.64, 22.6], f: 32 }]);
     CAM.shake = .18;
   },
   act: function (t, u) {
-    var c = place(MARCUS, -2.8, 19.4, 1.45);
-    poseStand(c, t, { still: true });
-    lookAt(MARCUS, 9.0, 2.2, 23.0);
+    var c = place(MARCUS, -1.6, 22.6, 1.30);
+    poseStand(c, t, {});
+    lookAt(MARCUS, 8.0, 2.0, 27.0);
   },
   lines: [[.42, .92, L("MARCUS", "Something feels wrong today.")]],
   fade: function (u) { return 1 - smoother(inv(0, .22, u)); }
@@ -7751,9 +7910,11 @@ S(22, {                                        /* 27 — THE JOURNEY */
     /* ride alongside it, the way a second car would */
     var cz = 40 - smooth(u) * 76;
     var swing = Math.sin(u * Math.PI);
-    camSet(1.7 + 3.6 + swing * 1.6, 1.85 + swing * .9,
-           cz + 7.5 - swing * 3.0,
-           1.7, 1.25, cz - 1.0, 38);
+    /* high and behind, on the crown of the road: from down beside it the
+       hedgerow fills the frame and the car reads as a black box */
+    camSet(1.7 + 2.6 + swing * 1.0, 3.6 + swing * .9,
+           cz + 12.5 - swing * 3.0,
+           1.7, 1.15, cz - 3.0, 34);
     CAM.shake = .34;
   },
   act: function () { hideAll(); },
@@ -8250,8 +8411,8 @@ S(18, {                                        /* 54 — MAYA'S DISCOVERY */
 S(22, {                                        /* 55 — THE EARTH MAP */
   set: "cmd",
   cam: function (u) {
-    camKeys(u, [{ p: [7.6, 2.60, 12.4], l: [.4, 1.80, 5.6], f: 40 },
-                { p: [6.0, 2.40, 10.8], l: [.4, 1.76, 5.6], f: 35 }]);
+    camKeys(u, [{ p: [7.0, 2.55, 10.9], l: [.4, 1.78, 5.4], f: 38 },
+                { p: [5.6, 2.38, 9.8], l: [.4, 1.74, 5.4], f: 34 }]);
     CAM.shake = .22;
   },
   act: function (t, u) {
@@ -8406,8 +8567,8 @@ S(20, {                                        /* 63 — THE ALLIANCE RESPONDS *
 S(20, {                                        /* 64 — THE PLAN */
   set: "cmd",
   cam: function (u) {
-    camKeys(u, [{ p: [8.4, 2.80, 13.6], l: [.4, 1.80, 6.2], f: 40 },
-                { p: [6.8, 2.60, 12.0], l: [.4, 1.78, 6.2], f: 36 }]);
+    camKeys(u, [{ p: [8.2, 2.75, 11.1], l: [.4, 1.78, 5.8], f: 38 },
+                { p: [6.8, 2.58, 10.2], l: [.4, 1.75, 5.8], f: 34 }]);
     CAM.shake = .22;
   },
   act: function (t, u) {
@@ -8541,8 +8702,8 @@ S(24, {                                        /* 70 — THE GOLD */
 S(20, {                                        /* 71 — INVASION */
   set: "gold", dark: 1,
   cam: function (u) {
-    camKeys(u, [{ p: [-6, 5.0, 40], l: [2, 3.0, 22], f: 42 },
-                { p: [-3, 3.2, 34], l: [3, 2.4, 20], f: 38 }]);
+    camKeys(u, [{ p: [-4.4, 2.9, 33], l: [1.8, 2.0, 24], f: 42 },
+                { p: [-2.6, 2.3, 30], l: [2.2, 1.85, 23], f: 38 }]);
     CAM.shake = .48; CAM.shakeFreq = 1.3;
   },
   act: function (t, u) {
@@ -8558,8 +8719,8 @@ S(20, {                                        /* 71 — INVASION */
 S(20, {                                        /* 72 — BATTLE */
   set: "gold", dark: 1,
   cam: function (u) {
-    camKeys(u, [{ p: [8.0, 2.6, 30], l: [1.0, 1.7, 22], f: 40 },
-                { p: [6.0, 2.4, 27], l: [.5, 1.7, 20], f: 36 }]);
+    camKeys(u, [{ p: [4.9, 1.95, 25.6], l: [1.0, 1.60, 21.4], f: 40 },
+                { p: [4.2, 1.88, 24.4], l: [.9, 1.58, 20.8], f: 36 }]);
     CAM.shake = .70; CAM.shakeFreq = 1.7;
   },
   act: function (t, u) {
@@ -8570,7 +8731,7 @@ S(20, {                                        /* 72 — BATTLE */
     j.root.position.set(O.x + 1.0, 0, O.z + 22);
     z.root.position.set(O.x + 1.0, 0, O.z + 20.4);
     j.root.rotation.y = Math.PI; z.root.rotation.y = 0;
-    battleLine(6, t, O.x - 6, O.z + 26, 9, .4);
+    battleLine(8, t, O.x - 3.5, O.z + 25.5, 8, .4);
   },
   lines: [[.16, .48, L("JACE", "Left side!")],
           [.56, .88, L("ZANE", "Got it!")]]
@@ -9542,6 +9703,62 @@ function dressSets(sh, t, u) {
   }
 }
 
+
+/* =====================================================================
+   PERFORMANCE
+   The shot list says who is in frame and roughly what they are doing.
+   This is the layer that makes it read as acting: the line goes into the
+   right actor's mouth, everyone else in the shot listens, feet meet the
+   floor the set actually has, and nobody stands inside anybody else.
+   ===================================================================== */
+/* which set sits on what — the tunnel's walkway and the chamber's apron
+   are above their origin, so feet plant on those instead of on zero */
+var FLOOR = { tun: .18, gold: 0 };
+
+
+var _byName = null;
+function castByName(name) {
+  if (!_byName) {
+    _byName = {};
+    for (var i = 0; i < CAST.length; i++) _byName[CAST[i].name] = i;
+    /* labels the script uses that are not a character's own name */
+    if (_byName.BM1 !== undefined) _byName.BLUE = _byName.BM1;
+    if (_byName.BLAZE !== undefined) _byName.HAVOC = _byName.BLAZE;
+    if (_byName.DRE !== undefined) _byName.COMMANDER = _byName.DRE;
+  }
+  return _byName[name];
+}
+
+/* the active line, and how far through it we are */
+function lineAt(sh, u) {
+  if (!sh.lines) return null;
+  for (var i = 0; i < sh.lines.length; i++) {
+    var L = sh.lines[i];
+    if (u >= L[0] && u <= L[1]) {
+      return { text: L[2], k: (u - L[0]) / Math.max(1e-6, L[1] - L[0]) };
+    }
+  }
+  return null;
+}
+
+function perform(sh, u, t, active) {
+  if (!active) {
+    for (var q = 0; q < CAST_OBJ.length; q++) {
+      var cq = CAST_OBJ[q];
+      if (cq.root.visible) listen(cq, t, .5);
+    }
+    return;
+  }
+  var who = active.text.slice(0, active.text.indexOf(":"));
+  var idx = castByName(who);
+  for (var i = 0; i < CAST_OBJ.length; i++) {
+    var c = CAST_OBJ[i];
+    if (!c.root.visible) continue;
+    if (i === idx) speak(c, active.text, active.k, t);
+    else listen(c, t, 1);
+  }
+}
+
 var _lastT = 0;
 function frame(t, playing) {
   if (!ready) return;
@@ -9567,19 +9784,28 @@ function frame(t, playing) {
 
   sh.cam.call(sh, u, t);
   sh.act.call(sh, t, u);
-  for (var f = 0; f < CAST_OBJ.length; f++) plantFeet(CAST_OBJ[f]);
-  for (var e = 0; e < EXTRAS.length; e++) if (EXTRAS[e].root.visible) plantFeet(EXTRAS[e]);
+  var floorY = FLOOR[sh.set] || 0;
+  separate(CAST_OBJ);
+  for (var f = 0; f < CAST_OBJ.length; f++) plantFeet(CAST_OBJ[f], floorY);
+  for (var e = 0; e < EXTRAS.length; e++) if (EXTRAS[e].root.visible) plantFeet(EXTRAS[e], floorY);
+  perform(sh, u, t, lineAt(sh, u));
   if (sh.fx) sh.fx.call(sh, t, u);
 
   dressSets(sh, t, u);
 
   /* ------------------------------------------------------ handheld */
   var quake = sh.quake ? 1 : 0;
+  /* an operator re-frames at the top of a take and settles into it */
+  CAM.shake *= 1 + .55 * (1 - smooth(clamp(u / .12, 0, 1)));
   var amt = CAM.shake * .009 * (1 + quake * .6), ff = CAM.shakeFreq;
   var sx = (Math.sin(t * 11.3 * ff) * .6 + Math.sin(t * 27.1 * ff) * .4) * amt;
   var sy = (Math.sin(t * 9.7 * ff + 1.7) * .6 + Math.sin(t * 23.3 * ff) * .4) * amt;
   var sz2 = Math.sin(t * 7.1 * ff + .5) * amt * .5;
-  camera.fov = CAM.fov;
+  /* CAM.fov stays the vertical field it always was; the frame is wider
+     because the canvas is 2.39:1, not because the lens was opened, so
+     every composition keeps the headroom it was written with.
+     A hair of lens breathing, the way a real one drifts on a slow push. */
+  camera.fov = CAM.fov * (1 + Math.sin(t * .21 + 1.3) * .0035);
   camera.position.set(CAM.pos.x + sx, CAM.pos.y + sy, CAM.pos.z + sz2);
   camera.lookAt(CAM.look.x + sx * .3, CAM.look.y + sy * .3, CAM.look.z);
   if (CAM.roll) camera.rotateZ(CAM.roll);
@@ -9766,8 +9992,12 @@ const mk = (src) => URL.createObjectURL(new Blob([src], { type: "text/javascript
 });
 
 /* --------------------------------------------------------------- size */
+const SCOPE_AR = 2.39;
 function resize() {
-  const w = stage.clientWidth, h = stage.clientHeight;
+  /* fit a 2.39:1 picture inside whatever the window is */
+  const W = stage.clientWidth, H = stage.clientHeight;
+  let w = W, h = Math.round(W / SCOPE_AR);
+  if (h > H) { h = H; w = Math.round(H * SCOPE_AR); }
   view.style.width = w + "px";
   view.style.height = h + "px";
   if (film) { film.resize(w, h); P.dirty = true; }

@@ -40,6 +40,30 @@ The halves are also on their own:
 - `battle-wars-2.html` — Part Two, **33:52**, 95 scenes, nine locations
   spanning 1946 and the present day. `SCRIPT-PART2.md` has the beat sheet.
 
+## How it is shot
+
+Every cut is composed and rendered for **2.39:1**. The camera really is a
+scope camera — the canvas is that shape and the black around it is the
+matte — so the picture holds its framing in any window, a portrait phone
+included, instead of being a widescreen frame with its top and bottom
+covered up.
+
+The performance layer runs under every scene:
+
+- **The dialogue drives the mouths.** Each line is broken into vowel
+  groups and the speaker's jaw opens and closes on them — wide for *a*,
+  round for *o*, nearly shut through consonant runs. Everyone else in the
+  shot listens rather than freezing.
+- **Weight transfers instead of drifting.** A standing figure holds a leg,
+  gets tired of it and eases across to the other one, the way people do.
+- **Arms trail the legs** by about a fifth of a stride, and the body
+  compresses a little as each heel takes the load.
+- **Reaching is a whole-body action.** How high the hands work decides how
+  far the knees bend and the back folds, so picking a note off the cobbles
+  does not look like reading a file.
+- **Feet meet the floor the set actually has** — the tunnel's walkway sits
+  above its origin — and nobody stands inside anybody else.
+
 ## The player
 
 Black interface, thin white outlines, nothing else on screen.
