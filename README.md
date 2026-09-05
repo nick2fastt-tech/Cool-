@@ -1,17 +1,18 @@
 # Films that render themselves
 
-Three films in this repo. Each is one self-contained HTML file — open it
-in a browser and press play. No video file, no server, no network request:
-every set, character, texture, animation, camera move and sound is generated
-in code and drawn live with three.js, which is inlined into the page.
+Two films in this repo, one of them in three cuts. Each cut is a single
+self-contained HTML file — open it in a browser and press play. No video
+file, no server, no network request: every set, character, texture,
+animation, camera move and sound is generated in code and drawn live with
+three.js, which is inlined into the page.
 
-## Watch all three — `watch.html`
+## Watch — `watch.html`
 
-`watch.html` is the whole library in one file: a streaming-style front end
-(hero banner, rails of hover-scale cards, match %, detail sheet, continue
-watching) with all three films inside it and three.js shared between them.
-It opens with an animated brand intro and a synthesised sting, then drops
-straight into the picture.
+`watch.html` is the library in one file: a streaming-style front end (hero
+banner, rails of hover-scale cards, match %, detail sheet, continue watching)
+carrying the complete Battle Wars and Run From Zombies, with three.js shared
+between them. It opens with an animated brand intro and a synthesised sting,
+then drops straight into the picture.
 
 Progress is remembered per film in `localStorage`, so closing the tab and
 coming back resumes where you stopped.
@@ -20,23 +21,24 @@ coming back resumes where you stopped.
 
 `run-from-zombies.html` — **5:20**, 46 shots, seven characters.
 
-## BATTLE WARS — PART ONE
+## BATTLE WARS
 
-`battle-wars.html` — **33:19**, 110 scenes, ten named characters plus
-Blackout. Seven locations: a city street, a warehouse, a rooftop, a fortress,
-a reactor hall, the wreckage, and the plaza where it ends.
+`battle-wars-complete.html` — **1:06:34**, 205 scenes, sixteen locations,
+eighteen named characters. Both halves joined into one picture, with a PART
+TWO card on the hinge and a single set of credits at the end.
 
-## BATTLE WARS — PART TWO
+The first half is a war between two teams who were never really enemies. The
+second opens on the ruins of both their headquarters and goes back eighty
+years to work out why — a murder in 1946, a stranger nobody can remember, and
+a reserve of gold under the planet somebody has been guarding ever since.
 
-`battle-wars-2.html` — **33:52**, 95 scenes, spanning 1946 and the present
-day. Nine locations: the ruined city it opens and closes in, the 1946
-headquarters, the alley behind it, the newspaper archive, the road out, the
-facility where the memories were taken, the rebuilt command centre, the
-tunnel down, and the chamber of gold under the planet.
+The halves are also on their own:
 
-It opens on the ending. Act I stands in the wreckage with no explanation;
-Act V arrives back at the same rainy street from the other side, and by then
-you know what caused it. `SCRIPT-PART2.md` has the beat sheet.
+- `battle-wars.html` — Part One, **33:19**, 110 scenes, seven locations: a
+  city street, a warehouse, a rooftop, a fortress, a reactor hall, the
+  wreckage, and the plaza where it ends.
+- `battle-wars-2.html` — Part Two, **33:52**, 95 scenes, nine locations
+  spanning 1946 and the present day. `SCRIPT-PART2.md` has the beat sheet.
 
 ## The player
 

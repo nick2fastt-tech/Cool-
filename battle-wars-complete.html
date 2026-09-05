@@ -305,15 +305,15 @@ import{Matrix3 as e,Vector2 as t,Color as n,mergeUniforms as r,Vector3 as i,Cube
 
 <!-- the film -->
 <script>/* =====================================================================
-   RUN FROM ZOMBIES — a short film rendered in real time with three.js
+   BATTLE WARS — the complete film, rendered in real time with three.js
    Everything below is a pure function of the film clock, so scrubbing
    the timeline lands on exactly the frame you would get by playing to it.
    ===================================================================== */
-window.RunFromZombies = (function () {
+window.BattleWars = (function () {
 "use strict";
 
 var THREE = null;                    /* filled in by boot()             */
-var RUNTIME = 300;                   /* film length in seconds          */
+
 
 /* ---------------------------------------------------------------- math */
 function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
@@ -559,6 +559,106 @@ function buildTextures() {
   sg.addColorStop(1, "rgba(255,255,255,0)");
   sx2.fillStyle = sg; sx2.fillRect(0, 0, 64, 64);
   TEX.spark = finish(sc, 1, 1, false);
+
+  /* ---- Part Two: 1946 interiors, the archive, and what is under Earth ---- */
+
+  /* oiled hardwood: office floors and desks */
+  var wd = noiseCanvas(256, 4, 611, function (n) {
+    return mixRGB([74, 46, 26], [122, 80, 44], Math.pow(n, .9));
+  });
+  var wx = wd.getContext("2d"), wr = rng(612);
+  for (var gi = 0; gi < 220; gi++) {                    /* the grain */
+    var gy = wr() * 256, gl = 40 + wr() * 200;
+    wx.strokeStyle = "rgba(38,22,12," + (.10 + wr() * .22).toFixed(3) + ")";
+    wx.lineWidth = .6 + wr() * 1.5;
+    wx.beginPath(); wx.moveTo(wr() * 256, gy);
+    wx.bezierCurveTo(wr() * 256, gy + (wr() - .5) * 8, wr() * 256, gy + (wr() - .5) * 8, wr() * 256 + gl, gy);
+    wx.stroke();
+  }
+  for (var bd = 0; bd < 256; bd += 32) {                /* board joins */
+    wx.strokeStyle = "rgba(28,16,9,.55)"; wx.lineWidth = 1.4;
+    wx.beginPath(); wx.moveTo(0, bd); wx.lineTo(256, bd); wx.stroke();
+  }
+  TEX.wood = finish(wd, 4);
+
+  /* aged paper: files, newspapers, the photograph */
+  var pp = noiseCanvas(256, 5, 733, function (n) {
+    return mixRGB([206, 192, 162], [238, 230, 208], n);
+  });
+  var px2 = pp.getContext("2d"), pr = rng(734);
+  for (var fx2 = 0; fx2 < 90; fx2++) {                  /* foxing */
+    var fxx = pr() * 256, fxy = pr() * 256, fr = 2 + pr() * 9;
+    var fg = px2.createRadialGradient(fxx, fxy, 0, fxx, fxy, fr);
+    fg.addColorStop(0, "rgba(150,116,66,.20)"); fg.addColorStop(1, "rgba(150,116,66,0)");
+    px2.fillStyle = fg; px2.beginPath(); px2.arc(fxx, fxy, fr, 0, 6.3); px2.fill();
+  }
+  TEX.paper = finish(pp, 1);
+
+  /* typed lines on paper — read as text at any distance we ever get to */
+  var tp = canvas(256, 256), tx2 = tp.getContext("2d");
+  tx2.drawImage(pp, 0, 0);
+  var tr = rng(801);
+  tx2.fillStyle = "rgba(38,34,28,.72)";
+  for (var ln = 22; ln < 240; ln += 9) {
+    var x0 = 24, wln = 150 + tr() * 70;
+    if (tr() < .12) continue;                            /* paragraph breaks */
+    for (var wq = x0; wq < x0 + wln; ) {
+      var ww = 6 + tr() * 22;
+      tx2.fillRect(wq, ln, Math.min(ww, x0 + wln - wq), 2.2);
+      wq += ww + 4;
+    }
+  }
+  TEX.typed = finish(tp, 1);
+
+  /* 1946 brick */
+  var bk = noiseCanvas(256, 4, 909, function (n) {
+    return mixRGB([96, 54, 44], [138, 84, 66], n);
+  });
+  var bx2 = bk.getContext("2d"), br2 = rng(910);
+  bx2.fillStyle = "rgba(196,190,178,.85)";
+  for (var byy = 0; byy < 256; byy += 16) {
+    bx2.fillRect(0, byy, 256, 3);
+    var off = (byy / 16) % 2 ? 16 : 0;
+    for (var bxx = off; bxx < 256; bxx += 32) bx2.fillRect(bxx, byy, 3, 16);
+  }
+  bx2.globalAlpha = .30;
+  bx2.drawImage(noiseCanvas(256, 5, 911, function (n) { var v = lerp(40, 200, n); return [v, v, v]; }), 0, 0);
+  bx2.globalAlpha = 1;
+  TEX.brick = finish(bk, 3);
+
+  /* the gold itself: veined, warm, and not flat */
+  var gd = noiseCanvas(256, 5, 1301, function (n) {
+    return mixRGB([132, 88, 20], [255, 214, 118], Math.pow(n, .75));
+  });
+  var gx2 = gd.getContext("2d"), gr2 = rng(1302);
+  for (var vn = 0; vn < 46; vn++) {                     /* bright veins */
+    gx2.strokeStyle = "rgba(255,238,180," + (.18 + gr2() * .4).toFixed(3) + ")";
+    gx2.lineWidth = .8 + gr2() * 3.2;
+    var vx = gr2() * 256, vy = gr2() * 256;
+    gx2.beginPath(); gx2.moveTo(vx, vy);
+    for (var vk = 0; vk < 5; vk++) { vx += (gr2() - .5) * 70; vy += (gr2() - .5) * 70; gx2.lineTo(vx, vy); }
+    gx2.stroke();
+  }
+  TEX.gold = finish(gd, 2);
+  TEX.goldGlow = finish(noiseCanvas(256, 4, 1303, function (n) {
+    var v = Math.pow(n, 2.4) * 255; return [v, v * .78, v * .34];
+  }), 2, 2, false);
+
+  /* raw rock: the tunnel and the chamber walls */
+  var rk = noiseCanvas(256, 6, 1407, function (n) {
+    return mixRGB([44, 38, 36], [104, 92, 84], Math.pow(n, 1.1));
+  });
+  TEX.rock = finish(rk, 4);
+  TEX.rockBump = finish(noiseCanvas(256, 6, 1408, function (n) { var v = n * 255; return [v, v, v]; }), 4, 4, false);
+
+  /* carved stone for the ancient door */
+  var st = noiseCanvas(256, 5, 1511, function (n) {
+    return mixRGB([70, 68, 62], [146, 142, 130], n);
+  });
+  var sx3 = st.getContext("2d");
+  sx3.strokeStyle = "rgba(30,28,24,.5)"; sx3.lineWidth = 2;
+  for (var cg = 0; cg < 256; cg += 64) { sx3.strokeRect(cg, cg / 2, 64, 64); }
+  TEX.stone = finish(st, 3);
 }
 
 /* a cheap equirectangular probe so metal and rough surfaces pick up
@@ -625,6 +725,7 @@ var SKIN = [0xf0c4a2, 0xdfa47c, 0xc4875e, 0x8a5636, 0x673d24, 0xf5d1b5, 0xa56c45
 var HAIRC = [0x1d1512, 0x0e0b09, 0x5a3418, 0xc9a35c, 0x3d2416, 0x7a3018, 0x24202c];
 
 var VAN = 0x2f6fd0, HAV = 0xd03a30, BLK = 0x7a1f22;   /* team accents */
+var OLD = 0x9db4d8;                                  /* 1946 Blue, faded */
 
 var CAST = [
   /* --- Team Vanguard ------------------------------------------------- */
@@ -638,7 +739,21 @@ var CAST = [
   { name: "ZANE",  team: 1, skin: 0, hair: 5, style: 8, coat: 0x7c2a22, pants: 0x26201f, accent: HAV, boots: 0x1a1516, h: 1.12, bulk: 1.04 },
   { name: "NOVA",  team: 1, skin: 6, hair: 6, style: 4, coat: 0x4a1f28, pants: 0x241d20, accent: HAV, boots: 0x1b1618, h: 1.05, bulk: 0.88 },
   { name: "BLAZE", team: 1, skin: 3, hair: 1, style: 9, coat: 0x6e2018, pants: 0x211b1a, accent: HAV, boots: 0x151112, h: 1.21, bulk: 1.32 },
-  { name: "ACE",   team: 1, skin: 2, hair: 0, style: 10, coat: 0x3e1c1e, pants: 0x1e1a1c, accent: HAV, boots: 0x161213, h: 1.10, bulk: 0.96 }
+  { name: "ACE",   team: 1, skin: 2, hair: 0, style: 10, coat: 0x3e1c1e, pants: 0x1e1a1c, accent: HAV, boots: 0x161213, h: 1.10, bulk: 0.96 },
+  /* --- 1946 ---------------------------------------------------------- */
+  /* The old Blue Team wear the colour their successors inherited, but in
+     the wool and worsted of their own decade rather than field kit. */
+  { name: "ELIAS",  team: 0, skin: 0, hair: 0, style: 7, coat: 0x2b3f63, pants: 0x2b2f3a, accent: OLD, boots: 0x241a14, h: 1.12, bulk: 1.00 },
+  { name: "MARCUS", team: 0, skin: 3, hair: 4, style: 8, coat: 0x22334f, pants: 0x272b34, accent: OLD, boots: 0x201812, h: 1.16, bulk: 1.10 },
+  { name: "HOLLOWAY", team: 0, skin: 5, hair: 3, style: 1, coat: 0x9aa2ad, pants: 0x3a4049, accent: 0x8fa8c4, boots: 0x24262c, h: 1.05, bulk: 0.90 },
+  { name: "WITNESS", team: 0, skin: 4, hair: 2, style: 9, coat: 0x4a4436, pants: 0x35302a, accent: 0x6b6250, boots: 0x241d16, h: 1.08, bulk: 1.04 },
+  { name: "BM1",    team: 0, skin: 1, hair: 1, style: 3, coat: 0x2e4568, pants: 0x2a2e38, accent: OLD, boots: 0x221a14, h: 1.09, bulk: 0.98 },
+  { name: "BM2",    team: 0, skin: 6, hair: 5, style: 4, coat: 0x1f3050, pants: 0x262a33, accent: OLD, boots: 0x1f1811, h: 1.07, bulk: 0.94 },
+  /* --- the man in the dark coat -------------------------------------- */
+  /* Victor and the Collector are one person eighty years apart. Two rigs
+     rather than one: the reveal in scene 75 is a cut between them. */
+  { name: "VICTOR", team: 1, skin: 0, hair: 0, style: 7, coat: 0x1a1a20, pants: 0x141419, accent: 0x6e6a78, boots: 0x0e0e12, h: 1.17, bulk: 1.06 },
+  { name: "COLLECTOR", team: 1, skin: 0, hair: 0, style: 7, coat: 0x15151b, pants: 0x111116, accent: 0xc9a24a, boots: 0x0c0c10, h: 1.17, bulk: 1.10, mask: 1 }
 ];
 
 /* Blackout: identical armour, faceless, a red visor slit */
@@ -1102,6 +1217,35 @@ function makeCharacter(cfg) {
     visor.position.set(0, R * 1.02, R * .86);
     head.add(visor);
     head.userData.visor = visor;
+  }
+
+  if (cfg.mask) {
+    /* The Collector keeps his face: a smooth plate over the front of the
+       skull, gold at the brow. Nothing behind it moves, which is the point. */
+    var MR = head.userData.R;
+    var maskM = armourMat(0x101015);
+    var shell2 = new THREE.Mesh(new THREE.SphereGeometry(MR * 1.16, 22, 16, -Math.PI * .12, Math.PI * 1.24, Math.PI * .06, Math.PI * .80), maskM);
+    shell2.position.y = MR * .92; shell2.scale.set(1.02, 1.10, 1.06); shell2.castShadow = true;
+    head.add(shell2);
+    /* gold at the brow, a lit slit where the eyes would be, and a seam
+       down the centre — enough that the face reads as made, not grown */
+    var goldM2 = glowMat(0xd8ad52, 1.9);
+    var brow = new THREE.Mesh(new THREE.TorusGeometry(MR * .92, MR * .075, 8, 26, Math.PI * 1.05), goldM2);
+    brow.position.set(0, MR * 1.12, MR * .30); brow.rotation.set(.26, 0, 0);
+    head.add(brow);
+    var seam = new THREE.Mesh(new THREE.BoxGeometry(MR * .07, MR * 1.30, MR * .07), goldM2);
+    seam.position.set(0, MR * .92, MR * 1.02); seam.rotation.x = -.10;
+    head.add(seam);
+    var slit = new THREE.Mesh(new THREE.BoxGeometry(MR * 1.28, MR * .13, MR * .09), glowMat(0xffca62, 3.0));
+    slit.position.set(0, MR * 1.00, MR * 1.02);
+    head.add(slit);
+    [-1, 1].forEach(function (cs) {
+      var cheek = new THREE.Mesh(new THREE.BoxGeometry(MR * .10, MR * .52, MR * .08), goldM2);
+      cheek.position.set(cs * MR * .58, MR * .70, MR * .84);
+      cheek.rotation.z = cs * .12;
+      head.add(cheek);
+    });
+    head.userData.visor = slit;
   }
 
   function arm(side) {
@@ -2134,13 +2278,21 @@ function blend(c, u, f1, f2) {
 
 
 /* =====================================================================
-   SETS
-   Seven locations, built once and toggled. They sit far apart in world
-   space so nothing bleeds between them.
+   SETS — BATTLE WARS, THE COMPLETE FILM
+   Nine locations spanning eighty years: the ruined city the film opens
+   and closes in, the 1946 headquarters and the streets around it, the
+   archive, the road out, the facility where the memories were taken,
+   the present-day command centre, and what is underneath all of it.
+   Each is built once and toggled; they sit far apart in world space so
+   nothing bleeds between them.
    ===================================================================== */
 
+/* Part One's seven locations and Part Two's nine, all in the one scene,
+   parked far enough apart that nothing bleeds between them. */
 var CITY_O = null, WARE_O = null, ROOF_O = null, FORT_O = null,
     REAC_O = null, WRECK_O = null, PLAZA_O = null;
+var RUIN_O = null, HQ_O = null, ALLEY_O = null, LIB_O = null, ROAD_O = null,
+    FAC_O = null, CMD_O = null, TUN_O = null, GOLD_O = null;
 
 function mat(o) { return new THREE.MeshStandardMaterial(o); }
 function box(w, h, d, m, x, y, z, parent) {
@@ -2234,6 +2386,1020 @@ function lamp(parent, x, z, hex) {
   lit.rotation.x = Math.PI / 2;
   g.userData.lit = lit;
   parent.add(g);
+  return g;
+}
+
+
+/* a period sedan — upright, running boards, small windows */
+function makeCar46(colour) {
+  var g = new THREE.Group();
+  var body = mat({ color: colour, roughness: .38, metalness: .55 });
+  var glass = mat({ color: 0x14181e, roughness: .10, metalness: .55 });
+  var chrome = mat({ color: 0xb8bcc4, roughness: .22, metalness: .95 });
+  box(1.95, .80, 4.4, body, 0, .82, 0, g);
+  box(1.80, .74, 2.0, body, 0, 1.54, -.35, g);          /* cabin */
+  box(1.72, .48, 1.9, glass, 0, 1.62, -.35, g);
+  box(1.30, .50, 1.5, body, 0, 1.20, 1.85, g);          /* bonnet */
+  [-1, 1].forEach(function (sx) {
+    box(.16, .16, 3.0, chrome, sx * 1.02, .58, 0, g);   /* running board rail */
+    box(.52, .10, 2.6, mat({ color: 0x22262c, roughness: .8 }), sx * .98, .50, 0, g);
+  });
+  [[-.92, 1.5], [.92, 1.5], [-.92, -1.5], [.92, -1.5]].forEach(function (q) {
+    var w = cyl(.44, .44, .26, 14, mat({ color: 0x15151a, roughness: .95 }), q[0], .44, q[1], g);
+    w.rotation.z = Math.PI / 2;
+    var h = cyl(.20, .20, .28, 12, chrome, q[0], .44, q[1], g);
+    h.rotation.z = Math.PI / 2;
+  });
+  [-.62, .62].forEach(function (hx) {
+    var lamp2 = new THREE.Mesh(new THREE.SphereGeometry(.19, 12, 10), chrome);
+    lamp2.position.set(hx, 1.22, 2.28); g.add(lamp2);
+    emit(.30, .30, 0xffe6b4, hx, 1.22, 2.44, 0, g, .9);
+  });
+  box(1.10, .34, .14, chrome, 0, .96, 2.30, g);         /* grille */
+  return g;
+}
+
+/* a wooden desk with a lamp, a telephone and loose paper */
+function makeDesk(seedN) {
+  var r = rng(seedN);
+  var g = new THREE.Group();
+  var woodM = mat({ map: TEX.wood, color: 0x9a7a58, roughness: .55 });
+  var darkM = mat({ color: 0x3a2c1e, roughness: .7 });
+  box(1.55, .07, .82, woodM, 0, .74, 0, g);
+  [[-.68, -.33], [.68, -.33], [-.68, .33], [.68, .33]].forEach(function (q) {
+    box(.09, .74, .09, darkM, q[0], .37, q[1], g);
+  });
+  box(.62, .48, .74, darkM, .44, .48, 0, g);            /* drawer pedestal */
+  box(.60, .04, .04, mat({ color: 0xa8aab0, roughness: .3, metalness: .8 }), .44, .60, .38, g);
+  /* paper, scattered but flat */
+  var paperM = mat({ map: TEX.typed, color: 0xe8e2cc, roughness: .95, side: THREE.DoubleSide });
+  for (var i = 0; i < 4 + Math.floor(r() * 4); i++) {
+    var sh = new THREE.Mesh(new THREE.PlaneGeometry(.22, .30), paperM);
+    sh.rotation.x = -Math.PI / 2; sh.rotation.z = (r() - .5) * 1.4;
+    sh.position.set(-.5 + r() * .9, .782 + i * .002, -.28 + r() * .56);
+    g.add(sh);
+  }
+  /* banker's lamp */
+  var lg = new THREE.Group(); lg.position.set(-.56, .78, -.24); g.add(lg);
+  cyl(.09, .11, .03, 12, darkM, 0, .015, 0, lg);
+  cyl(.012, .012, .22, 8, mat({ color: 0x6b5a3a, roughness: .4, metalness: .7 }), 0, .13, 0, lg);
+  var shade = cyl(.10, .13, .09, 12, mat({ color: 0x1f5a3c, roughness: .5, side: THREE.DoubleSide }), 0, .26, 0, lg);
+  var bulb = new THREE.Mesh(new THREE.SphereGeometry(.045, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffdfa8 }));
+  bulb.position.set(0, .22, 0); lg.add(bulb);
+  var pl = new THREE.PointLight(0xffd398, 3.2, 3.4, 2);
+  pl.position.set(0, .22, 0); lg.add(pl);
+  /* telephone */
+  var ph = new THREE.Group(); ph.position.set(.42, .78, -.18); g.add(ph);
+  box(.17, .10, .13, mat({ color: 0x16161a, roughness: .35 }), 0, .05, 0, ph);
+  var horn = cyl(.026, .026, .21, 8, mat({ color: 0x16161a, roughness: .35 }), 0, .13, 0, ph);
+  horn.rotation.z = Math.PI / 2;
+  return g;
+}
+
+/* a filing cabinet */
+function makeCabinet() {
+  var g = new THREE.Group();
+  var m = mat({ color: 0x515b53, roughness: .55, metalness: .45 });
+  box(.56, 1.42, .62, m, 0, .71, 0, g);
+  for (var d = 0; d < 4; d++) {
+    box(.50, .30, .04, mat({ color: 0x5b6560, roughness: .5, metalness: .45 }), 0, .22 + d * .34, .32, g);
+    box(.16, .04, .04, mat({ color: 0xa9adb2, roughness: .3, metalness: .85 }), 0, .22 + d * .34, .35, g);
+  }
+  return g;
+}
+
+/* ============================================================ RUINS */
+/* The opening and the ending. A city knocked flat, in rain. */
+function buildRuins() {
+  var g = new THREE.Group();
+  g.position.copy(RUIN_O);
+  var r = rng(9001);
+
+  var wetM = mat({ map: TEX.asphalt, color: 0x4e5259, roughness: .22, metalness: .12 });
+  plane(220, 220, wetM, 0, 0, 0, g);
+  /* standing water: flat, dark, and reflective enough to read as wet */
+  var pool = new THREE.Mesh(new THREE.PlaneGeometry(220, 220),
+    mat({ color: 0x1a2028, roughness: .06, metalness: .85, transparent: true, opacity: .40 }));
+  pool.rotation.x = -Math.PI / 2; pool.position.y = .012; g.add(pool);
+
+  var rubbleM = mat({ map: TEX.rubble, color: 0x6a6560, roughness: .95 });
+  var concM = mat({ map: TEX.concrete, color: 0x7e8188, roughness: .92 });
+  var steelM = mat({ map: TEX.rust, color: 0x8a7a68, roughness: .8, metalness: .45 });
+
+  /* the two headquarters, broken open and facing each other */
+  function hulk(px, pz, ry, tint, seedN) {
+    var h = new THREE.Group();
+    h.position.set(px, 0, pz); h.rotation.y = ry; g.add(h);
+    var rr = rng(seedN);
+    var shellM = mat({ map: TEX.concrete, color: tint, roughness: .93 });
+    /* three storeys of a facade with the middle torn out */
+    box(16, 5.0, 12, shellM, 0, 2.5, 0, h);
+    box(16, 4.6, 12, shellM, 0, 7.4, 0, h).scale.set(1, 1, .55);
+    box(6.2, 4.2, 6.4, shellM, -4.6, 11.8, -2.2, h);
+    /* the tear: slabs leaning off the front */
+    for (var i = 0; i < 9; i++) {
+      var sw = 2 + rr() * 4, sh2 = .32 + rr() * .5, sd = 2 + rr() * 3.5;
+      /* they lean off the front, they do not stand up in the shot */
+      var sl = box(sw, sh2, sd, concM, -7 + rr() * 14, .15 + rr() * 1.9, 6 + rr() * 6, h);
+      sl.rotation.set((rr() - .5) * .55, rr() * 3.14, (rr() - .5) * .5);
+    }
+    /* exposed rebar */
+    for (var b = 0; b < 14; b++) {
+      var bar = cyl(.035, .035, 1.4 + rr() * 2.2, 5, steelM, -7 + rr() * 14, 5.4 + rr() * 2.4, 5.6 + rr() * 1.2, h);
+      bar.rotation.set((rr() - .5) * .9, 0, (rr() - .5) * 1.3);
+    }
+    /* a sign that still has power, barely */
+    var sign = emit(6.4, 1.1, tint === 0x6b7382 ? 0x4a86e0 : 0xe04a3a, 0, 5.6, 6.1, 0, h, .8);
+    h.userData.sign = sign;
+    return h;
+  }
+  g.userData.blueHQ = hulk(-17, -6, .22, 0x6b7382, 9101);
+  g.userData.redHQ = hulk(19, 10, -.30, 0x82706b, 9202);
+
+  /* the street between them, littered */
+  for (var i = 0; i < 130; i++) {
+    var s2 = .3 + r() * 1.5;
+    var chunk = box(s2 * (1 + r()), s2 * .6, s2 * (1 + r()), rubbleM,
+      (r() - .5) * 110, s2 * .3, (r() - .5) * 110, g);
+    chunk.rotation.set(r() * 3, r() * 3, r() * 3);
+  }
+  /* bent lamps, still standing */
+  for (var L = -60; L <= 60; L += 24) {
+    var lm = lamp(g, L % 48 === 0 ? 11 : -11, L, 0xffb27a);
+    lm.rotation.z = (r() - .5) * .5;
+    lm.userData.lit.material.opacity = r() > .5 ? .8 : .12;
+  }
+  /* burning horizon: a low band of fire beyond the wreck */
+  for (var f = 0; f < 16; f++) {
+    var fx3 = -90 + f * 12 + r() * 8;
+    emit(14, 5 + r() * 7, 0xff5a24, fx3, 3, -78 - r() * 16, 0, g, .16 + r() * .12);
+    var fl = new THREE.PointLight(0xff6a30, 26, 60, 2);
+    fl.position.set(fx3, 5, -74); g.add(fl);
+  }
+  /* dead skyline silhouettes, broken-topped */
+  var sr = rng(9303);
+  for (var t2 = 0; t2 < 26; t2++) {
+    var a = sr() * Math.PI * 2, rad = 70 + sr() * 110;
+    var tw = box(8 + sr() * 12, 14 + sr() * 46, 8 + sr() * 12,
+      mat({ color: 0x1b2029, roughness: .95 }),
+      Math.cos(a) * rad, 0, Math.sin(a) * rad, g);
+    tw.position.y = tw.geometry.parameters.height / 2;
+    tw.rotation.y = sr() * .8;
+    tw.rotation.z = (sr() - .5) * .10;
+  }
+
+  var sun = new THREE.DirectionalLight(0x8fa4c0, .70);
+  sun.position.set(-40, 70, -30);
+  sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+  var sc = sun.shadow.camera;
+  sc.left = -60; sc.right = 60; sc.top = 60; sc.bottom = -60; sc.far = 220;
+  sun.shadow.bias = -.0012; sun.shadow.normalBias = .03;
+  g.add(sun); g.add(sun.target);
+  var hemi = new THREE.HemisphereLight(0x39465c, 0x14161b, 1.15);
+  g.add(hemi);
+  g.userData.sun = sun; g.userData.hemi = hemi;
+  return g;
+}
+
+/* ==================================================== 1946 HEADQUARTERS */
+/* One long room: desks down the middle, cabinets and a case-board on the
+   walls, a door to the hall at the far end. Everything is staged here. */
+function buildHQ46() {
+  var g = new THREE.Group();
+  g.position.copy(HQ_O);
+  var W = 15, D = 26, H = 4.2;
+
+  plane(W, D, mat({ map: TEX.wood, color: 0x8a6a4a, roughness: .52 }), 0, 0, 0, g);
+  var wallM = mat({ color: 0xbdb49c, roughness: .92, side: THREE.DoubleSide });
+  var wainM = mat({ map: TEX.wood, color: 0x6a4c30, roughness: .55, side: THREE.DoubleSide });
+  function wall(w, x, y, z, ry) {
+    var m = new THREE.Mesh(new THREE.PlaneGeometry(w, H), wallM);
+    m.position.set(x, y, z); m.rotation.y = ry; m.receiveShadow = true; g.add(m);
+    var wn = new THREE.Mesh(new THREE.PlaneGeometry(w, 1.05), wainM);
+    wn.position.set(x, .52, z); wn.rotation.y = ry;
+    wn.position.x += Math.cos(ry) * .01; wn.position.z -= Math.sin(ry) * .01;
+    g.add(wn);
+    return m;
+  }
+  wall(W, 0, H / 2, -D / 2, 0);
+  wall(W, 0, H / 2, D / 2, Math.PI);
+  wall(D, -W / 2, H / 2, 0, Math.PI / 2);
+  wall(D, W / 2, H / 2, 0, -Math.PI / 2);
+  var ceil = new THREE.Mesh(new THREE.PlaneGeometry(W, D), mat({ color: 0xcfc8b4, roughness: 1, side: THREE.DoubleSide }));
+  ceil.rotation.x = Math.PI / 2; ceil.position.y = H; g.add(ceil);
+
+  /* tall sash windows down the left wall, grey daylight outside */
+  for (var wz = -8; wz <= 8; wz += 8) {
+    var frame = box(.14, 2.5, 1.7, mat({ map: TEX.wood, color: 0x5c4028, roughness: .6 }), -W / 2 + .07, 2.0, wz, g);
+    emit(1.55, 2.35, 0xd7e4f2, -W / 2 + .16, 2.0, wz, Math.PI / 2, g, .92);
+    var mull = box(.06, 2.4, .07, mat({ color: 0x4a3220, roughness: .7 }), -W / 2 + .18, 2.0, wz, g);
+    box(.06, .07, 1.6, mat({ color: 0x4a3220, roughness: .7 }), -W / 2 + .18, 2.0, wz, g);
+    var wl = new THREE.RectAreaLight ? null : null;
+    var dl = new THREE.PointLight(0xcadcf0, 16, 16, 2);
+    dl.position.set(-W / 2 + 2.2, 2.4, wz); g.add(dl);
+    /* the shaft it throws across the floor */
+    var pool = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 2.6),
+      new THREE.MeshBasicMaterial({ color: 0xbcd2ec, transparent: true, opacity: .12, blending: THREE.AdditiveBlending, depthWrite: false }));
+    pool.rotation.x = -Math.PI / 2; pool.position.set(-W / 2 + 3.0, .02, wz + 1.1); g.add(pool);
+  }
+
+  /* the hanging lamps that actually light the room */
+  for (var lz = -9; lz <= 9; lz += 6) {
+    cyl(.015, .015, .9, 5, mat({ color: 0x241c14 }), 0, H - .45, lz, g);
+    cyl(.44, .10, .26, 14, mat({ color: 0xd8d2bc, roughness: .5, side: THREE.DoubleSide }), 0, H - 1.02, lz, g);
+    var bulb = new THREE.Mesh(new THREE.SphereGeometry(.09, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffe3b4 }));
+    bulb.position.set(0, H - 1.12, lz); g.add(bulb);
+    var pl = new THREE.PointLight(0xffd8a4, 12, 12, 2);
+    pl.position.set(0, H - 1.25, lz); g.add(pl);
+  }
+
+  /* desks, two rows */
+  var deskSpots = [[-3.4, -7], [3.4, -7], [-3.4, -1], [3.4, -1], [-3.4, 5], [3.4, 5]];
+  var desks = [];
+  for (var di = 0; di < deskSpots.length; di++) {
+    var dk = makeDesk(400 + di);
+    dk.position.set(deskSpots[di][0], 0, deskSpots[di][1]);
+    dk.rotation.y = deskSpots[di][0] < 0 ? .18 : -.18;
+    g.add(dk); desks.push(dk);
+    /* a chair behind it */
+    var ch = new THREE.Group();
+    ch.position.set(deskSpots[di][0], 0, deskSpots[di][1] + 1.15);
+    ch.rotation.y = Math.PI + (deskSpots[di][0] < 0 ? .18 : -.18);
+    g.add(ch);
+    var cm = mat({ map: TEX.wood, color: 0x7a5a3c, roughness: .6 });
+    box(.46, .05, .44, cm, 0, .46, 0, ch);
+    box(.44, .55, .05, cm, 0, .74, -.20, ch);
+    [[-.19, -.18], [.19, -.18], [-.19, .18], [.19, .18]].forEach(function (q) { box(.05, .46, .05, cm, q[0], .23, q[1], ch); });
+  }
+  g.userData.desks = desks;
+
+  /* the long table they spread the archive over */
+  var tbl = new THREE.Group(); tbl.position.set(0, 0, 10.4); g.add(tbl);
+  var tblM = mat({ map: TEX.wood, color: 0x8f6c4a, roughness: .5 });
+  box(5.2, .09, 1.5, tblM, 0, .78, 0, tbl);
+  [[-2.4, -.6], [2.4, -.6], [-2.4, .6], [2.4, .6]].forEach(function (q) { box(.12, .78, .12, tblM, q[0], .39, q[1], tbl); });
+  var pM = mat({ map: TEX.typed, color: 0xe6dfc8, roughness: .95, side: THREE.DoubleSide });
+  var pr3 = rng(455);
+  for (var pp2 = 0; pp2 < 26; pp2++) {
+    var sheet = new THREE.Mesh(new THREE.PlaneGeometry(.24, .32), pM);
+    sheet.rotation.x = -Math.PI / 2; sheet.rotation.z = (pr3() - .5) * 2.4;
+    sheet.position.set(-2.3 + pr3() * 4.6, .828 + pp2 * .0015, -.55 + pr3() * 1.1);
+    tbl.add(sheet);
+  }
+  g.userData.table = tbl;
+
+  /* cabinets and the case board along the right wall */
+  for (var cb = 0; cb < 6; cb++) {
+    var cab = makeCabinet();
+    cab.position.set(W / 2 - .40, 0, -10 + cb * 2.4);
+    cab.rotation.y = -Math.PI / 2;
+    g.add(cab);
+  }
+  var board = new THREE.Group(); board.position.set(0, 0, -D / 2 + .12); g.add(board);
+  box(5.0, 2.6, .10, mat({ color: 0x2a2620, roughness: .9 }), 0, 2.1, 0, board);
+  var photoM = mat({ map: TEX.paper, color: 0xbdb49a, roughness: .9, side: THREE.DoubleSide });
+  var br3 = rng(466);
+  var pins = [];
+  for (var ph2 = 0; ph2 < 14; ph2++) {
+    var card = new THREE.Mesh(new THREE.PlaneGeometry(.42, .54), photoM);
+    card.position.set(-2.1 + (ph2 % 7) * .70, 1.35 + Math.floor(ph2 / 7) * .82, .06);
+    card.rotation.z = (br3() - .5) * .22;
+    board.add(card); pins.push(card);
+  }
+  g.userData.board = board; g.userData.pins = pins;
+
+  /* the door to the hall */
+  box(1.3, 2.4, .10, mat({ map: TEX.wood, color: 0x5a3d24, roughness: .6 }), -4.2, 1.2, D / 2 - .06, g);
+  emit(1.1, 2.1, 0x2a3038, -4.2, 1.15, D / 2 - .13, 0, g, .9);
+
+  g.add(new THREE.HemisphereLight(0x9aa6b8, 0x2e2a24, 1.30));
+  var key = new THREE.DirectionalLight(0xcfdcee, 1.35);
+  key.position.set(-24, 16, 6);
+  key.castShadow = true; key.shadow.mapSize.set(1024, 1024);
+  var kc = key.shadow.camera;
+  kc.left = -16; kc.right = 16; kc.top = 12; kc.bottom = -12; kc.far = 70;
+  key.shadow.bias = -.0015;
+  g.add(key); g.add(key.target);
+  g.userData.sun = key; g.userData.hemi = g.children[g.children.length - 3];
+  return g;
+}
+
+/* ============================================================== ALLEY */
+/* Behind headquarters: wet brick, fire escapes, a strip of 1946 street
+   visible at the mouth. */
+function buildAlley() {
+  var g = new THREE.Group();
+  g.position.copy(ALLEY_O);
+  var r = rng(7700);
+
+  plane(9, 46, mat({ map: TEX.asphalt, color: 0x5a5d63, roughness: .30, metalness: .10 }), 0, 0, 0, g);
+  var brickM = mat({ map: TEX.brick, color: 0x8a6a5c, roughness: .93 });
+  [-1, 1].forEach(function (sx) {
+    var w = new THREE.Mesh(new THREE.PlaneGeometry(46, 15), brickM);
+    w.rotation.y = -sx * Math.PI / 2;
+    w.position.set(sx * 4.5, 7.5, 0);
+    w.receiveShadow = true; g.add(w);
+    /* fire escape */
+    var steel = mat({ color: 0x3e4046, roughness: .7, metalness: .5 });
+    for (var fy = 3.0; fy < 12; fy += 3.0) {
+      box(1.5, .08, 5.0, steel, sx * 3.6, fy, -4 + (fy % 6 ? 0 : 3), g);
+      for (var rl = -2; rl <= 2; rl += 1) box(.05, .9, .05, steel, sx * 3.0, fy + .45, -4 + rl * 1.2 + (fy % 6 ? 0 : 3), g);
+      var lad = box(.06, 3.0, .5, steel, sx * 3.2, fy + 1.5, -6.4 + (fy % 6 ? 0 : 3), g);
+    }
+    /* windows */
+    for (var wy = 2.4; wy < 13; wy += 3.2) {
+      for (var wz2 = -18; wz2 < 20; wz2 += 5.5) {
+        emit(1.0, 1.5, r() > .55 ? 0xffd79a : 0x2c3340, sx * 4.42, wy, wz2, -sx * Math.PI / 2, g, .85);
+      }
+    }
+  });
+  /* the far end: a brick back wall */
+  var bw2 = new THREE.Mesh(new THREE.PlaneGeometry(9, 15), brickM);
+  bw2.position.set(0, 7.5, -23); g.add(bw2);
+  /* dustbins, crates, a puddle */
+  var binM = mat({ map: TEX.rust, color: 0x6e6a5e, roughness: .8, metalness: .3 });
+  [[-3.2, -6], [-2.6, -4.4], [3.1, 2], [3.4, 8]].forEach(function (q) {
+    cyl(.36, .32, .95, 14, binM, q[0], .48, q[1], g);
+    cyl(.38, .38, .06, 14, binM, q[0], .98, q[1], g);
+  });
+  var crM = mat({ map: TEX.wood, color: 0x8a6a48, roughness: .85 });
+  for (var ci = 0; ci < 7; ci++) {
+    var cb2 = box(.7, .55, .7, crM, (r() > .5 ? 3.0 : -3.0) + (r() - .5) * .6, .28, -14 + r() * 26, g);
+    cb2.rotation.y = r() * 1.2;
+  }
+  var pud = new THREE.Mesh(new THREE.PlaneGeometry(4.0, 6.0),
+    mat({ color: 0x1c2229, roughness: .05, metalness: .9 }));
+  pud.rotation.x = -Math.PI / 2; pud.position.set(.4, .014, -2); g.add(pud);
+
+  /* the street at the mouth of the alley, with traffic light and a car */
+  var street = new THREE.Group(); street.position.set(0, 0, 24); g.add(street);
+  plane(60, 14, mat({ map: TEX.asphalt, color: 0x62666c, roughness: .35, metalness: .08 }), 0, 0, 0, street);
+  box(60, .20, .6, mat({ map: TEX.concrete, color: 0xa8aaae, roughness: .9 }), 0, .10, -6.6, street);
+  var far = new THREE.Mesh(new THREE.PlaneGeometry(60, 22), brickM);
+  far.position.set(0, 11, 8); street.add(far);
+  for (var sy = 3; sy < 20; sy += 3.4) for (var sx2 = -26; sx2 < 28; sx2 += 5) emit(1.2, 1.8, r() > .6 ? 0xffd9a0 : 0x2b323c, sx2, sy, 7.9, 0, street, .8);
+  var car = makeCar46(0x2a2e34); car.position.set(-8, 0, -2); car.rotation.y = Math.PI / 2; street.add(car);
+  var car2 = makeCar46(0x40312a); car2.position.set(12, 0, 1.4); car2.rotation.y = -Math.PI / 2; street.add(car2);
+  lamp(g, -3.9, 20, 0xffcf96);
+  lamp(g, 3.9, 6, 0xffcf96);
+
+  var sun = new THREE.DirectionalLight(0xa8bcd8, 1.15);
+  sun.position.set(-30, 46, 24);
+  sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
+  var sc2 = sun.shadow.camera;
+  sc2.left = -22; sc2.right = 22; sc2.top = 26; sc2.bottom = -20; sc2.far = 120;
+  sun.shadow.bias = -.0014;
+  g.add(sun); g.add(sun.target);
+  var hemi = new THREE.HemisphereLight(0x53637e, 0x1a1c20, 1.10);
+  g.add(hemi);
+  g.userData.sun = sun; g.userData.hemi = hemi;
+  return g;
+}
+
+/* ============================================================ LIBRARY */
+/* Newspaper archives: tall stacks, green lamps, a reading table under a
+   high window. Quiet enough that the discovery lands. */
+function buildLibrary() {
+  var g = new THREE.Group();
+  g.position.copy(LIB_O);
+  var W = 20, D = 34, H = 7.5;
+  var r = rng(6100);
+
+  plane(W, D, mat({ map: TEX.wood, color: 0x7a5c40, roughness: .45 }), 0, 0, 0, g);
+  var wallM = mat({ color: 0xa89c80, roughness: .95, side: THREE.DoubleSide });
+  [[W, 0, -D / 2, 0], [W, 0, D / 2, Math.PI], [D, -W / 2, 0, Math.PI / 2], [D, W / 2, 0, -Math.PI / 2]].forEach(function (q) {
+    var m = new THREE.Mesh(new THREE.PlaneGeometry(q[0], H), wallM);
+    m.position.set(q[1], H / 2, q[2]); m.rotation.y = q[3]; g.add(m);
+  });
+  var ceil = new THREE.Mesh(new THREE.PlaneGeometry(W, D), mat({ color: 0x6c604c, roughness: 1, side: THREE.DoubleSide }));
+  ceil.rotation.x = Math.PI / 2; ceil.position.y = H; g.add(ceil);
+
+  /* stacks: rows of shelving with bound volumes */
+  var shelfM = mat({ map: TEX.wood, color: 0x5e4028, roughness: .6 });
+  var bookMats = [0x6a2a24, 0x2c4432, 0x3a3550, 0x63512c, 0x40331f].map(function (h) {
+    return mat({ color: h, roughness: .85 });
+  });
+  function stack(px, pz, ry, len) {
+    var st = new THREE.Group(); st.position.set(px, 0, pz); st.rotation.y = ry; g.add(st);
+    box(.42, 2.9, len, shelfM, 0, 1.45, 0, st);
+    for (var sy = .45; sy < 2.8; sy += .55) {
+      box(.46, .05, len, shelfM, 0, sy, 0, st);
+      for (var bz = -len / 2 + .2; bz < len / 2 - .2; ) {
+        var bw = .05 + r() * .09, bh = .30 + r() * .16;
+        var bk2 = box(.30, bh, bw, bookMats[(r() * bookMats.length) | 0], .09, sy + bh / 2 + .025, bz, st);
+        bz += bw + .012;
+      }
+    }
+    return st;
+  }
+  for (var sx = -6.5; sx <= 6.5; sx += 4.3) { stack(sx, -8, 0, 15); stack(sx + 1.0, -8, 0, 15); }
+  stack(-W / 2 + .35, 5, Math.PI / 2, 9);
+  stack(W / 2 - .35, 5, Math.PI / 2, 9);
+
+  /* the reading table */
+  var tbl = new THREE.Group(); tbl.position.set(0, 0, 7.5); g.add(tbl);
+  var tblM = mat({ map: TEX.wood, color: 0x8a684a, roughness: .45 });
+  box(4.4, .10, 1.9, tblM, 0, .80, 0, tbl);
+  [[-2.0, -.75], [2.0, -.75], [-2.0, .75], [2.0, .75]].forEach(function (q) { box(.14, .80, .14, tblM, q[0], .40, q[1], tbl); });
+  var newsM = mat({ map: TEX.typed, color: 0xdcd4bc, roughness: .96, side: THREE.DoubleSide });
+  for (var np = 0; np < 12; np++) {
+    var pg = new THREE.Mesh(new THREE.PlaneGeometry(.52, .68), newsM);
+    pg.rotation.x = -Math.PI / 2; pg.rotation.z = (r() - .5) * .8;
+    pg.position.set(-1.8 + r() * 3.6, .852 + np * .002, -.6 + r() * 1.2);
+    tbl.add(pg);
+  }
+  /* green banker's lamps down the table */
+  [-1.5, 0, 1.5].forEach(function (lx) {
+    cyl(.10, .12, .04, 12, mat({ color: 0x30281c, roughness: .6 }), lx, .87, -.55, tbl);
+    cyl(.014, .014, .24, 8, mat({ color: 0x6b5a3a, roughness: .35, metalness: .75 }), lx, 1.00, -.55, tbl);
+    cyl(.11, .15, .10, 12, mat({ color: 0x1d5a3a, roughness: .5, side: THREE.DoubleSide }), lx, 1.14, -.55, tbl);
+    var bb = new THREE.Mesh(new THREE.SphereGeometry(.05, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffe0aa }));
+    bb.position.set(lx, 1.10, -.55); tbl.add(bb);
+    var pl = new THREE.PointLight(0xffd9a0, 5.5, 5.0, 2);
+    pl.position.set(lx, 1.06, -.55); tbl.add(pl);
+  });
+  /* chairs */
+  [[-1.4, 1.5], [1.4, 1.5]].forEach(function (q) {
+    var ch = new THREE.Group(); ch.position.set(q[0], 0, q[1]); ch.rotation.y = Math.PI; g.add(ch);
+    ch.position.z += 7.5 - 7.5;
+    ch.position.set(q[0], 0, 7.5 + q[1]);
+    var cm = mat({ map: TEX.wood, color: 0x6e4e32, roughness: .6 });
+    box(.46, .05, .44, cm, 0, .46, 0, ch);
+    box(.44, .60, .05, cm, 0, .76, -.20, ch);
+    [[-.19, -.18], [.19, -.18], [-.19, .18], [.19, .18]].forEach(function (w) { box(.05, .46, .05, cm, w[0], .23, w[1], ch); });
+  });
+
+  /* one high window behind the table, and hanging globes over the stacks */
+  emit(3.4, 3.0, 0xd8e6f4, 0, 4.6, D / 2 - .12, Math.PI, g, .95);
+  var wl = new THREE.PointLight(0xcfe0f4, 34, 26, 2); wl.position.set(0, 4.4, D / 2 - 2.4); g.add(wl);
+  for (var gz = -13; gz <= 3; gz += 6) {
+    cyl(.015, .015, 1.4, 5, mat({ color: 0x241c14 }), 0, H - .7, gz, g);
+    var globe = new THREE.Mesh(new THREE.SphereGeometry(.30, 14, 10), new THREE.MeshBasicMaterial({ color: 0xffe6bc }));
+    globe.position.set(0, H - 1.5, gz); g.add(globe);
+    var pl2 = new THREE.PointLight(0xffd9a4, 20, 18, 2); pl2.position.set(0, H - 1.6, gz); g.add(pl2);
+  }
+
+  g.add(new THREE.HemisphereLight(0x8b8d92, 0x2a251c, 1.10));
+  var key = new THREE.DirectionalLight(0xd0dcea, 1.05);
+  key.position.set(4, 18, 34);
+  key.castShadow = true; key.shadow.mapSize.set(1024, 1024);
+  var kc2 = key.shadow.camera; kc2.left = -14; kc2.right = 14; kc2.top = 12; kc2.bottom = -10; kc2.far = 80;
+  key.shadow.bias = -.0015;
+  g.add(key); g.add(key.target);
+  g.userData.sun = key;
+  g.userData.hemi = g.children[g.children.length - 3];
+  return g;
+}
+
+/* =============================================================== ROAD */
+/* The drive out to the facility. A wet country road, hedgerows, hills. */
+function buildRoad() {
+  var g = new THREE.Group();
+  g.position.copy(ROAD_O);
+  var r = rng(5200);
+
+  plane(400, 400, mat({ color: 0x3d4632, roughness: .96 }), 0, -.05, 0, g);
+  plane(7.5, 320, mat({ map: TEX.asphalt, color: 0x5e6167, roughness: .30, metalness: .10 }), 0, 0, 0, g);
+  for (var mz = -150; mz < 152; mz += 9) {
+    var dash = emit(.22, 3.4, 0xcfc79c, 0, .02, mz, 0, g, .5);
+    dash.rotation.x = -Math.PI / 2;
+  }
+  /* verges and hedgerow */
+  var hedgeM = mat({ color: 0x2f4426, roughness: .98 });
+  for (var hz = -150; hz < 152; hz += 3.4) {
+    [-1, 1].forEach(function (sx) {
+      var h = 1.4 + r() * 1.6;
+      var hb = box(1.6 + r() * .9, h, 3.2, hedgeM, sx * (5.4 + r() * .5), h / 2, hz + r() * 1.2, g);
+      hb.rotation.y = r() * .7;
+    });
+  }
+  /* bare trees behind the hedge */
+  var trunkM = mat({ color: 0x36291f, roughness: .95 });
+  var canopyM = mat({ color: 0x27381f, roughness: 1 });
+  for (var ti = 0; ti < 60; ti++) {
+    var side = r() > .5 ? 1 : -1;
+    var tg = new THREE.Group();
+    tg.position.set(side * (9 + r() * 26), 0, -150 + r() * 300);
+    g.add(tg);
+    var th = 4 + r() * 5;
+    cyl(.16, .30, th, 7, trunkM, 0, th / 2, 0, tg);
+    var can = new THREE.Mesh(new THREE.SphereGeometry(1.6 + r() * 1.4, 8, 6), canopyM);
+    can.position.y = th + .6; can.scale.y = .8; can.castShadow = true; tg.add(can);
+  }
+  /* hills on the horizon */
+  for (var hi = 0; hi < 16; hi++) {
+    var a = -1.5 + hi * .19;
+    var hill = new THREE.Mesh(new THREE.SphereGeometry(30 + r() * 40, 12, 8),
+      mat({ color: 0x2c3a30, roughness: 1, fog: true }));
+    hill.position.set(Math.sin(a) * 190, -18 - r() * 12, Math.cos(a) * 190 - 40);
+    hill.scale.set(1.6, .45, 1.2);
+    g.add(hill);
+  }
+  /* telegraph poles marking the distance */
+  for (var pz = -140; pz < 150; pz += 22) {
+    var pg2 = new THREE.Group(); pg2.position.set(6.6, 0, pz); g.add(pg2);
+    cyl(.13, .17, 7.5, 7, trunkM, 0, 3.75, 0, pg2);
+    box(1.7, .12, .12, trunkM, 0, 7.0, 0, pg2);
+    box(1.3, .12, .12, trunkM, 0, 6.5, 0, pg2);
+  }
+
+  var car = makeCar46(0x232830);
+  g.add(car); g.userData.car = car;
+
+  var sun = new THREE.DirectionalLight(0x9fb4d0, .95);
+  sun.position.set(-50, 60, -20);
+  sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+  var sc3 = sun.shadow.camera;
+  sc3.left = -40; sc3.right = 40; sc3.top = 40; sc3.bottom = -40; sc3.far = 200;
+  sun.shadow.bias = -.0014; sun.shadow.normalBias = .03;
+  g.add(sun); g.add(sun.target);
+  var hemi = new THREE.HemisphereLight(0x4c5c76, 0x1d2318, 1.20);
+  g.add(hemi);
+  g.userData.sun = sun; g.userData.hemi = hemi;
+  return g;
+}
+
+/* =========================================================== FACILITY */
+/* The building the trail leads to, in 1946 and again eighty years later.
+   One hall: the wall of photographs on the left, the hidden room and the
+   memory machine at the far end. The same room does both eras — that is
+   the point of the place. */
+function buildFacility() {
+  var g = new THREE.Group();
+  g.position.copy(FAC_O);
+  var W = 26, D = 58, H = 9;
+  var r = rng(4400);
+
+  plane(W, D, mat({ map: TEX.concrete, bumpMap: TEX.concreteBump, bumpScale: .05, color: 0x6e7076, roughness: .95 }), 0, 0, 0, g);
+  var wallM = mat({ map: TEX.concrete, color: 0x5c5e64, roughness: .95, side: THREE.DoubleSide });
+  [[W, 0, -D / 2, 0], [W, 0, D / 2, Math.PI], [D, -W / 2, 0, Math.PI / 2], [D, W / 2, 0, -Math.PI / 2]].forEach(function (q) {
+    var m = new THREE.Mesh(new THREE.PlaneGeometry(q[0], H), wallM);
+    m.position.set(q[1], H / 2, q[2]); m.rotation.y = q[3]; m.receiveShadow = true; g.add(m);
+  });
+  var ceil = new THREE.Mesh(new THREE.PlaneGeometry(W, D), mat({ color: 0x1e2025, roughness: 1, side: THREE.DoubleSide }));
+  ceil.rotation.x = Math.PI / 2; ceil.position.y = H; g.add(ceil);
+
+  /* rusted roof trusses and a few broken skylights */
+  var steel = mat({ map: TEX.rust, color: 0x7c7168, roughness: .8, metalness: .45 });
+  for (var tz = -26; tz <= 26; tz += 5) {
+    box(W, .3, .3, steel, 0, H - .5, tz, g);
+    for (var tx = -9; tx <= 9; tx += 6) {
+      var br4 = box(.2, 1.2, .2, steel, tx, H - 1.2, tz, g);
+      br4.rotation.z = tx > 0 ? .22 : -.22;
+    }
+  }
+  for (var sz = -16; sz <= 16; sz += 16) {
+    emit(5.0, 3.4, 0xb6cbe2, 0, H - .06, sz, 0, g, .55).rotation.x = Math.PI / 2;
+    var shaft = new THREE.Mesh(new THREE.BoxGeometry(5.0, H, 3.4),
+      new THREE.MeshBasicMaterial({ color: 0xa8c2e0, transparent: true, opacity: .035, blending: THREE.AdditiveBlending, depthWrite: false }));
+    shaft.position.set(0, H / 2, sz); g.add(shaft);
+    var pool = new THREE.Mesh(new THREE.PlaneGeometry(5.4, 3.8),
+      new THREE.MeshBasicMaterial({ color: 0xbcd2ec, transparent: true, opacity: .10, blending: THREE.AdditiveBlending, depthWrite: false }));
+    pool.rotation.x = -Math.PI / 2; pool.position.set(0, .02, sz); g.add(pool);
+    var dl2 = new THREE.PointLight(0xbdd2ec, 26, 26, 2); dl2.position.set(0, H - 2.4, sz); g.add(dl2);
+  }
+
+  /* THE WALL: photographs, decades of them, pinned in a grid with string */
+  var wallGrp = new THREE.Group();
+  wallGrp.position.set(-W / 2 + .18, 0, -2);
+  wallGrp.rotation.y = Math.PI / 2;
+  g.add(wallGrp);
+  box(20, 5.0, .12, mat({ color: 0x2a2c30, roughness: .95 }), 0, 3.2, -.10, wallGrp);
+  var photoM = mat({ map: TEX.paper, color: 0xa8a08a, roughness: .92, side: THREE.DoubleSide });
+  var photos = [];
+  for (var pi2 = 0; pi2 < 96; pi2++) {
+    var col = pi2 % 16, row = Math.floor(pi2 / 16);
+    var card = new THREE.Mesh(new THREE.PlaneGeometry(.72, .92), photoM);
+    card.position.set(-9.4 + col * 1.24, 1.5 + row * .82, .01);
+    card.rotation.z = (r() - .5) * .18;
+    wallGrp.add(card); photos.push(card);
+  }
+  /* the string between them */
+  var strM = new THREE.MeshBasicMaterial({ color: 0xc44a3a });
+  for (var si = 0; si < 30; si++) {
+    var a1 = photos[(r() * photos.length) | 0], a2 = photos[(r() * photos.length) | 0];
+    var dx = a2.position.x - a1.position.x, dy = a2.position.y - a1.position.y;
+    var len = Math.sqrt(dx * dx + dy * dy);
+    if (len < .5 || len > 6) continue;
+    var str = new THREE.Mesh(new THREE.BoxGeometry(len, .012, .012), strM);
+    str.position.set((a1.position.x + a2.position.x) / 2, (a1.position.y + a2.position.y) / 2, .03);
+    str.rotation.z = Math.atan2(dy, dx);
+    wallGrp.add(str);
+  }
+  g.userData.photoWall = wallGrp;
+
+  /* crates, a fallen shelf, dust — the years that passed */
+  var crM = mat({ map: TEX.rust, color: 0x6a5c4a, roughness: .92 });
+  for (var ci2 = 0; ci2 < 22; ci2++) {
+    var cs = .8 + r() * 1.1;
+    var cbx = -9 + r() * 18, cbz = -22 + r() * 40;
+    if (Math.abs(cbx) < 4 && cbz > 8) continue;              /* keep the machine floor clear */
+    var cb3 = box(cs, cs * .8, cs, crM, cbx, cs * .4, cbz, g);
+    cb3.rotation.y = r() * 1.4;
+  }
+  for (var db = 0; db < 40; db++) {
+    var d2 = box(.2 + r() * .7, .06 + r() * .12, .2 + r() * .7,
+      mat({ map: TEX.rubble, color: 0x6e6a62, roughness: .98 }),
+      (r() - .5) * 20, .05, (r() - .5) * 48, g);
+    d2.rotation.y = r() * 3;
+  }
+
+  /* THE HIDDEN ROOM: a doorway in the end wall that opens on the machine */
+  var doorFrame = box(3.6, 4.2, .5, mat({ color: 0x35383e, roughness: .85, metalness: .3 }), 0, 2.1, -D / 2 + .3, g);
+  var slab = box(3.2, 3.9, .28, mat({ map: TEX.plate, color: 0x4a4e55, roughness: .55, metalness: .6 }), 0, 1.95, -D / 2 + .55, g);
+  g.userData.hiddenDoor = slab;
+
+  /* the machine itself: a drum on a plinth, ringed with coils, cabled to
+     the walls. It reads as 1946 engineering doing something it shouldn't. */
+  var mach = new THREE.Group(); mach.position.set(0, 0, 14); g.add(mach);
+  var caseM = mat({ map: TEX.plate, color: 0x555a60, roughness: .48, metalness: .70 });
+  var copper = mat({ color: 0x9a6a38, roughness: .35, metalness: .90 });
+  box(6.4, .55, 5.0, mat({ color: 0x3a3d42, roughness: .8, metalness: .3 }), 0, .28, 0, mach);
+  var drum = cyl(1.55, 1.75, 3.6, 24, caseM, 0, 2.35, 0, mach);
+  for (var cr2 = 0; cr2 < 7; cr2++) {
+    var coil = new THREE.Mesh(new THREE.TorusGeometry(1.72, .085, 8, 28), copper);
+    coil.rotation.x = Math.PI / 2; coil.position.set(0, .95 + cr2 * .46, 0); mach.add(coil);
+  }
+  var glass2 = cyl(1.12, 1.12, 1.5, 20, new THREE.MeshBasicMaterial({ color: 0x7fd8ff, transparent: true, opacity: .22, depthWrite: false }), 0, 2.5, 0, mach);
+  var core = cyl(.42, .42, 1.9, 16, new THREE.MeshBasicMaterial({ color: 0xbfe8ff }), 0, 2.5, 0, mach);
+  var coreLight = new THREE.PointLight(0x7fd8ff, 20, 26, 2);
+  coreLight.position.set(0, 2.6, 0); mach.add(coreLight);
+  /* control desk in front of it */
+  var desk2 = new THREE.Group(); desk2.position.set(0, 0, -3.2); mach.add(desk2);
+  box(3.0, .10, 1.1, caseM, 0, 1.02, 0, desk2);
+  [[-1.3, -.45], [1.3, -.45], [-1.3, .45], [1.3, .45]].forEach(function (q) { box(.12, 1.02, .12, caseM, q[0], .51, q[1], desk2); });
+  var panelM = mat({ map: TEX.panel, emissiveMap: TEX.panelGlow, emissive: 0x6ad0ff, emissiveIntensity: 1.4, color: 0x3a3f46, roughness: .5, metalness: .5 });
+  var face2 = box(2.8, .70, .10, panelM, 0, 1.36, -.45, desk2);
+  face2.rotation.x = -.34;
+  for (var dg = 0; dg < 6; dg++) {
+    var dial = cyl(.10, .10, .05, 14, mat({ color: 0xb8bcc2, roughness: .3, metalness: .8 }), -1.1 + dg * .44, 1.09, .18, desk2);
+  }
+  /* cables snaking to the walls */
+  var cabM = mat({ color: 0x1c1e22, roughness: .9 });
+  for (var cq = 0; cq < 10; cq++) {
+    var ang = cq / 10 * Math.PI * 2;
+    var cab = cyl(.07, .07, 8 + r() * 5, 6, cabM, Math.cos(ang) * 4.5, .12, Math.sin(ang) * 4.5, mach);
+    cab.rotation.z = Math.PI / 2; cab.rotation.y = ang + Math.PI / 2;
+  }
+  g.userData.machine = mach;
+  g.userData.machCore = core;
+  g.userData.machGlass = glass2;
+  g.userData.machLight = coreLight;
+  g.userData.machCoils = mach.children.filter(function (c2) { return c2.geometry && c2.geometry.type === "TorusGeometry"; });
+
+  /* modern gear, hidden until the present-day scenes need it */
+  var modern = new THREE.Group(); g.add(modern);
+  modern.visible = false;
+  var scrM = mat({ map: TEX.panel, emissiveMap: TEX.panelGlow, emissive: 0xff7a3a, emissiveIntensity: 2.0, color: 0x22262c, roughness: .4, metalness: .6 });
+  for (var mq = 0; mq < 5; mq++) {
+    var scr = box(2.2, 1.3, .16, scrM, -7 + mq * 3.5, 3.2, D / 2 - .5, modern);
+    scr.rotation.y = Math.PI;
+  }
+  box(5.0, 1.0, 2.2, mat({ color: 0x1a1d22, roughness: .5, metalness: .5 }), 0, .5, 16.5, modern);
+  g.userData.modern = modern;
+
+  var hemi = new THREE.HemisphereLight(0x5d6b80, 0x1a1c20, 1.20);
+  g.add(hemi);
+  var key = new THREE.DirectionalLight(0xa8bdd8, 1.15);
+  key.position.set(-16, 26, 18);
+  key.castShadow = true; key.shadow.mapSize.set(1024, 1024);
+  var kc3 = key.shadow.camera; kc3.left = -18; kc3.right = 18; kc3.top = 16; kc3.bottom = -14; kc3.far = 90;
+  key.shadow.bias = -.0016;
+  g.add(key); g.add(key.target);
+  g.userData.sun = key; g.userData.hemi = hemi;
+  return g;
+}
+
+/* ============================================================ COMMAND */
+/* Present day. The rebuilt centre both teams share, built around a globe
+   of the Earth with one point burning under the crust. */
+function buildCommand() {
+  var g = new THREE.Group();
+  g.position.copy(CMD_O);
+  var W = 28, D = 24, H = 7;
+
+  plane(W, D, mat({ map: TEX.plate, color: 0x3e444d, roughness: .42, metalness: .45 }), 0, 0, 0, g);
+  var wallM = mat({ map: TEX.panel, color: 0x2a2f37, roughness: .55, metalness: .40, side: THREE.DoubleSide });
+  [[W, 0, -D / 2, 0], [W, 0, D / 2, Math.PI], [D, -W / 2, 0, Math.PI / 2], [D, W / 2, 0, -Math.PI / 2]].forEach(function (q) {
+    var m = new THREE.Mesh(new THREE.PlaneGeometry(q[0], H), wallM);
+    m.position.set(q[1], H / 2, q[2]); m.rotation.y = q[3]; m.receiveShadow = true; g.add(m);
+  });
+  var ceil = new THREE.Mesh(new THREE.PlaneGeometry(W, D), mat({ color: 0x14171c, roughness: 1, side: THREE.DoubleSide }));
+  ceil.rotation.x = Math.PI / 2; ceil.position.y = H; g.add(ceil);
+
+  /* light strips in the ceiling and along the wall joins */
+  for (var lz = -9; lz <= 9; lz += 4.5) {
+    var strip = emit(W - 2, .34, 0xbcdcff, 0, H - .04, lz, 0, g, .9);
+    strip.rotation.x = Math.PI / 2;
+    var pl = new THREE.PointLight(0xbcd8ff, 30, 22, 2); pl.position.set(0, H - .8, lz); g.add(pl);
+  }
+  [-1, 1].forEach(function (sx) {
+    emit(D, .12, 0x4a8fd8, sx * (W / 2 - .05), .28, 0, -sx * Math.PI / 2, g, .8);
+  });
+
+  /* wall screens: the two team crests, and a bank of readouts */
+  var scrM = mat({ map: TEX.panel, emissiveMap: TEX.panelGlow, emissive: 0x5aa8ff, emissiveIntensity: 1.9, color: 0x1c2028, roughness: .35, metalness: .55 });
+  for (var si2 = 0; si2 < 6; si2++) {
+    var sc4 = box(3.0, 1.8, .14, scrM, -8.5 + si2 * 3.4, 3.6, -D / 2 + .10, g);
+  }
+  emit(2.2, 2.2, 0x2f6fd0, -10.5, 3.6, D / 2 - .10, Math.PI, g, .55);
+  emit(2.2, 2.2, 0xd03a30, 10.5, 3.6, D / 2 - .10, Math.PI, g, .55);
+
+  /* THE EARTH: a globe on a plinth, cut open, with the deposit glowing */
+  var globe = new THREE.Group(); globe.position.set(0, 0, 1.5); g.add(globe);
+  var plinth = cyl(1.5, 1.9, .95, 22, mat({ color: 0x272c34, roughness: .5, metalness: .55 }), 0, .48, 0, globe);
+  emit(2.6, 2.6, 0x3f7fd0, 0, .96, 0, 0, globe, .35).rotation.x = -Math.PI / 2;
+  var earth = new THREE.Mesh(new THREE.SphereGeometry(1.55, 40, 28),
+    new THREE.MeshBasicMaterial({ color: 0x3f86d8, transparent: true, opacity: .26, wireframe: true }));
+  earth.position.y = 2.9; globe.add(earth);
+  var shellE = new THREE.Mesh(new THREE.SphereGeometry(1.50, 32, 22),
+    new THREE.MeshBasicMaterial({ color: 0x1a4a86, transparent: true, opacity: .13, depthWrite: false }));
+  shellE.position.y = 2.9; globe.add(shellE);
+  /* latitude rings */
+  for (var lr = -2; lr <= 2; lr++) {
+    var ring = new THREE.Mesh(new THREE.TorusGeometry(1.55 * Math.cos(lr * .5), .012, 4, 40),
+      new THREE.MeshBasicMaterial({ color: 0x8fd0ff, transparent: true, opacity: .5 }));
+    ring.rotation.x = Math.PI / 2; ring.position.y = 2.9 + Math.sin(lr * .5) * 1.55; globe.add(ring);
+  }
+  /* the deposit, deep inside */
+  var deposit = new THREE.Mesh(new THREE.SphereGeometry(.42, 18, 14), new THREE.MeshBasicMaterial({ color: 0xffcc55 }));
+  deposit.position.set(.3, 2.55, .2); globe.add(deposit);
+  var depGlow = new THREE.PointLight(0xffbe4a, 12, 9, 2);
+  depGlow.position.copy(deposit.position); globe.add(depGlow);
+  var beamUp = new THREE.Mesh(new THREE.CylinderGeometry(.06, .06, 3.4, 10, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xffd070, transparent: true, opacity: .30, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+  beamUp.position.set(.3, 4.4, .2); globe.add(beamUp);
+  g.userData.globe = globe; g.userData.earth = earth;
+  g.userData.deposit = deposit; g.userData.depGlow = depGlow; g.userData.depBeam = beamUp;
+
+  /* consoles around the room */
+  function console2(px, pz, ry) {
+    var cg = new THREE.Group(); cg.position.set(px, 0, pz); cg.rotation.y = ry; g.add(cg);
+    var m = mat({ color: 0x2a2f38, roughness: .45, metalness: .55 });
+    box(2.6, .95, 1.0, m, 0, .48, 0, cg);
+    var top = box(2.6, .10, 1.0, mat({ map: TEX.panel, emissiveMap: TEX.panelGlow, emissive: 0x5ab8ff, emissiveIntensity: 1.6, color: 0x22262e, roughness: .35, metalness: .5 }), 0, 1.00, 0, cg);
+    var scr2 = box(2.2, 1.2, .10, scrM, 0, 1.68, -.42, cg);
+    scr2.rotation.x = -.30;
+    return cg;
+  }
+  g.userData.consoleA = console2(-7.5, 4.5, .55);
+  g.userData.consoleB = console2(7.5, 4.5, -.55);
+  console2(-9.5, -4.0, 1.25);
+  console2(9.5, -4.0, -1.25);
+
+  /* a low ring of seats around the globe */
+  for (var st2 = 0; st2 < 6; st2++) {
+    var a2 = st2 / 6 * Math.PI * 2;
+    var seat = cyl(.30, .34, .48, 12, mat({ color: 0x22262d, roughness: .7 }), Math.cos(a2) * 4.6, .24, 1.5 + Math.sin(a2) * 4.6, g);
+  }
+
+  var hemi = new THREE.HemisphereLight(0x7690b4, 0x1a1e24, 1.55);
+  g.add(hemi);
+  var key = new THREE.DirectionalLight(0xbcd4f0, 1.30);
+  key.position.set(-18, 22, 16);
+  key.castShadow = true; key.shadow.mapSize.set(1024, 1024);
+  var kc4 = key.shadow.camera; kc4.left = -18; kc4.right = 18; kc4.top = 16; kc4.bottom = -14; kc4.far = 80;
+  key.shadow.bias = -.0016;
+  g.add(key); g.add(key.target);
+  g.userData.sun = key; g.userData.hemi = hemi;
+  return g;
+}
+
+/* ============================================================= TUNNEL */
+/* The descent, and the door at the end of it. */
+function buildTunnel() {
+  var g = new THREE.Group();
+  g.position.copy(TUN_O);
+  var r = rng(3300);
+  var L = 150;
+
+  var rockM = mat({ map: TEX.rock, bumpMap: TEX.rockBump, bumpScale: .12, color: 0x6a6058, roughness: .97 });
+  plane(24, L, mat({ map: TEX.rock, color: 0x5c554e, roughness: .96 }), 0, 0, 0, g);
+  /* the bore: a tube of rock with the bottom cut flat */
+  var tube = new THREE.Mesh(new THREE.CylinderGeometry(11, 11, L, 22, 1, true), rockM);
+  tube.rotation.x = Math.PI / 2; tube.position.y = 6.5;
+  tube.material.side = THREE.BackSide;
+  g.add(tube);
+  /* rough it up with slabs on the walls */
+  for (var i = 0; i < 150; i++) {
+    var a = r() * Math.PI * 2;
+    if (Math.sin(a) < -.4) continue;
+    var rad = 10.4;
+    var sl = box(.8 + r() * 2.4, .5 + r() * 1.6, .8 + r() * 2.6, rockM,
+      Math.cos(a) * rad, 6.5 + Math.sin(a) * rad, -L / 2 + r() * L, g);
+    sl.rotation.set(r() * 3, r() * 3, r() * 3);
+  }
+  /* the walkway: steel mesh with rails, running the length */
+  var steel = mat({ map: TEX.grate, color: 0x6a6f76, roughness: .6, metalness: .55, side: THREE.DoubleSide });
+  var railM = mat({ color: 0x585e66, roughness: .5, metalness: .7 });
+  plane(6.5, L, steel, 0, .16, 0, g);
+  for (var rz = -L / 2; rz < L / 2; rz += 3) {
+    [-1, 1].forEach(function (sx) {
+      cyl(.05, .05, 1.05, 6, railM, sx * 3.2, .68, rz, g);
+    });
+  }
+  [-1, 1].forEach(function (sx) {
+    box(.07, .07, L, railM, sx * 3.2, 1.16, 0, g);
+    box(.07, .07, L, railM, sx * 3.2, .70, 0, g);
+  });
+  /* strip lights along the rails */
+  for (var lz2 = -L / 2 + 4; lz2 < L / 2; lz2 += 12) {
+    emit(.22, 2.6, 0x9fd8ff, -3.28, 1.26, lz2, Math.PI / 2, g, .85);
+    emit(.22, 2.6, 0x9fd8ff, 3.28, 1.26, lz2, -Math.PI / 2, g, .85);
+    var pl3 = new THREE.PointLight(0x8fc8ff, 22, 20, 2);
+    pl3.position.set(0, 2.2, lz2); g.add(pl3);
+  }
+  /* support ribs */
+  var ribM = mat({ map: TEX.rust, color: 0x7a6f62, roughness: .8, metalness: .4 });
+  for (var rb = -L / 2 + 8; rb < L / 2; rb += 16) {
+    var rib = new THREE.Mesh(new THREE.TorusGeometry(10.6, .28, 6, 24, Math.PI * 1.35), ribM);
+    rib.position.set(0, 6.5, rb); rib.rotation.z = -Math.PI * .175;
+    g.add(rib);
+  }
+
+  /* THE DOOR at the far end: a carved stone disc set in the rock face */
+  var face3 = new THREE.Mesh(new THREE.PlaneGeometry(24, 16), rockM);
+  face3.position.set(0, 8, -L / 2 + .3); g.add(face3);
+  var doorG = new THREE.Group(); doorG.position.set(0, 0, -L / 2 + .6); g.add(doorG);
+  var stoneM = mat({ map: TEX.stone, color: 0x8a8578, roughness: .88, metalness: .10 });
+  var disc = cyl(6.2, 6.2, .9, 40, stoneM, 0, 6.4, 0, doorG);
+  disc.rotation.x = Math.PI / 2;
+  box(15, .9, 1.0, stoneM, 0, .45, 0, doorG);
+  /* concentric carved rings and a symbol at the centre */
+  var glyphM = new THREE.MeshBasicMaterial({ color: 0x2c2a26 });
+  var litM = new THREE.MeshBasicMaterial({ color: 0xffc85a });
+  var glyphs = [];
+  for (var gr = 0; gr < 4; gr++) {
+    var ring2 = new THREE.Mesh(new THREE.TorusGeometry(1.5 + gr * 1.25, .10, 5, 44), glyphM);
+    ring2.position.set(0, 6.4, .48); doorG.add(ring2); glyphs.push(ring2);
+  }
+  /* the symbol: three bars over a broken circle */
+  var sym = new THREE.Group(); sym.position.set(0, 6.4, .52); doorG.add(sym);
+  var symRing = new THREE.Mesh(new THREE.TorusGeometry(.95, .13, 6, 34, Math.PI * 1.55), glyphM);
+  sym.add(symRing); glyphs.push(symRing);
+  for (var sb = -1; sb <= 1; sb++) {
+    var bar = box(.16, 1.5, .13, glyphM, sb * .38, 0, 0, sym);
+    bar.rotation.z = sb * .18;
+    glyphs.push(bar);
+  }
+  g.userData.doorDisc = disc;
+  g.userData.doorGroup = doorG;
+  g.userData.glyphs = glyphs;
+  g.userData.glyphLit = litM;
+  /* what is behind it, revealed when the door opens */
+  var behind = emit(11, 11, 0xffc45a, 0, 6.4, -.6, 0, doorG, 0);
+  g.userData.doorGlow = behind;
+
+  var hemi = new THREE.HemisphereLight(0x445a72, 0x14120e, 1.05);
+  g.add(hemi);
+  var key = new THREE.DirectionalLight(0x9fbdd8, .55);
+  key.position.set(-10, 30, 40);
+  g.add(key); g.add(key.target);
+  g.userData.sun = key; g.userData.hemi = hemi;
+  return g;
+}
+
+/* =============================================================== GOLD */
+/* The chamber. Everything the film has been walking toward: a cavern of
+   raw gold with the Collector's rig standing in the middle of it. */
+function buildGold() {
+  var g = new THREE.Group();
+  g.position.copy(GOLD_O);
+  var r = rng(2100);
+  var R = 70;
+
+  var rockM = mat({ map: TEX.rock, bumpMap: TEX.rockBump, bumpScale: .16, color: 0x54493f, roughness: .97 });
+  var goldM = mat({
+    map: TEX.gold, emissiveMap: TEX.goldGlow, emissive: 0xffb43a, emissiveIntensity: .55,
+    color: 0xffc65a, roughness: .28, metalness: .92
+  });
+
+  /* the floor takes a warmer, lighter rock so the gold has something to
+     bounce off — with the raw wall material it read as a black void */
+  var floorM = mat({ map: TEX.rock, bumpMap: TEX.rockBump, bumpScale: .10, color: 0xa28a68, roughness: .88 });
+  plane(R * 3, R * 3, floorM, 0, 0, 0, g);
+  /* the dome overhead */
+  var dome2 = new THREE.Mesh(new THREE.SphereGeometry(R, 30, 18, 0, Math.PI * 2, 0, Math.PI * .5), rockM);
+  dome2.material = rockM.clone(); dome2.material.side = THREE.BackSide;
+  g.add(dome2);
+
+  /* gold seams running up the walls */
+  var seams = [];
+  for (var i = 0; i < 120; i++) {
+    var a = r() * Math.PI * 2;
+    var h = 2 + r() * 26;
+    var rad = R * (.80 + r() * .16);
+    var sm = new THREE.Mesh(new THREE.BoxGeometry(1.4 + r() * 7, h, 1.2 + r() * 5), goldM);
+    sm.position.set(Math.cos(a) * rad, h * (.30 + r() * .25), Math.sin(a) * rad);
+    /* leaned back against the rock, not standing to attention */
+    sm.rotation.set(-.06 - r() * .24, a + (r() - .5) * .8, (r() - .5) * .5);
+    g.add(sm); seams.push(sm);
+  }
+  /* The floor deposits step down toward the middle, but only on the far
+     side: the whole approach from the tunnel and the ground the fight is
+     staged on stay clear, or the camera ends up inside a gold block. */
+  for (var t3 = 0; t3 < 5; t3++) {
+    var rad2 = 52 - t3 * 4;
+    var ring3 = new THREE.Mesh(
+      new THREE.CylinderGeometry(rad2, rad2 + 4, 2.4 + t3 * .6, 30, 1, true, Math.PI * .58, Math.PI * .84), goldM);
+    ring3.position.y = 1.2 + t3 * 1.7;
+    g.add(ring3); seams.push(ring3);
+  }
+  for (var b2 = 0; b2 < 90; b2++) {
+    var ba = r() * Math.PI * 2, brd = 34 + r() * 22;
+    var bx2 = Math.cos(ba) * brd, bz2 = Math.sin(ba) * brd;
+    if (bz2 > 12 && Math.abs(bx2) < 24) continue;      /* keep the approach open */
+    var bs = 1.4 + r() * 4.0;
+    var blk = new THREE.Mesh(new THREE.BoxGeometry(bs * (1 + r()), bs * .8, bs * (1 + r())), goldM);
+    blk.position.set(bx2, bs * .4, bz2);
+    blk.rotation.set(r() * .4, r() * 3, r() * .4);
+    g.add(blk); seams.push(blk);
+  }
+  g.userData.seams = seams;
+
+  /* the extraction rig in the centre: a tripod over a shaft, three towers */
+  var rig = new THREE.Group(); g.add(rig);
+  var rigM = mat({ map: TEX.plate, color: 0x3e444c, roughness: .42, metalness: .72 });
+  var hotM = mat({ map: TEX.hazard, color: 0x9a8c5a, roughness: .6, metalness: .4 });
+  cyl(7.5, 8.5, 1.2, 32, rigM, 0, .6, 0, rig);
+  var shaft = cyl(4.2, 4.2, .6, 32, new THREE.MeshBasicMaterial({ color: 0xffd070 }), 0, 1.15, 0, rig);
+  var towers = [];
+  for (var tw = 0; tw < 3; tw++) {
+    var ta = tw / 3 * Math.PI * 2;
+    var tg2 = new THREE.Group();
+    tg2.position.set(Math.cos(ta) * 6.6, 0, Math.sin(ta) * 6.6);
+    tg2.rotation.y = -ta;
+    rig.add(tg2);
+    box(1.9, 12, 1.9, rigM, 0, 6, 0, tg2);
+    box(2.6, 1.0, 2.6, hotM, 0, 1.2, 0, tg2);
+    var em = box(1.3, 2.4, .2, mat({ map: TEX.panel, emissiveMap: TEX.panelGlow, emissive: 0x6ad0ff, emissiveIntensity: 2.0, color: 0x22262c, roughness: .4, metalness: .55 }), 0, 3.4, -1.05, tg2);
+    /* the emitter head */
+    var head2 = new THREE.Mesh(new THREE.ConeGeometry(1.5, 2.6, 16), rigM);
+    head2.position.y = 13.2; head2.rotation.x = Math.PI; tg2.add(head2);
+    var lens = new THREE.Mesh(new THREE.SphereGeometry(.85, 16, 12), new THREE.MeshBasicMaterial({ color: 0x8fe0ff }));
+    lens.position.y = 12.0; tg2.add(lens);
+    var tl = new THREE.PointLight(0x7fd0ff, 26, 34, 2);
+    tl.position.set(0, 12, 0); tg2.add(tl);
+    towers.push({ g: tg2, lens: lens, light: tl, panel: em });
+  }
+  /* the arch they hang from */
+  for (var ar = 0; ar < 3; ar++) {
+    var aa = ar / 3 * Math.PI * 2 + Math.PI / 3;
+    var beam2 = box(13.5, .8, .8, rigM, 0, 13.6, 0, rig);
+    beam2.rotation.y = aa;
+  }
+  var crown = cyl(1.4, 2.4, 2.0, 16, rigM, 0, 15.0, 0, rig);
+  var crownLens = new THREE.Mesh(new THREE.SphereGeometry(1.2, 18, 14), new THREE.MeshBasicMaterial({ color: 0xffe0a0 }));
+  crownLens.position.y = 13.6; rig.add(crownLens);
+  var crownLight = new THREE.PointLight(0xffd28a, 40, 60, 2);
+  crownLight.position.y = 13.6; rig.add(crownLight);
+  g.userData.rig = rig; g.userData.towers = towers;
+  g.userData.crownLens = crownLens; g.userData.crownLight = crownLight;
+  g.userData.rigShaft = shaft;
+
+  /* the three control stations Maya and Nova have to reach */
+  var stations = [];
+  for (var sn = 0; sn < 3; sn++) {
+    var sa = sn / 3 * Math.PI * 2 + Math.PI / 6;
+    var sg2 = new THREE.Group();
+    sg2.position.set(Math.cos(sa) * 12.5, 0, Math.sin(sa) * 12.5);
+    sg2.rotation.y = -sa + Math.PI / 2;
+    g.add(sg2);
+    box(2.4, .9, 1.0, rigM, 0, .45, 0, sg2);
+    var top2 = box(2.4, .10, 1.0, mat({ map: TEX.panel, emissiveMap: TEX.panelGlow, emissive: 0x66ff9a, emissiveIntensity: 1.8, color: 0x1e2228, roughness: .35, metalness: .5 }), 0, .95, 0, sg2);
+    var scr3 = box(1.9, 1.05, .1, mat({ map: TEX.panel, emissiveMap: TEX.panelGlow, emissive: 0x66ff9a, emissiveIntensity: 2.2, color: 0x1a1e24, roughness: .35, metalness: .5 }), 0, 1.55, -.38, sg2);
+    scr3.rotation.x = -.32;
+    stations.push({ g: sg2, top: top2, screen: scr3 });
+  }
+  g.userData.stations = stations;
+
+  /* the mouth of the tunnel they came in through */
+  var mouth = new THREE.Mesh(new THREE.CylinderGeometry(6.5, 6.5, 4, 20, 1, true), rockM);
+  mouth.rotation.set(Math.PI / 2, 0, 0); mouth.position.set(0, 6.5, 50); g.add(mouth);
+  emit(11, 11, 0x101a24, 0, 6.5, 52, 0, g, .9);
+  plane(9, 14, mat({ map: TEX.grate, color: 0x6a6f76, roughness: .6, metalness: .55 }), 0, .18, 44, g);
+
+  var hemi = new THREE.HemisphereLight(0x6a5a34, 0x2a2114, 1.35);
+  g.add(hemi);
+  var key = new THREE.DirectionalLight(0xffd48a, 1.05);
+  key.position.set(-20, 44, 26);
+  key.castShadow = true; key.shadow.mapSize.set(2048, 2048);
+  var kc5 = key.shadow.camera; kc5.left = -40; kc5.right = 40; kc5.top = 36; kc5.bottom = -30; kc5.far = 160;
+  key.shadow.bias = -.0014; key.shadow.normalBias = .03;
+  g.add(key); g.add(key.target);
+  /* the gold lights the room from below as much as anything above does */
+  var up = new THREE.PointLight(0xffc258, 70, 90, 2);
+  up.position.set(0, 3, 0); g.add(up);
+  /* the seams glow, so the room is lit from its edges too */
+  for (var ul = 0; ul < 5; ul++) {
+    var ua = ul / 5 * Math.PI * 2 + .4;
+    var edge = new THREE.PointLight(0xffb44a, 55, 110, 2);
+    edge.position.set(Math.cos(ua) * 44, 7, Math.sin(ua) * 44);
+    g.add(edge);
+  }
+  var soft = new THREE.HemisphereLight(0xffc978, 0x6a5230, .95);
+  g.add(soft);
+  g.userData.sun = key; g.userData.hemi = hemi; g.userData.upLight = up;
   return g;
 }
 
@@ -3245,7 +4411,7 @@ function headPos(c) {
 }
 /* park everybody far below the floor so stray rigs never show */
 function hideAll() {
-  for (var i = 0; i < 7; i++) { CAST_OBJ[i].root.position.set(0, -60, 0); CAST_OBJ[i].root.visible = false; }
+  for (var i = 0; i < CAST_OBJ.length; i++) { CAST_OBJ[i].root.position.set(0, -60, 0); CAST_OBJ[i].root.visible = false; }
 }
 function show(i) { CAST_OBJ[i].root.visible = true; }
 
@@ -3623,12 +4789,113 @@ function advanceRow(n, t, cx, cz, width, facing, speed, t0) {
 }
 
 /* =====================================================================
+   RAIN
+   Part Two opens and closes in it. One instanced sheet of streaks that
+   follows the camera, plus splash rings where it lands.
+   ===================================================================== */
+var rainMesh = null, rainSplash = null, RAIN_N = 2600;
+function makeRain() {
+  var g = new THREE.Group();
+  var geo = new THREE.PlaneGeometry(.018, .55);
+  var m = new THREE.MeshBasicMaterial({
+    color: 0xc8dcf0, transparent: true, opacity: .34,
+    depthWrite: false, side: THREE.DoubleSide, fog: false
+  });
+  rainMesh = new THREE.InstancedMesh(geo, m, RAIN_N);
+  rainMesh.frustumCulled = false;
+  rainMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  g.add(rainMesh);
+
+  var sgeo = new THREE.RingGeometry(.09, .13, 12);
+  var sm = new THREE.MeshBasicMaterial({
+    color: 0xa8c4e0, transparent: true, opacity: .22,
+    depthWrite: false, side: THREE.DoubleSide, fog: false
+  });
+  rainSplash = new THREE.InstancedMesh(sgeo, sm, 340);
+  rainSplash.frustumCulled = false;
+  rainSplash.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  g.add(rainSplash);
+
+  g.visible = false;
+  rainMesh.userData.group = g;
+  return g;
+}
+
+var _rm = null, _rq = null, _rv = null;
+/* Deterministic: each drop's height is a function of the clock alone, so a
+   scrub lands on the same weather the play-through would have shown. */
+function rainFrame(t, amount, camPos) {
+  var grp = rainMesh.userData.group;
+  grp.visible = amount > .001;
+  if (!grp.visible) return;
+  if (!_rm) { _rm = new THREE.Matrix4(); _rq = new THREE.Quaternion(); _rv = new THREE.Vector3(); }
+  var r = rng(70707), n = Math.floor(RAIN_N * clamp(amount, 0, 1));
+  var tilt = new THREE.Euler(0, 0, .12);
+  _rq.setFromEuler(tilt);
+  var scale = new THREE.Vector3(1, 1, 1);
+  for (var i = 0; i < RAIN_N; i++) {
+    var ox = (r() - .5) * 34, oz = (r() - .5) * 34;
+    var speed = 15 + r() * 11, ph = r();
+    if (i >= n) { _rm.makeScale(0, 0, 0); rainMesh.setMatrixAt(i, _rm); continue; }
+    var fall = ((ph + t * speed / 22) % 1);
+    var y = camPos.y + 11 - fall * 22;
+    scale.set(1, .7 + speed / 22, 1);
+    _rv.set(camPos.x + ox + fall * 2.2, y, camPos.z + oz);
+    _rm.compose(_rv, _rq, scale);
+    rainMesh.setMatrixAt(i, _rm);
+  }
+  rainMesh.instanceMatrix.needsUpdate = true;
+
+  var sr = rng(80808), sn = Math.floor(340 * clamp(amount, 0, 1));
+  var flat = new THREE.Quaternion();
+  flat.setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
+  for (var s = 0; s < 340; s++) {
+    var sx = camPos.x + (sr() - .5) * 22, sz = camPos.z + (sr() - .5) * 22;
+    var sph = sr(), rate = 1.6 + sr() * 1.4;
+    if (s >= sn) { _rm.makeScale(0, 0, 0); rainSplash.setMatrixAt(s, _rm); continue; }
+    var k = ((sph + t * rate) % 1);
+    /* a ring that opens and thins out, not a hoop lying on the floor */
+    var gscale = (.14 + k * .62) * (1 - k * .35);
+    _rv.set(sx, .035, sz);
+    scale.set(gscale, gscale, gscale);
+    _rm.compose(_rv, flat, scale);
+    rainSplash.setMatrixAt(s, _rm);
+  }
+  rainSplash.material.opacity = .13 * amount;
+  rainSplash.instanceMatrix.needsUpdate = true;
+}
+
+/* =====================================================================
+   THE PULSE
+   The memory machine's discharge: a white sphere that expands through
+   the room. Used in 1946 and again under the Earth.
+   ===================================================================== */
+var pulseMesh = null;
+function makePulse() {
+  pulseMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(1, 24, 16),
+    new THREE.MeshBasicMaterial({ color: 0xdff0ff, transparent: true, opacity: 0, depthWrite: false, side: THREE.BackSide, fog: false })
+  );
+  pulseMesh.visible = false;
+  return pulseMesh;
+}
+function pulse(x, y, z, radius, opacity) {
+  pulseMesh.visible = true;
+  pulseMesh.position.set(x, y, z);
+  pulseMesh.scale.setScalar(Math.max(.01, radius));
+  pulseMesh.material.opacity = clamp(opacity, 0, 1);
+}
+/* =====================================================================
    THE CAST, BY ROLE
    ===================================================================== */
 var KAI = 0, JACE = 1, MAYA = 2, DRE = 3, LEO = 4,
-    RYDER = 5, ZANE = 6, NOVA = 7, BLAZE = 8, ACE = 9;
+    RYDER = 5, ZANE = 6, NOVA = 7, BLAZE = 8, ACE = 9,
+    ELIAS = 10, MARCUS = 11, HOLLOWAY = 12, WITNESS = 13,
+    BM1 = 14, BM2 = 15, VICTOR = 16, COLLECTOR = 17;
 var VANGUARD = [KAI, JACE, MAYA, DRE, LEO];
 var HAVOC = [RYDER, ZANE, NOVA, BLAZE, ACE];
+var BOTH = [KAI, JACE, MAYA, DRE, LEO, RYDER, ZANE, NOVA, BLAZE, ACE];
+var OLD46 = [MARCUS, ELIAS, BM1, BM2];
 
 /* =====================================================================
    STAGING SHORTHAND
@@ -3637,7 +4904,7 @@ function place(i, x, z, ry) { var c = G(i); stage(c, x, z, ry === undefined ? 0 
 function look(i, j, w) { headLook(G(i), headPos(G(j)), w === undefined ? .85 : w); }
 function lookAt(i, x, y, z) { headLook(G(i), new THREE.Vector3(O.x + x, y, O.z + z), .85); }
 
-/* a team strung out in a line, all facing the same way */
+/* a group strung out in a line, all facing the same way */
 function line(list, cx, cz, ry, gap, t, pose) {
   for (var k = 0; k < list.length; k++) {
     var off = (k - (list.length - 1) / 2) * gap;
@@ -3658,6 +4925,23 @@ function knot(list, cx, cz, faceX, faceZ, radius, t, pose) {
     if (pose) pose(c, k); else poseStand(c, t, { still: true });
   }
 }
+
+/* Two people talking, staged so the camera never ends up behind a head.
+   A stands left of the lens axis, B right, both angled inward. */
+function twoShot(a, b, cx, cz, ry, gap) {
+  gap = gap || 1.25;
+  var ca = Math.cos(ry), sa = Math.sin(ry);
+  var A2 = place(a, cx - ca * gap / 2, cz + sa * gap / 2, ry + .38);
+  var B2 = place(b, cx + ca * gap / 2, cz - sa * gap / 2, ry - .38);
+  headLook(A2, headPos(B2), .8);
+  headLook(B2, headPos(A2), .8);
+  return [A2, B2];
+}
+
+var SHOTS = [], _cursor = 0;
+function S(dur, def) { def.t0 = _cursor; def.dur = dur; _cursor += dur; SHOTS.push(def); return def; }
+function L(who, text) { return who + ":  " + text; }
+
 /* two teams squared up */
 function faceOff(vx, vz, hx, hz, t, gapV, gapH) {
   var ang = Math.atan2(hx - vx, hz - vz);
@@ -3702,8 +4986,32 @@ function wearAt(t) {
   return w;
 }
 
+
+/* How battered everyone looks, across both halves.
+   The first half escalates through its brawls, the fortress and the reactor;
+   the second opens on two men already standing in the wreckage, eases off
+   through the 1946 flashback, and takes it back once the chamber turns into
+   a battle. The 1946 cast is never marked — their story is a mystery, not a
+   fight. */
+var PART2 = 0;                         /* filled in once the list is built */
+function wearAt(t) {
+  var w = [], modern;
+  if (t < PART2) {
+    modern = clamp(ease(0, .30, inv(300, 460, t))
+                 + ease(0, .30, inv(900, 1100, t))
+                 + ease(0, .35, inv(1450, 1700, t)), 0, 1);
+  } else {
+    var p = t - PART2;
+    var opening = 1 - smooth(inv(120, 152, p));
+    modern = clamp(Math.max(opening * .68, ease(0, .82, inv(1434, 1700, p))), 0, 1);
+  }
+  for (var i = 0; i < 10; i++) w.push(modern);
+  for (var j = 10; j < 18; j++) w.push(0);
+  return w;
+}
+
 /* ==================================================== TITLE ========= */
-S(22, {
+S(24, {
   set: "city", title: 1,
   cam: function (u) {
     camKeys(u, [{ p: [30, 96, 150], l: [0, 34, 0], f: 42 },
@@ -3711,7 +5019,7 @@ S(22, {
     CAM.shake = .12;
   },
   act: function () { hideAll(); },
-  fade: function (u) { return 1 - smoother(inv(.06, .34, u)) * smoother(1 - inv(.80, 1, u)); }
+  fade: function (u) { return 1 - smoother(inv(.06, .32, u)) * smoother(1 - inv(.82, 1, u)); }
 });
 
 /* ===================================================== ACT 1 ======== */
@@ -5933,29 +7241,1818 @@ S(30, {                                                        /* 110 */
   fade: function (u) { return smoother(inv(.74, .94, u)); }
 });
 
-/* ------------------------------------------------------- end cards */
-S(11, {
-  set: "roof", endcard: 1,
-  cam: function () { camSet(0, 2, 10, 0, 1.6, 0, 40); CAM.shake = 0; },
-  act: function () { hideAll(); hideExtras(); },
-  fade: function () { return 1; }
-});
-S(26, {
-  set: "roof", credits: 1,
-  cam: function () { camSet(0, 2, 10, 0, 1.6, 0, 40); CAM.shake = 0; },
-  act: function () { hideAll(); hideExtras(); },
-  fade: function () { return 1; }
+
+/* ============================================ PART TWO CARD ========= */
+/* The hinge. The first half closes on two leaders shaking hands on a
+   rooftop at dawn; the second opens on what is left of both buildings. */
+S(18, {
+  set: "ruins", part2: 1, rain: 1, dark: 1, quiet: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [30, 54, 92], l: [0, 12, -8], f: 44 },
+                { p: [20, 34, 64], l: [0, 10, -8], f: 40 }]);
+    CAM.shake = .12;
+  },
+  act: function () { hideAll(); },
+  fade: function (u) { return 1 - smoother(inv(.10, .34, u)) * smoother(1 - inv(.78, 1, u)); }
 });
 
-RUNTIME = _cursor;
+/* ===================================================== ACT I ========
+   THE END BEFORE THE BEGINNING
+   ==================================================================== */
 
+S(24, {                                        /* 1 — THE RUINS */
+  set: "ruins", rain: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-4, 15, 30], l: [-14, 4, 2], f: 42 },
+                { p: [-8.5, 3.6, 13], l: [-13.4, 1.9, 3.4], f: 38 },
+                { p: [-9.6, 2.2, 7.4], l: [-12.4, 1.66, 2.2], f: 34 }]);
+    CAM.shake = .30;
+  },
+  act: function (t, u) {
+    var c = place(KAI, -14 + smooth(u) * 2.0, 2 + smooth(u) * 4, 2.9);
+    if (u < .72) {
+      var ph = (u * 24) % (Math.PI * 2);
+      walkCycle(c, u * 26, .62, t);
+      c.root.position.set(O.x - 14 + smooth(u) * 2.4, 0, O.z + 8 - smooth(u) * 6.5);
+    } else {
+      poseSurvey(c, t, 1);
+      c.root.position.set(O.x - 11.6, 0, O.z + 1.5);
+    }
+    lookAt(KAI, -17, 6, -6);
+  },
+  lines: [[.78, .99, L("KAI", "No...")]]
+});
+
+S(20, {                                        /* 2 — RED TEAM'S RUINS */
+  set: "ruins", rain: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [28.5, 4.4, 34.0], l: [20.0, 2.0, 24.0], f: 42 },
+                { p: [25.4, 2.5, 29.6], l: [20.2, 1.75, 23.6], f: 36 }]);
+    CAM.shake = .28;
+  },
+  act: function (t, u) {
+    var c = place(RYDER, 20.6 - smooth(u) * .6, 27.0 - smooth(u) * 3.4, Math.PI + .1);
+    if (u < .42) walkCycle(c, u * 22, .58, t); else poseSurvey(c, t, .8);
+    lookAt(RYDER, 19, 7.0, 12);
+  },
+  lines: [[.20, .42, L("RYDER", "Everybody...")],
+          [.60, .95, L("RYDER", "They're gone.")]]
+});
+
+S(24, {                                        /* 3 — TWO LEADERS */
+  set: "ruins", rain: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [0, 9, 24], l: [1, 2.2, 2], f: 44 },
+                { p: [1.5, 2.1, 12], l: [1, 1.7, 2], f: 36 }]);
+    CAM.shake = .26;
+  },
+  act: function (t, u) {
+    var pair = twoShot(KAI, RYDER, 1, 2, 0, 2.0);
+    poseStand(pair[0], t, { still: true });
+    poseStand(pair[1], t, { still: true });
+    if (u > .55) poseTalk(pair[1], t, .5);
+    if (u < .40) poseTalk(pair[0], t, .4);
+  },
+  lines: [[.14, .38, L("KAI", "We lost everything.")],
+          [.44, .64, L("RYDER", "Not everything.")],
+          [.76, .98, L("RYDER", "We still have each other.")]]
+});
+
+S(22, {                                        /* 4 — THE ANGER */
+  set: "ruins", rain: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-1.2, 1.75, 5.0], l: [-.6, 1.62, 1.6], f: 32 },
+                { p: [2.8, 1.80, 4.6], l: [2.2, 1.64, 1.8], f: 32 }]);
+    CAM.shake = .34;
+  },
+  act: function (t, u) {
+    var k = place(KAI, -.6, 1.6, .12);
+    var r = place(RYDER, 2.2, 1.8, -.10);
+    if (u < .5) { poseSurvey(k, t, 1); poseStand(r, t, { still: true }); }
+    else { poseStand(k, t, { still: true }); poseFold(r, t); }
+    lookAt(KAI, -20, 8, -50);
+    lookAt(RYDER, -18, 6, -46);
+  },
+  lines: [[.12, .42, L("KAI", "Whoever did this...")],
+          [.60, .95, L("RYDER", "We're going to find them.")]]
+});
+
+S(22, {                                        /* 5 — THE RAIN → 1946 */
+  set: "ruins", rain: 1, dark: 1, era: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [4.6, 2.6, 11.0], l: [1.4, 1.2, 3.0], f: 40 },
+                { p: [3.0, 1.30, 7.6], l: [1.8, .35, 3.6], f: 32 },
+                { p: [2.4, .62, 5.8], l: [2.0, .04, 4.0], f: 27 }]);
+    CAM.shake = .18 * (1 - u);
+  },
+  act: function (t, u) {
+    /* the two of them still standing behind the lens, reflected in it */
+    if (u < .52) {
+      var k = place(KAI, 1.0, 2.0, .2); poseStand(k, t, { still: true });
+      var r = place(RYDER, 2.8, 2.6, -.2); poseStand(r, t, { still: true });
+    } else hideAll();
+  },
+  fx: function (t, u) {
+    if (u > .58) {
+      var k = inv(.58, .92, u);
+      pulse(O.x + 2.0, .1, O.z + 4.0, .3 + k * 55, k * .92 * (1 - inv(.94, 1, u)));
+    }
+  },
+  big: function (u) { return u > .90 ? "1946" : ""; },
+  fade: function (u) { return smoother(inv(.90, 1, u)) * .55; }
+});
+
+/* ==================================================== ACT II ========
+   1946 — THE MYSTERY BEGINS
+   ==================================================================== */
+
+S(20, {                                        /* 6 — 1946 CITY */
+  set: "alley", era: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [9.0, 4.6, 25.0], l: [-2.4, 1.90, 20.0], f: 44 },
+                { p: [4.4, 2.0, 23.4], l: [-2.6, 1.62, 19.8], f: 36 }]);
+    CAM.shake = .18;
+  },
+  act: function (t, u) {
+    var c = place(MARCUS, -2.8, 19.4, 1.45);
+    poseStand(c, t, { still: true });
+    lookAt(MARCUS, 9.0, 2.2, 23.0);
+  },
+  lines: [[.42, .92, L("MARCUS", "Something feels wrong today.")]],
+  fade: function (u) { return 1 - smoother(inv(0, .22, u)); }
+});
+
+S(18, {                                        /* 7 — ELIAS */
+  set: "hq46", era: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-1.2, 1.72, 8.4], l: [-2.6, 1.58, 12.2], f: 38 },
+                { p: [-1.0, 1.70, 7.0], l: [-2.8, 1.56, 11.6], f: 34 }]);
+    CAM.shake = .22;
+  },
+  act: function (t, u) {
+    var e = place(ELIAS, -4.2, 12.4 - smooth(u) * 3.4, Math.PI);
+    if (u < .48) walkCycle(e, u * 22, .9, t); else poseStand(e, t, {});
+    var m = place(MARCUS, -2.2, 10.0, -.5);
+    poseFold(m, t);
+    look(MARCUS, ELIAS, .9);
+    if (u > .40) look(ELIAS, MARCUS, .85);
+  },
+  lines: [[.34, .50, L("ELIAS", "Morning.")],
+          [.54, .70, L("MARCUS", "You're late.")],
+          [.74, .98, L("ELIAS", "Had something to take care of.")]]
+});
+
+S(18, {                                        /* 8 — THE DISCOVERY */
+  set: "hq46", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [1.6, 1.68, 2.0], l: [-1.0, 1.30, -6.5], f: 40 },
+                { p: [1.2, 1.62, -.6], l: [-1.2, 1.20, -8.0], f: 34 }]);
+    CAM.shake = .34;
+  },
+  act: function (t, u) {
+    var m = place(MARCUS, -1.0, -4.4, -.28);
+    if (u < .30) { walkCycle(m, u * 26, .8, t); m.root.position.z = O.z - 3.0 - smooth(u / .30) * 1.8; }
+    else if (u < .62) poseSurvey(m, t, 1);
+    else poseShout(m, t, .9);
+    lookAt(MARCUS, -3.4, .6, -8.4);
+  },
+  lines: [[.66, .99, L("MARCUS", "Everyone! Get in here!")]]
+});
+
+S(20, {                                        /* 9 — THE TEAM GATHERS */
+  set: "hq46", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [3.6, 1.90, -.4], l: [-1.4, 1.50, -6.4], f: 40 },
+                { p: [3.0, 1.84, -1.6], l: [-1.4, 1.48, -6.6], f: 37 }]);
+    CAM.shake = .26;
+  },
+  act: function (t, u) {
+    knot(OLD46, -1.4, -5.4, O.x - 3.6, O.z - 9.4, 1.55, t);
+    poseTalk(G(MARCUS), t, u < .34 ? .7 : (u > .60 ? .6 : .2));
+    if (u > .36 && u < .60) poseTalk(G(ELIAS), t, .6);
+  },
+  lines: [[.06, .32, L("MARCUS", "Nobody leaves this building.")],
+          [.38, .58, L("ELIAS", "Who could've done this?")],
+          [.64, .98, L("MARCUS", "That's what we're going to find out.")]]
+});
+
+S(18, {                                        /* 10 — LOCKDOWN */
+  set: "hq46", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-1.0, 1.60, 7.0], l: [-4.2, 1.30, 12.6], f: 36 },
+                { p: [-2.0, 1.55, 8.6], l: [-4.2, 1.25, 12.8], f: 33 }]);
+    CAM.shake = .28;
+  },
+  act: function (t, u) {
+    var b = place(BM1, -3.0, 11.0, Math.PI - .5);
+    poseConsole(b, t, 1.4);
+    var m = place(MARCUS, -.6, 9.4, -.9);
+    poseStand(m, t, { still: true });
+    look(MARCUS, BM1, .8);
+    look(BM1, MARCUS, u > .40 ? .7 : .2);
+  },
+  lines: [[.06, .28, L("MARCUS", "Lock the entire building.")],
+          [.36, .64, L("BLUE", "You think the person is still here?")],
+          [.70, .98, L("MARCUS", "I think they might be.")]]
+});
+
+S(18, {                                        /* 11 — THE FIRST CLUE */
+  set: "hq46", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [.4, 1.66, -2.2], l: [-3.0, 1.15, -6.6], f: 36 },
+                { p: [-.2, 1.55, -3.0], l: [-3.1, 1.10, -6.8], f: 33 }]);
+    CAM.shake = .24;
+  },
+  act: function (t, u) {
+    var e = place(ELIAS, -3.6, -7.2, -.35);
+    poseConsole(e, t, .70);
+    var m = place(MARCUS, -2.0, -8.0, .45);
+    if (u > .48) poseConsole(m, t, .6); else poseStand(m, t, { still: true });
+    look(MARCUS, ELIAS, .7);
+  },
+  lines: [[.10, .38, L("ELIAS", "This wasn't ours.")],
+          [.62, .96, L("MARCUS", "Then somebody left it behind.")]]
+});
+
+S(18, {                                        /* 12 — FOOTPRINTS */
+  set: "hq46", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [1.8, 1.55, 3.2], l: [-2.4, 1.10, 9.0], f: 38 },
+                { p: [.6, 1.40, 5.2], l: [-3.2, .95, 10.4], f: 34 }]);
+    CAM.shake = .30;
+  },
+  act: function (t, u) {
+    var s = smooth(u);
+    for (var k = 0; k < 3; k++) {
+      var who = [MARCUS, ELIAS, BM1][k];
+      var c = place(who, -2.0 - k * .9, 6.0 + s * 4.6 - k * 1.0, Math.PI + .2);
+      walkCycle(c, u * 20 + k * 1.7, .72, t);
+    }
+  },
+  lines: [[.14, .44, L("ELIAS", "They lead outside.")],
+          [.54, .98, L("MARCUS", "Then whoever did this wanted us to follow.")]]
+});
+
+S(18, {                                        /* 13 — THE ALLEY */
+  set: "alley", era: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [0, 3.4, 8.6], l: [0, 1.5, -2.0], f: 42 },
+                { p: [.4, 2.0, 5.2], l: [.2, 1.4, -2.6], f: 36 }]);
+    CAM.shake = .28;
+  },
+  act: function (t, u) {
+    var m = place(MARCUS, -.8, -.6, .12);
+    var e = place(ELIAS, 1.3, -1.6, -.35);
+    var b = place(BM1, -1.9, -3.4, .3);
+    if (u < .55) { poseSurvey(m, t, .8); poseSurvey(e, t, .6); poseStand(b, t, {}); }
+    else { poseConsole(m, t, .35); poseStand(e, t, { still: true }); poseStand(b, t, { still: true }); }
+    look(ELIAS, MARCUS, .7);
+  },
+  lines: [[.10, .32, L("BLUE", "Nothing.")],
+          [.40, .62, L("MARCUS", "Look closer.")]]
+});
+
+S(18, {                                        /* 14 — THE NOTE */
+  set: "alley", era: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-1.4, 1.72, 2.2], l: [.2, 1.55, -1.4], f: 30 },
+                { p: [-1.0, 1.66, 1.4], l: [.3, 1.52, -1.6], f: 28 }]);
+    CAM.shake = .22;
+  },
+  act: function (t, u) {
+    var pair = twoShot(ELIAS, MARCUS, .2, -1.4, .25, 1.15);
+    poseConsole(pair[1], t, .95);
+    if (u < .45) poseTalk(pair[0], t, .5); else poseStand(pair[0], t, { still: true });
+  },
+  lines: [[.12, .44, L("ELIAS", "What does that mean?")],
+          [.56, .92, L("MARCUS", "I don't know.")]]
+});
+
+S(18, {                                        /* 15 — THE ARCHIVES */
+  set: "hq46", era: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [3.2, 2.35, 6.0], l: [0, 1.20, 10.4], f: 40 },
+                { p: [2.2, 1.90, 7.2], l: [0, 1.12, 10.6], f: 36 }]);
+    CAM.shake = .22;
+  },
+  act: function (t, u) {
+    var m = place(MARCUS, -1.5, 9.3, -.05);
+    poseConsole(m, t, .95);
+    var e = place(ELIAS, 1.4, 9.4, .12);
+    poseConsole(e, t, .95);
+    var b = place(BM1, -.1, 11.6, Math.PI);
+    poseConsole(b, t, .95);
+  },
+  lines: [[.08, .34, L("MARCUS", "Every incident we've ever had.")],
+          [.40, .64, L("ELIAS", "That's thousands of pages.")],
+          [.70, .98, L("MARCUS", "Then we'd better start reading.")]]
+});
+
+S(18, {                                        /* 16 — NIGHT INVESTIGATION */
+  set: "hq46", era: 1, dark: 1, quiet: 1,
+  cam: function (u) {
+    camOrbit(u, 0, 1.55, 9.0, 2.6, -.72, .28, 1.85, 1.20, 42);
+    CAM.shake = .16;
+  },
+  act: function (t, u) {
+    var m = place(MARCUS, -1.6, 9.3, -.05); poseConsole(m, t, .95);
+    var e = place(ELIAS, 1.5, 9.4, .10); poseConsole(e, t, .95);
+    var b = place(BM1, -.6, 11.7, Math.PI + .1); poseConsole(b, t, .95);
+    var b2 = place(BM2, 1.6, 11.6, Math.PI - .2); poseFold(b2, t);
+  },
+  lines: [[.20, .48, L("ELIAS", "We've been searching for hours.")],
+          [.58, .92, L("MARCUS", "And we're getting closer.")]]
+});
+
+S(20, {                                        /* 17 — THE PHOTOGRAPH */
+  set: "hq46", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-.4, 1.60, 8.6], l: [.6, 1.34, 10.2], f: 32 },
+                { p: [.2, 1.52, 8.2], l: [.8, 1.30, 10.3], f: 28 }]);
+    CAM.shake = .20;
+  },
+  act: function (t, u) {
+    var e = place(ELIAS, 1.4, 9.6, .55);
+    poseConsole(e, t, 1.05);
+    var m = place(MARCUS, -1.0, 9.2, -.35);
+    if (u < .55) poseConsole(m, t, .95); else poseStand(m, t, { still: true });
+    if (u > .55) look(MARCUS, ELIAS, .9);
+  },
+  lines: [[.16, .40, L("ELIAS", "Who's that?")],
+          [.72, .98, L("MARCUS", "I don't know.")]]
+});
+
+S(18, {                                        /* 18 — THE STRANGER */
+  set: "hq46", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-3.0, 2.10, -8.6], l: [0, 2.00, -12.6], f: 38 },
+                { p: [-2.0, 2.00, -9.6], l: [0, 1.95, -12.7], f: 34 }]);
+    CAM.shake = .22;
+  },
+  act: function (t, u) {
+    knot([MARCUS, ELIAS, BM2], 0, -10.4, O.x, O.z - 13, 1.35, t);
+    lookAt(MARCUS, 0, 2.1, -13);
+    lookAt(ELIAS, 0, 2.1, -13);
+    if (u > .50) poseTalk(G(MARCUS), t, .5);
+  },
+  lines: [[.10, .42, L("BLUE", "He wasn't part of our team.")],
+          [.56, .94, L("MARCUS", "Then why was he there?")]]
+});
+
+S(18, {                                        /* 19 — THE LIBRARY */
+  set: "lib", era: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-3.6, 3.4, 14.6], l: [0, 1.5, 7.6], f: 42 },
+                { p: [-2.4, 2.1, 12.6], l: [0, 1.42, 7.8], f: 36 }]);
+    CAM.shake = .20;
+  },
+  act: function (t, u) {
+    var e = place(ELIAS, -1.3, 8.9, .1); poseConsole(e, t, 1.0);
+    var m = place(MARCUS, 1.4, 8.9, -.1); poseConsole(m, t, 1.0);
+    look(MARCUS, ELIAS, .5);
+  },
+  lines: [[.16, .40, L("ELIAS", "Nothing.")],
+          [.52, .92, L("MARCUS", "Try the previous year.")]]
+});
+
+S(20, {                                        /* 20 — OLD NEWSPAPER */
+  set: "lib", era: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-3.6, 1.76, 11.4], l: [.3, 1.44, 8.0], f: 32 },
+                { p: [-3.0, 1.70, 10.8], l: [.4, 1.42, 8.0], f: 29 }]);
+    CAM.shake = .18;
+  },
+  act: function (t, u) {
+    var e = place(ELIAS, -1.2, 8.8, .35); poseConsole(e, t, 1.02);
+    var m = place(MARCUS, 1.2, 8.7, -.35); poseConsole(m, t, 1.02);
+    if (u > .55) { poseStand(m, t, { still: true }); look(MARCUS, ELIAS, .85); }
+  },
+  lines: [[.12, .42, L("ELIAS", "Three people vanished.")],
+          [.60, .94, L("MARCUS", "Same symbol.")]]
+});
+
+S(20, {                                        /* 21 — CONNECTION */
+  set: "lib", era: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [0, 2.6, 11.2], l: [0, 1.10, 7.6], f: 34 },
+                { p: [.6, 1.70, 10.0], l: [.2, 1.05, 7.7], f: 30 }]);
+    CAM.shake = .22;
+  },
+  act: function (t, u) {
+    var m = place(MARCUS, -.9, 8.8, .15); poseConsole(m, t, 1.02);
+    var e = place(ELIAS, 1.0, 8.9, -.15);
+    if (u < .5) poseConsole(e, t, 1.02); else poseStand(e, t, { still: true });
+    look(ELIAS, MARCUS, .6);
+  },
+  lines: [[.10, .42, L("MARCUS", "This isn't random.")],
+          [.56, .96, L("ELIAS", "Someone's been doing this for years.")]]
+});
+
+S(20, {                                        /* 22 — THE WITNESS */
+  set: "alley", era: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-2.2, 1.80, 12.0], l: [.6, 1.55, 8.0], f: 34 },
+                { p: [-1.6, 1.74, 11.2], l: [.7, 1.52, 8.1], f: 31 }]);
+    CAM.shake = .24;
+  },
+  act: function (t, u) {
+    var w = place(WITNESS, 1.2, 7.4, .5);
+    var m = place(MARCUS, -.6, 9.2, .5 - Math.PI);
+    var e = place(ELIAS, -1.9, 8.2, .3 - Math.PI);
+    poseStand(w, t, {});
+    poseStand(m, t, { still: true });
+    poseStand(e, t, { still: true });
+    headLook(m, headPos(w), .85); headLook(e, headPos(w), .8);
+    headLook(w, headPos(m), .8);
+    if (u < .34) poseTalk(w, t, .6);
+    if (u > .70) poseTalk(w, t, .5);
+  },
+  lines: [[.08, .34, L("WITNESS", "I saw someone that night.")],
+          [.42, .58, L("MARCUS", "Who?")],
+          [.66, .98, L("WITNESS", "A man wearing a dark coat.")]]
+});
+
+S(20, {                                        /* 23 — DESCRIPTION */
+  set: "alley", era: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [2.6, 1.76, 10.4], l: [.2, 1.56, 8.2], f: 30 },
+                { p: [2.2, 1.72, 10.0], l: [.3, 1.54, 8.2], f: 28 }]);
+    CAM.shake = .22;
+  },
+  act: function (t, u) {
+    var w = place(WITNESS, .6, 7.6, .8);
+    var e = place(ELIAS, -1.1, 9.0, .8 - Math.PI);
+    var m = place(MARCUS, -.2, 9.8, .6 - Math.PI);
+    poseStand(w, t, {}); poseStand(e, t, { still: true }); poseStand(m, t, { still: true });
+    headLook(w, headPos(e), .8); headLook(e, headPos(w), .85); headLook(m, headPos(w), .8);
+    if (u > .70) poseTalk(w, t, .55);
+  },
+  lines: [[.06, .26, L("ELIAS", "Did you see his face?")],
+          [.30, .42, L("WITNESS", "No.")],
+          [.48, .64, L("MARCUS", "Anything else?")],
+          [.70, .99, L("WITNESS", "He had a silver mark on his hand.")]]
+});
+
+S(18, {                                        /* 24 — THE SILVER MARK */
+  set: "hq46", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-2.4, 1.66, 8.0], l: [.4, 1.30, 10.4], f: 32 },
+                { p: [-1.8, 1.58, 8.4], l: [.5, 1.26, 10.5], f: 29 }]);
+    CAM.shake = .20;
+  },
+  act: function (t, u) {
+    var e = place(ELIAS, .8, 9.4, .3); poseConsole(e, t, 1.0);
+    var m = place(MARCUS, -1.4, 9.6, -.1);
+    poseConsole(m, t, .95);
+    if (u > .60) { poseStand(m, t, { still: true }); look(MARCUS, ELIAS, .9); }
+  },
+  lines: [[.62, .92, L("ELIAS", "Here.")]]
+});
+
+S(20, {                                        /* 25 — THE SECRET FILE */
+  set: "hq46", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [1.4, 1.62, 7.4], l: [-1.0, 1.36, 10.0], f: 32 },
+                { p: [1.0, 1.58, 7.8], l: [-1.0, 1.34, 10.1], f: 29 }]);
+    CAM.shake = .22;
+  },
+  act: function (t, u) {
+    var m = place(MARCUS, -1.2, 9.3, .2); poseConsole(m, t, 1.0);
+    var e = place(ELIAS, .9, 9.6, -.25); poseStand(e, t, { still: true });
+    look(ELIAS, MARCUS, .85);
+    if (u > .10 && u < .34) poseTalk(m, t, .5);
+  },
+  lines: [[.12, .34, L("MARCUS", "The Collector.")],
+          [.42, .64, L("ELIAS", "That's a name?")],
+          [.72, .96, L("MARCUS", "Apparently.")]]
+});
+
+S(18, {                                        /* 26 — THE OLD FACILITY */
+  set: "hq46", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [2.6, 1.90, 12.2], l: [-.6, 1.50, 9.6], f: 36 },
+                { p: [2.0, 1.82, 11.6], l: [-.6, 1.48, 9.7], f: 33 }]);
+    CAM.shake = .24;
+  },
+  act: function (t, u) {
+    var m = place(MARCUS, -1.1, 9.2, .55); poseConsole(m, t, 1.0);
+    var e = place(ELIAS, .6, 10.6, .1); poseStand(e, t, { still: true });
+    var b = place(BM1, -.4, 11.5, -.3); poseFold(b, t);
+    look(ELIAS, MARCUS, .85); look(BM1, MARCUS, .7);
+  },
+  lines: [[.08, .32, L("MARCUS", "We've got a location.")],
+          [.40, .58, L("ELIAS", "Where?")],
+          [.66, .96, L("MARCUS", "Outside the city.")]]
+});
+
+S(22, {                                        /* 27 — THE JOURNEY */
+  set: "road", era: 1, rain: .55,
+  cam: function (u) {
+    /* ride alongside it, the way a second car would */
+    var cz = 40 - smooth(u) * 76;
+    var swing = Math.sin(u * Math.PI);
+    camSet(1.7 + 3.6 + swing * 1.6, 1.85 + swing * .9,
+           cz + 7.5 - swing * 3.0,
+           1.7, 1.25, cz - 1.0, 38);
+    CAM.shake = .34;
+  },
+  act: function () { hideAll(); },
+  drive: 1,
+  lines: [[.24, .52, L("ELIAS", "This feels like a trap.")],
+          [.62, .94, L("MARCUS", "It probably is.")]]
+});
+
+S(20, {                                        /* 28 — ABANDONED FACILITY */
+  set: "fac", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-5.0, 5.4, 26.4], l: [0, 2.4, 12.0], f: 44 },
+                { p: [-3.2, 2.2, 24.0], l: [0, 1.75, 13.0], f: 38 }]);
+    CAM.shake = .30;
+  },
+  act: function (t, u) {
+    var s = smooth(u);
+    var order = [MARCUS, ELIAS, BM1, BM2];
+    for (var k = 0; k < 4; k++) {
+      var c = place(order[k], -1.8 + k * 1.25, 19.5 - s * 3.2 - k * .9, Math.PI);
+      if (u < .62) walkCycle(c, u * 18 + k * 1.4, .68, t);
+      else poseSurvey(c, t, k === 0 ? 1 : .5);
+    }
+  },
+  lines: [[.62, .96, L("MARCUS", "Stay together.")]]
+});
+
+S(18, {                                        /* 29 — ENTERING */
+  set: "fac", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [4.6, 1.90, 14.0], l: [-1.0, 1.60, 8.0], f: 38 },
+                { p: [3.8, 1.86, 12.4], l: [-1.0, 1.58, 7.8], f: 35 }]);
+    CAM.shake = .28;
+  },
+  act: function (t, u) {
+    var e = place(ELIAS, -.4, 9.4, 2.6); poseSurvey(e, t, .8);
+    var m = place(MARCUS, -1.8, 10.6, 2.4); poseStand(m, t, {});
+    var b = place(BM1, .8, 11.4, 2.9); poseStand(b, t, { still: true });
+    look(MARCUS, ELIAS, .6);
+  },
+  lines: [[.10, .44, L("ELIAS", "Nobody's been here in years.")],
+          [.54, .98, L("MARCUS", "That's what they want us to think.")]]
+});
+
+S(22, {                                        /* 30 — THE WALL */
+  set: "fac", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [3.0, 2.6, 2.0], l: [-9.0, 3.0, -2.0], f: 42 },
+                { p: [-.4, 2.2, -1.0], l: [-10.2, 2.6, -2.2], f: 36 }]);
+    CAM.shake = .26;
+  },
+  act: function (t, u) {
+    var e = place(ELIAS, -8.2, .4, 1.35); poseSurvey(e, t, 1);
+    var m = place(MARCUS, -7.4, -3.0, 1.45); poseStand(m, t, {});
+    var b = place(BM2, -6.4, -5.4, 1.5); poseStand(b, t, { still: true });
+    lookAt(ELIAS, -12.6, 3.2, -1);
+    lookAt(MARCUS, -12.6, 3.0, -3);
+  },
+  lines: [[.42, .92, L("ELIAS", "They've been watching us.")]]
+});
+
+S(18, {                                        /* 31 — THE TIMELINE */
+  set: "fac", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-4.6, 2.20, 4.2], l: [-9.6, 1.75, -.6], f: 36 },
+                { p: [-4.0, 2.10, 3.2], l: [-9.6, 1.70, -.8], f: 33 }]);
+    CAM.shake = .22;
+  },
+  act: function (t, u) {
+    var m = place(MARCUS, -9.6, -1.0, 1.5); poseSurvey(m, t, 1);
+    var e = place(ELIAS, -9.4, 1.8, 1.4); poseStand(e, t, { still: true });
+    lookAt(MARCUS, -12.8, 4.2, -1.4);
+  },
+  lines: [[.30, .94, L("MARCUS", "This started before we were even born.")]]
+});
+
+S(18, {                                        /* 32 — THE HIDDEN ROOM */
+  set: "fac", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [3.4, 1.90, -12.4], l: [-.4, 1.70, -18.4], f: 38 },
+                { p: [2.4, 1.86, -14.0], l: [-.4, 1.68, -18.6], f: 34 }]);
+    CAM.shake = .30;
+  },
+  act: function (t, u) {
+    var e = place(ELIAS, -.8, -16.6, Math.PI); poseConsole(e, t, 1.3);
+    var m = place(MARCUS, 1.9, -15.6, Math.PI - .5);
+    if (u < .45) poseStand(m, t, {}); else poseTalk(m, t, .5);
+    look(MARCUS, ELIAS, .85);
+    if (u > .40) look(ELIAS, MARCUS, .6);
+  },
+  lines: [[.14, .40, L("ELIAS", "Marcus.")],
+          [.56, .86, L("MARCUS", "Open it.")]]
+});
+
+S(22, {                                        /* 33 — THE MACHINE */
+  set: "fac", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [8.4, 2.6, 24.0], l: [.4, 2.4, 15.4], f: 42 },
+                { p: [6.4, 2.3, 22.0], l: [.4, 2.2, 15.4], f: 36 }]);
+    CAM.shake = .26;
+  },
+  act: function (t, u) {
+    var e = place(ELIAS, -1.4, 17.6, .12); poseSurvey(e, t, 1);
+    var m = place(MARCUS, 1.2, 18.2, -.10); poseStand(m, t, {});
+    var b = place(BM1, -2.8, 18.8, .2); poseStand(b, t, { still: true });
+    lookAt(ELIAS, 0, 3.0, 14);
+    lookAt(MARCUS, 0, 3.2, 14);
+  },
+  lines: [[.24, .52, L("ELIAS", "What is that?")],
+          [.62, .96, L("MARCUS", "I have no idea.")]]
+});
+
+S(22, {                                        /* 34 — THE RECORDING */
+  set: "fac", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-3.6, 1.86, 17.8], l: [.6, 1.70, 15.4], f: 34 },
+                { p: [-2.8, 1.82, 17.2], l: [.6, 1.68, 15.4], f: 31 }]);
+    CAM.shake = .24;
+  },
+  act: function (t, u) {
+    var m = place(MARCUS, .4, 16.0, -.9); poseStand(m, t, { still: true });
+    var e = place(ELIAS, 1.8, 17.2, -1.3); poseStand(e, t, { still: true });
+    lookAt(MARCUS, 0, 2.5, 14); lookAt(ELIAS, 0, 2.5, 14);
+  },
+  machine: .5,
+  lines: [[.24, .78, L("VOICE", "The Earth contains something they must never find.")]]
+});
+
+S(20, {                                        /* 35 — THE GOLD CLUE */
+  set: "fac", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [1.2, 1.72, 12.0], l: [-1.4, 1.42, 15.0], f: 32 },
+                { p: [.6, 1.66, 12.6], l: [-1.4, 1.40, 15.1], f: 29 }]);
+    CAM.shake = .22;
+  },
+  act: function (t, u) {
+    var e = place(ELIAS, -1.9, 14.2, -.4); poseConsole(e, t, 1.0);
+    var m = place(MARCUS, -.6, 13.6, .4); poseConsole(m, t, 1.0);
+    if (u > .55) { poseStand(m, t, { still: true }); look(MARCUS, ELIAS, .8); }
+  },
+  machine: .3,
+  lines: [[.16, .44, L("ELIAS", "What's down there?")],
+          [.60, .96, L("MARCUS", "Something valuable.")]]
+});
+
+S(18, {                                        /* 36 — THE SECOND RECORDING */
+  set: "fac", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [5.6, 2.30, 22.6], l: [-.4, 1.74, 17.4], f: 38 },
+                { p: [4.6, 2.20, 21.4], l: [-.4, 1.72, 17.4], f: 34 }]);
+    CAM.shake = .30;
+  },
+  act: function (t, u) {
+    var m = place(MARCUS, -1.6, 17.4, .05); poseStand(m, t, {});
+    var e = place(ELIAS, 1.4, 17.8, -.05); poseStand(e, t, {});
+    lookAt(MARCUS, 0, 2.6, 14); lookAt(ELIAS, 0, 2.6, 14);
+  },
+  machine: .8,
+  lines: [[.22, .86, L("VOICE", "When they discover it, everything changes.")]]
+});
+
+S(20, {                                        /* 37 — THE ATTACK */
+  set: "fac", era: 1, dark: 2,
+  cam: function (u) {
+    camKeys(u, [{ p: [4.0, 1.92, 12.0], l: [-2.0, 1.60, 6.0], f: 38 },
+                { p: [2.0, 1.86, 9.0], l: [-4.0, 1.55, 3.0], f: 34 }]);
+    CAM.shake = .58; CAM.shakeFreq = 1.5;
+  },
+  act: function (t, u) {
+    var m = place(MARCUS, -1.0, 8.0, 2.2); poseShout(m, t, u < .5 ? .9 : .3);
+    var e = place(ELIAS, -2.6, 6.6, 2.6); poseCrouch(e, t, .7);
+    var b = place(BM1, .6, 6.0, 2.0); poseCover(b, t, u > .6);
+    if (u > .55) {
+      var v = place(VICTOR, -8.0 + smooth(inv(.55, 1, u)) * 3.0, -3.0, 1.2);
+      runCycle(v, u * 30, .8, t);
+    }
+  },
+  lines: [[.10, .48, L("MARCUS", "Everyone stay together!")]]
+});
+
+S(20, {                                        /* 38 — THE CHASE */
+  set: "fac", era: 1, dark: 2,
+  cam: function (u) {
+    var s = smooth(u);
+    camSet(2.6, 1.75, 8.0 - s * 12, -1.0, 1.55, 2.0 - s * 12, 40);
+    CAM.shake = .70; CAM.shakeFreq = 1.8;
+  },
+  act: function (t, u) {
+    var s = smooth(u);
+    var v = place(VICTOR, -1.6, 0 - s * 13, Math.PI);
+    runCycle(v, u * 34, 1, t);
+    var e = place(ELIAS, -.4, 5.4 - s * 12.4, Math.PI);
+    runCycle(e, u * 34 + 1.1, 1, t);
+    var m = place(MARCUS, 1.2, 6.6 - s * 12.2, Math.PI);
+    runCycle(m, u * 34 + 2.2, 1, t);
+  },
+  lines: [[.34, .68, L("ELIAS", "Stop!")]]
+});
+
+S(20, {                                        /* 39 — VICTOR */
+  set: "fac", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [4.4, 1.86, -12.0], l: [-.6, 1.66, -17.0], f: 36 },
+                { p: [3.4, 1.82, -13.4], l: [-.6, 1.64, -17.2], f: 32 }]);
+    CAM.shake = .34;
+  },
+  act: function (t, u) {
+    var v = place(VICTOR, -1.0, -18.0, .05); poseStand(v, t, {});
+    var m = place(MARCUS, -.2, -14.4, Math.PI + .1); poseStand(m, t, {});
+    var e = place(ELIAS, 1.8, -13.6, Math.PI - .25); poseStand(e, t, { still: true });
+    headLook(m, headPos(v), .9); headLook(e, headPos(v), .85); headLook(v, headPos(m), .8);
+    if (u > .52) poseTalk(v, t, .45);
+  },
+  lines: [[.12, .40, L("MARCUS", "Who are you?")],
+          [.54, .96, L("VICTOR", "You're asking the wrong question.")]]
+});
+
+S(20, {                                        /* 40 — THE QUESTION */
+  set: "fac", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-3.6, 1.80, -15.4], l: [.6, 1.68, -17.6], f: 32 },
+                { p: [-3.0, 1.78, -15.8], l: [.7, 1.66, -17.7], f: 29 }]);
+    CAM.shake = .26;
+  },
+  act: function (t, u) {
+    var v = place(VICTOR, .8, -18.2, .35); poseStand(v, t, {});
+    var e = place(ELIAS, -.9, -16.0, .35 - Math.PI); poseStand(e, t, {});
+    headLook(v, headPos(e), .85); headLook(e, headPos(v), .85);
+    if (u > .46) poseTalk(v, t, .5); else poseTalk(e, t, .45);
+  },
+  lines: [[.10, .38, L("ELIAS", "Then what's the right one?")],
+          [.52, .98, L("VICTOR", "What are you going to do when you find the gold?")]]
+});
+
+S(20, {                                        /* 41 — THE CONFUSION */
+  set: "fac", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [3.8, 1.82, -14.6], l: [-.4, 1.68, -17.8], f: 33 },
+                { p: [3.2, 1.80, -15.2], l: [-.4, 1.66, -17.9], f: 30 }]);
+    CAM.shake = .24;
+  },
+  act: function (t, u) {
+    var v = place(VICTOR, -.6, -18.4, .2); poseStand(v, t, {});
+    var m = place(MARCUS, .4, -15.4, .2 - Math.PI); poseStand(m, t, {});
+    var e = place(ELIAS, 2.2, -14.6, .1 - Math.PI); poseStand(e, t, { still: true });
+    headLook(v, headPos(m), .85); headLook(m, headPos(v), .9); headLook(e, headPos(v), .8);
+    if (u < .40) poseTalk(m, t, .5); else if (u > .58) poseTalk(v, t, .4);
+  },
+  lines: [[.10, .36, L("MARCUS", "What gold?")],
+          [.58, .98, L("VICTOR", "You really don't know.")]]
+});
+
+S(24, {                                        /* 42 — THE REVEAL */
+  set: "fac", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-2.6, 1.84, -15.0], l: [.4, 1.70, -18.0], f: 34 },
+                { p: [-1.4, 1.80, -14.4], l: [.4, 1.68, -18.1], f: 30 }]);
+    CAM.shake = .26;
+  },
+  act: function (t, u) {
+    var v = place(VICTOR, .5, -18.6, .18); poseStand(v, t, {});
+    var e = place(ELIAS, -.5, -15.4, .18 - Math.PI); poseStand(e, t, {});
+    var m = place(MARCUS, 1.9, -14.8, .05 - Math.PI); poseStand(m, t, { still: true });
+    headLook(v, headPos(e), .8); headLook(e, headPos(v), .88); headLook(m, headPos(v), .8);
+    if (u < .48) poseTalk(v, t, .55); else if (u < .80) poseTalk(e, t, .7);
+  },
+  lines: [[.06, .46, L("VICTOR", "The deepest layer of this planet contains an extraordinary reserve.")],
+          [.52, .84, L("ELIAS", "And you killed our teammate because of it?")]]
+});
+
+S(20, {                                        /* 43 — THE ESCAPE */
+  set: "fac", era: 1, dark: 2,
+  cam: function (u) {
+    camKeys(u, [{ p: [4.6, 2.00, -11.4], l: [-.4, 1.70, -18.0], f: 36 },
+                { p: [3.6, 1.96, -12.2], l: [-.4, 1.68, -18.1], f: 33 }]);
+    CAM.shake = .40;
+  },
+  act: function (t, u) {
+    if (u < .70) {
+      var v = place(VICTOR, -.6, -18.4, .16);
+      if (u > .44) poseAim(v, t, 1); else poseStand(v, t, {});
+    }
+    var m = place(MARCUS, .2, -15.0, .16 - Math.PI);
+    if (u < .40) poseStand(m, t, {}); else poseShout(m, t, .8);
+    var e = place(ELIAS, 2.0, -14.4, .05 - Math.PI); poseStand(e, t, {});
+    if (u < .70) { headLook(m, headPos(G(VICTOR)), .9); headLook(e, headPos(G(VICTOR)), .85); }
+  },
+  fx: function (t, u) {
+    if (u > .62 && u < .86) {
+      var k = inv(.62, .74, u) * (1 - inv(.74, .86, u));
+      pulse(O.x - .6, 1.4, O.z - 18.4, .3 + k * 26, k);
+    }
+  },
+  lines: [[.42, .60, L("MARCUS", "Stop!")]]
+});
+
+S(20, {                                        /* 44 — THE MEMORY MACHINE */
+  set: "fac", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [5.0, 2.0, 19.0], l: [0, 2.6, 14.2], f: 38 },
+                { p: [3.6, 1.94, 17.4], l: [0, 2.4, 14.2], f: 34 }]);
+    CAM.shake = .52; CAM.shakeFreq = 1.4;
+  },
+  act: function (t, u) {
+    var e = place(ELIAS, -1.6, 17.0, .2); poseStand(e, t, {});
+    var m = place(MARCUS, 1.0, 17.8, -.1);
+    if (u < .5) poseStand(m, t, {}); else poseShout(m, t, .9);
+    var b = place(BM1, -3.0, 18.4, .3); poseCover(b, t, false);
+    lookAt(ELIAS, 0, 2.6, 14); lookAt(MARCUS, 0, 2.6, 14);
+  },
+  machine: 1,
+  lines: [[.10, .42, L("ELIAS", "Marcus, what's happening?")],
+          [.52, .84, L("MARCUS", "Get away from it!")]]
+});
+
+S(18, {                                        /* 45 — MEMORY LOSS */
+  set: "fac", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [4.2, 2.2, 20.0], l: [0, 2.0, 15.0], f: 40 },
+                { p: [3.4, 1.6, 19.0], l: [0, 1.2, 15.2], f: 38 }]);
+    CAM.shake = .60; CAM.shakeFreq = 1.8;
+  },
+  act: function (t, u) {
+    var who = [ELIAS, MARCUS, BM1, BM2], px = [-1.8, .8, -3.2, 2.4], pz = [17.0, 17.8, 18.4, 18.6];
+    for (var k = 0; k < 4; k++) {
+      var c = place(who[k], px[k], pz[k], .2 - k * .12);
+      if (u < .30) poseStand(c, t, {});
+      else if (u < .62) poseCollapse(c, inv(.30, .62, u), t);
+      else poseDown(c, t, .3);
+    }
+  },
+  machine: 2,
+  fx: function (t, u) {
+    var k = inv(.16, .34, u) * (1 - inv(.40, .78, u));
+    if (k > .001) pulse(O.x, 2.5, O.z + 14, .5 + k * 44, k * .95);
+  }
+});
+
+S(20, {                                        /* 46 — THE MORNING */
+  set: "hq46", era: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [3.4, 1.86, 2.0], l: [-1.0, 1.56, -3.0], f: 38 },
+                { p: [2.6, 1.82, .8], l: [-1.0, 1.54, -3.2], f: 35 }]);
+    CAM.shake = .22;
+  },
+  act: function (t, u) {
+    var e = place(ELIAS, -1.4, -3.4, .5); poseStand(e, t, {});
+    var m = place(MARCUS, .6, -4.4, .1); poseStand(m, t, {});
+    var b = place(BM1, -2.6, -5.2, .6); poseStand(b, t, { still: true });
+    headLook(e, headPos(m), .8); headLook(m, headPos(e), .8);
+    if (u < .42) poseTalk(e, t, .5); else if (u > .54) poseTalk(m, t, .4);
+  },
+  fade: function (u) { return 1 - smoother(inv(0, .26, u)); },
+  lines: [[.14, .42, L("ELIAS", "Why are we here?")],
+          [.54, .94, L("MARCUS", "I... don't remember.")]]
+});
+
+S(18, {                                        /* 47 — THE EMPTY FILE */
+  set: "hq46", era: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-2.8, 1.80, 8.2], l: [.6, 1.40, 10.6], f: 34 },
+                { p: [-2.2, 1.74, 8.6], l: [.6, 1.38, 10.7], f: 31 }]);
+    CAM.shake = .22;
+  },
+  act: function (t, u) {
+    var e = place(ELIAS, .4, 9.6, .3); poseConsole(e, t, .95);
+    var m = place(MARCUS, -1.4, 9.8, -.1); poseStand(m, t, {});
+    look(MARCUS, ELIAS, .8);
+    if (u > .55) poseTalk(m, t, .4);
+  },
+  lines: [[.10, .44, L("ELIAS", "Where's everything we found?")],
+          [.58, .92, L("MARCUS", "I don't know.")]]
+});
+
+S(20, {                                        /* 48 — THE PHOTOGRAPH */
+  set: "hq46", era: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [1.0, 1.66, 7.6], l: [-.4, 1.44, 10.0], f: 30 },
+                { p: [.4, 1.60, 8.2], l: [-.4, 1.42, 10.1], f: 27 }]);
+    CAM.shake = .20;
+  },
+  act: function (t, u) {
+    var e = place(ELIAS, -.6, 9.6, -.05); poseConsole(e, t, 1.05);
+    if (u > .60) { poseStand(e, t, { still: true }); lookAt(ELIAS, -1, 1.2, 10.5); }
+  },
+  lines: [[.30, .92, L("ELIAS", "Was this always like this?")]]
+});
+
+S(18, {                                        /* 49 — VICTOR WATCHES */
+  set: "alley", era: 1, dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-1.4, 12.8, 6.2], l: [1.2, 12.4, .4], f: 34 },
+                { p: [-1.0, 12.6, 5.4], l: [1.2, 12.3, .4], f: 31 }]);
+    CAM.shake = .22;
+  },
+  act: function (t, u) {
+    var v = place(VICTOR, 1.2, .2, .2);
+    v.root.position.y = 12.0;
+    v.airborne = true;
+    poseSurvey(v, t, .6);
+    lookAt(VICTOR, -1, 4, 20);
+  },
+  lines: [[.34, .90, L("VICTOR", "They'll forget.")]]
+});
+
+S(20, {                                        /* 50 — THE MEMORY ERASED */
+  set: "fac", era: 1, dark: 1,
+  cam: function (u) {
+    camOrbit(u, 0, 2.6, 14, 7.0, .4, 2.6, 3.2, 2.4, 40);
+    CAM.shake = .18;
+  },
+  act: function () { hideAll(); },
+  machine: .6,
+  fx: function (t, u) {
+    var k = Math.sin(u * Math.PI) * .5;
+    pulse(O.x, 2.5, O.z + 14, 1 + k * 30, k * .40);
+  },
+  lines: [[.30, .82, L("VICTOR", "They'll forget me.")]]
+});
+
+S(22, {                                        /* 51 — 1946 ENDS */
+  set: "hq46", era: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [2.8, 1.80, 4.6], l: [-1.2, 1.56, .2], f: 36 },
+                { p: [2.0, 1.76, 3.6], l: [-1.2, 1.54, 0], f: 32 }]);
+    CAM.shake = .20;
+  },
+  act: function (t, u) {
+    var e = place(ELIAS, -1.6, -.4, .55);
+    var m = place(MARCUS, .2, -1.6, .30);
+    poseStand(e, t, {}); poseStand(m, t, {});
+    headLook(m, headPos(e), .85);
+    if (u > .18 && u < .42) poseTalk(e, t, .5);
+    if (u > .46 && u < .62) poseTalk(m, t, .4);
+    if (u > .70) poseSurvey(e, t, .4);
+  },
+  lines: [[.18, .42, L("ELIAS", "Something's missing.")],
+          [.48, .62, L("MARCUS", "What?")],
+          [.70, .92, L("ELIAS", "I don't know.")]],
+  fade: function (u) { return smoother(inv(.86, 1, u)); }
+});
+
+/* =================================================== ACT III ========
+   PRESENT DAY
+   ==================================================================== */
+
+S(18, {                                        /* 52 — PRESENT DAY */
+  set: "cmd", dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [0, 3.4, 12.0], l: [0, 2.6, 2.0], f: 40 },
+                { p: [0, 3.1, 10.0], l: [0, 2.7, 1.8], f: 36 }]);
+    CAM.shake = .16;
+  },
+  act: function () { hideAll(); },
+  big: function (u) { return u > .18 && u < .62 ? "PRESENT DAY" : ""; },
+  fade: function (u) { return 1 - smoother(inv(0, .22, u)); }
+});
+
+S(22, {                                        /* 53 — THE ALLIANCE */
+  set: "cmd",
+  cam: function (u) {
+    camKeys(u, [{ p: [-1.2, 1.78, 10.4], l: [.2, 1.60, 6.4], f: 34 },
+                { p: [-.6, 1.74, 9.6], l: [.3, 1.58, 6.4], f: 31 }]);
+    CAM.shake = .20;
+  },
+  act: function (t, u) {
+    var pair = twoShot(KAI, RYDER, .2, 6.6, 0, 1.5);
+    poseStand(pair[0], t, {}); poseStand(pair[1], t, {});
+    if (u < .55) poseTalk(pair[0], t, .5); else poseTalk(pair[1], t, .45);
+  },
+  lines: [[.08, .54, L("KAI", "After everything we've been through, I never thought we'd become friends.")],
+          [.62, .94, L("RYDER", "Neither did I.")]]
+});
+
+S(18, {                                        /* 54 — MAYA'S DISCOVERY */
+  set: "cmd",
+  cam: function (u) {
+    camKeys(u, [{ p: [3.2, 1.84, 11.0], l: [-1.0, 1.62, 5.2], f: 38 },
+                { p: [2.4, 1.80, 9.6], l: [-1.0, 1.60, 5.2], f: 35 }]);
+    CAM.shake = .30;
+  },
+  act: function (t, u) {
+    var s = smooth(clamp(u / .45, 0, 1));
+    var m = place(MAYA, -1.4, 10.4 - s * 4.4, Math.PI);
+    if (u < .45) walkCycle(m, u * 26, 1, t); else poseTalk(m, t, .7);
+    var k = place(KAI, -.2, 4.4, .3); poseStand(k, t, {});
+    var r = place(RYDER, 1.4, 4.8, -.2); poseStand(r, t, { still: true });
+    look(KAI, MAYA, .85); look(RYDER, MAYA, .7);
+  },
+  lines: [[.30, .62, L("MAYA", "Guys, we have a problem.")],
+          [.70, .94, L("KAI", "What now?")]]
+});
+
+S(22, {                                        /* 55 — THE EARTH MAP */
+  set: "cmd",
+  cam: function (u) {
+    camKeys(u, [{ p: [7.6, 2.60, 12.4], l: [.4, 1.80, 5.6], f: 40 },
+                { p: [6.0, 2.40, 10.8], l: [.4, 1.76, 5.6], f: 35 }]);
+    CAM.shake = .22;
+  },
+  act: function (t, u) {
+    knot([MAYA, KAI, RYDER, JACE], .2, 5.6, O.x, O.z + 1.5, 1.9, t);
+    poseTalk(G(MAYA), t, u > .40 ? .6 : .2);
+    lookAt(KAI, 0, 2.9, 1.5); lookAt(RYDER, 0, 2.9, 1.5);
+  },
+  lines: [[.42, .92, L("MAYA", "There's something down there.")]]
+});
+
+S(20, {                                        /* 56 — NOVA'S RESEARCH */
+  set: "cmd",
+  cam: function (u) {
+    camKeys(u, [{ p: [-4.4, 1.86, 8.6], l: [.6, 1.64, 5.0], f: 36 },
+                { p: [-3.6, 1.82, 8.0], l: [.6, 1.62, 5.0], f: 33 }]);
+    CAM.shake = .24;
+  },
+  act: function (t, u) {
+    var s = smooth(clamp(u / .40, 0, 1));
+    var n = place(NOVA, 1.8, 8.6 - s * 3.0, Math.PI + .4);
+    if (u < .40) walkCycle(n, u * 24, .9, t); else poseTalk(n, t, .6);
+    var k = place(KAI, -.4, 4.8, .5); poseStand(k, t, {});
+    var r = place(RYDER, .9, 4.2, .1); poseStand(r, t, { still: true });
+    look(KAI, NOVA, .9); look(RYDER, NOVA, .7);
+  },
+  lines: [[.40, .82, L("NOVA", "And it's connected to 1946.")]]
+});
+
+S(20, {                                        /* 57 — THE PHOTOGRAPH */
+  set: "cmd",
+  cam: function (u) {
+    camKeys(u, [{ p: [10.4, 2.45, 9.6], l: [7.2, 1.72, 5.4], f: 36 },
+                { p: [9.8, 2.38, 9.0], l: [7.3, 1.70, 5.4], f: 33 }]);
+    CAM.shake = .22;
+  },
+  act: function (t, u) {
+    var n = place(NOVA, 7.4, 5.6, .05); poseConsole(n, t, 1.35);
+    var r = place(RYDER, 6.2, 6.8, -.5); poseStand(r, t, {});
+    var k = place(KAI, 8.6, 7.0, .5); poseStand(k, t, { still: true });
+    lookAt(RYDER, 7.5, 2.3, 4.2); lookAt(KAI, 7.5, 2.3, 4.2);
+    if (u < .48) poseTalk(r, t, .5);
+  },
+  lines: [[.12, .44, L("RYDER", "Who's that guy?")],
+          [.54, .96, L("NOVA", "That's what we're trying to figure out.")]]
+});
+
+S(20, {                                        /* 58 — THE CONNECTION */
+  set: "cmd",
+  cam: function (u) {
+    camKeys(u, [{ p: [-10.4, 2.45, 9.6], l: [-7.2, 1.72, 5.4], f: 36 },
+                { p: [-9.8, 2.38, 9.0], l: [-7.3, 1.70, 5.4], f: 33 }]);
+    CAM.shake = .22;
+  },
+  act: function (t, u) {
+    var m = place(MAYA, -7.4, 5.6, -.05); poseConsole(m, t, 1.35);
+    var k = place(KAI, -6.2, 6.8, .5); poseStand(k, t, {});
+    lookAt(KAI, -7.5, 2.3, 4.2);
+    if (u > .52) poseTalk(k, t, .4);
+  },
+  lines: [[.10, .42, L("MAYA", "Same symbol.")],
+          [.56, .92, L("KAI", "The Collector.")]]
+});
+
+S(22, {                                        /* 59 — THE VILLAIN RETURNS */
+  set: "fac", dark: 2, modern: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-4.6, 2.6, 26.0], l: [0, 2.2, 16.0], f: 38 },
+                { p: [-3.0, 2.2, 23.4], l: [0, 2.1, 16.2], f: 34 }]);
+    CAM.shake = .24;
+  },
+  act: function (t, u) {
+    var s = smooth(u);
+    var c = place(COLLECTOR, -.2, 20.0 - s * 2.6, Math.PI);
+    if (u < .70) walkCycle(c, u * 18, .62, t); else poseSurvey(c, t, .6);
+    lookAt(COLLECTOR, 0, 2.6, 14);
+  },
+  machine: .4,
+  lines: [[.44, .74, L("COLLECTOR", "After eighty years...")],
+          [.80, .99, L("COLLECTOR", "It's finally time.")]]
+});
+
+S(18, {                                        /* 60 — THE PLAN */
+  set: "fac", dark: 2, modern: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [2.6, 1.80, 16.6], l: [-.4, 1.72, 18.4], f: 32 },
+                { p: [2.2, 1.78, 16.2], l: [-.4, 1.70, 18.5], f: 30 }]);
+    CAM.shake = .22;
+  },
+  act: function (t, u) {
+    var c = place(COLLECTOR, -.5, 18.8, 2.19); poseTalk(c, t, .5);
+    lookAt(COLLECTOR, 2.4, 1.75, 16.4);
+  },
+  machine: .4,
+  lines: [[.16, .92, L("COLLECTOR", "The gold beneath this planet belongs to me.")]]
+});
+
+S(20, {                                        /* 61 — WARNING */
+  set: "cmd",
+  cam: function (u) {
+    camKeys(u, [{ p: [-2.0, 1.80, 8.0], l: [-.2, 1.62, 4.8], f: 34 },
+                { p: [-1.4, 1.76, 7.4], l: [-.2, 1.60, 4.8], f: 31 }]);
+    CAM.shake = .30;
+  },
+  act: function (t, u) {
+    var k = place(KAI, -.2, 5.0, .1); poseStand(k, t, {});
+    var r = place(RYDER, 1.5, 5.6, -.3); poseStand(r, t, { still: true });
+    var m = place(MAYA, -1.9, 6.0, .4); poseConsole(m, t, 1.2);
+    if (u > .38 && u < .60) poseTalk(k, t, .55);
+    lookAt(KAI, -8, 3.6, -12); lookAt(RYDER, -8, 3.6, -12);
+  },
+  alarm: 1,
+  lines: [[.10, .34, L("COLLECTOR", "You found the truth.")],
+          [.40, .58, L("KAI", "Who are you?")],
+          [.64, .98, L("COLLECTOR", "Someone your history tried to forget.")]]
+});
+
+S(20, {                                        /* 62 — THE THREAT */
+  set: "cmd",
+  cam: function (u) {
+    camKeys(u, [{ p: [3.0, 1.82, 8.2], l: [.4, 1.64, 5.0], f: 34 },
+                { p: [2.4, 1.78, 7.6], l: [.4, 1.62, 5.0], f: 31 }]);
+    CAM.shake = .32;
+  },
+  act: function (t, u) {
+    var r = place(RYDER, .2, 5.2, -.15); poseStand(r, t, {});
+    var k = place(KAI, -1.5, 5.8, .25); poseFold(k, t);
+    if (u > .38 && u < .56) poseShout(r, t, .5);
+    lookAt(RYDER, -8, 3.6, -12); lookAt(KAI, -8, 3.6, -12);
+  },
+  alarm: 1,
+  lines: [[.08, .34, L("COLLECTOR", "Give me access to the Earth's core.")],
+          [.40, .54, L("RYDER", "No.")],
+          [.62, .94, L("COLLECTOR", "Then I'll take it.")]]
+});
+
+S(20, {                                        /* 63 — THE ALLIANCE RESPONDS */
+  set: "cmd",
+  cam: function (u) {
+    camKeys(u, [{ p: [-.4, 1.80, 9.4], l: [.6, 1.64, 5.6], f: 32 },
+                { p: [.2, 1.76, 8.6], l: [.7, 1.62, 5.6], f: 29 }]);
+    CAM.shake = .24;
+  },
+  act: function (t, u) {
+    var pair = twoShot(KAI, RYDER, .6, 5.8, 0, 1.4);
+    poseStand(pair[0], t, {}); poseStand(pair[1], t, {});
+    if (u < .50) poseTalk(pair[0], t, .55); else poseTalk(pair[1], t, .5);
+  },
+  lines: [[.14, .48, L("KAI", "We protect the planet.")],
+          [.58, .92, L("RYDER", "Together.")]]
+});
+
+S(20, {                                        /* 64 — THE PLAN */
+  set: "cmd",
+  cam: function (u) {
+    camKeys(u, [{ p: [8.4, 2.80, 13.6], l: [.4, 1.80, 6.2], f: 40 },
+                { p: [6.8, 2.60, 12.0], l: [.4, 1.78, 6.2], f: 36 }]);
+    CAM.shake = .22;
+  },
+  act: function (t, u) {
+    knot([MAYA, NOVA, KAI, RYDER, JACE, ZANE], .2, 6.2, O.x, O.z + 1.5, 2.4, t);
+    if (u < .52) poseTalk(G(MAYA), t, .6); else poseTalk(G(NOVA), t, .55);
+  },
+  lines: [[.12, .48, L("MAYA", "We can't destroy the gold.")],
+          [.58, .92, L("NOVA", "So we protect it.")]]
+});
+
+S(22, {                                        /* 65 — UNDERGROUND MISSION */
+  set: "tun",
+  cam: function (u) {
+    camKeys(u, [{ p: [0, 3.6, 46], l: [0, 2.0, 22], f: 44 },
+                { p: [0, 2.4, 34], l: [0, 1.8, 12], f: 38 }]);
+    CAM.shake = .30;
+  },
+  act: function (t, u) {
+    var s = smooth(u) * 10;
+    var order = [KAI, RYDER, MAYA, NOVA, LEO, DRE];
+    var ox = [-1.6, .0, 1.6, -1.0, 1.0, -.2];
+    for (var k = 0; k < order.length; k++) {
+      var c = place(order[k], ox[k], 26 - s - k * 1.9, Math.PI);
+      walkCycle(c, (26 - s - k * 1.9) / 1.42 * -Math.PI * 2 + c.seed, .92, t);
+    }
+  },
+  lines: [[.28, .62, L("LEO", "We're really going under the Earth?")],
+          [.70, .94, L("DRE", "Apparently.")]]
+});
+
+S(20, {                                        /* 66 — THE TUNNEL */
+  set: "tun",
+  cam: function (u) {
+    camKeys(u, [{ p: [3.6, 2.2, 6], l: [-1.0, 2.0, -14], f: 40 },
+                { p: [2.6, 2.1, -4], l: [-1.0, 1.9, -24], f: 36 }]);
+    CAM.shake = .34;
+  },
+  act: function (t, u) {
+    var s = smooth(u) * 12;
+    var order = [JACE, ZANE, KAI, RYDER, MAYA];
+    var ox = [-1.5, .3, 1.7, -.6, 1.1];
+    for (var k = 0; k < order.length; k++) {
+      var z = -8 - s - k * 2.0;
+      var c = place(order[k], ox[k], z, Math.PI);
+      walkCycle(c, z / 1.42 * -Math.PI * 2 + c.seed, .9, t);
+      if (k === 0 && u > .12 && u < .46) poseSurvey(c, t, .5);
+    }
+  },
+  lines: [[.14, .46, L("JACE", "This place is enormous.")],
+          [.56, .92, L("ZANE", "Don't get distracted.")]]
+});
+
+S(22, {                                        /* 67 — THE ANCIENT DOOR */
+  set: "tun",
+  cam: function (u) {
+    camKeys(u, [{ p: [4.0, 2.8, -52], l: [0, 4.4, -71], f: 42 },
+                { p: [2.2, 2.3, -59], l: [0, 4.0, -72], f: 36 }]);
+    CAM.shake = .26;
+  },
+  act: function (t, u) {
+    var order = [KAI, MAYA, RYDER, NOVA];
+    var ox = [-1.8, -.5, .9, 2.1];
+    for (var k = 0; k < order.length; k++) {
+      var c = place(order[k], ox[k], -64 + k * .7, Math.PI);
+      poseSurvey(c, t, k === 0 ? .8 : .35);
+      lookAt(order[k], 0, 6.4, -74);
+    }
+  },
+  lines: [[.24, .56, L("KAI", "That's not natural.")],
+          [.66, .90, L("MAYA", "No.")]]
+});
+
+S(18, {                                        /* 68 — THE SYMBOL */
+  set: "tun",
+  cam: function (u) {
+    camKeys(u, [{ p: [-4.2, 3.0, -59.0], l: [.6, 3.6, -68.0], f: 36 },
+                { p: [-3.4, 3.4, -60.6], l: [.6, 3.8, -68.4], f: 33 }]);
+    CAM.shake = .22;
+  },
+  act: function (t, u) {
+    var r = place(RYDER, 1.4, -67.4, Math.PI + .2); poseSurvey(r, t, .8);
+    var k = place(KAI, -.6, -66.0, Math.PI - .1); poseStand(k, t, {});
+    lookAt(RYDER, 0, 6.4, -74); lookAt(KAI, 0, 6.4, -74);
+  },
+  glyphs: 1,
+  lines: [[.34, .90, L("RYDER", "We're in the right place.")]]
+});
+
+S(22, {                                        /* 69 — THE DOOR OPENS */
+  set: "tun",
+  cam: function (u) {
+    camKeys(u, [{ p: [3.4, 2.6, -58], l: [0, 5.6, -73], f: 40 },
+                { p: [1.6, 3.2, -64], l: [0, 6.0, -74], f: 36 }]);
+    CAM.shake = .44; CAM.shakeFreq = 1.3;
+  },
+  act: function (t, u) {
+    var m = place(MAYA, -1.6, -68.0, Math.PI); poseConsole(m, t, 1.2);
+    var k = place(KAI, .6, -66.4, Math.PI - .2); poseStand(k, t, {});
+    var r = place(RYDER, 2.0, -65.6, Math.PI - .3); poseStand(r, t, {});
+    lookAt(KAI, 0, 6.4, -74); lookAt(RYDER, 0, 6.4, -74);
+  },
+  glyphs: 1, doorOpen: 1
+});
+
+S(24, {                                        /* 70 — THE GOLD */
+  set: "gold",
+  cam: function (u) {
+    camKeys(u, [{ p: [0, 3.4, 50], l: [0, 6.0, 14], f: 46 },
+                { p: [7.5, 3.0, 47], l: [-.5, 2.2, 38], f: 40 },
+                { p: [9.5, 2.6, 45], l: [-.5, 2.0, 37.5], f: 34 }]);
+    CAM.shake = .24;
+  },
+  act: function (t, u) {
+    var order = [KAI, RYDER, MAYA, NOVA, LEO, JACE, ZANE, DRE];
+    var ox = [-3.4, -1.6, .2, 2.0, 3.8, -2.6, 1.1, 4.6];
+    for (var k = 0; k < order.length; k++) {
+      var c = place(order[k], ox[k], 39.5 - (k % 3) * 1.7, Math.PI);
+      poseSurvey(c, t, k < 2 ? .9 : .35);
+      lookAt(order[k], ox[k] * .3, 6, 4);
+    }
+  },
+  lines: [[.44, .74, L("LEO", "That's... unbelievable.")],
+          [.80, .99, L("MAYA", "Now we know what he wants.")]],
+  fade: function (u) { return 1 - smoother(inv(0, .18, u)); }
+});
+
+/* =================================================== ACT IV =========
+   THE COLLECTOR
+   ==================================================================== */
+
+S(20, {                                        /* 71 — INVASION */
+  set: "gold", dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-6, 5.0, 40], l: [2, 3.0, 22], f: 42 },
+                { p: [-3, 3.2, 34], l: [3, 2.4, 20], f: 38 }]);
+    CAM.shake = .48; CAM.shakeFreq = 1.3;
+  },
+  act: function (t, u) {
+    var r = place(RYDER, 2.4, 26.0, .5); poseStand(r, t, {});
+    var k = place(KAI, .6, 27.0, .3); poseShout(k, t, u > .48 ? .9 : .3);
+    advanceRow(9, t, O.x + 4, O.z + 46, 16, Math.PI, 2.6, 0);
+    lookAt(RYDER, 4, 2, 44); lookAt(KAI, 4, 2, 44);
+  },
+  lines: [[.14, .44, L("RYDER", "They're here.")],
+          [.54, .92, L("KAI", "Defensive positions!")]]
+});
+
+S(20, {                                        /* 72 — BATTLE */
+  set: "gold", dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [8.0, 2.6, 30], l: [1.0, 1.7, 22], f: 40 },
+                { p: [6.0, 2.4, 27], l: [.5, 1.7, 20], f: 36 }]);
+    CAM.shake = .70; CAM.shakeFreq = 1.7;
+  },
+  act: function (t, u) {
+    /* stage them first, then let the duel drive the limbs */
+    var j = place(JACE, 1.0, 22.0, Math.PI);
+    var z = place(ZANE, 1.0, 20.4, 0);
+    duel(j, z, t, 3, 1.25, 1.5);
+    j.root.position.set(O.x + 1.0, 0, O.z + 22);
+    z.root.position.set(O.x + 1.0, 0, O.z + 20.4);
+    j.root.rotation.y = Math.PI; z.root.rotation.y = 0;
+    battleLine(6, t, O.x - 6, O.z + 26, 9, .4);
+  },
+  lines: [[.16, .48, L("JACE", "Left side!")],
+          [.56, .88, L("ZANE", "Got it!")]]
+});
+
+S(20, {                                        /* 73 — MAYA AND NOVA */
+  set: "gold", dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [14.6, 2.10, 6.0], l: [11.4, 1.60, 5.6], f: 34 },
+                { p: [14.0, 2.06, 6.6], l: [11.3, 1.58, 5.8], f: 31 }]);
+    CAM.shake = .44;
+  },
+  act: function (t, u) {
+    var m = place(MAYA, 11.0, 6.6, 1.3); poseConsole(m, t, 1.05);
+    var n = place(NOVA, 11.8, 8.4, 1.5); poseConsole(n, t, 1.05);
+    if (u > .48) { poseStand(n, t, {}); look(NOVA, MAYA, .8); }
+  },
+  lines: [[.10, .46, L("NOVA", "If he activates this machine—")],
+          [.52, .96, L("MAYA", "The entire planet could be destabilized.")]]
+});
+
+S(22, {                                        /* 74 — THE COLLECTOR ENTERS */
+  set: "gold", dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [4.8, 2.10, 8.4], l: [.6, 1.80, 16.2], f: 38 },
+                { p: [4.0, 2.05, 9.6], l: [.6, 1.78, 16.4], f: 34 }]);
+    CAM.shake = .34;
+  },
+  act: function (t, u) {
+    var s = smooth(u);
+    var c = place(COLLECTOR, .5, 20.0 - s * 3.2, Math.PI);
+    if (u < .60) walkCycle(c, u * 16, .58, t); else poseSurvey(c, t, .6);
+    var k = place(KAI, -1.9, 12.6, .1); poseStand(k, t, {});
+    var r = place(RYDER, 1.9, 12.2, -.1); poseStand(r, t, {});
+    look(KAI, COLLECTOR, .9); look(RYDER, COLLECTOR, .85);
+    if (u > .66) poseShout(k, t, .5);
+  },
+  lines: [[.30, .56, L("COLLECTOR", "Beautiful.")],
+          [.68, .96, L("KAI", "You're not taking it.")]]
+});
+
+S(22, {                                        /* 75 — THE TRUTH */
+  set: "gold", dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-2.8, 1.90, 18.4], l: [.6, 1.76, 16.0], f: 32 },
+                { p: [-2.0, 1.86, 17.8], l: [.7, 1.74, 16.0], f: 29 }]);
+    CAM.shake = .30;
+  },
+  act: function (t, u) {
+    /* the unmasking is a cut between two rigs standing in the same place */
+    var who = u < .44 ? COLLECTOR : VICTOR;
+    var v = place(who, .8, 15.4, .25); poseStand(v, t, {});
+    var r = place(RYDER, -.8, 18.0, .25 - Math.PI); poseStand(r, t, {});
+    var k = place(KAI, .9, 19.0, .05 - Math.PI); poseStand(k, t, { still: true });
+    headLook(r, headPos(v), .9); headLook(k, headPos(v), .85); headLook(v, headPos(r), .7);
+    if (u > .52 && u < .70) poseTalk(r, t, .45);
+  },
+  lines: [[.50, .70, L("RYDER", "Victor...")],
+          [.78, .98, L("KAI", "That's impossible.")]]
+});
+
+S(24, {                                        /* 76 — 1946 CONNECTION */
+  set: "gold", dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [3.2, 1.92, 18.2], l: [.4, 1.78, 15.6], f: 32 },
+                { p: [2.6, 1.88, 17.6], l: [.4, 1.76, 15.6], f: 29 }]);
+    CAM.shake = .28;
+  },
+  act: function (t, u) {
+    var v = place(VICTOR, .4, 15.0, .1); poseStand(v, t, {});
+    var k = place(KAI, .1, 18.2, .1 - Math.PI); poseStand(k, t, {});
+    headLook(v, headPos(k), .8); headLook(k, headPos(v), .9);
+    if (u < .30 || u > .70) poseTalk(v, t, .5); else poseTalk(k, t, .5);
+  },
+  lines: [[.06, .30, L("VICTOR", "I was there in 1946.")],
+          [.38, .64, L("KAI", "You erased their memories.")],
+          [.70, .98, L("VICTOR", "Because they weren't ready to know.")]]
+});
+
+S(24, {                                        /* 77 — HIS MOTIVE */
+  set: "gold", dark: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-3.4, 1.94, 18.0], l: [.5, 1.78, 15.4], f: 33 },
+                { p: [-2.6, 1.90, 17.4], l: [.5, 1.76, 15.4], f: 30 }]);
+    CAM.shake = .28;
+  },
+  act: function (t, u) {
+    var v = place(VICTOR, .5, 14.8, .2); poseStand(v, t, {});
+    var r = place(RYDER, -.6, 18.0, .2 - Math.PI); poseStand(r, t, {});
+    var k = place(KAI, 1.2, 18.8, .0 - Math.PI); poseStand(k, t, { still: true });
+    headLook(v, headPos(r), .8); headLook(r, headPos(v), .9); headLook(k, headPos(v), .8);
+    if (u < .34 || u > .58) poseTalk(v, t, .5);
+  },
+  lines: [[.06, .34, L("VICTOR", "I don't want the gold for wealth.")],
+          [.40, .56, L("RYDER", "Then why?")],
+          [.60, .98, L("VICTOR", "Because whoever controls it controls the future.")]]
+});
+
+S(22, {                                        /* 78 — THE MACHINE */
+  set: "gold", dark: 1, rigOn: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [10, 4.0, 26], l: [0, 8.0, 2], f: 42 },
+                { p: [7, 3.4, 22], l: [0, 7.0, 2], f: 38 }]);
+    CAM.shake = .62; CAM.shakeFreq = 1.5;
+  },
+  act: function (t, u) {
+    var v = place(VICTOR, 2.6, 12.4, .2); poseConsole(v, t, 1.1);
+    var m = place(MAYA, 11.4, 7.0, 1.3); poseShout(m, t, u > .55 ? .8 : .2);
+    lookAt(VICTOR, 0, 8, 2);
+  },
+  lines: [[.58, .94, L("MAYA", "He's extracting it!")]]
+});
+
+S(20, {                                        /* 79 — THE PLANET SHAKES */
+  set: "ruins", dark: 1, quake: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [16, 4.2, 40], l: [-6, 9, -14], f: 46 },
+                { p: [11, 3.0, 31], l: [-8, 8, -18], f: 42 }]);
+    CAM.shake = 1.5; CAM.shakeFreq = 2.4;
+    CAM.roll = Math.sin(u * 9) * .02;
+  },
+  act: function () { hideAll(); },
+  lines: [[.34, .82, L("LEO", "The whole planet's moving!")]]
+});
+
+S(20, {                                        /* 80 — KAI'S DECISION */
+  set: "gold", dark: 1, rigOn: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-1.0, 1.86, 22.0], l: [.4, 1.70, 18.4], f: 32 },
+                { p: [-.4, 1.82, 21.4], l: [.5, 1.68, 18.4], f: 29 }]);
+    CAM.shake = .60; CAM.shakeFreq = 1.6;
+  },
+  act: function (t, u) {
+    var pair = twoShot(KAI, RYDER, .4, 18.6, 0, 1.4);
+    poseStand(pair[0], t, {}); poseStand(pair[1], t, {});
+    if (u < .34 || u > .62) poseTalk(pair[0], t, .55); else poseTalk(pair[1], t, .45);
+  },
+  lines: [[.08, .34, L("KAI", "We shut the machine down.")],
+          [.40, .56, L("RYDER", "How?")],
+          [.64, .96, L("KAI", "However we have to.")]]
+});
+
+S(20, {                                        /* 81 — SPLIT UP */
+  set: "gold", dark: 1, rigOn: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [0, 4.6, 30], l: [0, 2.2, 20], f: 42 },
+                { p: [1.6, 3.6, 27], l: [0, 2.0, 19], f: 38 }]);
+    CAM.shake = .56; CAM.shakeFreq = 1.4;
+  },
+  act: function (t, u) {
+    var s = smooth(clamp((u - .40) / .60, 0, 1));
+    var k = place(KAI, -2.4, 21.0, .6); poseRally(k, clamp(u / .4, 0, 1), t);
+    var r = place(RYDER, 2.4, 21.4, -.6); poseRally(r, clamp(u / .4, 0, 1), t);
+    var blue = [JACE, MAYA, LEO], red = [ZANE, NOVA, DRE];
+    for (var i = 0; i < 3; i++) {
+      var b = place(blue[i], -4.0 - s * 4 - i * 1.2, 23.5 - s * 3 - i * .8, .7);
+      var h = place(red[i], 4.0 + s * 4 + i * 1.2, 23.5 - s * 3 - i * .8, -.7);
+      if (s > .01) { walkCycle(b, u * 22 + i, .85, t); walkCycle(h, u * 22 + i * 1.4, .85, t); }
+      else { poseStand(b, t, { still: true }); poseStand(h, t, { still: true }); }
+    }
+  },
+  lines: [[.14, .46, L("KAI", "Blue Team, with me.")],
+          [.56, .90, L("RYDER", "Red Team, follow me.")]]
+});
+
+S(20, {                                        /* 82 — CONTROL ROOM */
+  set: "gold", dark: 1, rigOn: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [15.0, 2.20, 4.4], l: [11.4, 1.62, 6.4], f: 34 },
+                { p: [14.4, 2.16, 5.0], l: [11.3, 1.60, 6.6], f: 31 }]);
+    CAM.shake = .50;
+  },
+  act: function (t, u) {
+    var m = place(MAYA, 11.0, 6.2, 1.35); poseConsole(m, t, 1.05);
+    var n = place(NOVA, 11.6, 8.2, 1.5); poseConsole(n, t, 1.05);
+    if (u > .52) { poseStand(n, t, {}); look(NOVA, MAYA, .8); }
+  },
+  lines: [[.12, .44, L("MAYA", "Three systems.")],
+          [.54, .94, L("NOVA", "Then we hit all three.")]]
+});
+
+S(22, {                                        /* 83 — JACE AND ZANE */
+  set: "gold", dark: 1, rigOn: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-2.6, 1.92, 40], l: [.4, 1.74, 44.6], f: 34 },
+                { p: [-2.0, 1.88, 40.6], l: [.5, 1.72, 44.7], f: 31 }]);
+    CAM.shake = .58; CAM.shakeFreq = 1.4;
+  },
+  act: function (t, u) {
+    var j = place(JACE, -.6, 44.2, Math.PI + .3);
+    var z = place(ZANE, 1.4, 44.8, Math.PI - .2);
+    if (u < .42) { poseFight(j, t, .8); poseFight(z, t, .8); }
+    else { poseStand(j, t, {}); poseStand(z, t, {}); headLook(j, headPos(z), .8); headLook(z, headPos(j), .8); }
+    if (u > .46 && u < .62) poseTalk(j, t, .5);
+  },
+  lines: [[.44, .58, L("JACE", "You know...")],
+          [.60, .70, L("ZANE", "What?")],
+          [.72, .90, L("JACE", "We're actually pretty good at this.")],
+          [.92, .99, L("ZANE", "Don't ruin the moment.")]]
+});
+
+S(22, {                                        /* 84 — KAI CONFRONTS VICTOR */
+  set: "gold", dark: 1, rigOn: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-3.2, 1.92, 14.4], l: [.6, 1.78, 11.8], f: 33 },
+                { p: [-2.4, 1.88, 13.8], l: [.6, 1.76, 11.8], f: 30 }]);
+    CAM.shake = .52;
+  },
+  act: function (t, u) {
+    var v = place(VICTOR, .6, 11.2, .2); poseStand(v, t, {});
+    var k = place(KAI, -.4, 14.4, .2 - Math.PI); poseStand(k, t, {});
+    headLook(v, headPos(k), .8); headLook(k, headPos(v), .9);
+    if (u < .48) poseTalk(k, t, .6); else poseTalk(v, t, .5);
+  },
+  lines: [[.10, .44, L("KAI", "This ends now.")],
+          [.54, .96, L("VICTOR", "You still don't understand.")]]
+});
+
+S(24, {                                        /* 85 — THE MEMORY */
+  set: "gold", dark: 1, rigOn: 1, flashback: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [4.0, 2.6, 15.6], l: [.2, 2.4, 11.6], f: 36 },
+                { p: [3.0, 2.5, 14.8], l: [.2, 2.4, 11.6], f: 33 }]);
+    CAM.shake = .34;
+  },
+  act: function (t, u) {
+    var v = place(VICTOR, .2, 11.0, .3); poseConsole(v, t, 1.5);
+    var k = place(KAI, .0, 14.2, .3 - Math.PI); poseStand(k, t, {});
+    headLook(k, headPos(v), .9);
+  },
+  fx: function (t, u) {
+    var k = smooth(inv(.12, .34, u)) * (1 - smooth(inv(.78, .96, u)));
+    if (k > .001) pulse(O.x + .2, 2.6, O.z + 12.6, 1.4 * k, k * .30);
+  },
+  lines: [[.24, .92, L("VICTOR", "Your ancestors almost destroyed everything trying to reach the gold.")]]
+});
+
+S(24, {                                        /* 86 — KAI UNDERSTANDS */
+  set: "gold", dark: 1, rigOn: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-2.4, 1.90, 15.4], l: [.5, 1.78, 12.0], f: 32 },
+                { p: [-1.8, 1.86, 14.8], l: [.5, 1.76, 12.0], f: 29 }]);
+    CAM.shake = .48;
+  },
+  act: function (t, u) {
+    var v = place(VICTOR, .5, 11.4, .22); poseStand(v, t, {});
+    var k = place(KAI, -.3, 14.6, .22 - Math.PI); poseStand(k, t, {});
+    headLook(v, headPos(k), .8); headLook(k, headPos(v), .9);
+    if (u < .32 || u > .58) poseTalk(k, t, .55); else poseTalk(v, t, .4);
+  },
+  lines: [[.06, .38, L("KAI", "So you erased their memories to protect it.")],
+          [.42, .54, L("VICTOR", "Yes.")],
+          [.60, .96, L("KAI", "Then why are you trying to take it now?")]]
+});
+
+S(22, {                                        /* 87 — THE CONFESSION */
+  set: "gold", dark: 1, rigOn: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [3.0, 1.88, 14.8], l: [.4, 1.76, 11.6], f: 31 },
+                { p: [2.4, 1.86, 14.2], l: [.4, 1.74, 11.6], f: 28 }]);
+    CAM.shake = .46;
+  },
+  act: function (t, u) {
+    var v = place(VICTOR, .4, 11.0, .16); poseStand(v, t, {});
+    var k = place(KAI, .1, 14.4, .16 - Math.PI); poseStand(k, t, { still: true });
+    headLook(v, headPos(k), .85); headLook(k, headPos(v), .9);
+    if (u < .52) poseTalk(v, t, .5); else poseTalk(k, t, .5);
+  },
+  lines: [[.06, .50, L("VICTOR", "Because I stopped believing people could be trusted with it.")],
+          [.58, .96, L("KAI", "And you think you're different?")]]
+});
+
+S(18, {                                        /* 88 — THE MACHINE FAILS */
+  set: "gold", dark: 1, rigOn: 1, sysDown: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [15.2, 2.10, 5.0], l: [11.4, 1.60, 6.6], f: 33 },
+                { p: [14.6, 2.06, 5.6], l: [11.3, 1.58, 6.8], f: 30 }]);
+    CAM.shake = .62; CAM.shakeFreq = 1.5;
+  },
+  act: function (t, u) {
+    var m = place(MAYA, 11.0, 6.4, 1.35);
+    if (u < .55) poseConsole(m, t, 1.05); else poseShout(m, t, .7);
+  },
+  lines: [[.58, .94, L("MAYA", "One down!")]]
+});
+
+S(18, {                                        /* 89 — SECOND SYSTEM */
+  set: "gold", dark: 1, rigOn: 1, sysDown: 2,
+  cam: function (u) {
+    camKeys(u, [{ p: [-14.8, 2.10, 4.2], l: [-11.0, 1.60, 6.4], f: 33 },
+                { p: [-14.2, 2.06, 4.8], l: [-11.0, 1.58, 6.6], f: 30 }]);
+    CAM.shake = .66; CAM.shakeFreq = 1.6;
+  },
+  act: function (t, u) {
+    var n = place(NOVA, -10.6, 6.6, 1.85);
+    if (u < .55) poseConsole(n, t, 1.05); else poseShout(n, t, .7);
+  },
+  lines: [[.58, .92, L("NOVA", "Two!")]]
+});
+
+S(22, {                                        /* 90 — FINAL SYSTEM */
+  set: "gold", dark: 1, rigOn: 2, sysDown: 3,
+  cam: function (u) {
+    camKeys(u, [{ p: [-9.0, 2.60, 19.5], l: [-2.8, 1.85, 13.4], f: 40 },
+                { p: [-8.0, 2.50, 18.4], l: [-2.8, 1.82, 13.4], f: 36 }]);
+    CAM.shake = 1.10; CAM.shakeFreq = 2.2;
+    CAM.roll = Math.sin(u * 14) * .016;
+  },
+  act: function (t, u) {
+    var m = place(MAYA, -4.2, 12.6, .5); poseShout(m, t, u < .5 ? .8 : .3);
+    var k = place(KAI, -1.6, 14.0, .2); poseShout(k, t, u > .5 ? .95 : .2);
+    lookAt(MAYA, 0, 8, 2);
+  },
+  big: function (u) { return u > .48 ? "CRITICAL" : ""; },
+  lines: [[.10, .46, L("MAYA", "This one's going critical!")],
+          [.54, .92, L("KAI", "Everyone out!")]]
+});
+
+/* ==================================================== ACT V =========
+   THE DESTRUCTION
+   ==================================================================== */
+
+S(24, {                                        /* 91 — ESCAPE */
+  set: "tun", dark: 1, collapse: 1,
+  cam: function (u) {
+    var s = smooth(u);
+    camSet(0, 2.4, -34 + s * 44, 0, 2.0, -54 + s * 44, 42);
+    CAM.shake = 1.2; CAM.shakeFreq = 2.2;
+    CAM.roll = Math.sin(u * 11) * .014;
+  },
+  act: function (t, u) {
+    var s = smooth(u) * 44;
+    var order = [KAI, RYDER, MAYA, NOVA, JACE, ZANE, LEO, DRE];
+    var ox = [-1.9, -.6, .8, 2.0, -1.4, .2, 1.5, -.2];
+    for (var k = 0; k < order.length; k++) {
+      var z = -48 + s - (k % 4) * 2.4;
+      var c = place(order[k], ox[k], z, 0);
+      runCycle(c, z / 1.95 * Math.PI * 2 + c.seed, 1, t);
+    }
+  },
+  lines: [[.18, .48, L("RYDER", "Keep moving!")],
+          [.56, .92, L("KAI", "Nobody gets left behind!")]]
+});
+
+S(22, {                                        /* 92 — THE SURFACE */
+  set: "ruins", dark: 1, rain: .7, quake: 1, shock: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [2, 3.0, 22], l: [-2, 6.0, -8], f: 44 },
+                { p: [0, 6.0, 18], l: [-4, 10.0, -20], f: 46 }]);
+    CAM.shake = 1.4; CAM.shakeFreq = 2.4;
+    CAM.roll = Math.sin(u * 8) * .022;
+  },
+  act: function (t, u) {
+    var order = [KAI, RYDER, MAYA, NOVA, JACE, ZANE];
+    var ox = [-2.2, -.8, .6, 2.0, -1.6, 1.2];
+    for (var k = 0; k < order.length; k++) {
+      var c = place(order[k], ox[k], 12 - smooth(u) * 3 - (k % 3) * 1.6, .1);
+      if (u < .34) runCycle(c, u * 30 + k, 1, t);
+      else poseCover(c, t, u > .60);
+      if (u >= .34) lookAt(order[k], -4, 12, -24);
+    }
+  },
+  fx: function (t, u) {
+    if (u > .30) {
+      var k = inv(.30, .62, u);
+      pulse(O.x - 4, 3, O.z - 30, 4 + k * 130, (1 - k) * .55);
+    }
+  }
+});
+
+S(24, {                                        /* 93 — THE BUILDINGS FALL */
+  set: "ruins", dark: 1, rain: .9, collapseHQ: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [-2, 3.4, 20], l: [-16, 8, -4], f: 42 },
+                { p: [1, 2.2, 14], l: [-14, 5, -4], f: 38 },
+                { p: [3, 1.9, 10], l: [1, 1.7, 4], f: 34 }]);
+    CAM.shake = 1.0; CAM.shakeFreq = 2.0;
+  },
+  act: function (t, u) {
+    var k = place(KAI, .2, 5.0, 2.6);
+    var r = place(RYDER, 2.2, 6.0, 2.2);
+    if (u < .55) { poseCover(k, t, false); poseCover(r, t, false); }
+    else { poseStand(k, t, {}); poseSurvey(r, t, .7); }
+    lookAt(KAI, -17, 8, -6);
+    if (u > .70) lookAt(RYDER, 19, 6, 10);
+  },
+  lines: [[.44, .66, L("KAI", "No...")],
+          [.78, .98, L("RYDER", "Our teams...")]]
+});
+
+S(26, {                                        /* 94 — BACK TO SCENE 1 */
+  set: "ruins", dark: 1, rain: 1,
+  cam: function (u) {
+    /* the exact move from the opening, so the audience recognises it */
+    camKeys(u, [{ p: [0, 9, 24], l: [1, 2.2, 2], f: 44 },
+                { p: [1.5, 2.1, 12], l: [1, 1.7, 2], f: 36 },
+                { p: [1.2, 1.80, 6.4], l: [1.2, 1.68, 2.4], f: 32 }]);
+    CAM.shake = .30;
+  },
+  act: function (t, u) {
+    var pair = twoShot(KAI, RYDER, 1, 2, 0, 1.9);
+    poseStand(pair[0], t, {}); poseStand(pair[1], t, {});
+    if (u > .40 && u < .70) poseTalk(pair[0], t, .5);
+    if (u > .74) poseTalk(pair[1], t, .45);
+  },
+  lines: [[.44, .70, L("KAI", "We can't let this be the end.")],
+          [.78, .96, L("RYDER", "It isn't.")]]
+});
+
+S(34, {                                        /* 95 — THE NEW BEGINNING */
+  set: "ruins", dawnLight: 1,
+  /* the rain stops over the course of the shot, which is the whole point */
+  rain: function (u) { return 1 - smooth(inv(.08, .58, u)); },
+  cam: function (u) {
+    camKeys(u, [{ p: [2.6, 1.72, 5.4], l: [1.0, 1.10, 2.6], f: 34 },
+                { p: [3.0, 2.4, 8.0], l: [1.0, 1.60, 2.6], f: 38 },
+                { p: [6, 22, 30], l: [0, 6, -10], f: 46 },
+                { p: [10, 58, 68], l: [-4, 4, -26], f: 50 }]);
+    CAM.shake = .22 * (1 - u);
+  },
+  act: function (t, u) {
+    var k = place(KAI, .8, 2.2, .35);
+    var r = place(RYDER, 2.4, 3.0, -.20);
+    if (u < .30) poseConsole(k, t, .35);          /* picking it out of the rubble */
+    else poseConsole(k, t, 1.15);                 /* holding it up */
+    poseStand(r, t, {});
+    headLook(r, headPos(k), .8);
+    if (u > .74) { poseStand(k, t, {}); lookAt(KAI, -10, 30, -60); lookAt(RYDER, -10, 30, -60); }
+  },
+  fx: function (t, u) {
+    if (u > .80) {
+      var k = inv(.80, 1, u);
+      pulse(O.x - 6, .2, O.z - 40, 1 + k * 3, .35 * Math.sin(k * Math.PI));
+    }
+  },
+  lines: [[.20, .46, L("KAI", "They erased their memories...")],
+          [.50, .74, L("RYDER", "But they couldn't erase the truth forever.")],
+          [.80, .90, L("KAI", "We rebuild.")],
+          [.91, .99, L("RYDER", "Together.")]],
+  fade: function (u) { return smoother(inv(.94, 1, u)); }
+});
+
+/* ================================================= END CARD ========= */
+S(16, {
+  set: "ruins", endcard: 1, dawnLight: 1,
+  cam: function (u) {
+    camKeys(u, [{ p: [10, 62, 74], l: [-4, 6, -26], f: 50 },
+                { p: [14, 70, 86], l: [-4, 6, -26], f: 50 }]);
+    CAM.shake = .08;
+  },
+  act: function () { hideAll(); },
+  fade: function (u) { return 1 - smoother(inv(0, .16, u)) * (1 - smoother(inv(.84, 1, u))); }
+});
+
+/* ================================================== CREDITS ========= */
+S(46, {
+  set: "ruins", credits: 1, dawnLight: 1, quiet: 1,
+  cam: function (u) {
+    camOrbit(u, 0, 30, -20, 96, .5, 1.5, 44, 8, 46);
+    CAM.shake = .06;
+  },
+  act: function () { hideAll(); },
+  fade: function (u) { return smoother(inv(.90, 1, u)) + (1 - smoother(inv(0, .10, u))); }
+});
+
+var RUNTIME_CALC = _cursor;
+
+/* Where the second half begins, in film time. Everything that needs to know
+   which half it is in — the grade, the score, the wear on the cast — asks
+   this one number. */
+for (var _pi = 0; _pi < SHOTS.length; _pi++) {
+  if (SHOTS[_pi].part2) { PART2 = SHOTS[_pi].t0 + SHOTS[_pi].dur; break; }
+}
 /* =====================================================================
    THE GRADE
-   The film runs from an overcast afternoon into night and out the far
-   side into dawn. Interiors take the exposure and colour but keep their
-   own lamps.
+   Two tables, one per half. The first runs an overcast afternoon down
+   into night and out into dawn; the second starts cold and wet in the
+   ruins, warms into the ambers of 1946, cools for the present day, goes
+   gold under the Earth, and comes out into a first light that is nothing
+   like the one the film opened in. They meet under the PART TWO card.
    ===================================================================== */
-var MOOD = [
+var MOOD1 = [
   { t: 0,    sun: 0xbcd0e8, si: 2.45, sky: 0x7b90b4, gnd: 0x2a3038, hi: 1.85, fog: 0x5b6b82, fd: .0030, dome: 0xa8b6c8, exp: 1.10, vig: .42, tint: [150, 172, 200], ti: .09, sat: .90 },
   { t: 460,  sun: 0xafc2de, si: 2.10, sky: 0x647a9e, gnd: 0x222831, hi: 1.65, fog: 0x4a5a72, fd: .0038, dome: 0x8f9db2, exp: 1.07, vig: .48, tint: [140, 160, 192], ti: .11, sat: .86 },
   { t: 900,  sun: 0x88a0c6, si: 1.55, sky: 0x435675, gnd: 0x181d25, hi: 1.35, fog: 0x303d52, fd: .0052, dome: 0x64738c, exp: 1.03, vig: .56, tint: [110, 136, 180], ti: .14, sat: .78 },
@@ -5964,11 +9061,32 @@ var MOOD = [
   { t: 1810, sun: 0xffc189, si: 2.55, sky: 0xa295a4, gnd: 0x342b28, hi: 1.75, fog: 0xa89189, fd: .0034, dome: 0xd8b79c, exp: 1.10, vig: .42, tint: [255, 208, 168], ti: .11, sat: .94 },
   { t: 1999, sun: 0xffd6ac, si: 2.75, sky: 0xbcb2ba, gnd: 0x3c322e, hi: 1.90, fog: 0xc9ad9c, fd: .0028, dome: 0xeacdb2, exp: 1.12, vig: .38, tint: [255, 218, 180], ti: .09, sat: .98 }
 ];
+var MOOD2 = [
+  /* the ruins: cold, wet, the light almost gone */
+  { t: 0,    sun: 0xa8bcd8, si: 1.45, sky: 0x53698c, gnd: 0x1e232b, hi: 1.75, fog: 0x3d4c64, fd: .0060, dome: 0x69788e, exp: 1.10, vig: .52, tint: [110, 136, 174], ti: .15, sat: .76 },
+  { t: 120,  sun: 0xa4b8d4, si: 1.50, sky: 0x556b8e, gnd: 0x1f242c, hi: 1.80, fog: 0x3f4e66, fd: .0058, dome: 0x6c7b92, exp: 1.11, vig: .50, tint: [112, 138, 176], ti: .14, sat: .78 },
+  /* 1946: amber, dusty, the colour of the paper it is all written on */
+  { t: 160,  sun: 0xd8c39a, si: 1.65, sky: 0x8a8068, gnd: 0x2c2620, hi: 1.40, fog: 0x6e6350, fd: .0040, dome: 0xa89a80, exp: 1.09, vig: .46, tint: [214, 188, 142], ti: .17, sat: .84 },
+  { t: 620,  sun: 0xcdb58e, si: 1.45, sky: 0x7b7059, gnd: 0x262019, hi: 1.30, fog: 0x62583f, fd: .0046, dome: 0x998b70, exp: 1.06, vig: .52, tint: [206, 178, 132], ti: .19, sat: .80 },
+  { t: 900,  sun: 0xb99f7c, si: 1.20, sky: 0x655c48, gnd: 0x1e1a15, hi: 1.20, fog: 0x4e4635, fd: .0056, dome: 0x7f7360, exp: 1.03, vig: .58, tint: [194, 166, 124], ti: .21, sat: .74 },
+  /* present day: back to the blue the modern film lives in */
+  { t: 1060, sun: 0xb6cae6, si: 1.95, sky: 0x5a6f92, gnd: 0x1e232b, hi: 1.60, fog: 0x40506a, fd: .0044, dome: 0x8496ae, exp: 1.08, vig: .46, tint: [140, 164, 200], ti: .10, sat: .90 },
+  { t: 1320, sun: 0x9fb6d4, si: 1.55, sky: 0x46587a, gnd: 0x191d24, hi: 1.40, fog: 0x33415a, fd: .0056, dome: 0x697890, exp: 1.04, vig: .54, tint: [122, 146, 186], ti: .13, sat: .84 },
+  /* the chamber: everything the gold touches */
+  { t: 1420, sun: 0xffcf82, si: 2.05, sky: 0x7a6440, gnd: 0x2e2416, hi: 1.55, fog: 0x5c4826, fd: .0038, dome: 0xb08c52, exp: 1.10, vig: .48, tint: [255, 206, 130], ti: .13, sat: .96 },
+  { t: 1760, sun: 0xffb45a, si: 2.35, sky: 0x8a6432, gnd: 0x33240f, hi: 1.70, fog: 0x6e4c1e, fd: .0044, dome: 0xc08c46, exp: 1.10, vig: .54, tint: [255, 176, 96], ti: .17, sat: 1.00 },
+  /* the surface, destroyed, in rain again */
+  { t: 1890, sun: 0xa0b4d0, si: 1.40, sky: 0x4e627f, gnd: 0x1c2027, hi: 1.70, fog: 0x3a4860, fd: .0058, dome: 0x66748a, exp: 1.09, vig: .54, tint: [110, 134, 172], ti: .15, sat: .76 },
+  { t: 1955, sun: 0xaabcd2, si: 1.55, sky: 0x586a82, gnd: 0x1e2229, hi: 1.78, fog: 0x44526a, fd: .0054, dome: 0x6f7d92, exp: 1.10, vig: .52, tint: [122, 144, 178], ti: .14, sat: .80 },
+  /* and the light the film has been withholding since the first frame */
+  { t: 1995, sun: 0xffc086, si: 2.85, sky: 0xb09a94, gnd: 0x3c322c, hi: 2.05, fog: 0xb3968a, fd: .0034, dome: 0xe8c1a2, exp: 1.13, vig: .38, tint: [255, 196, 150], ti: .16, sat: .98 },
+  { t: 2032, sun: 0xffd2a0, si: 3.10, sky: 0xd0bcb4, gnd: 0x463a30, hi: 2.20, fog: 0xd8b8a2, fd: .0026, dome: 0xf4d6b4, exp: 1.15, vig: .32, tint: [255, 212, 172], ti: .13, sat: 1.00 }
+];
 var _cA = null, _cB = null;
-function moodAt(t) {
+function pickMood(table, t) {
   var i = 0;
-  while (i < MOOD.length - 2 && t >= MOOD[i + 1].t) i++;
-  var a = MOOD[i], b = MOOD[i + 1];
+  while (i < table.length - 2 && t >= table[i + 1].t) i++;
+  var a = table[i], b = table[i + 1];
   var u = smooth(inv(a.t, b.t, t));
   return {
     sun: _cA.setHex(a.sun).lerp(_cB.setHex(b.sun), u).clone(),
@@ -5986,10 +9104,28 @@ function moodAt(t) {
     sat: lerp(a.sat, b.sat, u)
   };
 }
-
+function mixMood(a, b, u) {
+  return {
+    sun: a.sun.clone().lerp(b.sun, u), si: lerp(a.si, b.si, u),
+    sky: a.sky.clone().lerp(b.sky, u), gnd: a.gnd.clone().lerp(b.gnd, u),
+    hi: lerp(a.hi, b.hi, u),
+    fog: a.fog.clone().lerp(b.fog, u), fd: lerp(a.fd, b.fd, u),
+    dome: a.dome.clone().lerp(b.dome, u),
+    exp: lerp(a.exp, b.exp, u), vig: lerp(a.vig, b.vig, u),
+    tint: [Math.round(lerp(a.tint[0], b.tint[0], u)), Math.round(lerp(a.tint[1], b.tint[1], u)), Math.round(lerp(a.tint[2], b.tint[2], u))],
+    ti: lerp(a.ti, b.ti, u), sat: lerp(a.sat, b.sat, u)
+  };
+}
+/* the two grades cross under the interstitial card, never mid-scene */
+var CARD_LEN = 18;
+function moodAt(t) {
+  if (t <= PART2 - CARD_LEN) return pickMood(MOOD1, t);
+  if (t >= PART2) return pickMood(MOOD2, t - PART2);
+  return mixMood(pickMood(MOOD1, PART2 - CARD_LEN), pickMood(MOOD2, 0),
+                 smooth(inv(PART2 - CARD_LEN, PART2, t)));
+}
 /* =====================================================================
    SOUND
-   A synthesised action score whose layers are functions of the clock.
    ===================================================================== */
 var A = { ctx: null, ready: false, master: null, layers: {}, lastT: -1 };
 function audioInit() {
@@ -6006,15 +9142,21 @@ function audioInit() {
   var buf = c.createBuffer(1, len, c.sampleRate);
   var d = buf.getChannelData(0), last = 0;
   for (var i = 0; i < len; i++) { var w = Math.random() * 2 - 1; last = (last + .022 * w) / 1.022; d[i] = last * 3.2; }
-  function noiseLayer(freq, q) {
-    var src = c.createBufferSource(); src.buffer = buf; src.loop = true;
-    var f = c.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = freq; f.Q.value = q;
+  /* a second, brighter noise buffer: this is the rain */
+  var rbuf = c.createBuffer(1, len, c.sampleRate);
+  var rd = rbuf.getChannelData(0), rl = 0;
+  for (var j = 0; j < len; j++) { var w2 = Math.random() * 2 - 1; rl = (rl + .38 * w2) / 1.38; rd[j] = rl * 1.5; }
+
+  function noiseLayer(buffer, freq, q, type) {
+    var src = c.createBufferSource(); src.buffer = buffer; src.loop = true;
+    var f = c.createBiquadFilter(); f.type = type || "lowpass"; f.frequency.value = freq; f.Q.value = q;
     var g = c.createGain(); g.gain.value = 0;
     src.connect(f); f.connect(g); g.connect(A.master); src.start();
     return { g: g, f: f };
   }
-  A.layers.air = noiseLayer(420, .6);
-  A.layers.rumble = noiseLayer(90, 3);
+  A.layers.air = noiseLayer(buf, 420, .6);
+  A.layers.rumble = noiseLayer(buf, 90, 3);
+  A.layers.rain = noiseLayer(rbuf, 2600, .5, "bandpass");
 
   function tone(type, freq) {
     var o = c.createOscillator(); o.type = type; o.frequency.value = freq;
@@ -6031,6 +9173,9 @@ function audioInit() {
   A.layers.fifth = tone("sawtooth", 73.42);
   A.layers.pad1 = tone("triangle", 146.83);
   A.layers.pad2 = tone("triangle", 220.00);
+  /* the 1946 theme sits a third above the modern one — same chord, older ear */
+  A.layers.old1 = tone("triangle", 130.81);
+  A.layers.old2 = tone("sine", 196.00);
   A.layers.tense1 = tone("sine", 103.83);
   A.layers.tense2 = tone("sine", 110.00);
   A.layers.pulse = tone("square", 55.00);
@@ -6051,6 +9196,7 @@ function hit(kind, when) {
   if (kind === "impact") { osc("square", 180, 42, .42, .55); osc("sawtooth", 700, 120, .16, .22); }
   else if (kind === "boom") { osc("sine", 120, 28, .60, 1.8); osc("sawtooth", 300, 40, .22, 1.0); }
   else if (kind === "stab") { osc("sawtooth", 880, 90, .40, .70); }
+  else if (kind === "thunder") { osc("sine", 74, 22, .55, 2.6); osc("sawtooth", 190, 30, .18, 2.2); }
   else if (kind === "swell") {
     [55, 82.41, 110].forEach(function (f, i2) {
       var o2 = c.createOscillator(), g2 = c.createGain();
@@ -6062,42 +9208,85 @@ function hit(kind, when) {
     });
   }
 }
-var STINGS = [
+var STINGS1 = [
   [22.5, "stab"], [330.5, "impact"], [340.0, "impact"],
   [370.0, "boom"], [418.0, "impact"], [640.0, "impact"],
   [900.0, "impact"], [1010.0, "boom"], [1040.0, "boom"],
   [1180.0, "boom"], [1214.0, "swell"], [1436.0, "boom"],
   [1770.0, "impact"], [1830.0, "stab"], [1902.0, "swell"]
 ];
+var STINGS2 = [
+  [4.0, "thunder"], [44.0, "thunder"], [96.0, "swell"], [124.0, "thunder"],
+  [170.0, "stab"], [246.0, "stab"], [330.0, "stab"], [402.0, "stab"],
+  [520.0, "impact"], [604.0, "stab"], [688.0, "stab"], [744.0, "stab"],
+  [806.0, "impact"], [826.0, "boom"], [846.0, "impact"],
+  [880.0, "boom"], [900.0, "swell"], [944.0, "stab"], [1006.0, "swell"],
+  [1044.0, "swell"], [1160.0, "stab"], [1196.0, "impact"], [1254.0, "stab"],
+  [1308.0, "boom"], [1394.0, "boom"], [1414.0, "swell"],
+  [1434.0, "impact"], [1454.0, "impact"], [1520.0, "stab"], [1588.0, "boom"],
+  [1608.0, "boom"], [1700.0, "stab"], [1798.0, "impact"], [1816.0, "impact"],
+  [1840.0, "boom"], [1864.0, "boom"], [1886.0, "boom"], [1910.0, "boom"],
+  [1936.0, "swell"], [1998.0, "swell"]
+];
 function audioFrame(t, playing, dt) {
   if (!A.ready) return;
   var g = A.layers, now = A.ctx.currentTime, k = .14;
   function set(n, v) { n.gain.setTargetAtTime(v, now, k); }
+  var half = clamp(inv(PART2 - CARD_LEN, PART2, t), 0, 1);   /* 0 = first half */
 
+  /* ---- the first half: an action score that grows through the night --- */
   var act1 = 1 - clamp(inv(430, 520, t), 0, 1);
   var war = clamp(inv(430, 700, t), 0, 1);
-  var deep = clamp(inv(1000, 1300, t), 0, 1);
-  var dawn = clamp(inv(1780, 1900, t), 0, 1);
-  var quiet = clamp(inv(1690, 1760, t), 0, 1) * (1 - dawn);
+  var deep1 = clamp(inv(1000, 1300, t), 0, 1);
+  var dawn1 = clamp(inv(1780, 1900, t), 0, 1);
+  var quiet1 = clamp(inv(1690, 1760, t), 0, 1) * (1 - dawn1);
 
-  set(g.air.g, .13 + war * .06);
-  set(g.rumble.g, .05 + war * .16 + deep * .12);
-  set(g.drone.g, (.05 + war * .13 + deep * .10) * (1 - quiet * .8));
-  g.droneF.frequency.setTargetAtTime(lerp(150, 88, deep), now, .4);
-  set(g.fifth.g, (war * .07 + deep * .07) * (1 - quiet * .85));
-  set(g.pad1.g, (act1 * .035 + dawn * .075));
-  set(g.pad2.g, (act1 * .022 + dawn * .055));
-  set(g.tense1.g, (war * .030 + deep * .035) * (1 - dawn) * (1 - quiet * .9));
-  set(g.tense2.g, (war * .024 + deep * .030) * (1 - dawn) * (1 - quiet * .9));
-  /* a heartbeat pulse under the big pushes */
-  var drive = clamp(inv(1150, 1210, t), 0, 1) * (1 - clamp(inv(1450, 1520, t), 0, 1))
-            + clamp(inv(1620, 1680, t), 0, 1) * (1 - clamp(inv(1700, 1740, t), 0, 1));
-  var beat = drive > .01 ? Math.pow(Math.max(0, Math.sin(t * Math.PI * 2 * 1.6)), 6) : 0;
+  /* ---- the second half: rain, then 1946, then the chamber ------------- */
+  var p = t - PART2;
+  var ruinA = 1 - clamp(inv(120, 152, p), 0, 1);
+  var old = clamp(inv(140, 175, p), 0, 1) * (1 - clamp(inv(1010, 1044, p), 0, 1));
+  var modernA = clamp(inv(1030, 1070, p), 0, 1);
+  var deep2 = clamp(inv(1300, 1420, p), 0, 1);
+  var fightK = clamp(inv(1420, 1480, p), 0, 1) * (1 - clamp(inv(1930, 1970, p), 0, 1));
+  var dawn2 = clamp(inv(1966, 2000, p), 0, 1);
+  var rainAmt = ruinA
+              + clamp(inv(1880, 1900, p), 0, 1) * (1 - dawn2 * .85)
+              + clamp(inv(568, 580, p), 0, 1) * (1 - clamp(inv(586, 600, p), 0, 1)) * .5;
+
+  function mix(a, b) { return lerp(a, b, half); }
+  set(g.rain.g, half * clamp(rainAmt, 0, 1) * .16);
+  set(g.air.g, mix(.13 + war * .06, .12 + fightK * .06));
+  set(g.rumble.g, mix(.05 + war * .16 + deep1 * .12,
+                      .05 + deep2 * .16 + fightK * .14 + ruinA * .07));
+  set(g.drone.g, mix((.05 + war * .13 + deep1 * .10) * (1 - quiet1 * .8),
+                     (.05 + deep2 * .12 + fightK * .12) * (1 - dawn2 * .8)));
+  g.droneF.frequency.setTargetAtTime(lerp(150, 84, Math.max(deep1 * (1 - half), deep2 * half)), now, .4);
+  set(g.fifth.g, mix((war * .07 + deep1 * .07) * (1 - quiet1 * .85),
+                     (fightK * .08 + deep2 * .06) * (1 - dawn2 * .85)));
+  set(g.pad1.g, mix(act1 * .035 + dawn1 * .075, modernA * (1 - fightK) * .035 + dawn2 * .080));
+  set(g.pad2.g, mix(act1 * .022 + dawn1 * .055, modernA * (1 - fightK) * .022 + dawn2 * .060));
+  /* the 1946 theme only ever plays in 1946 */
+  set(g.old1.g, half * old * .048 * (1 - clamp(inv(806, 860, p), 0, 1) * .65));
+  set(g.old2.g, half * old * .030 * (1 - clamp(inv(806, 860, p), 0, 1) * .75));
+  set(g.tense1.g, mix((war * .030 + deep1 * .035) * (1 - dawn1) * (1 - quiet1 * .9),
+                      (old * .014 + fightK * .032 + deep2 * .028) * (1 - dawn2)));
+  set(g.tense2.g, mix((war * .024 + deep1 * .030) * (1 - dawn1) * (1 - quiet1 * .9),
+                      (old * .010 + fightK * .026 + deep2 * .024) * (1 - dawn2)));
+  var drive1 = clamp(inv(1150, 1210, t), 0, 1) * (1 - clamp(inv(1450, 1520, t), 0, 1))
+             + clamp(inv(1620, 1680, t), 0, 1) * (1 - clamp(inv(1700, 1740, t), 0, 1));
+  var drive2 = clamp(inv(1560, 1620, p), 0, 1) * (1 - clamp(inv(1900, 1940, p), 0, 1));
+  var drive = mix(drive1, drive2);
+  var beat = drive > .01 ? Math.pow(Math.max(0, Math.sin(t * Math.PI * 2 * 1.58)), 6) : 0;
   set(g.pulse.g, drive * beat * .18);
 
   if (playing && dt > 0 && dt < .6) {
-    for (var i = 0; i < STINGS.length; i++) {
-      if (A.lastT < STINGS[i][0] && t >= STINGS[i][0]) hit(STINGS[i][1]);
+    var i;
+    for (i = 0; i < STINGS1.length; i++) {
+      if (A.lastT < STINGS1[i][0] && t >= STINGS1[i][0] && STINGS1[i][0] < PART2) hit(STINGS1[i][1]);
+    }
+    for (i = 0; i < STINGS2.length; i++) {
+      var at = STINGS2[i][0] + PART2;
+      if (A.lastT < at && t >= at) hit(STINGS2[i][1]);
     }
   }
   A.lastT = t;
@@ -6111,6 +9300,7 @@ function initGlobals() {
   _v1 = new THREE.Vector3(); _v2 = new THREE.Vector3(); _q1 = new THREE.Quaternion();
   _cA = new THREE.Color(); _cB = new THREE.Color();
   O = new THREE.Vector3(0, 0, 0);
+  /* the first half */
   CITY_O = new THREE.Vector3(0, 0, 0);
   WARE_O = new THREE.Vector3(600, 0, 0);
   ROOF_O = new THREE.Vector3(0, 0, 600);
@@ -6118,14 +9308,26 @@ function initGlobals() {
   REAC_O = new THREE.Vector3(0, 0, -600);
   WRECK_O = new THREE.Vector3(600, 0, 600);
   PLAZA_O = new THREE.Vector3(-600, 0, 600);
+  /* the second */
+  RUIN_O = new THREE.Vector3(-600, 0, -600);
+  HQ_O = new THREE.Vector3(1400, 0, 0);
+  ALLEY_O = new THREE.Vector3(0, 0, 1400);
+  LIB_O = new THREE.Vector3(-1400, 0, 0);
+  ROAD_O = new THREE.Vector3(0, 0, -1400);
+  FAC_O = new THREE.Vector3(1400, 0, 1400);
+  CMD_O = new THREE.Vector3(-1400, 0, 1400);
+  TUN_O = new THREE.Vector3(1400, 0, -1400);
+  GOLD_O = new THREE.Vector3(-1400, 0, -1400);
   CAM.pos = new THREE.Vector3();
   CAM.look = new THREE.Vector3();
 }
 
 var renderer, scene, camera, sets = {}, dome, camFill, ui = null, ready = false;
-var SET_ORIGIN = {};
+var SET_ORIGIN = {}, RUNTIME = 0;
+var INTERIOR = { ware: 1, fort: 1, reac: 1, hq46: 1, lib: 1, fac: 1, cmd: 1, tun: 1, gold: 1 };
 
 function boot(_THREE, canvas, uiRefs) {
+  if (ready) { ui = uiRefs || ui; return api; }
   THREE = _THREE;
   ui = uiRefs || {};
   initGlobals();
@@ -6161,9 +9363,23 @@ function boot(_THREE, canvas, uiRefs) {
   sets.reac = buildReactor();
   sets.wreck = buildWreck();
   sets.plaza = buildPlaza();
+  sets.ruins = buildRuins();
+  sets.hq46 = buildHQ46();
+  sets.alley = buildAlley();
+  sets.lib = buildLibrary();
+  sets.road = buildRoad();
+  sets.fac = buildFacility();
+  sets.cmd = buildCommand();
+  sets.tun = buildTunnel();
+  sets.gold = buildGold();
   addDetail(sets);
   for (var key in sets) scene.add(sets[key]);
-  SET_ORIGIN = { city: CITY_O, ware: WARE_O, roof: ROOF_O, fort: FORT_O, reac: REAC_O, wreck: WRECK_O, plaza: PLAZA_O };
+  SET_ORIGIN = {
+    city: CITY_O, ware: WARE_O, roof: ROOF_O, fort: FORT_O, reac: REAC_O,
+    wreck: WRECK_O, plaza: PLAZA_O,
+    ruins: RUIN_O, hq46: HQ_O, alley: ALLEY_O, lib: LIB_O, road: ROAD_O,
+    fac: FAC_O, cmd: CMD_O, tun: TUN_O, gold: GOLD_O
+  };
 
   for (var i = 0; i < CAST.length; i++) {
     var c = makeCharacter(CAST[i]);
@@ -6172,7 +9388,7 @@ function boot(_THREE, canvas, uiRefs) {
     scene.add(c.root);
   }
   /* a soft key that rides with the lens — without it faces fall into
-     shadow in half the sets, which is what the first pass looked like */
+     shadow in half the sets */
   camFill = new THREE.DirectionalLight(0xdfe8f6, 1.05);
   camFill.castShadow = false;
   scene.add(camFill);
@@ -6181,8 +9397,12 @@ function boot(_THREE, canvas, uiRefs) {
   makeExtras(scene, 26);
   scene.add(makeFX());
   scene.add(makeBeam());
+  scene.add(makeRain());
+  scene.add(makePulse());
   scene.add(makeMotes());
 
+  RUNTIME = RUNTIME_CALC;
+  window.__DIAG = { THREE: THREE, camera: camera, cast: CAST_OBJ, extras: EXTRAS, shots: SHOTS, sets: sets };
   ready = true;
   return api;
 }
@@ -6198,50 +9418,31 @@ function shotAt(t) {
 
 var CREDITS =
   '<div class="crole">A FILM GENERATED IN CODE</div>' +
-  '<div class="crole">TEAM VANGUARD</div><div class="cname">KAI &nbsp; JACE &nbsp; MAYA &nbsp; DRE &nbsp; LEO</div>' +
-  '<div class="crole">TEAM HAVOC</div><div class="cname">RYDER &nbsp; ZANE &nbsp; NOVA &nbsp; BLAZE &nbsp; ACE</div>' +
+  '<div class="crole">BLUE TEAM &mdash; VANGUARD</div><div class="cname">KAI &nbsp; JACE &nbsp; MAYA &nbsp; DRE &nbsp; LEO</div>' +
+  '<div class="crole">RED TEAM &mdash; HAVOC</div><div class="cname">RYDER &nbsp; ZANE &nbsp; NOVA &nbsp; BLAZE &nbsp; ACE</div>' +
+  '<div class="crole">1946</div><div class="cname">ELIAS &nbsp; MARCUS &nbsp; VICTOR</div>' +
+  '<div class="crole">AND</div><div class="cname">BLACKOUT &nbsp;&middot;&nbsp; THE COLLECTOR</div>' +
   '<div class="crole">RENDERED IN REAL TIME</div><div class="cname">THREE.JS &nbsp;&middot;&nbsp; WEBGL</div>' +
   '<div class="crole">EVERY SET, TEXTURE, ANIMATION<br>AND SOUND GENERATED IN CODE</div>';
 
-var _lastT = 0;
-function frame(t, playing) {
-  if (!ready) return;
-  t = clamp(t, 0, RUNTIME - .001);
-  var dt = t - _lastT;
-  var sh = shotAt(t);
-  var u = clamp((t - sh.t0) / sh.dur, 0, 1);
-
-  O.copy(SET_ORIGIN[sh.set] || CITY_O);
-  for (var key in sets) sets[key].visible = (key === sh.set);
-  var interior = sh.set === "ware" || sh.set === "fort" || sh.set === "reac";
-  dome.visible = !interior;
-
-  var wear = wearAt(t);
-  for (var i = 0; i < 10; i++) setGore(CAST_OBJ[i], wear[i]);
-
-  hideAll();
-  hideExtras();
-  fxReset();
-  beamMesh.visible = false;
-  CAM.roll = 0; CAM.shake = .3; CAM.shakeFreq = 1;
-
-  sh.cam.call(sh, u, t);
-  sh.act.call(sh, t, u);
-  for (var f = 0; f < 10; f++) plantFeet(CAST_OBJ[f]);
-  for (var e = 0; e < EXTRAS.length; e++) if (EXTRAS[e].root.visible) plantFeet(EXTRAS[e]);
-  if (sh.fx) sh.fx.call(sh, t, u);
-
-  /* set dressing driven by the story */
+/* =====================================================================
+   SET DRESSING
+   Everything in a set that is driven by the story rather than the clock:
+   a reactor going critical, a door grinding open, an extraction rig
+   pulling on the planet. Sixteen sets, one place.
+   ===================================================================== */
+function dressSets(sh, t, u) {
+  /* ---- the first half ------------------------------------------------ */
   var reac = sets.reac.userData;
   if (reac.rings) {
     var over = sh.overload ? (sh.overload === 2 ? 1 : smooth(u)) : 0;
-    var pulse = .5 + .5 * Math.sin(t * (4 + over * 20));
+    var pulseR = .5 + .5 * Math.sin(t * (4 + over * 20));
     for (var rr = 0; rr < reac.rings.length; rr++) {
       reac.rings[rr].material.color.setHex(0x59d8ff).lerp(_cA.setHex(0xff4a24), over);
-      reac.rings[rr].scale.setScalar(1 + over * pulse * .10);
+      reac.rings[rr].scale.setScalar(1 + over * pulseR * .10);
     }
     reac.coreLight.color.setHex(0x59d8ff).lerp(_cA.setHex(0xff4a24), over);
-    reac.coreLight.intensity = 40 + over * pulse * 220;
+    reac.coreLight.intensity = 40 + over * pulseR * 220;
   }
   var pz = sets.plaza.userData;
   if (pz.emitter) {
@@ -6255,13 +9456,126 @@ function frame(t, playing) {
   }
   var fo = sets.fort.userData;
   if (fo.machineCore) {
-    var on = t > 990 ? 1 : 0;
+    var on = (t > 990 && t < PART2) ? 1 : 0;
     fo.machineCore.material.color.setHex(0x6fd8ff).lerp(_cA.setHex(0xff5a30), on);
     fo.machineLight.intensity = on ? 60 + Math.sin(t * 8) * 30 : 8;
   }
 
-  /* handheld */
-  var amt = CAM.shake * .009, ff = CAM.shakeFreq;
+  /* ---- the second ---------------------------------------------------- */
+  var fac = sets.fac.userData;
+  if (fac.machCore) {
+    var m2 = sh.machine || 0;
+    var lvl2 = m2 === 2 ? 1 : (m2 ? .25 + m2 * .55 * (.6 + .4 * Math.sin(t * (2 + m2 * 9))) : .08);
+    fac.machCore.material.color.setHex(0xbfe8ff).lerp(_cA.setHex(0xffffff), m2 === 2 ? .9 : 0);
+    fac.machCore.scale.set(1, 1, 1).multiplyScalar(.8 + lvl2 * .5);
+    fac.machGlass.material.opacity = .10 + lvl2 * .30;
+    fac.machLight.intensity = 6 + lvl2 * (m2 === 2 ? 320 : 70);
+    for (var ci3 = 0; ci3 < fac.machCoils.length; ci3++) {
+      fac.machCoils[ci3].rotation.z = t * (.4 + ci3 * .1) * (m2 ? 1 : .15);
+    }
+    fac.modern.visible = !!sh.modern;
+  }
+  var tun = sets.tun.userData;
+  if (tun.doorDisc) {
+    var open = sh.doorOpen ? smooth(inv(.25, .85, u)) : 0;
+    if (sh.glyphs) {
+      for (var gq = 0; gq < tun.glyphs.length; gq++) tun.glyphs[gq].material = tun.glyphLit;
+    }
+    tun.doorDisc.rotation.y = open * 2.4;
+    tun.doorDisc.position.x = open * 7.2;
+    tun.doorGlow.material.opacity = open * .85;
+  }
+  var gd2 = sets.gold.userData;
+  if (gd2.rig) {
+    var on2 = sh.rigOn ? (sh.rigOn === 2 ? 1 : smooth(u) * .8 + .2) : 0;
+    var thr = .5 + .5 * Math.sin(t * (3 + on2 * 16));
+    gd2.crownLens.scale.setScalar(.7 + on2 * (.6 + thr * .5));
+    gd2.crownLight.intensity = 30 + on2 * (140 + thr * 220);
+    gd2.crownLight.color.setHex(0xffd28a).lerp(_cA.setHex(0xff6a30), sh.rigOn === 2 ? .8 : 0);
+    gd2.rigShaft.material.color.setHex(0xffd070).lerp(_cA.setHex(0xfff2c8), on2);
+    for (var tq = 0; tq < gd2.towers.length; tq++) {
+      var tw2 = gd2.towers[tq];
+      tw2.lens.scale.setScalar(.8 + on2 * thr * .7);
+      tw2.light.intensity = 12 + on2 * (40 + thr * 60);
+      tw2.panel.material.emissiveIntensity = 1.2 + on2 * 2.2;
+    }
+    var down = sh.sysDown || 0;
+    for (var sq = 0; sq < gd2.stations.length; sq++) {
+      var st3 = gd2.stations[sq];
+      var dead = sq < down ? (sq === down - 1 ? smooth(inv(.45, .75, u)) : 1) : 0;
+      var col = _cA.setHex(0x66ff9a).lerp(_cB.setHex(0x201f18), dead);
+      st3.top.material.emissive.copy(col);
+      st3.screen.material.emissive.copy(col);
+      st3.screen.material.emissiveIntensity = 2.2 * (1 - dead * .92);
+    }
+    gd2.upLight.intensity = 70 + on2 * 90;
+  }
+  var cmd = sets.cmd.userData;
+  if (cmd.earth) {
+    cmd.earth.rotation.y = t * .10;
+    var pk = .5 + .5 * Math.sin(t * 2.2);
+    cmd.deposit.scale.setScalar(.9 + pk * .25);
+    cmd.depGlow.intensity = 9 + pk * 8;
+    cmd.depBeam.material.opacity = .18 + pk * .18;
+    var alarm = sh.alarm ? (.5 + .5 * Math.abs(Math.sin(t * 7))) : 0;
+    cmd.deposit.material.color.setHex(0xffcc55).lerp(_cA.setHex(0xff4a30), alarm);
+    cmd.depGlow.color.setHex(0xffbe4a).lerp(_cA.setHex(0xff4a30), alarm);
+  }
+  var ru = sets.ruins.userData;
+  if (ru.blueHQ) {
+    var fl2 = Math.abs(Math.sin(t * 3.1) * Math.sin(t * 1.3));
+    ru.blueHQ.userData.sign.material.opacity = .25 + fl2 * .55;
+    ru.redHQ.userData.sign.material.opacity = .25 + (1 - fl2) * .5;
+    var drop = sh.collapseHQ ? smooth(inv(.10, .60, u)) : 0;
+    ru.blueHQ.position.y = -drop * 5.4;
+    ru.redHQ.position.y = -drop * 4.6;
+    ru.blueHQ.rotation.z = drop * .09;
+    ru.redHQ.rotation.z = -drop * .07;
+  }
+  var rd2 = sets.road.userData;
+  if (rd2.car) {
+    if (sh.drive) {
+      rd2.car.visible = true;
+      rd2.car.position.set(1.7, Math.abs(Math.sin(t * 9)) * .012, 40 - smooth(u) * 76);
+      rd2.car.rotation.y = Math.PI + Math.sin(t * .7) * .012;
+    } else rd2.car.visible = false;
+  }
+}
+
+var _lastT = 0;
+function frame(t, playing) {
+  if (!ready) return;
+  t = clamp(t, 0, RUNTIME - .001);
+  var dt = t - _lastT;
+  var sh = shotAt(t);
+  var u = clamp((t - sh.t0) / sh.dur, 0, 1);
+
+  O.copy(SET_ORIGIN[sh.set] || CITY_O);
+  for (var key in sets) sets[key].visible = (key === sh.set);
+  var interior = !!INTERIOR[sh.set];
+  dome.visible = !interior;
+
+  var wear = wearAt(t);
+  for (var i = 0; i < CAST_OBJ.length; i++) setGore(CAST_OBJ[i], wear[i] || 0);
+
+  hideAll();
+  hideExtras();
+  fxReset();
+  beamMesh.visible = false;
+  pulseMesh.visible = false;
+  CAM.roll = 0; CAM.shake = .3; CAM.shakeFreq = 1;
+
+  sh.cam.call(sh, u, t);
+  sh.act.call(sh, t, u);
+  for (var f = 0; f < CAST_OBJ.length; f++) plantFeet(CAST_OBJ[f]);
+  for (var e = 0; e < EXTRAS.length; e++) if (EXTRAS[e].root.visible) plantFeet(EXTRAS[e]);
+  if (sh.fx) sh.fx.call(sh, t, u);
+
+  dressSets(sh, t, u);
+
+  /* ------------------------------------------------------ handheld */
+  var quake = sh.quake ? 1 : 0;
+  var amt = CAM.shake * .009 * (1 + quake * .6), ff = CAM.shakeFreq;
   var sx = (Math.sin(t * 11.3 * ff) * .6 + Math.sin(t * 27.1 * ff) * .4) * amt;
   var sy = (Math.sin(t * 9.7 * ff + 1.7) * .6 + Math.sin(t * 23.3 * ff) * .4) * amt;
   var sz2 = Math.sin(t * 7.1 * ff + .5) * amt * .5;
@@ -6271,37 +9585,39 @@ function frame(t, playing) {
   if (CAM.roll) camera.rotateZ(CAM.roll);
   camera.updateProjectionMatrix();
   dome.position.copy(camera.position);
-  /* keep the fill just off the lens axis, above and to the left */
   camFill.position.copy(camera.position);
   camFill.position.y += 2.2;
   camFill.position.x -= 1.6;
   camFill.target.position.copy(CAM.look);
   camFill.target.updateMatrixWorld();
 
+  var rainAmt = typeof sh.rain === "function" ? sh.rain(u) : (sh.rain || 0);
+  rainFrame(t, interior ? 0 : rainAmt, camera.position);
   moteFrame(t, sh, interior, camera.position);
 
-  /* grade */
+  /* ---------------------------------------------------------- grade */
   var m = moodAt(t);
-  var night = interior ? .5 : 1;
   var setUD = sets[sh.set].userData;
   if (setUD.sun) {
     setUD.sun.color.copy(m.sun);
-    setUD.sun.intensity = m.si * (sh.dawnLight ? 1.4 : 1);
+    setUD.sun.intensity = m.si * (sh.dawnLight ? 1.45 : 1) * (sh.dark === 2 ? .72 : 1);
   }
-  if (setUD.hemi) { setUD.hemi.color.copy(m.sky); setUD.hemi.groundColor.copy(m.gnd); setUD.hemi.intensity = m.hi; }
+  if (setUD.hemi && setUD.hemi.isHemisphereLight) {
+    setUD.hemi.color.copy(m.sky); setUD.hemi.groundColor.copy(m.gnd); setUD.hemi.intensity = m.hi;
+  }
   scene.fog.color.copy(m.fog);
   scene.fog.density = interior ? m.fd * .5 : m.fd;
   dome.material.color.copy(m.dome);
   scene.environmentIntensity = 1.10 * m.sat;
-  camFill.intensity = (interior ? 1.35 : .85) * (sh.quiet ? .8 : 1);
+  camFill.intensity = (sh.set === "gold" ? 2.10 : interior ? 1.35 : .90) * (sh.quiet ? .8 : 1) * (sh.dark === 2 ? .75 : 1);
   camFill.color.copy(m.sun).lerp(_cB.setHex(0xffffff), .55);
-  renderer.toneMappingExposure = m.exp * (sh.dark ? .88 : 1) * (sh.flashback ? .94 : 1);
+  renderer.toneMappingExposure = m.exp * (sh.dark ? (sh.dark === 2 ? .90 : .95) : 1) * (sh.flashback ? .94 : 1);
 
-  var sat = m.sat * (sh.flashback ? .35 : 1);
+  var sat = m.sat * (sh.flashback ? .32 : 1);
   if (ui.canvasEl) ui.canvasEl.style.filter = "saturate(" + sat.toFixed(3) + ")";
   if (ui.vig) ui.vig.style.opacity = m.vig + (sh.flashback ? .2 : 0);
   if (ui.tint) {
-    var tc = sh.flashback ? [180, 195, 220] : m.tint;
+    var tc = sh.flashback ? [186, 198, 222] : m.tint;
     ui.tint.style.background = "rgb(" + tc[0] + "," + tc[1] + "," + tc[2] + ")";
     ui.tint.style.opacity = m.ti + (sh.flashback ? .10 : 0);
   }
@@ -6318,22 +9634,24 @@ function frame(t, playing) {
   if (ui.line && ui.line.textContent !== line) ui.line.textContent = line;
   if (ui.line) ui.line.style.opacity = line ? 1 : 0;
 
-  /* big centred text: countdowns and warnings */
-  var bigTxt = sh.big ? sh.big(u) : (sh.alert && u >= sh.alert[0] && u <= sh.alert[1] ? "" : "");
+  var bigTxt = sh.big ? sh.big(u) : "";
   if (ui.big) {
     ui.big.textContent = bigTxt || "";
     ui.big.style.opacity = bigTxt ? 1 : 0;
   }
 
-  /* cards */
   if (ui.card) {
     if (sh.title) {
       ui.card.className = "card show title";
-      ui.card.innerHTML = "<span>BATTLE WARS</span><em>PART ONE</em>";
+      ui.card.innerHTML = "<span>BATTLE WARS</span><em>THE COMPLETE FILM</em>";
       ui.card.style.opacity = smooth(inv(.16, .40, u)) * (1 - smooth(inv(.80, .97, u)));
+    } else if (sh.part2) {
+      ui.card.className = "card show title";
+      ui.card.innerHTML = "<span>PART TWO</span><em>EIGHTY YEARS OF IT</em>";
+      ui.card.style.opacity = smooth(inv(.18, .40, u)) * (1 - smooth(inv(.74, .94, u)));
     } else if (sh.endcard) {
       ui.card.className = "card show title";
-      ui.card.innerHTML = "<span>BATTLE WARS</span><em>WILL RETURN</em>";
+      ui.card.innerHTML = "<span>BATTLE WARS</span><em>TO BE CONTINUED</em>";
       ui.card.style.opacity = smooth(inv(.10, .32, u)) * (1 - smooth(inv(.78, .96, u)));
     } else if (sh.credits) {
       ui.card.className = "card show credits";
@@ -6361,8 +9679,8 @@ var api = {
   boot: boot,
   frame: frame,
   resize: resize,
-  duration: function () { return RUNTIME; },
-  marks: function () { return SHOTS.map(function (s) { return s.t0; }).filter(function (v, i) { return i % 5 === 0; }); },
+  duration: function () { return RUNTIME || RUNTIME_CALC; },
+  marks: function () { return []; },
   audioInit: function () { audioInit(); if (A.ctx && A.ctx.state === "suspended") A.ctx.resume(); },
   audioGain: function (v) { if (A.master) A.master.gain.setTargetAtTime(v, A.ctx.currentTime, .05); },
   audioSuspend: function () { if (A.ctx && A.ctx.state === "running") A.ctx.suspend(); },
@@ -6429,7 +9747,7 @@ const mk = (src) => URL.createObjectURL(new Blob([src], { type: "text/javascript
   barFill.style.width = "42%";
   await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-  film = window.RunFromZombies.boot(THREE, view, {
+  film = window.BattleWars.boot(THREE, view, {
     tint: $("tint"), vig: $("vig"), grain: $("grain"), black: $("black"),
     line: $("line"), card: $("card"), big: $("big"), canvasEl: view
   });

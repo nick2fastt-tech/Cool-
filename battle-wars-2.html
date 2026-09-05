@@ -3288,7 +3288,7 @@ function buildGold() {
     var sm = new THREE.Mesh(new THREE.BoxGeometry(1.4 + r() * 7, h, 1.2 + r() * 5), goldM);
     sm.position.set(Math.cos(a) * rad, h * (.30 + r() * .25), Math.sin(a) * rad);
     /* leaned back against the rock, not standing to attention */
-    sm.rotation.set(-.10 - r() * .42, a + (r() - .5) * .8, (r() - .5) * .9);
+    sm.rotation.set(-.06 - r() * .24, a + (r() - .5) * .8, (r() - .5) * .5);
     g.add(sm); seams.push(sm);
   }
   /* The floor deposits step down toward the middle, but only on the far
@@ -3397,6 +3397,455 @@ function buildGold() {
   g.add(soft);
   g.userData.sun = key; g.userData.hemi = hemi; g.userData.upLight = up;
   return g;
+}
+/* =====================================================================
+   THE DETAIL PASS
+   A second lap over the sets, adding the things a place accumulates:
+   signals and hydrants on the street, tool racks and pipe runs in the
+   warehouse, a clock and a coat stand in a 1946 office, cable runs and
+   warning signs underground, spoil heaps in the chamber. Everything here
+   is pushed to the edges of the frame — props the camera passes, not
+   props it has to work around.
+
+   Shared by all three builds. Each block asks whether its set exists, so
+   the same file dresses the first half, the second, and the complete
+   film without knowing which one it is in.
+   ===================================================================== */
+function addDetail(sets) {
+  var g, r, i;
+  if (!sets) return;
+
+  /* -------------------------------------------------------- the street */
+  if (sets.city) {
+    g = sets.city; r = rng(20001);
+    var poleM = mat({ color: 0x24282e, roughness: .55, metalness: .55 });
+    for (i = -100; i <= 100; i += 50) {                     /* traffic signals */
+      [-1, 1].forEach(function (side) {
+        var tg = new THREE.Group();
+        tg.position.set(side * 12.2, 0, i);
+        tg.rotation.y = side > 0 ? 0 : Math.PI;
+        g.add(tg);
+        cyl(.09, .11, 5.4, 8, poleM, 0, 2.7, 0, tg);
+        var armT = cyl(.06, .06, 4.4, 6, poleM, -2.2, 5.3, 0, tg);
+        armT.rotation.z = Math.PI / 2;
+        var head = box(.34, 1.0, .34, poleM, -4.2, 5.0, 0, tg);
+        ["#ff3b30", "#ffc42e", "#34d06a"].forEach(function (hex, k) {
+          var lens = emit(.20, .20, parseInt(hex.slice(1), 16), -4.2, 5.32 - k * .30, .18, 0, tg, k === 2 ? .95 : .22);
+          if (k === 2) tg.userData.go = lens;
+        });
+      });
+    }
+    for (i = -110; i <= 110; i += 26) {                     /* hydrants and bins */
+      var hy = new THREE.Group();
+      hy.position.set((i % 52 === 0 ? 1 : -1) * 13.4, 0, i + r() * 4);
+      g.add(hy);
+      var hydM = mat({ color: 0x9c2b22, roughness: .6, metalness: .25 });
+      cyl(.16, .19, .72, 12, hydM, 0, .36, 0, hy);
+      cyl(.11, .11, .16, 10, hydM, 0, .80, 0, hy);
+      var cap = cyl(.07, .07, .14, 8, hydM, .17, .52, 0, hy); cap.rotation.z = Math.PI / 2;
+    }
+    for (i = 0; i < 26; i++) {                              /* litter on the walk */
+      var lit = new THREE.Mesh(new THREE.PlaneGeometry(.16, .22),
+        mat({ map: TEX.paper, color: 0xb8b2a0, roughness: .95, side: THREE.DoubleSide }));
+      lit.rotation.x = -Math.PI / 2; lit.rotation.z = r() * 6.3;
+      lit.position.set((r() > .5 ? 1 : -1) * (12.5 + r() * 5), .19, -110 + r() * 220);
+      g.add(lit);
+    }
+    for (i = -90; i <= 90; i += 45) {                       /* crossings */
+      for (var cw = -9; cw <= 9; cw += 3) {
+        var bar2 = emit(1.6, 2.2, 0xd8d2bc, cw, .022, i, 0, g, .5);
+        bar2.rotation.x = -Math.PI / 2;
+      }
+    }
+    /* overhead cables strung between the buildings */
+    for (i = -100; i < 100; i += 30) {
+      var cbl = cyl(.035, .035, 52, 5, mat({ color: 0x14161a, roughness: .9 }), 0, 11 + r() * 3, i, g);
+      cbl.rotation.z = Math.PI / 2;
+    }
+
+    /* ------------------------------------------------------ 1946 office */
+  }
+
+  if (sets.hq46) {
+    g = sets.hq46;
+    var brassM = mat({ color: 0x9a7a3a, roughness: .35, metalness: .8 });
+    var darkW = mat({ map: TEX.wood, color: 0x4e3520, roughness: .6 });
+    var clock = new THREE.Group();                          /* the wall clock */
+    clock.position.set(7.36, 3.0, -6); clock.rotation.y = -Math.PI / 2; g.add(clock);
+    cyl(.30, .30, .09, 22, darkW, 0, 0, 0, clock).rotation.x = Math.PI / 2;
+    var faceC = emit(.50, .50, 0xf2ecd8, 0, 0, .06, 0, clock, .95);
+    var hh = box(.022, .17, .012, mat({ color: 0x1a1a1a }), 0, .07, .075, clock);
+    hh.rotation.z = .6;
+    var mh = box(.016, .24, .012, mat({ color: 0x1a1a1a }), 0, -.06, .075, clock);
+    mh.rotation.z = 2.5;
+    var stand = new THREE.Group();                          /* coat stand */
+    stand.position.set(-6.2, 0, 11.4); g.add(stand);
+    cyl(.05, .07, 1.85, 8, darkW, 0, .92, 0, stand);
+    cyl(.34, .38, .05, 12, darkW, 0, .03, 0, stand);
+    for (i = 0; i < 4; i++) {
+      var hook = cyl(.03, .03, .22, 6, brassM,
+        Math.cos(i * 1.57) * .13, 1.78, Math.sin(i * 1.57) * .13, stand);
+      hook.rotation.z = Math.cos(i * 1.57) * .8; hook.rotation.x = -Math.sin(i * 1.57) * .8;
+    }
+    var coat = shapeMeshSimple(.95, [.10, .20, .24, .22], mat({ color: 0x2c3345, roughness: .85 }));
+    coat.position.set(.13, 1.20, 0); stand.add(coat);
+    /* a map pinned beside the case board */
+    var mapM = mat({ map: TEX.paper, color: 0xc8bfa4, roughness: .95, side: THREE.DoubleSide });
+    var mp2 = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.6), mapM);
+    mp2.position.set(-7.38, 2.4, -4); mp2.rotation.y = Math.PI / 2; g.add(mp2);
+    var pinM = new THREE.MeshBasicMaterial({ color: 0xc44a3a });
+    var mr = rng(20101);
+    for (i = 0; i < 9; i++) {
+      var pin = new THREE.Mesh(new THREE.SphereGeometry(.035, 6, 5), pinM);
+      pin.position.set(-7.33, 1.85 + mr() * 1.1, -4.9 + mr() * 1.9); g.add(pin);
+    }
+    /* a typewriter on the nearest desk */
+    var tw3 = new THREE.Group(); tw3.position.set(-3.5, .78, -6.6); tw3.rotation.y = .18; g.add(tw3);
+    var twM = mat({ color: 0x1c1c20, roughness: .45, metalness: .35 });
+    box(.42, .12, .34, twM, 0, .06, 0, tw3);
+    var carr = box(.46, .07, .10, twM, 0, .16, -.10, tw3);
+    for (i = 0; i < 4; i++) box(.34, .015, .03, twM, 0, .13 - i * .022, .02 + i * .045, tw3);
+    var paperIn = new THREE.Mesh(new THREE.PlaneGeometry(.22, .28), mapM);
+    paperIn.position.set(0, .30, -.12); paperIn.rotation.x = -.22; tw3.add(paperIn);
+
+    /* -------------------------------------------------------- the archive */
+  }
+
+  if (sets.lib) {
+    g = sets.lib;
+    var ladder = new THREE.Group();                          /* rolling ladder */
+    ladder.position.set(-9.2, 0, -2); ladder.rotation.y = .04; g.add(ladder);
+    var ladM = mat({ map: TEX.wood, color: 0x6e4e30, roughness: .6 });
+    [-.28, .28].forEach(function (lx) {
+      var rail = cyl(.05, .05, 3.4, 6, ladM, lx, 1.7, 0, ladder);
+      rail.rotation.x = .14;
+    });
+    for (i = 0; i < 9; i++) box(.62, .05, .10, ladM, 0, .35 + i * .36, -.24 + i * .05, ladder);
+    var cat = new THREE.Group();                             /* card catalogue */
+    cat.position.set(6.8, 0, 12.5); cat.rotation.y = -.3; g.add(cat);
+    box(2.0, 1.25, .70, ladM, 0, .63, 0, cat);
+    for (var cy2 = 0; cy2 < 4; cy2++) {
+      for (var cx2 = 0; cx2 < 5; cx2++) {
+        box(.34, .24, .04, mat({ map: TEX.wood, color: 0x7d5a38, roughness: .55 }),
+          -.8 + cx2 * .4, .22 + cy2 * .30, .36, cat);
+        box(.10, .03, .03, brassM, -.8 + cx2 * .4, .22 + cy2 * .30, .39, cat);
+      }
+    }
+
+    /* -------------------------------------------------------- the facility */
+  }
+
+  if (sets.fac) {
+    g = sets.fac; r = rng(20301);
+    var chainM = mat({ color: 0x4e4a44, roughness: .7, metalness: .6 });
+    for (i = 0; i < 14; i++) {                               /* chains from the trusses */
+      var cx3 = -11 + r() * 22, cz3 = -24 + r() * 46;
+      if (Math.abs(cx3) < 5 && cz3 > 8) continue;
+      var len2 = 1.4 + r() * 3.4;
+      cyl(.035, .035, len2, 5, chainM, cx3, 8.3 - len2 / 2, cz3, g);
+      var hookF = new THREE.Mesh(new THREE.TorusGeometry(.10, .028, 4, 10, 4.2), chainM);
+      hookF.position.set(cx3, 8.3 - len2, cz3); g.add(hookF);
+    }
+    var sheetM = mat({ map: TEX.typed, color: 0xb0a892, roughness: .96, side: THREE.DoubleSide });
+    for (i = 0; i < 60; i++) {                               /* paper across the floor */
+      var pf = new THREE.Mesh(new THREE.PlaneGeometry(.22, .30), sheetM);
+      pf.rotation.x = -Math.PI / 2; pf.rotation.z = r() * 6.3;
+      pf.position.set((r() - .5) * 22, .012, (r() - .5) * 50);
+      g.add(pf);
+    }
+    var shelfF = new THREE.Group();                          /* a shelf that came down */
+    shelfF.position.set(-10.5, 0, -14); shelfF.rotation.set(0, .3, 1.45); g.add(shelfF);
+    var shM = mat({ map: TEX.rust, color: 0x6e6459, roughness: .85, metalness: .3 });
+    box(.4, 2.6, 1.2, shM, 0, 1.3, 0, shelfF);
+    for (i = 0; i < 4; i++) box(.45, .05, 1.2, shM, 0, .4 + i * .6, 0, shelfF);
+
+    /* ------------------------------------------------------ command centre */
+  }
+
+  if (sets.cmd) {
+    g = sets.cmd;
+    var trM = mat({ color: 0x1c2028, roughness: .5, metalness: .6 });
+    for (i = -10; i <= 10; i += 5) box(26, .22, .22, trM, 0, 6.75, i, g);
+    var cableM = mat({ color: 0x141519, roughness: .9 });
+    for (i = 0; i < 10; i++) {                               /* cable runs on the floor */
+      var cr3 = cyl(.05, .05, 7 + i * .4, 5, cableM,
+        (i % 2 ? 1 : -1) * (10 + (i % 3)), .05, -8 + i * 1.7, g);
+      cr3.rotation.z = Math.PI / 2; cr3.rotation.y = .3 + i * .2;
+    }
+    [-1, 1].forEach(function (side) {                        /* a rail round the globe */
+      for (var rr2 = 0; rr2 < 5; rr2++) {
+        cyl(.035, .035, .95, 6, trM, side * 6.4, .48, -1.2 + rr2 * 1.4, g);
+      }
+      box(.05, .05, 6.4, trM, side * 6.4, .95, 1.6, g);
+    });
+
+    /* ----------------------------------------------------------- the tunnel */
+  }
+
+  if (sets.tun) {
+    g = sets.tun; r = rng(20401);
+    var condM = mat({ color: 0x33363c, roughness: .7, metalness: .45 });
+    for (i = 0; i < 3; i++) {                                /* cable bundles */
+      var cd = cyl(.10, .10, 150, 6, condM, -6.2 - i * .28, 4.4 + i * .34, 0, g);
+      cd.rotation.x = Math.PI / 2;
+      var cd2 = cyl(.10, .10, 150, 6, condM, 6.2 + i * .28, 4.4 + i * .34, 0, g);
+      cd2.rotation.x = Math.PI / 2;
+    }
+    for (i = -70; i < 70; i += 22) {                         /* warning plates */
+      var sgn = box(1.1, .7, .05, mat({ map: TEX.hazard, color: 0xb9a45a, roughness: .7, metalness: .3 }), -6.9, 2.6, i, g);
+    }
+    for (i = 0; i < 26; i++) {                               /* puddles on the rock */
+      var pud2 = new THREE.Mesh(new THREE.CircleGeometry(.6 + r() * 1.5, 12),
+        mat({ color: 0x1a1e22, roughness: .06, metalness: .85 }));
+      pud2.rotation.x = -Math.PI / 2;
+      pud2.position.set((r() > .5 ? 1 : -1) * (4.6 + r() * 4), .02, -70 + r() * 140);
+      g.add(pud2);
+    }
+
+    /* ------------------------------------------------------- the chamber */
+  }
+
+  if (sets.gold) {
+    g = sets.gold; r = rng(20501);
+    var spoilM = mat({ map: TEX.rock, color: 0x6a5c46, roughness: .95 });
+    for (i = 0; i < 20; i++) {                               /* spoil heaps */
+      var sa2 = r() * Math.PI * 2, srd = 20 + r() * 12;
+      var sz3 = Math.sin(sa2) * srd;
+      if (sz3 > 12) continue;
+      var heap = new THREE.Mesh(new THREE.ConeGeometry(1.6 + r() * 2.4, 1.0 + r() * 1.6, 9), spoilM);
+      heap.position.set(Math.cos(sa2) * srd, .5, sz3);
+      heap.rotation.y = r() * 3;
+      g.add(heap);
+    }
+    for (i = 0; i < 34; i++) {                               /* cracks in the floor */
+      var ca2 = r() * Math.PI * 2, crd = 10 + r() * 26;
+      var crk = box(.10 + r() * .2, .02, 3 + r() * 7, mat({ color: 0x2a2016, roughness: 1 }),
+        Math.cos(ca2) * crd, .015, Math.sin(ca2) * crd, g);
+      crk.rotation.y = r() * 3;
+    }
+
+    /* --------------------------------------------------------- the ruins */
+  }
+
+  if (sets.ruins) {
+    g = sets.ruins; r = rng(20601);
+    var glassM = new THREE.MeshBasicMaterial({ color: 0x9fc0d8, transparent: true, opacity: .35 });
+    for (i = 0; i < 40; i++) {                               /* broken glass */
+      var gl = new THREE.Mesh(new THREE.CircleGeometry(.4 + r() * 1.2, 6), glassM);
+      gl.rotation.x = -Math.PI / 2; gl.rotation.z = r() * 6.3;
+      gl.position.set((r() - .5) * 90, .022, (r() - .5) * 90);
+      g.add(gl);
+    }
+    var wetPaper = mat({ map: TEX.paper, color: 0x8a8478, roughness: .98, side: THREE.DoubleSide });
+    for (i = 0; i < 50; i++) {                               /* paper in the water */
+      var wp = new THREE.Mesh(new THREE.PlaneGeometry(.24, .32), wetPaper);
+      wp.rotation.x = -Math.PI / 2; wp.rotation.z = r() * 6.3;
+      wp.position.set((r() - .5) * 70, .026, (r() - .5) * 70);
+      g.add(wp);
+    }
+    var board2 = new THREE.Group();                          /* a billboard, down */
+    board2.position.set(-30, 0, 22); board2.rotation.set(-1.2, .5, .1); g.add(board2);
+    box(9, .3, 5, mat({ map: TEX.rust, color: 0x6e6a62, roughness: .9 }), 0, 0, 0, board2);
+    emit(8.4, 4.4, 0x3a4d6b, 0, .18, 0, 0, board2, .5).rotation.x = -Math.PI / 2;
+  }
+
+  /* ---------------------------------------------------- the warehouse */
+  if (sets.ware) {
+    g = sets.ware; r = rng(20701);
+    var toolM = mat({ color: 0x4a5058, roughness: .5, metalness: .6 });
+    var pegM = mat({ map: TEX.rust, color: 0x7a6f60, roughness: .85 });
+    /* a tool wall on the far side, away from the staging area */
+    var peg = box(4.2, 2.4, .12, pegM, -13, 2.6, -12.6, g);
+    for (i = 0; i < 16; i++) {
+      var tl = box(.06 + r() * .10, .30 + r() * .55, .06, toolM,
+        -14.9 + r() * 3.8, 2.0 + r() * 1.5, -12.48, g);
+      tl.rotation.z = (r() - .5) * .5;
+    }
+    /* pipes running the length of the ceiling */
+    for (i = 0; i < 4; i++) {
+      var pipe = cyl(.11 + i * .02, .11 + i * .02, 33, 8, toolM, -8 + i * .5, 10.4 - i * .16, 11.4, g);
+      pipe.rotation.z = Math.PI / 2;
+      for (var br5 = -15; br5 < 16; br5 += 7) {
+        box(.10, .5, .10, toolM, br5, 10.7 - i * .16, 11.4, g);
+      }
+    }
+    /* pallets, a hand truck, and rope coils */
+    var woodM = mat({ map: TEX.wood, color: 0x8a6a48, roughness: .9 });
+    for (i = 0; i < 5; i++) {
+      var pal = new THREE.Group();
+      pal.position.set(-15 + r() * 4, 0, -6 + r() * 16);
+      pal.rotation.y = r() * 1.2; g.add(pal);
+      for (var pb = 0; pb < 5; pb++) box(1.1, .04, .12, woodM, 0, .16, -.5 + pb * .25, pal);
+      box(1.1, .10, 1.1, woodM, 0, .06, 0, pal);
+    }
+    for (i = 0; i < 4; i++) {
+      var coil = new THREE.Mesh(new THREE.TorusGeometry(.34, .09, 6, 16),
+        mat({ color: 0x6e6248, roughness: .95 }));
+      coil.rotation.x = Math.PI / 2;
+      coil.position.set(13 + r() * 2, .09, -10 + r() * 20);
+      g.add(coil);
+    }
+  }
+
+  /* ------------------------------------------------------ the fortress */
+  if (sets.fort) {
+    g = sets.fort; r = rng(20801);
+    var condM2 = mat({ color: 0x2c3037, roughness: .6, metalness: .5 });
+    /* conduit and cable trays down both walls of the corridor */
+    for (i = 0; i < 3; i++) {
+      [-1, 1].forEach(function (side) {
+        var cd3 = cyl(.09, .09, 118, 6, condM2, side * 3.2, 3.9 + i * .3, 0, g);
+        cd3.rotation.x = Math.PI / 2;
+      });
+    }
+    /* bulkhead ribs every few metres, and a numbered plate on each */
+    for (i = -54; i < 56; i += 9) {
+      [-1, 1].forEach(function (side) {
+        box(.22, 5.0, .5, condM2, side * 3.42, 2.5, i, g);
+      });
+      emit(.8, .34, 0x8fd6ff, -3.36, 3.4, i, Math.PI / 2, g, .55);
+      box(7, .3, .5, condM2, 0, 5.05, i, g);
+    }
+    /* crates and a dropped rifle rack along the corridor edges */
+    var crateM2 = mat({ map: TEX.plate, color: 0x4c525a, roughness: .55, metalness: .5 });
+    for (i = 0; i < 12; i++) {
+      var cs2 = .5 + r() * .5;
+      var cb4 = box(cs2, cs2 * .8, cs2, crateM2,
+        (r() > .5 ? 1 : -1) * (2.7 + r() * .4), cs2 * .4, -50 + r() * 100, g);
+      cb4.rotation.y = r() * 1.2;
+    }
+    /* steam venting from the floor grating */
+    for (i = 0; i < 6; i++) {
+      var vent = new THREE.Mesh(new THREE.CylinderGeometry(.5, .18, 2.4, 10, 1, true),
+        new THREE.MeshBasicMaterial({ color: 0xb8ccdd, transparent: true, opacity: .045,
+          side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+      vent.position.set((r() > .5 ? 1 : -1) * 2.4, 1.2, -48 + r() * 96);
+      g.add(vent);
+    }
+  }
+
+  /* ------------------------------------------------------- the reactor */
+  if (sets.reac) {
+    g = sets.reac; r = rng(20901);
+    var pipeM = mat({ map: TEX.metal, color: 0x5a626c, roughness: .5, metalness: .65 });
+    /* coolant pipes arcing from the shell into the core */
+    for (i = 0; i < 8; i++) {
+      var pa = i / 8 * Math.PI * 2;
+      var run = cyl(.34, .34, 22, 10, pipeM,
+        Math.cos(pa) * 17, 3.0, Math.sin(pa) * 17, g);
+      run.rotation.z = Math.PI / 2; run.rotation.y = -pa;
+      var elbow = new THREE.Mesh(new THREE.TorusGeometry(1.5, .34, 8, 14, 1.6), pipeM);
+      elbow.position.set(Math.cos(pa) * 28, 3.0, Math.sin(pa) * 28);
+      elbow.rotation.set(Math.PI / 2, 0, -pa);
+      g.add(elbow);
+    }
+    /* service platforms and ladders around the outside */
+    var deckM2 = mat({ map: TEX.grate, color: 0x6d757e, roughness: .6, metalness: .5, side: THREE.DoubleSide });
+    for (i = 0; i < 4; i++) {
+      var da = i / 4 * Math.PI * 2 + .6;
+      var pf2 = box(5.0, .16, 3.0, deckM2, Math.cos(da) * 24, 10.5, Math.sin(da) * 24, g);
+      pf2.rotation.y = -da;
+      for (var lr = 0; lr < 8; lr++) {
+        box(1.0, .07, .07, pipeM,
+          Math.cos(da) * 24, 1.4 + lr * 1.15, Math.sin(da) * 24 + .9, g).rotation.y = -da;
+      }
+      emit(1.6, .3, 0xffa23a, Math.cos(da) * 23.4, 10.9, Math.sin(da) * 23.4, -da + Math.PI, g, .8);
+    }
+    /* warning strobes on the shell, and hazard striping on the floor */
+    for (i = 0; i < 10; i++) {
+      var sa3 = i / 10 * Math.PI * 2;
+      emit(1.2, .5, 0xff5a30, Math.cos(sa3) * 31.4, 14, Math.sin(sa3) * 31.4, -sa3 + Math.PI, g, .55);
+    }
+    for (i = 0; i < 12; i++) {
+      var ha = i / 12 * Math.PI * 2;
+      var stripe2 = box(3.0, .02, 1.0, mat({ map: TEX.hazard, color: 0xa89050, roughness: .8 }),
+        Math.cos(ha) * 10.5, .03, Math.sin(ha) * 10.5, g);
+      stripe2.rotation.y = -ha;
+    }
+  }
+}
+
+/* a tapered soft shape used for hanging cloth */
+function shapeMeshSimple(h, prof, m) {
+  var pts = [];
+  for (var i = 0; i < prof.length; i++) {
+    pts.push(new THREE.Vector2(prof[i], -h * (i / (prof.length - 1))));
+  }
+  var geo = new THREE.LatheGeometry(pts, 12);
+  var mesh = new THREE.Mesh(geo, m);
+  mesh.castShadow = true;
+  return mesh;
+}
+
+/* =====================================================================
+   AIR
+   Rooms this old are never empty. Dust hangs in the light indoors and
+   embers drift where things are burning outside, both a pure function of
+   the clock so a scrub lands on the same air.
+   ===================================================================== */
+var motes = null, embers = null, MOTE_N = 900, EMBER_N = 260;
+function makeMotes() {
+  var g = new THREE.Group();
+
+  var mg = new THREE.BufferGeometry();
+  var mp = new Float32Array(MOTE_N * 3);
+  mg.setAttribute("position", new THREE.BufferAttribute(mp, 3));
+  motes = new THREE.Points(mg, new THREE.PointsMaterial({
+    map: TEX.spark, color: 0xe8e0cc, size: .035, sizeAttenuation: true,
+    transparent: true, opacity: 0, depthWrite: false, fog: false
+  }));
+  motes.frustumCulled = false;
+  g.add(motes);
+
+  var eg = new THREE.BufferGeometry();
+  var ep = new Float32Array(EMBER_N * 3);
+  eg.setAttribute("position", new THREE.BufferAttribute(ep, 3));
+  embers = new THREE.Points(eg, new THREE.PointsMaterial({
+    map: TEX.spark, color: 0xff9440, size: .10, sizeAttenuation: true,
+    transparent: true, opacity: 0, depthWrite: false,
+    blending: THREE.AdditiveBlending, fog: false
+  }));
+  embers.frustumCulled = false;
+  g.add(embers);
+  return g;
+}
+
+function moteFrame(t, sh, interior, camPos) {
+  /* indoors: dust turning over slowly in whatever light there is */
+  var dustAmt = interior ? (sh.set === "gold" ? .22 : .34) : 0;
+  motes.material.opacity = dustAmt;
+  if (dustAmt > .001) {
+    var p = motes.geometry.attributes.position.array;
+    var r = rng(31337);
+    for (var i = 0; i < MOTE_N; i++) {
+      var ox = (r() - .5) * 16, oz = (r() - .5) * 16, base = r() * 5;
+      var sp = .04 + r() * .10, ph = r() * 6.28;
+      p[i * 3] = camPos.x + ox + Math.sin(t * sp * 3 + ph) * .7;
+      p[i * 3 + 1] = .25 + ((base + t * sp) % 5);
+      p[i * 3 + 2] = camPos.z + oz + Math.cos(t * sp * 2.4 + ph * 1.7) * .7;
+    }
+    motes.geometry.attributes.position.needsUpdate = true;
+  }
+
+  /* outdoors, where things are burning: embers going up and out */
+  /* the ruins burn on the horizon and the wreckage is still smoking, so
+     both carry embers without every shot in them having to say so */
+  var emberAmt = sh.embers !== undefined ? sh.embers
+               : (sh.set === "ruins" ? .8 : sh.set === "wreck" ? .5 : 0);
+  embers.material.opacity = emberAmt * .85;
+  if (emberAmt > .001) {
+    var q = embers.geometry.attributes.position.array;
+    var r2 = rng(90210);
+    for (var k = 0; k < EMBER_N; k++) {
+      var ex = (r2() - .5) * 44, ez = (r2() - .5) * 44;
+      var rise = .35 + r2() * .8, ph2 = r2();
+      var life = (ph2 + t * rise / 14) % 1;
+      q[k * 3] = camPos.x + ex + life * 5.5 + Math.sin(t * 1.3 + ph2 * 9) * 1.1;
+      q[k * 3 + 1] = .2 + life * 16;
+      q[k * 3 + 2] = camPos.z + ez + Math.cos(t * .9 + ph2 * 7) * 1.4;
+    }
+    embers.geometry.attributes.position.needsUpdate = true;
+  }
 }
 
 /* =====================================================================
@@ -4570,7 +5019,7 @@ S(18, {                                        /* 32 — THE HIDDEN ROOM */
   },
   act: function (t, u) {
     var e = place(ELIAS, -.8, -16.6, Math.PI); poseConsole(e, t, 1.3);
-    var m = place(MARCUS, 1.4, -14.6, Math.PI - .5);
+    var m = place(MARCUS, 1.9, -15.6, Math.PI - .5);
     if (u < .45) poseStand(m, t, {}); else poseTalk(m, t, .5);
     look(MARCUS, ELIAS, .85);
     if (u > .40) look(ELIAS, MARCUS, .6);
@@ -5014,8 +5463,8 @@ S(20, {                                        /* 56 — NOVA'S RESEARCH */
 S(20, {                                        /* 57 — THE PHOTOGRAPH */
   set: "cmd",
   cam: function (u) {
-    camKeys(u, [{ p: [8.6, 2.10, 8.4], l: [7.4, 1.90, 4.6], f: 34 },
-                { p: [8.2, 2.06, 7.8], l: [7.5, 1.88, 4.6], f: 31 }]);
+    camKeys(u, [{ p: [10.4, 2.45, 9.6], l: [7.2, 1.72, 5.4], f: 36 },
+                { p: [9.8, 2.38, 9.0], l: [7.3, 1.70, 5.4], f: 33 }]);
     CAM.shake = .22;
   },
   act: function (t, u) {
@@ -5032,8 +5481,8 @@ S(20, {                                        /* 57 — THE PHOTOGRAPH */
 S(20, {                                        /* 58 — THE CONNECTION */
   set: "cmd",
   cam: function (u) {
-    camKeys(u, [{ p: [-8.6, 2.10, 8.4], l: [-7.4, 1.90, 4.6], f: 34 },
-                { p: [-8.2, 2.06, 7.8], l: [-7.5, 1.88, 4.6], f: 31 }]);
+    camKeys(u, [{ p: [-10.4, 2.45, 9.6], l: [-7.2, 1.72, 5.4], f: 36 },
+                { p: [-9.8, 2.38, 9.0], l: [-7.3, 1.70, 5.4], f: 33 }]);
     CAM.shake = .22;
   },
   act: function (t, u) {
@@ -6020,6 +6469,7 @@ function boot(_THREE, canvas, uiRefs) {
   sets.cmd = buildCommand();
   sets.tun = buildTunnel();
   sets.gold = buildGold();
+  addDetail(sets);
   for (var key in sets) scene.add(sets[key]);
   SET_ORIGIN = {
     ruins: RUIN_O, hq46: HQ_O, alley: ALLEY_O, lib: LIB_O, road: ROAD_O,
@@ -6040,6 +6490,7 @@ function boot(_THREE, canvas, uiRefs) {
   makeExtras(scene, 26);
   scene.add(makeFX());
   scene.add(makeBeam());
+  scene.add(makeMotes());
   scene.add(makeRain());
   scene.add(makePulse());
 
@@ -6212,6 +6663,7 @@ function frame(t, playing) {
   /* rain follows the lens, and only falls where the sky is */
   var rainAmt = typeof sh.rain === "function" ? sh.rain(u) : (sh.rain || 0);
   rainFrame(t, interior ? 0 : rainAmt, camera.position);
+  moteFrame(t, sh, interior, camera.position);
 
   /* ---------------------------------------------------------- grade */
   var m = moodAt(t);
