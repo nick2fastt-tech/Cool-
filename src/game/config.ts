@@ -41,17 +41,17 @@ export interface CameraDef {
 }
 
 export const CAMERAS: readonly CameraDef[] = [
-  { id: 'CAM_01', label: 'Show Stage',   room: Room.Stage,      map: { x: 0.50, y: 0.09 }, view: { pos: [0, 2.6, -13.5], target: [0, 1.3, -18.5] } },
-  { id: 'CAM_02', label: 'Dining Hall',  room: Room.Dining,     map: { x: 0.50, y: 0.28 }, view: { pos: [0, 3.0, -3.0],  target: [0, 1.2, -14.0] } },
-  { id: 'CAM_03', label: 'Backstage',    room: Room.Backstage,  map: { x: 0.14, y: 0.16 }, view: { pos: [-11.5, 2.4, -15.0], target: [-8.5, 1.2, -17.5] } },
-  { id: 'CAM_04', label: "Crow's Nest",  room: Room.Cove,       map: { x: 0.16, y: 0.38 }, view: { pos: [-10.8, 2.4, -6.5], target: [-13.5, 1.1, -9.5] } },
-  { id: 'CAM_05', label: 'West Hall',    room: Room.WestHall,   map: { x: 0.24, y: 0.60 }, view: { pos: [-6.2, 2.4, -1.0], target: [-6.2, 1.2, 6.0] } },
-  { id: 'CAM_06', label: 'West Corner',  room: Room.WestCorner, map: { x: 0.30, y: 0.80 }, view: { pos: [-6.2, 2.3, 6.4],  target: [-3.0, 1.2, 8.4] } },
-  { id: 'CAM_07', label: 'East Hall',    room: Room.EastHall,   map: { x: 0.76, y: 0.60 }, view: { pos: [6.2, 2.4, -1.0],  target: [6.2, 1.2, 6.0] } },
-  { id: 'CAM_08', label: 'East Corner',  room: Room.EastCorner, map: { x: 0.70, y: 0.80 }, view: { pos: [6.2, 2.3, 6.4],   target: [3.0, 1.2, 8.4] } },
-  { id: 'CAM_09', label: 'Supply Closet',room: Room.Supply,     map: { x: 0.09, y: 0.72 }, view: { pos: [-10.2, 2.2, 3.6], target: [-12.4, 1.2, 4.6] } },
-  { id: 'CAM_10', label: 'Kitchen',      room: Room.Kitchen,    audioOnly: true, map: { x: 0.88, y: 0.24 }, view: { pos: [11.0, 2.4, -12.0], target: [13.5, 1.2, -14.0] } },
-  { id: 'CAM_11', label: 'Restrooms',    room: Room.Restrooms,  map: { x: 0.86, y: 0.42 }, view: { pos: [10.6, 2.4, -5.0], target: [13.2, 1.2, -7.0] } },
+  { id: 'CAM_01', label: 'Show Stage',    room: Room.Stage,      map: { x: 0.50, y: 0.08 }, view: { pos: [0, 2.9, -11.0],    target: [0, 1.4, -16.5] } },
+  { id: 'CAM_02', label: 'Dining Hall',   room: Room.Dining,     map: { x: 0.50, y: 0.30 }, view: { pos: [0, 3.2, -2.5],     target: [0, 1.2, -12.0] } },
+  { id: 'CAM_03', label: 'Backstage',     room: Room.Backstage,  map: { x: 0.14, y: 0.12 }, view: { pos: [-9.6, 2.4, -13.4], target: [-12.0, 1.2, -16.5] } },
+  { id: 'CAM_04', label: "Crow's Nest",   room: Room.Cove,       map: { x: 0.13, y: 0.40 }, view: { pos: [-9.4, 2.5, -5.4],  target: [-12.5, 1.1, -8.5] } },
+  { id: 'CAM_05', label: 'West Hall',     room: Room.WestHall,   map: { x: 0.28, y: 0.62 }, view: { pos: [-6.2, 2.4, -0.6],  target: [-6.2, 1.2, 6.5] } },
+  { id: 'CAM_06', label: 'West Corner',   room: Room.WestCorner, map: { x: 0.33, y: 0.84 }, view: { pos: [-5.6, 2.3, 6.6],   target: [-3.4, 1.2, 8.6] } },
+  { id: 'CAM_07', label: 'East Hall',     room: Room.EastHall,   map: { x: 0.72, y: 0.62 }, view: { pos: [6.2, 2.4, -0.6],   target: [6.2, 1.2, 6.5] } },
+  { id: 'CAM_08', label: 'East Corner',   room: Room.EastCorner, map: { x: 0.67, y: 0.84 }, view: { pos: [5.6, 2.3, 6.6],    target: [3.4, 1.2, 8.6] } },
+  { id: 'CAM_09', label: 'Supply Closet', room: Room.Supply,     map: { x: 0.10, y: 0.72 }, view: { pos: [-9.6, 2.2, 1.6],   target: [-12.0, 1.2, 4.5] } },
+  { id: 'CAM_10', label: 'Kitchen',       room: Room.Kitchen,    audioOnly: true, map: { x: 0.89, y: 0.16 }, view: { pos: [9.6, 2.4, -10.6], target: [12.5, 1.2, -14.0] } },
+  { id: 'CAM_11', label: 'Restrooms',     room: Room.Restrooms,  map: { x: 0.88, y: 0.44 }, view: { pos: [9.6, 2.4, -3.6],   target: [12.5, 1.2, -6.5] } },
 ] as const;
 
 export const CAMERA_BY_ROOM: ReadonlyMap<Room, CameraDef> = new Map(
