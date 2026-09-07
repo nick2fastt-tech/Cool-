@@ -26,6 +26,16 @@ Co-op free-roam is the next milestone.
 | Packaging | PWA now, Capacitor shell for the stores | One codebase for web, Android and iOS |
 | Multiplayer | Node + `ws`, server-authoritative (M4) | The whole simulation is already headless and seedable |
 
+## Just play it
+
+**[`hollow-shift.html`](hollow-shift.html) is the whole game in one file.**
+Download it and open it - no install, no server, no build step. It works from
+a phone's file manager, a USB stick, or any static host. 588 KB, no external
+requests: every texture is drawn to a canvas and every sound is synthesised at
+runtime, so there is nothing to fetch.
+
+Regenerate it after a code change with `npm run build:single`.
+
 ## Running it
 
 ```bash
@@ -35,6 +45,9 @@ npm run build      # production bundle in dist/
 npm test           # simulation unit tests + difficulty regression sweep
 npm run balance    # prints the win-rate table for all six nights
 npm run smoke      # drives the built game in Chromium, writes artifacts/*.png
+
+npm run build:single   # regenerate the standalone hollow-shift.html
+npm run smoke:single   # build it, then verify it over file:// as a player would
 ```
 
 ## How it plays
@@ -81,7 +94,9 @@ doorways when the lights come back.
 **Milestone 1 (single player) is complete and verified.** Six nights, five
 characters, eleven cameras, power and blackout, save system, settings, 3D menu,
 touch controls, four graphics presets. 22 unit tests, a 480-night balance
-sweep, and a 20-check browser smoke run all pass.
+sweep, and a 20-check browser smoke run all pass - the smoke run passes against
+both the multi-file build and the standalone `hollow-shift.html` loaded over
+`file://`.
 
 **Not built yet:** co-op multiplayer (unlock and menu entry are wired; the mode
 itself says so on screen rather than pretending), and the Capacitor store
