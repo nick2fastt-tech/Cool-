@@ -32,7 +32,26 @@ The pass that turns a working game into one worth playing twice.
 - Unlockables in Extras tied to real feats, not grinding.
 - More easter eggs on the rare-event system that HUSK already uses.
 
-## M4 - Co-op free roam (the big one)
+## M4 - Co-op free roam - DONE (Co-op Survival)
+
+Dedicated authoritative server (Node + `ws`), 1-4 players, free roam of the
+whole building, shared power grid, roaming animatronics with real target
+selection, the multi-step power-restoration objective, torch batteries,
+down/revive/elimination, host migration, reconnection and server-side
+validation.
+
+Verified by 58 automated tests and a 26-check four-client browser run. Full
+status, including what is deliberately not built:
+[MULTIPLAYER.md](MULTIPLAYER.md).
+
+Still open from this milestone:
+
+- Free Roam, Objective Mode and Night Survival (locked in the UI today).
+- A second co-op map.
+- Real-device network testing over cellular, and player counts above four.
+- Voice or text chat.
+
+## M4 (original plan, kept for reference)
 
 The mode the menu already unlocks after Night 1.
 

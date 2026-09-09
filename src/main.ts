@@ -1,6 +1,10 @@
 import './ui/styles.css';
 import * as THREE from 'three';
 import { AudioEngine } from './audio/audioEngine';
+import { CoopScene } from './mp/mpScene';
+import { MpHud } from './ui/mpHud';
+import { MpScreens } from './ui/mpScreens';
+import { NetClient } from './mp/netClient';
 import { Effects } from './ui/effects';
 import { Hud } from './ui/hud';
 import { NightSession } from './game/nightManager';
@@ -13,6 +17,7 @@ import { TouchInput } from './ui/touch';
 import { NIGHTS, Room, TIME, type CharacterId } from './game/config';
 import { probeDevice } from './core/device';
 import type { AudioCue } from './game/animatronic';
+import type { MatchEvent } from './net/protocol';
 import type { Settings } from './game/saveSystem';
 
 /**
@@ -24,7 +29,17 @@ import type { Settings } from './game/saveSystem';
  * game/config.ts and the simulation applies it.
  */
 
-type AppState = 'loading' | 'menu' | 'intro' | 'playing' | 'result' | 'paused';
+type AppState =
+  | 'loading'
+  | 'menu'
+  | 'intro'
+  | 'playing'
+  | 'result'
+  | 'paused'
+  /** Multiplayer menus, host setup, join and lobby. */
+  | 'mp-menu'
+  /** Inside a co-op match. */
+  | 'mp-match';
 
 const OFFICE_POS = new THREE.Vector3(0, 0, 9.6);
 
@@ -48,6 +63,15 @@ class App {
   private jumpscareTimer = 0;
   private tutorialQueue: { at: number; text: string }[] = [];
 
+  /* --- multiplayer, created on first use so single player pays nothing --- */
+  private net: NetClient | null = null;
+  private mpScreens: MpScreens | null = null;
+  private mpHud: MpHud | null = null;
+  private coopScene: CoopScene | null = null;
+  private mpHeld: { kind: 'interact' | 'revive'; id: string } | null = null;
+  private mpDebugTaps = 0;
+  private mpDebugTapAt = 0;
+
   async boot(): Promise<void> {
     this.effects = new Effects(this.uiRoot, this.save.settings.quality);
     this.input = new TouchInput(document.getElementById('app') as HTMLElement, (dx, dy) => {
@@ -59,7 +83,7 @@ class App {
 
     this.screens = new Screens(this.uiRoot, this.input, {
       startNight: (night) => this.startNight(night),
-      openMultiplayer: () => this.screens.showMultiplayerPreview(this.save.value),
+      openMultiplayer: () => this.openMultiplayer(),
       updateSettings: (patch) => this.applySettings(patch),
       resetProgress: () => {
         this.save.reset();
@@ -87,8 +111,21 @@ class App {
     progress(1, 'READY');
     await frame();
 
+    // Look-drag inside a co-op match is handled by the multiplayer HUD, which
+    // has to ignore the stick and the buttons.
+    const app = document.getElementById('app') as HTMLElement;
+    for (const [type, kind] of [['pointerdown', 'down'], ['pointermove', 'move'], ['pointerup', 'up'], ['pointercancel', 'up']] as const) {
+      app.addEventListener(type, (e) => {
+        if (this.state !== 'mp-match' || !this.mpHud || !this.coopScene || !this.net) return;
+        this.mpHud.handleLookPointer(kind, e as PointerEvent, (dx, dy) =>
+          this.coopScene!.look(dx, dy, this.save.settings.sensitivity, this.net!),
+        );
+      });
+    }
+
     window.addEventListener('resize', () => this.scene.resize());
     window.addEventListener('orientationchange', () => setTimeout(() => this.scene.resize(), 250));
+    window.addEventListener('resize', () => this.coopScene?.resize());
     document.addEventListener('visibilitychange', () => this.onVisibility());
     // Audio contexts only start inside a gesture, so arm it on the first touch.
     const unlock = () => {
@@ -282,12 +319,17 @@ class App {
       this.audio.setVolumes(settings.masterVolume, settings.sfxVolume);
     }
     if (patch.haptics !== undefined) this.input.haptics = settings.haptics;
+    if (patch.quality) this.coopScene?.setQuality(patch.quality);
     this.hud.applySettings(settings);
+    this.mpHud?.applySettings(settings);
   }
 
   private onVisibility(): void {
     if (document.hidden) {
       this.audio.suspend();
+      // A co-op match is not pausable - the server never stops - so the most
+      // useful thing to do is drop the controls and stop drawing.
+      if (this.state === 'mp-match') this.mpHud?.banner('BACKGROUNDED - THE SHIFT CONTINUES');
       if (this.state === 'playing') {
         this.state = 'paused';
         this.session?.setCrank(false);
@@ -295,11 +337,255 @@ class App {
       }
     } else {
       this.audio.resume();
+      if (this.state === 'mp-match') this.mpHud?.banner(null);
       if (this.state === 'paused') {
         this.state = 'playing';
         this.hud.clearTransient();
       }
     }
+  }
+
+
+  /* ------------------------------------------------------- multiplayer */
+
+  /** Built the first time the player opens co-op, then reused. */
+  private ensureMultiplayer(): void {
+    if (this.net) return;
+
+    const net = new NetClient();
+    this.net = net;
+    this.coopScene = new CoopScene(this.scene.renderer, this.save.settings.quality);
+
+    this.mpScreens = new MpScreens(this.uiRoot, {
+      back: () => {
+        net.leave();
+        net.disconnect();
+        this.mpScreens?.hide();
+        this.toMenu();
+      },
+      host: (settings) => net.host(settings),
+      join: (code) => net.join(code),
+      quickJoin: () => net.quickJoin(),
+      refreshPublic: () => net.listPublic(),
+      setSettings: (settings) => net.setSettings(settings),
+      ready: (ready) => net.setReady(ready),
+      start: () => net.startMatch(),
+      leave: () => {
+        net.leave();
+        this.mpScreens?.showMenu();
+      },
+    });
+
+    this.mpHud = new MpHud(this.uiRoot, net, () => {
+      net.leave();
+      this.exitMatch();
+    });
+    this.mpHud.applySettings(this.save.settings);
+    // Debug overlay: hidden unless asked for, by ?debug=1 or three taps on the
+    // match clock. Never on by default in a shipped build.
+    if (new URLSearchParams(location.search).get('debug') === '1') this.mpHud.toggleDebug();
+    this.mpHud.root.addEventListener('pointerdown', (e) => {
+      if (!(e.target as HTMLElement).classList.contains('mp-clock')) return;
+      const now = performance.now();
+      this.mpDebugTaps = now - this.mpDebugTapAt < 600 ? this.mpDebugTaps + 1 : 1;
+      this.mpDebugTapAt = now;
+      if (this.mpDebugTaps >= 3) {
+        this.mpDebugTaps = 0;
+        this.mpHud?.toggleDebug();
+      }
+    });
+
+    this.wireNet(net);
+  }
+
+  private wireNet(net: NetClient): void {
+    net.events.on('connection', ({ state, detail }) => {
+      this.mpScreens?.setConnection(state, detail);
+      if (this.state !== 'mp-match') return;
+      if (state === 'reconnecting') this.mpHud?.banner(detail ?? 'CONNECTION LOST - RECONNECTING');
+      else if (state === 'online') this.mpHud?.banner(null);
+      else if (state === 'failed') {
+        this.exitMatch();
+        this.mpScreens?.showError(detail ?? 'CONNECTION LOST', () => this.mpScreens?.showMenu());
+      }
+    });
+
+    net.events.on('lobby', (state) => {
+      if (state.phase === 'match' && this.state !== 'mp-match') this.enterMatch();
+      else if (state.phase !== 'match' && this.state === 'mp-match') this.exitMatch();
+      if (this.state !== 'mp-match') this.mpScreens?.showLobby(state, net.playerId);
+    });
+
+    net.events.on('publicRooms', (rooms) => {
+      if (this.mpScreens?.screen === 'join') this.mpScreens.showJoin(rooms);
+    });
+
+    net.events.on('error', ({ code, message }) => {
+      // Fatal problems get a screen with a way out; the rest are just toasts.
+      if (code === 'BAD_VERSION' || code === 'INTERNAL') {
+        this.mpScreens?.showError(message, () => this.mpScreens?.showMenu());
+      } else if (this.state === 'mp-match') {
+        this.mpHud?.toast(message);
+      } else {
+        this.mpScreens?.toast(message);
+      }
+    });
+
+    net.events.on('matchStart', () => this.enterMatch());
+
+    net.events.on('matchEnd', ({ win, reason }) => {
+      this.audio.stopLoop('musicbox');
+      if (win) this.audio.win();
+      this.mpHud?.toast(`${win ? '6 AM - SHIFT COMPLETE' : 'SHIFT ENDED'} - ${reason}`, 6);
+      window.setTimeout(() => this.exitMatch(), 2600);
+    });
+
+    net.events.on('matchEvents', (list) => this.playMatchEvents(list));
+
+    net.events.on('kicked', ({ reason }) => {
+      this.exitMatch();
+      this.mpScreens?.showError(reason.toUpperCase(), () => this.mpScreens?.showMenu());
+    });
+  }
+
+  private openMultiplayer(): void {
+    this.ensureMultiplayer();
+    this.state = 'mp-menu';
+    this.screens.hide();
+    this.hud.setVisible(false);
+    this.audio.unlock();
+    this.audio.startAmbience();
+    const name = (this.save.value.stats.nightsAttempted > 0 ? 'GUARD' : 'ROOKIE') + Math.floor(Math.random() * 90 + 10);
+    this.net?.connect(name);
+    this.mpScreens?.showMenu();
+  }
+
+  private enterMatch(): void {
+    const net = this.net;
+    if (!net || this.state === 'mp-match') return;
+    this.state = 'mp-match';
+    this.mpScreens?.hide();
+    this.mpHud?.setVisible(true);
+    this.mpHud?.banner(null);
+    this.input.lookEnabled = false;
+    this.mpHeld = null;
+    const mine = net.me;
+    if (mine) {
+      net.predicted.x = mine.x;
+      net.predicted.z = mine.z;
+      net.predicted.yaw = mine.r;
+    }
+  }
+
+  private exitMatch(): void {
+    if (this.state !== 'mp-match') return;
+    this.state = 'mp-menu';
+    this.mpHud?.setVisible(false);
+    this.mpHeld = null;
+    const lobby = this.net?.lobby;
+    if (lobby && this.net) this.mpScreens?.showLobby(lobby, this.net.playerId);
+    else this.mpScreens?.showMenu();
+  }
+
+  /** Turn server events into sound, haptics and text. */
+  private playMatchEvents(list: MatchEvent[]): void {
+    const net = this.net;
+    if (!net) return;
+    const nameOf = (id: string): string =>
+      net.lobby?.players.find((p) => p.id === id)?.name ?? 'A GUARD';
+
+    for (const event of list) {
+      switch (event.e) {
+        case 'down':
+          if (event.player === net.playerId) {
+            this.audio.jumpscare();
+            this.effects.flashOnce(0.25);
+            this.coopScene?.shake(0.8, this.now);
+            this.input.buzz(400);
+          } else {
+            this.audio.laugh(0, 12);
+            this.mpHud?.toast(`${nameOf(event.player).toUpperCase()} IS DOWN`, 4);
+            this.input.buzz(60);
+          }
+          break;
+        case 'revived':
+          this.audio.lightSwitch(0);
+          this.mpHud?.toast(`${nameOf(event.player).toUpperCase()} IS BACK UP`, 3);
+          break;
+        case 'eliminated':
+          this.mpHud?.toast(`${nameOf(event.player).toUpperCase()} DID NOT MAKE IT`, 4);
+          break;
+        case 'blackout':
+          this.audio.doorImpact(0);
+          this.audio.startMusicBox();
+          this.mpHud?.toast('THE GRID IS DOWN', 5);
+          this.input.buzz(120);
+          break;
+        case 'restored':
+          this.audio.stopLoop('musicbox');
+          this.audio.win();
+          this.effects.flashOnce(0.4);
+          this.mpHud?.toast(`POWER BACK - ${Math.round(event.power)}%`, 4);
+          break;
+        case 'step':
+          this.audio.cameraSwitch();
+          this.mpHud?.toast(event.label, 4);
+          break;
+        case 'hour':
+          this.audio.hourChime();
+          break;
+        case 'pickup':
+          if (event.player === net.playerId) this.mpHud?.toast('FUSE COLLECTED - TAKE IT TO THE PANEL', 4);
+          break;
+        case 'attack':
+          this.audio.knock(0);
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
+  /** One frame of co-op: sample the controls, predict, draw. */
+  private renderMatch(frameDt: number): void {
+    const net = this.net;
+    const hud = this.mpHud;
+    const scene = this.coopScene;
+    if (!net || !hud || !scene) return;
+
+    const control = hud.refreshControl(net.predicted.yaw);
+    const action = hud.currentAction();
+    const wanted = control.interact ? action : null;
+    // Edge-detect the USE button so the server gets one hold, not a stream.
+    if (wanted?.id !== this.mpHeld?.id || wanted?.kind !== this.mpHeld?.kind) {
+      if (this.mpHeld?.kind === 'interact') net.interact(null, false);
+      if (this.mpHeld?.kind === 'revive') net.revive(null, false);
+      if (wanted?.kind === 'interact') net.interact(wanted.id, true);
+      if (wanted?.kind === 'revive') net.revive(wanted.id, true);
+      this.mpHeld = wanted;
+    }
+
+    const anchored = wanted !== null;
+    net.pushInput(
+      frameDt,
+      {
+        mx: control.mx,
+        mz: control.mz,
+        yaw: net.predicted.yaw,
+        sprint: control.sprint,
+        crouch: control.crouch,
+        flashlight: control.flashlight,
+      },
+      anchored,
+    );
+
+    hud.focus = scene.update(net, frameDt, this.now, {
+      crouch: control.crouch,
+      flashlight: control.flashlight,
+      moving: control.moving && !anchored,
+    });
+    scene.render();
+    hud.update(net.latestSnapshot, frameDt, 60);
   }
 
   /* ------------------------------------------------------------ main loop */
@@ -321,7 +607,12 @@ class App {
     this.now += frameDt;
     this.effects.update(this.now);
 
-    if (this.state === 'menu') {
+    if (this.state === 'mp-match') {
+      this.renderMatch(frameDt);
+      return;
+    }
+
+    if (this.state === 'menu' || this.state === 'mp-menu') {
       this.scene.renderMenu(this.now, this.device.recommended !== 'low');
       return;
     }
@@ -367,6 +658,25 @@ class App {
  * real shift in a real browser (skip the clock, force a blackout, read the
  * simulation back) instead of only checking that pixels appeared.
  */
+/** Multiplayer QA surface - see DebugApi. */
+export interface MpDebugApi {
+  state: () => string;
+  connection: () => string;
+  id: () => string;
+  lobby: () => unknown;
+  snapshot: () => unknown;
+  pos: () => { x: number; z: number; yaw: number };
+  remote: (id: string) => unknown;
+  ping: () => number;
+  snapshotRate: () => number;
+  /** Drive the movement stick, in world space. */
+  setStick: (x: number, z: number) => void;
+  setYaw: (yaw: number) => void;
+  /** Hold or release the USE button. */
+  use: (held: boolean) => void;
+  focus: () => unknown;
+}
+
 export interface DebugApi {
   state: () => string;
   session: () => NightSession | null;
@@ -401,3 +711,45 @@ const debug: DebugApi = {
   },
 };
 (window as unknown as { __hollow: DebugApi }).__hollow = debug;
+
+const mpDebug: MpDebugApi = {
+  state: () => app['state'],
+  connection: () => app['net']?.state ?? 'offline',
+  id: () => app['net']?.playerId ?? '',
+  lobby: () => app['net']?.lobby ?? null,
+  snapshot: () => app['net']?.latestSnapshot ?? null,
+  pos: () => {
+    const net = app['net'];
+    return net ? { x: net.predicted.x, z: net.predicted.z, yaw: net.predicted.yaw } : { x: 0, z: 0, yaw: 0 };
+  },
+  remote: (id) => app['net']?.sample(id, 'player') ?? null,
+  ping: () => app['net']?.ping ?? -1,
+  snapshotRate: () => app['net']?.snapshotRate ?? 0,
+  setStick: (x, z) => {
+    const hud = app['mpHud'];
+    const net = app['net'];
+    if (!hud || !net) return;
+    // Convert a world-space direction into stick axes for the current yaw.
+    const yaw = net.predicted.yaw;
+    const forwardX = -Math.sin(yaw);
+    const forwardZ = -Math.cos(yaw);
+    const rightX = Math.cos(yaw);
+    const rightZ = -Math.sin(yaw);
+    const magnitude = Math.hypot(x, z) || 1;
+    const nx = x / magnitude;
+    const nz = z / magnitude;
+    hud.scriptedStick = x === 0 && z === 0
+      ? { x: 0, y: 0 }
+      : { x: nx * rightX + nz * rightZ, y: nx * forwardX + nz * forwardZ };
+  },
+  setYaw: (yaw) => {
+    const net = app['net'];
+    if (net) net.predicted.yaw = yaw;
+  },
+  use: (held) => {
+    const hud = app['mpHud'];
+    if (hud) hud.scriptedUse = held;
+  },
+  focus: () => app['mpHud']?.focus ?? null,
+};
+(window as unknown as { __hollowMp: MpDebugApi }).__hollowMp = mpDebug;

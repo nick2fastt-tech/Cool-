@@ -24,7 +24,7 @@ Co-op free-roam is the next milestone.
 | Storage | localStorage with in-memory fallback | Progress survives an app swipe; never throws in private mode |
 | Tests | Vitest (sim) + Playwright (browser) | The rules are tested headless; the game is tested in a real browser |
 | Packaging | PWA now, Capacitor shell for the stores | One codebase for web, Android and iOS |
-| Multiplayer | Node + `ws`, server-authoritative (M4) | The whole simulation is already headless and seedable |
+| Multiplayer | Node + `ws`, dedicated authoritative server | One shared simulation, and host migration costs nothing |
 
 ## Just play it
 
@@ -48,6 +48,9 @@ npm run smoke      # drives the built game in Chromium, writes artifacts/*.png
 
 npm run build:single   # regenerate the standalone hollow-shift.html
 npm run smoke:single   # build it, then verify it over file:// as a player would
+
+npm run server         # co-op server on :8787 (serves the game too)
+npm run smoke:mp       # four real browser clients play a co-op match
 ```
 
 ## How it plays
@@ -61,6 +64,32 @@ npm run smoke:single   # build it, then verify it over file:// as a player would
   Everything you switch on shortens the night.
 - **At 0%** the grid dies, the shutters spring open, and a music box starts.
   See below.
+
+## Co-op
+
+Clear Night 1 and **Co-op Shift** unlocks: 1-4 guards, free roam of the whole
+building, one shared power grid, and no office to hide in.
+
+```bash
+npm run build && npm run server     # then open http://<your-lan-ip>:8787
+```
+
+Host a lobby, share the join code (`DEPOT-7K2P`), and play. It is a real
+dedicated server: the simulation, the animatronics, the power and the clock all
+live there, clients send intents and draw what comes back. The host is only a
+UI role, so if the host leaves, the match carries on and somebody else gets the
+Start button.
+
+When the grid dies in co-op there is no crank at your desk - the whole team has
+to get the building back: reach the electrical room, start the generator, find
+three fuses scattered across the map, fit them, reset three breakers, then hold
+**both** main switches at the same time - one is in the electrical room, the
+other is in the office. Torches have batteries and charging stations. Getting
+caught puts you down, not out: a teammate has eight seconds of standing over
+you to bring you back.
+
+Full architecture, and an honest feature-by-feature status of what is built,
+tested, or not implemented: **[docs/MULTIPLAYER.md](docs/MULTIPLAYER.md)**.
 
 Each of the five characters plays by different rules - see
 [docs/DESIGN.md](docs/DESIGN.md) for the full behaviour spec, and
@@ -98,6 +127,11 @@ sweep, and a 20-check browser smoke run all pass - the smoke run passes against
 both the multi-file build and the standalone `hollow-shift.html` loaded over
 `file://`.
 
-**Not built yet:** co-op multiplayer (unlock and menu entry are wired; the mode
-itself says so on screen rather than pretending), and the Capacitor store
-shells. See [docs/ROADMAP.md](docs/ROADMAP.md).
+**Milestone 4 (co-op multiplayer) is complete for Co-op Survival**, on a
+dedicated authoritative server, verified by 58 automated tests and a 26-check
+four-client browser run.
+
+**Not built yet:** the other three multiplayer modes (locked in the UI, and
+labelled as such), a second map, chat, and the Capacitor store shells. See
+[docs/ROADMAP.md](docs/ROADMAP.md) and
+[docs/MULTIPLAYER.md](docs/MULTIPLAYER.md).

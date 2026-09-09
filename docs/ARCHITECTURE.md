@@ -58,8 +58,29 @@ src/
     hud.ts       in-shift interface
     screens.ts   menu, night select, settings, extras, results
 
+  net/
+    protocol.ts   the wire format, imported by client AND server
+  mp/
+    map.ts        co-op map: rooms, walls, collision, nav graph, fixtures
+    matchSim.ts   THE authoritative co-op simulation (server-side only)
+    netClient.ts  socket, reconnect, prediction, interpolation
+    mpScene.ts    first-person renderer for the co-op map
+  ui/
+    mpScreens.ts  multiplayer menu, host setup, join, lobby
+    mpHud.ts      stick, buttons and every piece of shared state
+
   main.ts        app shell: state machine, event wiring, the loop
+
+server/
+  main.ts        HTTP + WebSocket, routing, validation, rate limits, codes
+  room.ts        one session: lobby, host role, match loop, migration
+  cli.ts         `npm run server`
 ```
+
+The multiplayer layer reuses the single-player primitives (`EventBus`, the
+renderer, the audio engine, the materials) and shares nothing with its game
+rules - `matchSim.ts` and `nightManager.ts` are two separate games that happen
+to live in the same building. See [MULTIPLAYER.md](MULTIPLAYER.md).
 
 ## Data flow for one frame
 
@@ -93,9 +114,9 @@ simulation. `main.ts` is the only file that knows about both.
   geometry in `world.ts`.
 - **A new mechanic** that consumes power implements a `PowerDraw` flag and a
   usage bar; nothing else needs to change.
-- **Multiplayer** replaces the local `NightSession` owner with a server one and
-  feeds clients snapshots. `AiDirector.snapshot()` is already the shape of that
-  message.
+- **Multiplayer** is built: `server/room.ts` owns a `MatchSim` and feeds
+  clients snapshots. The client runs exactly one piece of that simulation -
+  `stepMovement` - to predict its own motion, and nothing else.
 
 ## Performance
 
@@ -124,6 +145,8 @@ Measured build output: `three` 129 KB gz, game code 25 KB gz, CSS 3 KB gz.
 | Simulation | `npm test` | Clock, power, blackout, crank, each character's defining rule, and that a full night resolves |
 | Balance | `npm run balance` | The six nights form a real difficulty curve, with bounds asserted so tuning cannot silently break it |
 | Browser | `npm run smoke` | The built bundle boots in Chromium at a phone viewport, WebGL initialises, touch controls reach the simulation, cameras switch, a blackout can be cranked back, 6 AM saves progress, and no console errors are thrown |
+| Networking | `npm test` (`mp-protocol`, `mp-match`) | Real WebSocket clients against a real server: lobby, codes, capacity, ready gate, host migration, reconnection, validation, rate limiting, downs, revives, and the whole power-restoration chain |
+| Four clients | `npm run smoke:mp` | Four separate Chromium clients host, join, ready up, play, walk the map, complete an objective step, disconnect, migrate the host and reconnect - with every assertion made from a client other than the one that acted |
 
 The smoke run writes annotated screenshots to `artifacts/`, which is how the
 visual state of the game is reviewed without a device in hand.
