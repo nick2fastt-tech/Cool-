@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startServer, type ServerHandle } from '../server/main';
 import { TestClient, sleep } from './mpClient';
 import { MatchSim } from '../src/mp/matchSim';
-import { INTERACT_BY_ID, hasLineOfSight } from '../src/mp/map';
+import { INTERACT_BY_ID, ROOMS, hasLineOfSight } from '../src/mp/map';
 import type { Room } from '../server/room';
 
 /**
@@ -29,9 +29,13 @@ async function client(name: string): Promise<TestClient> {
 }
 
 /** Host a room with two clients and start the match. Returns everything. */
-async function twoPlayerMatch(label: string, aiLevel = 1): Promise<{ host: TestClient; guest: TestClient; room: Room }> {
+async function twoPlayerMatch(
+  label: string,
+  aiLevel = 1,
+  extra: Partial<{ mode: 'coop-survival' | 'free-roam' }> = {},
+): Promise<{ host: TestClient; guest: TestClient; room: Room }> {
   const host = await client(`${label}_H`);
-  host.send({ t: 'host', settings: { requireReady: false, aiLevel } });
+  host.send({ t: 'host', settings: { requireReady: false, aiLevel, ...extra } });
   await host.waitFor((m) => m.t === 'lobby');
   const code = host.lastLobby!.code;
   const guest = await client(`${label}_G`);
@@ -377,5 +381,119 @@ describe('animatronic behaviour in co-op', () => {
       sim.step(1 / 30);
       expect(player.flashlight).toBe(false);
     }
+  });
+});
+
+describe('free roam mode', () => {
+  const freeRoamSim = (aiLevel = 10) =>
+    new MatchSim({
+      seed: 11,
+      mode: 'free-roam',
+      difficulty: 'standard',
+      aiLevel,
+      players: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }],
+    });
+
+  it('leaves the grid alone - the building is not the threat here', () => {
+    // Aggression 0: this test is about the grid and the clock, and a crew that
+    // gets wiped would end the match for an unrelated reason.
+    const sim = freeRoamSim(0);
+    // Well past a full six-hour shift.
+    for (let i = 0; i < 30 * 400; i++) sim.step(1 / 30);
+    expect(sim.power).toBe(100);
+    expect(sim.blackout).toBe(false);
+    // The clock reaches 6 AM and keeps going: free roam does not end there the
+    // way a survival shift does.
+    expect(sim.hour).toBe(6);
+    expect(sim.finished).toBeNull();
+  });
+
+  it('credits a room the moment somebody stands in it', () => {
+    const sim = freeRoamSim(1);
+    const player = sim.players.get('a')!;
+    sim.step(1 / 30);
+    const startCount = sim.exploredRooms.length;
+    expect(sim.exploredRooms).toContain('office');
+
+    player.x = 0;
+    player.z = -8; // dining hall
+    sim.step(1 / 30);
+    expect(sim.exploredRooms).toContain('dining');
+    expect(sim.exploredRooms.length).toBe(startCount + 1);
+
+    // Standing there longer does not credit it twice.
+    for (let i = 0; i < 30; i++) sim.step(1 / 30);
+    expect(sim.exploredRooms.length).toBe(startCount + 1);
+  });
+
+  it('gets more dangerous the further and longer you go', () => {
+    const early = freeRoamSim();
+    early.step(1 / 30);
+    const earlyLabel = early.snapshot().obj.detail;
+
+    const late = freeRoamSim();
+    const player = late.players.get('a')!;
+    for (const room of ROOMS) {
+      player.x = (room.rect.x1 + room.rect.x2) / 2;
+      player.z = (room.rect.z1 + room.rect.z2) / 2;
+      late.step(1 / 30);
+    }
+    for (let i = 0; i < 30 * 90; i++) late.step(1 / 30);
+    const lateLabel = late.snapshot().obj.detail;
+
+    const value = (text: string) => Number(text.replace(/[^0-9.]/g, ''));
+    expect(value(lateLabel)).toBeGreaterThan(value(earlyLabel));
+    expect(value(lateLabel)).toBeLessThanOrEqual(2.4);
+  });
+
+  it('walking the whole building is the win, and both clients get it', async () => {
+    const { host, guest, room } = await twoPlayerMatch('ROAM', 1, { mode: 'free-roam' });
+    const sim = room.sim!;
+    expect(sim.mode).toBe('free-roam');
+
+    await guest.waitUntil(
+      () => (guest.lastSnapshot?.obj.label ?? '').startsWith('EXPLORE THE DEPOT'),
+      4000,
+      'the free roam objective reaches the client',
+    );
+
+    // Walk the crew through every room. The rule under test is the sim's, so
+    // placing them is fair game; the assertion is on what the clients receive.
+    const player = sim.players.get(host.id)!;
+    for (const roomDef of ROOMS) {
+      // Only living players credit a room, and this test is about exploration
+      // rather than survival - so if the cast catches them on the way round,
+      // put them back on their feet and carry on.
+      if (player.status !== 'alive') {
+        player.status = 'alive';
+        player.bleedOut = 0;
+      }
+      player.x = (roomDef.rect.x1 + roomDef.rect.x2) / 2;
+      player.z = (roomDef.rect.z1 + roomDef.rect.z2) / 2;
+      await sleep(70);
+    }
+
+    const ending = await guest.waitFor((m) => m.t === 'matchEnd', 8000);
+    expect((ending as { win: boolean }).win).toBe(true);
+    await host.waitFor((m) => m.t === 'matchEnd', 4000);
+
+    room.dispose();
+    server.rooms.delete(room.code);
+  }, 30000);
+
+  it('a mode that is not implemented is refused by the server', async () => {
+    const host = await client('MODEHOST');
+    host.send({ t: 'host', settings: { mode: 'objective' as never, requireReady: false } });
+    await host.waitFor((m) => m.t === 'lobby');
+    // Falls back to the default rather than starting something that does not exist.
+    expect(host.lastLobby!.settings.mode).toBe('coop-survival');
+
+    host.send({ t: 'setSettings', settings: { mode: 'night-survival' as never } });
+    await sleep(250);
+    expect(host.lastLobby!.settings.mode).toBe('coop-survival');
+
+    // ...but free roam is accepted, because it exists.
+    host.send({ t: 'setSettings', settings: { mode: 'free-roam' } });
+    await host.waitUntil(() => host.lastLobby?.settings.mode === 'free-roam', 3000, 'free roam accepted');
   });
 });

@@ -3,6 +3,8 @@
 Co-op for 1-4 players on a dedicated authoritative server. Real WebSockets, one
 shared simulation, no local fakery anywhere.
 
+Two modes are built: **Co-op Survival** and **Free Roam**.
+
 > **Status honesty.** Every line in the status tables below is either backed by
 > an automated test that runs against a real server with real clients, or
 > marked as untested/not implemented. Nothing is described as working because
@@ -100,6 +102,7 @@ centimetres; only entities and objective state are sent, never geometry.
 | A step completed by one player is seen by all | `mp-browser` |
 | A dropped player's fuse returns to the map instead of soft-locking | `mp-match` |
 | Torch battery drains, dies, needs a real charge to restart | `mp-match` |
+| **Free Roam**: no clock end, no grid drain, exploration objective, escalating aggression, win by walking every room | `mp-match` (5 tests), `mp-browser` (hosted and played through the real UI) |
 | Player down → bleed-out → revive by a teammate → elimination → spectate | `mp-match` |
 | Whole crew down ends the match for everyone | `mp-match` |
 | Match timer owned by the server | `mp-browser` (clients within 400 ms) |
@@ -130,9 +133,9 @@ Test counts as of this commit: **58 automated tests** (`npm test`) plus a
 
 ### NOT IMPLEMENTED YET
 
-- **Free Roam, Objective Mode and Night Survival.** Only Co-op Survival is
-  built. The other three appear in the host settings as locked, and selecting
-  one says `NOT IMPLEMENTED YET` rather than pretending.
+- **Objective Mode and Night Survival.** Both appear in the host settings as
+  locked, selecting one says `NOT IMPLEMENTED YET`, and the server refuses the
+  mode even if a client asks for it directly.
 - **A second map.** The map selector exists with one entry (`depot`) so adding
   another is a data change, but there is only one.
 - **Voice or text chat.** Neither is built, and the protocol no longer carries
@@ -142,6 +145,27 @@ Test counts as of this commit: **58 automated tests** (`npm test`) plus a
 - **Anti-cheat beyond server authority.** Every gameplay-relevant action is
   validated server-side and clients cannot move themselves, but there is no
   behavioural detection or reporting.
+
+## The two modes
+
+### Co-op Survival
+
+Survive 12 AM to 6 AM. The shared grid drains the whole time, and when it hits
+zero the whole crew has to bring it back: reach the electrical room, start the
+generator, find and fit three fuses, reset three breakers, then hold **both**
+main switches at once - one in the electrical room, one in the office. Each
+blackout pays back less than the last.
+
+### Free Roam
+
+No clock to survive to, and the grid does not drain - the building is not the
+threat here, the cast is. The objective is the map itself: walk all fourteen
+rooms. Every new room you open, and every minute you stay, raises how much
+attention the crew attracts (shown in the HUD as `FREE ROAM x1.4`), capped at
+2.4x. Walking the whole building wins; losing the whole crew loses.
+
+That escalation is the whole design: in survival the pressure is a number
+draining on a wall, in free roam the pressure is your own curiosity.
 
 ## Test-only knobs, and why they are honest
 

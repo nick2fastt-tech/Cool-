@@ -74,6 +74,11 @@ building, one shared power grid, and no office to hide in.
 npm run build && npm run server     # then open http://<your-lan-ip>:8787
 ```
 
+Two modes are built. **Co-op Survival** is the shift: last until 6 AM while the
+grid drains. **Free Roam** has no clock and no drain - the objective is the
+building itself, all fourteen rooms, and the further you get the more attention
+the crew attracts.
+
 Host a lobby, share the join code (`DEPOT-7K2P`), and play. It is a real
 dedicated server: the simulation, the animatronics, the power and the clock all
 live there, clients send intents and draw what comes back. The host is only a
@@ -127,11 +132,11 @@ sweep, and a 20-check browser smoke run all pass - the smoke run passes against
 both the multi-file build and the standalone `hollow-shift.html` loaded over
 `file://`.
 
-**Milestone 4 (co-op multiplayer) is complete for Co-op Survival**, on a
-dedicated authoritative server, verified by 58 automated tests and a 26-check
-four-client browser run.
+**Milestone 4 (co-op multiplayer) is complete for Co-op Survival and Free
+Roam**, on a dedicated authoritative server, verified by 63 automated tests and
+a 30-check four-client browser run.
 
-**Not built yet:** the other three multiplayer modes (locked in the UI, and
+**Not built yet:** Objective Mode and Night Survival (locked in the UI, and
 labelled as such), a second map, chat, and the Capacitor store shells. See
 [docs/ROADMAP.md](docs/ROADMAP.md) and
 [docs/MULTIPLAYER.md](docs/MULTIPLAYER.md).

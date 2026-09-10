@@ -360,6 +360,42 @@ try {
 check('and they are alive again rather than stuck as a ghost', liveAgain);
 await c3.page.screenshot({ path: SHOTS + 'mp-08-reconnected.png' });
 
+/* ----------------------------------------------------------- free roam */
+
+const roamer = await makeClient('ROAMER');
+await roamer.page.locator('.menu-list .btn', { hasText: 'Co-op Shift' }).click();
+await waitFor(() => mp(roamer).then((s) => s === 'mp-menu'), 10000, 'roamer menu');
+await roamer.page.locator('.mp-host-btn').click();
+await roamer.page.locator('.seg button', { hasText: 'Free Roam' }).click();
+await roamer.page.locator('.mp-create-btn').click();
+const roamLobby = await waitFor(() => lobbyOf(roamer).then((l) => (l?.code ? l : null)), 10000, 'free roam lobby');
+check('free roam can be selected and hosted', roamLobby.settings.mode === 'free-roam', roamLobby.settings.mode);
+
+await roamer.page.locator('.mp-start-btn').click();
+await waitFor(() => mp(roamer).then((s) => s === 'mp-match'), 12000, 'free roam match starts');
+await sleep(900);
+const roamSnap = await snapOf(roamer);
+check('free roam runs its own objective', roamSnap.obj.label.startsWith('EXPLORE THE DEPOT'), roamSnap.obj.label);
+// The harness starts matches on a sliver of power, so the property to check
+// is that free roam does not *drain* it - not its starting value.
+await sleep(2500);
+const roamLater = await snapOf(roamer);
+check(
+  'and does not drain the grid',
+  roamLater.power === roamSnap.power && !roamLater.blackout,
+  `${roamSnap.power} -> ${roamLater.power}`,
+);
+await roamer.page.screenshot({ path: SHOTS + 'mp-09-free-roam.png' });
+
+const exploredBefore = Number(roamSnap.obj.label.match(/(\d+)\/\d+/)?.[1] ?? 0);
+await walkTo(roamer, [[0, 4], [0, 1.6], [-6, 1.6]]);
+await sleep(600);
+const roamAfter = await snapOf(roamer);
+const exploredAfter = Number(roamAfter.obj.label.match(/(\d+)\/\d+/)?.[1] ?? 0);
+check('walking into a new room is credited', exploredAfter > exploredBefore, `${exploredBefore} -> ${exploredAfter}`);
+await roamer.page.screenshot({ path: SHOTS + 'mp-10-free-roam-explored.png' });
+await roamer.context.close();
+
 /* -------------------------------------------------------------- finish */
 
 check('no uncaught client errors during the whole session', errors.length === 0, errors.slice(0, 2).join(' | '));

@@ -12,6 +12,7 @@
 
 import {
   BOT_RADIUS,
+  ROOMS,
   INTERACT_BY_ID,
   INTERACT_RANGE,
   INTERACTABLES,
@@ -26,7 +27,7 @@ import {
   roomAt,
   roomName,
 } from './map';
-import { STATUS_CODE, type BotSnap, type Difficulty, type InputFrame, type MatchEvent, type MatchSnapshot, type ObjectiveSnap, type PlayerSnap, type PlayerStatus } from '../net/protocol';
+import { STATUS_CODE, type BotSnap, type Difficulty, type GameMode, type InputFrame, type MatchEvent, type MatchSnapshot, type ObjectiveSnap, type PlayerSnap, type PlayerStatus } from '../net/protocol';
 
 /* --------------------------------------------------------------- tuning */
 
@@ -148,6 +149,8 @@ interface ObjectiveState {
 export interface MatchOptions {
   seed: number;
   difficulty: Difficulty;
+  /** Which game mode's rules to run. Defaults to co-op survival. */
+  mode?: GameMode;
   aiLevel: number;
   players: { id: string; name: string }[];
   /**
@@ -160,11 +163,17 @@ export interface MatchOptions {
 
 /* ------------------------------------------------------------------ sim */
 
+/** Rooms that count toward exploration in Free Roam. */
+export const EXPLORABLE_ROOMS = ROOMS.map((r) => r.id);
+
 export class MatchSim {
   readonly players = new Map<string, MatchPlayer>();
   readonly bots: Bot[] = [];
+  readonly mode: GameMode;
   private readonly tuning: (typeof DIFFICULTY)[Difficulty];
   private readonly aggression: number;
+  /** Free Roam: rooms the crew has set foot in. */
+  private readonly explored = new Set<string>();
 
   power = 100;
   blackout = false;
@@ -188,6 +197,7 @@ export class MatchSim {
   private rngState: number;
 
   constructor(options: MatchOptions) {
+    this.mode = options.mode ?? 'coop-survival';
     this.rngState = options.seed >>> 0 || 1;
     this.tuning = DIFFICULTY[options.difficulty];
     if (typeof options.startPower === 'number') this.power = Math.max(0.01, options.startPower);
@@ -245,6 +255,21 @@ export class MatchSim {
         burstCooldown: 8,
       });
     }
+  }
+
+  /**
+   * Free Roam escalation.
+   *
+   * There is no clock running out and no grid draining, so the pressure has to
+   * come from somewhere: the more of the building the crew has walked, and the
+   * longer they have been in it, the more attention they attract. Capped, so
+   * it ramps into "dangerous" rather than "impossible".
+   */
+  private escalation(): number {
+    if (this.mode !== 'free-roam') return 1;
+    const byRooms = this.explored.size * 0.07;
+    const byTime = (this.elapsed / 60) * 0.12;
+    return Math.min(2.4, 1 + byRooms + byTime);
   }
 
   private random(): number {
@@ -386,12 +411,38 @@ export class MatchSim {
     this.stepInteractions(dt);
     this.stepPlayers(dt);
     this.stepBots(dt);
+    if (this.mode === 'free-roam') this.stepExploration();
 
-    if (this.elapsed >= this.tuning.secondsPerHour * HOURS_PER_NIGHT) {
+    if (this.mode === 'free-roam') {
+      if (this.explored.size >= EXPLORABLE_ROOMS.length) {
+        this.finished = { win: true, reason: 'Every room in the building has been walked.' };
+      }
+    } else if (this.elapsed >= this.tuning.secondsPerHour * HOURS_PER_NIGHT) {
       this.finished = { win: true, reason: 'The shift ended at 6 AM.' };
-    } else if (this.players.size > 0 && this.aliveCount === 0 && this.noRevivablePlayers()) {
+    }
+    if (!this.finished && this.players.size > 0 && this.aliveCount === 0 && this.noRevivablePlayers()) {
       this.finished = { win: false, reason: 'The whole crew was taken.' };
     }
+  }
+
+  /** Credit every room an living player is standing in. */
+  private stepExploration(): void {
+    for (const [, player] of this.players) {
+      if (player.status !== 'alive') continue;
+      const room = roomAt(player.x, player.z);
+      if (room === 'void' || this.explored.has(room)) continue;
+      this.explored.add(room);
+      this.events.push({
+        e: 'step',
+        step: 'explore',
+        label: `${roomName(room).toUpperCase()} - ${this.explored.size}/${EXPLORABLE_ROOMS.length} EXPLORED`,
+      });
+    }
+  }
+
+  /** Rooms walked so far, for the HUD and for tests. */
+  get exploredRooms(): readonly string[] {
+    return [...this.explored];
   }
 
   private noRevivablePlayers(): boolean {
@@ -400,7 +451,7 @@ export class MatchSim {
   }
 
   private stepPower(dt: number): void {
-    if (this.blackout) return;
+    if (this.mode === 'free-roam' || this.blackout) return;
     const scale = 1 + Math.max(0, this.players.size - 1) * 0.12;
     this.power -= this.tuning.powerDrain * scale * dt;
     if (this.power <= 0) {
@@ -732,7 +783,7 @@ export class MatchSim {
       }
 
       if (this.blackout) score += 2;
-      score *= this.aggression;
+      score *= this.aggression * this.escalation();
       if (!best || score > best.score) best = { id: player.id, score };
     }
 
@@ -850,6 +901,9 @@ export class MatchSim {
 
   objectiveLabel(): string {
     const obj = this.objective;
+    if (this.mode === 'free-roam' && obj.step === 'none') {
+      return `EXPLORE THE DEPOT  ${this.explored.size}/${EXPLORABLE_ROOMS.length}`;
+    }
     switch (obj.step) {
       case 'findElectrical': return 'GET TO THE ELECTRICAL ROOM';
       case 'generator': return 'START THE BACKUP GENERATOR';
@@ -879,6 +933,9 @@ export class MatchSim {
 
   objectiveProgress(): number {
     const obj = this.objective;
+    if (this.mode === 'free-roam' && obj.step === 'none') {
+      return this.explored.size / EXPLORABLE_ROOMS.length;
+    }
     switch (obj.step) {
       case 'findElectrical': return 0;
       case 'generator': return 0.1;
@@ -921,7 +978,11 @@ export class MatchSim {
       step: this.objective.step,
       label: this.objectiveLabel(),
       progress: round2(this.objectiveProgress()),
-      detail: this.blackout ? `BLACKOUT ${this.objective.round}` : '',
+      detail: this.blackout
+        ? `BLACKOUT ${this.objective.round}`
+        : this.mode === 'free-roam'
+          ? `FREE ROAM  x${this.escalation().toFixed(1)}`
+          : '',
       targets: this.objectiveTargets(),
     };
 

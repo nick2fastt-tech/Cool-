@@ -1,5 +1,6 @@
 import {
   EMPTY_ROOM_TTL_MS,
+  IMPLEMENTED_MODES,
   MAX_PLAYERS,
   MIN_PLAYERS,
   RECONNECT_GRACE_MS,
@@ -236,6 +237,7 @@ export class Room {
     this.sim = new MatchSim({
       ...(Number.isFinite(testPower) && testPower > 0 ? { startPower: testPower } : {}),
       seed: this.seed,
+      mode: this.settings.mode,
       difficulty: this.settings.difficulty,
       aiLevel: Number.isFinite(testAi) && testAi > 0 ? testAi : this.settings.aiLevel,
       players: [...this.members.values()]
@@ -393,7 +395,7 @@ function sanitiseSettings(patch: Partial<RoomSettings>): Partial<RoomSettings> {
   }
   if (patch.map === 'depot') out.map = patch.map;
   // Only implemented modes are accepted, whatever a client asks for.
-  if (patch.mode === 'coop-survival') out.mode = patch.mode;
+  if (patch.mode && IMPLEMENTED_MODES.includes(patch.mode)) out.mode = patch.mode;
   if (typeof patch.isPublic === 'boolean') out.isPublic = patch.isPublic;
   if (typeof patch.requireReady === 'boolean') out.requireReady = patch.requireReady;
   if (typeof patch.aiLevel === 'number') {

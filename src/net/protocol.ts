@@ -30,7 +30,7 @@ export type Difficulty = 'relaxed' | 'standard' | 'nightmare';
 export type MapId = 'depot';
 
 /** Modes that are actually implemented. The rest are shown as locked. */
-export const IMPLEMENTED_MODES: GameMode[] = ['coop-survival'];
+export const IMPLEMENTED_MODES: GameMode[] = ['coop-survival', 'free-roam'];
 
 export interface RoomSettings {
   maxPlayers: number;

@@ -1,4 +1,4 @@
-import { MAX_PLAYERS, MIN_PLAYERS, defaultSettings, type Difficulty, type GameMode, type LobbyState, type PublicRoomInfo, type RoomSettings } from '../net/protocol';
+import { IMPLEMENTED_MODES, MAX_PLAYERS, MIN_PLAYERS, defaultSettings, type Difficulty, type GameMode, type LobbyState, type PublicRoomInfo, type RoomSettings } from '../net/protocol';
 import { button, clear, el } from './dom';
 import type { ConnectionState } from '../mp/netClient';
 
@@ -19,6 +19,14 @@ const MODE_LABELS: Record<GameMode, string> = {
   'free-roam': 'Free Roam',
   objective: 'Objective Mode',
   'night-survival': 'Night Survival',
+};
+
+/** One line of "what am I signing up for" under the mode buttons. */
+const MODE_BLURBS: Record<GameMode, string> = {
+  'coop-survival': 'Survive to 6 AM. The grid drains, and when it dies the whole crew has to bring it back.',
+  'free-roam': 'No clock, no drain. Walk every room in the building - and everything in it notices you more the further you get.',
+  objective: 'Not implemented yet.',
+  'night-survival': 'Not implemented yet.',
 };
 
 const DIFFICULTY_LABELS: Record<Difficulty, string> = {
@@ -138,6 +146,7 @@ export class MpScreens {
         this.draft.aiLevel = v;
       }),
     );
+    panel.appendChild(this.modeBlurb());
 
     const create = button('Create Lobby');
     create.classList.add('mp-create-btn');
@@ -152,7 +161,7 @@ export class MpScreens {
     row.appendChild(el('label', undefined, 'GAME MODE'));
     const seg = el('div', 'seg');
     for (const mode of Object.keys(MODE_LABELS) as GameMode[]) {
-      const available = mode === 'coop-survival';
+      const available = IMPLEMENTED_MODES.includes(mode);
       const b = el('button', this.draft.mode === mode ? 'on' : undefined, MODE_LABELS[mode]);
       if (!available) {
         b.classList.add('locked');
@@ -167,11 +176,18 @@ export class MpScreens {
         this.draft.mode = mode;
         for (const child of Array.from(seg.children)) child.classList.remove('on');
         b.classList.add('on');
+        const blurb = this.root.querySelector('.mp-mode-blurb');
+        if (blurb) blurb.textContent = MODE_BLURBS[mode];
       });
       seg.appendChild(b);
     }
     row.appendChild(seg);
     return row;
+  }
+
+  private modeBlurb(): HTMLElement {
+    const note = el('div', 'tip mp-mode-blurb', MODE_BLURBS[this.draft.mode]);
+    return note;
   }
 
   /* --------------------------------------------------------------- join */
