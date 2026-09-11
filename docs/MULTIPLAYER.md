@@ -3,14 +3,27 @@
 Co-op for 1-4 players on a dedicated authoritative server. Real WebSockets, one
 shared simulation, no local fakery anywhere.
 
-Two modes are built: **Co-op Survival** and **Free Roam**.
+Two modes are built: **Co-op Survival** and **Free Roam**, and the crew can be
+filled with AI teammates. Co-op runs **with or without a server**: the same
+host code runs inside the page for solo play.
 
 > **Status honesty.** Every line in the status tables below is either backed by
 > an automated test that runs against a real server with real clients, or
 > marked as untested/not implemented. Nothing is described as working because
 > the code compiles.
 
-## Running it
+## Two ways to play co-op
+
+**With no server at all.** Co-op Shift -> **Play With Bots** hosts the match
+inside the page and fills the crew with AI teammates. This works from a file,
+on a plane, with no network - because `LocalHost` runs the same `SessionHost`
+the dedicated server runs, wired to a loopback instead of a socket. A solo game
+and an online game are the same code path, which is why "works offline" cannot
+quietly drift away from "works online".
+
+**With other people.** Run the server below and share the join code.
+
+## Running the server
 
 The server serves the game *and* the socket from one port, so a client always
 connects back to wherever the page came from - no address to configure.
@@ -39,18 +52,25 @@ Opened without one, the multiplayer menu says so instead of failing silently.
 ## Architecture
 
 ```
-   CLIENT (browser)                         SERVER (node + ws)
-   ─────────────────                        ──────────────────
-   MpScreens   menus, lobby                 main.ts    sockets, routing,
-   MpHud       stick, buttons, shared state             rate limits, codes
-   CoopScene   renders what the server says  room.ts   lobby, host role,
-   NetClient   prediction + interpolation               match loop, migration
-        │                                    matchSim.ts  THE GAME
-        │  intents (20 Hz)                        │
-        └──────────────────────────────────▶ applyInput / setInteract
-                                                  │  fixed 30 Hz
-        ◀────────────────────────────────────  snapshots (15 Hz) + events
+   CLIENT (browser)                    HOST (server process, or this page)
+   ─────────────────                   ──────────────────────────────────
+   MpScreens   menus, lobby            sessionHost.ts  rooms, routing, codes
+   MpHud       stick, buttons          room.ts         lobby, host role,
+   CoopScene   draws what it is told                   match loop, migration
+   NetClient   prediction + interp     matchSim.ts     THE GAME
+        │                              crewAI.ts       AI teammates
+        │  intents (20 Hz)                   │
+        └───────────────────────────▶ applyInput / setInteract
+                                             │  fixed 30 Hz
+        ◀─────────────────────────────  snapshots (15 Hz) + events
+
+   transport = WebSocket  (server/main.ts, online)
+             | loopback   (src/mp/localHost.ts, solo with bots)
 ```
+
+`server/main.ts` is a thin shell around `SessionHost`: sockets, static files
+and rate limiting, nothing else. Swapping the transport is the *only*
+difference between playing alone and playing with five people.
 
 **The client never owns anything.** It sends a movement vector and "I am
 holding this thing"; the server decides where the player is and whether the
@@ -102,6 +122,8 @@ centimetres; only entities and objective state are sent, never geometry.
 | A step completed by one player is seen by all | `mp-browser` |
 | A dropped player's fuse returns to the map instead of soft-locking | `mp-match` |
 | Torch battery drains, dies, needs a real charge to restart | `mp-match` |
+| **AI teammates**: walk the map, follow you, revive you, flee what is hunting them, work the restoration chain, explore in free roam, call out what they are doing | `mp-bots` (8 tests), `mp-browser`, `smoke` |
+| **Co-op with no server**, hosted inside the page | `mp-bots` (3 tests), `smoke` (over `file://`) |
 | **Free Roam**: no clock end, no grid drain, exploration objective, escalating aggression, win by walking every room | `mp-match` (5 tests), `mp-browser` (hosted and played through the real UI) |
 | Player down → bleed-out → revive by a teammate → elimination → spectate | `mp-match` |
 | Whole crew down ends the match for everyone | `mp-match` |
@@ -145,6 +167,39 @@ Test counts as of this commit: **58 automated tests** (`npm test`) plus a
 - **Anti-cheat beyond server authority.** Every gameplay-relevant action is
   validated server-side and clients cannot move themselves, but there is no
   behavioural detection or reporting.
+
+## AI teammates
+
+A crew bot is **not** a scripted prop. It is an ordinary player entity driven
+by code instead of a phone: every move goes through `sim.applyInput` and every
+interaction through `sim.setInteract` - the same authoritative, validated path
+a human uses. A bot cannot walk through a wall or reach a breaker from across
+the map, for exactly the same reason you cannot.
+
+"Human-like" means three specific things, all of which are in `crewAI.ts`:
+
+- **They are late.** Every decision waits out a reaction time that varies per
+  bot, so they do not snap onto a new objective the instant the server changes
+  one.
+- **They are imprecise.** They aim near a target rather than at it, they stop
+  to look around, and they turn at a human speed instead of snapping.
+- **They are limited.** They react to animatronics they can see or hear - not
+  to the whole world state they technically have access to. And once they have
+  stepped around a patrol they get on with the job rather than flinching at it
+  every two seconds.
+
+Left alone in a blackout, a crew of three restores the grid in **77-104
+seconds** across every seed tried: generator, three fuses from three corners of
+the map, three breakers, then two of them holding the two main switches in two
+different rooms at the same time. That coordination is the hardest thing in the
+mode and they do it unprompted.
+
+They also call out what they are doing (`RILEY: BREAKER ON ME`), which is most
+of what makes a teammate feel present.
+
+What they are not: they do not talk to you beyond callouts, they do not adapt
+to your playstyle, and they will not out-think a good human. They are a crew
+that lets you play the mode alone, not a Turing test.
 
 ## The two modes
 

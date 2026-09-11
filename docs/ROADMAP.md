@@ -32,7 +32,7 @@ The pass that turns a working game into one worth playing twice.
 - Unlockables in Extras tied to real feats, not grinding.
 - More easter eggs on the rare-event system that HUSK already uses.
 
-## M4 - Co-op free roam - DONE (Co-op Survival + Free Roam)
+## M4 - Co-op free roam - DONE (Co-op Survival + Free Roam + AI crew)
 
 Dedicated authoritative server (Node + `ws`), 1-4 players, free roam of the
 whole building, shared power grid, roaming animatronics with real target
@@ -43,6 +43,9 @@ validation.
 Verified by 58 automated tests and a 26-check four-client browser run. Full
 status, including what is deliberately not built:
 [MULTIPLAYER.md](MULTIPLAYER.md).
+
+Also done: AI teammates that work the objectives, revive you and follow you,
+and a host that runs inside the page so co-op needs no server at all.
 
 Still open from this milestone:
 

@@ -72,6 +72,8 @@ export const HOURS_PER_NIGHT = 6;
 export interface MatchPlayer {
   id: string;
   name: string;
+  /** True for an AI teammate. Only affects who the match is lost for. */
+  isBot: boolean;
   x: number;
   z: number;
   yaw: number;
@@ -208,6 +210,7 @@ export class MatchSim {
       this.players.set(p.id, {
         id: p.id,
         name: p.name,
+        isBot: false,
         x: spawn.x,
         z: spawn.z,
         yaw: 0,
@@ -290,6 +293,20 @@ export class MatchSim {
     return n;
   }
 
+  /** Humans only - the match is played for them, not for the AI teammates. */
+  get humanCount(): number {
+    let n = 0;
+    for (const [, p] of this.players) if (!p.isBot) n++;
+    return n;
+  }
+
+  private get humansStillInIt(): boolean {
+    for (const [, p] of this.players) {
+      if (!p.isBot && (p.status === 'alive' || p.status === 'downed' || p.status === 'disconnected')) return true;
+    }
+    return false;
+  }
+
   /* ------------------------------------------------------ player intents */
 
   /** A client says where it wants to be. The server decides where it is. */
@@ -361,11 +378,11 @@ export class MatchSim {
     player.reviving = targetId;
   }
 
-  addPlayer(id: string, name: string): void {
+  addPlayer(id: string, name: string, isBot = false): void {
     if (this.players.has(id)) return;
     const spawn = SPAWNS[this.players.size % SPAWNS.length];
     this.players.set(id, {
-      id, name, x: spawn.x, z: spawn.z, yaw: Math.PI, status: 'alive',
+      id, name, isBot, x: spawn.x, z: spawn.z, yaw: 0, status: 'alive',
       battery: 60, flashlight: false, sprinting: false, crouching: false,
       stamina: MOVE.stamina, holding: null, holdProgress: 0, reviving: null,
       bleedOut: 0, revivedProgress: 0, carrying: null, lastSeq: 0, noise: 0,
@@ -420,7 +437,12 @@ export class MatchSim {
     } else if (this.elapsed >= this.tuning.secondsPerHour * HOURS_PER_NIGHT) {
       this.finished = { win: true, reason: 'The shift ended at 6 AM.' };
     }
-    if (!this.finished && this.players.size > 0 && this.aliveCount === 0 && this.noRevivablePlayers()) {
+    if (this.finished) return;
+    // With AI teammates in the crew, the match is over when the *people* are
+    // out - a lone surviving bot is not a win condition.
+    if (this.humanCount > 0 && !this.humansStillInIt) {
+      this.finished = { win: false, reason: 'Every guard was taken.' };
+    } else if (this.players.size > 0 && this.aliveCount === 0 && this.noRevivablePlayers()) {
       this.finished = { win: false, reason: 'The whole crew was taken.' };
     }
   }
@@ -1008,6 +1030,11 @@ export class MatchSim {
       obj,
       ints,
     };
+  }
+
+  /** A crew bot saying something. Reaches every client as a normal event. */
+  pushCrewCallout(playerId: string, text: string): void {
+    this.events.push({ e: 'crew', player: playerId, text });
   }
 
   drainEvents(): MatchEvent[] {

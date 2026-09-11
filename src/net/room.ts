@@ -13,8 +13,9 @@ import {
   type PublicRoomInfo,
   type RoomSettings,
   type ServerMessage,
-} from '../src/net/protocol';
-import { MatchSim } from '../src/mp/matchSim';
+} from './protocol';
+import { MatchSim } from '../mp/matchSim';
+import { CrewAI, crewBotName } from '../mp/crewAI';
 
 export interface Conn {
   id: string;
@@ -52,6 +53,8 @@ export class Room {
   settings: RoomSettings = defaultSettings();
   phase: LobbyState['phase'] = 'lobby';
   sim: MatchSim | null = null;
+  /** AI teammates, created with the match and torn down with it. */
+  crew: CrewAI | null = null;
   result: { win: boolean; reason: string } | null = null;
   startedAt = 0;
   seed = 0;
@@ -244,6 +247,18 @@ export class Room {
         .filter((m) => m.conn)
         .map((m) => ({ id: m.id, name: m.name })),
     });
+    // AI teammates fill whatever the humans have not taken. People always get
+    // the seats first: bots never block a real player from joining.
+    const humans = [...this.members.values()].filter((m) => m.conn).length;
+    const botCount = Math.max(0, Math.min(this.settings.bots, this.settings.maxPlayers - humans));
+    const botIds: string[] = [];
+    for (let i = 0; i < botCount; i++) {
+      const id = `bot-${i}`;
+      this.sim.addPlayer(id, crewBotName(i), true);
+      botIds.push(id);
+    }
+    this.crew = botIds.length ? new CrewAI(this.sim, botIds) : null;
+
     this.broadcast({ t: 'matchStart', seed: this.seed, map: this.settings.map, startedAt: this.startedAt });
     this.broadcastLobby();
 
@@ -268,6 +283,9 @@ export class Room {
 
       let steps = 0;
       while (accumulator >= stepSeconds && steps < 8) {
+        // Teammates decide before the world moves, exactly like a human client
+        // whose input arrived between ticks.
+        this.crew?.step(stepSeconds);
         sim.step(stepSeconds);
         accumulator -= stepSeconds;
         this.tickCounter++;
@@ -295,6 +313,7 @@ export class Room {
     this.endTimer = setTimeout(() => {
       this.phase = 'lobby';
       this.sim = null;
+      this.crew = null;
       for (const [, m] of this.members) {
         m.ready = false;
         m.prevStatus = 'lobby';
@@ -339,6 +358,7 @@ export class Room {
     for (const [, m] of this.members) m.conn?.close('room closed');
     this.members.clear();
     this.sim = null;
+    this.crew = null;
   }
 
   /* ------------------------------------------------------------- comms */
@@ -358,6 +378,27 @@ export class Room {
         ? 'disconnected'
         : this.sim?.players.get(m.id)?.status ?? (this.phase === 'match' ? 'alive' : 'lobby'),
     }));
+    // AI teammates appear in the crew list like anybody else, marked as bots.
+    const botIds = this.crew?.ids ?? [];
+    if (botIds.length) {
+      for (const id of botIds) {
+        players.push({
+          id,
+          name: this.sim?.players.get(id)?.name ?? 'CREW',
+          ready: true,
+          isHost: false,
+          isBot: true,
+          ping: 0,
+          status: this.sim?.players.get(id)?.status ?? 'alive',
+        });
+      }
+    } else if (this.phase === 'lobby' && this.settings.bots > 0) {
+      const free = Math.max(0, this.settings.maxPlayers - this.members.size);
+      for (let i = 0; i < Math.min(this.settings.bots, free); i++) {
+        players.push({ id: `bot-${i}`, name: crewBotName(i), ready: true, isHost: false, isBot: true, ping: 0, status: 'lobby' });
+      }
+    }
+
     return {
       code: this.code,
       settings: this.settings,
@@ -400,6 +441,9 @@ function sanitiseSettings(patch: Partial<RoomSettings>): Partial<RoomSettings> {
   if (typeof patch.requireReady === 'boolean') out.requireReady = patch.requireReady;
   if (typeof patch.aiLevel === 'number') {
     out.aiLevel = Math.max(1, Math.min(20, Math.round(patch.aiLevel)));
+  }
+  if (typeof patch.bots === 'number') {
+    out.bots = Math.max(0, Math.min(MAX_PLAYERS - 1, Math.floor(patch.bots)));
   }
   return out;
 }

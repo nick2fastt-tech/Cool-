@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startServer, type ServerHandle } from '../server/main';
 import { TestClient, sleep } from './mpClient';
-import { MAX_PLAYERS, normaliseCode } from '../src/net/protocol';
+import { MAX_PLAYERS, PROTOCOL_VERSION, normaliseCode } from '../src/net/protocol';
 
 /**
  * Multi-client networking tests.
@@ -331,7 +331,7 @@ describe('host migration and disconnects', () => {
     const stale = new TestClient('STALE');
     open.push(stale);
     await stale.connect(server.port);
-    stale.send({ t: 'hello', v: 3, name: 'STALE', resume: 'not-a-real-token' });
+    stale.send({ t: 'hello', v: PROTOCOL_VERSION, name: 'STALE', resume: 'not-a-real-token' });
     await stale.waitFor((m) => m.t === 'error' && (m as { code: string }).code === 'RESUME_EXPIRED');
     // ...and still gets a working session.
     await stale.waitFor((m) => m.t === 'welcome');

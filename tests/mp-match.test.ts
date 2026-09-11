@@ -3,7 +3,7 @@ import { startServer, type ServerHandle } from '../server/main';
 import { TestClient, sleep } from './mpClient';
 import { MatchSim } from '../src/mp/matchSim';
 import { INTERACT_BY_ID, ROOMS, hasLineOfSight } from '../src/mp/map';
-import type { Room } from '../server/room';
+import type { Room } from '../src/net/room';
 
 /**
  * Match behaviour: downs, revives, elimination, the power-restoration chain

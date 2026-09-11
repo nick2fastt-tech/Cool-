@@ -7,7 +7,7 @@
  * more during development than the bytes a binary codec would save.
  */
 
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 /** Server simulation rate. */
 export const SERVER_TICK_HZ = 30;
@@ -34,6 +34,8 @@ export const IMPLEMENTED_MODES: GameMode[] = ['coop-survival', 'free-roam'];
 
 export interface RoomSettings {
   maxPlayers: number;
+  /** AI teammates to fill the crew with. Humans always take priority. */
+  bots: number;
   difficulty: Difficulty;
   map: MapId;
   mode: GameMode;
@@ -53,6 +55,7 @@ export function defaultSettings(): RoomSettings {
     isPublic: true,
     requireReady: true,
     aiLevel: 10,
+    bots: 0,
   };
 }
 
@@ -63,6 +66,8 @@ export interface LobbyPlayer {
   name: string;
   ready: boolean;
   isHost: boolean;
+  /** True for an AI teammate rather than a connected person. */
+  isBot?: boolean;
   /** Round-trip time in ms as measured by the server, or -1 before first ping. */
   ping: number;
   status: PlayerStatus;
@@ -227,7 +232,9 @@ export type MatchEvent =
   | { e: 'noise'; x: number; z: number; kind: string }
   | { e: 'hour'; hour: number }
   | { e: 'attack'; bot: string; player: string }
-  | { e: 'pickup'; player: string; item: string };
+  | { e: 'pickup'; player: string; item: string }
+  /** A crew member calling something out, so bots read as teammates. */
+  | { e: 'crew'; player: string; text: string };
 
 export type ServerMessage =
   | { t: 'welcome'; id: string; resume: string; v: number }

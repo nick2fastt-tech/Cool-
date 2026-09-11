@@ -60,9 +60,13 @@ src/
 
   net/
     protocol.ts   the wire format, imported by client AND server
+    sessionHost.ts  rooms + message routing, with no transport in it
+    room.ts       one session: lobby, host role, match loop, migration
   mp/
     map.ts        co-op map: rooms, walls, collision, nav graph, fixtures
-    matchSim.ts   THE authoritative co-op simulation (server-side only)
+    matchSim.ts   THE authoritative co-op simulation (host-side only)
+    crewAI.ts     AI teammates, driven through the same input path as a human
+    localHost.ts  the session host, running inside the page for solo play
     netClient.ts  socket, reconnect, prediction, interpolation
     mpScene.ts    first-person renderer for the co-op map
   ui/
@@ -72,10 +76,12 @@ src/
   main.ts        app shell: state machine, event wiring, the loop
 
 server/
-  main.ts        HTTP + WebSocket, routing, validation, rate limits, codes
-  room.ts        one session: lobby, host role, match loop, migration
+  main.ts        HTTP + WebSocket + rate limiting around SessionHost
   cli.ts         `npm run server`
 ```
+
+The dedicated server and the in-page host are the same `SessionHost` with a
+different transport, so an offline co-op game and an online one cannot diverge.
 
 The multiplayer layer reuses the single-player primitives (`EventBus`, the
 renderer, the audio engine, the materials) and shares nothing with its game

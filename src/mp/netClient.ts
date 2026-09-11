@@ -13,6 +13,7 @@ import {
   type ServerMessage,
 } from '../net/protocol';
 import { EventBus } from '../core/events';
+import { LocalHost } from './localHost';
 import { MOVE, stepMovement } from './matchSim';
 import type { InputFrame } from '../net/protocol';
 
@@ -65,6 +66,8 @@ export class NetClient {
   snapshotRate = 0;
 
   private socket: WebSocket | null = null;
+  /** Set instead of `socket` when hosting the match inside this page. */
+  private local: LocalHost | null = null;
   private url = '';
   private resumeToken = '';
   private name = 'GUARD';
@@ -98,6 +101,27 @@ export class NetClient {
     // A file:// build has no host to talk to; the player must supply one.
     if (!location.host) return '';
     return `${protocol}//${location.host}/ws`;
+  }
+
+  /**
+   * Host the match in this page instead of over the network.
+   *
+   * Used for solo play with AI teammates, and as the fallback when the game is
+   * opened from a file with no server behind it. It runs the real server code
+   * (see LocalHost), so everything downstream of here is unchanged.
+   */
+  connectLocal(name: string): void {
+    this.disconnect();
+    this.name = name;
+    this.wantConnection = true;
+    this.deliberateClose = false;
+    this.local = new LocalHost((message) => this.receive(message));
+    this.setState('online', 'LOCAL');
+    this.send({ t: 'hello', v: PROTOCOL_VERSION, name });
+  }
+
+  get isLocal(): boolean {
+    return this.local !== null;
   }
 
   connect(name: string, url = NetClient.defaultUrl()): void {
@@ -173,6 +197,8 @@ export class NetClient {
   disconnect(): void {
     this.wantConnection = false;
     this.deliberateClose = true;
+    this.local?.close();
+    this.local = null;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.pingTimer) clearInterval(this.pingTimer);
     this.reconnectTimer = null;
@@ -191,11 +217,19 @@ export class NetClient {
   }
 
   private send(message: ClientMessage): void {
+    if (this.local) {
+      this.local.send(message);
+      return;
+    }
     if (this.socket?.readyState !== WebSocket.OPEN) return;
     this.socket.send(JSON.stringify(message));
   }
 
   private sendPing(): void {
+    if (this.local) {
+      this.ping = 0;
+      return;
+    }
     const sentAt = performance.now();
     this.pendingPing = sentAt;
     this.send({ t: 'ping', c: sentAt, ...(this.ping >= 0 ? { rtt: this.ping } : {}) });
@@ -210,6 +244,9 @@ export class NetClient {
       case 'welcome':
         this.playerId = message.id;
         this.resumeToken = message.resume;
+        // A local session dies with the page, so its token is worthless and
+        // must not overwrite a real one from an online match.
+        if (this.local) break;
         try {
           this.storage?.setItem('hollow-shift.resume', message.resume);
         } catch {

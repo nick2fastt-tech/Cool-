@@ -360,8 +360,16 @@ class App {
       back: () => {
         net.leave();
         net.disconnect();
+        if (this.mpScreens) this.mpScreens.isLocal = false;
         this.mpScreens?.hide();
         this.toMenu();
+      },
+      soloWithBots: () => {
+        // The match is hosted right here in the page, so this works with no
+        // server, no network and no other people.
+        net.connectLocal(this.crewName());
+        net.host({ bots: 3, maxPlayers: 4, isPublic: false, requireReady: false });
+        if (this.mpScreens) this.mpScreens.isLocal = true;
       },
       host: (settings) => net.host(settings),
       join: (code) => net.join(code),
@@ -448,6 +456,10 @@ class App {
     });
   }
 
+  private crewName(): string {
+    return (this.save.value.stats.nightsAttempted > 0 ? 'GUARD' : 'ROOKIE') + Math.floor(Math.random() * 90 + 10);
+  }
+
   private openMultiplayer(): void {
     this.ensureMultiplayer();
     this.state = 'mp-menu';
@@ -455,8 +467,14 @@ class App {
     this.hud.setVisible(false);
     this.audio.unlock();
     this.audio.startAmbience();
-    const name = (this.save.value.stats.nightsAttempted > 0 ? 'GUARD' : 'ROOKIE') + Math.floor(Math.random() * 90 + 10);
-    this.net?.connect(name);
+    // Only try to reach a server when the page actually came from one; opened
+    // from a file there is nothing to connect to, and the menu says so.
+    const canPlayOnline = NetClient.defaultUrl() !== '';
+    if (this.mpScreens) {
+      this.mpScreens.canPlayOnline = canPlayOnline;
+      this.mpScreens.isLocal = false;
+    }
+    if (canPlayOnline) this.net?.connect(this.crewName());
     this.mpScreens?.showMenu();
   }
 
@@ -536,6 +554,9 @@ class App {
           break;
         case 'pickup':
           if (event.player === net.playerId) this.mpHud?.toast('FUSE COLLECTED - TAKE IT TO THE PANEL', 4);
+          break;
+        case 'crew':
+          this.mpHud?.toast(`${nameOf(event.player).toUpperCase()}: ${event.text}`, 3);
           break;
         case 'attack':
           this.audio.knock(0);

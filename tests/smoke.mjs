@@ -193,6 +193,48 @@ const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('hollow-
 check('progress is saved', saved.nightsCompleted >= 1, JSON.stringify(saved.stats ?? {}));
 check('co-op unlocks after night 1', saved.multiplayerUnlocked === true);
 
+/* ------------------------------------------- 6b. co-op with no server */
+
+// Night 1 is complete, so co-op is unlocked. This is the zero-setup path:
+// the match is hosted inside the page, so it works from a file with no
+// server anywhere - which is exactly how this build is usually opened.
+await page.getByText('Continue', { exact: false }).first().click();
+await page.waitForFunction(() => window.__hollow?.state() === 'menu', null, { timeout: 10000 });
+await page.locator('.menu-list .btn', { hasText: 'Co-op Shift' }).click();
+await page.waitForFunction(() => window.__hollowMp?.state() === 'mp-menu', null, { timeout: 10000 });
+await page.screenshot({ path: join(SHOTS, PREFIX + '07-coop-menu.png') });
+
+await page.locator('.mp-solo-btn').click();
+await page.waitForFunction(() => !!window.__hollowMp.lobby()?.code, null, { timeout: 10000 });
+const soloLobby = await page.evaluate(() => window.__hollowMp.lobby());
+check('co-op hosts a lobby with no server at all', !!soloLobby.code, soloLobby.code);
+check('the crew is filled with AI teammates',
+  soloLobby.players.filter((p) => p.isBot).length === 3, `${soloLobby.players.length} in the crew`);
+
+await page.locator('.mp-start-btn').click();
+await page.waitForFunction(() => window.__hollowMp.state() === 'mp-match', null, { timeout: 12000 });
+await page.waitForTimeout(1200);
+const soloSnap = await page.evaluate(() => window.__hollowMp.snapshot());
+check('the match runs locally with the whole crew in it',
+  soloSnap.players.length === 4 && soloSnap.bots.length === 4, `${soloSnap.players.length} guards`);
+await page.screenshot({ path: join(SHOTS, PREFIX + '08-coop-bots.png') });
+
+// Teammates gather around a stationary guard and stand there, correctly - so
+// the thing to check is that they come with you when you move.
+const myId = await page.evaluate(() => window.__hollowMp.id());
+const teammateBefore = soloSnap.players.filter((p) => p.id !== myId);
+await page.evaluate(() => window.__hollowMp.setStick(0, -1));
+await page.waitForTimeout(4000);
+await page.evaluate(() => window.__hollowMp.setStick(0, 0));
+await page.waitForTimeout(600);
+const soloLater = await page.evaluate(() => window.__hollowMp.snapshot());
+const teammateMoved = teammateBefore.some((before) => {
+  const now = soloLater.players.find((p) => p.id === before.id);
+  return now && Math.hypot(now.x - before.x, now.z - before.z) > 0.8;
+});
+check('AI teammates come with you when you move', teammateMoved);
+await page.screenshot({ path: join(SHOTS, PREFIX + '09-coop-bots-later.png') });
+
 /* -------------------------------------------------------- 7. framerate */
 const fps = await page.evaluate(() => new Promise((resolve) => {
   let frames = 0;

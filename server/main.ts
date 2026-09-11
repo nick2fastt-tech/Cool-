@@ -1,28 +1,21 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
-import { randomUUID } from 'node:crypto';
 import { WebSocketServer, type WebSocket } from 'ws';
 
-import {
-  ERROR_TEXT,
-  PROTOCOL_VERSION,
-  generateCode,
-  normaliseCode,
-  type ClientMessage,
-  type ErrorCode,
-  type ServerMessage,
-} from '../src/net/protocol';
-import { Room, type Conn } from './room';
+import { PROTOCOL_VERSION, type ClientMessage, type ServerMessage } from '../src/net/protocol';
+import { SessionHost, randomId, type HostedConn } from '../src/net/sessionHost';
+import type { Room } from '../src/net/room';
 
 /**
- * The multiplayer server.
+ * The dedicated multiplayer server.
  *
- * It serves the game's static build and the WebSocket endpoint from the same
- * origin, so a client never has to be told where its server is - it connects
- * back to wherever the page came from. One process, one port, no CORS.
+ * It is a thin shell: sockets, static files and abuse control. Every rule
+ * lives in `SessionHost`, which the browser also runs for solo play, so the
+ * two can never disagree about how a lobby or a match behaves.
  *
- * Everything a client sends is treated as a request, never as a fact.
+ * The game and the WebSocket share one origin, so a client connects back to
+ * wherever the page came from and there is nothing to configure.
  */
 
 const MIME: Record<string, string> = {
@@ -40,14 +33,12 @@ const MIME: Record<string, string> = {
 const RATE_LIMIT = 90;
 const RATE_HARD_KILL = 400;
 
-interface Client extends Conn {
+interface Client extends HostedConn {
   socket: WebSocket;
-  helloed: boolean;
   budget: number;
   budgetResetAt: number;
   /** Consecutive one-second windows in which the budget was exceeded. */
   strikes: number;
-  /** Whether this window has already been counted as a strike. */
   struckThisWindow: boolean;
 }
 
@@ -59,47 +50,15 @@ export interface ServerHandle {
 
 export async function startServer(options: { port?: number; staticDir?: string } = {}): Promise<ServerHandle> {
   const staticDir = options.staticDir ? resolve(options.staticDir) : resolve(process.cwd(), 'dist');
-  const rooms = new Map<string, Room>();
-  /** resume token -> where that player was sitting. */
-  const resumeTokens = new Map<string, { code: string; memberId: string; expires: number }>();
+  const host = new SessionHost();
+  const clients = new Set<Client>();
 
   const http = createServer((req, res) => void serveStatic(req, res, staticDir));
   const wss = new WebSocketServer({ server: http, path: '/ws' });
 
-  const clients = new Set<Client>();
-
-  function send(client: Client, message: ServerMessage): void {
-    if (client.socket.readyState !== client.socket.OPEN) return;
-    client.socket.send(JSON.stringify(message));
-  }
-
-  function fail(client: Client, code: ErrorCode): void {
-    send(client, { t: 'error', code, message: ERROR_TEXT[code] });
-  }
-
-  function leaveRoom(client: Client, hard: boolean): void {
-    const room = client.room as Room | null;
-    if (!room) return;
-    client.room = null;
-    if (hard) room.remove(client.id);
-    else room.markDisconnected(client.id, client);
-    if (room.connectedCount === 0 && room.phase === 'lobby' && room.slotCount === 0) {
-      room.dispose();
-      rooms.delete(room.code);
-    }
-  }
-
-  function freshCode(): string {
-    for (let i = 0; i < 200; i++) {
-      const code = generateCode();
-      if (!rooms.has(code)) return code;
-    }
-    return `DEPOT-${Date.now().toString(36).slice(-4).toUpperCase()}`;
-  }
-
   wss.on('connection', (socket: WebSocket) => {
     const client: Client = {
-      id: randomUUID().slice(0, 8),
+      id: randomId().slice(0, 8),
       name: 'GUARD',
       socket,
       room: null,
@@ -109,9 +68,11 @@ export async function startServer(options: { port?: number; staticDir?: string }
       budgetResetAt: Date.now() + 1000,
       strikes: 0,
       struckThisWindow: false,
-      send: (m) => send(client, m),
-      close: (reason) => {
-        send(client, { t: 'kick', reason });
+      send: (message: ServerMessage) => {
+        if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(message));
+      },
+      close: (reason: string) => {
+        client.send({ t: 'kick', reason });
         socket.close();
       },
     };
@@ -132,7 +93,7 @@ export async function startServer(options: { port?: number; staticDir?: string }
         if (!client.struckThisWindow) {
           client.struckThisWindow = true;
           client.strikes++;
-          fail(client, 'RATE_LIMITED');
+          host.fail(client, 'RATE_LIMITED');
         }
         // Only a sustained flood, or an absurd single burst, drops the socket.
         if (client.budget < -RATE_HARD_KILL || client.strikes > 5) client.close('flooding');
@@ -147,224 +108,19 @@ export async function startServer(options: { port?: number; staticDir?: string }
       } catch {
         return;
       }
-      handle(client, message);
+      host.handle(client, message);
     });
 
     socket.on('close', () => {
       clients.delete(client);
-      leaveRoom(client, false);
+      host.leave(client, false);
     });
     socket.on('error', () => {
       /* the close handler does the cleanup */
     });
   });
 
-  function handle(client: Client, message: ClientMessage): void {
-    if (!message || typeof message.t !== 'string') return;
-
-    if (message.t === 'hello') {
-      if (message.v !== PROTOCOL_VERSION) {
-        fail(client, 'BAD_VERSION');
-        client.close('version');
-        return;
-      }
-      client.name = cleanName(message.name);
-      client.helloed = true;
-
-      if (message.resume) {
-        const token = resumeTokens.get(message.resume);
-        const room = token ? rooms.get(token.code) : undefined;
-        if (token && room && token.expires > Date.now() && room.reattach(token.memberId, client)) {
-          client.id = token.memberId;
-          send(client, { t: 'welcome', id: client.id, resume: message.resume, v: PROTOCOL_VERSION });
-          send(client, { t: 'lobby', state: room.lobbyState() });
-          if (room.phase === 'match' && room.sim) {
-            send(client, { t: 'matchStart', seed: room.seed, map: room.settings.map, startedAt: room.startedAt });
-            send(client, room.sim.snapshot());
-          }
-          return;
-        }
-        // Token is stale: carry on as a brand new player rather than failing.
-        fail(client, 'RESUME_EXPIRED');
-      }
-
-      const token = randomUUID();
-      resumeTokens.set(token, { code: '', memberId: client.id, expires: Date.now() + 3600_000 });
-      client.resumeToken = token;
-      send(client, { t: 'welcome', id: client.id, resume: token, v: PROTOCOL_VERSION });
-      return;
-    }
-
-    if (!client.helloed) return;
-
-    switch (message.t) {
-      case 'host': {
-        if (client.room) {
-          fail(client, 'ALREADY_IN_ROOM');
-          return;
-        }
-        const room = new Room(freshCode(), message.settings ?? {});
-        rooms.set(room.code, room);
-        room.add(client);
-        rememberSlot(client, room);
-        room.broadcastLobby();
-        return;
-      }
-
-      case 'join': {
-        if (client.room) {
-          fail(client, 'ALREADY_IN_ROOM');
-          return;
-        }
-        const code = normaliseCode(message.code ?? '');
-        if (!code) {
-          fail(client, 'INVALID_CODE');
-          return;
-        }
-        const room = rooms.get(code);
-        if (!room) {
-          fail(client, 'ROOM_NOT_FOUND');
-          return;
-        }
-        if (room.isFull) {
-          fail(client, 'ROOM_FULL');
-          return;
-        }
-        // Joining a running match is allowed; joining a finished one is not.
-        if (room.phase === 'ended') {
-          fail(client, 'ALREADY_STARTED');
-          return;
-        }
-        room.add(client);
-        rememberSlot(client, room);
-        room.broadcastLobby();
-        if (room.phase === 'match' && room.sim) {
-          send(client, { t: 'matchStart', seed: room.seed, map: room.settings.map, startedAt: room.startedAt });
-          send(client, room.sim.snapshot());
-        }
-        return;
-      }
-
-      case 'quickJoin': {
-        if (client.room) {
-          fail(client, 'ALREADY_IN_ROOM');
-          return;
-        }
-        const open = [...rooms.values()]
-          .filter((r) => r.settings.isPublic && !r.isFull && r.phase === 'lobby')
-          .sort((a, b) => b.slotCount - a.slotCount); // fill lobbies, do not scatter
-        const room = open[0];
-        if (!room) {
-          fail(client, 'NO_PUBLIC_ROOMS');
-          return;
-        }
-        room.add(client);
-        rememberSlot(client, room);
-        room.broadcastLobby();
-        return;
-      }
-
-      case 'listPublic': {
-        const list = [...rooms.values()]
-          .filter((r) => r.settings.isPublic && r.phase !== 'ended')
-          .map((r) => r.publicInfo())
-          .slice(0, 30);
-        send(client, { t: 'public', rooms: list });
-        return;
-      }
-
-      case 'setSettings': {
-        const room = client.room as Room | null;
-        if (!room) {
-          fail(client, 'NOT_IN_ROOM');
-          return;
-        }
-        if (!room.setSettings(client.id, message.settings ?? {})) fail(client, 'NOT_HOST');
-        return;
-      }
-
-      case 'ready': {
-        const room = client.room as Room | null;
-        if (!room) {
-          fail(client, 'NOT_IN_ROOM');
-          return;
-        }
-        room.setReady(client.id, Boolean(message.ready));
-        return;
-      }
-
-      case 'start': {
-        const room = client.room as Room | null;
-        if (!room) {
-          fail(client, 'NOT_IN_ROOM');
-          return;
-        }
-        const verdict = room.canStart(client.id);
-        if (!verdict.ok) {
-          fail(client, verdict.reason);
-          return;
-        }
-        room.start();
-        return;
-      }
-
-      case 'leave': {
-        leaveRoom(client, true);
-        return;
-      }
-
-      case 'input': {
-        const room = client.room as Room | null;
-        if (!room?.sim || !message.f) return;
-        room.sim.applyInput(client.id, message.f);
-        return;
-      }
-
-      case 'interact': {
-        const room = client.room as Room | null;
-        if (!room?.sim) return;
-        room.sim.setInteract(client.id, message.id ?? null, Boolean(message.held));
-        return;
-      }
-
-      case 'revive': {
-        const room = client.room as Room | null;
-        if (!room?.sim) return;
-        room.sim.setRevive(client.id, message.target ?? null, Boolean(message.held));
-        return;
-      }
-
-      case 'ping': {
-        send(client, { t: 'pong', c: message.c, s: Date.now() });
-        // The round trip is measured by the client and reported back purely so
-        // the lobby can show it. It is display data, never used for anything
-        // that affects gameplay, so a client lying about it costs nothing.
-        if (typeof message.rtt === 'number' && message.rtt >= 0 && message.rtt < 10_000) {
-          client.ping = Math.round(message.rtt);
-        }
-        return;
-      }
-
-      default:
-        return;
-    }
-  }
-
-  function rememberSlot(client: Client, room: Room): void {
-    const token = client.resumeToken;
-    if (!token) return;
-    resumeTokens.set(token, { code: room.code, memberId: client.id, expires: Date.now() + 3600_000 });
-  }
-
-  const sweeper = setInterval(() => {
-    const now = Date.now();
-    for (const [code, room] of [...rooms]) {
-      if (room.sweep(now)) rooms.delete(code);
-    }
-    for (const [token, entry] of [...resumeTokens]) {
-      if (entry.expires < now) resumeTokens.delete(token);
-    }
-  }, 2000);
+  const sweeper = setInterval(() => host.sweep(), 2000);
 
   const port = await new Promise<number>((resolvePort, reject) => {
     http.once('error', reject);
@@ -376,11 +132,10 @@ export async function startServer(options: { port?: number; staticDir?: string }
 
   return {
     port,
-    rooms,
+    rooms: host.rooms,
     async close() {
       clearInterval(sweeper);
-      for (const [, room] of rooms) room.dispose();
-      rooms.clear();
+      host.dispose();
       for (const client of clients) client.socket.terminate();
       await new Promise<void>((done) => wss.close(() => done()));
       await new Promise<void>((done) => http.close(() => done()));
@@ -388,23 +143,13 @@ export async function startServer(options: { port?: number; staticDir?: string }
   };
 }
 
-declare module './room' {
-  interface Conn {
-    /** Token this connection may use to reclaim its slot after a drop. */
-    resumeToken?: string;
-  }
-}
-
-function cleanName(raw: unknown): string {
-  const text = String(raw ?? '').replace(/[^\w \-.]/g, '').trim().slice(0, 16);
-  return text || 'GUARD';
-}
-
 async function serveStatic(req: IncomingMessage, res: ServerResponse, root: string): Promise<void> {
   const url = (req.url ?? '/').split('?')[0];
   if (url === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, protocol: PROTOCOL_VERSION }));
+    // The pid lets an automated test prove it is talking to the server it just
+    // started, rather than a stale one still holding the port.
+    res.end(JSON.stringify({ ok: true, protocol: PROTOCOL_VERSION, pid: process.pid }));
     return;
   }
   const rel = url === '/' ? 'index.html' : normalize(url).replace(/^(\.\.[/\\])+/, '').replace(/^\//, '');

@@ -4,6 +4,8 @@ import type { ConnectionState } from '../mp/netClient';
 
 export interface MpScreenHandlers {
   back: () => void;
+  /** Start a match hosted inside this page, with AI teammates. */
+  soloWithBots: () => void;
   host: (settings: Partial<RoomSettings>) => void;
   join: (code: string) => void;
   quickJoin: () => void;
@@ -48,6 +50,10 @@ export class MpScreens {
   private publicRooms: PublicRoomInfo[] = [];
   private connection: ConnectionState = 'offline';
   private connectionDetail = '';
+  /** False when the page has no server behind it (opened from a file). */
+  canPlayOnline = true;
+  /** True while the current session is hosted in this page. */
+  isLocal = false;
   private current: 'menu' | 'host' | 'join' | 'lobby' | 'error' | 'none' = 'none';
 
   constructor(parent: HTMLElement, private readonly handlers: MpScreenHandlers) {
@@ -71,7 +77,7 @@ export class MpScreens {
 
   private connectionText(): string {
     switch (this.connection) {
-      case 'online': return 'CONNECTED';
+      case 'online': return this.isLocal ? 'HOSTED ON THIS DEVICE' : 'CONNECTED';
       case 'connecting': return 'CONNECTING...';
       case 'reconnecting': return this.connectionDetail || 'RECONNECTING...';
       case 'failed': return this.connectionDetail || 'CONNECTION FAILED';
@@ -87,8 +93,11 @@ export class MpScreens {
   }
 
   private connBadge(): HTMLElement {
-    const badge = el('div', 'mp-conn subtitle', this.connectionText());
-    return badge;
+    return el('div', 'mp-conn subtitle', this.connectionText());
+  }
+
+  private offlineToast(): void {
+    this.toast('NO SERVER - PLAY WITH BOTS, OR RUN THE SERVER');
   }
 
   /* ---------------------------------------------------------------- menu */
@@ -99,22 +108,46 @@ export class MpScreens {
     root.append(el('div', 'title', 'MULTIPLAYER'), this.connBadge());
 
     const list = el('div', 'menu-list');
-    const host = button('Host Game', 'create a session');
+
+    // Offline first: this one needs nothing but the device in your hand.
+    const solo = button('Play With Bots', 'no server needed');
+    solo.classList.add('mp-solo-btn');
+    solo.addEventListener('pointerdown', () => this.handlers.soloWithBots());
+
+    const host = button('Host Game', this.canPlayOnline ? 'create a session' : 'needs a server');
     host.classList.add('mp-host-btn');
-    host.addEventListener('pointerdown', () => this.showHostSetup());
-    const join = button('Join Game', 'code or public list');
+    host.classList.toggle('locked', !this.canPlayOnline);
+    host.addEventListener('pointerdown', () => {
+      if (!this.canPlayOnline) return this.offlineToast();
+      this.showHostSetup();
+    });
+
+    const join = button('Join Game', this.canPlayOnline ? 'code or public list' : 'needs a server');
     join.classList.add('mp-join-open-btn');
-    join.addEventListener('pointerdown', () => this.showJoin());
-    const quick = button('Quick Join', 'find an open lobby');
+    join.classList.toggle('locked', !this.canPlayOnline);
+    join.addEventListener('pointerdown', () => {
+      if (!this.canPlayOnline) return this.offlineToast();
+      this.showJoin();
+    });
+
+    const quick = button('Quick Join', this.canPlayOnline ? 'find an open lobby' : 'needs a server');
     quick.classList.add('mp-quick-btn');
+    quick.classList.toggle('locked', !this.canPlayOnline);
     quick.addEventListener('pointerdown', () => {
+      if (!this.canPlayOnline) return this.offlineToast();
       this.handlers.quickJoin();
       this.toast('SEARCHING...');
     });
+
     const back = button('Back');
     back.addEventListener('pointerdown', () => this.handlers.back());
-    list.append(host, join, quick, back);
+    list.append(solo, host, join, quick, back);
     root.append(list);
+    if (!this.canPlayOnline) {
+      root.append(el('div', 'tip',
+        'This copy was opened straight from a file, so there is no server to talk to. ' +
+        'Playing with bots works anyway. For online play, run the server and open the address it prints.'));
+    }
   }
 
   /* --------------------------------------------------------- host setup */
@@ -144,6 +177,9 @@ export class MpScreens {
       }),
       this.sliderRow('ANIMATRONIC AGGRESSION', 1, 20, this.draft.aiLevel, (v) => {
         this.draft.aiLevel = v;
+      }),
+      this.sliderRow('CREW BOTS', 0, MAX_PLAYERS - 1, this.draft.bots, (v) => {
+        this.draft.bots = v;
       }),
     );
     panel.appendChild(this.modeBlurb());
@@ -268,20 +304,24 @@ export class MpScreens {
       chip('AGGRESSION', String(lobby.settings.aiLevel)),
       chip('VISIBILITY', lobby.settings.isPublic ? 'Public' : 'Private'),
       chip('PLAYERS', `${lobby.players.length}/${lobby.settings.maxPlayers}`),
+      chip('CREW BOTS', String(lobby.settings.bots)),
     );
 
     const players = el('div', 'mp-players');
     for (const player of lobby.players) {
       const row = el('div', 'mp-player-row');
-      const state = player.status === 'disconnected'
+      const state = player.isBot
+        ? 'AI CREW'
+        : player.status === 'disconnected'
         ? 'DISCONNECTED'
         : lobby.phase === 'match'
           ? player.status.toUpperCase()
           : player.ready ? 'READY' : 'NOT READY';
       row.classList.toggle('ready', player.ready && player.status !== 'disconnected');
       row.classList.toggle('gone', player.status === 'disconnected');
+      row.classList.toggle('bot', !!player.isBot);
       row.append(
-        el('b', undefined, player.name + (player.isHost ? '  (HOST)' : '')),
+        el('b', undefined, player.name + (player.isHost ? '  (HOST)' : player.isBot ? '  (BOT)' : '')),
         el('span', 'val', `${state}${player.ping >= 0 ? `  ${player.ping}ms` : ''}`),
       );
       players.appendChild(row);
@@ -358,6 +398,9 @@ export class MpScreens {
       }),
       this.sliderRow('ANIMATRONIC AGGRESSION', 1, 20, this.draft.aiLevel, (v) => {
         this.handlers.setSettings({ aiLevel: v });
+      }),
+      this.sliderRow('CREW BOTS', 0, MAX_PLAYERS - 1, this.draft.bots, (v) => {
+        this.handlers.setSettings({ bots: v });
       }),
     );
     const back = button('Back to Lobby');

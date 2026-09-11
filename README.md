@@ -70,6 +70,13 @@ npm run smoke:mp       # four real browser clients play a co-op match
 Clear Night 1 and **Co-op Shift** unlocks: 1-4 guards, free roam of the whole
 building, one shared power grid, and no office to hide in.
 
+**You do not need a server to play it.** Co-op Shift -> **Play With Bots**
+hosts the match inside the page and fills the crew with AI teammates. It works
+from a file, offline, on a phone with no signal - because the same host code
+that runs on the server also runs in the browser.
+
+For playing with other people:
+
 ```bash
 npm run build && npm run server     # then open http://<your-lan-ip>:8787
 ```
@@ -133,8 +140,8 @@ both the multi-file build and the standalone `hollow-shift.html` loaded over
 `file://`.
 
 **Milestone 4 (co-op multiplayer) is complete for Co-op Survival and Free
-Roam**, on a dedicated authoritative server, verified by 63 automated tests and
-a 30-check four-client browser run.
+Roam**, with AI teammates and no-server solo play, verified by 73 automated
+tests and a 34-check four-client browser run.
 
 **Not built yet:** Objective Mode and Night Survival (locked in the UI, and
 labelled as such), a second map, chat, and the Capacitor store shells. See

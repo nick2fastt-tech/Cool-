@@ -396,6 +396,41 @@ check('walking into a new room is credited', exploredAfter > exploredBefore, `${
 await roamer.page.screenshot({ path: SHOTS + 'mp-10-free-roam-explored.png' });
 await roamer.context.close();
 
+/* ------------------------------------------ bots in an online lobby */
+
+const botHost = await makeClient('BOTHOST');
+await botHost.page.locator('.menu-list .btn', { hasText: 'Co-op Shift' }).click();
+await waitFor(() => mp(botHost).then((s) => s === 'mp-menu'), 10000, 'bot host menu');
+await botHost.page.locator('.mp-host-btn').click();
+// The CREW BOTS slider is the last range control on the host settings screen.
+await botHost.page.locator('.settings input[type=range]').last().fill('2');
+await botHost.page.locator('.mp-create-btn').click();
+const botLobby = await waitFor(() => lobbyOf(botHost).then((l) => (l?.code ? l : null)), 10000, 'bot lobby');
+check('a hosted lobby can be filled with AI teammates',
+  botLobby.settings.bots === 2 && botLobby.players.filter((p) => p.isBot).length === 2,
+  `bots=${botLobby.settings.bots}`);
+
+await botHost.page.locator('.mp-start-btn').click();
+await waitFor(() => mp(botHost).then((s) => s === 'mp-match'), 12000, 'bot match starts');
+await sleep(2500);
+const botSnap = await snapOf(botHost);
+check('the AI crew is in the match', botSnap.players.length === 3, `${botSnap.players.length} guards`);
+const hostPlayerId = await botHost.page.evaluate(() => window.__hollowMp.id());
+const teammates = botSnap.players.filter((p) => p.id !== hostPlayerId);
+// They group around a stationary guard, so walk off and see if they follow.
+await botHost.page.evaluate(() => window.__hollowMp.setStick(0, -1));
+await sleep(4000);
+await botHost.page.evaluate(() => window.__hollowMp.setStick(0, 0));
+await sleep(600);
+const botSnapLater = await snapOf(botHost);
+const moved = teammates.some((before) => {
+  const now = botSnapLater.players.find((p) => p.id === before.id);
+  return now && Math.hypot(now.x - before.x, now.z - before.z) > 0.8;
+});
+check('AI teammates follow a moving player over the network', moved);
+await botHost.page.screenshot({ path: SHOTS + 'mp-11-bots.png' });
+await botHost.context.close();
+
 /* -------------------------------------------------------------- finish */
 
 check('no uncaught client errors during the whole session', errors.length === 0, errors.slice(0, 2).join(' | '));
