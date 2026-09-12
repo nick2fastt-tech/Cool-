@@ -37,7 +37,26 @@ await page.waitForFunction(() => !!window.__hollowMp.lobby()?.code, null, { time
 await page.locator('.mp-start-btn').click();
 await page.waitForFunction(() => window.__hollowMp.state() === 'mp-match', null, { timeout: 15000 });
 await sleep(1200);
-await page.screenshot({ path: SHOTS + 'mp-look-01-office.png' });
+// A turn on the spot, so the office can actually be reviewed rather than
+// guessed at from one arbitrary heading.
+for (const [i, yaw] of [0, Math.PI / 2, Math.PI, -Math.PI / 2].entries()) {
+  await page.evaluate((y) => window.__hollowMp.setYaw(y), yaw);
+  await sleep(500);
+  const p = await page.evaluate(() => window.__hollowMp.pos());
+  console.log(`shot ${i}: asked ${yaw.toFixed(2)} got yaw ${p.yaw.toFixed(2)} at ${p.x.toFixed(1)},${p.z.toFixed(1)}`);
+  await page.screenshot({ path: `${SHOTS}mp-look-01-office-${i}.png` });
+}
+// Back off to the door end, then look across the whole office.
+await page.evaluate(() => window.__hollowMp.setYaw(Math.PI));
+await page.evaluate(() => window.__hollowMp.setStick(0, -1));
+await sleep(900);
+await page.evaluate(() => window.__hollowMp.setStick(0, 0));
+await sleep(500);
+const deskPos = await page.evaluate(() => window.__hollowMp.pos());
+console.log(`at desk: ${deskPos.x.toFixed(1)},${deskPos.z.toFixed(1)} yaw ${deskPos.yaw.toFixed(2)}`);
+await page.screenshot({ path: SHOTS + 'mp-look-01b-desk.png' });
+await page.evaluate(() => window.__hollowMp.setYaw(0));
+await sleep(300);
 // Walk out into the corridor and look around.
 for (const [x, z, ms] of [[0, -1, 2600]]) {
   await page.evaluate(([a, b]) => window.__hollowMp.setStick(a, b), [x, z]);

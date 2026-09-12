@@ -168,6 +168,30 @@ Test counts as of this commit: **58 automated tests** (`npm test`) plus a
   validated server-side and clients cannot move themselves, but there is no
   behavioural detection or reporting.
 
+## Difficulty, and a balance bug worth knowing about
+
+The animatronic aggression dial (1-20) used to map onto an internal scale
+where the **default lobby setting made the mode unplayable**: the first guard
+was hunted down about twelve seconds into a match, at full power, before any
+blackout, and the whole thing was over inside a minute. Nothing caught it,
+because every browser test ran with aggression forced to 1.
+
+The dial now maps onto the measured playable band. `npm run coop-balance`
+plays four seeded matches at each setting with an AI crew and prints:
+
+| Aggression | Match length | First casualty | Guard survived |
+| --- | --- | --- | --- |
+| 6 | 360s (reaches 6 AM) | 205s | 4/4 |
+| 10 (default) | 283s | 185s | 0/4 |
+| 14 | 241s | 186s | 0/4 |
+| 20 | 120s | 25s | 0/4 |
+
+Casualties clustering around 185s is the first blackout arriving - which is
+when a co-op match is supposed to get dangerous.
+
+Those numbers are produced by AI teammates, who are worse than a competent
+human. Treat them as a floor.
+
 ## AI teammates
 
 A crew bot is **not** a scripted prop. It is an ordinary player entity driven
@@ -197,9 +221,51 @@ mode and they do it unprompted.
 They also call out what they are doing (`RILEY: BREAKER ON ME`), which is most
 of what makes a teammate feel present.
 
-What they are not: they do not talk to you beyond callouts, they do not adapt
-to your playstyle, and they will not out-think a good human. They are a crew
-that lets you play the mode alone, not a Turing test.
+### What they do now
+
+Coordination:
+
+- **They divide the work.** Each bot claims a job, and nobody walks to a fuse
+  somebody else already called.
+- **Triage.** They go to whoever is closest to bleeding out, not whoever is
+  closest - and they will not walk into something still standing over a body.
+- **A lookout.** With three or more up, one hangs back and watches while the
+  others work a fixture.
+- **They tell each other.** A sighting is called out and the whole crew
+  remembers roughly where it was for a few seconds, and routes around it.
+
+Self-preservation, all of it learned from watching them die in the sweep:
+
+- **They keep breath in reserve.** They used to sprint the whole way to a job
+  and arrive with no stamina, which is how they were being caught within
+  fifteen seconds of a blackout.
+- **They move quietly near danger.** Sprinting roughly doubles the noise you
+  make, and noise is the strongest signal these animatronics hunt on, so they
+  slow to a walk near one and crouch when it is close.
+- **They put the torch out** when something is hunting them. A light is
+  exactly what it is looking for.
+- **They do not walk back past** something they just ran from because a timer
+  expired.
+
+Feel:
+
+- Their heads move - a sweep while walking, a glance back when something is
+  about.
+- They check a corner before stepping through it.
+- They thank whoever picks them up, and take a moment before moving off.
+
+### What they are not
+
+They do not talk to you beyond callouts, they do not adapt to your playstyle,
+and they will not out-think a good human.
+
+**And they are not survivors.** Measured, with a crew of three left alone in a
+permanent blackout: at aggression 1 they restore the grid every time in about
+two minutes with no casualties; at aggression 2 and above in that same
+worst-case scenario they are wiped. In a normal match - where the first four
+minutes are lit and powered - they hold up far better, which is what the table
+above shows. If you want an AI crew that lasts, host on the low half of the
+dial.
 
 ## The two modes
 

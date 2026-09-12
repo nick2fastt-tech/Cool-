@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {
   INTERACTABLES,
+  wallStyleFor,
   INTERACT_RANGE,
   ROOMS,
   WALLS,
@@ -12,6 +13,7 @@ import {
 } from './map';
 import { QUALITY, type QualityPreset } from '../game/config';
 import { buildCharacter, type CharacterModel } from '../render/characterModels';
+import { buildMapProps } from './mapProps';
 import { carpetTexture, litMaterial, tileTexture, wallTexture, whiteTileTexture } from '../render/materials';
 import type { NetClient } from './netClient';
 
@@ -77,6 +79,8 @@ export class CoopScene {
 
     this.buildMap(q.extraLights);
     this.buildProps();
+    // Set dressing: hundreds of objects, about twenty draw calls.
+    this.scene.add(buildMapProps(quality === 'low' ? 'low' : 'full'));
 
     // The player's own torch: one real spot light, because it is the only
     // light a player ever studies closely.
@@ -93,7 +97,13 @@ export class CoopScene {
     const carpet = litMaterial('mp:carpet', { map: carpetTexture(10) });
     const tile = litMaterial('mp:tile', { map: tileTexture(12) });
     const wtile = litMaterial('mp:wtile', { map: whiteTileTexture(6) });
-    const wallMat = litMaterial('mp:wall', { map: wallTexture(3) });
+    // One finish per room type, so a kitchen reads as a kitchen from the door.
+    const wallMats = {
+      panel: litMaterial('mp:wall', { map: wallTexture(3) }),
+      tile: litMaterial('mp:wall:tile', { map: whiteTileTexture(4) }),
+      concrete: litMaterial('mp:wall:concrete', { color: 0x3a3a3c }),
+      show: litMaterial('mp:wall:show', { map: wallTexture(3), color: 0xc99a6a }),
+    } as const;
     const ceilMat = litMaterial('mp:ceil', { color: 0x14151a });
 
     for (const room of ROOMS) {
@@ -144,7 +154,7 @@ export class CoopScene {
     for (const wall of WALLS) {
       const w = Math.max(Math.abs(wall.x2 - wall.x1), WALL_THICKNESS);
       const d = Math.max(Math.abs(wall.z2 - wall.z1), WALL_THICKNESS);
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, WALL_HEIGHT, d), wallMat);
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, WALL_HEIGHT, d), wallMats[wallStyleFor(wall)]);
       mesh.position.set((wall.x1 + wall.x2) / 2, WALL_HEIGHT / 2, (wall.z1 + wall.z2) / 2);
       mesh.matrixAutoUpdate = false;
       mesh.updateMatrix();

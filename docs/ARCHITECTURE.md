@@ -69,6 +69,7 @@ src/
     localHost.ts  the session host, running inside the page for solo play
     netClient.ts  socket, reconnect, prediction, interpolation
     mpScene.ts    first-person renderer for the co-op map
+    mapProps.ts   set dressing, batched into InstancedMeshes
   ui/
     mpScreens.ts  multiplayer menu, host setup, join, lobby
     mpHud.ts      stick, buttons and every piece of shared state

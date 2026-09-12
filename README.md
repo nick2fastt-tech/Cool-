@@ -100,6 +100,13 @@ other is in the office. Torches have batteries and charging stations. Getting
 caught puts you down, not out: a teammate has eight seconds of standing over
 you to bring you back.
 
+The building is dressed: party tables and chairs, a stage with curtains and a
+drum kit, kitchen counters, freezer shelving, restroom stalls, spare heads on
+the backstage bench, conduit in the electrical room, and a framed doorway with
+a lit exit sign over every opening. It is several hundred objects rendered in
+about twenty draw calls, and each room type has its own wall finish so a
+kitchen reads as a kitchen from the doorway.
+
 Full architecture, and an honest feature-by-feature status of what is built,
 tested, or not implemented: **[docs/MULTIPLAYER.md](docs/MULTIPLAYER.md)**.
 
@@ -140,7 +147,7 @@ both the multi-file build and the standalone `hollow-shift.html` loaded over
 `file://`.
 
 **Milestone 4 (co-op multiplayer) is complete for Co-op Survival and Free
-Roam**, with AI teammates and no-server solo play, verified by 73 automated
+Roam**, with AI teammates and no-server solo play, verified by 84 automated
 tests and a 34-check four-client browser run.
 
 **Not built yet:** Objective Mode and Night Survival (locked in the UI, and

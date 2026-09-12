@@ -29,10 +29,14 @@ export interface Rect {
   z2: number;
 }
 
+export type WallStyle = 'panel' | 'tile' | 'concrete' | 'show';
+
 export interface MapRoom {
   id: string;
   name: string;
   rect: Rect;
+  /** Which surface this room's walls are finished in. */
+  style?: WallStyle;
   /**
    * Ceiling light, killed by a blackout. Intensity is in three.js physical
    * units (candela-ish): a room-scale fixture lands in the twenties, not
@@ -83,20 +87,20 @@ export const BOT_RADIUS = 0.42;
 export const MAP_BOUNDS: Rect = { x1: -23.4, z1: -19.6, x2: 23.4, z2: 9.4 };
 
 export const ROOMS: MapRoom[] = [
-  { id: 'stage', name: 'Show Stage', rect: { x1: -6, z1: -20, x2: 6, z2: -16 }, light: { x: 0, z: -18, color: 0x9ab4ff, intensity: 31 } },
-  { id: 'dining', name: 'Dining Hall', rect: { x1: -14, z1: -16, x2: 14, z2: 0 }, light: { x: 0, z: -8, color: 0xffcf9a, intensity: 34 } },
-  { id: 'corrW', name: 'West Corridor', rect: { x1: -17, z1: -19, x2: -14, z2: 3 }, light: { x: -15.5, z: -8, color: 0xbfd4ff, intensity: 22 } },
-  { id: 'corrE', name: 'East Corridor', rect: { x1: 14, z1: -19, x2: 17, z2: 3 }, light: { x: 15.5, z: -8, color: 0xbfd4ff, intensity: 22 } },
-  { id: 'corrS', name: 'Main Corridor', rect: { x1: -17, z1: 0, x2: 17, z2: 3 }, light: { x: 0, z: 1.5, color: 0xbfd4ff, intensity: 25 } },
-  { id: 'backstage', name: 'Backstage', rect: { x1: -23, z1: -19, x2: -17, z2: -13 }, light: { x: -20, z: -16, color: 0xffd0a0, intensity: 20 } },
-  { id: 'cove', name: "Crow's Nest", rect: { x1: -23, z1: -12, x2: -17, z2: -6 }, light: { x: -20, z: -9, color: 0xd07070, intensity: 17 } },
-  { id: 'electrical', name: 'Electrical Room', rect: { x1: -23, z1: -5, x2: -17, z2: 1 }, light: { x: -20, z: -2, color: 0x9fe8c0, intensity: 22 } },
-  { id: 'kitchen', name: 'Kitchen', rect: { x1: 17, z1: -19, x2: 23, z2: -13 }, light: { x: 20, z: -16, color: 0xd8e6ff, intensity: 25 } },
-  { id: 'freezer', name: 'Freezer', rect: { x1: 17, z1: -12, x2: 23, z2: -7 }, light: { x: 20, z: -9.5, color: 0xc8e0ff, intensity: 20 } },
-  { id: 'restrooms', name: 'Restrooms', rect: { x1: 17, z1: -6, x2: 23, z2: 1 }, light: { x: 20, z: -2.5, color: 0xd8e6ff, intensity: 20 } },
-  { id: 'supply', name: 'Supply Closet', rect: { x1: -14, z1: 3, x2: -7, z2: 9 }, light: { x: -10.5, z: 6, color: 0xffd0a0, intensity: 20 } },
-  { id: 'office', name: 'Security Office', rect: { x1: -4, z1: 3, x2: 4, z2: 9 }, light: { x: 0, z: 6, color: 0xffd8a0, intensity: 28 } },
-  { id: 'parts', name: 'Parts & Service', rect: { x1: 7, z1: 3, x2: 14, z2: 9 }, light: { x: 10.5, z: 6, color: 0xffc890, intensity: 20 } },
+  { id: 'stage', name: 'Show Stage', style: 'show', rect: { x1: -6, z1: -20, x2: 6, z2: -16 }, light: { x: 0, z: -18, color: 0x9ab4ff, intensity: 31 } },
+  { id: 'dining', name: 'Dining Hall', style: 'show', rect: { x1: -14, z1: -16, x2: 14, z2: 0 }, light: { x: 0, z: -8, color: 0xffcf9a, intensity: 34 } },
+  { id: 'corrW', name: 'West Corridor', style: 'panel', rect: { x1: -17, z1: -19, x2: -14, z2: 3 }, light: { x: -15.5, z: -8, color: 0xbfd4ff, intensity: 22 } },
+  { id: 'corrE', name: 'East Corridor', style: 'panel', rect: { x1: 14, z1: -19, x2: 17, z2: 3 }, light: { x: 15.5, z: -8, color: 0xbfd4ff, intensity: 22 } },
+  { id: 'corrS', name: 'Main Corridor', style: 'panel', rect: { x1: -17, z1: 0, x2: 17, z2: 3 }, light: { x: 0, z: 1.5, color: 0xbfd4ff, intensity: 25 } },
+  { id: 'backstage', name: 'Backstage', style: 'concrete', rect: { x1: -23, z1: -19, x2: -17, z2: -13 }, light: { x: -20, z: -16, color: 0xffd0a0, intensity: 20 } },
+  { id: 'cove', name: "Crow's Nest", style: 'show', rect: { x1: -23, z1: -12, x2: -17, z2: -6 }, light: { x: -20, z: -9, color: 0xd07070, intensity: 17 } },
+  { id: 'electrical', name: 'Electrical Room', style: 'concrete', rect: { x1: -23, z1: -5, x2: -17, z2: 1 }, light: { x: -20, z: -2, color: 0x9fe8c0, intensity: 22 } },
+  { id: 'kitchen', name: 'Kitchen', style: 'tile', rect: { x1: 17, z1: -19, x2: 23, z2: -13 }, light: { x: 20, z: -16, color: 0xd8e6ff, intensity: 25 } },
+  { id: 'freezer', name: 'Freezer', style: 'tile', rect: { x1: 17, z1: -12, x2: 23, z2: -7 }, light: { x: 20, z: -9.5, color: 0xc8e0ff, intensity: 20 } },
+  { id: 'restrooms', name: 'Restrooms', style: 'tile', rect: { x1: 17, z1: -6, x2: 23, z2: 1 }, light: { x: 20, z: -2.5, color: 0xd8e6ff, intensity: 20 } },
+  { id: 'supply', name: 'Supply Closet', style: 'concrete', rect: { x1: -14, z1: 3, x2: -7, z2: 9 }, light: { x: -10.5, z: 6, color: 0xffd0a0, intensity: 20 } },
+  { id: 'office', name: 'Security Office', style: 'panel', rect: { x1: -4, z1: 3, x2: 4, z2: 9 }, light: { x: 0, z: 6, color: 0xffd8a0, intensity: 28 } },
+  { id: 'parts', name: 'Parts & Service', style: 'concrete', rect: { x1: 7, z1: 3, x2: 14, z2: 9 }, light: { x: 10.5, z: 6, color: 0xffc890, intensity: 20 } },
 ];
 
 /* ------------------------------------------------------------------ walls */
@@ -168,6 +172,41 @@ vwall(3, 9, -4);  vwall(3, 9, 4);  hwall(-4, 4, 9);
 vwall(3, 9, 7);   vwall(3, 9, 14); hwall(7, 14, 9);
 
 export const WALLS: readonly Wall[] = walls;
+
+/**
+ * Every doorway, as authored above.
+ *
+ * The collision walls already have the gaps in them; this is the same
+ * information stated positively so the renderer can frame each opening and the
+ * AI can reason about chokepoints. `axis` is the direction the opening spans.
+ */
+export interface Doorway {
+  x: number;
+  z: number;
+  /** Width of the opening along `axis`. */
+  width: number;
+  axis: 'x' | 'z';
+  /** Rooms either side, for AI and for signage. */
+  between: [string, string];
+}
+
+export const DOORWAYS: readonly Doorway[] = [
+  { x: -14, z: -7.5, width: 3, axis: 'z', between: ['dining', 'corrW'] },
+  { x: 14, z: -7.5, width: 3, axis: 'z', between: ['dining', 'corrE'] },
+  { x: -9.5, z: 0, width: 3, axis: 'x', between: ['dining', 'corrS'] },
+  { x: 0, z: 0, width: 3, axis: 'x', between: ['dining', 'corrS'] },
+  { x: 9.5, z: 0, width: 3, axis: 'x', between: ['dining', 'corrS'] },
+  { x: -17, z: -15.5, width: 3, axis: 'z', between: ['corrW', 'backstage'] },
+  { x: -17, z: -8.5, width: 3, axis: 'z', between: ['corrW', 'cove'] },
+  { x: -17, z: -1.5, width: 3, axis: 'z', between: ['corrW', 'electrical'] },
+  { x: 17, z: -15.5, width: 3, axis: 'z', between: ['corrE', 'kitchen'] },
+  { x: 17, z: -9.5, width: 3, axis: 'z', between: ['corrE', 'freezer'] },
+  { x: 17, z: -2.5, width: 3, axis: 'z', between: ['corrE', 'restrooms'] },
+  { x: -10.5, z: 3, width: 3, axis: 'x', between: ['corrS', 'supply'] },
+  { x: 0, z: 3, width: 3, axis: 'x', between: ['corrS', 'office'] },
+  { x: 10.5, z: 3, width: 3, axis: 'x', between: ['corrS', 'parts'] },
+  { x: 0, z: -16, width: 12, axis: 'x', between: ['dining', 'stage'] },
+] as const;
 
 /** Wall as a collision box, expanded by the wall's thickness. */
 export function wallBox(w: Wall): { minX: number; maxX: number; minZ: number; maxZ: number } {
@@ -281,11 +320,37 @@ export function roomName(id: string): string {
 /* ---------------------------------------------------------------- spawning */
 
 export const SPAWNS: { x: number; z: number }[] = [
-  { x: -2.2, z: 7.2 },
-  { x: 2.2, z: 7.2 },
-  { x: -2.2, z: 4.6 },
-  { x: 2.2, z: 4.6 },
+  { x: -2.4, z: 5.8 },
+  { x: 2.4, z: 5.8 },
+  { x: -2.4, z: 4.4 },
+  { x: 2.4, z: 4.4 },
 ];
+
+/**
+ * Which room a wall belongs to, for finishing it.
+ *
+ * A wall is shared by whatever is on either side of it, so this samples just
+ * inside both faces and takes the first real room it finds. Corridors lose the
+ * tie, which is what you want: the tiled kitchen wall should read as kitchen
+ * from inside the kitchen.
+ */
+export function wallStyleFor(wall: Wall): WallStyle {
+  const midX = (wall.x1 + wall.x2) / 2;
+  const midZ = (wall.z1 + wall.z2) / 2;
+  const along = Math.abs(wall.x2 - wall.x1) > Math.abs(wall.z2 - wall.z1) ? 'x' : 'z';
+  const offset = 0.5;
+  const samples: [number, number][] = along === 'x'
+    ? [[midX, midZ - offset], [midX, midZ + offset]]
+    : [[midX - offset, midZ], [midX + offset, midZ]];
+  let fallback: WallStyle = 'panel';
+  for (const [x, z] of samples) {
+    const room = ROOMS.find((r) => x >= r.rect.x1 && x <= r.rect.x2 && z >= r.rect.z1 && z <= r.rect.z2);
+    if (!room) continue;
+    if (!room.id.startsWith('corr')) return room.style ?? 'panel';
+    fallback = room.style ?? 'panel';
+  }
+  return fallback;
+}
 
 /* ----------------------------------------------------------- interactables */
 

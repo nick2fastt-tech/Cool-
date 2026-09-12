@@ -122,6 +122,8 @@ interface Bot {
   thinkTimer: number;
   /** How long it has been unable to see its target. */
   lostTimer: number;
+  /** Where the target was when it could last actually see them. */
+  lastSeen: { x: number; z: number } | null;
   /** Fox only: charge burst timing. */
   burst: number;
   burstCooldown: number;
@@ -203,7 +205,15 @@ export class MatchSim {
     this.rngState = options.seed >>> 0 || 1;
     this.tuning = DIFFICULTY[options.difficulty];
     if (typeof options.startPower === 'number') this.power = Math.max(0.01, options.startPower);
-    this.aggression = (options.aiLevel / 10) * this.tuning.aggression;
+    // Aggression scale.
+    //
+    // This was `aiLevel / 10`, which put the default lobby setting at 1.0 -
+    // and at 1.0 the first guard is hunted down within about twelve seconds
+    // of the match starting, with full power and no blackout. Four hunters
+    // moving at close to a player's sprint do not need that much help. The
+    // measured playable band is roughly 0.05 to 0.5, so the 1-20 dial now
+    // maps onto it: 10 sits in the middle, 20 is genuinely nasty.
+    this.aggression = (options.aiLevel / 40) * this.tuning.aggression;
 
     options.players.forEach((p, i) => {
       const spawn = SPAWNS[i % SPAWNS.length];
@@ -234,8 +244,13 @@ export class MatchSim {
     const spawnNodes: Record<BotKind, string> = {
       bear: 'stage', rabbit: 'backstage', hen: 'kitchen', fox: 'cove',
     };
+    // Chase speeds sit just below a player's sprint (4.5 m/s) on purpose.
+    // Something faster than a sprint has no counterplay at all: you cannot
+    // outrun it, and breaking sight is not possible if it closes the gap in a
+    // second. Below a sprint, running costs you stamina and buys you the few
+    // seconds you need to get round a corner - which is the game.
     const speeds: Record<BotKind, [number, number]> = {
-      bear: [1.9, 3.5], rabbit: [2.4, 4.0], hen: [2.1, 3.7], fox: [2.2, 5.3],
+      bear: [1.9, 3.3], rabbit: [2.4, 3.9], hen: [2.1, 3.6], fox: [2.2, 4.3],
     };
     for (const kind of ['bear', 'rabbit', 'hen', 'fox'] as BotKind[]) {
       const node = NAV_BY_ID.get(spawnNodes[kind])!;
@@ -254,6 +269,7 @@ export class MatchSim {
         attackCooldown: 6,
         thinkTimer: this.random() * 2,
         lostTimer: 0,
+        lastSeen: null,
         burst: 0,
         burstCooldown: 8,
       });
@@ -718,16 +734,25 @@ export class MatchSim {
       const target = bot.target ? this.players.get(bot.target) : null;
       if (target && target.status === 'alive') {
         const visible = hasLineOfSight(bot.x, bot.z, target.x, target.z);
-        bot.lostTimer = visible ? 0 : bot.lostTimer + dt;
-        if (bot.lostTimer > 4) {
+        if (visible) {
+          bot.lostTimer = 0;
+          bot.lastSeen = { x: target.x, z: target.z };
+        } else {
+          bot.lostTimer += dt;
+        }
+        if (bot.lostTimer > 3) {
           // Lost them: go and look where they were last seen.
-          bot.investigate = { x: target.x, z: target.z };
+          bot.investigate = bot.lastSeen ?? { x: target.x, z: target.z };
           bot.target = null;
+          bot.lastSeen = null;
           bot.state = 'investigate';
           bot.path = [];
         } else {
           bot.state = 'chase';
-          this.moveBotToward(bot, target.x, target.z, dt, visible);
+          // Out of sight means chasing where they *were*, not tracking them
+          // live through a wall. Rounding a corner has to actually work.
+          const aim = visible ? target : bot.lastSeen ?? target;
+          this.moveBotToward(bot, aim.x, aim.z, dt, visible);
           const dx = bot.x - target.x;
           const dz = bot.z - target.z;
           if (dx * dx + dz * dz < 1.5 * 1.5 && bot.attackCooldown <= 0) this.attack(bot, target);

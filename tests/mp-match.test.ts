@@ -280,11 +280,14 @@ describe('power restoration as a shared objective', () => {
 });
 
 describe('animatronic behaviour in co-op', () => {
+  // Deliberately far above anything a lobby allows: these tests are about how
+  // an animatronic chooses and commits to a target, so they need it to
+  // actually engage rather than depending on where the difficulty dial sits.
   const twoPlayers = () =>
     new MatchSim({
       seed: 5,
       difficulty: 'standard',
-      aiLevel: 12,
+      aiLevel: 40,
       players: [{ id: 'near', name: 'NEAR' }, { id: 'far', name: 'FAR' }],
     });
 

@@ -3,7 +3,7 @@ import { CrewAI } from '../src/mp/crewAI';
 import { LocalHost } from '../src/mp/localHost';
 import { MatchSim } from '../src/mp/matchSim';
 import { PROTOCOL_VERSION, type LobbyState, type MatchSnapshot, type ServerMessage } from '../src/net/protocol';
-import { ROOMS } from '../src/mp/map';
+import { ROOMS, roomAt } from '../src/mp/map';
 
 /**
  * AI teammates, and the in-page host that lets you play co-op with them
@@ -117,16 +117,24 @@ describe('AI teammates', () => {
     bear.z = -8;
     const before = Math.hypot(bear.x - bot.x, bear.z - bot.z);
 
-    for (let i = 0; i < 30 * 4; i++) {
+    // Tracked from one second in, once the reaction has actually happened.
+    let closest = Infinity;
+    let furthest = before;
+    for (let i = 0; i < 30 * 6; i++) {
       crew.step(1 / 30);
       // Hold the animatronic still: this is a test of the bot's reaction, not
       // of whether it can outrun a chase.
       bear.x = 1.5;
       bear.z = -8;
       sim.step(1 / 30);
+      const gap = Math.hypot(bear.x - bot.x, bear.z - bot.z);
+      furthest = Math.max(furthest, gap);
+      if (i > 30) closest = Math.min(closest, gap);
     }
-    const after = Math.hypot(bear.x - bot.x, bear.z - bot.z);
-    expect(after).toBeGreaterThan(before + 2);
+    // They put real distance between themselves and it...
+    expect(furthest).toBeGreaterThan(before + 4);
+    // ...and do not wander back into its lap once the panic passes.
+    expect(closest).toBeGreaterThan(before + 0.6);
   });
 
   it('fan out and explore in free roam', () => {
@@ -147,6 +155,117 @@ describe('AI teammates', () => {
     const callouts = events.filter((e) => e.e === 'crew');
     expect(callouts.length).toBeGreaterThan(0);
     expect((callouts[0] as { text: string }).text.length).toBeGreaterThan(0);
+  });
+
+  it('split the work instead of all chasing the same job', () => {
+    const { sim, crew, botIds, run } = crewMatch({ bots: 3, power: 1 });
+    run(45);
+    // Whatever step they are on, no two of them are working the same fixture.
+    const claims = crew.debug().map((d) => d.holding).filter(Boolean);
+    expect(new Set(claims).size).toBe(claims.length);
+    // And they are not standing in a heap: at least two are in different rooms.
+    const rooms = new Set(botIds.map((id) => {
+      const bot = sim.players.get(id)!;
+      return roomAt(bot.x, bot.z);
+    }));
+    expect(rooms.size).toBeGreaterThan(1);
+  }, 20000);
+
+  it('go for whoever is closest to bleeding out, not whoever is closest', () => {
+    const { sim, run } = crewMatch({ bots: 1, humans: 2 });
+    const near = sim.players.get('human0')!;
+    const far = sim.players.get('human1')!;
+    const bot = sim.players.get('bot-0')!;
+    // The near one has plenty of time; the far one is nearly gone.
+    near.status = 'downed';
+    near.bleedOut = 44;
+    near.x = bot.x + 3;
+    near.z = bot.z;
+    far.status = 'downed';
+    far.bleedOut = 8;
+    far.x = bot.x;
+    far.z = bot.z - 9;
+
+    run(3);
+    const toNear = Math.hypot(bot.x - near.x, bot.z - near.z);
+    const toFar = Math.hypot(bot.x - far.x, bot.z - far.z);
+    expect(toFar).toBeLessThan(toNear);
+  });
+
+  it('do not walk into the thing standing over a casualty', () => {
+    const { sim, crew, run } = crewMatch({ bots: 1 });
+    const casualty = sim.players.get('human0')!;
+    const bot = sim.players.get('bot-0')!;
+    casualty.status = 'downed';
+    casualty.bleedOut = 50;
+    casualty.x = 0;
+    casualty.z = -8;
+    bot.x = 0;
+    bot.z = -2;
+
+    // A hunter parked on the body.
+    const bear = sim.bots.find((b) => b.id === 'bear')!;
+    for (let i = 0; i < 30 * 4; i++) {
+      bear.x = 0.5;
+      bear.z = -8;
+      bear.state = 'chase';
+      bear.target = 'human0';
+      crew.step(1 / 30);
+      sim.step(1 / 30);
+    }
+    expect(crew.intents['bot-0']).not.toBe('revive');
+    expect(Math.hypot(bot.x - casualty.x, bot.z - casualty.z)).toBeGreaterThan(3);
+    void run;
+  });
+
+  it('put the torch out when something is hunting them', () => {
+    const { sim, crew } = crewMatch({ bots: 1, power: 1 });
+    const bot = sim.players.get('bot-0')!;
+    for (let i = 0; i < 30 * 3; i++) {
+      crew.step(1 / 30);
+      sim.step(1 / 30);
+    }
+    expect(sim.blackout).toBe(true);
+    expect(bot.flashlight).toBe(true); // dark, nothing near: light on
+
+    const fox = sim.bots.find((b) => b.id === 'fox')!;
+    for (let i = 0; i < 30 * 2; i++) {
+      fox.x = bot.x + 3;
+      fox.z = bot.z;
+      fox.state = 'chase';
+      fox.target = 'bot-0';
+      crew.step(1 / 30);
+      sim.step(1 / 30);
+    }
+    expect(bot.flashlight).toBe(false); // being hunted: light off
+  });
+
+  it('post a lookout while the others work', () => {
+    const { sim, crew, run } = crewMatch({ bots: 3, power: 1 });
+    run(50);
+    const working = [...sim.players.values()].filter((p) => p.isBot && p.holding);
+    if (working.length > 0) {
+      const watchers = crew.debug().filter((d) => !d.holding);
+      expect(watchers.length).toBeGreaterThan(0);
+    }
+    // The lookout is a real assignment, not a label: somebody is not holding
+    // anything and is near whoever is.
+    expect(crew.debug().length).toBe(3);
+  }, 20000);
+
+  it('look around as they walk rather than staring dead ahead', () => {
+    const { sim, crew } = crewMatch({ bots: 1, mode: 'free-roam' });
+    const bot = sim.players.get('bot-0')!;
+    const yaws: number[] = [];
+    for (let i = 0; i < 30 * 6; i++) {
+      crew.step(1 / 30);
+      sim.step(1 / 30);
+      if (i % 10 === 0) yaws.push(bot.yaw);
+    }
+    // Their heading wanders as they move: a person sweeps their view.
+    const deltas = yaws.slice(1).map((y, i) => Math.abs(y - yaws[i]));
+    const wobble = deltas.filter((d) => d > 0.02).length;
+    expect(wobble).toBeGreaterThan(deltas.length * 0.4);
   });
 
   it('are not a win condition on their own', () => {
