@@ -1,6 +1,18 @@
 # Cool-
 
-Self-contained HTML projects. No build step, no dependencies — open a file and it runs.
+## T10 — `t10/`
+
+A full AI platform: Next.js + TypeScript, streaming chat, a model selector (T10 V1 / T10 1.1), provider abstraction, image-generation layer, and indexable public pages. See [`t10/README.md`](t10/README.md).
+
+```bash
+cd t10 && npm install && npm run dev
+```
+
+---
+
+## Static HTML projects
+
+Self-contained single files. No build step, no dependencies — open one and it runs.
 
 ## C10.1
 

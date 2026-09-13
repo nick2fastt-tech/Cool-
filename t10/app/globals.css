@@ -1,0 +1,278 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==========================================================================
+   T10 design tokens
+   Dark is the primary surface. Light is a straight token swap, enabled by
+   setting data-theme="light" on <html>.
+   ========================================================================== */
+@layer base {
+  :root {
+    /* System font stacks - no webfont request, no layout shift, no third-party
+       dependency on the SEO pages. */
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+      "Helvetica Neue", "Noto Sans", Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+      "Liberation Mono", monospace;
+  }
+
+  :root,
+  :root[data-theme="dark"] {
+    --t10-canvas: 9 11 16;
+    --t10-surface: 15 18 25;
+    --t10-raised: 22 26 35;
+    --t10-line: 33 39 51;
+    --t10-line-strong: 50 58 74;
+    --t10-ink: 232 236 243;
+    --t10-ink-soft: 168 178 195;
+    --t10-ink-muted: 122 133 152;
+    --t10-accent: 122 162 255;
+    --t10-accent-soft: 32 45 78;
+    --t10-accent-ink: 9 11 16;
+    --t10-danger: 240 118 118;
+    --t10-warn: 226 170 92;
+    --t10-ok: 96 208 148;
+    color-scheme: dark;
+  }
+
+  :root[data-theme="light"] {
+    --t10-canvas: 252 253 255;
+    --t10-surface: 255 255 255;
+    --t10-raised: 246 248 252;
+    --t10-line: 226 232 241;
+    --t10-line-strong: 203 213 228;
+    --t10-ink: 16 22 33;
+    --t10-ink-soft: 61 74 94;
+    --t10-ink-muted: 104 118 140;
+    --t10-accent: 44 95 220;
+    --t10-accent-soft: 226 236 255;
+    --t10-accent-ink: 255 255 255;
+    --t10-danger: 200 58 58;
+    --t10-warn: 168 106 20;
+    --t10-ok: 22 132 88;
+    color-scheme: light;
+  }
+
+  * {
+    @apply border-line;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-canvas text-ink antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "ss01";
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+
+  ::selection {
+    background: rgb(var(--t10-accent) / 0.28);
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent/70 ring-offset-2 ring-offset-canvas rounded-md;
+  }
+
+  /* Scrollbars */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--t10-line-strong));
+    border-radius: 99px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--t10-ink-muted));
+    background-clip: content-box;
+    border: 3px solid transparent;
+  }
+}
+
+@layer components {
+  /* Brand wordmark */
+  .t10-mark {
+    @apply inline-flex items-center font-semibold tracking-[-0.04em];
+    font-variant-ligatures: none;
+  }
+
+  .t10-skip {
+    @apply sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100]
+           focus:rounded-lg focus:bg-raised focus:px-4 focus:py-2 focus:text-sm focus:text-ink;
+  }
+
+  /* Assistant prose */
+  .t10-prose {
+    @apply text-[15.5px] leading-[1.75] text-ink;
+  }
+  .t10-prose > * + * {
+    @apply mt-4;
+  }
+  .t10-prose h1 {
+    @apply mt-7 text-[1.35rem] font-semibold tracking-tight;
+  }
+  .t10-prose h2 {
+    @apply mt-7 text-[1.18rem] font-semibold tracking-tight;
+  }
+  .t10-prose h3 {
+    @apply mt-6 text-[1.05rem] font-semibold tracking-tight;
+  }
+  .t10-prose ul {
+    @apply list-disc space-y-1.5 pl-5 marker:text-ink-muted;
+  }
+  .t10-prose ol {
+    @apply list-decimal space-y-1.5 pl-5 marker:text-ink-muted;
+  }
+  .t10-prose li > ul,
+  .t10-prose li > ol {
+    @apply mt-1.5;
+  }
+  .t10-prose a {
+    @apply text-accent underline decoration-accent/35 underline-offset-[3px] hover:decoration-accent;
+  }
+  .t10-prose blockquote {
+    @apply border-l-2 border-line-strong pl-4 text-ink-soft;
+  }
+  .t10-prose strong {
+    @apply font-semibold text-ink;
+  }
+  .t10-prose hr {
+    @apply border-line;
+  }
+  .t10-prose code:not(pre code) {
+    @apply rounded-[5px] border border-line bg-raised px-1.5 py-0.5 font-mono text-[0.85em] text-ink;
+  }
+  .t10-prose table {
+    @apply block w-full overflow-x-auto text-sm;
+  }
+  .t10-prose th,
+  .t10-prose td {
+    @apply border border-line px-3 py-2 text-left align-top;
+  }
+  .t10-prose th {
+    @apply bg-raised font-semibold;
+  }
+  .t10-prose p:first-child {
+    @apply mt-0;
+  }
+
+  /* Streaming caret */
+  .t10-caret::after {
+    content: "";
+    @apply ml-0.5 inline-block h-[1.05em] w-[2px] translate-y-[2px] rounded-sm bg-accent align-baseline;
+    animation: t10-blink 1.05s ease-in-out infinite;
+  }
+
+  .t10-shimmer {
+    background: linear-gradient(
+      100deg,
+      rgb(var(--t10-ink-muted)) 24%,
+      rgb(var(--t10-ink)) 42%,
+      rgb(var(--t10-ink-muted)) 62%
+    );
+    background-size: 260% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+@keyframes t10-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.15;
+  }
+}
+
+/* highlight.js token colours, mapped onto T10 tokens */
+.hljs-keyword,
+.hljs-built_in,
+.hljs-literal {
+  color: rgb(147 176 255);
+}
+.hljs-string,
+.hljs-regexp {
+  color: rgb(134 214 166);
+}
+.hljs-number {
+  color: rgb(233 176 122);
+}
+.hljs-comment,
+.hljs-quote {
+  color: rgb(var(--t10-ink-muted));
+  font-style: italic;
+}
+.hljs-title,
+.hljs-title.function_,
+.hljs-section {
+  color: rgb(196 168 255);
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-variable,
+.hljs-template-variable {
+  color: rgb(126 205 224);
+}
+.hljs-type,
+.hljs-class .hljs-title {
+  color: rgb(232 197 138);
+}
+.hljs-meta,
+.hljs-doctag {
+  color: rgb(var(--t10-ink-muted));
+}
+.hljs-deletion {
+  color: rgb(var(--t10-danger));
+}
+.hljs-addition {
+  color: rgb(var(--t10-ok));
+}
+
+:root[data-theme="light"] .hljs-keyword,
+:root[data-theme="light"] .hljs-built_in,
+:root[data-theme="light"] .hljs-literal {
+  color: rgb(28 86 190);
+}
+:root[data-theme="light"] .hljs-string,
+:root[data-theme="light"] .hljs-regexp {
+  color: rgb(22 116 72);
+}
+:root[data-theme="light"] .hljs-number {
+  color: rgb(160 80 16);
+}
+:root[data-theme="light"] .hljs-title,
+:root[data-theme="light"] .hljs-title.function_,
+:root[data-theme="light"] .hljs-section {
+  color: rgb(110 52 180);
+}
+:root[data-theme="light"] .hljs-attr,
+:root[data-theme="light"] .hljs-variable {
+  color: rgb(20 100 120);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}
