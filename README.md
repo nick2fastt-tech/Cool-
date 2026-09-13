@@ -1,8 +1,12 @@
 # Cool-
 
-## T10 — `t10/`
+## T10
 
-A full AI platform: Next.js + TypeScript, streaming chat, a model selector (T10 V1 / T10 1.1), provider abstraction, image-generation layer, and indexable public pages. See [`t10/README.md`](t10/README.md).
+An AI platform with model selection (T10 V1 / T10 1.1), streaming chat, coding and image creation. Two builds:
+
+**`t10.html`** — the whole interface in one file. Open it in any browser, no install, no server. Connect your own API key in Settings for real responses, or switch on the local demo to explore the interface. Keys stay in your browser.
+
+**`t10/`** — the full platform: Next.js + TypeScript, a secure server-side API layer, provider abstraction, and indexable public pages (landing, Models, About, Docs) with SEO, robots and sitemap. Use this to deploy publicly. See [`t10/README.md`](t10/README.md).
 
 ```bash
 cd t10 && npm install && npm run dev

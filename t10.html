@@ -1,0 +1,1930 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#090b10">
+<meta name="description" content="T10 - AI for thinking, coding and creation.">
+<title>T10</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%230b0e14'/><text x='32' y='42' font-size='26' font-family='system-ui,sans-serif' font-weight='600' fill='%23e8ecf3' text-anchor='middle'>T10</text></svg>">
+<style>
+/* ==========================================================================
+   T10 - design tokens
+   ========================================================================== */
+:root{
+  --canvas:#090b10; --surface:#0f1219; --raised:#161a23;
+  --line:#212733; --line-strong:#323a4a;
+  --ink:#e8ecf3; --ink-soft:#a8b2c3; --ink-muted:#7a8598;
+  --accent:#7aa2ff; --accent-soft:#202d4e; --accent-ink:#090b10;
+  --danger:#f07676; --warn:#e2aa5c; --ok:#60d094;
+  --font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue","Noto Sans",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sidebar-w:280px;
+  color-scheme:dark;
+}
+:root[data-theme="light"]{
+  --canvas:#fcfdff; --surface:#ffffff; --raised:#f6f8fc;
+  --line:#e2e8f1; --line-strong:#cbd5e4;
+  --ink:#101621; --ink-soft:#3d4a5e; --ink-muted:#68768c;
+  --accent:#2c5fdc; --accent-soft:#e2ecff; --accent-ink:#ffffff;
+  --danger:#c83a3a; --warn:#a86a14; --ok:#168458;
+  color-scheme:light;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  font-family:var(--font);background:var(--canvas);color:var(--ink);
+  font-size:15px;line-height:1.6;overflow:hidden;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  transition:background .25s ease,color .25s ease;
+}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+input,textarea,select{font:inherit;color:inherit}
+a{color:var(--accent)}
+::selection{background:rgba(122,162,255,.28)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:99px;border:3px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:var(--ink-muted);background-clip:content-box;border:3px solid transparent}
+.sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+/* ================================ shell ================================ */
+#app{display:flex;height:100dvh;overflow:hidden}
+
+/* ------------------------------ sidebar ------------------------------- */
+#sidebar{
+  width:var(--sidebar-w);flex:0 0 var(--sidebar-w);
+  background:var(--surface);border-right:1px solid var(--line);
+  display:flex;flex-direction:column;min-height:0;z-index:50;
+  transition:transform .25s cubic-bezier(.4,0,.2,1);
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+.side-head{display:flex;align-items:center;gap:8px;padding:12px}
+.brand{
+  display:inline-flex;align-items:center;gap:3px;font-weight:600;font-size:19px;
+  letter-spacing:-.04em;color:var(--ink);text-decoration:none;padding:4px 6px;border-radius:8px;
+  transition:background .15s;
+}
+.brand:hover{background:var(--raised)}
+.brand .dot{width:.2em;height:.2em;border-radius:50%;background:var(--accent);margin-bottom:.38em}
+.iconbtn{
+  width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:0 0 auto;
+  color:var(--ink-muted);transition:background .15s,color .15s;
+}
+.iconbtn:hover{background:var(--raised);color:var(--ink)}
+.iconbtn:active{transform:scale(.94)}
+.iconbtn svg{width:19px;height:19px}
+svg{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+.newchat{
+  margin:0 12px;min-height:44px;border-radius:12px;display:flex;align-items:center;gap:10px;
+  padding:0 14px;font-size:14px;font-weight:500;
+  background:var(--raised);border:1px solid var(--line-strong);color:var(--ink);
+  transition:border-color .15s,transform .1s;
+}
+.newchat:hover{border-color:rgba(122,162,255,.45)}
+.newchat:active{transform:scale(.99)}
+.newchat svg{width:17px;height:17px;color:var(--accent)}
+
+.searchwrap{position:relative;margin:10px 12px 0}
+.searchwrap svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--ink-muted);pointer-events:none}
+#search{
+  width:100%;height:40px;border-radius:12px;border:1px solid transparent;
+  background:rgba(9,11,16,.55);padding:0 12px 0 34px;font-size:13.5px;color:var(--ink);transition:.15s;
+}
+:root[data-theme="light"] #search{background:var(--raised)}
+#search::placeholder{color:var(--ink-muted)}
+#search:focus{outline:none;border-color:var(--line-strong);background:var(--canvas)}
+
+.sidelabel{padding:14px 14px 6px;font-size:10.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-muted)}
+#convlist{flex:1;overflow-y:auto;min-height:0;padding:0 8px 12px}
+.conv{display:flex;align-items:center;border-radius:10px;transition:background .13s}
+.conv:hover{background:rgba(22,26,35,.6)}
+.conv.active{background:var(--raised)}
+.conv > button.open{flex:1;min-width:0;text-align:left;padding:10px;font-size:13.5px;color:var(--ink-soft)}
+.conv.active > button.open{color:var(--ink);font-weight:500}
+.conv .title{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.conv .tools{display:flex;padding-right:4px;opacity:0;transition:opacity .15s}
+.conv:hover .tools,.conv.active .tools,.conv:focus-within .tools{opacity:1}
+.conv .tools button{padding:7px;border-radius:7px;color:var(--ink-muted);transition:.15s}
+.conv .tools button:hover{color:var(--ink)}
+.conv .tools button.del:hover{color:var(--danger)}
+.conv .tools svg{width:15px;height:15px}
+.conv input.rename{width:100%;border-radius:10px;border:1px solid var(--accent);background:var(--canvas);padding:9px 10px;font-size:13.5px;color:var(--ink);outline:none}
+.emptynote{padding:12px 14px;font-size:13px;line-height:1.55;color:var(--ink-muted)}
+
+.side-foot{border-top:1px solid var(--line);padding:8px}
+.side-foot button{
+  width:100%;min-height:44px;border-radius:12px;display:flex;align-items:center;gap:10px;
+  padding:0 12px;font-size:13.5px;color:var(--ink-soft);transition:.15s;
+}
+.side-foot button:hover{background:var(--raised);color:var(--ink)}
+.side-foot svg{width:17px;height:17px}
+.side-foot .badge{margin-left:auto;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:3px 7px;border-radius:6px;background:var(--accent-soft);color:var(--accent)}
+.side-foot .badge.warnb{background:rgba(226,170,92,.15);color:var(--warn)}
+.side-foot .badge.okb{background:rgba(96,208,148,.15);color:var(--ok)}
+
+#scrim{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(2px);opacity:0;pointer-events:none;transition:opacity .22s;z-index:45}
+
+/* -------------------------------- main -------------------------------- */
+main{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
+header.topbar{
+  display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid var(--line);
+  padding-top:max(8px,env(safe-area-inset-top,0px));flex:0 0 auto;
+}
+#menubtn{display:none}
+
+/* model selector */
+.selector{position:relative}
+.seltrigger{
+  display:flex;align-items:center;gap:8px;min-height:44px;padding:5px 12px;border-radius:12px;
+  border:1px solid transparent;transition:.15s;text-align:left;
+}
+.seltrigger:hover,.seltrigger[aria-expanded="true"]{border-color:var(--line-strong);background:var(--raised)}
+.seltrigger .names{display:flex;flex-direction:column;line-height:1.25}
+.seltrigger .mname{display:flex;align-items:center;gap:6px;font-size:15px;font-weight:600;letter-spacing:-.01em}
+.seltrigger .mname svg{width:16px;height:16px;color:var(--ink-muted);transition:transform .2s}
+.seltrigger[aria-expanded="true"] .mname svg{transform:rotate(180deg)}
+.seltrigger .rmode{font-size:11.5px;font-weight:500;color:var(--ink-muted)}
+
+#selpanel{
+  position:fixed;z-index:60;border-radius:16px;border:1px solid var(--line-strong);
+  background:var(--surface);box-shadow:0 24px 60px rgba(0,0,0,.55);overflow-y:auto;
+  max-height:min(78dvh,40rem);animation:pop .16s cubic-bezier(.2,.8,.3,1);
+}
+@keyframes pop{from{opacity:0;transform:translateY(-4px) scale(.98)}to{opacity:1;transform:none}}
+.panelgroup{padding:6px}
+.panelgroup + .panelgroup{border-top:1px solid var(--line)}
+.panellabel{padding:6px 10px 4px;font-size:10.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-muted)}
+.opt{display:flex;gap:10px;padding:10px;border-radius:12px;cursor:pointer;transition:background .13s;align-items:flex-start}
+.opt:hover,.opt.cursor{background:var(--raised)}
+.opt .body{flex:1;min-width:0}
+.opt .row1{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.opt .nm{font-size:14px;font-weight:600;letter-spacing:-.01em;color:var(--ink)}
+.tag{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:2px 6px;border-radius:5px}
+.tag.new{background:rgba(122,162,255,.16);color:var(--accent)}
+.tag.rec{border:1px solid var(--line-strong);color:var(--ink-muted)}
+.tag.soon{border:1px solid var(--line-strong);color:var(--ink-muted)}
+.opt .desc{margin-top:2px;font-size:12.5px;line-height:1.4;color:var(--ink-muted)}
+.caps{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.cap{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:500;color:var(--ink-muted);border:1px solid var(--line);background:rgba(9,11,16,.5);padding:3px 7px;border-radius:6px}
+:root[data-theme="light"] .cap{background:var(--raised)}
+.cap svg{width:12px;height:12px}
+.opt .check{width:16px;height:16px;margin-top:3px;color:var(--accent);flex:0 0 16px}
+.opt[aria-disabled="true"]{cursor:not-allowed;opacity:.55}
+.rmode-status{font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ok)}
+
+.topright{margin-left:auto;display:flex;align-items:center;gap:4px}
+
+/* thread */
+#scroll{flex:1;overflow-y:auto;overscroll-behavior:contain;min-height:0}
+.thread{max-width:48rem;margin:0 auto;padding:0 20px}
+#empty{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:36px 16px}
+#empty h1{font-size:clamp(1.6rem,4.5vw,2.1rem);font-weight:600;letter-spacing:-.03em}
+#empty p{margin-top:8px;font-size:15.5px;color:var(--ink-muted)}
+.suggestions{margin-top:30px;display:grid;gap:10px;width:100%;max-width:40rem}
+@media(min-width:640px){.suggestions{grid-template-columns:1fr 1fr}}
+.sg{
+  display:flex;align-items:center;gap:12px;min-height:56px;padding:12px 16px;border-radius:12px;
+  border:1px solid var(--line);background:var(--surface);text-align:left;transition:.16s;
+}
+.sg:hover{border-color:var(--line-strong);background:var(--raised);transform:translateY(-1px)}
+.sg:active{transform:none}
+.sg svg{width:18px;height:18px;color:var(--ink-muted);flex:0 0 18px;transition:color .16s}
+.sg:hover svg{color:var(--accent)}
+.sg span{font-size:14px;font-weight:500;color:var(--ink-soft)}
+.sg:hover span{color:var(--ink)}
+
+#messages{padding:24px 0 12px;display:none;flex-direction:column;gap:28px}
+#messages.on{display:flex}
+.msg{animation:rise .3s cubic-bezier(.2,.8,.3,1) both}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.msg.user{display:flex;justify-content:flex-end}
+.msg.user .bubble{
+  max-width:85%;border-radius:18px 18px 6px 18px;border:1px solid var(--line);
+  background:var(--raised);padding:10px 16px;font-size:15px;line-height:1.62;
+  white-space:pre-wrap;overflow-wrap:anywhere;
+}
+.msg.bot .who{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.msg.bot .who .b{display:inline-flex;align-items:center;font-size:13px;font-weight:600;letter-spacing:-.04em}
+.msg.bot .who .m{font-size:12px;font-weight:500;color:var(--ink-muted)}
+.badge-demo{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:2px 6px;border-radius:5px;border:1px solid rgba(226,170,92,.4);background:rgba(226,170,92,.1);color:var(--warn)}
+
+/* prose */
+.prose{font-size:15.5px;line-height:1.75;overflow-wrap:anywhere}
+.prose > * + *{margin-top:16px}
+.prose h1{font-size:1.35rem;font-weight:600;letter-spacing:-.02em;margin-top:28px}
+.prose h2{font-size:1.18rem;font-weight:600;letter-spacing:-.02em;margin-top:28px}
+.prose h3{font-size:1.05rem;font-weight:600;margin-top:24px}
+.prose ul{list-style:disc;padding-left:22px}
+.prose ol{list-style:decimal;padding-left:22px}
+.prose li + li{margin-top:6px}
+.prose li::marker{color:var(--ink-muted)}
+.prose strong{font-weight:600;color:var(--ink)}
+.prose em{font-style:italic}
+.prose blockquote{border-left:2px solid var(--line-strong);padding-left:16px;color:var(--ink-soft)}
+.prose hr{border:none;border-top:1px solid var(--line)}
+.prose a{text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(122,162,255,.4)}
+.prose code:not(pre code){border:1px solid var(--line);background:var(--raised);padding:1.5px 5px;border-radius:5px;font-family:var(--mono);font-size:.85em}
+.prose table{display:block;width:100%;overflow-x:auto;border-collapse:collapse;font-size:14px}
+.prose th,.prose td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+.prose th{background:var(--raised);font-weight:600}
+
+/* code block */
+.codeblock{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface)}
+.codehead{display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--raised);border-bottom:1px solid var(--line)}
+.codehead .lang{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-muted)}
+.codehead .lines{font-size:11px;color:var(--ink-muted);opacity:.7}
+.codehead .acts{margin-left:auto;display:flex;gap:2px}
+.codehead .acts button{display:inline-flex;align-items:center;gap:5px;padding:5px 8px;border-radius:7px;font-size:11.5px;font-weight:500;color:var(--ink-muted);transition:.14s}
+.codehead .acts button:hover{background:rgba(50,58,74,.5);color:var(--ink)}
+.codehead .acts svg{width:13px;height:13px}
+.codeblock pre{margin:0;padding:16px;overflow-x:auto;max-height:32rem}
+.codeblock code{font-family:var(--mono);font-size:13px;line-height:1.65;white-space:pre}
+.tk-key{color:#93b0ff}.tk-str{color:#86d6a6}.tk-num{color:#e9b07a}
+.tk-com{color:var(--ink-muted);font-style:italic}.tk-fn{color:#c4a8ff}.tk-typ{color:#e8c58a}
+:root[data-theme="light"] .tk-key{color:#1c56be}
+:root[data-theme="light"] .tk-str{color:#167448}
+:root[data-theme="light"] .tk-num{color:#a05010}
+:root[data-theme="light"] .tk-fn{color:#6e34b4}
+:root[data-theme="light"] .tk-typ{color:#8a5a10}
+
+/* thinking + caret */
+.thinking{display:flex;align-items:center;gap:10px;padding:2px 0}
+.dots{display:inline-flex;gap:5px}
+.dots i{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:bob 1.25s cubic-bezier(.45,0,.55,1) infinite}
+.dots i:nth-child(2){animation-delay:.16s}.dots i:nth-child(3){animation-delay:.32s}
+@keyframes bob{0%,70%,100%{transform:translateY(0) scale(.82);opacity:.45}35%{transform:translateY(-6px) scale(1);opacity:1}}
+.shimmer{
+  font-size:13.5px;font-weight:500;
+  background:linear-gradient(100deg,var(--ink-muted) 24%,var(--ink) 42%,var(--ink-muted) 62%);
+  background-size:260% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;
+  animation:shim 2.1s linear infinite;
+}
+@keyframes shim{from{background-position:190% 0}to{background-position:-90% 0}}
+.trace{margin-top:8px;border-left:2px solid var(--line);padding-left:12px;font-size:12.5px;line-height:1.6;color:var(--ink-muted);max-height:6rem;overflow:hidden}
+.caret::after{content:"";display:inline-block;width:2px;height:1.05em;margin-left:3px;vertical-align:-2px;border-radius:2px;background:var(--accent);animation:blink 1.05s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}
+.fw{display:inline-block;animation:fwin .3s ease both}
+@keyframes fwin{from{opacity:0;filter:blur(4px)}to{opacity:1;filter:none}}
+
+/* message actions */
+.msgacts{display:flex;gap:2px;margin-top:8px;opacity:0;transition:opacity .16s}
+.msg.bot:hover .msgacts,.msg.bot:focus-within .msgacts{opacity:1}
+.msgacts button{padding:8px;border-radius:9px;color:var(--ink-muted);transition:.14s}
+.msgacts button:hover{background:var(--raised);color:var(--ink)}
+.msgacts svg{width:16px;height:16px}
+
+/* error card */
+.errcard{border:1px solid rgba(240,118,118,.35);background:rgba(240,118,118,.07);border-radius:12px;padding:16px;display:flex;gap:12px}
+.errcard > svg{width:17px;height:17px;color:var(--danger);flex:0 0 17px;margin-top:2px}
+.errcard .t{font-size:14px;font-weight:500}
+.errcard .h{margin-top:6px;font-size:13px;line-height:1.6;color:var(--ink-soft)}
+.errcard .a{margin-top:12px;display:flex;flex-wrap:wrap;gap:8px}
+.errcard .a button{border:1px solid var(--line-strong);background:var(--raised);border-radius:9px;padding:7px 13px;font-size:13px;font-weight:500;transition:.15s}
+.errcard .a button:hover{border-color:rgba(122,162,255,.5)}
+
+/* image */
+.imgcard{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--surface)}
+.imgcard .shot{display:block;width:100%;position:relative;background:var(--raised)}
+.imgcard img{display:block;width:100%;height:auto;max-width:100%}
+.imgfoot{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 12px;border-top:1px solid var(--line)}
+.imgfoot .p{flex:1;min-width:0;font-size:12px;color:var(--ink-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.imgfoot button{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border-radius:9px;font-size:11.5px;font-weight:500;color:var(--ink-muted);transition:.14s}
+.imgfoot button:hover{background:var(--raised);color:var(--ink)}
+.imgfoot svg{width:14px;height:14px}
+.imgloading{aspect-ratio:1;max-width:24rem;position:relative;overflow:hidden;background:var(--raised);display:grid;place-items:center;text-align:center;padding:24px}
+.imgloading .sweep{position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(122,162,255,.1),transparent);animation:sweep 1.5s ease-in-out infinite}
+@keyframes sweep{from{transform:translateX(-100%)}to{transform:translateX(320%)}}
+#lightbox{position:fixed;inset:0;z-index:90;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.92);padding:16px}
+#lightbox.on{display:flex}
+#lightbox img{max-height:88dvh;max-width:100%;border-radius:8px;object-fit:contain}
+#lightbox .close{position:absolute;right:16px;top:calc(env(safe-area-inset-top,0px) + 16px);background:rgba(255,255,255,.12);color:#fff;border-radius:12px;padding:10px}
+
+/* composer */
+.composerwrap{flex:0 0 auto;padding:0 16px 12px;padding-bottom:max(12px,env(safe-area-inset-bottom,0px))}
+.composerinner{max-width:48rem;margin:0 auto}
+.composer{
+  display:flex;align-items:flex-end;gap:8px;padding:8px 8px 8px 12px;
+  border:1px solid var(--line-strong);border-radius:22px;background:var(--surface);transition:.18s;
+}
+.composer:focus-within{border-color:rgba(122,162,255,.55);box-shadow:0 0 0 3px rgba(122,162,255,.14)}
+#input{
+  flex:1;align-self:center;min-height:44px;max-height:208px;resize:none;border:none;outline:none;
+  background:none;padding:10px 0;font-size:16px;line-height:1.5;color:var(--ink);
+}
+#input::placeholder{color:var(--ink-muted)}
+.cbtn{width:44px;height:44px;flex:0 0 44px;border-radius:50%;display:grid;place-items:center;transition:.15s}
+#attach{color:var(--ink-muted)}
+#attach:hover{background:var(--raised);color:var(--ink)}
+#send{background:var(--accent);color:var(--accent-ink)}
+#send:hover:not(:disabled){filter:brightness(1.1)}
+#send:active:not(:disabled){transform:scale(.94)}
+#send:disabled{background:var(--raised);color:var(--ink-muted);cursor:not-allowed}
+#send.stop{background:var(--ink);color:var(--canvas)}
+#send svg{width:18px;height:18px}
+.indicators{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:4px 14px;padding:10px 8px 0;font-size:11.5px;color:var(--ink-muted)}
+.indicators .ind{display:inline-flex;align-items:center;gap:5px}
+.indicators .ind svg{width:12px;height:12px;color:var(--accent)}
+
+/* modal */
+.modal{position:fixed;inset:0;z-index:80;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.62);backdrop-filter:blur(3px)}
+.modal.on{display:flex}
+.modalcard{width:100%;max-width:30rem;max-height:86dvh;overflow-y:auto;border:1px solid var(--line-strong);border-radius:16px;background:var(--surface);box-shadow:0 24px 60px rgba(0,0,0,.55);animation:pop .18s cubic-bezier(.2,.8,.3,1)}
+.modalhead{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line)}
+.modalhead h2{font-size:16px;font-weight:600;letter-spacing:-.01em}
+.modalbody{padding:20px;display:flex;flex-direction:column;gap:20px}
+.sec > h3{font-size:11.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-muted);margin-bottom:8px}
+.field{display:flex;flex-direction:column;gap:6px}
+.field + .field{margin-top:12px}
+.field label{font-size:13px;font-weight:500}
+.field input,.field select{
+  width:100%;min-height:42px;border-radius:10px;border:1px solid var(--line-strong);
+  background:var(--canvas);padding:0 12px;font-size:14px;transition:.15s;
+}
+.field input:focus,.field select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(122,162,255,.14)}
+.field .hint{font-size:12px;line-height:1.55;color:var(--ink-muted)}
+.seg{display:flex;gap:6px;padding:4px;border-radius:12px;border:1px solid var(--line);background:var(--canvas)}
+.seg button{flex:1;min-height:38px;border-radius:9px;font-size:13px;font-weight:500;color:var(--ink-muted);transition:.15s}
+.seg button.on{background:var(--raised);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.3)}
+.infobox{border:1px solid var(--line);border-radius:12px;background:var(--raised);padding:14px}
+.infobox p{font-size:13px;line-height:1.6;color:var(--ink-soft)}
+.infobox p + p{margin-top:6px;font-size:12px;color:var(--ink-muted)}
+.btn{min-height:42px;border-radius:10px;padding:0 16px;font-size:14px;font-weight:500;background:var(--accent);color:var(--accent-ink);transition:.15s}
+.btn:hover{filter:brightness(1.1)}
+.btn.ghost{background:var(--raised);color:var(--ink);border:1px solid var(--line-strong)}
+.btn.ghost:hover{filter:none;border-color:var(--accent)}
+.btn.danger{background:none;border:1px solid rgba(240,118,118,.4);color:var(--danger)}
+.btn.danger:hover{background:rgba(240,118,118,.1);filter:none}
+.modalactions{display:flex;justify-content:flex-end;gap:10px}
+
+/* toast */
+#toast{
+  position:fixed;left:50%;transform:translateX(-50%) translateY(16px);
+  bottom:calc(env(safe-area-inset-bottom,0px) + 20px);z-index:95;
+  border:1px solid var(--line-strong);background:var(--raised);color:var(--ink);
+  padding:11px 18px;border-radius:12px;font-size:13.5px;box-shadow:0 12px 32px rgba(0,0,0,.5);
+  opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;max-width:min(90vw,28rem);text-align:center;
+}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* responsive */
+/* the drawer close button only exists where a drawer does */
+@media(min-width:1024px){ #closedrawer{display:none} }
+@media(max-width:1023px){
+  #sidebar{position:fixed;inset:0 auto 0 0;transform:translateX(-100%);box-shadow:0 0 40px rgba(0,0,0,.5)}
+  #app.drawer #sidebar{transform:none}
+  #app.drawer #scrim{opacity:1;pointer-events:auto}
+  #menubtn{display:grid}
+  .thread{padding:0 16px}
+  .composerwrap{padding-left:12px;padding-right:12px}
+}
+@media(max-width:400px){
+  .seltrigger{padding:5px 8px}
+  .seltrigger .mname{font-size:14.5px}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- ============================ SIDEBAR ============================ -->
+  <aside id="sidebar" aria-label="Chat history">
+    <div class="side-head">
+      <span class="brand">T10<span class="dot"></span></span>
+      <button class="iconbtn" id="closedrawer" aria-label="Close sidebar" style="margin-left:auto">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    <button class="newchat" id="newchat">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New chat
+    </button>
+
+    <div class="searchwrap">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.2-3.2"/></svg>
+      <label for="search" class="sr">Search chats</label>
+      <input id="search" type="search" placeholder="Search chats" autocomplete="off">
+    </div>
+
+    <div class="sidelabel">Recent</div>
+    <nav id="convlist" aria-label="Recent conversations"></nav>
+
+    <div class="side-foot">
+      <button id="opensettings">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1 2 2 0 1 1-4 0 1.6 1.6 0 0 0-2.7-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 15a2 2 0 1 1 0-4 1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 9.6 4.5a2 2 0 1 1 4 0 1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7 2 2 0 1 1 0 4 1.6 1.6 0 0 0-1.5 1z"/></svg>
+        Settings<span class="badge" id="modebadge">Not connected</span>
+      </button>
+    </div>
+  </aside>
+  <div id="scrim"></div>
+
+  <!-- ============================== MAIN ============================== -->
+  <main>
+    <header class="topbar">
+      <button class="iconbtn" id="menubtn" aria-label="Open chat history">
+        <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+
+      <div class="selector">
+        <button class="seltrigger" id="seltrigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="selpanel">
+          <span class="names">
+            <span class="mname"><span id="selname">T10 1.1</span>
+              <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </span>
+            <span class="rmode" id="selmode">Thinking</span>
+          </span>
+        </button>
+      </div>
+
+      <div class="topright">
+        <button class="iconbtn" id="newchattop" aria-label="New chat" title="New chat">
+          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div id="scroll">
+      <div class="thread">
+        <section id="empty">
+          <h1 id="emptyname">T10 1.1</h1>
+          <p>How can I help?</p>
+          <div class="suggestions" id="suggestions"></div>
+        </section>
+        <div id="messages"></div>
+      </div>
+    </div>
+
+    <div class="composerwrap">
+      <div class="composerinner">
+        <form class="composer" id="composer">
+          <button type="button" class="cbtn" id="attach" aria-label="Attach a file">
+            <svg viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M21 12.5l-8.4 8.4a5.5 5.5 0 0 1-7.8-7.8l8.9-8.9a3.7 3.7 0 0 1 5.2 5.2l-8.9 8.9a1.8 1.8 0 0 1-2.6-2.6l8.2-8.2"/></svg>
+          </button>
+          <label for="input" class="sr">Message T10</label>
+          <textarea id="input" rows="1" placeholder="Ask T10 anything..." enterkeyhint="send" autocomplete="off"></textarea>
+          <button type="submit" class="cbtn" id="send" disabled aria-label="Send message">
+            <svg id="sendicon" viewBox="0 0 24 24" stroke-width="2.1"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+          </button>
+        </form>
+        <div class="indicators" id="indicators"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ========================= MODEL SELECTOR PANEL ========================= -->
+<div id="selpanel" role="listbox" aria-label="Available models" tabindex="-1" hidden></div>
+
+<!-- ============================== SETTINGS ============================== -->
+<div class="modal" id="settings" role="dialog" aria-modal="true" aria-labelledby="settingstitle">
+  <div class="modalcard">
+    <div class="modalhead">
+      <h2 id="settingstitle">Settings</h2>
+      <button class="iconbtn" data-close style="margin-left:auto" aria-label="Close settings">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="modalbody">
+
+      <div class="sec">
+        <h3>Model provider</h3>
+        <div class="seg" id="providerseg">
+          <button data-provider="none" class="on">Not connected</button>
+          <button data-provider="anthropic">Anthropic</button>
+          <button data-provider="openai">OpenAI-compatible</button>
+        </div>
+
+        <div id="providerfields" style="display:none">
+          <div class="field" style="margin-top:14px">
+            <label for="apikey">API key</label>
+            <input id="apikey" type="password" placeholder="Paste your key" autocomplete="off" spellcheck="false">
+            <p class="hint">Stored only in this browser and sent only to the endpoint below. This file has no server, so the key never leaves your device except to call that API directly.</p>
+          </div>
+          <div class="field">
+            <label for="baseurl">Endpoint</label>
+            <input id="baseurl" type="text" spellcheck="false" placeholder="https://api.anthropic.com">
+            <p class="hint" id="corshint"></p>
+          </div>
+          <div class="field">
+            <label for="upstream11">Upstream model for T10 1.1</label>
+            <input id="upstream11" type="text" spellcheck="false" placeholder="model id">
+          </div>
+          <div class="field">
+            <label for="upstreamv1">Upstream model for T10 V1</label>
+            <input id="upstreamv1" type="text" spellcheck="false" placeholder="model id">
+          </div>
+        </div>
+
+        <div class="infobox" id="noneinfo" style="margin-top:14px">
+          <p>No provider is connected, so T10 cannot answer yet.</p>
+          <p>Pick a provider above and paste a key, or switch on the local demo below to explore the interface. T10 will not invent responses in the meantime.</p>
+        </div>
+      </div>
+
+      <div class="sec">
+        <h3>Image creation</h3>
+        <div class="field">
+          <label for="imageprovider">Provider</label>
+          <select id="imageprovider">
+            <option value="none">Not configured</option>
+            <option value="openai">OpenAI Images</option>
+          </select>
+          <p class="hint">Image requests route here. With nothing configured, T10 reports a configuration error rather than showing a stand-in picture.</p>
+        </div>
+        <div class="field" id="imagefields" style="display:none">
+          <label for="imagekey">Image API key</label>
+          <input id="imagekey" type="password" placeholder="Paste your key" autocomplete="off" spellcheck="false">
+          <label for="imagemodel" style="margin-top:10px">Image model</label>
+          <input id="imagemodel" type="text" spellcheck="false" placeholder="gpt-image-1">
+        </div>
+      </div>
+
+      <div class="sec">
+        <h3>Local demo</h3>
+        <div class="seg" id="demoseg">
+          <button data-demo="off" class="on">Off</button>
+          <button data-demo="on">On</button>
+        </div>
+        <p class="hint" style="margin-top:8px">Generates replies on this device so you can try the interface with no key. It is not a T10 model, and every turn it produces is labelled <strong>Demo mode</strong>.</p>
+      </div>
+
+      <div class="sec">
+        <h3>Appearance</h3>
+        <div class="seg" id="themeseg">
+          <button data-theme="dark" class="on">Dark</button>
+          <button data-theme="light">Light</button>
+        </div>
+      </div>
+
+      <div class="sec">
+        <h3>Data</h3>
+        <div class="infobox">
+          <p id="convcount">No conversations saved.</p>
+          <p>Chats are stored in this browser only.</p>
+          <button class="btn danger" id="clearall" style="margin-top:12px">Delete all chats</button>
+        </div>
+      </div>
+
+      <div class="modalactions">
+        <button class="btn" data-close>Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="lightbox">
+  <button class="close iconbtn" id="lightboxclose" aria-label="Close preview">
+    <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
+  <img id="lightboximg" alt="">
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<script>
+/* ==========================================================================
+   T10 - single-file build
+   Same model architecture as the full platform: models are configuration,
+   providers sit behind one interface, and nothing is faked.
+   ========================================================================== */
+(function () {
+"use strict";
+
+const $  = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+const STORE_KEY = "t10:conversations:v1";
+const CFG_KEY   = "t10:config:v1";
+const SEP = String.fromCharCode(1);
+
+/* ====================== MODEL REGISTRY (configuration) ==================== */
+const MODELS = [
+  {
+    id: "t10-v1",
+    name: "T10 V1",
+    tagline: "Fast general-purpose model",
+    description: "General-purpose T10 model for everyday conversation, writing and explanation.",
+    status: "available",
+    recommended: false,
+    isNew: false,
+    capabilities: { coding: true, images: false },
+    reasoningModes: [],
+    defaultReasoningMode: null,
+    upstreamKey: "upstreamV1",
+    maxTokens: 2048,
+  },
+  {
+    id: "t10-1.1",
+    name: "T10 1.1",
+    tagline: "Advanced reasoning, coding & image creation",
+    description: "Our newest model. Built for multi-step reasoning, software engineering, image creation and complex instructions.",
+    status: "available",
+    recommended: true,
+    isNew: true,
+    capabilities: { coding: true, images: true },
+    reasoningModes: [
+      { id: "thinking", label: "Thinking", description: "Works through problems step by step before answering.", status: "available" },
+      { id: "extended-thinking", label: "Extended Thinking", description: "Longer deliberation for the hardest multi-step problems.", status: "coming-soon" },
+    ],
+    defaultReasoningMode: "thinking",
+    upstreamKey: "upstream11",
+    maxTokens: 4096,
+  },
+];
+const DEFAULT_MODEL_ID = "t10-1.1";
+const getModel = (id) => MODELS.find((m) => m.id === id) || MODELS.find((m) => m.id === DEFAULT_MODEL_ID);
+const modeSelectable = (model, id) =>
+  !id || !!model.reasoningModes.find((r) => r.id === id && r.status === "available");
+
+/* ================================= STATE ================================= */
+const state = {
+  conversations: [],
+  activeId: null,
+  messages: [],
+  modelId: DEFAULT_MODEL_ID,
+  reasoningMode: null,
+  busy: false,
+  abort: null,
+  cfg: {
+    provider: "none",
+    apiKey: "",
+    baseUrl: "",
+    upstream11: "",
+    upstreamV1: "",
+    imageProvider: "none",
+    imageKey: "",
+    imageModel: "",
+    demo: false,
+    theme: "dark",
+  },
+};
+
+/* ================================ STORAGE ================================ */
+function storageOk() {
+  try {
+    localStorage.setItem("__t10__", "1");
+    localStorage.removeItem("__t10__");
+    return true;
+  } catch (e) { return false; }
+}
+function loadAll() {
+  if (!storageOk()) return;
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(parsed)) state.conversations = parsed.filter((c) => c && c.id && Array.isArray(c.messages));
+  } catch (e) { state.conversations = []; }
+  try {
+    const raw = localStorage.getItem(CFG_KEY);
+    if (raw) Object.assign(state.cfg, JSON.parse(raw) || {});
+  } catch (e) { /* keep defaults */ }
+}
+function saveConversations() {
+  if (!storageOk()) return;
+  try {
+    const trimmed = state.conversations.slice().sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 200);
+    localStorage.setItem(STORE_KEY, JSON.stringify(trimmed));
+  } catch (e) { /* quota - stay in memory */ }
+}
+function saveConfig() {
+  if (!storageOk()) return;
+  try { localStorage.setItem(CFG_KEY, JSON.stringify(state.cfg)); } catch (e) {}
+}
+
+/* ================================ HELPERS ================================ */
+const uid = () => (crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 9));
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+let toastTimer;
+function toast(msg) {
+  const el = $("#toast");
+  el.textContent = msg;
+  el.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("on"), 3000);
+}
+function titleFrom(text) {
+  const clean = String(text).replace(/\s+/g, " ").trim();
+  if (!clean) return "New chat";
+  const t = clean.length > 46 ? clean.slice(0, 46).replace(/\s\S*$/, "") + "…" : clean;
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+/* ================================= ICONS ================================= */
+const ICON = {
+  brain: '<svg viewBox="0 0 24 24"><path d="M9.5 4A2.5 2.5 0 0 0 7 6.5 2.5 2.5 0 0 0 5 9a2.5 2.5 0 0 0 .8 1.8A2.5 2.5 0 0 0 5 13a2.5 2.5 0 0 0 2 2.5A2.5 2.5 0 0 0 9.5 18 2 2 0 0 0 12 16V6a2 2 0 0 0-2.5-2z"/><path d="M14.5 4A2.5 2.5 0 0 1 17 6.5 2.5 2.5 0 0 1 19 9a2.5 2.5 0 0 1-.8 1.8A2.5 2.5 0 0 1 19 13a2.5 2.5 0 0 1-2 2.5A2.5 2.5 0 0 1 14.5 18 2 2 0 0 1 12 16"/></svg>',
+  code: '<svg viewBox="0 0 24 24"><path d="M16 18l6-6-6-6"/><path d="M8 6l-6 6 6 6"/></svg>',
+  image: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M21 16l-5-5L5 20"/></svg>',
+  sparkle: '<svg viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>',
+  check: '<svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>',
+  copy: '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>',
+  download: '<svg viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg>',
+  refresh: '<svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg>',
+  expand: '<svg viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7.5 7.5"/><path d="M3 21l7.5-7.5"/></svg>',
+  alert: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.2"/><path d="M12 8v5"/><path d="M12 16.4v.2"/></svg>',
+  pencil: '<svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+  trash: '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/></svg>',
+  stop: '<svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2.5" fill="currentColor" stroke="none"/></svg>',
+  arrow: '<svg viewBox="0 0 24 24" stroke-width="2.1"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>',
+};
+
+/* ============================ INTENT ROUTING ============================= */
+const CODE_RE = [
+  /\b(write|build|create|make|generate|implement|refactor|optimi[sz]e)\b[^.?!]*\b(code|script|function|class|component|app|website|site|page|api|endpoint|program|bot|game|query|regex)\b/i,
+  /\b(debug|fix|why (is|does)|what'?s wrong with)\b[^.?!]*\b(code|script|function|error|exception|bug|stack ?trace|test|build)\b/i,
+  /\b(python|javascript|typescript|java|kotlin|swift|rust|golang|c\+\+|c#|php|ruby|sql|html|css|react|next\.?js|node|lua|roblox|bash|shell|powershell)\b/i,
+  /\b(roblox|unity|godot)\b/i,
+  /```/,
+  /\b(stack ?trace|traceback|segfault|compile error|syntax error|type ?error)\b/i,
+];
+const IMG_RE = [
+  /\b(create|generate|make|draw|paint|render|design|imagine)\b[^.?!]{0,60}\b(an? )?(image|picture|photo|illustration|artwork|logo|poster|wallpaper|drawing|render|painting|concept art)\b/i,
+  /\b(image|picture|photo|illustration|artwork) of\b/i,
+];
+const IMG_NOT = [
+  /\b(code|script|function|api|library|program|snippet)\b[^.?!]{0,40}\b(image|picture)\b/i,
+  /\b(image|picture)\b[^.?!]{0,40}\b(tag|element|component|upload|compression|resizing|format|codec)\b/i,
+];
+const isCoding = (t) => CODE_RE.some((r) => r.test(t));
+const isImage = (t) => (IMG_NOT.some((r) => r.test(t)) ? false : IMG_RE.some((r) => r.test(t)));
+function imagePrompt(t) {
+  return (
+    t
+      .replace(/^\s*(please\s+)?(can you\s+)?(create|generate|make|draw|paint|render|design|imagine|show me)\s+/i, "")
+      .replace(/^\s*(an?|the)\s+/i, "")
+      .replace(/^\s*(image|picture|photo|illustration|artwork|drawing|render|painting)\s+(of|showing|depicting)\s+/i, "")
+      .replace(/^\s*(image|picture|photo|illustration|artwork|drawing|render|painting)\s*[:,-]?\s*/i, "")
+      .trim() || t.trim()
+  );
+}
+
+/* ============================== MARKDOWN =============================== */
+const KEYWORDS = "const let var function return if else for while class new import from export default async await try catch finally throw typeof instanceof this null undefined true false def elif print lambda self None True False int str float bool public private static void interface type struct func package end local then do";
+const KEY_RE = new RegExp("\\b(" + KEYWORDS.split(/\s+/).join("|") + ")\\b", "g");
+const HASH_LANGS = /^(python|py|bash|sh|shell|zsh|ruby|rb|yaml|yml|perl|r|toml|ini|make|dockerfile)$/;
+
+/* Highlights only the stretches that are neither string nor comment, so there
+   is no placeholder round-trip that a later pass could corrupt. */
+function highlight(code, lang) {
+  const L = (lang || "").toLowerCase();
+  const raw = String(code);
+  const plain = L === "text" || L === "output";
+
+  const comment = HASH_LANGS.test(L) ? "#[^\\n]*" : "\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/";
+  const re = new RegExp("(" + comment + ")|(\"(?:\\\\.|[^\"\\\\\\n])*\"|'(?:\\\\.|[^'\\\\\\n])*'|`(?:\\\\.|[^`\\\\])*`)", "g");
+
+  const span = (txt) => {
+    let e = esc(txt);
+    if (plain) return e;
+    e = e.replace(KEY_RE, '<span class="tk-key">$1</span>');
+    e = e.replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="tk-num">$1</span>');
+    e = e.replace(/\b([A-Z][A-Za-z0-9_]*)\b(?!<)/g, '<span class="tk-typ">$1</span>');
+    e = e.replace(/\b([a-z_$][\w$]*)(?=\()/g, '<span class="tk-fn">$1</span>');
+    return e;
+  };
+
+  let out = "", last = 0, m;
+  while ((m = re.exec(raw)) !== null) {
+    out += span(raw.slice(last, m.index));
+    out += m[1]
+      ? '<span class="tk-com">' + esc(m[0]) + "</span>"
+      : '<span class="tk-str">' + esc(m[0]) + "</span>";
+    last = re.lastIndex;
+  }
+  return out + span(raw.slice(last));
+}
+
+function inlineMd(t) {
+  t = esc(t);
+  const codes = [];
+  t = t.replace(/`([^`\n]+)`/g, (_, c) => SEP + (codes.push("<code>" + c + "</code>") - 1) + SEP);
+  t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|\/[^\s)]*)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  t = t.replace(/\*\*\*([^*]+)\*\*\*/g, "<strong><em>$1</em></strong>");
+  t = t.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  t = t.replace(/(^|[^*\w])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+  t = t.replace(/(^|[^_\w])_([^_\n]+)_/g, "$1<em>$2</em>");
+  t = t.replace(/~~([^~]+)~~/g, "<s>$1</s>");
+  return t.replace(new RegExp(SEP + "(\\d+)" + SEP, "g"), (_, i) => codes[+i]);
+}
+
+function renderMd(src) {
+  const lines = String(src).replace(/\r\n/g, "\n").split("\n");
+  const out = [];
+  let i = 0, para = [], listType = null, items = [], quote = [];
+
+  const fp = () => { if (para.length) { out.push("<p>" + inlineMd(para.join("\n")).replace(/\n/g, "<br>") + "</p>"); para = []; } };
+  const fl = () => { if (items.length) { out.push("<" + listType + ">" + items.map((x) => "<li>" + inlineMd(x) + "</li>").join("") + "</" + listType + ">"); items = []; listType = null; } };
+  const fq = () => { if (quote.length) { out.push("<blockquote>" + inlineMd(quote.join("\n")).replace(/\n/g, "<br>") + "</blockquote>"); quote = []; } };
+  const fa = () => { fp(); fl(); fq(); };
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const fence = line.match(/^\s*```(\w+)?\s*$/);
+    if (fence) {
+      fa();
+      const lang = fence[1] || "";
+      const buf = [];
+      i++;
+      while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) { buf.push(lines[i]); i++; }
+      i++;
+      const code = buf.join("\n");
+      const n = buf.length;
+      out.push(
+        '<figure class="codeblock"><figcaption class="codehead">' +
+          '<span class="lang">' + esc(lang || "code") + "</span>" +
+          '<span class="lines">' + n + (n === 1 ? " line" : " lines") + "</span>" +
+          '<span class="acts">' +
+            '<button type="button" data-dl aria-label="Download snippet" title="Download">' + ICON.download + "</button>" +
+            '<button type="button" data-copy aria-label="Copy code">' + ICON.copy + "Copy</button>" +
+          "</span></figcaption>" +
+          '<pre><code data-lang="' + esc(lang) + '">' + highlight(code, lang) + "</code></pre>" +
+        "</figure>"
+      );
+      continue;
+    }
+    if (/^\s*(---|\*\*\*|___)\s*$/.test(line)) { fa(); out.push("<hr>"); i++; continue; }
+    const h = line.match(/^(#{1,3})\s+(.*)$/);
+    if (h) { fa(); out.push("<h" + h[1].length + ">" + inlineMd(h[2]) + "</h" + h[1].length + ">"); i++; continue; }
+    const q = line.match(/^\s*>\s?(.*)$/);
+    if (q) { fp(); fl(); quote.push(q[1]); i++; continue; }
+    if (quote.length) fq();
+    const ul = line.match(/^\s*[-*]\s+(.*)$/);
+    const ol = line.match(/^\s*\d+[.)]\s+(.*)$/);
+    if (ul || ol) {
+      fp();
+      const t = ul ? "ul" : "ol";
+      if (listType && listType !== t) fl();
+      listType = t;
+      items.push((ul || ol)[1]);
+      i++;
+      continue;
+    }
+    if (items.length && line.trim() === "") { fl(); i++; continue; }
+    if (items.length && /^\s{2,}\S/.test(line)) { items[items.length - 1] += "\n" + line.trim(); i++; continue; }
+    if (items.length) fl();
+    if (/\|/.test(line) && lines[i + 1] && /^\s*\|?[\s:|-]+\|[\s:|-]*$/.test(lines[i + 1])) {
+      fa();
+      const cells = (r) => r.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|").map((c) => c.trim());
+      const head = cells(line);
+      i += 2;
+      const rows = [];
+      while (i < lines.length && /\|/.test(lines[i]) && lines[i].trim() !== "") { rows.push(cells(lines[i])); i++; }
+      out.push(
+        "<table><thead><tr>" + head.map((c) => "<th>" + inlineMd(c) + "</th>").join("") + "</tr></thead><tbody>" +
+        rows.map((r) => "<tr>" + r.map((c) => "<td>" + inlineMd(c) + "</td>").join("") + "</tr>").join("") +
+        "</tbody></table>"
+      );
+      continue;
+    }
+    if (line.trim() === "") { fp(); i++; continue; }
+    para.push(line);
+    i++;
+  }
+  fa();
+  return out.join("");
+}
+
+/* ============================ ERROR SHAPES ============================== */
+function appError(code, message, hint) {
+  return { code: code, message: message, hint: hint || "" };
+}
+
+/* ============================== PROVIDERS =============================== */
+function systemPrompt(model, reasoningMode, codingTask) {
+  const parts = [
+    "You are " + model.name + ", an AI assistant on the T10 platform.",
+    "Be clear, accurate and direct. Prefer concrete answers over hedging.",
+    "Use markdown for structure. Keep formatting purposeful rather than decorative.",
+    "If you are unsure or lack the information, say so plainly instead of inventing detail.",
+  ];
+  if (reasoningMode === "thinking") {
+    parts.push("Work through multi-step problems carefully before committing to an answer. Present the reasoning that matters to the reader, not a transcript of every step.");
+  }
+  if (model.capabilities.coding && codingTask) {
+    parts.push("This is a software engineering request. Respond with working, complete code. Always put code in fenced blocks with an accurate language tag. Explain the key decisions briefly around the code, and note error handling and edge cases. If requirements are ambiguous, state the assumption you made and continue.");
+  }
+  if (model.capabilities.images) {
+    parts.push("You can create images. If the user asks for one, the platform routes that request to the image provider automatically - do not claim you cannot make images.");
+  }
+  return parts.join("\n\n");
+}
+
+function upstreamFor(model) {
+  return (state.cfg[model.upstreamKey] || "").trim();
+}
+
+/* Parses an SSE body stream into JSON frames. */
+async function* sseFrames(body) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    while (true) {
+      const r = await reader.read();
+      if (r.done) break;
+      buffer += decoder.decode(r.value, { stream: true });
+      let idx;
+      while ((idx = buffer.indexOf("\n\n")) !== -1) {
+        const frame = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+        for (const line of frame.split("\n")) {
+          if (!line.startsWith("data:")) continue;
+          const payload = line.slice(5).trim();
+          if (!payload || payload === "[DONE]") continue;
+          try { yield JSON.parse(payload); } catch (e) { /* skip malformed */ }
+        }
+      }
+    }
+  } finally {
+    try { reader.releaseLock(); } catch (e) {}
+  }
+}
+
+function httpError(status) {
+  if (status === 401 || status === 403) return appError("unauthorized", "The provider rejected your API key.", "Check the key in Settings.");
+  if (status === 404) return appError("model_unavailable", "The configured upstream model was not found.", "Check the upstream model id in Settings.");
+  if (status === 429) return appError("rate_limited", "Rate limit reached at the provider. Try again shortly.");
+  if (status === 400) return appError("invalid_request", "The provider rejected that request.", "The upstream model id may be wrong for this endpoint.");
+  return appError("upstream_error", "The provider could not complete that request.", "HTTP " + status + ".");
+}
+
+const providers = {
+  anthropic: {
+    id: "anthropic",
+    label: "Anthropic Messages API",
+    defaultBase: "https://api.anthropic.com",
+    async stream(req, on) {
+      const base = (state.cfg.baseUrl || this.defaultBase).replace(/\/+$/, "");
+      const res = await fetch(base + "/v1/messages", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": state.cfg.apiKey,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
+        signal: req.signal,
+        body: JSON.stringify({
+          model: req.upstream,
+          max_tokens: req.model.maxTokens,
+          stream: true,
+          system: systemPrompt(req.model, req.reasoningMode, req.codingTask),
+          messages: req.messages.map((m) => ({ role: m.role, content: m.content })),
+        }),
+      });
+      if (!res.ok || !res.body) throw httpError(res.status);
+      for await (const f of sseFrames(res.body)) {
+        if (f.type === "content_block_delta") {
+          if (f.delta && f.delta.type === "text_delta") on.delta(f.delta.text);
+          else if (f.delta && f.delta.type === "thinking_delta") on.thinking(f.delta.thinking);
+        } else if (f.type === "error") {
+          throw appError("upstream_error", "The provider returned an error mid-response.");
+        }
+      }
+    },
+  },
+
+  openai: {
+    id: "openai",
+    label: "OpenAI-compatible Chat Completions",
+    defaultBase: "https://api.openai.com/v1",
+    async stream(req, on) {
+      const base = (state.cfg.baseUrl || this.defaultBase).replace(/\/+$/, "");
+      const res = await fetch(base + "/chat/completions", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: "Bearer " + state.cfg.apiKey },
+        signal: req.signal,
+        body: JSON.stringify({
+          model: req.upstream,
+          stream: true,
+          max_tokens: req.model.maxTokens,
+          messages: [{ role: "system", content: systemPrompt(req.model, req.reasoningMode, req.codingTask) }].concat(
+            req.messages.map((m) => ({ role: m.role, content: m.content }))
+          ),
+        }),
+      });
+      if (!res.ok || !res.body) throw httpError(res.status);
+      for await (const f of sseFrames(res.body)) {
+        const choice = f.choices && f.choices[0];
+        const text = choice && choice.delta && choice.delta.content;
+        if (typeof text === "string" && text) on.delta(text);
+      }
+    },
+  },
+};
+
+/* Local demo adapter - explicitly not a T10 model. */
+const DEMO_NOTE = "\n\n---\n\n*Served by the local demo adapter, not by a T10 model. Connect a provider in Settings for real responses.*";
+const demoAdapter = {
+  id: "demo",
+  label: "Local demo adapter",
+  async stream(req, on) {
+    if (req.reasoningMode === "thinking") {
+      for (const t of ["Reading the request", "Checking what is being asked", "Drafting a reply"]) {
+        if (req.signal.aborted) return;
+        on.thinking(t);
+        await sleep(170);
+      }
+    }
+    const body = demoBody(req.lastUser, req.codingTask, req.model.name);
+    const tokens = body.match(/\S+\s*|\s+/g) || [body];
+    for (const tk of tokens) {
+      if (req.signal.aborted) return;
+      on.delta(tk);
+      await sleep(tk.length > 8 ? 20 : 12);
+    }
+  },
+};
+function demoBody(prompt, coding, modelName) {
+  const p = (prompt || "").toLowerCase();
+  if (coding) {
+    if (/\bpython\b/.test(p)) {
+      return [
+        "Here is a working example with the error handling you want in production:",
+        "", "```python",
+        "import json",
+        "from pathlib import Path", "", "",
+        "def load_config(path: str) -> dict:",
+        '    """Read a JSON config, failing loudly with a useful message."""',
+        "    file = Path(path)",
+        "    if not file.exists():",
+        '        raise FileNotFoundError(f"No config at {file.resolve()}")', "",
+        "    try:",
+        '        return json.loads(file.read_text(encoding="utf-8"))',
+        "    except json.JSONDecodeError as exc:",
+        '        raise ValueError(f"{file.name} is not valid JSON: {exc.msg}") from exc', "", "",
+        'if __name__ == "__main__":',
+        '    print(load_config("settings.json"))',
+        "```", "",
+        "Two things worth noting: `read_text` with an explicit encoding avoids platform-dependent defaults, and re-raising with `from exc` keeps the original traceback attached." + DEMO_NOTE,
+      ].join("\n");
+    }
+    return [
+      "Here is a self-contained implementation:", "", "```typescript",
+      "type Result<T> = { ok: true; value: T } | { ok: false; error: string };", "",
+      "export async function fetchJson<T>(url: string, timeoutMs = 8000): Promise<Result<T>> {",
+      "  const controller = new AbortController();",
+      "  const timer = setTimeout(() => controller.abort(), timeoutMs);", "",
+      "  try {",
+      "    const res = await fetch(url, { signal: controller.signal });",
+      "    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };",
+      "    return { ok: true, value: (await res.json()) as T };",
+      "  } catch (err) {",
+      "    const aborted = err instanceof DOMException && err.name === 'AbortError';",
+      "    return { ok: false, error: aborted ? 'Request timed out' : 'Network error' };",
+      "  } finally {",
+      "    clearTimeout(timer);",
+      "  }",
+      "}",
+      "```", "",
+      "The `Result` shape forces the caller to handle failure at the type level, and `finally` guarantees the timer clears on every path." + DEMO_NOTE,
+    ].join("\n");
+  }
+  if (/^(hi|hey|hello)\b/.test(p)) {
+    return "Hello. You are talking to the T10 interface running on the local demo adapter, so this reply was produced on your device rather than by " + modelName + ".\n\nThe whole pipeline is live here - streaming, markdown, code blocks, conversation history. Connect a provider in Settings and the same interface carries real model responses." + DEMO_NOTE;
+  }
+  return [
+    "Here is how I would approach **" + (String(prompt).trim().slice(0, 110) || "that") + "**:", "",
+    "1. **Pin down the outcome.** State in one sentence what a finished answer looks like - vague goals are the usual reason work stalls.",
+    "2. **Find the smallest real version.** Build the stripped-down version first; it shows you what the full one actually needs.",
+    "3. **Attack the hard part early.** Most problems have one genuinely difficult step and many easy ones.",
+    "4. **Close the loop.** Put something in place that tells you quickly whether you are going the right way.",
+    DEMO_NOTE.trim(),
+  ].join("\n");
+}
+
+/* Resolve an adapter, or explain exactly what is missing. */
+function resolveProvider(model) {
+  const p = state.cfg.provider;
+  if (p !== "none" && providers[p]) {
+    if (!state.cfg.apiKey) {
+      throw appError("provider_not_configured", model.name + " is not connected yet.", "Add your " + providers[p].label + " API key in Settings.");
+    }
+    if (!upstreamFor(model)) {
+      throw appError("provider_not_configured", model.name + " has no upstream model set.", "Set the upstream model id for " + model.name + " in Settings.");
+    }
+    return { adapter: providers[p], demo: false };
+  }
+  if (state.cfg.demo) return { adapter: demoAdapter, demo: true };
+  throw appError(
+    "provider_not_configured",
+    model.name + " is not connected to a model provider yet.",
+    "Open Settings and either connect a provider with your own API key, or switch on the local demo to explore the interface."
+  );
+}
+
+/* ========================== IMAGE GENERATION =========================== */
+async function generateImage(prompt, signal) {
+  if (state.cfg.imageProvider !== "openai") {
+    throw appError("image_provider_not_configured", "Image creation is not configured.", "Choose an image provider in Settings and add its API key. T10 will not substitute a stand-in picture.");
+  }
+  if (!state.cfg.imageKey) {
+    throw appError("image_provider_not_configured", "Image creation is not configured.", "Add your image provider API key in Settings.");
+  }
+  const base = (state.cfg.baseUrl && state.cfg.provider === "openai" ? state.cfg.baseUrl : "https://api.openai.com/v1").replace(/\/+$/, "");
+  const res = await fetch(base + "/images/generations", {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: "Bearer " + state.cfg.imageKey },
+    signal: signal,
+    body: JSON.stringify({ model: state.cfg.imageModel || "gpt-image-1", prompt: prompt, size: "1024x1024", n: 1 }),
+  });
+  if (!res.ok) throw httpError(res.status);
+  const data = await res.json();
+  const first = data && data.data && data.data[0];
+  const url = first && (first.url || (first.b64_json ? "data:image/png;base64," + first.b64_json : null));
+  if (!url) throw appError("upstream_error", "The image provider returned no image.");
+  return { url: url, prompt: prompt, width: 1024, height: 1024 };
+}
+
+/* ============================== RENDERING ============================== */
+function revealWords(root, from) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  const nodes = [];
+  let n;
+  while ((n = walker.nextNode())) nodes.push(n);
+  let idx = 0;
+  for (const node of nodes) {
+    const parts = node.nodeValue.split(/(\s+)/);
+    let changed = false;
+    const frag = document.createDocumentFragment();
+    for (const part of parts) {
+      if (!part) continue;
+      if (/^\s+$/.test(part)) { frag.appendChild(document.createTextNode(part)); continue; }
+      if (idx >= from) {
+        const sp = document.createElement("span");
+        sp.className = "fw";
+        sp.textContent = part;
+        frag.appendChild(sp);
+        changed = true;
+      } else {
+        frag.appendChild(document.createTextNode(part));
+      }
+      idx++;
+    }
+    if (changed && node.parentNode) node.parentNode.replaceChild(frag, node);
+  }
+  return idx;
+}
+
+function errorCardHtml(err, retry) {
+  return (
+    '<div class="errcard" role="alert">' + ICON.alert +
+    '<div style="flex:1;min-width:0">' +
+      '<p class="t">' + esc(err.message) + "</p>" +
+      (err.hint ? '<p class="h">' + esc(err.hint) + "</p>" : "") +
+      '<div class="a">' +
+        (retry ? '<button type="button" data-retry>Try again</button>' : "") +
+        '<button type="button" data-opensettings>Open settings</button>' +
+      "</div>" +
+    "</div></div>"
+  );
+}
+
+function messageEl(msg) {
+  const wrap = document.createElement("div");
+  wrap.className = "msg " + (msg.role === "user" ? "user" : "bot");
+  wrap.dataset.id = msg.id;
+
+  if (msg.role === "user") {
+    const b = document.createElement("div");
+    b.className = "bubble";
+    b.textContent = msg.content;
+    wrap.appendChild(b);
+    return wrap;
+  }
+
+  wrap.innerHTML =
+    '<div class="who"><span class="b">T10</span>' +
+      '<span class="m">' + esc(msg.modelName || "") + "</span>" +
+      (msg.demo ? '<span class="badge-demo" title="Produced locally, not by a T10 model">Demo mode</span>' : "") +
+    "</div><div class=\"content\"></div>";
+
+  const content = $(".content", wrap);
+
+  if (msg.error) {
+    content.innerHTML = errorCardHtml(msg.error, true);
+    return wrap;
+  }
+  if (msg.imagePending) {
+    content.innerHTML =
+      '<div class="imgcard"><div class="imgloading"><div class="sweep"></div>' +
+      '<div><p class="shimmer">Creating your image…</p>' +
+      '<p style="margin-top:6px;font-size:11.5px;color:var(--ink-muted)">' + esc(msg.imagePrompt || "") + "</p></div></div></div>";
+    return wrap;
+  }
+  if (msg.image) {
+    content.innerHTML =
+      '<div class="imgcard">' +
+        '<button class="shot" data-zoom aria-label="View image full screen">' +
+          '<img src="' + esc(msg.image.url) + '" alt="' + esc(msg.image.prompt) + '" loading="lazy">' +
+        "</button>" +
+        '<div class="imgfoot">' +
+          '<span class="p" title="' + esc(msg.image.prompt) + '">' + esc(msg.image.prompt) + "</span>" +
+          '<button type="button" data-variation>' + ICON.sparkle + "Variation</button>" +
+          '<button type="button" data-regenimg>' + ICON.refresh + "Regenerate</button>" +
+          '<button type="button" data-saveimg>' + ICON.download + "Save</button>" +
+        "</div>" +
+      "</div>";
+    return wrap;
+  }
+
+  if (!msg.content) {
+    content.innerHTML =
+      '<div class="thinking"><span class="dots"><i></i><i></i><i></i></span>' +
+      '<span class="shimmer">' + (msg.reasoningMode === "thinking" ? "Thinking" : "Responding") + "</span></div>" +
+      (msg.thinking ? '<p class="trace">' + esc(msg.thinking) + "</p>" : "");
+    return wrap;
+  }
+
+  content.innerHTML = '<div class="prose">' + renderMd(msg.content) + "</div>";
+  if (!msg.streaming) {
+    const acts = document.createElement("div");
+    acts.className = "msgacts";
+    acts.innerHTML =
+      '<button type="button" data-copymsg aria-label="Copy response" title="Copy">' + ICON.copy + "</button>" +
+      '<button type="button" data-regen aria-label="Regenerate response" title="Regenerate">' + ICON.refresh + "</button>";
+    content.appendChild(acts);
+  }
+  return wrap;
+}
+
+/* ============================ THREAD RENDER ============================ */
+let stick = true;
+function nearBottom() {
+  const el = $("#scroll");
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 140;
+}
+function scrollEnd(instant) {
+  const el = $("#scroll");
+  if (instant) { const b = el.style.scrollBehavior; el.style.scrollBehavior = "auto"; el.scrollTop = el.scrollHeight; el.style.scrollBehavior = b; }
+  else el.scrollTop = el.scrollHeight;
+}
+function renderThread() {
+  const box = $("#messages");
+  box.innerHTML = "";
+  const has = state.messages.length > 0;
+  $("#empty").style.display = has ? "none" : "flex";
+  box.classList.toggle("on", has);
+  if (!has) return;
+  state.messages.forEach((m) => box.appendChild(messageEl(m)));
+  requestAnimationFrame(() => scrollEnd(true));
+}
+function patchMessage(id) {
+  const msg = state.messages.find((m) => m.id === id);
+  const old = $('#messages [data-id="' + id + '"]');
+  if (!msg || !old) return null;
+  const next = messageEl(msg);
+  old.replaceWith(next);
+  return next;
+}
+
+/* ============================== SIDEBAR =============================== */
+function renderSidebar() {
+  const list = $("#convlist");
+  const q = $("#search").value.trim().toLowerCase();
+  const items = state.conversations
+    .slice()
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .filter((c) => !q || c.title.toLowerCase().includes(q) || c.messages.some((m) => (m.content || "").toLowerCase().includes(q)));
+
+  list.innerHTML = "";
+  if (!items.length) {
+    const p = document.createElement("p");
+    p.className = "emptynote";
+    p.textContent = q ? "No chats match that search." : "No conversations yet. Start a new chat to begin.";
+    list.appendChild(p);
+    return;
+  }
+  items.forEach((c) => {
+    const row = document.createElement("div");
+    row.className = "conv" + (c.id === state.activeId ? " active" : "");
+    row.innerHTML =
+      '<button class="open" type="button"><span class="title"></span></button>' +
+      '<span class="tools">' +
+        '<button type="button" data-rename aria-label="Rename ' + esc(c.title) + '">' + ICON.pencil + "</button>" +
+        '<button type="button" class="del" data-del aria-label="Delete ' + esc(c.title) + '">' + ICON.trash + "</button>" +
+      "</span>";
+    $(".title", row).textContent = c.title;
+    $("button.open", row).title = c.title;
+    $("button.open", row).addEventListener("click", () => openConversation(c.id));
+    $("[data-rename]", row).addEventListener("click", () => startRename(row, c));
+    $("[data-del]", row).addEventListener("click", () => deleteConversation(c.id));
+    list.appendChild(row);
+  });
+}
+function startRename(row, c) {
+  row.innerHTML = "";
+  const input = document.createElement("input");
+  input.className = "rename";
+  input.value = c.title;
+  input.setAttribute("aria-label", "Conversation title");
+  row.appendChild(input);
+  input.focus();
+  input.select();
+  const commit = () => {
+    const v = input.value.trim();
+    if (v) { c.title = v; c.updatedAt = Date.now(); saveConversations(); }
+    renderSidebar();
+  };
+  input.addEventListener("blur", commit);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); commit(); }
+    if (e.key === "Escape") renderSidebar();
+  });
+}
+function persist(seed) {
+  const id = state.activeId || uid();
+  const existing = state.conversations.find((c) => c.id === id);
+  const convo = {
+    id: id,
+    title: existing ? existing.title : titleFrom(seed || (state.messages.find((m) => m.role === "user") || {}).content || ""),
+    modelId: state.modelId,
+    createdAt: existing ? existing.createdAt : Date.now(),
+    updatedAt: Date.now(),
+    messages: state.messages,
+  };
+  state.conversations = state.conversations.filter((c) => c.id !== id).concat([convo]);
+  state.activeId = id;
+  saveConversations();
+  renderSidebar();
+}
+function openConversation(id) {
+  stopGenerating();
+  const c = state.conversations.find((x) => x.id === id);
+  if (!c) return;
+  state.activeId = id;
+  state.messages = c.messages;
+  if (MODELS.some((m) => m.id === c.modelId)) setModel(c.modelId, true);
+  renderThread();
+  renderSidebar();
+  closeDrawer();
+}
+function deleteConversation(id) {
+  state.conversations = state.conversations.filter((c) => c.id !== id);
+  saveConversations();
+  if (state.activeId === id) newChat();
+  else renderSidebar();
+  toast("Conversation deleted.");
+}
+function newChat() {
+  stopGenerating();
+  state.activeId = null;
+  state.messages = [];
+  $("#input").value = "";
+  autosize();
+  renderThread();
+  renderSidebar();
+  closeDrawer();
+  $("#input").focus();
+}
+
+/* =========================== MODEL SELECTOR ============================ */
+let selOpen = false, selCursor = 0;
+function currentModel() { return getModel(state.modelId); }
+
+function setModel(id, keepMode) {
+  const model = getModel(id);
+  state.modelId = model.id;
+  if (!keepMode || !modeSelectable(model, state.reasoningMode)) {
+    state.reasoningMode = model.defaultReasoningMode;
+  }
+  $("#selname").textContent = model.name;
+  const mode = model.reasoningModes.find((r) => r.id === state.reasoningMode);
+  $("#selmode").textContent = mode ? mode.label : "";
+  $("#selmode").style.display = mode ? "" : "none";
+  $("#emptyname").textContent = model.name;
+  $("#seltrigger").setAttribute(
+    "aria-label",
+    "Model: " + model.name + (mode ? ", reasoning: " + mode.label : "") + ". Change model"
+  );
+  renderSuggestions();
+  renderIndicators();
+  saveConfigModel();
+}
+function saveConfigModel() {
+  if (!storageOk()) return;
+  try { localStorage.setItem("t10:model", state.modelId); } catch (e) {}
+}
+
+function buildPanel() {
+  const model = currentModel();
+  let html = '<div class="panelgroup"><p class="panellabel">Models</p>';
+  MODELS.forEach((m, i) => {
+    const selected = m.id === state.modelId;
+    const caps = [];
+    if (m.reasoningModes.length) caps.push('<span class="cap">' + ICON.brain + "Reasoning</span>");
+    if (m.capabilities.coding) caps.push('<span class="cap">' + ICON.code + "Coding</span>");
+    if (m.capabilities.images) caps.push('<span class="cap">' + ICON.image + "Images</span>");
+    html +=
+      '<div class="opt' + (i === selCursor ? " cursor" : "") + '" role="option" id="t10opt' + i + '"' +
+      ' aria-selected="' + selected + '" data-model="' + m.id + '">' +
+        '<div class="body">' +
+          '<div class="row1"><span class="nm">' + esc(m.name) + "</span>" +
+            (m.isNew ? '<span class="tag new">New</span>' : "") +
+            (m.recommended ? '<span class="tag rec">Recommended</span>' : "") +
+          "</div>" +
+          '<p class="desc">' + esc(m.tagline) + "</p>" +
+          '<div class="caps">' + caps.join("") + "</div>" +
+        "</div>" +
+        (selected ? '<span class="check">' + ICON.check + "</span>" : "") +
+      "</div>";
+  });
+  html += "</div>";
+
+  if (model.reasoningModes.length) {
+    html += '<div class="panelgroup"><p class="panellabel">Reasoning</p>';
+    model.reasoningModes.forEach((r) => {
+      const disabled = r.status !== "available";
+      const selected = r.id === state.reasoningMode;
+      html +=
+        '<div class="opt" role="option" aria-selected="' + (selected && !disabled) + '"' +
+        (disabled ? ' aria-disabled="true"' : "") + ' data-mode="' + r.id + '">' +
+          '<span class="check" style="color:' + (selected && !disabled ? "var(--accent)" : "var(--ink-muted)") + '">' + ICON.sparkle + "</span>" +
+          '<div class="body">' +
+            '<div class="row1"><span class="nm" style="font-weight:500">' + esc(r.label) + "</span>" +
+              (disabled ? '<span class="tag soon">Coming Soon</span>' : '<span class="rmode-status">Available</span>') +
+            "</div>" +
+            '<p class="desc">' + esc(r.description) + "</p>" +
+          "</div>" +
+          (selected && !disabled ? '<span class="check">' + ICON.check + "</span>" : "") +
+        "</div>";
+    });
+    html += "</div>";
+  }
+  return html;
+}
+
+function placePanel() {
+  const panel = $("#selpanel");
+  const rect = $("#seltrigger").getBoundingClientRect();
+  const margin = 12;
+  const width = Math.min(352, window.innerWidth - margin * 2);
+  const left = Math.min(Math.max(rect.left, margin), window.innerWidth - width - margin);
+  panel.style.width = width + "px";
+  panel.style.left = left + "px";
+  panel.style.top = rect.bottom + 8 + "px";
+}
+function openSelector() {
+  selOpen = true;
+  selCursor = Math.max(0, MODELS.findIndex((m) => m.id === state.modelId));
+  const panel = $("#selpanel");
+  panel.innerHTML = buildPanel();
+  panel.hidden = false;
+  placePanel();
+  $("#seltrigger").setAttribute("aria-expanded", "true");
+  panel.setAttribute("aria-activedescendant", "t10opt" + selCursor);
+  panel.focus();
+}
+function closeSelector(focusTrigger) {
+  if (!selOpen) return;
+  selOpen = false;
+  $("#selpanel").hidden = true;
+  $("#seltrigger").setAttribute("aria-expanded", "false");
+  if (focusTrigger) $("#seltrigger").focus();
+}
+function moveCursor(delta) {
+  selCursor = (selCursor + delta + MODELS.length) % MODELS.length;
+  const panel = $("#selpanel");
+  panel.innerHTML = buildPanel();
+  panel.setAttribute("aria-activedescendant", "t10opt" + selCursor);
+}
+
+/* ============================ SEND PIPELINE ============================ */
+function stopGenerating() {
+  if (state.abort) { try { state.abort.abort(); } catch (e) {} }
+  state.abort = null;
+  state.busy = false;
+  setBusyUI(false);
+}
+function setBusyUI(on) {
+  const btn = $("#send");
+  btn.classList.toggle("stop", on);
+  btn.disabled = on ? false : !$("#input").value.trim();
+  btn.setAttribute("aria-label", on ? "Stop generating" : "Send message");
+  $("#sendicon").outerHTML = on
+    ? ICON.stop.replace("<svg", '<svg id="sendicon"')
+    : ICON.arrow.replace("<svg", '<svg id="sendicon"');
+}
+
+async function runTurn(seed) {
+  const model = currentModel();
+  const lastUser = (state.messages.slice().reverse().find((m) => m.role === "user") || {}).content || "";
+  const codingTask = model.capabilities.coding && isCoding(lastUser);
+  const wantsImage = model.capabilities.images && isImage(lastUser);
+
+  const assistant = {
+    id: uid(),
+    role: "assistant",
+    content: "",
+    createdAt: Date.now(),
+    modelId: model.id,
+    modelName: model.name,
+    reasoningMode: state.reasoningMode,
+    streaming: true,
+  };
+  state.messages.push(assistant);
+  $("#messages").appendChild(messageEl(assistant));
+  stick = true;
+  scrollEnd(true);
+
+  state.busy = true;
+  setBusyUI(true);
+  const controller = new AbortController();
+  state.abort = controller;
+
+  try {
+    if (wantsImage) {
+      assistant.imagePending = true;
+      assistant.imagePrompt = imagePrompt(lastUser);
+      patchMessage(assistant.id);
+      if (nearBottom()) scrollEnd(true);
+
+      const img = await generateImage(assistant.imagePrompt, controller.signal);
+      assistant.imagePending = false;
+      assistant.image = img;
+      assistant.content = "";
+    } else {
+      const resolved = resolveProvider(model);
+      assistant.demo = resolved.demo;
+      let acc = "", think = "", revealed = 0, lastPaint = 0;
+
+      await resolved.adapter.stream(
+        {
+          model: model,
+          upstream: upstreamFor(model),
+          messages: state.messages.filter((m) => !m.error && (m.role === "user" || m.content)).map((m) => ({ role: m.role, content: m.content })),
+          reasoningMode: state.reasoningMode,
+          codingTask: codingTask,
+          lastUser: lastUser,
+          signal: controller.signal,
+        },
+        {
+          thinking: (t) => {
+            think = (think + " " + t).trim().slice(-400);
+            assistant.thinking = think;
+            if (!acc) patchMessage(assistant.id);
+          },
+          delta: (t) => {
+            acc += t;
+            assistant.content = acc;
+            const now = performance.now();
+            if (now - lastPaint > 32) {
+              lastPaint = now;
+              const el = $('#messages [data-id="' + assistant.id + '"] .content');
+              if (el) {
+                let prose = $(".prose", el);
+                if (!prose) { el.innerHTML = '<div class="prose"></div>'; prose = $(".prose", el); }
+                prose.innerHTML = renderMd(acc);
+                prose.classList.add("caret");
+                revealed = revealWords(prose, revealed);
+              }
+              if (nearBottom()) scrollEnd(true);
+            }
+          },
+        }
+      );
+      assistant.content = acc;
+      if (!acc && !controller.signal.aborted) {
+        assistant.error = appError("upstream_error", "The provider returned an empty response.", "Check the upstream model id in Settings.");
+      }
+    }
+  } catch (err) {
+    assistant.imagePending = false;
+    if (err && (err.name === "AbortError" || controller.signal.aborted)) {
+      if (!assistant.content) assistant.content = "_Stopped._";
+    } else if (err && err.code) {
+      assistant.error = err;
+    } else if (err instanceof TypeError) {
+      assistant.error = appError(
+        "network_error",
+        "Could not reach the provider from the browser.",
+        "This usually means the endpoint does not allow direct browser (CORS) requests, or you are offline. Providers that block browser calls need the full T10 server build."
+      );
+    } else {
+      assistant.error = appError("internal_error", "Something went wrong handling that request.");
+    }
+  } finally {
+    assistant.streaming = false;
+    state.busy = false;
+    state.abort = null;
+    setBusyUI(false);
+    patchMessage(assistant.id);
+    persist(seed);
+    if (nearBottom()) scrollEnd(true);
+  }
+}
+
+async function send(text) {
+  const clean = String(text || "").trim();
+  if (!clean || state.busy) return;
+  const userMsg = { id: uid(), role: "user", content: clean, createdAt: Date.now() };
+  state.messages.push(userMsg);
+
+  $("#empty").style.display = "none";
+  $("#messages").classList.add("on");
+  $("#messages").appendChild(messageEl(userMsg));
+  $("#input").value = "";
+  autosize();
+  persist(clean);
+  scrollEnd();
+  await runTurn(clean);
+}
+
+async function regenerate() {
+  if (state.busy) return;
+  while (state.messages.length && state.messages[state.messages.length - 1].role === "assistant") state.messages.pop();
+  if (!state.messages.length) return;
+  renderThread();
+  await runTurn(state.messages[state.messages.length - 1].content);
+}
+
+/* ============================== COMPOSER =============================== */
+function autosize() {
+  const el = $("#input");
+  el.style.height = "auto";
+  el.style.height = Math.min(el.scrollHeight, 208) + "px";
+  if (!state.busy) $("#send").disabled = !el.value.trim();
+}
+function renderIndicators() {
+  const model = currentModel();
+  const mode = model.reasoningModes.find((r) => r.id === state.reasoningMode);
+  let html = "";
+  if (mode) html += '<span class="ind">' + ICON.sparkle + esc(mode.label) + "</span>";
+  if (model.capabilities.coding) html += '<span class="ind">' + ICON.code + "Coding</span>";
+  if (model.capabilities.images) html += '<span class="ind">' + ICON.image + "Image creation</span>";
+  html += "<span>T10 can make mistakes — verify important information.</span>";
+  $("#indicators").innerHTML = html;
+}
+const SUGGESTIONS = [
+  { icon: ICON.sparkle, label: "Explain something to me", prompt: "Explain how large language models actually work, in plain language." },
+  { icon: ICON.code, label: "Build a website", prompt: "Build me a responsive landing page in HTML and CSS for a small coffee shop." },
+  { icon: ICON.code, label: "Help me debug code", prompt: "Help me debug this JavaScript — it throws 'Cannot read properties of undefined'." },
+  { icon: ICON.image, label: "Create an image", prompt: "Create an image of a futuristic city at night." },
+];
+function renderSuggestions() {
+  const model = currentModel();
+  const box = $("#suggestions");
+  box.innerHTML = "";
+  SUGGESTIONS.filter((s) => (s.label === "Create an image" ? model.capabilities.images : true)).forEach((s) => {
+    const b = document.createElement("button");
+    b.className = "sg";
+    b.type = "button";
+    b.innerHTML = s.icon + "<span></span>";
+    $("span", b).textContent = s.label;
+    b.addEventListener("click", () => send(s.prompt));
+    box.appendChild(b);
+  });
+}
+
+/* ============================== SETTINGS =============================== */
+function providerBadge() {
+  const badge = $("#modebadge");
+  badge.classList.remove("warnb", "okb");
+  if (state.cfg.provider !== "none" && state.cfg.apiKey) {
+    badge.textContent = "Connected";
+    badge.classList.add("okb");
+  } else if (state.cfg.demo) {
+    badge.textContent = "Demo mode";
+    badge.classList.add("warnb");
+  } else {
+    badge.textContent = "Not connected";
+  }
+}
+function syncSettings() {
+  $$("#providerseg button").forEach((b) => b.classList.toggle("on", b.dataset.provider === state.cfg.provider));
+  const showFields = state.cfg.provider !== "none";
+  $("#providerfields").style.display = showFields ? "" : "none";
+  $("#noneinfo").style.display = showFields ? "none" : "";
+  if (showFields) {
+    const p = providers[state.cfg.provider];
+    $("#baseurl").placeholder = p.defaultBase;
+    $("#corshint").textContent =
+      state.cfg.provider === "anthropic"
+        ? "Anthropic is called directly from your browser with the direct-browser-access header. If your network blocks it, use the full T10 server build."
+        : "Any OpenAI-compatible host. The endpoint must allow browser (CORS) requests.";
+  }
+  $("#apikey").value = state.cfg.apiKey;
+  $("#baseurl").value = state.cfg.baseUrl;
+  $("#upstream11").value = state.cfg.upstream11;
+  $("#upstreamv1").value = state.cfg.upstreamV1;
+  $("#imageprovider").value = state.cfg.imageProvider;
+  $("#imagefields").style.display = state.cfg.imageProvider === "none" ? "none" : "";
+  $("#imagekey").value = state.cfg.imageKey;
+  $("#imagemodel").value = state.cfg.imageModel;
+  $$("#demoseg button").forEach((b) => b.classList.toggle("on", (b.dataset.demo === "on") === !!state.cfg.demo));
+  $$("#themeseg button").forEach((b) => b.classList.toggle("on", b.dataset.theme === state.cfg.theme));
+  const n = state.conversations.length;
+  $("#convcount").textContent = n ? n + (n === 1 ? " conversation saved." : " conversations saved.") : "No conversations saved.";
+  providerBadge();
+}
+function applyTheme() {
+  document.documentElement.setAttribute("data-theme", state.cfg.theme);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", state.cfg.theme === "light" ? "#fcfdff" : "#090b10");
+}
+
+/* =============================== EVENTS ================================ */
+function openDrawer() { $("#app").classList.add("drawer"); }
+function closeDrawer() { $("#app").classList.remove("drawer"); }
+
+$("#menubtn").addEventListener("click", openDrawer);
+$("#closedrawer").addEventListener("click", closeDrawer);
+$("#scrim").addEventListener("click", closeDrawer);
+$("#newchat").addEventListener("click", newChat);
+$("#newchattop").addEventListener("click", newChat);
+$("#search").addEventListener("input", renderSidebar);
+
+/* composer */
+$("#input").addEventListener("input", autosize);
+$("#input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+    e.preventDefault();
+    if (!state.busy) send($("#input").value);
+  }
+});
+$("#composer").addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (state.busy) stopGenerating();
+  else send($("#input").value);
+});
+$("#attach").addEventListener("click", () => toast("File attachments are not available in this build."));
+
+/* model selector */
+$("#seltrigger").addEventListener("click", () => (selOpen ? closeSelector(true) : openSelector()));
+$("#selpanel").addEventListener("click", (e) => {
+  const modelOpt = e.target.closest("[data-model]");
+  if (modelOpt) { setModel(modelOpt.dataset.model, false); closeSelector(true); return; }
+  const modeOpt = e.target.closest("[data-mode]");
+  if (modeOpt) {
+    const model = currentModel();
+    const mode = model.reasoningModes.find((r) => r.id === modeOpt.dataset.mode);
+    if (!mode) return;
+    if (mode.status !== "available") { toast(mode.label + " is coming soon."); return; }
+    state.reasoningMode = mode.id;
+    setModel(state.modelId, true);
+    $("#selpanel").innerHTML = buildPanel();
+  }
+});
+$("#selpanel").addEventListener("keydown", (e) => {
+  if (e.key === "ArrowDown") { e.preventDefault(); moveCursor(1); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); moveCursor(-1); }
+  else if (e.key === "Home") { e.preventDefault(); selCursor = 0; moveCursor(0); }
+  else if (e.key === "End") { e.preventDefault(); selCursor = MODELS.length - 1; moveCursor(0); }
+  else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setModel(MODELS[selCursor].id, false); closeSelector(true); }
+  else if (e.key === "Tab") closeSelector(false);
+});
+document.addEventListener("pointerdown", (e) => {
+  if (!selOpen) return;
+  if (!e.target.closest("#selpanel") && !e.target.closest("#seltrigger")) closeSelector(false);
+});
+window.addEventListener("resize", () => { if (selOpen) placePanel(); });
+$("#scroll").addEventListener("scroll", () => { if (selOpen) placePanel(); });
+
+/* thread-level delegated actions */
+$("#messages").addEventListener("click", async (e) => {
+  const copyCode = e.target.closest("[data-copy]");
+  if (copyCode) {
+    const code = copyCode.closest(".codeblock").querySelector("code");
+    try {
+      await navigator.clipboard.writeText(code.innerText);
+      const label = copyCode.lastChild;
+      if (label && label.nodeType === 3) { label.textContent = "Copied"; setTimeout(() => (label.textContent = "Copy"), 1500); }
+    } catch (err) { toast("Clipboard is unavailable in this context."); }
+    return;
+  }
+  const dl = e.target.closest("[data-dl]");
+  if (dl) {
+    const codeEl = dl.closest(".codeblock").querySelector("code");
+    const lang = codeEl.dataset.lang || "txt";
+    const extMap = { javascript: "js", typescript: "ts", python: "py", bash: "sh", shell: "sh", markdown: "md", rust: "rs" };
+    const blob = new Blob([codeEl.innerText], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "t10-snippet." + (extMap[lang] || lang || "txt");
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    return;
+  }
+  const copyMsg = e.target.closest("[data-copymsg]");
+  if (copyMsg) {
+    const id = copyMsg.closest(".msg").dataset.id;
+    const msg = state.messages.find((m) => m.id === id);
+    try { await navigator.clipboard.writeText(msg ? msg.content : ""); toast("Copied to clipboard."); }
+    catch (err) { toast("Clipboard is unavailable in this context."); }
+    return;
+  }
+  if (e.target.closest("[data-regen]") || e.target.closest("[data-retry]")) { regenerate(); return; }
+  if (e.target.closest("[data-opensettings]")) { openSettings(); return; }
+
+  const zoom = e.target.closest("[data-zoom]");
+  if (zoom) {
+    const img = zoom.querySelector("img");
+    $("#lightboximg").src = img.src;
+    $("#lightboximg").alt = img.alt;
+    $("#lightbox").classList.add("on");
+    return;
+  }
+  const saveImg = e.target.closest("[data-saveimg]");
+  if (saveImg) {
+    const id = saveImg.closest(".msg").dataset.id;
+    const msg = state.messages.find((m) => m.id === id);
+    if (!msg || !msg.image) return;
+    try {
+      const res = await fetch(msg.image.url);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "t10-image-" + Date.now() + ".png";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) { toast("Could not download that image."); }
+    return;
+  }
+  const regenImg = e.target.closest("[data-regenimg]");
+  const variation = e.target.closest("[data-variation]");
+  if (regenImg || variation) {
+    const id = (regenImg || variation).closest(".msg").dataset.id;
+    const msg = state.messages.find((m) => m.id === id);
+    if (!msg || !msg.image) return;
+    send((variation ? "Create another variation of an image of " : "Create an image of ") + msg.image.prompt);
+  }
+});
+
+/* lightbox */
+$("#lightbox").addEventListener("click", (e) => { if (!e.target.closest("img")) $("#lightbox").classList.remove("on"); });
+$("#lightboxclose").addEventListener("click", () => $("#lightbox").classList.remove("on"));
+
+/* settings */
+function openSettings() { $("#settings").classList.add("on"); syncSettings(); }
+function closeSettings() { $("#settings").classList.remove("on"); }
+$("#opensettings").addEventListener("click", () => { openSettings(); closeDrawer(); });
+$$("#settings [data-close]").forEach((b) => b.addEventListener("click", closeSettings));
+$("#settings").addEventListener("click", (e) => { if (e.target.id === "settings") closeSettings(); });
+
+$$("#providerseg button").forEach((b) =>
+  b.addEventListener("click", () => { state.cfg.provider = b.dataset.provider; saveConfig(); syncSettings(); })
+);
+$$("#demoseg button").forEach((b) =>
+  b.addEventListener("click", () => { state.cfg.demo = b.dataset.demo === "on"; saveConfig(); syncSettings(); })
+);
+$$("#themeseg button").forEach((b) =>
+  b.addEventListener("click", () => { state.cfg.theme = b.dataset.theme; applyTheme(); saveConfig(); syncSettings(); })
+);
+[["apikey", "apiKey"], ["baseurl", "baseUrl"], ["upstream11", "upstream11"], ["upstreamv1", "upstreamV1"], ["imagekey", "imageKey"], ["imagemodel", "imageModel"]].forEach(
+  (pair) => $("#" + pair[0]).addEventListener("input", (e) => { state.cfg[pair[1]] = e.target.value.trim(); saveConfig(); providerBadge(); })
+);
+$("#imageprovider").addEventListener("change", (e) => { state.cfg.imageProvider = e.target.value; saveConfig(); syncSettings(); });
+$("#clearall").addEventListener("click", () => {
+  if (!confirm("Delete every saved conversation? This cannot be undone.")) return;
+  state.conversations = [];
+  saveConversations();
+  newChat();
+  syncSettings();
+  toast("All conversations deleted.");
+});
+
+/* global keys */
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    if ($("#lightbox").classList.contains("on")) { $("#lightbox").classList.remove("on"); return; }
+    if ($("#settings").classList.contains("on")) { closeSettings(); return; }
+    if (selOpen) { closeSelector(true); return; }
+    if (state.busy) { stopGenerating(); return; }
+    closeDrawer();
+  }
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); $("#search").focus(); }
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "o") { e.preventDefault(); newChat(); }
+});
+
+/* ================================ BOOT ================================= */
+function boot() {
+  loadAll();
+  applyTheme();
+
+  let storedModel = null;
+  try { storedModel = localStorage.getItem("t10:model"); } catch (e) {}
+  setModel(storedModel && MODELS.some((m) => m.id === storedModel) ? storedModel : DEFAULT_MODEL_ID, false);
+
+  renderSidebar();
+  renderThread();
+  renderSuggestions();
+  renderIndicators();
+  syncSettings();
+  autosize();
+  if (window.innerWidth > 1023) $("#input").focus();
+}
+boot();
+
+})();
+</script>
+</body>
+</html>
