@@ -96,7 +96,10 @@ input,textarea{font:inherit;color:inherit}
 }
 #app.collapsed #sidebar{margin-left:calc(var(--sidebar-w) * -1)}
 .side-top{display:flex;align-items:center;gap:10px;padding:14px 12px 10px 16px}
-.brand{display:flex;align-items:center;gap:9px;font-weight:650;letter-spacing:-.2px;font-size:16px}
+.brand{display:flex;align-items:center;gap:9px;font-weight:650;letter-spacing:-.2px;font-size:16px;
+  color:inherit;text-decoration:none;border-radius:10px;padding:2px 4px;margin:-2px -4px;
+  transition:background .15s}
+.brand:hover{background:var(--sidebar-hover)}
 .brand .mark{
   width:28px;height:28px;border-radius:9px;flex:0 0 28px;
   background:linear-gradient(145deg,var(--blue-400),var(--blue-600));
@@ -228,6 +231,8 @@ main{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;position
 #thread.on{display:block}
 .msg{margin-bottom:26px;animation:rise .32s cubic-bezier(.2,.8,.3,1) both}
 @keyframes rise{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
+.msg.user .bubble{animation:bubbleIn .38s cubic-bezier(.18,.9,.28,1.06) both}
+@keyframes bubbleIn{from{opacity:0;transform:translateY(6px) scale(.96)}to{opacity:1;transform:none}}
 
 .msg.user{display:flex;justify-content:flex-end}
 .msg.user .bubble{
@@ -288,16 +293,58 @@ main{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;position
 [data-theme="dark"] .tok-key{color:#79b8ff}[data-theme="dark"] .tok-str{color:#8fdca5}
 [data-theme="dark"] .tok-num{color:#ffb870}[data-theme="dark"] .tok-fn{color:#c9a6ff}
 
-/* streaming caret */
-.caret{display:inline-block;width:8px;height:16px;vertical-align:-3px;margin-left:2px;border-radius:2px;
-  background:var(--accent);animation:blink 1s steps(2,start) infinite}
-@keyframes blink{50%{opacity:0}}
+/* ---- streaming caret ---- */
+.caret{
+  display:inline-block;width:3px;height:1.05em;vertical-align:-2px;margin-left:3px;border-radius:2px;
+  background:linear-gradient(180deg,var(--blue-400),var(--blue-600));
+  animation:caretPulse 1.1s ease-in-out infinite;
+  box-shadow:0 0 8px rgba(59,139,253,.7);
+}
+@keyframes caretPulse{0%,100%{opacity:1;transform:scaleY(1)}50%{opacity:.25;transform:scaleY(.86)}}
 
-/* typing dots */
-.dots{display:inline-flex;gap:5px;padding:8px 2px}
-.dots i{width:7px;height:7px;border-radius:50%;background:var(--blue-300);animation:bob 1.3s ease-in-out infinite}
-.dots i:nth-child(2){animation-delay:.18s}.dots i:nth-child(3){animation-delay:.36s}
-@keyframes bob{0%,60%,100%{transform:translateY(0);opacity:.5}30%{transform:translateY(-6px);opacity:1}}
+/* ---- per-word reveal while streaming ---- */
+.fw{display:inline-block;animation:fwIn .34s cubic-bezier(.22,.75,.3,1) both;will-change:opacity,transform,filter}
+@keyframes fwIn{
+  from{opacity:0;transform:translateY(4px);filter:blur(5px)}
+  60%{filter:blur(0)}
+  to{opacity:1;transform:none;filter:none}
+}
+/* code streams in by line rather than by word */
+.codeblock .fw{display:inline;animation-duration:.22s}
+
+/* ---- thinking state ---- */
+.thinking{display:flex;align-items:center;gap:11px;padding:3px 0 5px}
+.dots{display:inline-flex;gap:5px;align-items:center}
+.dots i{
+  width:7px;height:7px;border-radius:50%;
+  background:linear-gradient(145deg,var(--blue-300),var(--blue-500));
+  animation:bob 1.25s cubic-bezier(.45,0,.55,1) infinite;
+}
+.dots i:nth-child(2){animation-delay:.16s}
+.dots i:nth-child(3){animation-delay:.32s}
+@keyframes bob{
+  0%,70%,100%{transform:translateY(0) scale(.82);opacity:.4}
+  35%{transform:translateY(-7px) scale(1);opacity:1}
+}
+.think-text{
+  font-size:13.8px;font-weight:550;letter-spacing:.1px;
+  background:linear-gradient(100deg,var(--muted) 20%,var(--blue-500) 42%,var(--blue-300) 52%,var(--muted) 72%);
+  background-size:280% 100%;
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  animation:shimmer 2.1s linear infinite;
+}
+@keyframes shimmer{from{background-position:190% 0}to{background-position:-90% 0}}
+
+/* avatar comes alive while generating */
+.msg.bot.live .avatar{animation:avatarPulse 1.8s ease-in-out infinite}
+@keyframes avatarPulse{
+  0%,100%{box-shadow:0 2px 8px rgba(59,139,253,.3),0 0 0 0 rgba(59,139,253,.34)}
+  50%{box-shadow:0 2px 10px rgba(59,139,253,.45),0 0 0 7px rgba(59,139,253,0)}
+}
+
+/* bot message settles in */
+.msg.bot .body{animation:bodyIn .4s cubic-bezier(.22,.8,.3,1) both}
+@keyframes bodyIn{from{opacity:0;transform:translateX(-5px)}to{opacity:1;transform:none}}
 
 /* message actions */
 .acts{display:flex;gap:2px;margin-top:7px;opacity:0;transition:opacity .18s}
@@ -431,7 +478,7 @@ main{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;position
   <!-- ================= SIDEBAR ================= -->
   <aside id="sidebar">
     <div class="side-top">
-      <div class="brand"><div class="mark">C</div>C10.1<span class="ver">beta</span></div>
+      <a class="brand" href="index.html" title="About C10.1"><div class="mark">C</div>C10.1<span class="ver">v1.0</span></a>
       <button class="icon-btn" id="collapseBtn" title="Hide sidebar" aria-label="Hide sidebar">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg>
@@ -1446,25 +1493,78 @@ function setBusy(on){
     : '<path d="M12 19V5"/><path d="M5 12l7-7 7 7"/>';
 }
 
+/* Wrap every word from index `from` onward in an animated span, so each
+   newly-arrived word fades in rather than the whole block re-flashing.
+   Words already on screen are left as plain text nodes. */
+function revealWords(root, from){
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  const nodes = [];
+  let n;
+  while((n = walker.nextNode())) nodes.push(n);
+
+  let idx = 0;
+  for(const node of nodes){
+    const parts = node.nodeValue.split(/(\s+)/);
+    let changed = false;
+    const frag = document.createDocumentFragment();
+    for(const part of parts){
+      if(!part) continue;
+      if(/^\s+$/.test(part)){ frag.appendChild(document.createTextNode(part)); continue; }
+      if(idx >= from){
+        const sp = document.createElement("span");
+        sp.className = "fw";
+        sp.textContent = part;
+        frag.appendChild(sp);
+        changed = true;
+      }else{
+        frag.appendChild(document.createTextNode(part));
+      }
+      idx++;
+    }
+    if(changed && node.parentNode) node.parentNode.replaceChild(frag, node);
+  }
+  return idx;
+}
+
+/* Pacing: punctuation breathes, code races, ordinary prose flows. */
+function chunkDelay(chunk, inCode){
+  if(inCode) return 9;
+  if(/[.!?]["')]?\s*$/.test(chunk)) return 116;
+  if(/[,;:]\s*$/.test(chunk))       return 54;
+  if(/\n\s*$/.test(chunk))          return 40;
+  return 20 + Math.min(chunk.length, 9) * 2.4;
+}
+
 async function streamInto(proseEl, text, rawHolder){
   const chunks = text.match(/\S+\s*|\s+/g) || [text];
   let acc = "";
-  let last = 0;
+  let revealed = 0;
+  let lastPaint = 0;
+  let fenceCount = 0;
+
   for(let i=0;i<chunks.length;i++){
     if(state.abort && state.abort.stopped) break;
     acc += chunks[i];
+    rawHolder.value = acc;
+
+    fenceCount = (acc.match(/```/g) || []).length;
+    const inCode = fenceCount % 2 === 1;
+
     const now = performance.now();
-    if(now - last > 34 || i === chunks.length-1){
-      proseEl.innerHTML = renderMd(acc) + '<span class="caret"></span>';
-      last = now;
+    const isLast = i === chunks.length - 1;
+    if(now - lastPaint > 30 || isLast){
+      proseEl.innerHTML = renderMd(acc);
+      revealed = revealWords(proseEl, revealed);
+      if(!isLast) proseEl.appendChild(Object.assign(document.createElement("span"), { className:"caret" }));
+      lastPaint = now;
       if(nearBottom()) scrollToEnd(true);
     }
-    rawHolder.value = acc;
-    const d = chunks[i].length > 8 ? 34 : 18;
-    await sleep(/[.!?]\s*$/.test(chunks[i]) ? d + 90 : d);
+    await sleep(chunkDelay(chunks[i], inCode));
   }
+
   rawHolder.value = acc;
   proseEl.innerHTML = renderMd(acc);
+  revealWords(proseEl, revealed);
 }
 
 async function send(text, opts){
@@ -1491,9 +1591,15 @@ async function send(text, opts){
   setBusy(true);
   state.abort = { stopped:false, ctrl: new AbortController() };
 
-  // typing indicator
+  // thinking state
   const holder = msgEl("bot","","");
-  $(".prose", holder).innerHTML = '<div class="dots"><i></i><i></i><i></i></div>';
+  holder.classList.add("live");
+  const thinkLine = state.settings.engine === "api"
+    ? "Contacting model"
+    : pick(["Thinking","Working it through","Composing a reply","Putting that together"]);
+  $(".prose", holder).innerHTML =
+    '<div class="thinking"><div class="dots"><i></i><i></i><i></i></div><span class="think-text"></span></div>';
+  $(".think-text", holder).textContent = thinkLine;
   thread.appendChild(holder);
   if(nearBottom()) scrollToEnd();
 
@@ -1526,6 +1632,7 @@ async function send(text, opts){
     }
   }
 
+  holder.classList.remove("live");
   holder.dataset.raw = answer;
   addActions(holder);
   c.messages.push({ role:"assistant", content:answer, ts:Date.now() });
