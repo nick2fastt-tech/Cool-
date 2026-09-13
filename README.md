@@ -4,7 +4,7 @@
 
 An AI platform with model selection (T10 V1 / T10 1.1), streaming chat, coding and image creation. Two builds:
 
-**`t10.html`** — the whole interface in one file. Open it in any browser, no install, no server.
+**`t10-site/`** — the whole site in one HTML file, plus `robots.txt` and `sitemap.xml`. Landing, Chat, Models, About and Documentation all in `index.html`. Open it from disk, or upload the three files to any static host. No build step, no server.
 
 Image creation works with no key at all: an on-device procedural renderer paints an original picture from your prompt on a canvas. It reads scene words (city, mountains, ocean, forest, desert, space, night, sunset, neon, rain, snow, fog) and composes the layers itself — sky, stars, terrain, skylines with lit windows, reflected light on water, weather, grain. It is a scene renderer, not a diffusion model, so it does not handle arbitrary descriptions. Roughly one second per 1024×1024 image, and every run differs.
 
