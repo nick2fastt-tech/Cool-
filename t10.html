@@ -530,10 +530,11 @@ header.topbar{
         <div class="field">
           <label for="imageprovider">Provider</label>
           <select id="imageprovider">
-            <option value="none">Not configured</option>
-            <option value="openai">OpenAI Images</option>
+            <option value="ondevice">On-device renderer (no key)</option>
+            <option value="openai">Image API (needs a key)</option>
+            <option value="none">Off</option>
           </select>
-          <p class="hint">Image requests route here. With nothing configured, T10 reports a configuration error rather than showing a stand-in picture.</p>
+          <p class="hint" id="imagehint"></p>
         </div>
         <div class="field" id="imagefields" style="display:none">
           <label for="imagekey">Image API key</label>
@@ -653,7 +654,7 @@ const state = {
     baseUrl: "",
     upstream11: "",
     upstreamV1: "",
-    imageProvider: "none",
+    imageProvider: "ondevice",
     imageKey: "",
     imageModel: "",
     demo: false,
@@ -1116,13 +1117,598 @@ function resolveProvider(model) {
   );
 }
 
+/* ======================================================================
+   On-device image renderer.
+
+   Composes an original image from the prompt on a canvas - no network,
+   no API key, nothing downloaded. This is a procedural scene renderer,
+   not a diffusion model: it reads scene keywords (place, time of day,
+   weather, palette, style) and paints the layers itself. Every output is
+   generated fresh from a seed, so regenerating gives a different image.
+   ====================================================================== */
+
+/* Deterministic PRNG so a seed reproduces an image exactly. */
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function hashString(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+
+/* ---------------------------- scene parsing --------------------------- */
+const PALETTES = {
+  night:    { sky: ["#04060f", "#0a1226", "#132244", "#1d3159"], glow: "#8fb6ff", ink: "#02030a", accent: "#cfe0ff" },
+  sunset:   { sky: ["#1a1033", "#4a1f52", "#a33a5b", "#e0714a", "#f6b06a"], glow: "#ffd9a0", ink: "#150a1a", accent: "#ffc48a" },
+  sunrise:  { sky: ["#241a4a", "#6b3a76", "#c4567b", "#f0a868", "#ffe1b0"], glow: "#ffe9c4", ink: "#1a1026", accent: "#ffd2a0" },
+  day:      { sky: ["#2a6fc9", "#5b9ede", "#9ccbf0", "#d8ecfb"], glow: "#ffffff", ink: "#20334a", accent: "#eaf6ff" },
+  overcast: { sky: ["#3d4757", "#5a6676", "#7c8795", "#a3acb8"], glow: "#d8dee6", ink: "#252d38", accent: "#c3cad3" },
+  neon:     { sky: ["#07031c", "#1a0b45", "#3d1170", "#7b1a84", "#e0277f"], glow: "#ff4fa3", ink: "#05020f", accent: "#4de8ff" },
+  space:    { sky: ["#02030c", "#070a22", "#0d1038", "#141a4d"], glow: "#a9c6ff", ink: "#01020a", accent: "#dfe8ff" },
+};
+
+function parseScene(prompt) {
+  const p = " " + String(prompt).toLowerCase() + " ";
+  const has = (re) => re.test(p);
+
+  let time =
+    has(/\bnight|midnight|nocturnal|after dark|moonlit|starry\b/) ? "night" :
+    has(/\bsunset|dusk|evening|golden hour|twilight\b/)           ? "sunset" :
+    has(/\bsunrise|dawn|morning\b/)                               ? "sunrise" :
+    has(/\bovercast|cloudy|storm|grey|gray|rain\b/)               ? "overcast" :
+    "day";
+
+  let style = "natural";
+  if (has(/\bneon|synthwave|cyberpunk|retrowave|vaporwave\b/)) { style = "neon"; time = "neon"; }
+  if (has(/\bspace|galaxy|nebula|cosmos|cosmic|planet|orbit|interstellar\b/)) { style = "space"; time = "space"; }
+  if (has(/\bminimal|minimalist|simple|flat\b/)) style = "minimal";
+  if (has(/\babstract|gradient|geometric|pattern\b/)) style = "abstract";
+
+  // Abstract and space are checked first: "abstract gradient waves" is an
+  // abstract piece, not a seascape.
+  let place =
+    has(/\babstract|geometric|pattern\b/)                                    ? "abstract" :
+    style === "space"                                                        ? "space" :
+    has(/\bcity|cities|skyline|urban|downtown|metropolis|town|buildings?\b/) ? "city" :
+    has(/\bdesert|dunes?|sahara|sand\b/)                                     ? "desert" :
+    has(/\bforest|woods|trees?|jungle|pine\b/)                               ? "forest" :
+    has(/\bmountain|alps|peaks?|valley|canyon|cliff\b/)                      ? "mountains" :
+    has(/\bocean|sea|beach|coast|waves?|shore|island|lake|water\b/)          ? "ocean" :
+    has(/\bgradient\b/)                                                      ? "abstract" :
+    "hills";
+
+  const snowy = has(/\bsnow|snowy|blizzard|winter|frost\b/);
+  if (snowy && time === "day") time = "overcast";
+
+  return {
+    prompt: String(prompt),
+    time: time,
+    style: style,
+    place: place,
+    palette: PALETTES[time] || PALETTES.day,
+    rain: has(/\brain|rainy|storm|downpour|drizzle\b/),
+    snow: has(/\bsnow|snowy|blizzard|winter|frost\b/),
+    fog: has(/\bfog|foggy|mist|misty|haze|hazy\b/),
+    stars: has(/\bstars?|starry|galaxy|nebula|cosmos\b/) || time === "night" || time === "space",
+    moon: has(/\bmoon|moonlit|lunar\b/) || (time === "night" && !has(/\bsun\b/)),
+    sun: has(/\bsun|sunny|sunlight\b/) || time === "day" || time === "sunset" || time === "sunrise",
+    aurora: has(/\baurora|northern lights\b/),
+    reflection: has(/\breflection|reflecting|mirror|lake|river|water|wet\b/) || has(/\bocean|sea|beach|coast\b/),
+    ground:
+      place === "desert" ? (time === "night" ? "#3a2c1e" : "#c99a5e") :
+      snowy               ? "#dfe8f2" :
+      place === "forest"  ? (time === "night" ? "#0a1410" : "#1e3524") :
+      null,
+    sea:
+      time === "sunset" || time === "sunrise" ? "#231a3a" :
+      time === "neon"                         ? "#10052c" :
+      time === "day"                          ? "#15406b" :
+      "#081426",
+  };
+}
+
+/* ------------------------------ utilities ----------------------------- */
+function lerpColor(a, b, t) {
+  const pa = [parseInt(a.slice(1, 3), 16), parseInt(a.slice(3, 5), 16), parseInt(a.slice(5, 7), 16)];
+  const pb = [parseInt(b.slice(1, 3), 16), parseInt(b.slice(3, 5), 16), parseInt(b.slice(5, 7), 16)];
+  const c = pa.map((v, i) => Math.round(v + (pb[i] - v) * t));
+  return "rgb(" + c[0] + "," + c[1] + "," + c[2] + ")";
+}
+function withAlpha(hex, a) {
+  const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+  return "rgba(" + r + "," + g + "," + b + "," + a + ")";
+}
+
+/* ------------------------------- layers ------------------------------- */
+function paintSky(ctx, W, H, desc) {
+  const stops = desc.palette.sky;
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  stops.forEach((c, i) => g.addColorStop(i / (stops.length - 1), c));
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function paintNebula(ctx, W, H, rng, desc) {
+  const blobs = 5 + Math.floor(rng() * 4);
+  ctx.globalCompositeOperation = "screen";
+  for (let i = 0; i < blobs; i++) {
+    const x = rng() * W, y = rng() * H * 0.7;
+    const r = (0.18 + rng() * 0.32) * W;
+    const hue = [desc.palette.glow, desc.palette.accent, "#6a4bd8", "#2f7fd8"][Math.floor(rng() * 4)];
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, withAlpha(hue.length === 7 ? hue : "#8fb6ff", 0.16 + rng() * 0.12));
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  ctx.globalCompositeOperation = "source-over";
+}
+
+function paintStars(ctx, W, H, rng, horizon, desc) {
+  const count = Math.floor((desc.time === "space" ? 900 : 520) * (W / 1024));
+  for (let i = 0; i < count; i++) {
+    const x = rng() * W;
+    const y = rng() * horizon * 0.98;
+    const depth = rng();
+    const r = depth * depth * 1.9 + 0.25;
+    const a = 0.25 + depth * 0.75;
+    ctx.fillStyle = "rgba(255,255,255," + a.toFixed(3) + ")";
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    if (depth > 0.93) {
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r * 7);
+      g.addColorStop(0, "rgba(255,255,255,.5)");
+      g.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(x - r * 7, y - r * 7, r * 14, r * 14);
+    }
+  }
+}
+
+function paintAurora(ctx, W, H, rng, horizon) {
+  ctx.globalCompositeOperation = "screen";
+  for (let band = 0; band < 3; band++) {
+    const baseY = horizon * (0.25 + band * 0.16);
+    const hue = ["#4de8a0", "#4dc6e8", "#9a6bff"][band];
+    ctx.beginPath();
+    ctx.moveTo(0, baseY);
+    for (let x = 0; x <= W; x += 12) {
+      const y = baseY + Math.sin(x / (110 + band * 40) + rng() * 0.02 + band) * (38 + band * 14);
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(W, baseY + 150);
+    ctx.lineTo(0, baseY + 150);
+    ctx.closePath();
+    const g = ctx.createLinearGradient(0, baseY - 60, 0, baseY + 150);
+    g.addColorStop(0, withAlpha(hue, 0));
+    g.addColorStop(0.4, withAlpha(hue, 0.26));
+    g.addColorStop(1, withAlpha(hue, 0));
+    ctx.fillStyle = g;
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = "source-over";
+}
+
+function paintCelestial(ctx, W, H, rng, horizon, desc) {
+  if (!desc.moon && !desc.sun) return null;
+  const isMoon = desc.moon && !(desc.time === "day");
+  const x = W * (0.18 + rng() * 0.64);
+  const y = horizon * (isMoon ? 0.2 + rng() * 0.3 : 0.42 + rng() * 0.3);
+  const r = isMoon ? W * (0.035 + rng() * 0.02) : W * (0.038 + rng() * 0.028);
+
+  const glow = ctx.createRadialGradient(x, y, 0, x, y, r * 9);
+  glow.addColorStop(0, withAlpha(desc.palette.glow, isMoon ? 0.3 : 0.42));
+  glow.addColorStop(0.28, withAlpha(desc.palette.glow, 0.12));
+  glow.addColorStop(0.55, withAlpha(desc.palette.glow, 0.04));
+  glow.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(x - r * 9, y - r * 9, r * 18, r * 18);
+
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = isMoon ? "#eef3ff" : desc.palette.glow;
+  ctx.fill();
+
+  if (isMoon) {
+    // craters
+    for (let i = 0; i < 6; i++) {
+      const cr = r * (0.08 + rng() * 0.16);
+      const ang = rng() * Math.PI * 2, dist = rng() * (r - cr * 1.6);
+      ctx.beginPath();
+      ctx.arc(x + Math.cos(ang) * dist, y + Math.sin(ang) * dist, cr, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(180,196,224,.35)";
+      ctx.fill();
+    }
+  }
+  return { x: x, y: y, r: r };
+}
+
+/* Fractal ridge line, used for mountains and hills. */
+function ridge(rng, W, baseY, amp, roughness, steps) {
+  const pts = [{ x: 0, y: baseY + (rng() - 0.5) * amp }, { x: W, y: baseY + (rng() - 0.5) * amp }];
+  let a = amp;
+  for (let s = 0; s < steps; s++) {
+    const next = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p = pts[i], q = pts[i + 1];
+      next.push(p);
+      next.push({ x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 + (rng() - 0.5) * a });
+    }
+    next.push(pts[pts.length - 1]);
+    pts.length = 0;
+    Array.prototype.push.apply(pts, next);
+    a *= roughness;
+  }
+  return pts;
+}
+
+function paintMountains(ctx, W, H, rng, horizon, desc, layers) {
+  layers = layers || 4;
+  for (let L = 0; L < layers; L++) {
+    const t = L / (layers - 1 || 1);
+    const baseY = horizon - (1 - t) * H * 0.16 + t * H * 0.06;
+    const pts = ridge(rng, W, baseY, H * (0.2 - t * 0.1), 0.55, 7);
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    pts.forEach((p) => ctx.lineTo(p.x, p.y));
+    ctx.lineTo(W, H);
+    ctx.closePath();
+    const base = desc.ground || desc.palette.sky[Math.min(2, desc.palette.sky.length - 1)];
+    ctx.fillStyle = desc.ground
+      ? lerpColor(desc.ground, desc.palette.ink, 0.1 + t * 0.45)
+      : lerpColor(base, desc.palette.ink, 0.25 + t * 0.7);
+    ctx.fill();
+
+    // snow caps on the nearest ranges
+    if ((desc.snow || desc.place === "mountains") && t > 0.45) {
+      ctx.save();
+      ctx.clip();
+      ctx.beginPath();
+      ctx.moveTo(0, H);
+      pts.forEach((p) => ctx.lineTo(p.x, p.y));
+      ctx.lineTo(W, H);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(255,255,255,0)";
+      ctx.fill();
+      pts.forEach((p, i) => {
+        if (i % 2 || p.y > baseY - H * 0.02) return;
+        ctx.beginPath();
+        ctx.moveTo(p.x - 14, p.y + 20);
+        ctx.lineTo(p.x, p.y - 2);
+        ctx.lineTo(p.x + 14, p.y + 20);
+        ctx.closePath();
+        ctx.fillStyle = "rgba(240,246,255,.55)";
+        ctx.fill();
+      });
+      ctx.restore();
+    }
+  }
+}
+
+function paintSkyline(ctx, W, H, rng, horizon, desc) {
+  const rows = 3;
+  for (let row = 0; row < rows; row++) {
+    const t = row / (rows - 1 || 1);
+    const baseY = horizon + t * H * 0.05;
+    const colour = lerpColor(desc.palette.sky[desc.palette.sky.length - 1], desc.palette.ink, 0.45 + t * 0.5);
+    // Solid ground for this row first - otherwise the sky shows between towers.
+    ctx.fillStyle = colour;
+    ctx.fillRect(0, baseY, W, H - baseY);
+    let x = -20;
+    while (x < W + 20) {
+      const w = W * (0.03 + rng() * 0.075);
+      const h = H * (0.06 + rng() * (0.3 - t * 0.12)) * (1 - t * 0.35);
+      const y = baseY - h;
+      ctx.fillStyle = colour;
+      ctx.fillRect(x, y, w, baseY - y);
+
+      // antenna on the tallest near towers
+      if (row === rows - 1 && rng() > 0.82) {
+        ctx.fillRect(x + w / 2 - 1.5, y - H * 0.05 * rng() - 8, 3, H * 0.05);
+      }
+
+      // lit windows
+      if (row >= 1) {
+        const cols = Math.max(2, Math.floor(w / (W * 0.011)));
+        const rws = Math.max(3, Math.floor(h / (H * 0.021)));
+        for (let c = 0; c < cols; c++) {
+          for (let r2 = 0; r2 < rws; r2++) {
+            if (rng() > (desc.time === "night" || desc.time === "neon" ? 0.45 : 0.82)) continue;
+            const wx = x + (c + 0.5) * (w / cols) - w / cols * 0.28;
+            const wy = y + (r2 + 0.5) * (h / rws) - h / rws * 0.28;
+            const warm = rng();
+            ctx.fillStyle =
+              desc.time === "neon"
+                ? (warm > 0.5 ? "rgba(255,110,180,.85)" : "rgba(90,225,255,.8)")
+                : "rgba(255," + Math.floor(214 + warm * 34) + "," + Math.floor(150 + warm * 60) + ",.8)";
+            ctx.fillRect(wx, wy, Math.max(1.5, w / cols * 0.5), Math.max(1.5, h / rws * 0.45));
+          }
+        }
+      }
+      x += w + W * (0.004 + rng() * 0.012);
+    }
+  }
+}
+
+function paintForest(ctx, W, H, rng, horizon, desc) {
+  for (let L = 0; L < 3; L++) {
+    const t = L / 2;
+    const baseY = horizon + t * H * 0.09;
+    const canopy = desc.ground || lerpColor(desc.palette.sky[desc.palette.sky.length - 1], "#16301f", 0.5);
+    const colour = lerpColor(canopy, desc.palette.ink, 0.12 + t * 0.5);
+    ctx.fillStyle = colour;
+    ctx.fillRect(0, baseY, W, H - baseY);
+    let x = -10;
+    while (x < W + 10) {
+      const h = H * (0.07 + rng() * 0.12) * (1 - t * 0.3);
+      const w = h * (0.28 + rng() * 0.14);
+      ctx.beginPath();
+      ctx.moveTo(x, baseY + 4);
+      ctx.lineTo(x + w / 2, baseY - h);
+      ctx.lineTo(x + w, baseY + 4);
+      ctx.closePath();
+      ctx.fill();
+      x += w * (0.5 + rng() * 0.5);
+    }
+  }
+}
+
+function paintDunes(ctx, W, H, rng, horizon, desc) {
+  for (let L = 0; L < 4; L++) {
+    const t = L / 3;
+    const baseY = horizon + t * H * 0.12;
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    for (let x = 0; x <= W; x += 10) {
+      const y = baseY + Math.sin(x / (180 - t * 60) + L * 2.2) * (H * 0.03 * (1 - t * 0.4)) + rng() * 2;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(W, H);
+    ctx.closePath();
+    const sand = desc.ground || "#c99a5e";
+    ctx.fillStyle = lerpColor(sand, desc.palette.ink, 0.06 + t * 0.5);
+    ctx.fill();
+  }
+}
+
+function paintWater(ctx, W, H, rng, horizon, desc, celestial) {
+  const depth = H - horizon;
+
+  // Sea body: picks up the sky near the horizon, deepens toward the viewer.
+  const g = ctx.createLinearGradient(0, horizon, 0, H);
+  g.addColorStop(0, lerpColor(desc.sea, desc.palette.sky[desc.palette.sky.length - 1], 0.55));
+  g.addColorStop(0.28, desc.sea);
+  g.addColorStop(1, lerpColor(desc.sea, "#000000", 0.45));
+  ctx.fillStyle = g;
+  ctx.fillRect(0, horizon, W, depth);
+
+  // A soft band of sky light sitting on the horizon line.
+  const hz = ctx.createLinearGradient(0, horizon - depth * 0.02, 0, horizon + depth * 0.1);
+  hz.addColorStop(0, withAlpha(desc.palette.glow, 0.3));
+  hz.addColorStop(1, withAlpha(desc.palette.glow, 0));
+  ctx.fillStyle = hz;
+  ctx.fillRect(0, horizon - depth * 0.02, W, depth * 0.12);
+
+  // Reflected light path: short dashes that widen and break up toward the
+  // viewer, which is what actually sells water.
+  if (celestial) {
+    const rows = 150;
+    for (let i = 0; i < rows; i++) {
+      const t = i / rows;
+      const y = horizon + Math.pow(t, 1.45) * depth;
+      const spread = celestial.r * (0.9 + t * 7);
+      const dashes = 1 + Math.floor(t * 5);
+      for (let d = 0; d < dashes; d++) {
+        const cx = celestial.x + (rng() - 0.5) * spread * 1.8;
+        const len = celestial.r * (0.35 + rng() * 1.5) * (0.4 + t * 1.6);
+        const a = Math.pow(1 - t, 1.5) * (0.12 + rng() * 0.3);
+        ctx.fillStyle = withAlpha(desc.palette.glow, a);
+        ctx.fillRect(cx - len / 2, y, len, Math.max(1, 1 + t * 2.6));
+      }
+    }
+  }
+
+  // General surface chop.
+  for (let i = 0; i < 220; i++) {
+    const t = Math.pow(rng(), 0.6);
+    const y = horizon + t * depth;
+    const len = W * (0.02 + rng() * 0.16) * (0.25 + t);
+    const x = rng() * W;
+    ctx.fillStyle = "rgba(255,255,255," + (0.012 + t * 0.055 * rng()).toFixed(3) + ")";
+    ctx.fillRect(x - len / 2, y, len, Math.max(1, t * 2));
+  }
+}
+
+function paintGrid(ctx, W, H, horizon, desc) {
+  // retro perspective grid for the neon style
+  ctx.strokeStyle = withAlpha(desc.palette.accent, 0.5);
+  ctx.lineWidth = 1.4;
+  for (let i = -20; i <= 20; i++) {
+    ctx.beginPath();
+    ctx.moveTo(W / 2 + i * (W * 0.03), horizon);
+    ctx.lineTo(W / 2 + i * (W * 0.5), H);
+    ctx.stroke();
+  }
+  let y = horizon, step = 2;
+  while (y < H) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(W, y);
+    ctx.stroke();
+    y += step;
+    step *= 1.32;
+  }
+}
+
+function paintAbstract(ctx, W, H, rng, desc) {
+  const shapes = 14 + Math.floor(rng() * 10);
+  ctx.globalCompositeOperation = "screen";
+  for (let i = 0; i < shapes; i++) {
+    const x = rng() * W, y = rng() * H;
+    const r = (0.06 + rng() * 0.3) * W;
+    const hue = [desc.palette.glow, desc.palette.accent, desc.palette.sky[1], desc.palette.sky[2]][Math.floor(rng() * 4)];
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, withAlpha(hue.length === 7 ? hue : "#8fb6ff", 0.3));
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g;
+    if (rng() > 0.45) {
+      ctx.fillRect(x - r, y - r, r * 2, r * 2);
+    } else {
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.globalCompositeOperation = "source-over";
+}
+
+function paintPrecipitation(ctx, W, H, rng, desc) {
+  if (desc.rain) {
+    ctx.strokeStyle = "rgba(198,218,255,.34)";
+    ctx.lineWidth = 1.2;
+    const n = Math.floor(600 * (W / 1024));
+    for (let i = 0; i < n; i++) {
+      const x = rng() * W, y = rng() * H, len = 10 + rng() * 26;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - len * 0.22, y + len);
+      ctx.stroke();
+    }
+  }
+  if (desc.snow) {
+    const n = Math.floor(420 * (W / 1024));
+    for (let i = 0; i < n; i++) {
+      const x = rng() * W, y = rng() * H, r = rng() * 2.4 + 0.6;
+      ctx.fillStyle = "rgba(255,255,255," + (0.3 + rng() * 0.55).toFixed(2) + ")";
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+function paintFog(ctx, W, H, rng, horizon, desc) {
+  for (let i = 0; i < 5; i++) {
+    const y = horizon - H * 0.06 + rng() * H * 0.24;
+    const h = H * (0.04 + rng() * 0.09);
+    const g = ctx.createLinearGradient(0, y, 0, y + h);
+    g.addColorStop(0, "rgba(255,255,255,0)");
+    g.addColorStop(0.5, withAlpha(desc.palette.glow, 0.14));
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, y, W, h);
+  }
+}
+
+function paintFinish(ctx, W, H, rng) {
+  // vignette
+  const v = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.32, W / 2, H / 2, Math.max(W, H) * 0.78);
+  v.addColorStop(0, "rgba(0,0,0,0)");
+  v.addColorStop(1, "rgba(0,0,0,.42)");
+  ctx.fillStyle = v;
+  ctx.fillRect(0, 0, W, H);
+
+  // film grain
+  const img = ctx.getImageData(0, 0, W, H);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const n = (rng() - 0.5) * 13;
+    d[i] = Math.max(0, Math.min(255, d[i] + n));
+    d[i + 1] = Math.max(0, Math.min(255, d[i + 1] + n));
+    d[i + 2] = Math.max(0, Math.min(255, d[i + 2] + n));
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+/* ----------------------------- composition ---------------------------- */
+function renderScene(prompt, seed, size) {
+  const W = size || 1024, H = size || 1024;
+  const desc = parseScene(prompt);
+  const rng = mulberry32(hashString(prompt) ^ (seed >>> 0));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d");
+
+  const horizon = H * (desc.place === "abstract" ? 1.2 : 0.52 + rng() * 0.14);
+
+  paintSky(ctx, W, H, desc);
+  if (desc.time === "space" || desc.time === "neon" || desc.style === "abstract") paintNebula(ctx, W, H, rng, desc);
+  const starCeiling = desc.place === "space" || desc.place === "abstract" ? H : Math.min(horizon, H);
+  if (desc.stars) paintStars(ctx, W, H, rng, starCeiling, desc);
+  if (desc.aurora) paintAurora(ctx, W, H, rng, horizon);
+  const celestial = desc.place === "abstract" ? null : paintCelestial(ctx, W, H, rng, horizon, desc);
+
+  if (desc.place === "abstract") {
+    paintAbstract(ctx, W, H, rng, desc);
+  } else if (desc.place === "space") {
+    paintAbstract(ctx, W, H, rng, desc);
+  } else {
+    const water = desc.place === "ocean" || (desc.reflection && desc.place !== "desert" && desc.place !== "forest");
+
+    if (desc.place === "mountains" || desc.place === "hills") {
+      paintMountains(ctx, W, H, rng, horizon, desc, desc.place === "mountains" ? 4 : 3);
+    }
+    if (water) paintWater(ctx, W, H, rng, horizon, desc, celestial);
+    if (desc.place === "city") {
+      if (desc.time === "neon") paintGrid(ctx, W, H, horizon, desc);
+      paintSkyline(ctx, W, H, rng, horizon, desc);
+    }
+    if (desc.place === "forest") paintForest(ctx, W, H, rng, horizon, desc);
+    if (desc.place === "desert") paintDunes(ctx, W, H, rng, horizon, desc);
+    if (!water && desc.place !== "city" && desc.place !== "forest" && desc.place !== "desert" && desc.place !== "mountains") {
+      paintMountains(ctx, W, H, rng, horizon, desc, 3);
+    }
+  }
+
+  // Settled snow on the ground plane before the falling flakes.
+  if (desc.snow && desc.place !== "abstract" && desc.place !== "space") {
+    const sg = ctx.createLinearGradient(0, horizon, 0, H);
+    sg.addColorStop(0, "rgba(223,232,242,.0)");
+    sg.addColorStop(0.35, "rgba(223,232,242,.28)");
+    sg.addColorStop(1, "rgba(235,242,250,.5)");
+    ctx.fillStyle = sg;
+    ctx.fillRect(0, horizon, W, H - horizon);
+  }
+  if (desc.fog) paintFog(ctx, W, H, rng, horizon, desc);
+  paintPrecipitation(ctx, W, H, rng, desc);
+  paintFinish(ctx, W, H, rng);
+
+  return { canvas: canvas, desc: desc };
+}
+
 /* ========================== IMAGE GENERATION =========================== */
-async function generateImage(prompt, signal) {
+async function generateImage(prompt, signal, seed) {
+  if (state.cfg.imageProvider === "ondevice") {
+    // Painted here, on this device. Yield a frame first so the progress
+    // state can render before the canvas work blocks the main thread.
+    await sleep(60);
+    if (signal && signal.aborted) throw appError("timeout", "Cancelled.");
+    const out = renderScene(prompt, typeof seed === "number" ? seed : (Math.random() * 1e9) | 0, 1024);
+    await sleep(220);
+    return {
+      url: out.canvas.toDataURL("image/png"),
+      prompt: prompt,
+      width: 1024,
+      height: 1024,
+      engine: "ondevice",
+      scene: out.desc.place + " / " + out.desc.time,
+    };
+  }
   if (state.cfg.imageProvider !== "openai") {
-    throw appError("image_provider_not_configured", "Image creation is not configured.", "Choose an image provider in Settings and add its API key. T10 will not substitute a stand-in picture.");
+    throw appError("image_provider_not_configured", "Image creation is turned off.", "Turn on the on-device renderer in Settings, or connect an image API. T10 will not substitute a stand-in picture.");
   }
   if (!state.cfg.imageKey) {
-    throw appError("image_provider_not_configured", "Image creation is not configured.", "Add your image provider API key in Settings.");
+    throw appError("image_provider_not_configured", "Image creation is not configured.", "Add your image provider API key in Settings, or switch to the on-device renderer which needs no key.");
   }
   const base = (state.cfg.baseUrl && state.cfg.provider === "openai" ? state.cfg.baseUrl : "https://api.openai.com/v1").replace(/\/+$/, "");
   const res = await fetch(base + "/images/generations", {
@@ -1136,7 +1722,7 @@ async function generateImage(prompt, signal) {
   const first = data && data.data && data.data[0];
   const url = first && (first.url || (first.b64_json ? "data:image/png;base64," + first.b64_json : null));
   if (!url) throw appError("upstream_error", "The image provider returned no image.");
-  return { url: url, prompt: prompt, width: 1024, height: 1024 };
+  return { url: url, prompt: prompt, width: 1024, height: 1024, engine: "openai" };
 }
 
 /* ============================== RENDERING ============================== */
@@ -1222,7 +1808,9 @@ function messageEl(msg) {
           '<img src="' + esc(msg.image.url) + '" alt="' + esc(msg.image.prompt) + '" loading="lazy">' +
         "</button>" +
         '<div class="imgfoot">' +
-          '<span class="p" title="' + esc(msg.image.prompt) + '">' + esc(msg.image.prompt) + "</span>" +
+          '<span class="p" title="' + esc(msg.image.prompt) + '">' + esc(msg.image.prompt) +
+            (msg.image.engine === "ondevice" ? ' <span style="opacity:.7">\u00b7 rendered on this device</span>' : "") +
+          "</span>" +
           '<button type="button" data-variation>' + ICON.sparkle + "Variation</button>" +
           '<button type="button" data-regenimg>' + ICON.refresh + "Regenerate</button>" +
           '<button type="button" data-saveimg>' + ICON.download + "Save</button>" +
@@ -1542,7 +2130,7 @@ async function runTurn(seed) {
       patchMessage(assistant.id);
       if (nearBottom()) scrollEnd(true);
 
-      const img = await generateImage(assistant.imagePrompt, controller.signal);
+      const img = await generateImage(assistant.imagePrompt, controller.signal, (Math.random() * 1e9) | 0);
       assistant.imagePending = false;
       assistant.image = img;
       assistant.content = "";
@@ -1711,7 +2299,13 @@ function syncSettings() {
   $("#upstream11").value = state.cfg.upstream11;
   $("#upstreamv1").value = state.cfg.upstreamV1;
   $("#imageprovider").value = state.cfg.imageProvider;
-  $("#imagefields").style.display = state.cfg.imageProvider === "none" ? "none" : "";
+  $("#imagefields").style.display = state.cfg.imageProvider === "openai" ? "" : "none";
+  $("#imagehint").textContent =
+    state.cfg.imageProvider === "ondevice"
+      ? "Paints an original image on your device from the prompt - no key, no network. This is a procedural scene renderer, not a diffusion model: it reads scene words (city, mountains, ocean, forest, desert, space, night, sunset, neon, rain, snow, fog) rather than arbitrary descriptions. Every run is generated fresh, so Regenerate gives a different picture."
+      : state.cfg.imageProvider === "openai"
+        ? "Sends the prompt to an image API using your own key."
+        : "Image requests will report that image creation is turned off rather than showing a stand-in picture.";
   $("#imagekey").value = state.cfg.imageKey;
   $("#imagemodel").value = state.cfg.imageModel;
   $$("#demoseg button").forEach((b) => b.classList.toggle("on", (b.dataset.demo === "on") === !!state.cfg.demo));
