@@ -454,14 +454,6 @@ export class NPC {
     this.lastLine = text;
     this.human.animator.setTalking(true, 1);
     this.speakTimer = duration || 2;
-    if (this.manager.listener && this.position.distanceTo(this.manager.listener) < 12) {
-      audio.speak(text, {
-        gender: this.appearance.gender,
-        pitch: this.appearance.voicePitch,
-        rate: this.appearance.voiceRate,
-        voiceIndex: this.appearance.voiceIndex,
-      }, { volume: 0.7 });
-    }
     setTimeout(() => { if (this.human && this.human.animator) this.human.animator.setTalking(false); }, (duration || 2) * 1000);
     if (this.manager.onSpeak) this.manager.onSpeak(this, text);
   }

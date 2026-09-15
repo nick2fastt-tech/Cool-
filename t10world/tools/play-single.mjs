@@ -20,9 +20,13 @@ try { await page.waitForFunction(()=>window.__t10 && window.__t10.phase==='playi
 await page.waitForTimeout(6000);
 const info = await page.evaluate(()=>{
   const g=window.__t10; if(!g||!g.t10) return {phase:g&&g.phase};
-  const tests = ['T10 how many commands do you have','T10 take me to the beach','T10 what is the t10 tower','T10 spawn 3 benches','T10 make it sunset'];
-  return { phase:g.phase, commands:g.t10.commandCount(), npcs:g.npcs.count(), cars:g.traffic.count(),
-    replies: tests.map(t=>{ const r=g.t10.handle(t); return t+' -> '+r.reply.slice(0,90); }) };
+  const tests = ['T10 how many commands do you have','T10 take me to the beach','T10 what is the t10 tower',
+    'T10 spawn 3 benches','T10 make it sunset','T10 where is the nearest hospital','T10 show me the map',
+    'T10 close the map','T10 make it snow','T10 this is my home','T10 take me home','T10 show all commands','T10'];
+  const replies = tests.map(t=>{ const r=g.t10.handle(t); return t+' -> '+r.reply.slice(0,90); });
+  const ui = { book: !!(g.book && g.book.visible), map: !!(g.map && g.map.visible), view: g.player.cameraMode };
+  if (g.book) g.book.hide();
+  return { phase:g.phase, commands:g.t10.commandCount(), npcs:g.npcs.count(), cars:g.traffic.count(), ui, replies };
 });
 console.log(JSON.stringify(info,null,1));
 await page.waitForTimeout(2500);

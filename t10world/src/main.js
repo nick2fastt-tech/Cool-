@@ -5,7 +5,7 @@ import { settings, QUALITY_PRESETS, PerformanceGovernor } from './core/settings.
 import { InputManager } from './core/input.js';
 import { audio } from './core/audio.js';
 import { saveGame, loadGame, hasSave, clearSave, saveInfo } from './core/save.js';
-import { clamp01, clampv, lerpv, TAU } from './core/math.js';
+import { clamp01, clampv, lerpv, hashString, TAU } from './core/math.js';
 import { World, CHUNK_SIZE } from './world/world.js';
 import { Atmosphere } from './render/atmosphere.js';
 import { PostProcessor } from './render/post.js';
@@ -15,12 +15,27 @@ import { TrafficManager } from './entities/traffic.js';
 import { AnimalManager } from './entities/animals.js';
 import { T10Brain } from './t10/brain.js';
 import { HUD } from './ui/hud.js';
+import { MapOverlay } from './ui/map.js';
+import { CommandBook } from './ui/commandbook.js';
 import { CharacterCreator } from './ui/creator.js';
 import { defaultPlayerAppearance } from './human/appearance.js';
 import { STATES } from './human/animator.js';
 import { setWetness } from './world/materials.js';
 
-const WORLD_SEED = 20260914;
+const DEFAULT_WORLD_NAME = 'Nightfall';
+
+const WORLD_NAME_PARTS = [
+  ['Iron', 'Silver', 'Amber', 'Hollow', 'Crimson', 'Quiet', 'Salt', 'Ember', 'North', 'Glass',
+   'Low', 'Far', 'Pale', 'Storm', 'Copper', 'Long', 'New', 'Old', 'Grey', 'Bright'],
+  ['haven', 'reach', 'fall', 'gate', 'harbour', 'ridge', 'shore', 'crest', 'point', 'vale',
+   'water', 'hollow', 'field', 'bay', 'run', 'stone', 'mere', 'cross', 'wick', 'moor'],
+];
+
+export function randomWorldName() {
+  const a = WORLD_NAME_PARTS[0][Math.floor(Math.random() * WORLD_NAME_PARTS[0].length)];
+  const b = WORLD_NAME_PARTS[1][Math.floor(Math.random() * WORLD_NAME_PARTS[1].length)];
+  return a + b;
+}
 
 export class Game {
   constructor(container) {
@@ -33,12 +48,16 @@ export class Game {
     this.frame = 0;
     this.gravityScale = 1;
     this.statsVisible = false;
+    this.worldName = DEFAULT_WORLD_NAME;
+    this.worldSeed = hashString(DEFAULT_WORLD_NAME);
 
     this.setupRenderer();
     this.setupScene();
 
     this.input = new InputManager(this.renderer.domElement);
     this.hud = new HUD(this, this.uiRoot);
+    this.map = new MapOverlay(this, this.uiRoot);
+    this.book = new CommandBook(this, this.uiRoot);
     this.creator = new CharacterCreator(this.renderer, this.uiRoot, (appearance) => this.startWorld(appearance));
 
     window.addEventListener('resize', () => this.onResize());
@@ -100,6 +119,8 @@ export class Game {
     window.addEventListener('keydown', (e) => {
       const typing = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA');
       if (e.code === 'Escape') {
+        if (this.book.visible) { this.book.hide(); e.preventDefault(); return; }
+        if (this.map.visible) { this.map.hide(); e.preventDefault(); return; }
         if (this.hud.chatOpen) { this.hud.setChatOpen(false); e.preventDefault(); return; }
         this.hud.toggleSettings();
         e.preventDefault();
@@ -108,6 +129,7 @@ export class Game {
       if (typing) return;
       if (this.phase !== 'playing') return;
       if (e.code === settings.get('keyBindings').t10) { this.hud.toggleChat(); e.preventDefault(); }
+      else if (e.code === settings.get('keyBindings').map) { this.map.toggle(); e.preventDefault(); }
       else if (e.code === settings.get('keyBindings').camera) { this.player.toggleCameraMode(); this.hud.refreshSettings(); }
       else if (e.code === settings.get('keyBindings').interact) this.doInteract();
       else if (e.code === settings.get('keyBindings').enterVehicle) this.doVehicleToggle();
@@ -122,6 +144,14 @@ export class Game {
   // -------------------------------------------------------------------------
   // Boot flow
   // -------------------------------------------------------------------------
+  setWorldIdentity(name) {
+    const clean = String(name || '').trim().slice(0, 28);
+    this.worldName = clean || DEFAULT_WORLD_NAME;
+    // The name is the seed: two players typing the same word get the same city.
+    this.worldSeed = hashString(this.worldName.toLowerCase());
+    return this.worldName;
+  }
+
   showCreator() {
     this.phase = 'creator';
     this.creator.open();
@@ -151,7 +181,7 @@ export class Game {
   buildWorld() {
     const steps = [
       ['Laying out streets…', () => {
-        this.world = new World(this.scene, WORLD_SEED);
+        this.world = new World(this.scene, this.worldSeed);
       }],
       ['Raising the skyline…', () => {
         this.atmosphere = new Atmosphere(this.scene, this.renderer);
@@ -201,13 +231,13 @@ export class Game {
 
     // T10's first words — the only instruction the game ever gives you.
     setTimeout(() => {
-      this.t10Say('You\'re awake. You\'re on ' +
+      this.t10Say('You\'re awake. This is ' + this.worldName + ' \u2014 you\'re on ' +
         this.world.city.describeLocation(this.player.position.x, this.player.position.z) +
         ', and it\'s ' + this.atmosphere.clockString() + '.');
     }, 2600);
     setTimeout(() => {
-      this.t10Say('Nothing here needs doing. Tap the orb and say my name if you want something — "T10 make it rain", "T10 I wanna wear something new". I know ' +
-        this.t10.commandCount() + ' things.');
+      this.t10Say('Nothing here needs doing. Tap the orb and say my name if you want something \u2014 "T10 make it rain", "T10 I wanna wear something new". ' +
+        'Say just "T10" on its own to see everything I know: ' + this.t10.commandCount() + ' commands.');
     }, 8000);
   }
 
@@ -263,8 +293,12 @@ export class Game {
     const focus = p.inVehicle ? p.inVehicle.position : p.position;
     this.atmosphere.update(dt, focus);
     this.world.setNightFactor(this.t10.forceStreetLights != null ? this.t10.forceStreetLights : this.atmosphere.nightFactor);
-    this.world.setWetness(clamp01(this.atmosphere.current.rain * 1.2));
-    if (this.post) this.post.wetness = clamp01(this.atmosphere.current.rain * 1.2);
+    // Snow doesn't make the road shine — it covers it.
+    const snow = clamp01(this.atmosphere.current.snow || 0);
+    const wet = clamp01(this.atmosphere.current.rain * 1.2) * (1 - snow * 0.85);
+    this.world.setWetness(wet);
+    this.world.setSnow(snow * clamp01(this.atmosphere.current.rain * 1.6));
+    if (this.post) this.post.wetness = wet;
     this.world.update(dt, focus.x, focus.z, this.frame < 120 ? 10 : 5);
 
     p.update(dt, this.input, this.npcs, this.traffic);
@@ -281,6 +315,7 @@ export class Game {
       this.hud.setPrompt(null);
     }
     this.hud.setVehicleMode(!!p.inVehicle);
+    this.map.update();
 
     // Touch interact button maps to the contextual action.
     if (this.input.edges.interact) this.doInteract();
@@ -361,7 +396,6 @@ export class Game {
     this.hud.addChatMessage('t10', res.reply);
     this.hud.pulseOrb();
     audio.t10Blip(res.unknown || !res.ok ? 'error' : 'reply');
-    audio.speakT10(res.reply);
     this.hud.say(res.reply, 't10');
   }
 
@@ -371,18 +405,31 @@ export class Game {
     this.hud.pulseOrb();
     this.hud.say(text, 't10');
     audio.t10Blip('reply');
-    audio.speakT10(text);
+  }
+
+  /** Any full-screen panel takes the controls away from the world. */
+  syncInputSuspend() {
+    this.input.setSuspended(this.hud.chatOpen || this.hud.settingsOpen ||
+      (this.map && this.map.visible) || (this.book && this.book.visible));
   }
 
   onChatToggled(open) {
-    this.input.setSuspended(open || this.hud.settingsOpen);
+    this.syncInputSuspend();
     // Opening the chat switches you into T10's machine sight.
     if (this.post) this.post.setVisionMode(open ? (this.t10 && this.t10.visionMode !== 'off' ? this.t10.visionMode : 't10') : (this.t10 && this.t10.visionMode !== 'off' ? this.t10.visionMode : 'off'));
     this.hud.setOrbActive(open);
   }
 
   onMenuToggled(open) {
-    this.input.setSuspended(open || this.hud.chatOpen);
+    this.syncInputSuspend();
+  }
+
+  onMapToggled() {
+    this.syncInputSuspend();
+  }
+
+  onBookToggled() {
+    this.syncInputSuspend();
   }
 
   setVisionMode(mode) {
@@ -432,6 +479,8 @@ export class Game {
   save() {
     if (this.phase !== 'playing') return false;
     return saveGame({
+      worldName: this.worldName,
+      worldSeed: this.worldSeed,
       player: this.player.serialize(),
       time: this.atmosphere.timeOfDay,
       day: this.atmosphere.day,
@@ -485,31 +534,74 @@ export function boot() {
   const splash = document.getElementById('t10-splash');
   const startBtn = document.getElementById('t10-start');
   const continueBtn = document.getElementById('t10-continue');
-  if (continueBtn) {
-    const info = saveInfo();
-    if (info) {
-      continueBtn.style.display = '';
-      continueBtn.textContent = 'Continue as ' + (info.name || 'yourself');
-    }
+  const nameInput = document.getElementById('t10-worldname');
+  const diceBtn = document.getElementById('t10-dice');
+  const seedHint = document.getElementById('t10-seedhint');
+
+  const suggested = randomWorldName();
+  if (nameInput) nameInput.placeholder = suggested;
+
+  const refreshHint = () => {
+    if (!seedHint || !nameInput) return;
+    const name = nameInput.value.trim() || nameInput.placeholder;
+    seedHint.innerHTML = 'The name shapes the city &mdash; <b>' + escapeHtml(name) +
+      '</b> builds one layout, anything else builds another.';
+  };
+  if (nameInput) {
+    nameInput.addEventListener('input', refreshHint);
+    nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') startBtn.click(); });
   }
-  const begin = (useSave) => {
-    audio.init();
-    if (splash) splash.classList.add('gone');
-    setTimeout(() => { if (splash) splash.style.display = 'none'; }, 700);
-    if (useSave) {
+  if (diceBtn) {
+    diceBtn.addEventListener('click', () => {
+      nameInput.value = randomWorldName();
+      refreshHint();
+      audio.init();
+      audio.ui('tick');
+    });
+  }
+  refreshHint();
+
+  const saved = saveInfo();
+  if (continueBtn && saved) {
+    continueBtn.style.display = '';
+    continueBtn.textContent = saved.worldName ? 'Continue: ' + saved.worldName : 'Continue';
+  }
+
+  const hideSplash = () => {
+    if (!splash) return;
+    splash.classList.add('gone');
+    setTimeout(() => { splash.style.display = 'none'; }, 700);
+  };
+
+  if (startBtn) {
+    startBtn.addEventListener('click', () => {
+      audio.init();
+      game.setWorldIdentity((nameInput && nameInput.value) || (nameInput && nameInput.placeholder) || suggested);
+      hideSplash();
+      game.showCreator();
+    });
+  }
+  if (continueBtn) {
+    continueBtn.addEventListener('click', () => {
+      audio.init();
       const d = loadGame();
-      const a = (d && d.player && d.player.appearance) || defaultPlayerAppearance('male');
+      if (!d) return;
+      game.setWorldIdentity(d.worldName || DEFAULT_WORLD_NAME);
+      if (d.worldSeed) game.worldSeed = d.worldSeed;
+      const a = (d.player && d.player.appearance) || defaultPlayerAppearance('male');
+      hideSplash();
       game.startWorld(a);
       game.start();
-      game.pendingLoad = d;
       const check = setInterval(() => {
         if (game.phase === 'playing') { clearInterval(check); game.load(); }
       }, 200);
-    } else {
-      game.showCreator();
-    }
-  };
-  if (startBtn) startBtn.addEventListener('click', () => begin(false));
-  if (continueBtn) continueBtn.addEventListener('click', () => begin(true));
+    });
+  }
   return game;
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
 }

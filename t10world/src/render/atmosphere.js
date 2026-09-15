@@ -110,15 +110,19 @@ void main() {
 }`;
 
 export const WEATHER_PRESETS = {
-  clear:      { name: 'Clear',        cloud: 0.06, rain: 0,    fog: 0.00, wind: 0.18, turb: 2.0, thunder: 0 },
-  fair:       { name: 'Fair',         cloud: 0.26, rain: 0,    fog: 0.02, wind: 0.30, turb: 2.6, thunder: 0 },
-  cloudy:     { name: 'Cloudy',       cloud: 0.62, rain: 0,    fog: 0.06, wind: 0.42, turb: 3.4, thunder: 0 },
-  overcast:   { name: 'Overcast',     cloud: 0.92, rain: 0,    fog: 0.12, wind: 0.36, turb: 4.2, thunder: 0 },
-  drizzle:    { name: 'Drizzle',      cloud: 0.80, rain: 0.28, fog: 0.22, wind: 0.40, turb: 4.0, thunder: 0 },
-  rain:       { name: 'Rain',         cloud: 0.94, rain: 0.70, fog: 0.32, wind: 0.62, turb: 4.6, thunder: 0.04 },
-  storm:      { name: 'Thunderstorm', cloud: 1.00, rain: 1.00, fog: 0.42, wind: 0.95, turb: 5.2, thunder: 0.55 },
-  fog:        { name: 'Fog',          cloud: 0.55, rain: 0,    fog: 0.92, wind: 0.10, turb: 6.0, thunder: 0 },
-  windy:      { name: 'Windy',        cloud: 0.40, rain: 0,    fog: 0.02, wind: 1.00, turb: 2.8, thunder: 0 },
+  clear:      { name: 'Clear',        cloud: 0.06, rain: 0,    fog: 0.00, wind: 0.18, turb: 2.0, thunder: 0,    snow: 0 },
+  fair:       { name: 'Fair',         cloud: 0.26, rain: 0,    fog: 0.02, wind: 0.30, turb: 2.6, thunder: 0,    snow: 0 },
+  cloudy:     { name: 'Cloudy',       cloud: 0.62, rain: 0,    fog: 0.06, wind: 0.42, turb: 3.4, thunder: 0,    snow: 0 },
+  overcast:   { name: 'Overcast',     cloud: 0.92, rain: 0,    fog: 0.12, wind: 0.36, turb: 4.2, thunder: 0,    snow: 0 },
+  drizzle:    { name: 'Drizzle',      cloud: 0.80, rain: 0.28, fog: 0.22, wind: 0.40, turb: 4.0, thunder: 0,    snow: 0 },
+  rain:       { name: 'Rain',         cloud: 0.94, rain: 0.70, fog: 0.32, wind: 0.62, turb: 4.6, thunder: 0.04, snow: 0 },
+  storm:      { name: 'Thunderstorm', cloud: 1.00, rain: 1.00, fog: 0.42, wind: 0.95, turb: 5.2, thunder: 0.55, snow: 0 },
+  fog:        { name: 'Fog',          cloud: 0.55, rain: 0,    fog: 0.92, wind: 0.10, turb: 6.0, thunder: 0,    snow: 0 },
+  windy:      { name: 'Windy',        cloud: 0.40, rain: 0,    fog: 0.02, wind: 1.00, turb: 2.8, thunder: 0,    snow: 0 },
+  // Snow rides the same particle buffer as rain: `snow` slows the fall,
+  // rounds the sprite and whitens the ground.
+  snow:       { name: 'Snow',         cloud: 0.90, rain: 0.52, fog: 0.34, wind: 0.26, turb: 3.0, thunder: 0,    snow: 1 },
+  blizzard:   { name: 'Blizzard',     cloud: 1.00, rain: 0.95, fog: 0.62, wind: 0.90, turb: 4.4, thunder: 0,    snow: 1 },
 };
 
 export class Atmosphere {
@@ -292,27 +296,33 @@ export class Atmosphere {
         uOpacity: { value: 0 },
         uWind: { value: new THREE.Vector2(0, 0) },
         uColor: { value: new THREE.Color(0xbcd0e0) },
+        uSnow: { value: 0 },
       },
       vertexShader: `
         attribute float aVel;
         uniform vec2 uWind;
+        uniform float uSnow;
         varying float vA;
         void main(){
           vec3 p = position;
           vec4 mv = modelViewMatrix * vec4(p, 1.0);
           gl_Position = projectionMatrix * mv;
-          gl_PointSize = clamp(90.0 / -mv.z, 1.0, 6.0) * (0.7 + aVel * 0.5);
+          float size = clamp(90.0 / -mv.z, 1.0, 6.0) * (0.7 + aVel * 0.5);
+          gl_PointSize = size * mix(1.0, 1.9, uSnow);
           vA = aVel;
         }`,
       fragmentShader: `
         uniform float uOpacity;
         uniform vec3 uColor;
+        uniform float uSnow;
         varying float vA;
         void main(){
           vec2 d = gl_PointCoord - 0.5;
-          // Stretch the sprite vertically so drops read as streaks.
-          float m = smoothstep(0.5, 0.0, length(vec2(d.x * 3.2, d.y)));
-          gl_FragColor = vec4(uColor, m * uOpacity * (0.4 + vA * 0.5));
+          // Rain stretches into streaks; snow stays round and soft.
+          float stretch = mix(3.2, 1.0, uSnow);
+          float m = smoothstep(0.5, 0.0, length(vec2(d.x * stretch, d.y)));
+          vec3 col = mix(uColor, vec3(1.0), uSnow * 0.7);
+          gl_FragColor = vec4(col, m * uOpacity * (0.4 + vA * 0.5) * mix(1.0, 1.25, uSnow));
         }`,
       transparent: true, depthWrite: false, fog: false,
     });
@@ -363,7 +373,7 @@ export class Atmosphere {
 
     // Ease weather toward the target so changes are gradual, not a hard cut.
     const k = clamp01(dt * 0.35);
-    for (const key of ['cloud', 'rain', 'fog', 'wind', 'turb', 'thunder']) {
+    for (const key of ['cloud', 'rain', 'fog', 'wind', 'turb', 'thunder', 'snow']) {
       this.current[key] = lerpv(this.current[key], this.target[key], k);
     }
 
@@ -482,7 +492,9 @@ export class Atmosphere {
 
   updateRain(dt, focus) {
     const amount = clamp01(this.current.rain);
+    const snow = clamp01(this.current.snow || 0);
     this.rainMat.uniforms.uOpacity.value = amount * 0.85;
+    this.rainMat.uniforms.uSnow.value = snow;
     this.rain.visible = amount > 0.02;
     if (!this.rain.visible || !focus) return;
     const pos = this.rain.geometry.attributes.position;
@@ -491,12 +503,14 @@ export class Atmosphere {
     const windX = Math.cos(this.windPhase * 0.3) * this.current.wind * 6;
     const windZ = Math.sin(this.windPhase * 0.23) * this.current.wind * 6;
     this.rainMat.uniforms.uWind.value.set(windX, windZ);
-    const fall = 26 + amount * 16;
+    // Flakes drift; drops fall. Snow also wanders sideways as it comes down.
+    const fall = (26 + amount * 16) * lerpv(1, 0.13, snow);
+    const drift = snow > 0.01 ? Math.sin(this.windPhase * 1.7) * 1.6 * snow : 0;
     for (let i = 0; i < active; i++) {
       const i3 = i * 3;
       arr[i3 + 1] -= fall * this.rainVel[i] * dt;
-      arr[i3] += windX * dt;
-      arr[i3 + 2] += windZ * dt;
+      arr[i3] += (windX + drift * Math.sin(i * 0.7)) * dt;
+      arr[i3 + 2] += (windZ + drift * Math.cos(i * 1.3)) * dt;
       if (arr[i3 + 1] < -2) {
         arr[i3] = (Math.random() - 0.5) * 60;
         arr[i3 + 1] = 28 + Math.random() * 10;

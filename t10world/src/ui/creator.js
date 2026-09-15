@@ -2,10 +2,9 @@
 // asks for, shown before you spawn into the world.
 import * as THREE from '../../vendor/three.module.js';
 import { Human } from '../human/human.js';
-import { defaultPlayerAppearance, generateAppearance, VOICE_PRESETS, PERSONALITIES } from '../human/appearance.js';
+import { defaultPlayerAppearance, generateAppearance, PERSONALITIES } from '../human/appearance.js';
 import { SKIN_TONES, EYE_COLORS, HAIR_COLORS } from '../human/textures.js';
 import { HAIR_STYLES } from '../human/hair.js';
-import { OUTFITS } from '../human/clothing.js';
 import { HEIGHT_RANGE } from '../human/skeleton.js';
 import { STATES } from '../human/animator.js';
 import { metersToFeetInches, clampv, clamp01, lerpv, TAU } from '../core/math.js';
@@ -119,7 +118,7 @@ export class CharacterCreator {
     this.tabs = {};
     this.pages = {};
     const pageWrap = el('div', 't10-creator-pages', side);
-    for (const name of ['Body', 'Face', 'Hair', 'Style', 'You']) {
+    for (const name of ['Body', 'Face', 'Hair', 'You']) {
       const t = el('button', 't10-creator-tab', tabRow, name);
       const p = el('div', 't10-creator-page', pageWrap);
       p.style.display = 'none';
@@ -131,7 +130,6 @@ export class CharacterCreator {
     this.buildBodyPage(this.pages.Body);
     this.buildFacePage(this.pages.Face);
     this.buildHairPage(this.pages.Hair);
-    this.buildStylePage(this.pages.Style);
     this.buildYouPage(this.pages.You);
     this.showTab('Body');
 
@@ -314,19 +312,6 @@ export class CharacterCreator {
       (v) => { this.appearance.browThickness = v; this.queueRebuild(); });
   }
 
-  buildStylePage(p) {
-    const list = OUTFITS[this.appearance.gender];
-    this.outfitBtns = this.choices(p, 'Outfit', list.map((o) => ({ label: o.name })), this.appearance.outfitIndex,
-      (item, i) => {
-        this.appearance.outfitIndex = i;
-        this.human.setOutfit(i);
-        this.outfitBlurb.textContent = OUTFITS[this.appearance.gender][i].blurb;
-      });
-    this.outfitBlurb = el('div', 't10-cr-note', p, list[this.appearance.outfitIndex].blurb);
-    el('div', 't10-cr-note', p, 'Three outfits for now. Ask T10 for something new any time — "T10 I wanna wear something new".');
-    this.stylePage = p;
-  }
-
   buildYouPage(p) {
     el('div', 't10-cr-label', p, 'Name');
     const nameInput = el('input', 't10-cr-text', p);
@@ -340,18 +325,6 @@ export class CharacterCreator {
       this.appearance.firstName = (v || 'You').split(/\s+/)[0];
     });
     this.nameInput = nameInput;
-
-    this.voiceBtns = this.choices(p, 'Voice', VOICE_PRESETS.map((v) => ({ label: v.name })), this.appearance.voiceIndex,
-      (item, i) => {
-        const v = VOICE_PRESETS[i];
-        this.appearance.voiceIndex = i;
-        this.appearance.voicePitch = v.pitch;
-        this.appearance.voiceRate = v.rate;
-        this.appearance.voiceName = v.name;
-        audio.speak('This is how I sound.', {
-          gender: this.appearance.gender, pitch: v.pitch, rate: v.rate, voiceIndex: i,
-        }, { interrupt: true });
-      });
 
     this.personalityBtns = this.choices(p, 'Personality', PERSONALITIES.map((x) => ({ label: x.name })),
       PERSONALITIES.findIndex((x) => x.id === this.appearance.personality),
@@ -368,7 +341,8 @@ export class CharacterCreator {
 
     el('div', 't10-cr-note', p,
       'You wake up on the street. There is no story and nothing to complete. ' +
-      'Tap the T10 orb at the top of the screen and tell it what you want.');
+      'Tap the T10 orb at the top of the screen and tell it what you want \u2014 ' +
+      'including what to wear: "T10 I wanna wear something new".');
   }
 
   /** Rebuilding the skeleton is expensive — coalesce slider drags into one. */
@@ -409,10 +383,6 @@ export class CharacterCreator {
     mark(this.eyeSwatches, EYE_COLORS.findIndex((e) => e.hex === a.eyeColor));
     mark(this.hairStyleBtns, HAIR_STYLES.findIndex((s) => s.id === a.hairStyle));
     mark(this.hairColorSwatches, HAIR_COLORS.findIndex((c) => c.hex === a.hairColor));
-    // The outfit list changes with gender, so rebuild that page in place.
-    this.stylePage.innerHTML = '';
-    this.buildStylePage(this.stylePage);
-    mark(this.voiceBtns, a.voiceIndex);
     mark(this.personalityBtns, PERSONALITIES.findIndex((x) => x.id === a.personality));
     if (this.nameInput) this.nameInput.value = a.name === 'You' ? '' : a.name;
   }

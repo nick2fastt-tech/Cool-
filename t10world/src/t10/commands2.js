@@ -50,16 +50,16 @@ export function extendRegistry(R, add) {
   // Everyday names for each district, so "take me to the beach" lands on the
   // beachfront rather than hunting for a landmark.
   const DISTRICT_ALIASES = {
-    downtown: ['downtown', 'the city centre', 'the city center', 'the towers'],
+    downtown: ['downtown', 'the city centre', 'the city center', 'the towers', 'the downtown district'],
     midrise: ['midtown'],
     apartments: ['apartment row', 'the apartments'],
-    commercial: ['the shops', 'the shopping district', 'the high street'],
-    residential: ['the suburbs', 'the residential streets', 'the houses'],
-    suburb: ['the outskirts', 'the edge of town'],
-    industrial: ['the industrial zone', 'the factories', 'the docks'],
+    commercial: ['the shops', 'the shopping district', 'the high street', 'the mall district'],
+    residential: ['the residential district', 'the residential streets', 'the houses'],
+    suburb: ['the suburbs', 'the outskirts', 'the edge of town'],
+    industrial: ['the industrial zone', 'the industrial district', 'the factories', 'the docks', 'the warehouses'],
     civic: ['the civic centre', 'the civic center'],
-    park: ['the park', 'the green'],
-    sports: ['the stadium', 'the sports complex'],
+    park: ['the park', 'the green', 'the park district', 'the parks'],
+    sports: ['the sports complex', 'the sports district', 'the playing fields'],
     beach: ['the beach', 'the seaside', 'the shore', 'the coast', 'the sea', 'the ocean', 'the water'],
     countryside: ['the countryside', 'the fields', 'the farms'],
     forest: ['the forest', 'the woods', 'the trees'],
@@ -476,12 +476,6 @@ export function extendRegistry(R, add) {
   add('sound_down', 'Sound', ['turn down the volume', 'quieter', 'volume down'],
     'Lower the volume.',
     (ctx) => { settings.set('masterVolume', clamp01(settings.get('masterVolume') - 0.15)); audio.applyVolumes(); return 'Volume at ' + Math.round(settings.get('masterVolume') * 100) + '%.'; });
-  add('voice_off', 'Sound', ['stop talking', 'be quiet', 'dont speak', 'turn off your voice'],
-    'Stop T10 speaking aloud.',
-    (ctx) => { settings.set('voiceVolume', 0); audio.stopSpeech(); return 'I\'ll keep it to text.'; });
-  add('voice_on', 'Sound', ['speak to me', 'use your voice', 'talk to me out loud', 'turn on your voice'],
-    'Let T10 speak aloud.',
-    (ctx) => { settings.set('voiceVolume', 0.9); return 'I\'ll speak up.'; });
 
   // ===== 23. Vision modes ==================================================
   const VISIONS = [

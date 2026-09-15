@@ -1,8 +1,12 @@
-// T10 World - unified input: keyboard/mouse, touch joystick + drag look, gamepad
+// T10 World - unified input: keyboard/mouse, touch joystick + screen dragging,
+// gamepad. Touches are tracked by pointer id so the stick and the look-drag
+// never steal each other's finger.
 import { settings } from './settings.js';
-import { clampv } from './math.js';
+import { clamp01, clampv } from './math.js';
 
-const DEADZONE = 0.14;
+const PAD_DEADZONE = 0.14;
+const STICK_DEADZONE = 0.14;
+const STICK_RADIUS = 66;          // matches the 132px ring drawn by the HUD
 
 export class InputManager {
   constructor(domElement) {
@@ -11,30 +15,35 @@ export class InputManager {
     this.pressedThisFrame = new Set();
     this.releasedThisFrame = new Set();
 
-    // Normalized intent, consumed by player/vehicle controllers.
+    // Normalized intent, consumed by the player and vehicle controllers.
     this.move = { x: 0, y: 0 };        // x = strafe, y = forward
-    this.look = { x: 0, y: 0 };        // delta this frame, radians-ish
+    this.look = { x: 0, y: 0 };        // delta this frame
     this.buttons = {
-      jump: false, sprint: false, crouch: false, interact: false,
-      enterVehicle: false, handbrake: false, horn: false, walk: false,
+      jump: false, crouch: false, interact: false,
+      enterVehicle: false, handbrake: false, horn: false,
     };
-    this.edges = {};                    // one-frame rising edges of the above
+    this.edges = {};
 
     this.pointerLocked = false;
     this.isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
     this.lastInputKind = this.isTouch ? 'touch' : 'kbm';
     this.gamepadIndex = null;
 
-    // Touch state
-    this.touchStick = { active: false, id: null, ox: 0, oy: 0, x: 0, y: 0, radius: 62 };
-    this.touchLook = { active: false, id: null, lx: 0, ly: 0 };
-    this.uiTouches = new Set();         // touches that started on a UI button — never steer the camera
+    // One record per active finger. role: 'stick' | 'look' | 'ui'
+    this.touches = new Map();
+    this.stickId = null;
+    this.stick = { x: 0, y: 0, ox: 0, oy: 0 };
+    this.uiClaimed = new Set();
+
+    // Desktop drag-to-look, for players who don't want pointer lock.
+    this.mouseDragging = false;
+    this.mouseLast = { x: 0, y: 0 };
 
     this._suspended = false;
     this.bind();
   }
 
-  /** Suspended while a menu/chat owns the input (movement stops, typing works). */
+  /** Suspended while a menu or the chat owns input. */
   setSuspended(v) {
     if (this._suspended === v) return;
     this._suspended = v;
@@ -42,40 +51,51 @@ export class InputManager {
       this.keys.clear();
       this.move.x = this.move.y = 0;
       for (const k in this.buttons) this.buttons[k] = false;
-      this.touchStick.active = false; this.touchStick.id = null;
-      this.touchLook.active = false; this.touchLook.id = null;
+      this.releaseStick();
+      this.touches.clear();
+      this.mouseDragging = false;
+      this.look.x = this.look.y = 0;
+      if (this._virtual) for (const k in this._virtual) this._virtual[k] = false;
       this.exitPointerLock();
     }
   }
   get suspended() { return this._suspended; }
 
   bind() {
-    const kb = settings.get('keyBindings');
     this._onKeyDown = (e) => {
       if (this.isTypingTarget(e.target)) return;
       this.lastInputKind = 'kbm';
       if (!this.keys.has(e.code)) this.pressedThisFrame.add(e.code);
       this.keys.add(e.code);
-      // Don't let the page scroll or the browser steal common game keys.
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code)) e.preventDefault();
     };
     this._onKeyUp = (e) => {
       this.keys.delete(e.code);
       this.releasedThisFrame.add(e.code);
     };
-    this._onBlur = () => { this.keys.clear(); };
+    this._onBlur = () => { this.keys.clear(); this.mouseDragging = false; };
 
     window.addEventListener('keydown', this._onKeyDown, { passive: false });
     window.addEventListener('keyup', this._onKeyUp);
     window.addEventListener('blur', this._onBlur);
 
-    // ---- Mouse look (pointer lock on PC) ----
+    // ---- Mouse: pointer lock when granted, drag-to-look otherwise ----------
     this._onMouseMove = (e) => {
-      if (!this.pointerLocked || this._suspended) return;
+      if (this._suspended) return;
       const s = settings.get('lookSensitivity') * 0.0022;
-      this.look.x += e.movementX * s;
-      this.look.y += e.movementY * s * (settings.get('invertY') ? -1 : 1);
-      this.lastInputKind = 'kbm';
+      if (this.pointerLocked) {
+        this.look.x += e.movementX * s;
+        this.look.y += e.movementY * s * (settings.get('invertY') ? -1 : 1);
+        this.lastInputKind = 'kbm';
+      } else if (this.mouseDragging) {
+        const dx = e.clientX - this.mouseLast.x;
+        const dy = e.clientY - this.mouseLast.y;
+        this.mouseLast.x = e.clientX;
+        this.mouseLast.y = e.clientY;
+        this.look.x += dx * s * 1.35;
+        this.look.y += dy * s * 1.35 * (settings.get('invertY') ? -1 : 1);
+        this.lastInputKind = 'kbm';
+      }
     };
     document.addEventListener('mousemove', this._onMouseMove);
 
@@ -87,11 +107,18 @@ export class InputManager {
 
     this._onMouseDown = (e) => {
       if (this._suspended) return;
-      if (e.button === 0) this.mouseLeft = true;
+      if (e.button === 0) {
+        this.mouseLeft = true;
+        if (!this.pointerLocked) {
+          this.mouseDragging = true;
+          this.mouseLast.x = e.clientX;
+          this.mouseLast.y = e.clientY;
+        }
+      }
       if (e.button === 2) this.mouseRight = true;
     };
     this._onMouseUp = (e) => {
-      if (e.button === 0) this.mouseLeft = false;
+      if (e.button === 0) { this.mouseLeft = false; this.mouseDragging = false; }
       if (e.button === 2) this.mouseRight = false;
     };
     this.dom.addEventListener('mousedown', this._onMouseDown);
@@ -104,30 +131,41 @@ export class InputManager {
     };
     this.dom.addEventListener('wheel', this._onWheel, { passive: true });
 
-    // ---- Touch ----
     if (this.isTouch) this.bindTouch();
   }
 
-  bindTouch() {
-    const halfSplit = () => (settings.get('leftHandedTouch') ? 0.5 : 0.5);
+  // -------------------------------------------------------------------------
+  // Touch
+  // -------------------------------------------------------------------------
 
+  /** Which half of the screen drives the joystick. */
+  stickSideTest(clientX) {
+    const leftHanded = settings.get('leftHandedTouch');
+    const onLeft = clientX < window.innerWidth * 0.5;
+    return leftHanded ? !onLeft : onLeft;
+  }
+
+  bindTouch() {
     const start = (e) => {
       if (this._suspended) return;
       this.lastInputKind = 'touch';
       for (const t of e.changedTouches) {
-        if (this.uiTouches.has(t.identifier)) continue;
-        const leftSide = t.clientX < window.innerWidth * halfSplit();
-        const stickSide = settings.get('leftHandedTouch') ? !leftSide : leftSide;
-        if (stickSide && !this.touchStick.active) {
-          this.touchStick.active = true;
-          this.touchStick.id = t.identifier;
-          this.touchStick.ox = t.clientX; this.touchStick.oy = t.clientY;
-          this.touchStick.x = 0; this.touchStick.y = 0;
+        if (this.uiClaimed.has(t.identifier)) {
+          this.touches.set(t.identifier, { role: 'ui' });
+          continue;
+        }
+        // The first finger on the movement half drives the stick; every other
+        // finger drags the view, wherever it lands.
+        if (this.stickId === null && this.stickSideTest(t.clientX)) {
+          this.stickId = t.identifier;
+          this.stick.ox = t.clientX;
+          this.stick.oy = t.clientY;
+          this.stick.x = 0;
+          this.stick.y = 0;
+          this.touches.set(t.identifier, { role: 'stick' });
           if (this.onStickShow) this.onStickShow(t.clientX, t.clientY);
-        } else if (!this.touchLook.active) {
-          this.touchLook.active = true;
-          this.touchLook.id = t.identifier;
-          this.touchLook.lx = t.clientX; this.touchLook.ly = t.clientY;
+        } else {
+          this.touches.set(t.identifier, { role: 'look', lx: t.clientX, ly: t.clientY });
         }
       }
     };
@@ -135,21 +173,25 @@ export class InputManager {
     const move = (e) => {
       if (this._suspended) return;
       for (const t of e.changedTouches) {
-        if (this.touchStick.active && t.identifier === this.touchStick.id) {
-          let dx = t.clientX - this.touchStick.ox;
-          let dy = t.clientY - this.touchStick.oy;
-          const r = this.touchStick.radius;
+        const rec = this.touches.get(t.identifier);
+        if (!rec || rec.role === 'ui') continue;
+        if (rec.role === 'stick') {
+          let dx = t.clientX - this.stick.ox;
+          let dy = t.clientY - this.stick.oy;
           const len = Math.hypot(dx, dy);
-          if (len > r) { dx = (dx / len) * r; dy = (dy / len) * r; }
-          this.touchStick.x = dx / r;
-          this.touchStick.y = dy / r;
+          if (len > STICK_RADIUS) {
+            dx = (dx / len) * STICK_RADIUS;
+            dy = (dy / len) * STICK_RADIUS;
+          }
+          this.stick.x = dx / STICK_RADIUS;
+          this.stick.y = dy / STICK_RADIUS;
           if (this.onStickMove) this.onStickMove(dx, dy);
-        } else if (this.touchLook.active && t.identifier === this.touchLook.id) {
+        } else {
           const s = settings.get('touchLookSensitivity') * 0.0052;
-          this.look.x += (t.clientX - this.touchLook.lx) * s;
-          this.look.y += (t.clientY - this.touchLook.ly) * s * (settings.get('invertY') ? -1 : 1);
-          this.touchLook.lx = t.clientX;
-          this.touchLook.ly = t.clientY;
+          this.look.x += (t.clientX - rec.lx) * s;
+          this.look.y += (t.clientY - rec.ly) * s * (settings.get('invertY') ? -1 : 1);
+          rec.lx = t.clientX;
+          rec.ly = t.clientY;
         }
       }
       if (e.cancelable) e.preventDefault();
@@ -157,15 +199,10 @@ export class InputManager {
 
     const end = (e) => {
       for (const t of e.changedTouches) {
-        this.uiTouches.delete(t.identifier);
-        if (t.identifier === this.touchStick.id) {
-          this.touchStick.active = false; this.touchStick.id = null;
-          this.touchStick.x = 0; this.touchStick.y = 0;
-          if (this.onStickHide) this.onStickHide();
-        }
-        if (t.identifier === this.touchLook.id) {
-          this.touchLook.active = false; this.touchLook.id = null;
-        }
+        this.uiClaimed.delete(t.identifier);
+        const rec = this.touches.get(t.identifier);
+        this.touches.delete(t.identifier);
+        if (rec && rec.role === 'stick') this.releaseStick();
       }
     };
 
@@ -175,8 +212,15 @@ export class InputManager {
     window.addEventListener('touchcancel', end);
   }
 
-  /** UI buttons call this so their touches never double as camera drags. */
-  claimTouch(id) { this.uiTouches.add(id); }
+  releaseStick() {
+    this.stickId = null;
+    this.stick.x = 0;
+    this.stick.y = 0;
+    if (this.onStickHide) this.onStickHide();
+  }
+
+  /** On-screen buttons call this so their touch never becomes a look-drag. */
+  claimTouch(id) { this.uiClaimed.add(id); }
 
   isTypingTarget(el) {
     if (!el) return false;
@@ -199,7 +243,6 @@ export class InputManager {
   isDown(action) { return this.keys.has(this.keyFor(action)); }
   justPressed(action) { return this.pressedThisFrame.has(this.keyFor(action)); }
 
-  /** Virtual button pressed by an on-screen control. */
   setVirtual(name, value) {
     this._virtual = this._virtual || {};
     this._virtual[name] = value;
@@ -214,33 +257,38 @@ export class InputManager {
       if (pads[i] && pads[i].connected) { pad = pads[i]; this.gamepadIndex = i; break; }
     }
     if (!pad) { this.gamepadIndex = null; return null; }
-    const ax = (v) => (Math.abs(v) < DEADZONE ? 0 : (v - Math.sign(v) * DEADZONE) / (1 - DEADZONE));
+    const ax = (v) => (Math.abs(v) < PAD_DEADZONE ? 0 : (v - Math.sign(v) * PAD_DEADZONE) / (1 - PAD_DEADZONE));
     const lx = ax(pad.axes[0] || 0), ly = ax(pad.axes[1] || 0);
     const rx = ax(pad.axes[2] || 0), ry = ax(pad.axes[3] || 0);
     if (Math.abs(lx) + Math.abs(ly) + Math.abs(rx) + Math.abs(ry) > 0.05) this.lastInputKind = 'gamepad';
     return { pad, lx, ly, rx, ry };
   }
 
-  /** Fold every source into one intent. Call once per frame, before controllers. */
+  /**
+   * Fold every source into one intent. Call once per frame, before controllers.
+   * `look` is NOT cleared here — mouse and touch accumulate into it between
+   * frames, and clearing it now would throw that away before anyone reads it.
+   * endFrame() clears it, after the player has consumed it.
+   */
   update(dt) {
-    this.look.x = 0; this.look.y = 0;
     let mx = 0, my = 0;
 
     if (!this._suspended) {
-      // Keyboard
       if (this.isDown('forward') || this.keys.has('ArrowUp')) my += 1;
       if (this.isDown('back') || this.keys.has('ArrowDown')) my -= 1;
       if (this.isDown('left') || this.keys.has('ArrowLeft')) mx -= 1;
       if (this.isDown('right') || this.keys.has('ArrowRight')) mx += 1;
 
-      // Touch stick
-      if (this.touchStick.active) {
-        mx += this.touchStick.x;
-        my -= this.touchStick.y;
+      // Joystick, with a dead zone and a smooth ramp out of it.
+      const sx = this.stick.x, sy = this.stick.y;
+      const mag = Math.hypot(sx, sy);
+      if (mag > STICK_DEADZONE) {
+        const scaled = (mag - STICK_DEADZONE) / (1 - STICK_DEADZONE);
+        mx += (sx / mag) * scaled;
+        my += (-sy / mag) * scaled;
       }
     }
 
-    // Gamepad
     const gp = this.pollGamepad();
     if (gp && !this._suspended) {
       mx += gp.lx; my -= gp.ly;
@@ -249,7 +297,6 @@ export class InputManager {
       this.look.y += gp.ry * ls * (settings.get('invertY') ? -1 : 1);
     }
 
-    // Mouse look already accumulated in this.look by the move handler.
     const len = Math.hypot(mx, my);
     if (len > 1) { mx /= len; my /= len; }
     this.move.x = mx; this.move.y = my;
@@ -260,13 +307,11 @@ export class InputManager {
       for (const k in b) b[k] = false;
     } else {
       b.jump = this.isDown('jump') || this.virtual('jump') || !!(gp && gp.pad.buttons[0] && gp.pad.buttons[0].pressed);
-      b.sprint = this.isDown('sprint') || this.virtual('sprint') || !!(gp && gp.pad.buttons[10] && gp.pad.buttons[10].pressed);
       b.crouch = this.isDown('crouch') || this.virtual('crouch') || !!(gp && gp.pad.buttons[1] && gp.pad.buttons[1].pressed);
       b.interact = this.isDown('interact') || this.virtual('interact') || !!(gp && gp.pad.buttons[2] && gp.pad.buttons[2].pressed);
       b.enterVehicle = this.isDown('enterVehicle') || this.virtual('enterVehicle') || !!(gp && gp.pad.buttons[3] && gp.pad.buttons[3].pressed);
       b.handbrake = this.virtual('handbrake') || !!(gp && gp.pad.buttons[0] && gp.pad.buttons[0].pressed);
       b.horn = this.isDown('horn') || this.virtual('horn');
-      b.walk = this.keys.has(this.keyFor('walkToggle'));
     }
     for (const k in b) this.edges[k] = b[k] && !prev[k];
 
@@ -281,12 +326,13 @@ export class InputManager {
     }
   }
 
-  /** Call at the very end of the frame. */
   endFrame() {
     this.pressedThisFrame.clear();
     this.releasedThisFrame.clear();
     this.wheel = 0;
-    if (this._virtual) for (const k in this._virtual) { if (this._virtual[k] === 'once') this._virtual[k] = false; }
+    // The look delta is per-frame: everything accumulated since the last frame
+    // has now been applied, so start the next one from zero.
+    this.look.x = 0; this.look.y = 0;
   }
 
   vibrate(ms) {

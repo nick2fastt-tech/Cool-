@@ -168,6 +168,7 @@ export class Human {
       eye.name = 'eye' + S;
       eye.castShadow = false;
       eye.receiveShadow = false;
+      eye.userData.wantsShadow = false;
       pivot.add(eye);
       this.face['eye' + S] = pivot;
 
@@ -407,6 +408,23 @@ export class Human {
     }
     if (this.parts.brows) this.parts.brows.visible = this.visibleDetail > 0.45;
     if (this.parts.beard) this.parts.beard.visible = this.visibleDetail > 0.35;
+
+    // Shoes are a few centimetres of geometry: past the detail radius they are
+    // never more than a pixel or two, and the trouser hems already cover them.
+    const shoes = this.visibleDetail > 0.3;
+    if (this.parts.shoeL) this.parts.shoeL.visible = shoes;
+    if (this.parts.shoeR) this.parts.shoeR.visible = shoes;
+
+    // A person's shadow past the detail radius costs a full set of shadow-map
+    // draw calls to produce a smudge nobody can read. Drop it.
+    const wantShadow = !!this.opts.shadows && this.visibleDetail > 0.5;
+    if (this._shadowLod !== wantShadow) {
+      this._shadowLod = wantShadow;
+      for (const k in this.parts) {
+        const part = this.parts[k];
+        if (part) part.traverse((o) => { if (o.isMesh && o.userData.wantsShadow !== false) o.castShadow = wantShadow; });
+      }
+    }
   }
 
   setShadowCasting(on) {

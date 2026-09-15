@@ -151,7 +151,6 @@ export class HUD {
         settings.setQuality(q);
         this.game.applyQuality();
         this.refreshSettings();
-        this.qualityBlurb.textContent = QUALITY_PRESETS[q].blurb;
       });
       this.qualityButtons[q] = b;
     }
@@ -160,7 +159,7 @@ export class HUD {
     // Sound
     el('div', 't10-set-label', this.settings, 'Sound');
     this.volumeSliders = {};
-    for (const [key, label] of [['masterVolume', 'Master'], ['sfxVolume', 'Effects'], ['voiceVolume', 'Voices'], ['musicVolume', 'Ambience']]) {
+    for (const [key, label] of [['masterVolume', 'Master'], ['sfxVolume', 'Effects'], ['musicVolume', 'Ambience']]) {
       const row = el('div', 't10-set-slider', this.settings);
       el('span', 't10-set-slider-label', row, label);
       const input = el('input', '', row);
@@ -175,15 +174,21 @@ export class HUD {
       this.volumeSliders[key] = input;
     }
 
-    // Controls
+    // View
+    el('div', 't10-set-label', this.settings, 'View');
+    const vRow = el('div', 't10-set-row', this.settings);
+    this.viewButtons = {};
+    for (const [mode, label] of [['first', 'First person'], ['third', 'Third person']]) {
+      const b = el('button', 't10-set-btn', vRow, label);
+      b.addEventListener('click', () => {
+        this.game.player.setCameraMode(mode);
+        this.refreshSettings();
+      });
+      this.viewButtons[mode] = b;
+    }
+
     el('div', 't10-set-label', this.settings, 'Controls');
     const cRow = el('div', 't10-set-row', this.settings);
-    const camBtn = el('button', 't10-set-btn', cRow, 'Camera: 3rd');
-    camBtn.addEventListener('click', () => {
-      const m = this.game.player.toggleCameraMode();
-      camBtn.textContent = 'Camera: ' + (m === 'first' ? '1st' : '3rd');
-    });
-    this.camBtn = camBtn;
     const invBtn = el('button', 't10-set-btn', cRow, 'Invert Y: off');
     invBtn.addEventListener('click', () => {
       settings.set('invertY', !settings.get('invertY'));
@@ -214,8 +219,13 @@ export class HUD {
     for (const k of QUALITY_ORDER) {
       this.qualityButtons[k].classList.toggle('active', k === q);
     }
-    if (this.camBtn && this.game.player) {
-      this.camBtn.textContent = 'Camera: ' + (this.game.player.cameraMode === 'first' ? '1st' : '3rd');
+    // T10 can change quality too, so the blurb tracks the setting rather than
+    // whichever button was last clicked.
+    if (this.qualityBlurb) this.qualityBlurb.textContent = QUALITY_PRESETS[q].blurb;
+    if (this.viewButtons && this.game.player) {
+      const m = this.game.player.cameraMode;
+      this.viewButtons.first.classList.toggle('active', m === 'first');
+      this.viewButtons.third.classList.toggle('active', m === 'third');
     }
   }
 
@@ -258,14 +268,13 @@ export class HUD {
         e.preventDefault();
         if (e.changedTouches) for (const t of e.changedTouches) this.game.input.claimTouch(t.identifier);
         b.classList.add('down');
-        if (d.id === 'camera') this.game.player.toggleCameraMode();
-        else this.game.input.setVirtual(d.id, true);
+        this.game.input.setVirtual(d.id, true);
         audio.ui('tick');
       };
       const up = (e) => {
         if (e) e.preventDefault();
         b.classList.remove('down');
-        if (d.id !== 'camera') this.game.input.setVirtual(d.id, false);
+        this.game.input.setVirtual(d.id, false);
       };
       b.addEventListener('touchstart', down, { passive: false });
       b.addEventListener('touchend', up, { passive: false });
@@ -340,7 +349,7 @@ export class HUD {
     if (this.vehiclePad) this.vehiclePad.style.display = on ? 'flex' : 'none';
     if (this.touchButtons && this.touchButtons.jump) {
       this.touchButtons.jump.style.display = on ? 'none' : 'flex';
-      this.touchButtons.sprint.style.display = on ? 'none' : 'flex';
+      this.touchButtons.crouch.style.display = on ? 'none' : 'flex';
     }
   }
 

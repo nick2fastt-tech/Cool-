@@ -12,9 +12,6 @@ export class AudioEngine {
     this.noiseBuffer = null;
     this.impulse = null;
     this.lastFootstep = 0;
-    this.voices = [];
-    this.speechQueue = [];
-    this._speaking = false;
   }
 
   /** Must be called from a user gesture (browser autoplay policy). */
@@ -36,7 +33,7 @@ export class AudioEngine {
     this.limiter.release.value = 0.18;
     this.master.connect(this.limiter).connect(ctx.destination);
 
-    for (const name of ['sfx', 'ambient', 'music', 'voice', 'vehicle']) {
+    for (const name of ['sfx', 'ambient', 'music', 'vehicle']) {
       const g = ctx.createGain();
       g.gain.value = 1;
       g.connect(this.master);
@@ -53,7 +50,6 @@ export class AudioEngine {
     this.noiseBuffer = this.makeNoise(3);
     this.ready = true;
     this.applyVolumes();
-    this.loadVoices();
     this.startAmbience();
   }
 
@@ -64,7 +60,6 @@ export class AudioEngine {
     this.buses.vehicle.gain.value = settings.get('sfxVolume') * 0.9;
     this.buses.ambient.gain.value = settings.get('sfxVolume') * 0.75;
     this.buses.music.gain.value = settings.get('musicVolume');
-    this.buses.voice.gain.value = settings.get('voiceVolume');
   }
 
   makeNoise(seconds) {
@@ -369,52 +364,6 @@ export class AudioEngine {
       nodes.noise.src.stop();
       nodes.out.disconnect();
     } catch (e) { /* already stopped */ }
-  }
-
-  // ---- Speech ---------------------------------------------------------------
-
-  loadVoices() {
-    if (!window.speechSynthesis) return;
-    const grab = () => {
-      this.voices = window.speechSynthesis.getVoices() || [];
-    };
-    grab();
-    window.speechSynthesis.onvoiceschanged = grab;
-  }
-
-  /** Pick a synthesis voice matching a character's voice profile. */
-  voiceFor(profile) {
-    if (!this.voices.length) return null;
-    const wantFemale = profile && profile.gender === 'female';
-    const prefer = this.voices.filter((v) => /en[-_]/i.test(v.lang));
-    const pool = prefer.length ? prefer : this.voices;
-    const named = pool.filter((v) => (wantFemale ? /female|samantha|victoria|karen|zira|susan|fiona|moira|tessa/i.test(v.name)
-                                                 : /male|daniel|alex|fred|david|thomas|oliver|rishi/i.test(v.name)));
-    const chosen = named.length ? named : pool;
-    const idx = profile && profile.voiceIndex != null ? profile.voiceIndex % chosen.length : 0;
-    return chosen[idx];
-  }
-
-  speak(text, profile, opts) {
-    if (!window.speechSynthesis || settings.get('voiceVolume') <= 0.01) return;
-    opts = opts || {};
-    try {
-      const u = new SpeechSynthesisUtterance(text);
-      const v = this.voiceFor(profile);
-      if (v) u.voice = v;
-      u.pitch = clampv((profile && profile.pitch) || 1, 0.1, 2);
-      u.rate = clampv((profile && profile.rate) || 1, 0.5, 2);
-      u.volume = clamp01(settings.get('voiceVolume') * (opts.volume != null ? opts.volume : 1));
-      if (opts.interrupt) window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(u);
-    } catch (e) { /* speech unsupported */ }
-  }
-
-  stopSpeech() { if (window.speechSynthesis) { try { window.speechSynthesis.cancel(); } catch (e) {} } }
-
-  /** T10's own voice: robotic, slightly low, always interrupts itself. */
-  speakT10(text) {
-    this.speak(text.replace(/[*_`#]/g, ''), { gender: 'male', pitch: 0.62, rate: 1.06, voiceIndex: 0 }, { interrupt: true, volume: 0.95 });
   }
 
   setMuted(m) { if (this.master) this.master.gain.value = m ? 0 : settings.get('masterVolume'); }

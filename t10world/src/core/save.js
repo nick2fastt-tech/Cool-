@@ -35,6 +35,10 @@ export function saveInfo() {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const p = JSON.parse(raw);
-    return { at: p.at, name: p.data && p.data.player && p.data.player.appearance && p.data.player.appearance.name };
+    return {
+      at: p.at,
+      name: p.data && p.data.player && p.data.player.appearance && p.data.player.appearance.name,
+      worldName: p.data && p.data.worldName,
+    };
   } catch (e) { return null; }
 }

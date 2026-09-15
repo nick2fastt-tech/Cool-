@@ -3,7 +3,7 @@
 // player can interact with them.
 import * as THREE from '../../vendor/three.module.js';
 import { makeRng, clamp01, lerpv, TAU } from '../core/math.js';
-import { boxUV, cylinderUV, prism, transformed } from './geomutils.js';
+import { boxUV, cylinderUV, prism, transformed, mergeGeometries } from './geomutils.js';
 import {
   metalMaterial, paintedMaterial, concreteMaterial, emissiveMaterial,
   foliageMaterial, barkMaterial, glassMaterial,
@@ -85,6 +85,38 @@ export function treeGeometry(kindIndex, sizeBucket) {
   const result = { trunk: trunkGeos, leaves: leafGeos, height: h, spread, kind };
   treeCache.set(key, result);
   return result;
+}
+
+/**
+ * Trunk and canopy merged into one geometry each, cached per kind+size so a
+ * whole forest of the same tree reuses two buffers rather than merging per
+ * tree. Instancing needs a single geometry per draw, which this provides.
+ */
+const treeMergedCache = new Map();
+export function treeMergedGeometry(kindIndex, sizeBucket) {
+  const key = kindIndex + ':' + sizeBucket;
+  if (treeMergedCache.has(key)) return treeMergedCache.get(key);
+  const t = treeGeometry(kindIndex, sizeBucket);
+  const trunk = mergeGeometries(t.trunk.map((g) => g.clone()));
+  const leaves = mergeGeometries(t.leaves.map((g) => {
+    const c = g.clone();
+    if (!c.attributes.uv) {
+      const uv = new Float32Array(c.attributes.position.count * 2);
+      for (let i = 0; i < c.attributes.position.count; i++) {
+        uv[i * 2] = c.attributes.position.getX(i) * 0.25;
+        uv[i * 2 + 1] = c.attributes.position.getY(i) * 0.25;
+      }
+      c.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    }
+    if (!c.attributes.normal) c.computeVertexNormals();
+    return c;
+  }));
+  // Flagged so chunk teardown leaves these buffers alone.
+  if (trunk) trunk.userData.shared = true;
+  if (leaves) leaves.userData.shared = true;
+  const rec = { trunk, leaves };
+  treeMergedCache.set(key, rec);
+  return rec;
 }
 
 export function treeMaterials(kindIndex) {

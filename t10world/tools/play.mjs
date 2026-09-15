@@ -84,12 +84,34 @@ await page.screenshot({ path: SHOT+'/05-awake.png' });
 log('--- walking ---');
 const alive = await page.evaluate(()=>!!(window.__t10 && window.__t10.player));
 if (!alive) { log('ABORT: player never built'); log('--- ERRORS ---'); for(const e of errors.slice(0,10)) log('  '+e.slice(0,600)); await browser.close(); server.close(); process.exit(1); }
-await page.evaluate(()=>{ window.__t10.input.keys.add('KeyW'); });
-await page.waitForTimeout(3000);
-await page.evaluate(()=>{ window.__t10.input.keys.delete('KeyW'); });
+const moved = await page.evaluate(async ()=>{
+  const g = window.__t10;
+  const before = { x: g.player.position.x, z: g.player.position.z };
+  g.input.keys.add('KeyW');
+  // Software GL runs about a frame a second, so pump frames rather than wait.
+  for (let f = 0; f < 12; f++) await new Promise(r=>requestAnimationFrame(()=>r()));
+  const after = { x: g.player.position.x, z: g.player.position.z };
+  g.input.keys.delete('KeyW');
+  return {
+    distance: +Math.hypot(after.x - before.x, after.z - before.z).toFixed(2),
+    pos: [Math.round(after.x), Math.round(after.z)],
+    state: g.player.human.animator.state,
+  };
+});
 await page.screenshot({ path: SHOT+'/06-walked.png' });
-const moved = await page.evaluate(()=>({pos:[Math.round(window.__t10.player.position.x),Math.round(window.__t10.player.position.z)], state: window.__t10.player.human.animator.state}));
 log('after walking:', JSON.stringify(moved));
+
+// Forest draw-call check: trees are instanced per chunk, so a dense forest
+// should not cost two draws per tree.
+const forest = await page.evaluate(async ()=>{
+  const g = window.__t10;
+  g.t10.handle('T10 take me to the forest');
+  for (let f = 0; f < 20; f++) await new Promise(r=>requestAnimationFrame(()=>r()));
+  let trees = 0, instanced = 0;
+  g.world.root.traverse((o)=>{ if (o.userData && o.userData.isTree) { trees++; if (o.isInstancedMesh) instanced += o.count; } });
+  return { treeNodes: trees, instancedTrees: instanced, draws: (g.lastRenderInfo||g.renderer.info.render).calls };
+});
+log('forest:', JSON.stringify(forest));
 
 // --- T10 commands ---
 log('--- T10 commands ---');
@@ -127,6 +149,31 @@ const cmds = [
   'T10 night vision',
   'T10 ultra quality',
   'make it rain',
+  'T10 where is the nearest gas station',
+  'T10 take me to the nearest hospital',
+  'T10 show me the map',
+  'T10 zoom in on the map',
+  'T10 close the map',
+  'T10 remember this place as the good spot',
+  'T10 list my places',
+  'T10 take me back to the good spot',
+  'T10 this is my home',
+  'T10 take me home',
+  'T10 make it snow',
+  'T10 what is the weather',
+  'T10 stop the snow',
+  'T10 what is this world called',
+  'T10 what is the tallest building',
+  'T10 how far is the harbour stadium',
+  'T10 park all the cars',
+  'T10 get the traffic moving',
+  'T10 make me look like them',
+  'T10 show me the controls',
+  'T10 go third person',
+  'T10 go first person',
+  'T10 how is it running',
+  'T10 show all commands',
+  'T10',
   'T10 flurbulate the widget',
 ];
 const replies = [];
@@ -139,8 +186,79 @@ for (const c of cmds) {
   log(`  ${r.ok ? (r.unknown?'?':'✓') : '✗'} "${c}"\n     → ${r.reply}${r.id ? '   ['+r.id+']' : ''}`);
   await page.waitForTimeout(500);
 }
-await page.waitForTimeout(3000);
+await page.waitForTimeout(1500);
+const bookOpen = await page.evaluate(()=>!!(window.__t10.book && window.__t10.book.visible));
+log('command book opened by bare "T10":', bookOpen);
+await page.screenshot({ path: SHOT+'/07a-book.png' });
+await page.evaluate(()=>{ window.__t10.book.hide(); window.__t10.map.show(); window.__t10.map.setZoom(1.4); });
+await page.waitForTimeout(1200);
+await page.screenshot({ path: SHOT+'/07b-map.png' });
+await page.evaluate(()=>{ window.__t10.map.setZoom(0.35); });
+await page.waitForTimeout(900);
+await page.screenshot({ path: SHOT+'/07c-map-wide.png' });
+await page.evaluate(()=>{ window.__t10.map.hide(); });
+await page.waitForTimeout(1500);
 await page.screenshot({ path: SHOT+'/07-after-commands.png' });
+
+// --- touch joystick + drag-to-look ---
+log('--- touch input ---');
+await page.evaluate(()=>{ window.__t10.t10.handle('T10 low quality'); });
+await page.waitForTimeout(2000);
+const touchMoved = await page.evaluate(async ()=>{
+  const g = window.__t10;
+  const el = g.renderer.domElement;
+  // The harness is a desktop browser, so bind the touch path explicitly.
+  if (!g.input.isTouch) { g.input.isTouch = true; g.input.bindTouch(); }
+  const before = { x: g.player.position.x, z: g.player.position.z, yaw: g.player.yaw };
+  const T = (id, x, y) => new Touch({ identifier: id, target: el, clientX: x, clientY: y, pageX: x, pageY: y });
+  const fire = (type, touches) => window.dispatchEvent(new TouchEvent(type, {
+    touches, changedTouches: touches, targetTouches: touches, bubbles: true, cancelable: true }));
+  // Finger 1: left stick, pushed forward.
+  fire('touchstart', [T(1, 140, 600)]);
+  fire('touchmove', [T(1, 140, 540)]);
+  // Finger 2: drag the right half of the screen to look.
+  fire('touchstart', [T(2, 900, 380)]);
+  for (let i = 1; i <= 8; i++) fire('touchmove', [T(2, 900 + i * 14, 380)]);
+  // Input-layer truth, before any frame consumes it.
+  const rawLook = +g.input.look.x.toFixed(4);
+  const stickRole = g.input.touches.get(1) && g.input.touches.get(1).role;
+  const lookRole = g.input.touches.get(2) && g.input.touches.get(2).role;
+  // Pump real frames so the player actually acts on it.
+  for (let f = 0; f < 6; f++) await new Promise(r=>requestAnimationFrame(()=>r()));
+  const mid = { x: g.player.position.x, z: g.player.position.z, yaw: g.player.yaw };
+  const stickMove = +g.input.move.y.toFixed(3);
+  fire('touchend', [T(1, 140, 540)]);
+  fire('touchend', [T(2, 1012, 380)]);
+  await new Promise(r=>setTimeout(r, 400));
+  g.input.isTouch = false;
+  await new Promise(r=>requestAnimationFrame(()=>r()));
+  return {
+    roles: [stickRole, lookRole],
+    rawLookDelta: rawLook,
+    stickForward: stickMove,
+    walked: +Math.hypot(mid.x - before.x, mid.z - before.z).toFixed(2),
+    turned: +(mid.yaw - before.yaw).toFixed(3),
+    stickReleasedTo: [g.input.stick.x, g.input.stick.y],
+    moveAfterRelease: +Math.hypot(g.input.move.x, g.input.move.y).toFixed(3),
+  };
+});
+log('touch:', JSON.stringify(touchMoved));
+
+// --- desktop drag-to-look (no pointer lock) ---
+const dragLook = await page.evaluate(async ()=>{
+  const g = window.__t10;
+  const el = g.renderer.domElement;
+  const yaw0 = g.player.yaw;
+  el.dispatchEvent(new MouseEvent('mousedown', { clientX: 640, clientY: 380, bubbles: true }));
+  for (let i = 1; i <= 10; i++) {
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 640 + i * 12, clientY: 380, bubbles: true }));
+  }
+  const raw = +g.input.look.x.toFixed(4);
+  for (let f = 0; f < 3; f++) await new Promise(r=>requestAnimationFrame(()=>r()));
+  window.dispatchEvent(new MouseEvent('mouseup', { clientX: 760, clientY: 380, bubbles: true }));
+  return { rawLookDelta: raw, yawDelta: +(g.player.yaw - yaw0).toFixed(3) };
+});
+log('drag-to-look:', JSON.stringify(dragLook));
 
 // Open the chat to see T10 vision
 await page.evaluate(()=>{ window.__t10.hud.setChatOpen(true); });

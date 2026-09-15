@@ -10,7 +10,7 @@ import { GeometryBatcher, groundPlane, ribbon, transformed, boxUV, disposeGroup,
 import {
   asphaltMaterial, concreteMaterial, grassMaterial, dirtMaterial, sandMaterial,
   roadMaterial, sidewalkMaterial, waterMaterial, paintedMaterial, setFacadeNightFactor,
-  setWetness, updateWaterTime, metalMaterial,
+  setWetness, setGroundFrost, refreshGroundFrost, updateWaterTime, metalMaterial,
 } from './materials.js';
 import { makeRng, fbm2, ridged2, clamp01, clampv, lerpv, smooth01, hash2, TAU } from '../core/math.js';
 import { settings } from '../core/settings.js';
@@ -23,6 +23,9 @@ export class World {
   constructor(scene, seed) {
     this.scene = scene;
     this.seed = (seed >>> 0) || 20260914;
+    this.snowCover = 0;
+    this.treeQueue = null;
+    this.queuedKeys = new Set();
     this.city = new CityLayout(this.seed);
     this.root = new THREE.Group();
     this.root.name = 'world';
@@ -160,6 +163,7 @@ export class World {
 
     // Queue missing chunks nearest-first.
     const wanted = new Set();
+    let added = false;
     for (let i = -radius; i <= radius; i++) {
       for (let j = -radius; j <= radius; j++) {
         const cx = ccx + i, cz = ccz + j;
@@ -169,20 +173,27 @@ export class World {
         if (dist > streamDistance + CHUNK_SIZE) continue;
         const key = this.chunkKey(cx, cz);
         wanted.add(key);
-        if (!this.chunks.has(key) && !this.queued(key)) {
+        if (!this.chunks.has(key) && !this.queuedKeys.has(key)) {
           this.buildQueue.push({ key, cx, cz, dist });
+          this.queuedKeys.add(key);
+          added = true;
         }
       }
     }
-    this.buildQueue.sort((a, b) => a.dist - b.dist);
+    // Only re-sort when the queue actually changed — on a normal frame the
+    // order is already right and this runs over a hundred-odd entries.
+    if (added) this.buildQueue.sort((a, b) => a.dist - b.dist);
 
     // Build within a time budget so streaming never stalls a frame.
     const t0 = performance.now();
     const budget = budgetMs == null ? 6 : budgetMs;
     while (this.buildQueue.length && performance.now() - t0 < budget) {
       const job = this.buildQueue.shift();
+      this.queuedKeys.delete(job.key);
       if (this.chunks.has(job.key)) continue;
       this.buildChunk(job.cx, job.cz);
+      // A new chunk can create materials the frost pass hasn't seen yet.
+      if (this.snowCover > 0.005) refreshGroundFrost();
     }
 
     // Release chunks that fell out of range.
@@ -199,10 +210,7 @@ export class World {
     updateWaterTime(this.time);
   }
 
-  queued(key) {
-    for (const j of this.buildQueue) if (j.key === key) return true;
-    return false;
-  }
+  queued(key) { return this.queuedKeys.has(key); }
 
   buildChunk(cx, cz) {
     const key = this.chunkKey(cx, cz);
@@ -210,12 +218,18 @@ export class World {
     const centerX = x0 + CHUNK_SIZE / 2, centerZ = z0 + CHUNK_SIZE / 2;
     const group = new THREE.Group();
     group.name = 'chunk' + key;
+    // The chunk sits at the origin and its contents are in world space.
+    group.matrixAutoUpdate = false;
+    group.updateMatrix();
     const batcher = new GeometryBatcher();
     const rng = makeRng(hash2(cx, cz, this.seed) * 0xffffffff);
     const chunk = {
       key, cx, cz, centerX, centerZ, group,
       interactables: [], colliders: [], lights: [], trafficLights: [],
     };
+    // Trees are collected here and emitted as instanced meshes at the end, so
+    // a forest chunk costs a handful of draw calls instead of two per tree.
+    this.treeQueue = [];
 
     this.buildTerrainTile(batcher, x0, z0, rng);
     this.buildRoadsInChunk(batcher, x0, z0, chunk);
@@ -223,6 +237,7 @@ export class World {
     this.buildPropsInChunk(batcher, x0, z0, rng, chunk);
     this.buildNatureInChunk(group, x0, z0, rng);
 
+    this.flushTrees(group);
     batcher.build(group, { name: 'chunk-batch' });
     this.root.add(group);
     this.chunks.set(key, chunk);
@@ -510,33 +525,109 @@ export class World {
     sub.groups.clear();
   }
 
+  /** Queue a tree for the chunk currently being built. */
   addTreeTo(group, kindIndex, bucket, x, y, z, rng) {
-    const t = Props.treeGeometry(kindIndex, bucket);
+    if (!this.treeQueue) { this.addTreeMeshTo(group, kindIndex, bucket, x, y, z, rng); return; }
+    this.treeQueue.push({
+      kindIndex: kindIndex % 6, bucket,
+      x, y, z,
+      scale: rng.range(0.85, 1.2),
+      rot: rng() * TAU,
+    });
+  }
+
+  /** One standalone tree with its own meshes — used by T10's spawn command. */
+  addTreeMeshTo(group, kindIndex, bucket, x, y, z, rng) {
+    const geo = Props.treeMergedGeometry(kindIndex, bucket);
     const mats = Props.treeMaterials(kindIndex);
-    const scale = rng.range(0.85, 1.2);
-    const rot = rng() * TAU;
-    const trunk = mergeGeometries(t.trunk.map((g) => g.clone()));
-    const leaves = mergeGeometries(t.leaves.map((g) => {
-      const c = g.clone();
-      if (!c.attributes.uv) {
-        const uv = new Float32Array(c.attributes.position.count * 2);
-        for (let i = 0; i < c.attributes.position.count; i++) { uv[i * 2] = c.attributes.position.getX(i) * 0.25; uv[i * 2 + 1] = c.attributes.position.getY(i) * 0.25; }
-        c.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-      }
-      if (!c.attributes.normal) c.computeVertexNormals();
-      return c;
-    }));
-    const tm = new THREE.Mesh(trunk, mats.bark);
-    const lm = new THREE.Mesh(leaves, mats.leaf);
+    const tm = new THREE.Mesh(geo.trunk, mats.bark);
+    const lm = new THREE.Mesh(geo.leaves, mats.leaf);
     tm.castShadow = lm.castShadow = settings.preset.shadows;
     tm.receiveShadow = lm.receiveShadow = true;
     const holder = new THREE.Group();
     holder.add(tm); holder.add(lm);
     holder.position.set(x, y, z);
-    holder.rotation.y = rot;
-    holder.scale.setScalar(scale);
+    holder.rotation.y = rng() * TAU;
+    holder.scale.setScalar(rng.range(0.85, 1.2));
     holder.userData.isTree = true;
     group.add(holder);
+  }
+
+  /**
+   * Turn the queued trees into instanced meshes: one trunk draw and one canopy
+   * draw per distinct kind+size in the chunk, however many trees there are.
+   */
+  flushTrees(group) {
+    const queue = this.treeQueue;
+    this.treeQueue = null;
+    if (!queue || !queue.length) return;
+
+    // Instancing only pays if trees share a geometry, so each chunk draws from
+    // a small palette sized to how many trees it actually has: a street corner
+    // with four trees uses one species, a forest uses three at two heights.
+    // Per-tree scale and rotation keep it from looking stamped out.
+    const n = queue.length;
+    const maxKinds = n >= 20 ? 3 : n >= 8 ? 2 : 1;
+    const twoSizes = n >= 12;
+
+    const counts = new Map();
+    for (const t of queue) counts.set(t.kindIndex, (counts.get(t.kindIndex) || 0) + 1);
+    const keep = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, maxKinds).map((e) => e[0]);
+    const kindOf = new Map();
+    for (const k of counts.keys()) kindOf.set(k, keep.includes(k) ? k : keep[0]);
+
+    // Snapping a tree onto the palette would change its height, so each
+    // instance is rescaled by the exact ratio of the height it wanted to the
+    // height of the geometry it ended up with. The distribution of tree sizes
+    // is identical to building them one by one.
+    const kinds = Props.TREE_KINDS;
+    const heightOf = (kind, bucket) => {
+      const k = kinds[kind % kinds.length];
+      return lerpv(k.h[0], k.h[1], bucket / 3);
+    };
+
+    const groups = new Map();
+    for (const t of queue) {
+      const kind = kindOf.get(t.kindIndex);
+      const bucket = twoSizes ? (t.bucket <= 1 ? 1 : 3) : 2;
+      const scale = t.scale * (heightOf(t.kindIndex, t.bucket) / heightOf(kind, bucket));
+      const key = kind + ':' + bucket;
+      let list = groups.get(key);
+      if (!list) { list = []; groups.set(key, list); }
+      list.push({ x: t.x, y: t.y, z: t.z, rot: t.rot, scale });
+    }
+
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const pos = new THREE.Vector3();
+    const scl = new THREE.Vector3();
+    const up = new THREE.Vector3(0, 1, 0);
+    const shadows = settings.preset.shadows;
+
+    for (const [key, list] of groups) {
+      const [kindIndex, bucket] = key.split(':').map(Number);
+      const geo = Props.treeMergedGeometry(kindIndex, bucket);
+      const mats = Props.treeMaterials(kindIndex);
+      for (const [g, mat] of [[geo.trunk, mats.bark], [geo.leaves, mats.leaf]]) {
+        if (!g) continue;
+        const inst = new THREE.InstancedMesh(g, mat, list.length);
+        for (let i = 0; i < list.length; i++) {
+          const t = list[i];
+          pos.set(t.x, t.y, t.z);
+          q.setFromAxisAngle(up, t.rot);
+          scl.setScalar(t.scale);
+          m.compose(pos, q, scl);
+          inst.setMatrixAt(i, m);
+        }
+        inst.instanceMatrix.needsUpdate = true;
+        inst.castShadow = shadows;
+        inst.receiveShadow = true;
+        inst.userData.isTree = true;
+        inst.matrixAutoUpdate = false;
+        inst.updateMatrix();
+        group.add(inst);
+      }
+    }
   }
 
   buildNatureInChunk(group, x0, z0, rng) {
@@ -732,6 +823,13 @@ export class World {
     this.wetness = clamp01(w);
     setWetness(this.wetness);
   }
+  /** Snow lying on the ground. Only re-tints when it has actually moved. */
+  setSnow(a) {
+    const v = clamp01(a);
+    if (Math.abs(v - (this.snowCover || 0)) < 0.01) return;
+    this.snowCover = v;
+    setGroundFrost(v);
+  }
 
   /** Spawn a standalone prop at runtime — used by T10 commands. */
   spawnProp(kind, x, z, opts) {
@@ -744,7 +842,7 @@ export class World {
     let label = kind, radius = 1.5, action = 'inspect';
     switch (kind) {
       case 'bench': Props.addBench(batcher, 0, 0, opts.rot || 0); label = 'Sit'; action = 'sit'; radius = 1.6; break;
-      case 'tree': this.addTreeTo(group, opts.treeKind != null ? opts.treeKind : rng.int(0, 5), rng.int(1, 3), 0, 0, 0, rng); label = 'Tree'; radius = 1.8; break;
+      case 'tree': this.addTreeMeshTo(group, opts.treeKind != null ? opts.treeKind : rng.int(0, 5), rng.int(1, 3), 0, 0, 0, rng); label = 'Tree'; radius = 1.8; break;
       case 'streetlight': Props.addStreetLight(batcher, 0, 0, opts.rot || 0, out); label = 'Street light'; radius = 1.2; break;
       case 'bin': case 'trashcan': Props.addTrashCan(batcher, 0, 0); label = 'Search bin'; action = 'search'; break;
       case 'hydrant': Props.addHydrant(batcher, 0, 0); label = 'Fire hydrant'; break;

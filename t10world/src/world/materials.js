@@ -512,3 +512,32 @@ export function setWetness(amount) {
     if (k.startsWith('road|') && m) { m.roughness = lerpv(0.9, 0.18, clamp01(amount)); m.metalness = lerpv(0, 0.3, clamp01(amount)); }
   }
 }
+
+// Snow lying on the ground. We keep each material's untouched colour the first
+// time we tint it so the effect is reversible however many times it's toggled.
+const FROST = new THREE.Color(0xdfe6ea);
+const baseColors = new Map();
+let frostAmount = 0;
+
+function frostKey(k) {
+  return k === 'asphalt' || k === 'sidewalk' || k === 'grass' || k === 'dirt' ||
+    k === 'sand' || k.startsWith('road|') || k.startsWith('ground|');
+}
+
+export function setGroundFrost(amount) {
+  const a = clamp01(amount);
+  // Nothing to do when we're already there and no new materials have appeared.
+  frostAmount = a;
+  for (const [k, m] of cache) {
+    if (!m || !m.color || !frostKey(k)) continue;
+    let base = baseColors.get(k);
+    if (!base) { base = m.color.clone(); baseColors.set(k, base); }
+    m.color.copy(base).lerp(FROST, a * 0.72);
+    if (a > 0.01) m.roughness = lerpv(m.roughness, 0.86, a * 0.6);
+  }
+}
+
+/** Re-apply the current frost to materials created after the last call. */
+export function refreshGroundFrost() {
+  if (frostAmount > 0.005) setGroundFrost(frostAmount);
+}

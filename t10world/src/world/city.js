@@ -122,6 +122,18 @@ export class CityLayout {
     const streetNames = ['Ash', 'Birch', 'Cedar', 'Dune', 'Elm', 'Fir', 'Grove', 'Harbour', 'Iris',
       'Juniper', 'Kestrel', 'Laurel', 'Maple', 'Nettle', 'Orchard'];
 
+    // 1st, 2nd, 3rd, 4th — not "2th Street".
+    const ordinal = (k) => {
+      const rem100 = k % 100;
+      if (rem100 >= 11 && rem100 <= 13) return k + 'th';
+      switch (k % 10) {
+        case 1: return k + 'st';
+        case 2: return k + 'nd';
+        case 3: return k + 'rd';
+        default: return k + 'th';
+      }
+    };
+
     for (let i = 0; i < n; i++) {
       const v = coords[i];
       const type = this.roadTypeForIndex(i, n);
@@ -130,7 +142,7 @@ export class CityLayout {
         (streetNames[i % streetNames.length]) + (type === 'avenue' ? ' Avenue' : ' Street'));
       // North-south
       this.addRoad(v, -CITY_RADIUS, v, CITY_RADIUS, type,
-        (i + 1) + (type === 'avenue' ? 'th Avenue' : 'th Street'));
+        ordinal(i + 1) + (type === 'avenue' ? ' Avenue' : ' Street'));
     }
 
     // Highway ring.

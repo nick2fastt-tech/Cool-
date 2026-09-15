@@ -169,9 +169,8 @@ const DEFAULTS = {
   masterVolume: 0.8,
   musicVolume: 0.35,
   sfxVolume: 0.9,
-  voiceVolume: 0.9,
   fov: 62,
-  cameraMode: 'third',       // 'first' | 'third'
+  cameraMode: 'first',       // 'first' | 'third' — changed in Settings
   invertY: false,
   lookSensitivity: 1.0,
   touchLookSensitivity: 1.0,
@@ -182,9 +181,9 @@ const DEFAULTS = {
   leftHandedTouch: false,
   keyBindings: {
     forward: 'KeyW', back: 'KeyS', left: 'KeyA', right: 'KeyD',
-    jump: 'Space', sprint: 'ShiftLeft', crouch: 'ControlLeft',
+    jump: 'Space', crouch: 'ControlLeft',
     interact: 'KeyE', enterVehicle: 'KeyF', t10: 'KeyT',
-    camera: 'KeyV', settings: 'Escape', map: 'KeyM', walkToggle: 'CapsLock',
+    camera: 'KeyV', settings: 'Escape', map: 'KeyM',
     handbrake: 'Space', horn: 'KeyH', lights: 'KeyL', signalLeft: 'KeyQ', signalRight: 'KeyR',
   },
 };

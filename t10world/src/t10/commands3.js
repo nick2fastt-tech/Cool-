@@ -4,7 +4,7 @@ import * as THREE from '../../vendor/three.module.js';
 import { HAIR_COLORS, SKIN_TONES, EYE_COLORS } from '../human/textures.js';
 import { HAIR_STYLES } from '../human/hair.js';
 import { OUTFITS } from '../human/clothing.js';
-import { VOICE_PRESETS, PERSONALITIES, OCCUPATIONS, generateAppearance } from '../human/appearance.js';
+import { PERSONALITIES, OCCUPATIONS, generateAppearance } from '../human/appearance.js';
 import { ANIMAL_TYPES } from '../entities/animals.js';
 import { VEHICLE_TYPES } from '../entities/vehicle.js';
 import { DISTRICTS } from '../world/city.js';
@@ -219,7 +219,7 @@ export function extendRegistry3(R, add) {
   for (const [id, spec] of Object.entries(ANIMAL_TYPES)) {
     const n = spec.name.toLowerCase();
     add('remove_animals_' + id, 'Animals',
-      ['remove all the ' + n + 's', 'delete all ' + n + 's', 'get rid of the ' + n + 's'],
+      ['remove all the ' + plural(n, 2), 'delete all ' + plural(n, 2), 'get rid of the ' + plural(n, 2)],
       'Remove every ' + n + '.',
       (ctx) => {
         let c = 0;
@@ -230,7 +230,7 @@ export function extendRegistry3(R, add) {
   for (const [id, spec] of Object.entries(VEHICLE_TYPES)) {
     const n = spec.name.toLowerCase();
     add('remove_vehicles_' + id, 'Vehicles',
-      ['remove all the ' + n + 's', 'delete all ' + n + 's', 'get rid of the ' + n + 's'],
+      ['remove all the ' + plural(n, 2), 'delete all ' + plural(n, 2), 'get rid of the ' + plural(n, 2)],
       'Remove every ' + spec.name + '.',
       (ctx) => {
         let c = 0;

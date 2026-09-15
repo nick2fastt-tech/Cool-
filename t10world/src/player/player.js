@@ -30,7 +30,6 @@ export class Player {
     this.grounded = true;
     this.verticalVel = 0;
     this.crouching = false;
-    this.sprinting = false;
     this.swimming = false;
     this.inVehicle = null;
     this.seatIndex = 0;
@@ -40,10 +39,10 @@ export class Player {
     this.flying = false;
     this.godMode = false;
 
-    this.walkSpeed = 1.55;
-    this.runSpeed = 4.3;
-    this.sprintSpeed = 7.0;
-    this.crouchSpeed = 1.0;
+    // A single on-foot pace — there is no sprint. Brisk enough to cross a
+    // block without feeling like a chore.
+    this.walkSpeed = 2.45;
+    this.crouchSpeed = 1.05;
     this.swimSpeed = 2.2;
     this.jumpVelocity = 5.4;
     this.speedMultiplier = 1;
@@ -141,16 +140,13 @@ export class Player {
     if (wishLen > 0.001) { wishX /= wishLen; wishZ /= wishLen; }
 
     this.crouching = input.buttons.crouch && !this.swimming;
-    this.sprinting = input.buttons.sprint && moveLen > 0.55 && !this.crouching;
 
-    const walkToggle = input.buttons.walk;
     let targetSpeed = 0;
     if (moveLen > 0.02) {
       const base = this.swimming ? this.swimSpeed
         : this.crouching ? this.crouchSpeed
-        : walkToggle ? this.walkSpeed
-        : this.sprinting ? this.sprintSpeed
-        : lerpv(this.walkSpeed, this.runSpeed, clamp01(moveLen));
+        : this.walkSpeed;
+      // Stick magnitude still eases you in, so a light push walks slowly.
       targetSpeed = base * clamp01(moveLen * 1.15) * this.speedMultiplier;
     }
 
@@ -226,8 +222,8 @@ export class Player {
     else if (!this.grounded && !this.flying) a.setState(this.verticalVel > 0.5 ? STATES.JUMP : STATES.FALL);
     else if (a.state === STATES.LAND && a.stateTime < 0.3) { /* let the landing play */ }
     else if (this.crouching) a.setState(STATES.CROUCH);
-    else if (this.speed > this.runSpeed * 1.25) a.setState(STATES.SPRINT);
-    else if (this.speed > this.walkSpeed * 1.35) a.setState(STATES.RUN);
+    // T10 can still raise your speed multiplier, so a run pose stays available.
+    else if (this.speed > this.walkSpeed * 2.4) a.setState(STATES.RUN);
     else if (this.speed > 0.22) a.setState(STATES.WALK);
     else if (a.state !== STATES.IDLE && a.state !== STATES.WAVE && a.state !== STATES.DANCE && a.state !== STATES.PHONE) a.setState(STATES.IDLE);
 
@@ -352,7 +348,7 @@ export class Player {
   // -------------------------------------------------------------------------
   updateCamera(dt) {
     const cam = this.camera;
-    const targetFov = settings.get('fov') + clamp01(this.speed / this.sprintSpeed) * 9 +
+    const targetFov = settings.get('fov') + clamp01(this.speed / (this.walkSpeed * 3)) * 9 +
       (this.inVehicle ? clamp01(Math.abs(this.inVehicle.speed) / this.inVehicle.spec.topSpeed) * 16 : 0);
     this.camFov = damp(this.camFov, targetFov, 0.02, dt);
     if (Math.abs(cam.fov - this.camFov) > 0.01) { cam.fov = this.camFov; cam.updateProjectionMatrix(); }
@@ -364,7 +360,7 @@ export class Player {
     if (this.cameraMode === 'first') {
       const headY = this.position.y + this.eyeHeight;
       // Slight head bob while moving on foot.
-      const bob = this.inVehicle ? 0 : Math.sin(this.human.animator.phase * TAU * 2) * clamp01(this.speed / this.runSpeed) * 0.022;
+      const bob = this.inVehicle ? 0 : Math.sin(this.human.animator.phase * TAU * 2) * clamp01(this.speed / this.walkSpeed) * 0.018;
       _v.set(this.position.x, headY + bob, this.position.z);
       if (this.inVehicle) {
         this.inVehicle.seatPosition(this.seatIndex, _v);

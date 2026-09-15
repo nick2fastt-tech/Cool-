@@ -7,7 +7,7 @@ import { HAIR_COLORS, SKIN_TONES, EYE_COLORS } from '../human/textures.js';
 import { HAIR_STYLES } from '../human/hair.js';
 import { OUTFITS } from '../human/clothing.js';
 import { HEIGHT_RANGE } from '../human/skeleton.js';
-import { VOICE_PRESETS, PERSONALITIES, OCCUPATIONS, generateAppearance } from '../human/appearance.js';
+import { PERSONALITIES, OCCUPATIONS, generateAppearance } from '../human/appearance.js';
 import { VEHICLE_TYPES, CIVILIAN_TYPES, EMERGENCY_TYPES } from '../entities/vehicle.js';
 import { ANIMAL_TYPES } from '../entities/animals.js';
 import { WEATHER_PRESETS } from '../render/atmosphere.js';
@@ -18,6 +18,7 @@ import { clamp01, clampv, lerpv, plural, metersToFeetInches, feetInchesToMeters,
 import { EMOTES } from './emotes.js';
 import { extendRegistry } from './commands2.js';
 import { extendRegistry3 } from './commands3.js';
+import { extendRegistry4 } from './commands4.js';
 
 function singularWord(word) {
   if (word.length < 4) return word;
@@ -134,8 +135,8 @@ export function buildRegistry() {
           : 'Done. ' + made.length + ' ' + plural(primary, made.length) + ' placed.';
       });
     add('remove_' + p.id, 'Spawning',
-      p.names.flatMap((n) => ['remove the ' + n, 'delete the ' + n, 'remove all ' + n + 's', 'delete all ' + n + 's', 'get rid of the ' + n]),
-      'Remove ' + primary + 's you spawned.',
+      p.names.flatMap((n) => ['remove the ' + n, 'delete the ' + n, 'remove all ' + plural(n, 2), 'delete all ' + plural(n, 2), 'get rid of the ' + n]),
+      'Remove ' + plural(primary, 2) + ' you spawned.',
       (ctx, m) => {
         const all = /all|every/.test(m.text);
         if (all) {
@@ -254,7 +255,7 @@ export function buildRegistry() {
   for (const [id, spec] of Object.entries(ANIMAL_TYPES)) {
     const n = spec.name.toLowerCase();
     add('spawn_animal_' + id, 'Animals',
-      ['spawn a ' + n, 'give me a ' + n, 'i want a ' + n, 'spawn ' + n + 's', 'make a ' + n, 'bring me a ' + n],
+      ['spawn a ' + n, 'give me a ' + n, 'i want a ' + n, 'spawn ' + plural(n, 2), 'make a ' + n, 'bring me a ' + n],
       'Spawn a ' + spec.name + '.',
       (ctx, m) => {
         const count = clampv(m.number || 1, 1, 25);
@@ -475,19 +476,7 @@ export function buildRegistry() {
       return 'Back to default.';
     });
 
-  // ===== 11. Voice / personality / name ====================================
-  VOICE_PRESETS.forEach((v, i) => {
-    add('voice_' + v.id, 'Identity',
-      ['give me a ' + v.name.toLowerCase() + ' voice', 'make my voice ' + v.name.toLowerCase(), 'voice ' + (i + 1)],
-      'Set your voice to ' + v.name + '.',
-      (ctx) => {
-        ctx.player.appearance.voiceIndex = i;
-        ctx.player.appearance.voicePitch = v.pitch;
-        ctx.player.appearance.voiceRate = v.rate;
-        ctx.player.appearance.voiceName = v.name;
-        return 'Voice set to ' + v.name + '.';
-      });
-  });
+  // ===== 11. Personality / name ============================================
   for (const p of PERSONALITIES) {
     add('personality_' + p.id, 'Identity',
       ['make me ' + p.name.toLowerCase(), 'my personality is ' + p.name.toLowerCase(), 'set my personality to ' + p.name.toLowerCase()],
@@ -586,5 +575,6 @@ export function buildRegistry() {
 
   extendRegistry(R, add);
   extendRegistry3(R, add);
+  extendRegistry4(R, add);
   return R;
 }

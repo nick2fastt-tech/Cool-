@@ -173,6 +173,11 @@ export class GeometryBatcher {
       mesh.castShadow = opts.castShadow !== false;
       mesh.receiveShadow = opts.receiveShadow !== false;
       if (opts.name) mesh.name = opts.name;
+      // Batched world geometry is baked in world space and never moves, so
+      // there is no matrix to recompose — thousands of these are traversed
+      // every frame and the compose() adds up.
+      mesh.matrixAutoUpdate = false;
+      mesh.updateMatrix();
       if (parent) parent.add(mesh);
       meshes.push(mesh);
     }
@@ -184,9 +189,12 @@ export class GeometryBatcher {
 export function disposeGroup(group) {
   group.traverse((o) => {
     if (o.isMesh || o.isInstancedMesh) {
-      if (o.geometry) o.geometry.dispose();
+      // Cached geometry (trees) is shared between chunks — disposing it here
+      // would blank out every other chunk still using it.
+      if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose();
       // Materials are shared across the world and cached — never disposed here.
     }
+    if (o.isInstancedMesh && o.dispose) o.dispose();
   });
   if (group.parent) group.parent.remove(group);
   group.clear();

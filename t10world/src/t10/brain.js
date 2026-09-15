@@ -177,16 +177,17 @@ export class T10Brain {
         };
       },
       findDistrict: (key) => {
-        // Sample the map for a point in the requested district.
+        // Sample the map for a point in the requested district. Snapping to a
+        // sidewalk can walk you out of a small district, so only take the
+        // snapped point when it's still in the district you asked for.
         for (let i = 0; i < 900; i++) {
           const a = (i * 2.399963) % TAU;
           const r = (i / 900) * 1100;
           const x = Math.cos(a) * r, z = Math.sin(a) * r;
-          if (g.world.city.districtAt(x, z) === key) {
-            const sw = g.world.city.nearestSidewalk(x, z);
-            if (!g.world.isWater(sw.x, sw.z)) return sw;
-            return { x, z };
-          }
+          if (g.world.city.districtAt(x, z) !== key) continue;
+          const sw = g.world.city.nearestSidewalk(x, z);
+          if (sw && g.world.city.districtAt(sw.x, sw.z) === key && !g.world.isWater(sw.x, sw.z)) return sw;
+          if (!g.world.isWater(x, z)) return { x, z };
         }
         return null;
       },
@@ -212,8 +213,14 @@ export class T10Brain {
         reply: 'Say my name first. Start with "T10" — like "T10 make it rain".',
       };
     }
+    // Just the wake word on its own: show the whole book.
     if (!after) {
-      return { ok: true, reply: 'I\'m listening.' };
+      if (this.game.book) this.game.book.show('');
+      return {
+        ok: true,
+        reply: 'Everything I know — ' + this.registry.count() + ' commands, ' +
+          this.registry.categoryNames().length + ' areas. Filter it, or tap a line to run it.',
+      };
     }
 
     const result = this.match(after);
