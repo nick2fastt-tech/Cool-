@@ -78,6 +78,9 @@ function buildTorsoPiece(b, piece, prop, BI, segments) {
     };
   };
 
+  // Start just inside the body so the bottom edge reads as a hem, not a cut.
+  const hemPr = bodyProfileAtY(yBot, m, bustAmt, bellyAmt, gluteAmt);
+  sections.push(sectionAt(yBot + m.height * 0.004, -0.05, 0, Math.max(hemPr.rx * 0.97, hemPr.rx + inflateBase - m.height * 0.004)));
   for (let i = 0; i <= steps; i++) {
     const f = i / steps;
     const y = lerpv(yBot, yTop, f);
@@ -138,8 +141,8 @@ function buildSleeve(b, piece, prop, BI, segments, side) {
 
   const pts = [];
   // Shoulder cap overlapping the torso.
-  pts.push({ pos: sh.clone().lerp(el, -0.22), r: m.upperArmR * 1.12 + inflate, w: [[BI('chest'), 0.65], [BI('upperArm' + S), 0.35]] });
-  pts.push({ pos: sh.clone().lerp(el, -0.05), r: m.upperArmR * 1.22 + inflate, w: [[BI('upperArm' + S), 0.7], [BI('chest'), 0.3]] });
+  pts.push({ pos: sh.clone().lerp(el, -0.26), r: m.upperArmR * 0.88 + inflate * 0.5, w: [[BI('chest'), 0.72], [BI('upperArm' + S), 0.28]] });
+  pts.push({ pos: sh.clone().lerp(el, -0.06), r: m.upperArmR * 1.16 + inflate, w: [[BI('upperArm' + S), 0.7], [BI('chest'), 0.3]] });
   pts.push({ pos: sh.clone().lerp(el, 0.06), r: m.upperArmR * 1.16 + inflate, w: [[BI('upperArm' + S), 0.9], [BI('chest'), 0.1]] });
   if (end <= 0.42) {
     pts.push({ pos: sh.clone().lerp(el, end * 0.6), r: m.upperArmR * 1.18 + inflate, w: [[BI('upperArm' + S), 1]] });
@@ -154,6 +157,8 @@ function buildSleeve(b, piece, prop, BI, segments, side) {
       pts.push({ pos: el.clone().lerp(wr, (end - 0.5) * 2), r: m.forearmR * 1.2 + inflate, w: [[BI('lowerArm' + S), 1]] });
     }
   }
+  const lastSleeve = pts[pts.length - 1];
+  pts.push({ pos: lastSleeve.pos.clone(), r: Math.max(lastSleeve.r * 0.72, lastSleeve.r - inflate * 2.0), w: lastSleeve.w });
   const samples = pts.map((p, i) => ({
     pos: p.pos, v: i / (pts.length - 1) * 1.5, weights: p.w, shape: limbShape(p.r, 0),
   }));
@@ -178,7 +183,7 @@ function buildBottomPiece(b, piece, prop, BI, segments) {
     const pr = bodyProfileAtY(y, m, 0, bellyAmt, gluteAmt);
     // Pinch the seat in toward the crotch so the legs read as legs and the
     // garment doesn't end in a skirt-wide hem.
-    const pinch = lerpv(0.60, 1.0, smooth01(clamp01(f / 0.55)));
+    const pinch = lerpv(0.86, 1.0, smooth01(clamp01(f / 0.55)));
     sections.push({
       center: new THREE.Vector3(0, y, 0),
       v: f, weights: torsoWeightsAt(y, m, BI),
@@ -210,6 +215,10 @@ function buildBottomPiece(b, piece, prop, BI, segments) {
       pts.push({ pos: knee.clone().lerp(ankle, e * 0.55), r: m.calfR * 1.06 + inflate, w: [[BI('lowerLeg' + S), 1]] });
       pts.push({ pos: knee.clone().lerp(ankle, e), r: (e > 0.85 ? m.ankleR * 1.35 : m.calfR * 0.95) + inflate * (1 + (piece.legFlare || 0)), w: [[BI('lowerLeg' + S), 1]] });
     }
+    // Roll the hem back inside the leg: an open tube end shows its own interior
+    // and reads as torn cloth.
+    const lastLeg = pts[pts.length - 1];
+    pts.push({ pos: lastLeg.pos.clone(), r: Math.max(lastLeg.r * 0.70, lastLeg.r - inflate * 2.2), w: lastLeg.w });
     const samples = pts.map((p, i) => ({ pos: p.pos, v: i / (pts.length - 1) * 2, weights: p.w, shape: limbShape(p.r, 0) }));
     orientedTubeInto(b, samples, Math.max(6, Math.round(segments * 0.85)));
   }
