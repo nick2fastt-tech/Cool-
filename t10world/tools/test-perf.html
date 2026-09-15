@@ -1,0 +1,35 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+window.__results = { logs: [], errors: [], done: false };
+const log = (...a) => window.__results.logs.push(a.map(String).join(' '));
+try {
+  const { settings } = await import('../src/core/settings.js');
+  settings.setQuality('high');
+  const T = await import('../src/human/textures.js');
+  const { computeProportions, buildSkeleton } = await import('../src/human/skeleton.js');
+  const { buildBodyGeometry } = await import('../src/human/body.js');
+  const { generateAppearance } = await import('../src/human/appearance.js');
+  const { buildGarment, getOutfit } = await import('../src/human/clothing.js');
+  const { buildHair } = await import('../src/human/hair.js');
+
+  const time = (name, fn) => { const t = performance.now(); const r = fn(); log(name, (performance.now()-t).toFixed(1)+'ms'); return r; };
+
+  const a = generateAppearance({ seed: 7 });
+  time('faceTexture 1024 (cold)', () => T.faceTexture({seed:1,gender:'male',toneIndex:3,browShape:'natural',browThickness:0.5,browColor:0x333,lipColor:0x955,lipFullness:0.5,stubble:0.4,freckles:0.3,makeup:0,age:0.4}));
+  time('faceTexture 1024 (warm)', () => T.faceTexture({seed:1,gender:'male',toneIndex:3,browShape:'natural',browThickness:0.5,browColor:0x333,lipColor:0x955,lipFullness:0.5,stubble:0.4,freckles:0.3,makeup:0,age:0.4}));
+  time('faceTexture other', () => T.faceTexture({seed:2,gender:'female',toneIndex:9,browShape:'arched',browThickness:0.3,browColor:0x543,lipColor:0xa55,lipFullness:0.7,stubble:0,freckles:0,makeup:0.6,age:0.2}));
+  time('skinTexture cold', () => T.skinTexture({toneIndex:11,freckles:0.5,age:0.3}));
+  time('irisTexture cold', () => T.irisTexture(0x4a7fa8));
+  time('hairTexture cold', () => T.hairTexture(0x543823,'long'));
+  time('fabricTexture denim', () => T.fabricTexture('denim', 0x39485c));
+
+  const prop = time('computeProportions', () => computeProportions(a.body));
+  const skel = time('buildSkeleton', () => buildSkeleton(prop, {fingers:true}));
+  const geo = time('buildBodyGeometry seg12', () => buildBodyGeometry(prop, skel.boneIndex, a.face, {segments:12, toes:true}));
+  log('  verts', geo.geometry.attributes.position.count);
+  time('buildBodyGeometry seg8', () => buildBodyGeometry(prop, skel.boneIndex, a.face, {segments:8, toes:false}));
+  time('buildGarment', () => buildGarment(prop, skel.boneIndex, getOutfit(a.gender, 0).pieces, {segments:12}));
+  time('buildHair long', () => buildHair({radii:{x:0.08,y:0.12,z:0.1},span:0.24,z:0.01,boneLocalY:0.05},'long',0x543823,7,0));
+  window.__results.done = true;
+} catch (e) { window.__results.errors.push(e.stack||String(e)); window.__results.done = true; }
+</script></body></html>

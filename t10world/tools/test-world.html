@@ -1,0 +1,50 @@
+<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;background:#222}</style></head>
+<body><canvas id="c" width="1280" height="720"></canvas>
+<script type="module">
+window.__results={logs:[],errors:[],done:false};
+const log=(...a)=>window.__results.logs.push(a.map(String).join(' '));
+try{
+ const THREE=await import('../vendor/three.module.js');
+ const {settings}=await import('../src/core/settings.js'); settings.setQuality('high');
+ const {World}=await import('../src/world/world.js');
+ const renderer=new THREE.WebGLRenderer({canvas:document.getElementById('c'),antialias:true});
+ renderer.setSize(1280,720,false);
+ renderer.outputColorSpace=THREE.SRGBColorSpace;
+ renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.0;
+ renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+ const scene=new THREE.Scene();
+ scene.background=new THREE.Color(0x9ec4e8);
+ scene.fog=new THREE.Fog(0x9ec4e8, 200, 900);
+ scene.add(new THREE.HemisphereLight(0xbcd8ff,0x6b6355,0.6));
+ const sun=new THREE.DirectionalLight(0xfff0dc,2.4);
+ sun.position.set(180,260,120); sun.castShadow=true;
+ sun.shadow.mapSize.set(2048,2048);
+ sun.shadow.camera.near=1; sun.shadow.camera.far=700;
+ sun.shadow.camera.left=-140;sun.shadow.camera.right=140;sun.shadow.camera.top=140;sun.shadow.camera.bottom=-140;
+ sun.shadow.bias=-0.0006;
+ scene.add(sun); scene.add(sun.target);
+
+ const t0=performance.now();
+ const world=new World(scene, 20260914);
+ log('city build ms',(performance.now()-t0).toFixed(1));
+ log('city stats', JSON.stringify(world.city.stats()));
+
+ // Stream in chunks around downtown with a generous budget
+ const t1=performance.now();
+ for(let i=0;i<180;i++){ world.update(1/60, 0, 40, 200); if(!world.buildQueue.length) break; }
+ log('stream ms',(performance.now()-t1).toFixed(1));
+ log('world stats', JSON.stringify(world.stats()));
+ world.setNightFactor(0);
+
+ const cam=new THREE.PerspectiveCamera(58,1280/720,0.4,1400);
+ window.__view=(name,px,py,pz,tx,ty,tz,night)=>{
+   world.setNightFactor(night?1:0);
+   if(night){ scene.background=new THREE.Color(0x0a1020); scene.fog.color.setHex(0x0a1020); sun.intensity=0.08; }
+   cam.position.set(px,py,pz); cam.lookAt(tx,ty,tz);
+   sun.target.position.set(px,0,pz); sun.position.set(px+180,260,pz+120);
+   renderer.render(scene,cam);
+ };
+ window.__view('street',-40,1.7,60,-40,1.6,-40,false);
+}catch(e){window.__results.errors.push(e.stack||String(e));}
+window.__results.done=true;
+</script></body></html>

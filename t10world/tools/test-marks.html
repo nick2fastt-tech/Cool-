@@ -1,0 +1,40 @@
+<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0}</style></head>
+<body><canvas id="c" width="900" height="600"></canvas>
+<script type="module">
+window.__results={logs:[],errors:[],done:false};
+const log=(...a)=>window.__results.logs.push(a.map(String).join(' '));
+try{
+ const THREE=await import('../vendor/three.module.js');
+ const {settings}=await import('../src/core/settings.js'); settings.setQuality('high');
+ const {Human}=await import('../src/human/human.js');
+ const {defaultPlayerAppearance}=await import('../src/human/appearance.js');
+ const h=new Human(defaultPlayerAppearance('female'),{tier:'player'});
+ const m=h.prop.measure;
+ const S=1024; const cv=document.createElement('canvas'); cv.width=cv.height=S; const cx=cv.getContext('2d');
+ cx.fillStyle='#c68f66'; cx.fillRect(0,0,S,S);
+ const box=(u,v,w,hh,col)=>{cx.fillStyle=col;cx.fillRect((u-w/2)*S,(1-v-hh/2)*S,w*S,hh*S);};
+ box(0.5-0.090,0.578,0.070,0.030,'#0000ff');  // left eye
+ box(0.5+0.090,0.578,0.070,0.030,'#00ff00');  // right eye
+ box(0.5-0.087,0.625,0.090,0.022,'#000000');  // left brow
+ box(0.5+0.087,0.625,0.090,0.022,'#000000');  // right brow
+ box(0.5,0.315,0.130,0.036,'#ff0000');        // lips
+ box(0.5,0.392,0.050,0.020,'#ffff00');        // nose base
+ const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace;
+ tex.wrapS=tex.wrapT=THREE.ClampToEdgeWrapping; tex.needsUpdate=true;
+ const renderer=new THREE.WebGLRenderer({canvas:document.getElementById('c'),antialias:true});
+ renderer.outputColorSpace=THREE.SRGBColorSpace;
+ const scene=new THREE.Scene(); scene.background=new THREE.Color(0x404040);
+ scene.add(new THREE.AmbientLight(0xffffff,1.0));
+ scene.add(h.root);
+ h.parts.body.material[0].visible=false;
+ for(const k of ['hair','brows','clothes','base']) if(h.parts[k]) h.parts[k].visible=false;
+ for(const S2 of ['L','R']){ if(h.face['eye'+S2]) h.face['eye'+S2].visible=false; }
+ h.parts.body.material[1]=new THREE.MeshBasicMaterial({map:tex});
+ const plane=new THREE.Mesh(new THREE.PlaneGeometry(0.28,0.28), new THREE.MeshBasicMaterial({map:tex}));
+ plane.position.set(0.30,m.eyeLine-0.02,0.05); scene.add(plane);
+ const cam=new THREE.PerspectiveCamera(30,900/600,0.05,10);
+ cam.position.set(0.14,m.eyeLine-0.02,0.72); cam.lookAt(0.14,m.eyeLine-0.04,0);
+ renderer.render(scene,cam);
+}catch(e){window.__results.errors.push(e.stack||String(e));}
+window.__results.done=true;
+</script></body></html>

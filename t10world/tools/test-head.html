@@ -1,0 +1,58 @@
+<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;background:#888}</style></head>
+<body><canvas id="c" width="900" height="600"></canvas>
+<script type="module">
+window.__results={logs:[],errors:[],done:false};
+const log=(...a)=>window.__results.logs.push(a.map(String).join(' '));
+try{
+ const THREE=await import('../vendor/three.module.js');
+ const {settings}=await import('../src/core/settings.js'); settings.setQuality('high');
+ const {Human}=await import('../src/human/human.js');
+ const {defaultPlayerAppearance}=await import('../src/human/appearance.js');
+ const h=new Human(defaultPlayerAppearance('female'),{tier:'player'});
+ const g=h.parts.body.geometry, pos=g.attributes.position, idx=g.index.array;
+ const hg=g.groups.find(x=>x.materialIndex===1);
+ const seen=new Set(); for(let i=hg.start;i<hg.start+hg.count;i++) seen.add(idx[i]);
+ const m=h.prop.measure;
+ // Nose protrusion: max z along the centre column between nose base and bridge
+ let maxZnose=-9, yAt=0, maxZbrow=-9, maxZchin=-9;
+ for(const vi of seen){
+   const x=pos.getX(vi),y=pos.getY(vi),z=pos.getZ(vi);
+   if(Math.abs(x)<0.006){
+     if(y>1.49&&y<1.56){ if(z>maxZnose){maxZnose=z;yAt=y;} }
+     if(y>1.585&&y<1.60){ maxZbrow=Math.max(maxZbrow,z); }
+     if(y>1.45&&y<1.47){ maxZchin=Math.max(maxZchin,z); }
+   }
+ }
+ log('nose tip z',maxZnose.toFixed(4),'at y',yAt.toFixed(3),'| brow z',maxZbrow.toFixed(4),'| chin z',maxZchin.toFixed(4));
+ log('nose protrusion beyond brow', (maxZnose-maxZbrow).toFixed(4));
+
+ const renderer=new THREE.WebGLRenderer({canvas:document.getElementById('c'),antialias:true});
+ renderer.outputColorSpace=THREE.SRGBColorSpace;
+ renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.0;
+ const scene=new THREE.Scene(); scene.background=new THREE.Color(0x777777);
+ scene.add(new THREE.HemisphereLight(0xcfe0f5,0x6b6055,0.55));
+ const d=new THREE.DirectionalLight(0xfff0dd,2.0); d.position.set(1.4,2.2,2.6); scene.add(d);
+ const f2=new THREE.DirectionalLight(0x9db6d8,0.35); f2.position.set(-2,0.6,1.2); scene.add(f2);
+ scene.add(h.root);
+ // Hide everything except the body so nothing occludes the face
+ h.parts.body.material[0].visible=false;
+ if(h.parts.hair) h.parts.hair.visible=false;
+ if(h.parts.brows) h.parts.brows.visible=false;
+ const cam=new THREE.PerspectiveCamera(22,900/600,0.05,10);
+ h.root.updateMatrixWorld(true);
+ const hb=h.boneMap.head; hb.updateWorldMatrix(true,false);
+ const p=new THREE.Vector3().setFromMatrixPosition(hb.matrixWorld);
+ log('head bone world',p.x.toFixed(3),p.y.toFixed(3),p.z.toFixed(3));
+ cam.position.set(0,m.eyeLine,0.95); cam.lookAt(0,m.eyeLine-0.03,0);
+ renderer.render(scene,cam);
+ window.__basic=()=>{
+   h.parts.body.material[1]=new THREE.MeshBasicMaterial({map:h.materials.head.map});
+   renderer.render(scene,cam);
+ };
+ window.__side=()=>{
+   cam.position.set(0.95,m.eyeLine,0.05); cam.lookAt(0,m.eyeLine-0.03,0);
+   renderer.render(scene,cam);
+ };
+}catch(e){window.__results.errors.push(e.stack||String(e));}
+window.__results.done=true;
+</script></body></html>

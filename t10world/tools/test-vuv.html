@@ -1,0 +1,47 @@
+<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0}</style></head>
+<body><canvas id="c" width="900" height="600"></canvas>
+<script type="module">
+window.__results={logs:[],errors:[],done:false};
+const log=(...a)=>window.__results.logs.push(a.map(String).join(' '));
+try{
+ const THREE=await import('../vendor/three.module.js');
+ const {settings}=await import('../src/core/settings.js'); settings.setQuality('high');
+ const {Human}=await import('../src/human/human.js');
+ const {defaultPlayerAppearance}=await import('../src/human/appearance.js');
+ const h=new Human(defaultPlayerAppearance('female'),{tier:'player'});
+ const m=h.prop.measure;
+ const mat=new THREE.ShaderMaterial({
+   vertexShader:`#include <common>
+#include <skinning_pars_vertex>
+varying vec2 vU;
+void main(){ vU=uv;
+ #include <skinbase_vertex>
+ vec3 transformed = vec3(position);
+ #include <skinning_vertex>
+ gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed,1.0);
+}`,
+   fragmentShader:`varying vec2 vU;
+void main(){ gl_FragColor=vec4(vU.x, vU.y, 0.0, 1.0); }`,
+ });
+ const renderer=new THREE.WebGLRenderer({canvas:document.getElementById('c'),antialias:false});
+ const scene=new THREE.Scene(); scene.background=new THREE.Color(0x000000);
+ scene.add(h.root);
+ h.parts.body.material[0].visible=false;
+ for(const k of ['hair','brows','clothes','base']) if(h.parts[k]) h.parts[k].visible=false;
+ for(const S2 of ['L','R']) if(h.face['eye'+S2]) h.face['eye'+S2].visible=false;
+ h.parts.body.material[1]=mat;
+ const cam=new THREE.PerspectiveCamera(30,900/600,0.05,10);
+ cam.position.set(0,m.eyeLine-0.02,0.60); cam.lookAt(0,m.eyeLine-0.04,0);
+ renderer.render(scene,cam);
+ // Read the centre pixel of the face
+ const gl=renderer.getContext();
+ const px=new Uint8Array(4);
+ const readAt=(sx,sy,label)=>{ gl.readPixels(sx,sy,1,1,gl.RGBA,gl.UNSIGNED_BYTE,px);
+   log(label,'u='+(px[0]/255).toFixed(3),'v='+(px[1]/255).toFixed(3)); };
+ readAt(450,300,'screen centre (face middle)');
+ readAt(450,360,'above centre');
+ readAt(400,330,'left of centre');
+ readAt(500,330,'right of centre');
+}catch(e){window.__results.errors.push(e.stack||String(e));}
+window.__results.done=true;
+</script></body></html>

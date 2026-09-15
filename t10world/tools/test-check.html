@@ -1,0 +1,42 @@
+<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0}</style></head>
+<body><canvas id="c" width="900" height="600"></canvas>
+<script type="module">
+window.__results={logs:[],errors:[],done:false};
+const log=(...a)=>window.__results.logs.push(a.map(String).join(' '));
+try{
+ const THREE=await import('../vendor/three.module.js');
+ const {settings}=await import('../src/core/settings.js'); settings.setQuality('high');
+ const {Human}=await import('../src/human/human.js');
+ const {defaultPlayerAppearance}=await import('../src/human/appearance.js');
+ const h=new Human(defaultPlayerAppearance('female'),{tier:'player'});
+ const m=h.prop.measure;
+ // High-contrast UV checker: 16x16 cells, magenta/black, with a red band at u=0.5
+ const cv=document.createElement('canvas'); cv.width=cv.height=512; const cx=cv.getContext('2d');
+ for(let y=0;y<16;y++)for(let x=0;x<16;x++){cx.fillStyle=((x+y)%2)?'#ff00ff':'#101010';cx.fillRect(x*32,y*32,32,32);}
+ cx.fillStyle='#ff0000'; cx.fillRect(252,0,8,512);      // u = 0.5 vertical band
+ cx.fillStyle='#00ff00'; cx.fillRect(0,512-0.578*512-4,512,8); // v = 0.578 (eye line)
+ cx.fillStyle='#0088ff'; cx.fillRect(0,512-0.315*512-4,512,8); // v = 0.315 (lips)
+ const chk=new THREE.CanvasTexture(cv); chk.colorSpace=THREE.SRGBColorSpace; chk.needsUpdate=true;
+ const faceMap=h.materials.head.map;
+ log('faceMap uuid',faceMap.uuid,'bodyMat1 map uuid',h.parts.body.material[1].map.uuid,'same',faceMap===h.parts.body.material[1].map);
+
+ const renderer=new THREE.WebGLRenderer({canvas:document.getElementById('c'),antialias:true});
+ renderer.outputColorSpace=THREE.SRGBColorSpace;
+ const scene=new THREE.Scene(); scene.background=new THREE.Color(0x404040);
+ scene.add(new THREE.AmbientLight(0xffffff,1.0));
+ scene.add(h.root);
+ h.parts.body.material[0].visible=false;
+ if(h.parts.hair) h.parts.hair.visible=false;
+ if(h.parts.brows) h.parts.brows.visible=false;
+ if(h.parts.clothes) h.parts.clothes.visible=false;
+ if(h.parts.base) h.parts.base.visible=false;
+ // Plane showing the real face texture, placed beside the head
+ const plane=new THREE.Mesh(new THREE.PlaneGeometry(0.30,0.30), new THREE.MeshBasicMaterial({map:faceMap}));
+ plane.position.set(0.30, m.eyeLine-0.02, 0.05); scene.add(plane);
+ h.parts.body.material[1]=new THREE.MeshBasicMaterial({map:faceMap});
+ const cam=new THREE.PerspectiveCamera(30,900/600,0.05,10);
+ cam.position.set(0.14,m.eyeLine-0.02,0.72); cam.lookAt(0.14,m.eyeLine-0.04,0);
+ renderer.render(scene,cam);
+}catch(e){window.__results.errors.push(e.stack||String(e));}
+window.__results.done=true;
+</script></body></html>

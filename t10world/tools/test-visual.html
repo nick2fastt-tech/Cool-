@@ -1,0 +1,82 @@
+<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;background:#dcdcdc}canvas{display:block}</style></head>
+<body><canvas id="c" width="1200" height="760"></canvas>
+<script type="module">
+window.__results = { logs: [], errors: [], done: false };
+try {
+  const THREE = await import('../vendor/three.module.js');
+  const { settings } = await import('../src/core/settings.js');
+  settings.setQuality('ultra');
+  const { Human } = await import('../src/human/human.js');
+  const { generateAppearance, defaultPlayerAppearance } = await import('../src/human/appearance.js');
+  const { STATES } = await import('../src/human/animator.js');
+
+  const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true });
+  renderer.setSize(1200, 760, false);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xd9dde2);
+  const hemi = new THREE.HemisphereLight(0xdfeaff, 0x8a7f72, 0.55); scene.add(hemi);
+  const key = new THREE.DirectionalLight(0xfff2e0, 2.1);
+  key.position.set(2.4, 4.0, 3.2); key.castShadow = true;
+  key.shadow.mapSize.set(2048,2048); key.shadow.camera.near=0.5; key.shadow.camera.far=20;
+  key.shadow.camera.left=-3; key.shadow.camera.right=3; key.shadow.camera.top=4; key.shadow.camera.bottom=-1;
+  key.shadow.bias = -0.0008;
+  scene.add(key);
+  const fill = new THREE.DirectionalLight(0xbdd4ff, 0.30); fill.position.set(-3, 2, 1.5); scene.add(fill);
+  const rim = new THREE.DirectionalLight(0xffffff, 0.55); rim.position.set(-1, 2.5, -4); scene.add(rim);
+
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(40,40), new THREE.MeshStandardMaterial({color:0xb9bcc0, roughness:0.95}));
+  ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+  const cast = [
+    { a: defaultPlayerAppearance('female'), x: -1.55, state: STATES.IDLE, spd: 0 },
+    { a: defaultPlayerAppearance('male'), x: -0.52, state: STATES.IDLE, spd: 0 },
+    { a: generateAppearance({ seed: 4242, gender:'female' }), x: 0.52, state: STATES.WALK, spd: 1.5 },
+    { a: generateAppearance({ seed: 991, gender:'male' }), x: 1.55, state: STATES.RUN, spd: 4.2 },
+  ];
+  const humans = [];
+  for (const c of cast) {
+    const h = new Human(c.a, { tier: 'player' });
+    h.root.position.set(c.x, 0, 0);
+    h.setGroundSampler(() => ({ y: 0, normal: new THREE.Vector3(0,1,0) }));
+    h.animator.setState(c.state);
+    scene.add(h.root);
+    humans.push({ h, spd: c.spd });
+  }
+  for (let i = 0; i < 150; i++) for (const {h, spd} of humans) h.update(1/60, { speed: spd, turnRate: 0, grounded: true, verticalVel: 0 });
+
+  const cam = new THREE.PerspectiveCamera(38, 1200/760, 0.1, 100);
+  cam.position.set(0, 1.15, 4.6); cam.lookAt(0, 0.95, 0);
+  renderer.render(scene, cam);
+  window.__results.logs.push('wide render ok, tris ' + renderer.info.render.triangles);
+
+  // Face close-up pass, drawn into a second canvas for the head shot.
+  window.__shot2 = () => {
+    cam.fov = 18; cam.updateProjectionMatrix();
+    const head = humans[0].h.boneMap.head; head.updateWorldMatrix(true,false);
+    const p = new THREE.Vector3().setFromMatrixPosition(head.matrixWorld);
+    cam.position.set(p.x + 0.02, p.y + 0.02, p.z + 1.05);
+    cam.lookAt(p.x, p.y, p.z);
+    renderer.render(scene, cam);
+  };
+  window.__shot3 = () => {
+    cam.fov = 18; cam.updateProjectionMatrix();
+    const head = humans[1].h.boneMap.head; head.updateWorldMatrix(true,false);
+    const p = new THREE.Vector3().setFromMatrixPosition(head.matrixWorld);
+    cam.position.set(p.x + 0.02, p.y + 0.02, p.z + 1.05);
+    cam.lookAt(p.x, p.y, p.z);
+    renderer.render(scene, cam);
+  };
+  window.__shotSide = () => {
+    cam.fov = 38; cam.updateProjectionMatrix();
+    cam.position.set(-4.0, 1.05, 0.9); cam.lookAt(-1.55, 0.92, 0);
+    renderer.render(scene, cam);
+  };
+} catch (e) { window.__results.errors.push(e.stack || String(e)); }
+window.__results.done = true;
+</script></body></html>

@@ -1,0 +1,46 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script type="module">
+window.__results={logs:[],errors:[],done:false};
+const log=(...a)=>window.__results.logs.push(a.map(String).join(' '));
+try{
+ const {settings}=await import('../src/core/settings.js'); settings.setQuality('high');
+ const {Human}=await import('../src/human/human.js');
+ const {defaultPlayerAppearance}=await import('../src/human/appearance.js');
+ const h=new Human(defaultPlayerAppearance('female'),{tier:'player'});
+ const g=h.parts.body.geometry, pos=g.attributes.position, uv=g.attributes.uv, idx=g.index.array;
+ const hg=g.groups.find(x=>x.materialIndex===1);
+ const seen=new Set(); for(let i=hg.start;i<hg.start+hg.count;i++) seen.add(idx[i]);
+ const tex=h.materials.head.map;
+ const img=tex.image;
+ const cc=document.createElement('canvas'); cc.width=img.width; cc.height=img.height;
+ const cx=cc.getContext('2d'); cx.drawImage(img,0,0);
+ const sample=(u,v)=>{
+   // flipY: uv v=0 is the bottom row of the image
+   const px=Math.max(0,Math.min(img.width-1, Math.round(u*img.width)));
+   const py=Math.max(0,Math.min(img.height-1,Math.round((1-v)*img.height)));
+   const d=cx.getImageData(px,py,1,1).data;
+   return '#'+[d[0],d[1],d[2]].map(n=>n.toString(16).padStart(2,'0')).join('');
+ };
+ const m=h.prop.measure;
+ const targets=[
+   ['lips', 1.486],['nostrils', 1.5165],['eyeline', 1.571],['brow', 1.592],['chin', 1.458],['forehead', 1.62],
+ ];
+ for(const [name,ty] of targets){
+   let best=null,bd=9;
+   for(const vi of seen){
+     const x=pos.getX(vi),y=pos.getY(vi),z=pos.getZ(vi);
+     if(z<0.02) continue;
+     const d=Math.abs(x)*4+Math.abs(y-ty);
+     if(d<bd){bd=d;best=vi;}
+   }
+   const u=uv.getX(best),v=uv.getY(best);
+   log(name,'y='+pos.getY(best).toFixed(3),'x='+pos.getX(best).toFixed(3),'z='+pos.getZ(best).toFixed(3),'uv=('+u.toFixed(3)+','+v.toFixed(3)+')','texel='+sample(u,v));
+ }
+ // Also sample where the paint SHOULD be
+ log('paint check: lips texel at (0.500,0.315) =', sample(0.5,0.315));
+ log('paint check: nostril texel at (0.4865,0.392) =', sample(0.4865,0.392));
+ log('paint check: brow texel at (0.548,0.625) =', sample(0.548,0.625));
+ log('img size', img.width, img.height, 'flipY', tex.flipY);
+}catch(e){window.__results.errors.push(e.stack||String(e));}
+window.__results.done=true;
+</script></body></html>

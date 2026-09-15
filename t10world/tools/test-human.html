@@ -1,0 +1,96 @@
+<!doctype html><html><head><meta charset="utf-8"><title>T10 human test</title></head>
+<body><canvas id="c" width="600" height="800"></canvas>
+<script type="module">
+window.__results = { logs: [], errors: [], done: false };
+const log = (...a) => { window.__results.logs.push(a.map(String).join(' ')); console.log(...a); };
+window.addEventListener('error', (e) => window.__results.errors.push('window:' + e.message));
+try {
+  const THREE = await import('../vendor/three.module.js');
+  const { generateAppearance, defaultPlayerAppearance, describeAppearance } = await import('../src/human/appearance.js');
+  const { Human } = await import('../src/human/human.js');
+  const { STATES } = await import('../src/human/animator.js');
+  const { settings } = await import('../src/core/settings.js');
+  settings.setQuality('high');
+
+  const t0 = performance.now();
+  const player = new Human(defaultPlayerAppearance('female'), { tier: 'player' });
+  const t1 = performance.now();
+  log('player build ms', (t1 - t0).toFixed(1));
+  const bodyGeo = player.parts.body.geometry;
+  log('body verts', bodyGeo.attributes.position.count, 'tris', bodyGeo.index.count / 3, 'groups', bodyGeo.groups.length);
+  log('bones', player.skeleton.bones.length);
+  log('clothes verts', player.parts.clothes.geometry.attributes.position.count);
+  log('parts', Object.keys(player.parts).join(','));
+  log('face parts', Object.keys(player.face || {}).join(','));
+
+  // Check no NaNs in geometry
+  const pos = bodyGeo.attributes.position.array;
+  let nan = 0, minY = 1e9, maxY = -1e9, maxAbsX = 0;
+  for (let i = 0; i < pos.length; i += 3) {
+    if (!isFinite(pos[i]) || !isFinite(pos[i+1]) || !isFinite(pos[i+2])) nan++;
+    minY = Math.min(minY, pos[i+1]); maxY = Math.max(maxY, pos[i+1]);
+    maxAbsX = Math.max(maxAbsX, Math.abs(pos[i]));
+  }
+  log('NaN verts', nan, 'y range', minY.toFixed(3), maxY.toFixed(3), 'half-span x', maxAbsX.toFixed(3));
+  log('expected height', player.appearance.body.height.toFixed(3));
+
+  // skin weights sanity
+  const sw = bodyGeo.attributes.skinWeight.array;
+  let badW = 0;
+  for (let i = 0; i < sw.length; i += 4) {
+    const s = sw[i]+sw[i+1]+sw[i+2]+sw[i+3];
+    if (Math.abs(s - 1) > 0.02) badW++;
+  }
+  log('bad skin weight sums', badW, 'of', sw.length/4);
+
+  // Animate a bunch of frames across states
+  const states = [STATES.IDLE, STATES.WALK, STATES.RUN, STATES.SPRINT, STATES.JUMP, STATES.SIT, STATES.DRIVE, STATES.GETUP, STATES.DANCE, STATES.PHONE, STATES.SWIM, STATES.LIE];
+  player.setGroundSampler((x,z) => ({ y: 0, normal: new THREE.Vector3(0,1,0) }));
+  for (const st of states) {
+    player.animator.setState(st);
+    for (let i = 0; i < 40; i++) {
+      player.update(1/60, { speed: st === STATES.RUN ? 4 : st === STATES.SPRINT ? 7 : st === STATES.WALK ? 1.6 : 0, turnRate: 0.2, grounded: true, verticalVel: 0 });
+    }
+    const h = player.boneMap.head;
+    h.updateWorldMatrix(true, false);
+    const p = new THREE.Vector3().setFromMatrixPosition(h.matrixWorld);
+    if (!isFinite(p.x) || !isFinite(p.y) || !isFinite(p.z)) window.__results.errors.push('NaN head pos in state ' + st);
+    log('state', st, 'head y', p.y.toFixed(3));
+  }
+
+  // NPC batch timing + variety
+  const tN0 = performance.now();
+  const npcs = [];
+  for (let i = 0; i < 12; i++) npcs.push(new Human(generateAppearance({ seed: 1000 + i }), { tier: 'npc' }));
+  const tN1 = performance.now();
+  log('12 npcs ms', (tN1 - tN0).toFixed(1), 'avg', ((tN1-tN0)/12).toFixed(1));
+  const heights = npcs.map(n => n.appearance.body.height.toFixed(2));
+  log('npc heights', heights.join(','));
+  log('sample', describeAppearance(npcs[0].appearance));
+  log('sample2', describeAppearance(npcs[5].appearance));
+
+  // Appearance mutation
+  player.setOutfit(1); log('outfit ->', player.appearance.outfitName);
+  player.setHairStyle('long'); log('hair -> long ok');
+  player.setSkinTone(14); log('tone ->', player.appearance.skinToneName);
+  player.setEyeColor(0x4a7fa8); log('eye ok');
+  player.setHeight(2.0); log('height ->', player.appearance.body.height.toFixed(2));
+
+  // WebGL render smoke test
+  try {
+    const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: false });
+    const scene = new THREE.Scene();
+    scene.add(new THREE.AmbientLight(0xffffff, 1));
+    scene.add(player.root);
+    for (const n of npcs) { n.root.position.x = Math.random()*4-2; scene.add(n.root); }
+    const cam = new THREE.PerspectiveCamera(50, 0.75, 0.1, 100);
+    cam.position.set(0, 1.2, 3.2); cam.lookAt(0, 1.0, 0);
+    renderer.render(scene, cam);
+    log('WebGL render OK', renderer.info.render.triangles, 'tris', renderer.info.render.calls, 'calls');
+  } catch (e) { log('WebGL unavailable:', e.message); }
+
+} catch (e) {
+  window.__results.errors.push(e.stack || String(e));
+}
+window.__results.done = true;
+</script></body></html>
