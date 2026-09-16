@@ -5,7 +5,7 @@ import { settings, QUALITY_PRESETS, PerformanceGovernor } from './core/settings.
 import { InputManager } from './core/input.js';
 import { audio } from './core/audio.js';
 import { saveGame, loadGame, hasSave, clearSave, saveInfo } from './core/save.js';
-import { clamp01, clampv, lerpv, hashString, TAU } from './core/math.js';
+import { clamp01, clampv, lerpv, hashString, makeRng, TAU } from './core/math.js';
 import { World, CHUNK_SIZE } from './world/world.js';
 import { Atmosphere } from './render/atmosphere.js';
 import { PostProcessor } from './render/post.js';
@@ -13,6 +13,7 @@ import { Player } from './player/player.js';
 import { NPCManager } from './entities/npc.js';
 import { TrafficManager } from './entities/traffic.js';
 import { AnimalManager } from './entities/animals.js';
+import { Apocalypse } from './entities/apocalypse.js';
 import { T10Brain } from './t10/brain.js';
 import { HUD } from './ui/hud.js';
 import { MapOverlay } from './ui/map.js';
@@ -193,12 +194,20 @@ export class Game {
         this.npcs = new NPCManager(this.world, this.scene, this.atmosphere);
         this.traffic = new TrafficManager(this.world, this.scene);
         this.animals = new AnimalManager(this.world, this.scene, this.atmosphere);
+        this.apocalypse = new Apocalypse(this);
+        this.npcs.apocalypse = this.apocalypse;
+        // People only get to lay a hand on you when the world is ending.
+        this.npcs.onPlayerAttacked = (npc, how) => this.onPlayerAttacked(npc, how);
       }],
       ['Bringing T10 online…', () => {
         this.t10 = new T10Brain(this);
       }],
       ['Finding you a street…', () => {
-        const spawn = this.world.findSpawnPoint(-40, 120);
+        // Different worlds wake you up on different streets.
+        const rng = makeRng(this.worldSeed ^ 0x5f3a7);
+        const a = rng() * Math.PI * 2;
+        const r = 90 + rng() * 380;
+        const spawn = this.world.findSpawnPoint(Math.cos(a) * r, Math.sin(a) * r);
         this.player.spawnOnStreet(spawn.x, spawn.z);
         this.player.setCameraMode(settings.get('cameraMode'));
         // Pre-stream the chunks around the spawn so you don't wake into a void.
@@ -305,6 +314,7 @@ export class Game {
     this.npcs.update(dt, p.position);
     this.traffic.update(dt, focus, p.inVehicle, this.npcs.npcs);
     this.animals.update(dt, p.position, this.traffic.vehicles);
+    if (this.apocalypse) this.apocalypse.update(dt, p.position);
     this.t10.update(dt);
 
     // Interaction prompt.
@@ -411,6 +421,28 @@ export class Game {
   syncInputSuspend() {
     this.input.setSuspended(this.hud.chatOpen || this.hud.settingsOpen ||
       (this.map && this.map.visible) || (this.book && this.book.visible));
+  }
+
+  /** A hostile or an infected person reached you. */
+  onPlayerAttacked(npc, how) {
+    const p = this.player;
+    if (p.immortal || p.godMode) {
+      if (!this._untouchableSaid || performance.now() - this._untouchableSaid > 20000) {
+        this._untouchableSaid = performance.now();
+        this.t10Say(npc.appearance.firstName + ' went for you and bounced off. You asked to never die.');
+      }
+      return;
+    }
+    if (!p.knockDown(how === 'infect' ? 5 : 4, how)) return;
+    audio.t10Blip('error');
+    // Being floored repeatedly is the point of a purge; being told about it
+    // every four seconds is not.
+    const now = performance.now();
+    if (this._downSaid && now - this._downSaid < 25000) return;
+    this._downSaid = now;
+    this.t10Say(how === 'infect'
+      ? npc.appearance.firstName + ' got hold of you. You\'re down — I\'ll have you up in a moment. Say "T10 never let me die" if you want that to stop happening.'
+      : npc.appearance.firstName + ' put you on the pavement. Say "T10 I never want to die" and nobody touches you again.');
   }
 
   onChatToggled(open) {

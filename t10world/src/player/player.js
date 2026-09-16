@@ -37,7 +37,13 @@ export class Player {
     this.frozen = false;
     this.noclip = false;
     this.flying = false;
+    this.flySpeed = 2.4;
     this.godMode = false;
+    // Nothing in this city kills you. Under an apocalypse it can knock you
+    // flat for a few seconds — unless you've asked T10 to make you untouchable.
+    this.immortal = false;
+    this.knockedDown = 0;
+    this.timesDowned = 0;
 
     // A single on-foot pace — there is no sprint. Brisk enough to cross a
     // block without feeling like a chore.
@@ -77,8 +83,11 @@ export class Player {
   spawnOnStreet(x, z) {
     const p = this.world.findSpawnPoint(x, z);
     this.position.copy(p);
-    this.heading = Math.random() * TAU;
+    // Face down the street. A random heading meant waking up nose-first
+    // against a wall about half the time.
+    this.heading = p.heading != null ? p.heading : 0;
     this.yaw = this.heading;
+    this.pitch = 0;
     this.root.position.copy(this.position);
     this.human.animator.setState(STATES.LIE);
     this.getUpTimer = 2.2;
@@ -108,6 +117,18 @@ export class Player {
     if (!input.suspended) {
       this.yaw = wrapAngle(this.yaw - input.look.x);
       this.pitch = clampv(this.pitch + input.look.y, -1.32, 1.28);
+    }
+
+    // Flat on your back: you can still look around, nothing else.
+    if (this.knockedDown > 0) {
+      this.knockedDown -= dt;
+      this.speed = 0;
+      this.human.animator.setState(this.knockedDown > 1.1 ? STATES.LIE : STATES.GETUP);
+      if (this.knockedDown <= 0) this.human.animator.setState(STATES.IDLE);
+      this.human.update(dt, { speed: 0, turnRate: 0, grounded: true, verticalVel: 0 });
+      this.root.position.copy(this.position);
+      this.updateCamera(dt);
+      return;
     }
 
     if (this.getUpTimer > 0) {
@@ -168,7 +189,12 @@ export class Player {
     if (this.flying || this.noclip) {
       this.verticalVel = 0;
       const lift = (input.buttons.jump ? 1 : 0) - (input.buttons.crouch ? 1 : 0);
-      this.position.y += lift * 8 * dt;
+      this.position.y += lift * 8 * this.flySpeed * dt;
+      // Flying follows your gaze: nose down and you descend as you move.
+      if (moveLen > 0.02 && Math.abs(this.pitch) > 0.08) {
+        this.position.y -= Math.sin(this.pitch) * targetSpeed * this.flySpeed * my * dt;
+      }
+      this.position.y = Math.min(this.position.y, 620);
       this.grounded = false;
     } else if (this.swimming) {
       this.verticalVel = input.buttons.jump ? 1.6 : -0.4;
@@ -200,6 +226,7 @@ export class Player {
     }
 
     // --- Horizontal integrate ---
+    if (this.flying || this.noclip) targetSpeed *= this.flySpeed;
     this.speed = damp(this.speed, targetSpeed, 0.0006, dt);
     const moveScale = this.grounded || this.swimming || this.flying ? 1 : 0.72;
     this.position.x += Math.sin(this.heading) * this.speed * moveScale * dt;
@@ -239,6 +266,29 @@ export class Player {
   onHardLanding(impact) {
     this.camShake = 1.4;
     if (this.onDamage) this.onDamage(impact);
+  }
+
+  /**
+   * Something out there got to you. There is still no health bar and no death
+   * — the worst that happens is you're on the pavement for a few seconds.
+   * @returns true if it landed, false if you're untouchable.
+   */
+  knockDown(seconds, reason) {
+    if (this.immortal || this.godMode || this.flying || this.inVehicle) return false;
+    if (this.knockedDown > 0) return false;
+    this.knockedDown = seconds || 4;
+    this.timesDowned++;
+    this.camShake = 1.5;
+    this.lastDownReason = reason || 'hit';
+    this.human.animator.setState(STATES.LIE);
+    return true;
+  }
+
+  getUp() {
+    if (this.knockedDown <= 0) return false;
+    this.knockedDown = 0;
+    this.human.animator.setState(STATES.IDLE);
+    return true;
   }
 
   updateInVehicle(dt, input) {
@@ -425,6 +475,13 @@ export class Player {
     this.velocity.set(0, 0, 0);
     this.verticalVel = 0;
     this.root.position.copy(this.position);
+    // Arriving nose-first against a wall is disorienting in first person, so
+    // turn to something open — but only when you'd otherwise be staring at one.
+    if (!this.inVehicle && !this.world.isOpenAhead(x, this.position.z, this.yaw, 3)) {
+      this.heading = this.world.openHeadingAt(x, this.position.z, null);
+      this.yaw = this.heading;
+    }
+    this.root.rotation.y = this.heading;
     if (this.inVehicle) this.inVehicle.teleport(x, z, this.heading);
   }
 

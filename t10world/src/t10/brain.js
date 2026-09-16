@@ -138,6 +138,50 @@ export class T10Brain {
     this.showStats = false;
     this.gravityScale = 1;
     this.unknownStreak = 0;
+    // When T10 asks you something, the next thing you say answers it — no
+    // wake word needed, because you're already in the conversation.
+    this.pending = null;
+  }
+
+  /**
+   * Ask a follow-up question.
+   * @param prompt what T10 says
+   * @param choices [{ words:[...], run(ctx) }] — first match wins
+   */
+  ask(prompt, choices) {
+    this.pending = { prompt, choices, asked: Date.now() };
+    return prompt;
+  }
+
+  /** Try to read `text` as the answer to the outstanding question. */
+  answerPending(text) {
+    const p = this.pending;
+    if (!p) return null;
+    const n = normalise(text);
+    if (!n) return null;
+    if (/^(never ?mind|forget it|cancel|nothing|no|stop)$/.test(n)) {
+      this.pending = null;
+      return 'Forget it then.';
+    }
+    const tokens = new Set(matchTokens(n));
+    let best = null, bestScore = 0;
+    for (const c of p.choices) {
+      let score = 0;
+      for (const w of c.words) {
+        if (n === w) score = Math.max(score, 100);
+        else if (n.includes(w)) score = Math.max(score, 60 + w.length);
+        else if (tokens.has(singular(w))) score = Math.max(score, 40);
+      }
+      if (score > bestScore) { bestScore = score; best = c; }
+    }
+    if (!best || bestScore < 30) return null;
+    this.pending = null;
+    try {
+      return best.run(this.ctx) || 'Done.';
+    } catch (err) {
+      console.error('[T10] answer failed', err);
+      return 'Something went wrong with that one.';
+    }
   }
 
   get ctx() {
@@ -150,11 +194,13 @@ export class T10Brain {
       npcs: g.npcs,
       traffic: g.traffic,
       animals: g.animals,
+      apocalypse: g.apocalypse,
       atmosphere: g.atmosphere,
       scene: g.scene,
       post: g.post,
       registry: this.registry,
       markers: this.markers,
+      ask: (prompt, choices) => self.ask(prompt, choices),
       get lastVehicle() { return self.lastVehicle; },
       set lastVehicle(v) { self.lastVehicle = v; },
       get trafficLightOverride() { return self.trafficLightOverride; },
@@ -206,6 +252,17 @@ export class T10Brain {
    * @returns { ok, reply, command } — ok:false when the wake word is missing.
    */
   handle(raw) {
+    // An outstanding question gets first refusal on whatever you say next,
+    // with or without the wake word.
+    if (this.pending) {
+      const stripped = stripWakeWord(raw);
+      const answered = this.answerPending(stripped === null ? raw : stripped);
+      if (answered != null) {
+        this.history.push({ input: raw, command: 'answer', reply: answered });
+        return { ok: true, reply: answered, answered: true };
+      }
+    }
+
     const after = stripWakeWord(raw);
     if (after === null) {
       return {

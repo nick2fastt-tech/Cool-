@@ -161,8 +161,16 @@ export function distToSeg2D(px, pz, ax, az, bx, bz) {
 }
 
 /** English plural for reply text: "3 benches", not "3 benchs". */
+const IRREGULAR_PLURALS = {
+  person: 'people', man: 'men', woman: 'women', child: 'children',
+  foot: 'feet', tooth: 'teeth', mouse: 'mice', goose: 'geese', ox: 'oxen',
+  sheep: 'sheep', deer: 'deer', fish: 'fish',
+};
+
 export function plural(word, n) {
   if (n === 1) return word;
+  const irr = IRREGULAR_PLURALS[word.toLowerCase()];
+  if (irr) return word[0] === word[0].toUpperCase() ? irr[0].toUpperCase() + irr.slice(1) : irr;
   if (/(s|x|z|ch|sh)$/i.test(word)) return word + 'es';
   if (/[^aeiou]y$/i.test(word)) return word.slice(0, -1) + 'ies';
   return word + 's';

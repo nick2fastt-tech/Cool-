@@ -53591,8 +53591,16 @@ function distToSeg2D(px, pz, ax, az, bx, bz) {
 }
 
 /** English plural for reply text: "3 benches", not "3 benchs". */
+const IRREGULAR_PLURALS = {
+  person: 'people', man: 'men', woman: 'women', child: 'children',
+  foot: 'feet', tooth: 'teeth', mouse: 'mice', goose: 'geese', ox: 'oxen',
+  sheep: 'sheep', deer: 'deer', fish: 'fish',
+};
+
 function plural(word, n) {
   if (n === 1) return word;
+  const irr = IRREGULAR_PLURALS[word.toLowerCase()];
+  if (irr) return word[0] === word[0].toUpperCase() ? irr[0].toUpperCase() + irr.slice(1) : irr;
   if (/(s|x|z|ch|sh)$/i.test(word)) return word + 'es';
   if (/[^aeiou]y$/i.test(word)) return word.slice(0, -1) + 'ies';
   return word + 's';
@@ -56249,6 +56257,1523 @@ function describeBuild(params) {
 return { defaultBodyParams, computeProportions, buildSkeleton, resetPose, solveTwoBoneIK, applyAimRotation, describeBuild, HEIGHT_RANGE, FINGER_NAMES, BONE_GRAPH, BONE_GRAPH_SIMPLE };
 })();
 
+__M["human/animator"] = (function(){
+// T10 World - procedural character animation.
+// No animation clips: every pose is computed from the locomotion phase and a
+// per-character motion profile, then blended. That gives each human a distinct
+// walk and keeps transitions continuous instead of snapping between clips.
+const THREE = __THREE;
+const { clamp01, clampv, lerpv, smooth01, damp, wrapAngle, TAU, DEG, makeRng, noise1 } = __M["core/math"];
+const { solveTwoBoneIK } = __M["human/skeleton"];
+
+const _q = new THREE.Quaternion();
+const _e = new THREE.Euler();
+const _v = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
+
+/** Per-character motion personality. Two people never move quite the same. */
+function makeMotionProfile(rng, params) {
+  const female = params.gender === 'female';
+  const heightFactor = params.height / (female ? 1.65 : 1.78);
+  return {
+    strideScale: rng.range(0.86, 1.16),
+    cadenceScale: rng.range(0.92, 1.10) / Math.sqrt(heightFactor),
+    armSwing: rng.range(0.62, 1.32),
+    armBend: rng.range(0.5, 1.5),
+    bounce: rng.range(0.7, 1.3),
+    hipSway: (female ? rng.range(0.9, 1.7) : rng.range(0.4, 1.0)),
+    shoulderRoll: rng.range(0.4, 1.5),
+    lean: rng.range(0.6, 1.4),
+    toeOut: rng.range(-0.06, 0.22),
+    bowLeg: rng.range(-0.035, 0.05),
+    headBob: rng.range(0.5, 1.4),
+    headTilt: rng.range(-0.05, 0.05),
+    swagger: rng.range(0, 1),
+    energy: rng.range(0.7, 1.25),
+    idleShiftRate: rng.range(0.05, 0.16),
+    blinkRate: rng.range(0.16, 0.34),
+    gazeRate: rng.range(0.25, 0.7),
+    breathRate: rng.range(0.20, 0.30),
+    phase: rng() * TAU,
+    limp: rng.chance(0.06) ? rng.range(0.1, 0.3) : 0,
+    armsCrossed: rng.chance(0.12),
+    handsInPockets: rng.chance(0.14),
+  };
+}
+
+const STATES = {
+  IDLE: 'idle', WALK: 'walk', RUN: 'run', SPRINT: 'sprint', JUMP: 'jump', FALL: 'fall',
+  LAND: 'land', CROUCH: 'crouch', SIT: 'sit', DRIVE: 'drive', TALK: 'talk', USE: 'use',
+  CLIMB: 'climb', SWIM: 'swim', GETUP: 'getup', LIE: 'lie', DANCE: 'dance', WAVE: 'wave',
+  PHONE: 'phone', EAT: 'eat', EXERCISE: 'exercise', CARRY: 'carry', AIM: 'aim', DEAD: 'dead',
+  SALUTE: 'salute', CLAP: 'clap', POINT: 'point', CHEER: 'cheer', THINK: 'think',
+  STRETCH: 'stretch', BOW: 'bow',
+};
+
+class HumanAnimator {
+  constructor(rig, prop, profile) {
+    this.rig = rig;                 // { boneMap, face, proportions }
+    this.bones = rig.boneMap;
+    this.prop = prop;
+    this.profile = profile;
+    this.state = STATES.IDLE;
+    this.prevState = STATES.IDLE;
+    this.stateTime = 0;
+    this.blend = 1;
+
+    this.phase = profile.phase;
+    this.speed = 0;
+    this.targetSpeed = 0;
+    this.turnRate = 0;
+    this.grounded = true;
+    this.verticalVel = 0;
+
+    // Additive layer state
+    this.breathT = Math.random() * 10;
+    this.blinkTimer = 1 + Math.random() * 3;
+    this.blinkValue = 0;
+    this.blinkPhase = 0;
+    this.gazeTimer = 0;
+    this.gazeTarget = new THREE.Vector2(0, 0);
+    this.gazeCurrent = new THREE.Vector2(0, 0);
+    this.lookAtWorld = null;
+    this.lookWeight = 0;
+    this.headYaw = 0; this.headPitch = 0;
+    this.jawOpen = 0; this.jawTarget = 0;
+    this.talking = false;
+    this.talkT = 0;
+    this.browRaise = 0;
+    this.mouthSmile = 0;
+
+    this.idleShiftT = Math.random() * 10;
+    this.idleVariant = 0;
+    this.idleVariantTimer = 4 + Math.random() * 8;
+
+    this.hipsOffset = new THREE.Vector3();
+    this.hipsExtraRot = new THREE.Euler();
+    this.footIK = { enabled: true, L: 0, R: 0, targetL: new THREE.Vector3(), targetR: new THREE.Vector3(), normalL: new THREE.Vector3(0, 1, 0), normalR: new THREE.Vector3(0, 1, 0) };
+    this.groundSampler = null;       // (x, z) => { y, normal }
+    this.lastFootY = { L: 0, R: 0 };
+    this.footPlant = { L: 0, R: 0 };
+    this.onFootstep = null;
+    this._stepFlag = { L: false, R: false };
+
+    this.handTargets = { L: null, R: null };   // world-space IK targets (steering wheel, door)
+    this.handWeights = { L: 0, R: 0 };
+
+    // Cached rest quaternions for blending.
+    this._target = {};
+    for (const name in this.bones) this._target[name] = new THREE.Quaternion();
+    this._rate = 14;
+  }
+
+  setState(state, opts) {
+    if (this.state === state) return;
+    this.prevState = this.state;
+    this.state = state;
+    this.stateTime = 0;
+    this.stateOpts = opts || {};
+  }
+
+  setLookTarget(worldPos, weight) {
+    this.lookAtWorld = worldPos;
+    this.lookWeight = weight == null ? 1 : clamp01(weight);
+  }
+
+  setTalking(v, intensity) {
+    this.talking = v;
+    this.talkIntensity = intensity == null ? 1 : intensity;
+  }
+
+  /** Main entry. `move` = { speed, turnRate, grounded, verticalVel }. */
+  update(dt, move, rootObject) {
+    dt = Math.min(dt, 0.1);
+    this.stateTime += dt;
+    const p = this.profile;
+
+    this.speed = damp(this.speed, move.speed, 0.0008, dt);
+    this.turnRate = damp(this.turnRate, move.turnRate || 0, 0.002, dt);
+    this.grounded = move.grounded;
+    this.verticalVel = move.verticalVel || 0;
+
+    // ---- Locomotion phase ------------------------------------------------
+    const legLen = this.prop.measure.crotchY;
+    const strideLen = legLen * 0.92 * p.strideScale * (1 + this.speed * 0.055);
+    if (this.isLocomotion()) {
+      const cadence = (this.speed / Math.max(0.2, strideLen)) * p.cadenceScale;
+      this.phase += cadence * dt;
+      this.phase %= 1;
+      if (this.phase < 0) this.phase += 1;
+    } else if (this.state === STATES.IDLE) {
+      this.phase = damp(this.phase, Math.round(this.phase * 4) / 4, 0.02, dt);
+    }
+
+    // ---- Build the target pose ------------------------------------------
+    this.resetTarget();
+    switch (this.state) {
+      case STATES.WALK: case STATES.RUN: case STATES.SPRINT: this.poseLocomotion(dt); break;
+      case STATES.JUMP: this.poseJump(dt); break;
+      case STATES.FALL: this.poseFall(dt); break;
+      case STATES.LAND: this.poseLand(dt); break;
+      case STATES.CROUCH: this.poseCrouch(dt); break;
+      case STATES.SIT: this.poseSit(dt); break;
+      case STATES.DRIVE: this.poseDrive(dt); break;
+      case STATES.CLIMB: this.poseClimb(dt); break;
+      case STATES.SWIM: this.poseSwim(dt); break;
+      case STATES.LIE: this.poseLie(dt); break;
+      case STATES.GETUP: this.poseGetUp(dt); break;
+      case STATES.DANCE: this.poseDance(dt); break;
+      case STATES.WAVE: this.poseWave(dt); break;
+      case STATES.PHONE: this.posePhone(dt); break;
+      case STATES.EAT: this.poseEat(dt); break;
+      case STATES.EXERCISE: this.poseExercise(dt); break;
+      case STATES.CARRY: this.poseCarry(dt); break;
+      case STATES.USE: this.poseUse(dt); break;
+      case STATES.SALUTE: this.poseSalute(dt); break;
+      case STATES.CLAP: this.poseClap(dt); break;
+      case STATES.POINT: this.posePoint(dt); break;
+      case STATES.CHEER: this.poseCheer(dt); break;
+      case STATES.THINK: this.poseThink(dt); break;
+      case STATES.STRETCH: this.poseStretch(dt); break;
+      case STATES.BOW: this.poseBow(dt); break;
+      case STATES.DEAD: this.poseDead(dt); break;
+      default: this.poseIdle(dt); break;
+    }
+
+    // ---- Additive layers -------------------------------------------------
+    this.applyBreathing(dt);
+    this.applyTurnLean(dt);
+    if (this.rig.facial !== false) {
+      this.applyBlink(dt);
+      this.applyGaze(dt);
+      this.applyTalk(dt);
+    }
+    this.applyLookAt(dt);
+
+    // ---- Commit: slerp bones toward the target pose ------------------------
+    const rate = 1 - Math.exp(-this._rate * dt);
+    for (const name in this.bones) {
+      const b = this.bones[name];
+      const t = this._target[name];
+      if (!t) continue;
+      b.quaternion.slerp(t, rate);
+    }
+
+    // Hips translation (bob, sway, crouch offsets).
+    const hips = this.bones.hips;
+    if (hips) {
+      const rest = hips.userData.restLocal;
+      hips.position.x = damp(hips.position.x, rest.x + this.hipsOffset.x, 0.0005, dt);
+      hips.position.y = damp(hips.position.y, rest.y + this.hipsOffset.y, 0.0005, dt);
+      hips.position.z = damp(hips.position.z, rest.z + this.hipsOffset.z, 0.0005, dt);
+    }
+
+    // ---- IK passes --------------------------------------------------------
+    if (rootObject) {
+      rootObject.updateMatrixWorld(true);
+      if (this.footIK.enabled && this.groundSampler && this.isGroundedState()) this.applyFootIK(rootObject, dt);
+      if (this.handTargets.L || this.handTargets.R) this.applyHandIK(rootObject);
+    }
+
+    this.detectFootsteps();
+  }
+
+  isLocomotion() { return this.state === STATES.WALK || this.state === STATES.RUN || this.state === STATES.SPRINT; }
+  isGroundedState() {
+    return this.state !== STATES.JUMP && this.state !== STATES.FALL && this.state !== STATES.SIT &&
+      this.state !== STATES.DRIVE && this.state !== STATES.SWIM && this.state !== STATES.LIE &&
+      this.state !== STATES.CLIMB && this.state !== STATES.DEAD;
+  }
+
+  resetTarget() {
+    for (const name in this._target) this._target[name].identity();
+    this.hipsOffset.set(0, 0, 0);
+    this.eyeSquint = 0;
+  }
+
+  /** Set a target bone rotation (replaces). Angles in radians. */
+  set(name, x, y, z, order) {
+    const t = this._target[name];
+    if (!t) return;
+    _e.set(x || 0, y || 0, z || 0, order || 'XYZ');
+    t.setFromEuler(_e);
+  }
+  /** Add a rotation on top of whatever the pose set. */
+  add(name, x, y, z, order) {
+    const t = this._target[name];
+    if (!t) return;
+    _e.set(x || 0, y || 0, z || 0, order || 'XYZ');
+    _q.setFromEuler(_e);
+    t.multiply(_q);
+  }
+
+  // =========================================================================
+  // Poses
+  // =========================================================================
+
+  poseIdle(dt) {
+    const p = this.profile;
+    this._rate = 6;
+    this.idleShiftT += dt * p.idleShiftRate;
+    this.idleVariantTimer -= dt;
+    if (this.idleVariantTimer <= 0) {
+      this.idleVariantTimer = 5 + Math.random() * 10;
+      this.idleVariant = Math.floor(Math.random() * 3);
+    }
+    const t = this.idleShiftT;
+    // Slow weight shift from one leg to the other.
+    const shift = Math.sin(t * TAU * 0.35) * 0.5 + Math.sin(t * TAU * 0.13) * 0.25;
+    const sway = Math.sin(t * TAU * 0.21) * 0.6;
+
+    this.hipsOffset.x = shift * this.prop.measure.height * 0.011;
+    this.hipsOffset.y = -Math.abs(shift) * this.prop.measure.height * 0.004;
+
+    this.set('hips', 0, shift * 0.05, -shift * 0.045);
+    this.set('spine', 0.012, -shift * 0.03, shift * 0.03);
+    this.set('chest', 0.006, sway * 0.04, shift * 0.018);
+    this.set('neck', -0.02, sway * 0.05, -shift * 0.02);
+    this.set('head', 0.01 + p.headTilt, sway * 0.07, p.headTilt);
+
+    // Arms hang with a natural inward rotation, elbows slightly bent.
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      const armSwing = Math.sin(t * TAU * 0.29 + (s > 0 ? 0 : 1.4)) * 0.03;
+      if (p.armsCrossed && this.idleVariant === 1) {
+        this.set('clavicle' + S, 0, 0, -s * 0.06);
+        this.set('upperArm' + S, 0.35, -s * 0.55, -s * (1.16 - 0.25));
+        this.set('lowerArm' + S, 0, -s * 1.55, 0);
+      } else if (p.handsInPockets && this.idleVariant === 2) {
+        this.set('clavicle' + S, 0, 0, -s * 0.04);
+        this.set('upperArm' + S, 0.16, s * 0.10, -s * 1.18);
+        this.set('lowerArm' + S, 0, -s * 0.72, 0);
+      } else {
+        this.set('clavicle' + S, 0, 0, -s * 0.03 + shift * 0.02 * s);
+        this.set('upperArm' + S, 0.03 + armSwing, s * 0.08, -s * (1.30 - shift * 0.03 * s));
+        this.set('lowerArm' + S, 0, -s * (0.22 + p.armBend * 0.10), 0);
+      }
+      this.set('hand' + S, 0, 0, s * 0.06);
+      this.relaxFingers(S, 0.52);
+    }
+
+    // Weight-bearing leg straight, other slightly bent and turned out.
+    const bearing = shift > 0 ? 'L' : 'R';
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      const isFree = S !== bearing;
+      const free = isFree ? Math.abs(shift) : 0;
+      this.set('upperLeg' + S, -free * 0.10, s * (p.toeOut * 0.6 + free * 0.10), s * p.bowLeg);
+      this.set('lowerLeg' + S, free * 0.22, 0, 0);
+      this.set('foot' + S, -free * 0.10, s * p.toeOut, 0);
+      this.set('toe' + S, 0, 0, 0);
+    }
+  }
+
+  poseLocomotion(dt) {
+    const p = this.profile;
+    this._rate = 18;
+    const spd = this.speed;
+    const run = clamp01((spd - 2.1) / 2.4);
+    const sprint = clamp01((spd - 4.6) / 2.6);
+    const walkAmt = 1 - run;
+    const ph = this.phase * TAU;
+
+    // Amplitudes ramp continuously from walk through sprint.
+    const thighAmp = lerpv(0.40, lerpv(0.70, 0.88, sprint), run) * p.strideScale;
+    const kneeAmp = lerpv(0.95, lerpv(1.85, 2.25, sprint), run);
+    const armAmp = lerpv(0.34, lerpv(0.85, 1.15, sprint), run) * p.armSwing;
+    const elbowBase = lerpv(0.30, lerpv(1.30, 1.65, sprint), run) * p.armBend;
+    const bounce = lerpv(0.014, lerpv(0.030, 0.042, sprint), run) * p.bounce;
+    const lean = lerpv(0.03, lerpv(0.16, 0.30, sprint), run) * p.lean;
+    const swayAmt = lerpv(0.075, 0.045, run) * p.hipSway;
+
+    // Vertical bob peaks twice per cycle; lateral sway once.
+    this.hipsOffset.y = (-Math.abs(Math.cos(ph)) * bounce + bounce * 0.42) * this.prop.measure.height;
+    this.hipsOffset.x = Math.sin(ph) * swayAmt * this.prop.measure.height * 0.12;
+    this.hipsOffset.z = -lean * this.prop.measure.height * 0.03;
+
+    const pelvisYaw = Math.sin(ph) * lerpv(0.10, 0.18, run);
+    const pelvisRoll = -Math.sin(ph) * swayAmt * 0.5;
+    this.set('hips', lean * 0.45, pelvisYaw, pelvisRoll);
+    this.set('spine', lean * 0.30, -pelvisYaw * 0.55, -pelvisRoll * 0.4);
+    this.set('chest', lean * 0.22, -pelvisYaw * 0.85 * p.shoulderRoll, -pelvisRoll * 0.3);
+    this.set('neck', -lean * 0.42, pelvisYaw * 0.25, 0);
+    this.set('head', -lean * 0.24 + Math.sin(ph * 2) * 0.02 * p.headBob, pelvisYaw * 0.18, p.headTilt);
+
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      // Right leg is half a cycle behind the left.
+      const legPh = ph + (S === 'L' ? 0 : Math.PI);
+      const limp = (S === 'L' && p.limp) ? p.limp : 0;
+
+      const swing = Math.sin(legPh);
+      const thigh = swing * thighAmp * (1 - limp * 0.5);
+      // Knee flexes during swing and absorbs on contact.
+      const kneeSwing = Math.max(0, -Math.cos(legPh)) * kneeAmp * 0.55;
+      const kneeStance = Math.max(0, Math.sin(legPh + Math.PI * 0.35)) * lerpv(0.12, 0.34, run);
+      const knee = kneeSwing + kneeStance + limp * 0.3;
+
+      this.set('upperLeg' + S, -thigh, s * p.toeOut * 0.5, s * p.bowLeg);
+      this.set('lowerLeg' + S, knee, 0, 0);
+      // Ankle: toe-off at the back, heel-strike at the front.
+      const ankle = -swing * lerpv(0.30, 0.45, run) + Math.max(0, Math.cos(legPh)) * lerpv(0.18, 0.40, run);
+      this.set('foot' + S, ankle, s * p.toeOut, 0);
+      this.set('toe' + S, Math.max(0, -Math.cos(legPh)) * lerpv(0.15, 0.55, run), 0, 0);
+
+      // Arms counter-swing.
+      const armPh = legPh + Math.PI;
+      const armSwing = Math.sin(armPh) * armAmp;
+      this.set('clavicle' + S, 0, -Math.sin(armPh) * 0.06 * p.shoulderRoll, -s * 0.03);
+      this.set('upperArm' + S,
+        armSwing,
+        s * (0.10 + run * 0.14),
+        -s * (1.30 - lerpv(0.10, 0.42, run) - Math.max(0, armSwing) * 0.10)
+      );
+      this.set('lowerArm' + S, 0, -s * (elbowBase + Math.max(0, -armSwing) * 0.35), 0);
+      this.set('hand' + S, Math.sin(armPh) * 0.12, 0, s * 0.06);
+      this.relaxFingers(S, lerpv(0.38, 0.72, run));
+    }
+  }
+
+  poseJump(dt) {
+    this._rate = 16;
+    const t = clamp01(this.stateTime / 0.35);
+    const tuck = Math.sin(t * Math.PI) * 0.6 + 0.25;
+    this.hipsOffset.y = -tuck * this.prop.measure.height * 0.012;
+    this.set('hips', 0.08, 0, 0);
+    this.set('spine', 0.10, 0, 0);
+    this.set('chest', 0.06, 0, 0);
+    this.set('neck', -0.10, 0, 0);
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      this.set('upperLeg' + S, -0.55 * tuck, s * 0.08, s * 0.05);
+      this.set('lowerLeg' + S, 0.95 * tuck, 0, 0);
+      this.set('foot' + S, 0.35, s * 0.06, 0);
+      this.set('upperArm' + S, -1.05 * tuck, s * 0.25, -s * 0.75);
+      this.set('lowerArm' + S, 0, -s * 0.5, 0);
+      this.relaxFingers(S, 0.5);
+    }
+  }
+
+  poseFall(dt) {
+    this._rate = 9;
+    const wind = Math.sin(this.stateTime * 7) * 0.08;
+    const fast = clamp01(-this.verticalVel / 14);
+    this.set('hips', -0.05, 0, 0);
+    this.set('spine', -0.08, wind * 0.3, 0);
+    this.set('chest', -0.05, -wind * 0.3, 0);
+    this.set('neck', 0.10, 0, 0);
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      this.set('upperLeg' + S, -0.28 + wind * 0.2 * s, s * 0.14, s * 0.10);
+      this.set('lowerLeg' + S, 0.55 + fast * 0.3, 0, 0);
+      this.set('foot' + S, 0.25, s * 0.08, 0);
+      this.set('upperArm' + S, -1.5 - fast * 0.6, s * 0.4, -s * 0.45);
+      this.set('lowerArm' + S, 0, -s * 0.7, 0);
+      this.relaxFingers(S, 0.3);
+    }
+  }
+
+  poseLand(dt) {
+    this._rate = 20;
+    const t = clamp01(this.stateTime / 0.30);
+    const absorb = Math.sin((1 - t) * Math.PI * 0.5);
+    this.hipsOffset.y = -absorb * this.prop.measure.height * 0.075;
+    this.set('hips', absorb * 0.22, 0, 0);
+    this.set('spine', absorb * 0.18, 0, 0);
+    this.set('chest', absorb * 0.10, 0, 0);
+    this.set('neck', -absorb * 0.24, 0, 0);
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      this.set('upperLeg' + S, -absorb * 0.75, s * 0.12, s * 0.07);
+      this.set('lowerLeg' + S, absorb * 1.45, 0, 0);
+      this.set('foot' + S, -absorb * 0.55, s * 0.08, 0);
+      this.set('upperArm' + S, -absorb * 0.45, s * 0.22, -s * (1.1 - absorb * 0.35));
+      this.set('lowerArm' + S, 0, -s * (0.35 + absorb * 0.6), 0);
+      this.relaxFingers(S, 0.45);
+    }
+  }
+
+  poseCrouch(dt) {
+    this._rate = 12;
+    const moving = clamp01(this.speed / 1.6);
+    const ph = this.phase * TAU;
+    this.hipsOffset.y = -this.prop.measure.height * 0.18;
+    this.hipsOffset.z = this.prop.measure.height * 0.02;
+    this.set('hips', 0.30, Math.sin(ph) * 0.06 * moving, 0);
+    this.set('spine', 0.18, 0, 0);
+    this.set('chest', 0.10, 0, 0);
+    this.set('neck', -0.34, 0, 0);
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      const legPh = ph + (S === 'L' ? 0 : Math.PI);
+      const sw = Math.sin(legPh) * 0.30 * moving;
+      this.set('upperLeg' + S, -1.05 - sw, s * 0.20, s * 0.10);
+      this.set('lowerLeg' + S, 1.75 + Math.max(0, -Math.cos(legPh)) * 0.4 * moving, 0, 0);
+      this.set('foot' + S, -0.55, s * 0.12, 0);
+      this.set('upperArm' + S, -0.22, s * 0.16, -s * 1.02);
+      this.set('lowerArm' + S, 0, -s * 0.85, 0);
+      this.relaxFingers(S, 0.5);
+    }
+  }
+
+  poseSit(dt) {
+    this._rate = 8;
+    const t = this.stateTime;
+    const idle = Math.sin(t * 0.7) * 0.02;
+    this.hipsOffset.y = -this.prop.measure.crotchY * 0.985;
+    this.hipsOffset.z = -this.prop.measure.height * 0.035;
+    this.set('hips', -0.10, 0, 0);
+    this.set('spine', 0.06 + idle, 0, 0);
+    this.set('chest', 0.04, idle * 1.5, 0);
+    this.set('neck', -0.05, idle * 2, 0);
+    this.set('head', 0.02, idle * 2.5, this.profile.headTilt);
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      this.set('upperLeg' + S, -1.52, s * 0.16, s * 0.06);
+      this.set('lowerLeg' + S, 1.48, 0, 0);
+      this.set('foot' + S, 0.10, s * 0.10, 0);
+      this.set('upperArm' + S, 0.22, s * 0.10, -s * 1.16);
+      this.set('lowerArm' + S, 0, -s * 0.92, 0);
+      this.set('hand' + S, 0.2, 0, 0);
+      this.relaxFingers(S, 0.5);
+    }
+  }
+
+  poseDrive(dt) {
+    this._rate = 10;
+    const steer = this.stateOpts && this.stateOpts.steer ? this.stateOpts.steer : 0;
+    this.hipsOffset.y = -this.prop.measure.crotchY * 0.97;
+    this.hipsOffset.z = -this.prop.measure.height * 0.02;
+    this.set('hips', -0.18, 0, 0);
+    this.set('spine', 0.10, -steer * 0.05, 0);
+    this.set('chest', 0.04, -steer * 0.10, 0);
+    this.set('neck', -0.06, steer * 0.12, 0);
+    this.set('head', 0.0, steer * 0.18, 0);
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      this.set('upperLeg' + S, -1.36, s * 0.20, s * 0.08);
+      this.set('lowerLeg' + S, 1.15, 0, 0);
+      this.set('foot' + S, 0.28, s * 0.10, 0);
+      // Hands at ten-and-two, rotating with the wheel.
+      const wheelAngle = steer * 0.9;
+      this.set('clavicle' + S, 0, 0, -s * 0.08);
+      this.set('upperArm' + S, -0.72 + wheelAngle * s * 0.35, s * 0.30, -s * 0.62);
+      this.set('lowerArm' + S, 0, -s * 1.22, -wheelAngle * 0.3);
+      this.set('hand' + S, 0, 0, s * 0.25);
+      this.gripFingers(S, 0.85);
+    }
+  }
+
+  poseClimb(dt) {
+    this._rate = 12;
+    const ph = this.stateTime * 2.2;
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      const o = S === 'L' ? 0 : Math.PI;
+      const reach = Math.sin(ph + o) * 0.5 + 0.5;
+      this.set('upperArm' + S, -2.30 + reach * 0.55, s * 0.30, -s * 0.30);
+      this.set('lowerArm' + S, 0, -s * (0.35 + reach * 0.5), 0);
+      this.gripFingers(S, 0.9);
+      this.set('upperLeg' + S, -0.55 - (1 - reach) * 0.55, s * 0.22, s * 0.10);
+      this.set('lowerLeg' + S, 0.85 + (1 - reach) * 0.65, 0, 0);
+      this.set('foot' + S, 0.25, s * 0.10, 0);
+    }
+    this.set('hips', 0.10, 0, 0);
+    this.set('spine', 0.12, 0, 0);
+    this.set('neck', -0.28, 0, 0);
+  }
+
+  poseSwim(dt) {
+    this._rate = 8;
+    const ph = this.stateTime * 2.6;
+    this.set('hips', -1.30, 0, 0);       // body goes horizontal
+    this.set('spine', 0.10, Math.sin(ph) * 0.12, 0);
+    this.set('chest', 0.08, -Math.sin(ph) * 0.14, 0);
+    this.set('neck', 0.55, 0, 0);
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      const o = S === 'L' ? 0 : Math.PI;
+      this.set('upperArm' + S, -1.2 + Math.sin(ph + o) * 1.5, s * 0.35, -s * 0.5);
+      this.set('lowerArm' + S, 0, -s * 0.45, 0);
+      this.set('upperLeg' + S, Math.sin(ph * 1.6 + o) * 0.35, s * 0.08, s * 0.04);
+      this.set('lowerLeg' + S, 0.3 + Math.max(0, Math.sin(ph * 1.6 + o)) * 0.5, 0, 0);
+      this.set('foot' + S, 0.5, s * 0.08, 0);
+      this.relaxFingers(S, 0.15);
+    }
+  }
+
+  poseLie(dt) {
+    this._rate = 7;
+    const breathe = Math.sin(this.stateTime * 1.1) * 0.02;
+    this.set('hips', -1.53, 0, 0.06);
+    this.set('spine', 0.04 + breathe, 0, -0.04);
+    this.set('chest', 0.06, 0, 0);
+    this.set('neck', 0.28, 0.10, 0);
+    this.set('head', 0.12, 0.14, 0);
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      this.set('upperArm' + S, 0.30, s * 0.20, -s * 1.24);
+      this.set('lowerArm' + S, 0, -s * 0.35, 0);
+      this.set('upperLeg' + S, -0.10, s * 0.10, s * 0.10);
+      this.set('lowerLeg' + S, 0.20 + (S === 'L' ? 0.25 : 0), 0, 0);
+      this.set('foot' + S, 0.30, s * 0.20, 0);
+      this.relaxFingers(S, 0.3);
+    }
+  }
+
+  /** Getting up off the street — the game's opening move. */
+  poseGetUp(dt) {
+    this._rate = 9;
+    const T = clamp01(this.stateTime / 3.4);
+    // Phase 1: roll to side. Phase 2: push up to hands and knees. Phase 3: stand.
+    const a = clamp01(T / 0.30);
+    const b = clamp01((T - 0.28) / 0.36);
+    const c = clamp01((T - 0.62) / 0.38);
+    const ea = smooth01(a), eb = smooth01(b), ec = smooth01(c);
+
+    const lieRot = lerpv(-1.53, -0.75, eb);
+    const hipRot = lerpv(lieRot, 0, ec);
+    this.hipsOffset.y = lerpv(
+      lerpv(-this.prop.measure.hipY * 0.94, -this.prop.measure.hipY * 0.55, eb),
+      0, ec
+    );
+    this.set('hips', hipRot, lerpv(0.15 * ea, 0, ec), lerpv(0.10 * ea, 0, ec));
+    this.set('spine', lerpv(0.20 * eb, 0.05, ec), 0, 0);
+    this.set('chest', lerpv(0.16 * eb, 0.02, ec), 0, 0);
+    this.set('neck', lerpv(lerpv(0.30, -0.30, eb), -0.03, ec), 0, 0);
+
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      // Hands push against the ground, then swing down.
+      const push = eb * (1 - ec);
+      this.set('upperArm' + S, lerpv(lerpv(0.3, -1.25, ea), lerpv(-0.55, 0.05, ec), eb), s * (0.2 + push * 0.25), -s * lerpv(1.24, 0.95, push));
+      this.set('lowerArm' + S, 0, -s * lerpv(0.35, 1.0, push * (1 - ec)) , 0);
+      this.relaxFingers(S, lerpv(0.3, 0.05, push));
+      // Legs tuck under, then straighten.
+      const tuck = eb * (1 - ec);
+      this.set('upperLeg' + S, lerpv(lerpv(-0.10, -1.40, tuck), 0, ec), s * 0.14, s * 0.08);
+      this.set('lowerLeg' + S, lerpv(lerpv(0.20, 1.85, tuck), 0.03, ec), 0, 0);
+      this.set('foot' + S, lerpv(0.30, 0, ec), s * 0.1, 0);
+    }
+  }
+
+  poseDance(dt) {
+    this._rate = 14;
+    const t = this.stateTime * 3.4;
+    const bob = Math.sin(t * 2);
+    this.hipsOffset.y = bob * this.prop.measure.height * 0.022 - this.prop.measure.height * 0.012;
+    this.hipsOffset.x = Math.sin(t) * this.prop.measure.height * 0.022;
+    this.set('hips', 0.04, Math.sin(t) * 0.30, -Math.sin(t) * 0.18);
+    this.set('spine', 0.05, -Math.sin(t) * 0.18, Math.sin(t) * 0.12);
+    this.set('chest', 0.02, Math.sin(t + 0.6) * 0.26, -Math.sin(t) * 0.10);
+    this.set('neck', -0.05, Math.sin(t + 1.1) * 0.18, 0);
+    this.set('head', Math.sin(t * 2) * 0.10, Math.sin(t + 1.4) * 0.22, Math.sin(t) * 0.08);
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      const o = S === 'L' ? 0 : Math.PI * 0.6;
+      this.set('upperArm' + S, -1.1 + Math.sin(t + o) * 0.85, s * (0.3 + Math.sin(t * 0.7) * 0.3), -s * (0.55 + Math.sin(t + o) * 0.3));
+      this.set('lowerArm' + S, 0, -s * (1.1 + Math.sin(t * 1.3 + o) * 0.5), 0);
+      this.relaxFingers(S, 0.25);
+      this.set('upperLeg' + S, Math.sin(t + o) * 0.22, s * 0.16, s * 0.08);
+      this.set('lowerLeg' + S, 0.15 + Math.max(0, Math.sin(t + o)) * 0.45, 0, 0);
+      this.set('foot' + S, -0.08, s * 0.14, 0);
+    }
+  }
+
+  poseWave(dt) {
+    this.poseIdle(dt);
+    this._rate = 12;
+    const t = this.stateTime * 6.5;
+    const S = 'R', s = -1;
+    const up = clamp01(this.stateTime / 0.35) * clamp01((2.2 - this.stateTime) / 0.4);
+    this.set('clavicle' + S, 0, 0, -s * 0.12 * up);
+    this.set('upperArm' + S, -0.35 * up, s * 0.25 * up, -s * (1.30 - 0.95 * up));
+    this.set('lowerArm' + S, 0, -s * (0.25 + 1.05 * up), 0);
+    this.set('hand' + S, 0, 0, s * (0.1 + Math.sin(t) * 0.55 * up));
+    this.relaxFingers(S, 0.05);
+  }
+
+  posePhone(dt) {
+    this.poseIdle(dt);
+    this._rate = 9;
+    const toEar = this.stateOpts && this.stateOpts.toEar;
+    const S = 'R', s = -1;
+    if (toEar) {
+      this.set('clavicle' + S, 0, 0, -s * 0.10);
+      this.set('upperArm' + S, -0.62, s * 0.52, -s * 0.72);
+      this.set('lowerArm' + S, 0, -s * 2.05, 0);
+      this.set('hand' + S, 0.2, 0, s * 0.3);
+      this.gripFingers(S, 0.8);
+      this.set('head', 0.04, s * 0.10, s * 0.14);
+    } else {
+      // Looking down at the screen — the universal pose.
+      for (const side of ['L', 'R']) {
+        const ss = side === 'L' ? 1 : -1;
+        this.set('upperArm' + side, -0.50, ss * 0.28, -ss * 0.88);
+        this.set('lowerArm' + side, 0, -ss * 1.35, 0);
+        this.set('hand' + side, 0.15, 0, ss * 0.2);
+        this.gripFingers(side, 0.55);
+      }
+      this.set('neck', 0.30, 0, 0);
+      this.set('head', 0.22, 0, 0);
+      this.set('chest', 0.05, 0, 0);
+    }
+  }
+
+  poseEat(dt) {
+    this.poseSit(dt);
+    this._rate = 8;
+    const t = this.stateTime * 1.4;
+    const bite = Math.max(0, Math.sin(t));
+    const S = 'R', s = -1;
+    this.set('upperArm' + S, -0.35 - bite * 0.55, s * 0.30, -s * 0.85);
+    this.set('lowerArm' + S, 0, -s * (1.1 + bite * 0.85), 0);
+    this.gripFingers(S, 0.7);
+    this.jawTarget = bite * 0.35;
+  }
+
+  poseExercise(dt) {
+    this._rate = 16;
+    const t = this.stateTime * 2.6;
+    const rep = Math.sin(t) * 0.5 + 0.5;
+    this.hipsOffset.y = -rep * this.prop.measure.height * 0.10;
+    this.set('hips', rep * 0.30, 0, 0);
+    this.set('spine', rep * 0.12, 0, 0);
+    this.set('neck', -rep * 0.20, 0, 0);
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      this.set('upperLeg' + S, -rep * 1.25, s * 0.22, s * 0.10);
+      this.set('lowerLeg' + S, rep * 2.0, 0, 0);
+      this.set('foot' + S, -rep * 0.45, s * 0.12, 0);
+      this.set('upperArm' + S, -0.55 - rep * 0.55, s * 0.28, -s * 0.85);
+      this.set('lowerArm' + S, 0, -s * (0.9 + rep * 0.4), 0);
+      this.relaxFingers(S, 0.6);
+    }
+  }
+
+  poseCarry(dt) {
+    const moving = this.speed > 0.4;
+    if (moving) this.poseLocomotion(dt); else this.poseIdle(dt);
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      this.set('upperArm' + S, -0.85, s * 0.30, -s * 0.72);
+      this.set('lowerArm' + S, 0, -s * 1.42, 0);
+      this.set('hand' + S, 0.1, 0, s * 0.12);
+      this.gripFingers(S, 0.75);
+    }
+    this.set('chest', 0.06, 0, 0);
+  }
+
+  poseUse(dt) {
+    this.poseIdle(dt);
+    this._rate = 11;
+    const reach = clamp01(this.stateTime / 0.4) * clamp01((1.6 - this.stateTime) / 0.4);
+    const S = (this.stateOpts && this.stateOpts.hand) || 'R';
+    const s = S === 'L' ? 1 : -1;
+    this.set('clavicle' + S, 0, -s * 0.10 * reach, -s * 0.08 * reach);
+    this.set('upperArm' + S, -1.15 * reach, s * 0.18, -s * (1.30 - 1.05 * reach));
+    this.set('lowerArm' + S, 0, -s * (0.25 + 0.55 * reach), 0);
+    this.set('hand' + S, 0, 0, s * 0.1);
+    this.relaxFingers(S, 0.15 + reach * 0.4);
+    this.set('chest', 0.03, -s * 0.10 * reach, 0);
+  }
+
+  poseDead(dt) {
+    this._rate = 3;
+    this.poseLie(dt);
+    this.set('neck', 0.45, 0.35, 0);
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      this.set('upperArm' + S, 0.15, s * 0.45, -s * 1.05);
+      this.relaxFingers(S, 0.5);
+    }
+  }
+
+  poseSalute(dt) {
+    this.poseIdle(dt);
+    this._rate = 12;
+    const up = clamp01(this.stateTime / 0.35);
+    const S = 'R', s = -1;
+    this.set('clavicle' + S, 0, 0, -s * 0.14 * up);
+    this.set('upperArm' + S, -0.30 * up, s * 0.62 * up, -s * (1.30 - 0.78 * up));
+    this.set('lowerArm' + S, 0, -s * (0.25 + 1.72 * up), 0);
+    this.set('hand' + S, -0.35 * up, 0, s * 0.18);
+    this.relaxFingers(S, 0.04);
+    this.add('spine', -0.04 * up, 0, 0);
+    this.add('head', -0.05 * up, 0, 0);
+  }
+
+  poseClap(dt) {
+    this.poseIdle(dt);
+    this._rate = 20;
+    const t = this.stateTime * 6.2;
+    const clap = Math.abs(Math.sin(t));
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      this.set('clavicle' + S, 0, -s * 0.06, -s * 0.05);
+      this.set('upperArm' + S, -0.72, s * (0.52 - clap * 0.30), -s * 0.70);
+      this.set('lowerArm' + S, 0, -s * (1.55 + clap * 0.22), 0);
+      this.set('hand' + S, 0, 0, s * 0.1);
+      this.relaxFingers(S, 0.10);
+    }
+    this.add('chest', 0.03 * clap, 0, 0);
+    // Hands meeting is what sells it — fire the sound on the closing frame.
+    if (this.onClap && clap > 0.94 && !this._clapFlag) { this._clapFlag = true; this.onClap(); }
+    if (clap < 0.5) this._clapFlag = false;
+  }
+
+  posePoint(dt) {
+    this.poseIdle(dt);
+    this._rate = 11;
+    const up = clamp01(this.stateTime / 0.30);
+    const S = (this.stateOpts && this.stateOpts.hand) || 'R';
+    const s = S === 'L' ? 1 : -1;
+    this.set('clavicle' + S, 0, -s * 0.12 * up, -s * 0.06 * up);
+    this.set('upperArm' + S, -1.35 * up, s * 0.12, -s * (1.30 - 1.18 * up));
+    this.set('lowerArm' + S, 0, -s * 0.16, 0);
+    this.set('hand' + S, 0, 0, s * 0.05);
+    // Index finger out, the rest curled.
+    const names = ['index', 'middle', 'ring', 'pinky'];
+    for (let i = 0; i < names.length; i++) {
+      const curl = i === 0 ? 0.02 : 0.95;
+      this.set(names[i] + S + '1', 0, -s * curl * 0.75, 0);
+      this.set(names[i] + S + '2', 0, -s * curl * 0.95, 0);
+      this.set(names[i] + S + '3', 0, -s * curl * 0.70, 0);
+    }
+    this.set('thumb' + S + '1', 0, -s * 0.5, s * 0.35);
+    this.add('chest', 0, -s * 0.12 * up, 0);
+  }
+
+  poseCheer(dt) {
+    this.poseIdle(dt);
+    this._rate = 14;
+    const t = this.stateTime * 5.0;
+    const pump = Math.sin(t) * 0.5 + 0.5;
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      this.set('clavicle' + S, 0, 0, -s * 0.16);
+      this.set('upperArm' + S, -0.25, s * 0.30, -s * (0.20 - pump * 0.16));
+      this.set('lowerArm' + S, 0, -s * (0.35 + pump * 0.45), 0);
+      this.relaxFingers(S, 0.95);
+    }
+    this.hipsOffset.y = pump * this.prop.measure.height * 0.012;
+    this.add('spine', -0.10 * pump, 0, 0);
+    this.add('head', -0.16 * pump, 0, 0);
+    this.jawTarget = 0.22 * pump;
+  }
+
+  poseThink(dt) {
+    this.poseIdle(dt);
+    this._rate = 7;
+    const t = this.stateTime;
+    const sway = Math.sin(t * 0.8) * 0.05;
+    const S = 'R', s = -1;
+    this.set('clavicle' + S, 0, 0, -s * 0.06);
+    this.set('upperArm' + S, -0.52, s * 0.44, -s * 0.86);
+    this.set('lowerArm' + S, 0, -s * 2.10, 0);
+    this.set('hand' + S, 0.28, 0, s * 0.22);
+    this.relaxFingers(S, 0.45);
+    // Other arm folded to support the elbow.
+    this.set('upperArmL', 0.22, 0.30, -1.02);
+    this.set('lowerArmL', 0, -1.35, 0);
+    this.relaxFingers('L', 0.35);
+    this.add('neck', 0.14, sway, 0);
+    this.add('head', 0.10, sway * 1.4, 0.06);
+    this.eyeSquint = 0.18;
+  }
+
+  poseStretch(dt) {
+    this.poseIdle(dt);
+    this._rate = 8;
+    const t = clamp01(this.stateTime / 1.6);
+    const reach = Math.sin(t * Math.PI);
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      this.set('clavicle' + S, 0, 0, -s * 0.18 * reach);
+      this.set('upperArm' + S, -0.30 * reach, s * 0.12, -s * (1.30 - 1.24 * reach));
+      this.set('lowerArm' + S, 0, -s * (0.22 - 0.18 * reach), 0);
+      this.relaxFingers(S, 0.10);
+    }
+    this.add('spine', -0.16 * reach, 0, 0);
+    this.add('chest', -0.12 * reach, 0, 0);
+    this.add('neck', 0.22 * reach, 0, 0);
+    this.hipsOffset.y = reach * this.prop.measure.height * 0.010;
+    this.jawTarget = Math.max(this.jawTarget, reach * 0.30);
+    this.eyeSquint = reach * 0.75;
+  }
+
+  poseBow(dt) {
+    this.poseIdle(dt);
+    this._rate = 9;
+    const t = clamp01(this.stateTime / 1.1);
+    const b = Math.sin(t * Math.PI) * 0.95;
+    this.set('hips', b * 0.30, 0, 0);
+    this.set('spine', b * 0.45, 0, 0);
+    this.set('chest', b * 0.28, 0, 0);
+    this.set('neck', b * 0.22, 0, 0);
+    this.set('head', b * 0.14, 0, 0);
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      this.set('upperArm' + S, -b * 0.35, s * 0.10, -s * (1.26 - b * 0.10));
+      this.set('lowerArm' + S, 0, -s * (0.22 + b * 0.30), 0);
+      this.relaxFingers(S, 0.25);
+      this.set('upperLeg' + S, b * 0.18, s * 0.10, s * 0.05);
+    }
+  }
+
+  /** Finger curl: 0 = straight, 1 = fist. */
+  relaxFingers(S, amount) {
+    const names = ['index', 'middle', 'ring', 'pinky'];
+    for (let i = 0; i < names.length; i++) {
+      const curl = amount * (0.85 + i * 0.08);
+      const s = S === 'L' ? 1 : -1;
+      this.set(names[i] + S + '1', 0, -s * curl * 0.75, 0);
+      this.set(names[i] + S + '2', 0, -s * curl * 0.95, 0);
+      this.set(names[i] + S + '3', 0, -s * curl * 0.70, 0);
+    }
+    const s = S === 'L' ? 1 : -1;
+    this.set('thumb' + S + '1', 0, -s * amount * 0.25, s * 0.35);
+    this.set('thumb' + S + '2', 0, -s * amount * 0.45, 0);
+    this.set('thumb' + S + '3', 0, -s * amount * 0.40, 0);
+  }
+  gripFingers(S, amount) { this.relaxFingers(S, 0.55 + amount * 0.55); }
+
+  // =========================================================================
+  // Additive layers
+  // =========================================================================
+
+  applyBreathing(dt) {
+    this.breathT += dt * this.profile.breathRate * (1 + this.speed * 0.13);
+    const b = Math.sin(this.breathT * TAU);
+    const depth = 0.0075 * (1 + this.speed * 0.30);
+    this.add('chest', -b * depth * 1.4, 0, 0);
+    this.add('spine', -b * depth * 0.5, 0, 0);
+    const chest = this.bones.chest;
+    if (chest) {
+      const s = 1 + b * depth * 1.8;
+      chest.scale.set(s, 1 + b * depth * 0.6, s);
+    }
+    // Shoulders rise slightly on the inhale.
+    this.add('clavicleL', 0, 0, -b * depth * 0.8);
+    this.add('clavicleR', 0, 0, b * depth * 0.8);
+  }
+
+  applyTurnLean(dt) {
+    const lean = clampv(this.turnRate * 0.20, -0.22, 0.22) * clamp01(this.speed / 2.5);
+    this.add('hips', 0, 0, lean * 0.4);
+    this.add('spine', 0, 0, lean * 0.35);
+    this.add('chest', 0, -lean * 0.25, lean * 0.3);
+    this.add('neck', 0, -lean * 0.35, 0);
+  }
+
+  applyBlink(dt) {
+    const face = this.rig.face;
+    this.blinkTimer -= dt;
+    if (this.blinkTimer <= 0) {
+      this.blinkTimer = (1 / this.profile.blinkRate) * (0.55 + Math.random() * 0.9);
+      this.blinkPhase = 1;
+      // Occasional double blink.
+      if (Math.random() < 0.18) this.blinkTimer = 0.22;
+    }
+    if (this.blinkPhase > 0) {
+      this.blinkPhase -= dt / 0.115;
+      const t = clamp01(this.blinkPhase);
+      // Fast close, slower open.
+      this.blinkValue = t > 0.55 ? (1 - t) / 0.45 : t / 0.55;
+      this.blinkValue = clamp01(this.blinkValue);
+      if (this.blinkPhase <= 0) this.blinkValue = 0;
+    }
+    if (!face) return;
+    const close = Math.max(this.blinkValue, this.eyeSquint || 0);
+    if (face.lidUpperL) face.lidUpperL.rotation.x = close * 1.62;
+    if (face.lidUpperR) face.lidUpperR.rotation.x = close * 1.62;
+    if (face.lidLowerL) face.lidLowerL.rotation.x = -close * 0.42;
+    if (face.lidLowerR) face.lidLowerR.rotation.x = -close * 0.42;
+  }
+
+  applyGaze(dt) {
+    const face = this.rig.face;
+    this.gazeTimer -= dt;
+    if (this.gazeTimer <= 0) {
+      this.gazeTimer = (1 / this.profile.gazeRate) * (0.4 + Math.random() * 1.6);
+      // Saccades are small and quick; occasionally a bigger glance.
+      const big = Math.random() < 0.22;
+      this.gazeTarget.set(
+        (Math.random() - 0.5) * (big ? 0.55 : 0.20),
+        (Math.random() - 0.5) * (big ? 0.30 : 0.12)
+      );
+    }
+    // Saccades snap, they don't glide.
+    this.gazeCurrent.x = damp(this.gazeCurrent.x, this.gazeTarget.x, 0.000002, dt);
+    this.gazeCurrent.y = damp(this.gazeCurrent.y, this.gazeTarget.y, 0.000002, dt);
+    if (!face) return;
+    const yaw = this.gazeCurrent.x + (this.eyeLookYaw || 0);
+    const pitch = this.gazeCurrent.y + (this.eyeLookPitch || 0);
+    if (face.eyeL) { face.eyeL.rotation.y = yaw; face.eyeL.rotation.x = pitch; }
+    if (face.eyeR) { face.eyeR.rotation.y = yaw; face.eyeR.rotation.x = pitch; }
+  }
+
+  applyTalk(dt) {
+    if (this.talking) {
+      this.talkT += dt * (7 + Math.random() * 5);
+      // Layered sine + noise reads as syllables rather than a metronome.
+      const syl = Math.abs(Math.sin(this.talkT * 0.9)) * 0.6 + noise1(this.talkT * 1.7, 31) * 0.5;
+      this.jawTarget = clamp01(syl) * 0.38 * (this.talkIntensity || 1);
+      this.browRaise = damp(this.browRaise, noise1(this.talkT * 0.35, 77) * 0.5, 0.02, dt);
+    } else {
+      this.jawTarget = damp(this.jawTarget, 0, 0.001, dt);
+      this.browRaise = damp(this.browRaise, 0, 0.01, dt);
+    }
+    this.jawOpen = damp(this.jawOpen, this.jawTarget, 0.0005, dt);
+    if (this.bones.jaw) {
+      _e.set(this.jawOpen, 0, 0);
+      this.bones.jaw.quaternion.setFromEuler(_e);
+    }
+    const face = this.rig.face;
+    if (face && face.brows) face.brows.position.y = (face.browRestY || 0) + this.browRaise * this.prop.measure.headH * 0.012;
+  }
+
+  applyLookAt(dt) {
+    if (!this.lookAtWorld || this.lookWeight <= 0.01) {
+      this.headYaw = damp(this.headYaw, 0, 0.004, dt);
+      this.headPitch = damp(this.headPitch, 0, 0.004, dt);
+      this.eyeLookYaw = damp(this.eyeLookYaw || 0, 0, 0.004, dt);
+      this.eyeLookPitch = damp(this.eyeLookPitch || 0, 0, 0.004, dt);
+    } else {
+      const head = this.bones.head;
+      if (!head) return;
+      head.updateWorldMatrix(true, false);
+      _v.setFromMatrixPosition(head.matrixWorld);
+      _v2.copy(this.lookAtWorld).sub(_v);
+      // Convert into the character's local frame.
+      const root = this.rig.root || head;
+      const rootQ = new THREE.Quaternion();
+      (this.rig.rootObject || root).getWorldQuaternion(rootQ);
+      _v2.applyQuaternion(rootQ.invert());
+      const yaw = Math.atan2(_v2.x, _v2.z);
+      const pitch = -Math.atan2(_v2.y, Math.hypot(_v2.x, _v2.z));
+      // Humans turn the head only so far before the eyes do the rest.
+      const clampedYaw = clampv(yaw, -1.15, 1.15) * this.lookWeight;
+      const clampedPitch = clampv(pitch, -0.55, 0.60) * this.lookWeight;
+      this.headYaw = damp(this.headYaw, clampedYaw, 0.0025, dt);
+      this.headPitch = damp(this.headPitch, clampedPitch, 0.0025, dt);
+      this.eyeLookYaw = damp(this.eyeLookYaw || 0, clampv(yaw - this.headYaw, -0.5, 0.5), 0.00001, dt);
+      this.eyeLookPitch = damp(this.eyeLookPitch || 0, clampv(pitch - this.headPitch, -0.3, 0.3), 0.00001, dt);
+    }
+    // Split the turn between neck and head so it doesn't look like an owl.
+    this.add('neck', this.headPitch * 0.38, this.headYaw * 0.42, 0);
+    this.add('head', this.headPitch * 0.62, this.headYaw * 0.58, 0);
+    this.add('chest', 0, this.headYaw * 0.14, 0);
+  }
+
+  // =========================================================================
+  // IK
+  // =========================================================================
+
+  applyFootIK(rootObject, dt) {
+    const m = this.prop.measure;
+    for (const S of ['L', 'R']) {
+      const hip = this.bones['upperLeg' + S];
+      const knee = this.bones['lowerLeg' + S];
+      const foot = this.bones['foot' + S];
+      if (!hip || !knee || !foot) continue;
+      foot.updateWorldMatrix(true, false);
+      _v.setFromMatrixPosition(foot.matrixWorld);
+      const ground = this.groundSampler(_v.x, _v.z);
+      if (!ground) continue;
+      const desiredY = ground.y + m.footH * 0.62;
+      // Only lift the foot; never push it through the floor.
+      const lift = desiredY - _v.y;
+      const w = clamp01(this.isLocomotion() ? clamp01(1 - Math.abs(lift) / (m.height * 0.25)) : 1) * 0.85;
+      if (Math.abs(lift) < 0.0015 || w < 0.02) continue;
+      const target = _v.clone();
+      target.y += lift;
+      // Knee pole: forward and slightly outward from the hip.
+      hip.updateWorldMatrix(true, false);
+      const hipPos = new THREE.Vector3().setFromMatrixPosition(hip.matrixWorld);
+      const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(rootObject.quaternion);
+      const side = new THREE.Vector3(S === 'L' ? 1 : -1, 0, 0).applyQuaternion(rootObject.quaternion);
+      const pole = hipPos.clone().add(fwd.multiplyScalar(m.height * 0.55)).add(side.multiplyScalar(m.height * 0.06));
+      solveTwoBoneIK(hip, knee, foot, target, pole, w);
+      // Roll the foot to match the ground normal.
+      if (ground.normal) {
+        const up = ground.normal;
+        const tilt = Math.atan2(up.z, up.y) * 0.5;
+        const roll = -Math.atan2(up.x, up.y) * 0.5;
+        _e.set(tilt, 0, roll);
+        _q.setFromEuler(_e);
+        foot.quaternion.multiply(_q);
+      }
+    }
+  }
+
+  applyHandIK(rootObject) {
+    for (const S of ['L', 'R']) {
+      const target = this.handTargets[S];
+      const w = this.handWeights[S];
+      if (!target || w <= 0.01) continue;
+      const shoulder = this.bones['upperArm' + S];
+      const elbow = this.bones['lowerArm' + S];
+      const hand = this.bones['hand' + S];
+      if (!shoulder || !elbow || !hand) continue;
+      shoulder.updateWorldMatrix(true, false);
+      const sp = new THREE.Vector3().setFromMatrixPosition(shoulder.matrixWorld);
+      const down = new THREE.Vector3(0, -1, 0);
+      const out = new THREE.Vector3(S === 'L' ? 1 : -1, 0, 0).applyQuaternion(rootObject.quaternion);
+      const pole = sp.clone().add(down.multiplyScalar(this.prop.measure.height * 0.35)).add(out.multiplyScalar(this.prop.measure.height * 0.18));
+      solveTwoBoneIK(shoulder, elbow, hand, target, pole, w);
+    }
+  }
+
+  /** Fire footstep callbacks when a foot passes through the bottom of its arc. */
+  detectFootsteps() {
+    if (!this.onFootstep || !this.isLocomotion()) { this._stepFlag.L = this._stepFlag.R = false; return; }
+    const ph = this.phase;
+    for (const S of ['L', 'R']) {
+      const legPh = (ph + (S === 'L' ? 0 : 0.5)) % 1;
+      // Contact happens around phase 0.25 of each leg's own cycle.
+      const contact = legPh > 0.20 && legPh < 0.34;
+      if (contact && !this._stepFlag[S]) {
+        this._stepFlag[S] = true;
+        this.onFootstep(S, this.speed);
+      } else if (!contact) {
+        this._stepFlag[S] = false;
+      }
+    }
+  }
+}
+
+return { makeMotionProfile, HumanAnimator, STATES };
+})();
+
+__M["entities/apocalypse"] = (function(){
+// T10 World - the end of the world, in six flavours.
+// Each kind rewrites the sky, changes what every person in the city is doing,
+// and adds its own thing in the air or on the ground. Nothing here is a cutscene:
+// the crowd simulation keeps running, it just runs on different rules.
+const THREE = __THREE;
+const { clamp01, clampv, lerpv, makeRng, TAU } = __M["core/math"];
+const { STATES } = __M["human/animator"];
+const { audio } = __M["core/audio"];
+const { settings } = __M["core/settings"];
+
+const APOCALYPSES = {
+  zombie: {
+    name: 'Zombie outbreak',
+    blurb: 'A virus. It spreads by touch, and it does not stop.',
+    sky: { weather: 'overcast', hour: null },
+    crowd: 'infect',
+  },
+  riot: {
+    name: 'The Purge',
+    blurb: 'Everyone turns on everyone. No law, no help, no reason.',
+    sky: { weather: 'storm', hour: 21 },
+    crowd: 'hostile',
+  },
+  alien: {
+    name: 'Alien invasion',
+    blurb: 'Ships over the city, taking people up one at a time.',
+    sky: { weather: 'fog', hour: 20 },
+    crowd: 'panic',
+  },
+  meteor: {
+    name: 'Meteor strike',
+    blurb: 'The sky is falling. Literally — look up.',
+    sky: { weather: 'storm', hour: 17 },
+    crowd: 'panic',
+  },
+  blackout: {
+    name: 'Total blackout',
+    blurb: 'Every light in the city is out, and something is wrong with the dark.',
+    sky: { weather: 'fog', hour: 1 },
+    crowd: 'panic',
+  },
+  machine: {
+    name: 'Machine uprising',
+    blurb: 'The cars decided they were done being driven.',
+    sky: { weather: 'overcast', hour: 19 },
+    crowd: 'panic',
+  },
+};
+
+const APOCALYPSE_KEYS = Object.keys(APOCALYPSES);
+
+// A strong green multiply: the skin map is already dark, so the tint has to
+// push the green channel well above red and blue to read across a street.
+const INFECTED_SKIN = 0x8fe070;
+const INFECTED_EYES = 0xd4ff5a;
+
+class Apocalypse {
+  constructor(game) {
+    this.game = game;
+    this.kind = null;
+    this.elapsed = 0;
+    this.rng = makeRng(0x51f0d3);
+    this.saucers = [];
+    this.meteors = [];
+    this.group = new THREE.Group();
+    this.group.name = 'apocalypse';
+    game.scene.add(this.group);
+    this.saved = null;
+    this.spawnTimer = 0;
+  }
+
+  get active() { return this.kind != null; }
+  get info() { return this.kind ? APOCALYPSES[this.kind] : null; }
+
+  /** @returns the human-readable name, or null if the kind is unknown. */
+  start(kind) {
+    const def = APOCALYPSES[kind];
+    if (!def) return null;
+    if (this.kind) this.stop(true);
+    const g = this.game;
+
+    this.saved = {
+      weather: g.atmosphere.weatherKey || null,
+      hour: g.atmosphere.timeOfDay,
+      streetLights: g.t10 ? g.t10.forceStreetLights : null,
+    };
+
+    this.kind = kind;
+    this.elapsed = 0;
+    this.spawnTimer = 0;
+    this.abducted = 0;
+    this.casualties = 0;
+
+    g.atmosphere.setWeather(def.sky.weather, true);
+    if (def.sky.hour != null) g.atmosphere.timeOfDay = def.sky.hour;
+
+    if (kind === 'blackout') {
+      if (g.t10) g.t10.forceStreetLights = 0;
+      for (const v of g.traffic.vehicles) { v.autoHeadlights = false; v.headlightsOn = false; }
+    }
+    if (kind === 'zombie') this.seedInfection(3);
+    if (kind === 'riot') this.makeHostile();
+    if (kind === 'machine') this.freeTheCars();
+
+    audio.t10Blip('error');
+    return def.name;
+  }
+
+  stop(quiet) {
+    if (!this.kind) return false;
+    const g = this.game;
+    for (const npc of g.npcs.npcs) this.clearNpc(npc);
+    for (const s of this.saucers) this.group.remove(s.mesh);
+    this.saucers.length = 0;
+    for (const m of this.meteors) this.group.remove(m.mesh);
+    this.meteors.length = 0;
+    for (const v of g.traffic.vehicles) {
+      v.autoHeadlights = true;
+      if (v.ai) { v.ai.berserk = false; if (v.ai.restoreSpeed != null) { v.ai.targetSpeed = v.ai.restoreSpeed; v.ai.restoreSpeed = null; } }
+    }
+    if (this.saved) {
+      if (g.t10) g.t10.forceStreetLights = this.saved.streetLights;
+      if (!quiet) g.atmosphere.setWeather('fair');
+    }
+    this.kind = null;
+    this.saved = null;
+    return true;
+  }
+
+  /** Put one person back to normal. */
+  clearNpc(npc) {
+    if (npc.infected || npc.hostile || npc.panicking) npc.human.setSkinTint(null, null);
+    npc.infected = false;
+    npc.hostile = false;
+    npc.panicking = false;
+    npc.downed = 0;
+    npc.combatTarget = null;
+    npc.abducting = null;
+    if (npc.controlled === 'apocalypse') npc.controlled = null;
+  }
+
+  // -------------------------------------------------------------------------
+  // Seeding
+  // -------------------------------------------------------------------------
+  seedInfection(n) {
+    const pool = this.game.npcs.npcs.filter((x) => !x.infected && !x.indoors);
+    for (let i = 0; i < n && pool.length; i++) {
+      const npc = pool.splice(Math.floor(this.rng() * pool.length), 1)[0];
+      this.infect(npc);
+    }
+    return n;
+  }
+
+  infect(npc) {
+    if (!npc || npc.infected) return false;
+    npc.infected = true;
+    npc.hostile = false;
+    npc.panicking = false;
+    npc.controlled = 'apocalypse';
+    npc.infectCooldown = 1.2;
+    npc.human.setSkinTint(INFECTED_SKIN, INFECTED_EYES);
+    npc.human.animator.setState(STATES.IDLE);
+    return true;
+  }
+
+  makeHostile(only) {
+    let n = 0;
+    for (const npc of this.game.npcs.npcs) {
+      if (only && npc !== only) continue;
+      if (npc.infected) continue;
+      npc.hostile = true;
+      npc.panicking = false;
+      npc.controlled = 'apocalypse';
+      npc.human.setSkinTint(0xff9a8c, 0xff5a3c);
+      n++;
+    }
+    return n;
+  }
+
+  panic(npc) {
+    if (npc.infected || npc.hostile) return;
+    npc.panicking = true;
+    npc.controlled = 'apocalypse';
+  }
+
+  freeTheCars() {
+    for (const v of this.game.traffic.vehicles) {
+      if (!v.ai || v.isPlayerVehicle) continue;
+      if (v.ai.restoreSpeed == null) v.ai.restoreSpeed = v.ai.targetSpeed;
+      v.ai.targetSpeed *= 2.1;
+      v.ai.berserk = true;
+      v.autoHeadlights = false;
+      v.headlightsOn = true;
+      v.honk && v.honk();
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Per-frame
+  // -------------------------------------------------------------------------
+  update(dt, playerPos) {
+    if (!this.kind) return;
+    this.elapsed += dt;
+    const g = this.game;
+
+    // Anyone who streams in after it starts joins whatever is happening.
+    for (const npc of g.npcs.npcs) {
+      if (npc.controlled === 'apocalypse' || npc.infected || npc.hostile || npc.panicking) continue;
+      if (npc.controlled === 'love' || npc.controlled === 'mind') continue;
+      const crowd = this.info.crowd;
+      if (crowd === 'hostile') this.makeHostile(npc);
+      else if (crowd === 'panic') this.panic(npc);
+      else if (crowd === 'infect' && this.rng() < 0.12) this.infect(npc);
+      else this.panic(npc);
+    }
+
+    if (this.kind === 'blackout' && g.t10) g.t10.forceStreetLights = 0;
+    if (this.kind === 'alien') this.updateSaucers(dt, playerPos);
+    if (this.kind === 'meteor') this.updateMeteors(dt, playerPos);
+    if (this.kind === 'machine') {
+      this.spawnTimer -= dt;
+      if (this.spawnTimer <= 0) { this.spawnTimer = 3; this.freeTheCars(); }
+    }
+  }
+
+  // ---- Aliens -------------------------------------------------------------
+  updateSaucers(dt, playerPos) {
+    const want = Math.min(5, 2 + Math.floor(this.elapsed / 25));
+    while (this.saucers.length < want && playerPos) this.addSaucer(playerPos);
+
+    for (const s of this.saucers) {
+      s.phase += dt * s.spin;
+      s.angle += dt * s.orbitSpeed;
+      const cx = s.centre.x + Math.cos(s.angle) * s.radius;
+      const cz = s.centre.z + Math.sin(s.angle) * s.radius;
+      const y = s.height + Math.sin(s.phase * 0.7) * 2.2;
+      s.mesh.position.set(cx, y, cz);
+      s.mesh.rotation.y += dt * 0.6;
+      if (s.ring) s.ring.rotation.z += dt * 1.8;
+
+      // Abduction: grab whoever is underneath and lift them.
+      s.cooldown -= dt;
+      if (!s.victim && s.cooldown <= 0) {
+        const npc = this.game.npcs.npcs.find((n) =>
+          !n.indoors && !n.abducting && Math.hypot(n.position.x - cx, n.position.z - cz) < 9);
+        if (npc) { s.victim = npc; npc.abducting = s; npc.controlled = 'apocalypse'; s.beamT = 0; }
+      }
+      if (s.victim) {
+        const npc = s.victim;
+        s.beamT += dt * 0.35;
+        npc.position.x = lerpv(npc.position.x, cx, clamp01(dt * 2.2));
+        npc.position.z = lerpv(npc.position.z, cz, clamp01(dt * 2.2));
+        npc.position.y = lerpv(npc.position.y, y - 2.4, clamp01(dt * 0.9));
+        npc.root.position.copy(npc.position);
+        npc.human.animator.setState(STATES.FALL);
+        s.beam.visible = true;
+        s.beam.position.set(0, -(y - npc.position.y) * 0.5, 0);
+        s.beam.scale.y = Math.max(0.1, (y - npc.position.y) / 12);
+        if (s.beamT >= 1 || npc.position.y > y - 3.2) {
+          this.game.npcs.remove(npc);
+          this.abducted++;
+          s.victim = null;
+          s.cooldown = 6 + this.rng() * 8;
+          s.beam.visible = false;
+        }
+      } else {
+        s.beam.visible = false;
+      }
+    }
+
+    // Keep them near the player so the invasion follows you around.
+    if (playerPos) {
+      for (const s of this.saucers) {
+        if (Math.hypot(s.centre.x - playerPos.x, s.centre.z - playerPos.z) > 220) {
+          s.centre.set(playerPos.x + (this.rng() - 0.5) * 90, 0, playerPos.z + (this.rng() - 0.5) * 90);
+        }
+      }
+    }
+  }
+
+  addSaucer(near) {
+    const mesh = buildSaucer();
+    const s = {
+      mesh,
+      ring: mesh.getObjectByName('ring'),
+      beam: mesh.getObjectByName('beam'),
+      centre: new THREE.Vector3(near.x + (this.rng() - 0.5) * 80, 0, near.z + (this.rng() - 0.5) * 80),
+      radius: 18 + this.rng() * 40,
+      angle: this.rng() * TAU,
+      orbitSpeed: (this.rng() * 0.12 + 0.05) * (this.rng() < 0.5 ? -1 : 1),
+      height: 34 + this.rng() * 26,
+      phase: this.rng() * TAU,
+      spin: 0.6 + this.rng(),
+      cooldown: this.rng() * 4,
+      victim: null,
+      beamT: 0,
+    };
+    s.beam.visible = false;
+    this.group.add(mesh);
+    this.saucers.push(s);
+    return s;
+  }
+
+  // ---- Meteors ------------------------------------------------------------
+  updateMeteors(dt, playerPos) {
+    this.spawnTimer -= dt;
+    if (this.spawnTimer <= 0 && playerPos && this.meteors.length < 8) {
+      this.spawnTimer = 0.7 + this.rng() * 1.6;
+      this.addMeteor(playerPos);
+    }
+    for (let i = this.meteors.length - 1; i >= 0; i--) {
+      const m = this.meteors[i];
+      m.mesh.position.addScaledVector(m.vel, dt);
+      m.mesh.rotation.x += dt * 2.4;
+      m.mesh.rotation.z += dt * 1.7;
+      const ground = this.game.world.groundAt(m.mesh.position.x, m.mesh.position.z);
+      if (m.mesh.position.y <= ground + 0.5) {
+        // Impact: a flash, a bang, and everyone nearby hits the deck.
+        if (this.game.atmosphere) this.game.atmosphere.lightning = 1;
+        const d = playerPos ? m.mesh.position.distanceTo(playerPos) : 999;
+        if (d < 180) audio.spawnPop();
+        for (const npc of this.game.npcs.npcs) {
+          if (npc.position.distanceTo(m.mesh.position) < 14) { npc.downed = 3 + this.rng() * 4; this.casualties++; }
+        }
+        this.group.remove(m.mesh);
+        this.meteors.splice(i, 1);
+      }
+    }
+  }
+
+  addMeteor(near) {
+    const geo = new THREE.IcosahedronGeometry(1.2 + this.rng() * 2.4, 0);
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0x30251d, emissive: 0xff6a1e, emissiveIntensity: 2.4, roughness: 1, metalness: 0,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    const a = this.rng() * TAU;
+    const r = 60 + this.rng() * 140;
+    mesh.position.set(near.x + Math.cos(a) * r, 220 + this.rng() * 90, near.z + Math.sin(a) * r);
+    const tx = near.x + (this.rng() - 0.5) * 220;
+    const tz = near.z + (this.rng() - 0.5) * 220;
+    const dir = new THREE.Vector3(tx - mesh.position.x, -mesh.position.y, tz - mesh.position.z).normalize();
+    const vel = dir.multiplyScalar(48 + this.rng() * 26);
+    this.group.add(mesh);
+    const m = { mesh, vel };
+    this.meteors.push(m);
+    return m;
+  }
+
+  // -------------------------------------------------------------------------
+  status() {
+    if (!this.kind) return 'Nothing is ending. The city is fine.';
+    const g = this.game;
+    let infected = 0, hostile = 0, panicking = 0, down = 0;
+    for (const n of g.npcs.npcs) {
+      if (n.infected) infected++;
+      else if (n.hostile) hostile++;
+      else if (n.panicking) panicking++;
+      if (n.downed > 0) down++;
+    }
+    const mins = Math.floor(this.elapsed / 60);
+    const head = this.info.name + ', ' + (mins ? mins + ' minutes in' : Math.round(this.elapsed) + ' seconds in');
+    const parts = [];
+    if (infected) parts.push(infected + ' infected');
+    if (hostile) parts.push(hostile + ' hostile');
+    if (panicking) parts.push(panicking + ' running');
+    if (down) parts.push(down + ' on the ground');
+    if (this.casualties) parts.push(this.casualties + ' knocked down so far');
+    if (this.abducted) parts.push(this.abducted + ' taken');
+    return head + '. ' + (parts.length ? parts.join(', ') + '.' : 'Nobody has noticed yet.');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The saucer. Two lathed shells, a lit rim and a beam cone.
+// ---------------------------------------------------------------------------
+function buildSaucer() {
+  const g = new THREE.Group();
+
+  const hullPts = [];
+  for (let i = 0; i <= 12; i++) {
+    const t = i / 12;
+    const r = Math.sin(t * Math.PI) * 9 + 0.4;
+    hullPts.push(new THREE.Vector2(r, lerpv(-1.9, 1.9, t) * (1 - Math.abs(t - 0.5) * 0.4)));
+  }
+  const hull = new THREE.Mesh(
+    new THREE.LatheGeometry(hullPts, 22),
+    new THREE.MeshStandardMaterial({ color: 0x2b3238, metalness: 0.85, roughness: 0.28 })
+  );
+  g.add(hull);
+
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(3.4, 18, 10, 0, TAU, 0, Math.PI / 2),
+    new THREE.MeshStandardMaterial({
+      color: 0x3fd9c0, emissive: 0x1fa88f, emissiveIntensity: 0.9,
+      metalness: 0.2, roughness: 0.1, transparent: true, opacity: 0.72,
+    })
+  );
+  dome.position.y = 1.5;
+  g.add(dome);
+
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(7.6, 0.42, 8, 34),
+    new THREE.MeshStandardMaterial({ color: 0x0c1412, emissive: 0x6dff9e, emissiveIntensity: 2.2, roughness: 0.4 })
+  );
+  ring.name = 'ring';
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = -0.6;
+  g.add(ring);
+
+  const beam = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.1, 6.4, 12, 18, 1, true),
+    new THREE.MeshBasicMaterial({
+      color: 0x8dffc4, transparent: true, opacity: 0.20, side: THREE.DoubleSide, depthWrite: false,
+    })
+  );
+  beam.name = 'beam';
+  beam.renderOrder = 880;
+  g.add(beam);
+
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+  return g;
+}
+
+return { Apocalypse, APOCALYPSES, APOCALYPSE_KEYS };
+})();
+
 __M["human/meshbuilder"] = (function(){
 // T10 World - skinned mesh accumulator.
 // Collects positions/uvs/skin weights from many parametric parts into one
@@ -58684,1095 +60209,6 @@ function outfitCount(gender) { return (OUTFITS[gender] || OUTFITS.male).length; 
 return { buildGarment, buildShoe, getOutfit, outfitCount, OUTFITS, BASE_LAYER };
 })();
 
-__M["human/animator"] = (function(){
-// T10 World - procedural character animation.
-// No animation clips: every pose is computed from the locomotion phase and a
-// per-character motion profile, then blended. That gives each human a distinct
-// walk and keeps transitions continuous instead of snapping between clips.
-const THREE = __THREE;
-const { clamp01, clampv, lerpv, smooth01, damp, wrapAngle, TAU, DEG, makeRng, noise1 } = __M["core/math"];
-const { solveTwoBoneIK } = __M["human/skeleton"];
-
-const _q = new THREE.Quaternion();
-const _e = new THREE.Euler();
-const _v = new THREE.Vector3();
-const _v2 = new THREE.Vector3();
-
-/** Per-character motion personality. Two people never move quite the same. */
-function makeMotionProfile(rng, params) {
-  const female = params.gender === 'female';
-  const heightFactor = params.height / (female ? 1.65 : 1.78);
-  return {
-    strideScale: rng.range(0.86, 1.16),
-    cadenceScale: rng.range(0.92, 1.10) / Math.sqrt(heightFactor),
-    armSwing: rng.range(0.62, 1.32),
-    armBend: rng.range(0.5, 1.5),
-    bounce: rng.range(0.7, 1.3),
-    hipSway: (female ? rng.range(0.9, 1.7) : rng.range(0.4, 1.0)),
-    shoulderRoll: rng.range(0.4, 1.5),
-    lean: rng.range(0.6, 1.4),
-    toeOut: rng.range(-0.06, 0.22),
-    bowLeg: rng.range(-0.035, 0.05),
-    headBob: rng.range(0.5, 1.4),
-    headTilt: rng.range(-0.05, 0.05),
-    swagger: rng.range(0, 1),
-    energy: rng.range(0.7, 1.25),
-    idleShiftRate: rng.range(0.05, 0.16),
-    blinkRate: rng.range(0.16, 0.34),
-    gazeRate: rng.range(0.25, 0.7),
-    breathRate: rng.range(0.20, 0.30),
-    phase: rng() * TAU,
-    limp: rng.chance(0.06) ? rng.range(0.1, 0.3) : 0,
-    armsCrossed: rng.chance(0.12),
-    handsInPockets: rng.chance(0.14),
-  };
-}
-
-const STATES = {
-  IDLE: 'idle', WALK: 'walk', RUN: 'run', SPRINT: 'sprint', JUMP: 'jump', FALL: 'fall',
-  LAND: 'land', CROUCH: 'crouch', SIT: 'sit', DRIVE: 'drive', TALK: 'talk', USE: 'use',
-  CLIMB: 'climb', SWIM: 'swim', GETUP: 'getup', LIE: 'lie', DANCE: 'dance', WAVE: 'wave',
-  PHONE: 'phone', EAT: 'eat', EXERCISE: 'exercise', CARRY: 'carry', AIM: 'aim', DEAD: 'dead',
-  SALUTE: 'salute', CLAP: 'clap', POINT: 'point', CHEER: 'cheer', THINK: 'think',
-  STRETCH: 'stretch', BOW: 'bow',
-};
-
-class HumanAnimator {
-  constructor(rig, prop, profile) {
-    this.rig = rig;                 // { boneMap, face, proportions }
-    this.bones = rig.boneMap;
-    this.prop = prop;
-    this.profile = profile;
-    this.state = STATES.IDLE;
-    this.prevState = STATES.IDLE;
-    this.stateTime = 0;
-    this.blend = 1;
-
-    this.phase = profile.phase;
-    this.speed = 0;
-    this.targetSpeed = 0;
-    this.turnRate = 0;
-    this.grounded = true;
-    this.verticalVel = 0;
-
-    // Additive layer state
-    this.breathT = Math.random() * 10;
-    this.blinkTimer = 1 + Math.random() * 3;
-    this.blinkValue = 0;
-    this.blinkPhase = 0;
-    this.gazeTimer = 0;
-    this.gazeTarget = new THREE.Vector2(0, 0);
-    this.gazeCurrent = new THREE.Vector2(0, 0);
-    this.lookAtWorld = null;
-    this.lookWeight = 0;
-    this.headYaw = 0; this.headPitch = 0;
-    this.jawOpen = 0; this.jawTarget = 0;
-    this.talking = false;
-    this.talkT = 0;
-    this.browRaise = 0;
-    this.mouthSmile = 0;
-
-    this.idleShiftT = Math.random() * 10;
-    this.idleVariant = 0;
-    this.idleVariantTimer = 4 + Math.random() * 8;
-
-    this.hipsOffset = new THREE.Vector3();
-    this.hipsExtraRot = new THREE.Euler();
-    this.footIK = { enabled: true, L: 0, R: 0, targetL: new THREE.Vector3(), targetR: new THREE.Vector3(), normalL: new THREE.Vector3(0, 1, 0), normalR: new THREE.Vector3(0, 1, 0) };
-    this.groundSampler = null;       // (x, z) => { y, normal }
-    this.lastFootY = { L: 0, R: 0 };
-    this.footPlant = { L: 0, R: 0 };
-    this.onFootstep = null;
-    this._stepFlag = { L: false, R: false };
-
-    this.handTargets = { L: null, R: null };   // world-space IK targets (steering wheel, door)
-    this.handWeights = { L: 0, R: 0 };
-
-    // Cached rest quaternions for blending.
-    this._target = {};
-    for (const name in this.bones) this._target[name] = new THREE.Quaternion();
-    this._rate = 14;
-  }
-
-  setState(state, opts) {
-    if (this.state === state) return;
-    this.prevState = this.state;
-    this.state = state;
-    this.stateTime = 0;
-    this.stateOpts = opts || {};
-  }
-
-  setLookTarget(worldPos, weight) {
-    this.lookAtWorld = worldPos;
-    this.lookWeight = weight == null ? 1 : clamp01(weight);
-  }
-
-  setTalking(v, intensity) {
-    this.talking = v;
-    this.talkIntensity = intensity == null ? 1 : intensity;
-  }
-
-  /** Main entry. `move` = { speed, turnRate, grounded, verticalVel }. */
-  update(dt, move, rootObject) {
-    dt = Math.min(dt, 0.1);
-    this.stateTime += dt;
-    const p = this.profile;
-
-    this.speed = damp(this.speed, move.speed, 0.0008, dt);
-    this.turnRate = damp(this.turnRate, move.turnRate || 0, 0.002, dt);
-    this.grounded = move.grounded;
-    this.verticalVel = move.verticalVel || 0;
-
-    // ---- Locomotion phase ------------------------------------------------
-    const legLen = this.prop.measure.crotchY;
-    const strideLen = legLen * 0.92 * p.strideScale * (1 + this.speed * 0.055);
-    if (this.isLocomotion()) {
-      const cadence = (this.speed / Math.max(0.2, strideLen)) * p.cadenceScale;
-      this.phase += cadence * dt;
-      this.phase %= 1;
-      if (this.phase < 0) this.phase += 1;
-    } else if (this.state === STATES.IDLE) {
-      this.phase = damp(this.phase, Math.round(this.phase * 4) / 4, 0.02, dt);
-    }
-
-    // ---- Build the target pose ------------------------------------------
-    this.resetTarget();
-    switch (this.state) {
-      case STATES.WALK: case STATES.RUN: case STATES.SPRINT: this.poseLocomotion(dt); break;
-      case STATES.JUMP: this.poseJump(dt); break;
-      case STATES.FALL: this.poseFall(dt); break;
-      case STATES.LAND: this.poseLand(dt); break;
-      case STATES.CROUCH: this.poseCrouch(dt); break;
-      case STATES.SIT: this.poseSit(dt); break;
-      case STATES.DRIVE: this.poseDrive(dt); break;
-      case STATES.CLIMB: this.poseClimb(dt); break;
-      case STATES.SWIM: this.poseSwim(dt); break;
-      case STATES.LIE: this.poseLie(dt); break;
-      case STATES.GETUP: this.poseGetUp(dt); break;
-      case STATES.DANCE: this.poseDance(dt); break;
-      case STATES.WAVE: this.poseWave(dt); break;
-      case STATES.PHONE: this.posePhone(dt); break;
-      case STATES.EAT: this.poseEat(dt); break;
-      case STATES.EXERCISE: this.poseExercise(dt); break;
-      case STATES.CARRY: this.poseCarry(dt); break;
-      case STATES.USE: this.poseUse(dt); break;
-      case STATES.SALUTE: this.poseSalute(dt); break;
-      case STATES.CLAP: this.poseClap(dt); break;
-      case STATES.POINT: this.posePoint(dt); break;
-      case STATES.CHEER: this.poseCheer(dt); break;
-      case STATES.THINK: this.poseThink(dt); break;
-      case STATES.STRETCH: this.poseStretch(dt); break;
-      case STATES.BOW: this.poseBow(dt); break;
-      case STATES.DEAD: this.poseDead(dt); break;
-      default: this.poseIdle(dt); break;
-    }
-
-    // ---- Additive layers -------------------------------------------------
-    this.applyBreathing(dt);
-    this.applyTurnLean(dt);
-    if (this.rig.facial !== false) {
-      this.applyBlink(dt);
-      this.applyGaze(dt);
-      this.applyTalk(dt);
-    }
-    this.applyLookAt(dt);
-
-    // ---- Commit: slerp bones toward the target pose ------------------------
-    const rate = 1 - Math.exp(-this._rate * dt);
-    for (const name in this.bones) {
-      const b = this.bones[name];
-      const t = this._target[name];
-      if (!t) continue;
-      b.quaternion.slerp(t, rate);
-    }
-
-    // Hips translation (bob, sway, crouch offsets).
-    const hips = this.bones.hips;
-    if (hips) {
-      const rest = hips.userData.restLocal;
-      hips.position.x = damp(hips.position.x, rest.x + this.hipsOffset.x, 0.0005, dt);
-      hips.position.y = damp(hips.position.y, rest.y + this.hipsOffset.y, 0.0005, dt);
-      hips.position.z = damp(hips.position.z, rest.z + this.hipsOffset.z, 0.0005, dt);
-    }
-
-    // ---- IK passes --------------------------------------------------------
-    if (rootObject) {
-      rootObject.updateMatrixWorld(true);
-      if (this.footIK.enabled && this.groundSampler && this.isGroundedState()) this.applyFootIK(rootObject, dt);
-      if (this.handTargets.L || this.handTargets.R) this.applyHandIK(rootObject);
-    }
-
-    this.detectFootsteps();
-  }
-
-  isLocomotion() { return this.state === STATES.WALK || this.state === STATES.RUN || this.state === STATES.SPRINT; }
-  isGroundedState() {
-    return this.state !== STATES.JUMP && this.state !== STATES.FALL && this.state !== STATES.SIT &&
-      this.state !== STATES.DRIVE && this.state !== STATES.SWIM && this.state !== STATES.LIE &&
-      this.state !== STATES.CLIMB && this.state !== STATES.DEAD;
-  }
-
-  resetTarget() {
-    for (const name in this._target) this._target[name].identity();
-    this.hipsOffset.set(0, 0, 0);
-    this.eyeSquint = 0;
-  }
-
-  /** Set a target bone rotation (replaces). Angles in radians. */
-  set(name, x, y, z, order) {
-    const t = this._target[name];
-    if (!t) return;
-    _e.set(x || 0, y || 0, z || 0, order || 'XYZ');
-    t.setFromEuler(_e);
-  }
-  /** Add a rotation on top of whatever the pose set. */
-  add(name, x, y, z, order) {
-    const t = this._target[name];
-    if (!t) return;
-    _e.set(x || 0, y || 0, z || 0, order || 'XYZ');
-    _q.setFromEuler(_e);
-    t.multiply(_q);
-  }
-
-  // =========================================================================
-  // Poses
-  // =========================================================================
-
-  poseIdle(dt) {
-    const p = this.profile;
-    this._rate = 6;
-    this.idleShiftT += dt * p.idleShiftRate;
-    this.idleVariantTimer -= dt;
-    if (this.idleVariantTimer <= 0) {
-      this.idleVariantTimer = 5 + Math.random() * 10;
-      this.idleVariant = Math.floor(Math.random() * 3);
-    }
-    const t = this.idleShiftT;
-    // Slow weight shift from one leg to the other.
-    const shift = Math.sin(t * TAU * 0.35) * 0.5 + Math.sin(t * TAU * 0.13) * 0.25;
-    const sway = Math.sin(t * TAU * 0.21) * 0.6;
-
-    this.hipsOffset.x = shift * this.prop.measure.height * 0.011;
-    this.hipsOffset.y = -Math.abs(shift) * this.prop.measure.height * 0.004;
-
-    this.set('hips', 0, shift * 0.05, -shift * 0.045);
-    this.set('spine', 0.012, -shift * 0.03, shift * 0.03);
-    this.set('chest', 0.006, sway * 0.04, shift * 0.018);
-    this.set('neck', -0.02, sway * 0.05, -shift * 0.02);
-    this.set('head', 0.01 + p.headTilt, sway * 0.07, p.headTilt);
-
-    // Arms hang with a natural inward rotation, elbows slightly bent.
-    for (const S of ['L', 'R']) {
-      const s = S === 'L' ? 1 : -1;
-      const armSwing = Math.sin(t * TAU * 0.29 + (s > 0 ? 0 : 1.4)) * 0.03;
-      if (p.armsCrossed && this.idleVariant === 1) {
-        this.set('clavicle' + S, 0, 0, -s * 0.06);
-        this.set('upperArm' + S, 0.35, -s * 0.55, -s * (1.16 - 0.25));
-        this.set('lowerArm' + S, 0, -s * 1.55, 0);
-      } else if (p.handsInPockets && this.idleVariant === 2) {
-        this.set('clavicle' + S, 0, 0, -s * 0.04);
-        this.set('upperArm' + S, 0.16, s * 0.10, -s * 1.18);
-        this.set('lowerArm' + S, 0, -s * 0.72, 0);
-      } else {
-        this.set('clavicle' + S, 0, 0, -s * 0.03 + shift * 0.02 * s);
-        this.set('upperArm' + S, 0.03 + armSwing, s * 0.08, -s * (1.30 - shift * 0.03 * s));
-        this.set('lowerArm' + S, 0, -s * (0.22 + p.armBend * 0.10), 0);
-      }
-      this.set('hand' + S, 0, 0, s * 0.06);
-      this.relaxFingers(S, 0.52);
-    }
-
-    // Weight-bearing leg straight, other slightly bent and turned out.
-    const bearing = shift > 0 ? 'L' : 'R';
-    for (const S of ['L', 'R']) {
-      const s = S === 'L' ? 1 : -1;
-      const isFree = S !== bearing;
-      const free = isFree ? Math.abs(shift) : 0;
-      this.set('upperLeg' + S, -free * 0.10, s * (p.toeOut * 0.6 + free * 0.10), s * p.bowLeg);
-      this.set('lowerLeg' + S, free * 0.22, 0, 0);
-      this.set('foot' + S, -free * 0.10, s * p.toeOut, 0);
-      this.set('toe' + S, 0, 0, 0);
-    }
-  }
-
-  poseLocomotion(dt) {
-    const p = this.profile;
-    this._rate = 18;
-    const spd = this.speed;
-    const run = clamp01((spd - 2.1) / 2.4);
-    const sprint = clamp01((spd - 4.6) / 2.6);
-    const walkAmt = 1 - run;
-    const ph = this.phase * TAU;
-
-    // Amplitudes ramp continuously from walk through sprint.
-    const thighAmp = lerpv(0.40, lerpv(0.70, 0.88, sprint), run) * p.strideScale;
-    const kneeAmp = lerpv(0.95, lerpv(1.85, 2.25, sprint), run);
-    const armAmp = lerpv(0.34, lerpv(0.85, 1.15, sprint), run) * p.armSwing;
-    const elbowBase = lerpv(0.30, lerpv(1.30, 1.65, sprint), run) * p.armBend;
-    const bounce = lerpv(0.014, lerpv(0.030, 0.042, sprint), run) * p.bounce;
-    const lean = lerpv(0.03, lerpv(0.16, 0.30, sprint), run) * p.lean;
-    const swayAmt = lerpv(0.075, 0.045, run) * p.hipSway;
-
-    // Vertical bob peaks twice per cycle; lateral sway once.
-    this.hipsOffset.y = (-Math.abs(Math.cos(ph)) * bounce + bounce * 0.42) * this.prop.measure.height;
-    this.hipsOffset.x = Math.sin(ph) * swayAmt * this.prop.measure.height * 0.12;
-    this.hipsOffset.z = -lean * this.prop.measure.height * 0.03;
-
-    const pelvisYaw = Math.sin(ph) * lerpv(0.10, 0.18, run);
-    const pelvisRoll = -Math.sin(ph) * swayAmt * 0.5;
-    this.set('hips', lean * 0.45, pelvisYaw, pelvisRoll);
-    this.set('spine', lean * 0.30, -pelvisYaw * 0.55, -pelvisRoll * 0.4);
-    this.set('chest', lean * 0.22, -pelvisYaw * 0.85 * p.shoulderRoll, -pelvisRoll * 0.3);
-    this.set('neck', -lean * 0.42, pelvisYaw * 0.25, 0);
-    this.set('head', -lean * 0.24 + Math.sin(ph * 2) * 0.02 * p.headBob, pelvisYaw * 0.18, p.headTilt);
-
-    for (const S of ['L', 'R']) {
-      const s = S === 'L' ? 1 : -1;
-      // Right leg is half a cycle behind the left.
-      const legPh = ph + (S === 'L' ? 0 : Math.PI);
-      const limp = (S === 'L' && p.limp) ? p.limp : 0;
-
-      const swing = Math.sin(legPh);
-      const thigh = swing * thighAmp * (1 - limp * 0.5);
-      // Knee flexes during swing and absorbs on contact.
-      const kneeSwing = Math.max(0, -Math.cos(legPh)) * kneeAmp * 0.55;
-      const kneeStance = Math.max(0, Math.sin(legPh + Math.PI * 0.35)) * lerpv(0.12, 0.34, run);
-      const knee = kneeSwing + kneeStance + limp * 0.3;
-
-      this.set('upperLeg' + S, -thigh, s * p.toeOut * 0.5, s * p.bowLeg);
-      this.set('lowerLeg' + S, knee, 0, 0);
-      // Ankle: toe-off at the back, heel-strike at the front.
-      const ankle = -swing * lerpv(0.30, 0.45, run) + Math.max(0, Math.cos(legPh)) * lerpv(0.18, 0.40, run);
-      this.set('foot' + S, ankle, s * p.toeOut, 0);
-      this.set('toe' + S, Math.max(0, -Math.cos(legPh)) * lerpv(0.15, 0.55, run), 0, 0);
-
-      // Arms counter-swing.
-      const armPh = legPh + Math.PI;
-      const armSwing = Math.sin(armPh) * armAmp;
-      this.set('clavicle' + S, 0, -Math.sin(armPh) * 0.06 * p.shoulderRoll, -s * 0.03);
-      this.set('upperArm' + S,
-        armSwing,
-        s * (0.10 + run * 0.14),
-        -s * (1.30 - lerpv(0.10, 0.42, run) - Math.max(0, armSwing) * 0.10)
-      );
-      this.set('lowerArm' + S, 0, -s * (elbowBase + Math.max(0, -armSwing) * 0.35), 0);
-      this.set('hand' + S, Math.sin(armPh) * 0.12, 0, s * 0.06);
-      this.relaxFingers(S, lerpv(0.38, 0.72, run));
-    }
-  }
-
-  poseJump(dt) {
-    this._rate = 16;
-    const t = clamp01(this.stateTime / 0.35);
-    const tuck = Math.sin(t * Math.PI) * 0.6 + 0.25;
-    this.hipsOffset.y = -tuck * this.prop.measure.height * 0.012;
-    this.set('hips', 0.08, 0, 0);
-    this.set('spine', 0.10, 0, 0);
-    this.set('chest', 0.06, 0, 0);
-    this.set('neck', -0.10, 0, 0);
-    for (const S of ['L', 'R']) {
-      const s = S === 'L' ? 1 : -1;
-      this.set('upperLeg' + S, -0.55 * tuck, s * 0.08, s * 0.05);
-      this.set('lowerLeg' + S, 0.95 * tuck, 0, 0);
-      this.set('foot' + S, 0.35, s * 0.06, 0);
-      this.set('upperArm' + S, -1.05 * tuck, s * 0.25, -s * 0.75);
-      this.set('lowerArm' + S, 0, -s * 0.5, 0);
-      this.relaxFingers(S, 0.5);
-    }
-  }
-
-  poseFall(dt) {
-    this._rate = 9;
-    const wind = Math.sin(this.stateTime * 7) * 0.08;
-    const fast = clamp01(-this.verticalVel / 14);
-    this.set('hips', -0.05, 0, 0);
-    this.set('spine', -0.08, wind * 0.3, 0);
-    this.set('chest', -0.05, -wind * 0.3, 0);
-    this.set('neck', 0.10, 0, 0);
-    for (const S of ['L', 'R']) {
-      const s = S === 'L' ? 1 : -1;
-      this.set('upperLeg' + S, -0.28 + wind * 0.2 * s, s * 0.14, s * 0.10);
-      this.set('lowerLeg' + S, 0.55 + fast * 0.3, 0, 0);
-      this.set('foot' + S, 0.25, s * 0.08, 0);
-      this.set('upperArm' + S, -1.5 - fast * 0.6, s * 0.4, -s * 0.45);
-      this.set('lowerArm' + S, 0, -s * 0.7, 0);
-      this.relaxFingers(S, 0.3);
-    }
-  }
-
-  poseLand(dt) {
-    this._rate = 20;
-    const t = clamp01(this.stateTime / 0.30);
-    const absorb = Math.sin((1 - t) * Math.PI * 0.5);
-    this.hipsOffset.y = -absorb * this.prop.measure.height * 0.075;
-    this.set('hips', absorb * 0.22, 0, 0);
-    this.set('spine', absorb * 0.18, 0, 0);
-    this.set('chest', absorb * 0.10, 0, 0);
-    this.set('neck', -absorb * 0.24, 0, 0);
-    for (const S of ['L', 'R']) {
-      const s = S === 'L' ? 1 : -1;
-      this.set('upperLeg' + S, -absorb * 0.75, s * 0.12, s * 0.07);
-      this.set('lowerLeg' + S, absorb * 1.45, 0, 0);
-      this.set('foot' + S, -absorb * 0.55, s * 0.08, 0);
-      this.set('upperArm' + S, -absorb * 0.45, s * 0.22, -s * (1.1 - absorb * 0.35));
-      this.set('lowerArm' + S, 0, -s * (0.35 + absorb * 0.6), 0);
-      this.relaxFingers(S, 0.45);
-    }
-  }
-
-  poseCrouch(dt) {
-    this._rate = 12;
-    const moving = clamp01(this.speed / 1.6);
-    const ph = this.phase * TAU;
-    this.hipsOffset.y = -this.prop.measure.height * 0.18;
-    this.hipsOffset.z = this.prop.measure.height * 0.02;
-    this.set('hips', 0.30, Math.sin(ph) * 0.06 * moving, 0);
-    this.set('spine', 0.18, 0, 0);
-    this.set('chest', 0.10, 0, 0);
-    this.set('neck', -0.34, 0, 0);
-    for (const S of ['L', 'R']) {
-      const s = S === 'L' ? 1 : -1;
-      const legPh = ph + (S === 'L' ? 0 : Math.PI);
-      const sw = Math.sin(legPh) * 0.30 * moving;
-      this.set('upperLeg' + S, -1.05 - sw, s * 0.20, s * 0.10);
-      this.set('lowerLeg' + S, 1.75 + Math.max(0, -Math.cos(legPh)) * 0.4 * moving, 0, 0);
-      this.set('foot' + S, -0.55, s * 0.12, 0);
-      this.set('upperArm' + S, -0.22, s * 0.16, -s * 1.02);
-      this.set('lowerArm' + S, 0, -s * 0.85, 0);
-      this.relaxFingers(S, 0.5);
-    }
-  }
-
-  poseSit(dt) {
-    this._rate = 8;
-    const t = this.stateTime;
-    const idle = Math.sin(t * 0.7) * 0.02;
-    this.hipsOffset.y = -this.prop.measure.crotchY * 0.985;
-    this.hipsOffset.z = -this.prop.measure.height * 0.035;
-    this.set('hips', -0.10, 0, 0);
-    this.set('spine', 0.06 + idle, 0, 0);
-    this.set('chest', 0.04, idle * 1.5, 0);
-    this.set('neck', -0.05, idle * 2, 0);
-    this.set('head', 0.02, idle * 2.5, this.profile.headTilt);
-    for (const S of ['L', 'R']) {
-      const s = S === 'L' ? 1 : -1;
-      this.set('upperLeg' + S, -1.52, s * 0.16, s * 0.06);
-      this.set('lowerLeg' + S, 1.48, 0, 0);
-      this.set('foot' + S, 0.10, s * 0.10, 0);
-      this.set('upperArm' + S, 0.22, s * 0.10, -s * 1.16);
-      this.set('lowerArm' + S, 0, -s * 0.92, 0);
-      this.set('hand' + S, 0.2, 0, 0);
-      this.relaxFingers(S, 0.5);
-    }
-  }
-
-  poseDrive(dt) {
-    this._rate = 10;
-    const steer = this.stateOpts && this.stateOpts.steer ? this.stateOpts.steer : 0;
-    this.hipsOffset.y = -this.prop.measure.crotchY * 0.97;
-    this.hipsOffset.z = -this.prop.measure.height * 0.02;
-    this.set('hips', -0.18, 0, 0);
-    this.set('spine', 0.10, -steer * 0.05, 0);
-    this.set('chest', 0.04, -steer * 0.10, 0);
-    this.set('neck', -0.06, steer * 0.12, 0);
-    this.set('head', 0.0, steer * 0.18, 0);
-    for (const S of ['L', 'R']) {
-      const s = S === 'L' ? 1 : -1;
-      this.set('upperLeg' + S, -1.36, s * 0.20, s * 0.08);
-      this.set('lowerLeg' + S, 1.15, 0, 0);
-      this.set('foot' + S, 0.28, s * 0.10, 0);
-      // Hands at ten-and-two, rotating with the wheel.
-      const wheelAngle = steer * 0.9;
-      this.set('clavicle' + S, 0, 0, -s * 0.08);
-      this.set('upperArm' + S, -0.72 + wheelAngle * s * 0.35, s * 0.30, -s * 0.62);
-      this.set('lowerArm' + S, 0, -s * 1.22, -wheelAngle * 0.3);
-      this.set('hand' + S, 0, 0, s * 0.25);
-      this.gripFingers(S, 0.85);
-    }
-  }
-
-  poseClimb(dt) {
-    this._rate = 12;
-    const ph = this.stateTime * 2.2;
-    for (const S of ['L', 'R']) {
-      const s = S === 'L' ? 1 : -1;
-      const o = S === 'L' ? 0 : Math.PI;
-      const reach = Math.sin(ph + o) * 0.5 + 0.5;
-      this.set('upperArm' + S, -2.30 + reach * 0.55, s * 0.30, -s * 0.30);
-      this.set('lowerArm' + S, 0, -s * (0.35 + reach * 0.5), 0);
-      this.gripFingers(S, 0.9);
-      this.set('upperLeg' + S, -0.55 - (1 - reach) * 0.55, s * 0.22, s * 0.10);
-      this.set('lowerLeg' + S, 0.85 + (1 - reach) * 0.65, 0, 0);
-      this.set('foot' + S, 0.25, s * 0.10, 0);
-    }
-    this.set('hips', 0.10, 0, 0);
-    this.set('spine', 0.12, 0, 0);
-    this.set('neck', -0.28, 0, 0);
-  }
-
-  poseSwim(dt) {
-    this._rate = 8;
-    const ph = this.stateTime * 2.6;
-    this.set('hips', -1.30, 0, 0);       // body goes horizontal
-    this.set('spine', 0.10, Math.sin(ph) * 0.12, 0);
-    this.set('chest', 0.08, -Math.sin(ph) * 0.14, 0);
-    this.set('neck', 0.55, 0, 0);
-    for (const S of ['L', 'R']) {
-      const s = S === 'L' ? 1 : -1;
-      const o = S === 'L' ? 0 : Math.PI;
-      this.set('upperArm' + S, -1.2 + Math.sin(ph + o) * 1.5, s * 0.35, -s * 0.5);
-      this.set('lowerArm' + S, 0, -s * 0.45, 0);
-      this.set('upperLeg' + S, Math.sin(ph * 1.6 + o) * 0.35, s * 0.08, s * 0.04);
-      this.set('lowerLeg' + S, 0.3 + Math.max(0, Math.sin(ph * 1.6 + o)) * 0.5, 0, 0);
-      this.set('foot' + S, 0.5, s * 0.08, 0);
-      this.relaxFingers(S, 0.15);
-    }
-  }
-
-  poseLie(dt) {
-    this._rate = 7;
-    const breathe = Math.sin(this.stateTime * 1.1) * 0.02;
-    this.set('hips', -1.53, 0, 0.06);
-    this.set('spine', 0.04 + breathe, 0, -0.04);
-    this.set('chest', 0.06, 0, 0);
-    this.set('neck', 0.28, 0.10, 0);
-    this.set('head', 0.12, 0.14, 0);
-    for (const S of ['L', 'R']) {
-      const s = S === 'L' ? 1 : -1;
-      this.set('upperArm' + S, 0.30, s * 0.20, -s * 1.24);
-      this.set('lowerArm' + S, 0, -s * 0.35, 0);
-      this.set('upperLeg' + S, -0.10, s * 0.10, s * 0.10);
-      this.set('lowerLeg' + S, 0.20 + (S === 'L' ? 0.25 : 0), 0, 0);
-      this.set('foot' + S, 0.30, s * 0.20, 0);
-      this.relaxFingers(S, 0.3);
-    }
-  }
-
-  /** Getting up off the street — the game's opening move. */
-  poseGetUp(dt) {
-    this._rate = 9;
-    const T = clamp01(this.stateTime / 3.4);
-    // Phase 1: roll to side. Phase 2: push up to hands and knees. Phase 3: stand.
-    const a = clamp01(T / 0.30);
-    const b = clamp01((T - 0.28) / 0.36);
-    const c = clamp01((T - 0.62) / 0.38);
-    const ea = smooth01(a), eb = smooth01(b), ec = smooth01(c);
-
-    const lieRot = lerpv(-1.53, -0.75, eb);
-    const hipRot = lerpv(lieRot, 0, ec);
-    this.hipsOffset.y = lerpv(
-      lerpv(-this.prop.measure.hipY * 0.94, -this.prop.measure.hipY * 0.55, eb),
-      0, ec
-    );
-    this.set('hips', hipRot, lerpv(0.15 * ea, 0, ec), lerpv(0.10 * ea, 0, ec));
-    this.set('spine', lerpv(0.20 * eb, 0.05, ec), 0, 0);
-    this.set('chest', lerpv(0.16 * eb, 0.02, ec), 0, 0);
-    this.set('neck', lerpv(lerpv(0.30, -0.30, eb), -0.03, ec), 0, 0);
-
-    for (const S of ['L', 'R']) {
-      const s = S === 'L' ? 1 : -1;
-      // Hands push against the ground, then swing down.
-      const push = eb * (1 - ec);
-      this.set('upperArm' + S, lerpv(lerpv(0.3, -1.25, ea), lerpv(-0.55, 0.05, ec), eb), s * (0.2 + push * 0.25), -s * lerpv(1.24, 0.95, push));
-      this.set('lowerArm' + S, 0, -s * lerpv(0.35, 1.0, push * (1 - ec)) , 0);
-      this.relaxFingers(S, lerpv(0.3, 0.05, push));
-      // Legs tuck under, then straighten.
-      const tuck = eb * (1 - ec);
-      this.set('upperLeg' + S, lerpv(lerpv(-0.10, -1.40, tuck), 0, ec), s * 0.14, s * 0.08);
-      this.set('lowerLeg' + S, lerpv(lerpv(0.20, 1.85, tuck), 0.03, ec), 0, 0);
-      this.set('foot' + S, lerpv(0.30, 0, ec), s * 0.1, 0);
-    }
-  }
-
-  poseDance(dt) {
-    this._rate = 14;
-    const t = this.stateTime * 3.4;
-    const bob = Math.sin(t * 2);
-    this.hipsOffset.y = bob * this.prop.measure.height * 0.022 - this.prop.measure.height * 0.012;
-    this.hipsOffset.x = Math.sin(t) * this.prop.measure.height * 0.022;
-    this.set('hips', 0.04, Math.sin(t) * 0.30, -Math.sin(t) * 0.18);
-    this.set('spine', 0.05, -Math.sin(t) * 0.18, Math.sin(t) * 0.12);
-    this.set('chest', 0.02, Math.sin(t + 0.6) * 0.26, -Math.sin(t) * 0.10);
-    this.set('neck', -0.05, Math.sin(t + 1.1) * 0.18, 0);
-    this.set('head', Math.sin(t * 2) * 0.10, Math.sin(t + 1.4) * 0.22, Math.sin(t) * 0.08);
-    for (const S of ['L', 'R']) {
-      const s = S === 'L' ? 1 : -1;
-      const o = S === 'L' ? 0 : Math.PI * 0.6;
-      this.set('upperArm' + S, -1.1 + Math.sin(t + o) * 0.85, s * (0.3 + Math.sin(t * 0.7) * 0.3), -s * (0.55 + Math.sin(t + o) * 0.3));
-      this.set('lowerArm' + S, 0, -s * (1.1 + Math.sin(t * 1.3 + o) * 0.5), 0);
-      this.relaxFingers(S, 0.25);
-      this.set('upperLeg' + S, Math.sin(t + o) * 0.22, s * 0.16, s * 0.08);
-      this.set('lowerLeg' + S, 0.15 + Math.max(0, Math.sin(t + o)) * 0.45, 0, 0);
-      this.set('foot' + S, -0.08, s * 0.14, 0);
-    }
-  }
-
-  poseWave(dt) {
-    this.poseIdle(dt);
-    this._rate = 12;
-    const t = this.stateTime * 6.5;
-    const S = 'R', s = -1;
-    const up = clamp01(this.stateTime / 0.35) * clamp01((2.2 - this.stateTime) / 0.4);
-    this.set('clavicle' + S, 0, 0, -s * 0.12 * up);
-    this.set('upperArm' + S, -0.35 * up, s * 0.25 * up, -s * (1.30 - 0.95 * up));
-    this.set('lowerArm' + S, 0, -s * (0.25 + 1.05 * up), 0);
-    this.set('hand' + S, 0, 0, s * (0.1 + Math.sin(t) * 0.55 * up));
-    this.relaxFingers(S, 0.05);
-  }
-
-  posePhone(dt) {
-    this.poseIdle(dt);
-    this._rate = 9;
-    const toEar = this.stateOpts && this.stateOpts.toEar;
-    const S = 'R', s = -1;
-    if (toEar) {
-      this.set('clavicle' + S, 0, 0, -s * 0.10);
-      this.set('upperArm' + S, -0.62, s * 0.52, -s * 0.72);
-      this.set('lowerArm' + S, 0, -s * 2.05, 0);
-      this.set('hand' + S, 0.2, 0, s * 0.3);
-      this.gripFingers(S, 0.8);
-      this.set('head', 0.04, s * 0.10, s * 0.14);
-    } else {
-      // Looking down at the screen — the universal pose.
-      for (const side of ['L', 'R']) {
-        const ss = side === 'L' ? 1 : -1;
-        this.set('upperArm' + side, -0.50, ss * 0.28, -ss * 0.88);
-        this.set('lowerArm' + side, 0, -ss * 1.35, 0);
-        this.set('hand' + side, 0.15, 0, ss * 0.2);
-        this.gripFingers(side, 0.55);
-      }
-      this.set('neck', 0.30, 0, 0);
-      this.set('head', 0.22, 0, 0);
-      this.set('chest', 0.05, 0, 0);
-    }
-  }
-
-  poseEat(dt) {
-    this.poseSit(dt);
-    this._rate = 8;
-    const t = this.stateTime * 1.4;
-    const bite = Math.max(0, Math.sin(t));
-    const S = 'R', s = -1;
-    this.set('upperArm' + S, -0.35 - bite * 0.55, s * 0.30, -s * 0.85);
-    this.set('lowerArm' + S, 0, -s * (1.1 + bite * 0.85), 0);
-    this.gripFingers(S, 0.7);
-    this.jawTarget = bite * 0.35;
-  }
-
-  poseExercise(dt) {
-    this._rate = 16;
-    const t = this.stateTime * 2.6;
-    const rep = Math.sin(t) * 0.5 + 0.5;
-    this.hipsOffset.y = -rep * this.prop.measure.height * 0.10;
-    this.set('hips', rep * 0.30, 0, 0);
-    this.set('spine', rep * 0.12, 0, 0);
-    this.set('neck', -rep * 0.20, 0, 0);
-    for (const S of ['L', 'R']) {
-      const s = S === 'L' ? 1 : -1;
-      this.set('upperLeg' + S, -rep * 1.25, s * 0.22, s * 0.10);
-      this.set('lowerLeg' + S, rep * 2.0, 0, 0);
-      this.set('foot' + S, -rep * 0.45, s * 0.12, 0);
-      this.set('upperArm' + S, -0.55 - rep * 0.55, s * 0.28, -s * 0.85);
-      this.set('lowerArm' + S, 0, -s * (0.9 + rep * 0.4), 0);
-      this.relaxFingers(S, 0.6);
-    }
-  }
-
-  poseCarry(dt) {
-    const moving = this.speed > 0.4;
-    if (moving) this.poseLocomotion(dt); else this.poseIdle(dt);
-    for (const S of ['L', 'R']) {
-      const s = S === 'L' ? 1 : -1;
-      this.set('upperArm' + S, -0.85, s * 0.30, -s * 0.72);
-      this.set('lowerArm' + S, 0, -s * 1.42, 0);
-      this.set('hand' + S, 0.1, 0, s * 0.12);
-      this.gripFingers(S, 0.75);
-    }
-    this.set('chest', 0.06, 0, 0);
-  }
-
-  poseUse(dt) {
-    this.poseIdle(dt);
-    this._rate = 11;
-    const reach = clamp01(this.stateTime / 0.4) * clamp01((1.6 - this.stateTime) / 0.4);
-    const S = (this.stateOpts && this.stateOpts.hand) || 'R';
-    const s = S === 'L' ? 1 : -1;
-    this.set('clavicle' + S, 0, -s * 0.10 * reach, -s * 0.08 * reach);
-    this.set('upperArm' + S, -1.15 * reach, s * 0.18, -s * (1.30 - 1.05 * reach));
-    this.set('lowerArm' + S, 0, -s * (0.25 + 0.55 * reach), 0);
-    this.set('hand' + S, 0, 0, s * 0.1);
-    this.relaxFingers(S, 0.15 + reach * 0.4);
-    this.set('chest', 0.03, -s * 0.10 * reach, 0);
-  }
-
-  poseDead(dt) {
-    this._rate = 3;
-    this.poseLie(dt);
-    this.set('neck', 0.45, 0.35, 0);
-    for (const S of ['L', 'R']) {
-      const s = S === 'L' ? 1 : -1;
-      this.set('upperArm' + S, 0.15, s * 0.45, -s * 1.05);
-      this.relaxFingers(S, 0.5);
-    }
-  }
-
-  poseSalute(dt) {
-    this.poseIdle(dt);
-    this._rate = 12;
-    const up = clamp01(this.stateTime / 0.35);
-    const S = 'R', s = -1;
-    this.set('clavicle' + S, 0, 0, -s * 0.14 * up);
-    this.set('upperArm' + S, -0.30 * up, s * 0.62 * up, -s * (1.30 - 0.78 * up));
-    this.set('lowerArm' + S, 0, -s * (0.25 + 1.72 * up), 0);
-    this.set('hand' + S, -0.35 * up, 0, s * 0.18);
-    this.relaxFingers(S, 0.04);
-    this.add('spine', -0.04 * up, 0, 0);
-    this.add('head', -0.05 * up, 0, 0);
-  }
-
-  poseClap(dt) {
-    this.poseIdle(dt);
-    this._rate = 20;
-    const t = this.stateTime * 6.2;
-    const clap = Math.abs(Math.sin(t));
-    for (const S of ['L', 'R']) {
-      const s = S === 'L' ? 1 : -1;
-      this.set('clavicle' + S, 0, -s * 0.06, -s * 0.05);
-      this.set('upperArm' + S, -0.72, s * (0.52 - clap * 0.30), -s * 0.70);
-      this.set('lowerArm' + S, 0, -s * (1.55 + clap * 0.22), 0);
-      this.set('hand' + S, 0, 0, s * 0.1);
-      this.relaxFingers(S, 0.10);
-    }
-    this.add('chest', 0.03 * clap, 0, 0);
-    // Hands meeting is what sells it — fire the sound on the closing frame.
-    if (this.onClap && clap > 0.94 && !this._clapFlag) { this._clapFlag = true; this.onClap(); }
-    if (clap < 0.5) this._clapFlag = false;
-  }
-
-  posePoint(dt) {
-    this.poseIdle(dt);
-    this._rate = 11;
-    const up = clamp01(this.stateTime / 0.30);
-    const S = (this.stateOpts && this.stateOpts.hand) || 'R';
-    const s = S === 'L' ? 1 : -1;
-    this.set('clavicle' + S, 0, -s * 0.12 * up, -s * 0.06 * up);
-    this.set('upperArm' + S, -1.35 * up, s * 0.12, -s * (1.30 - 1.18 * up));
-    this.set('lowerArm' + S, 0, -s * 0.16, 0);
-    this.set('hand' + S, 0, 0, s * 0.05);
-    // Index finger out, the rest curled.
-    const names = ['index', 'middle', 'ring', 'pinky'];
-    for (let i = 0; i < names.length; i++) {
-      const curl = i === 0 ? 0.02 : 0.95;
-      this.set(names[i] + S + '1', 0, -s * curl * 0.75, 0);
-      this.set(names[i] + S + '2', 0, -s * curl * 0.95, 0);
-      this.set(names[i] + S + '3', 0, -s * curl * 0.70, 0);
-    }
-    this.set('thumb' + S + '1', 0, -s * 0.5, s * 0.35);
-    this.add('chest', 0, -s * 0.12 * up, 0);
-  }
-
-  poseCheer(dt) {
-    this.poseIdle(dt);
-    this._rate = 14;
-    const t = this.stateTime * 5.0;
-    const pump = Math.sin(t) * 0.5 + 0.5;
-    for (const S of ['L', 'R']) {
-      const s = S === 'L' ? 1 : -1;
-      this.set('clavicle' + S, 0, 0, -s * 0.16);
-      this.set('upperArm' + S, -0.25, s * 0.30, -s * (0.20 - pump * 0.16));
-      this.set('lowerArm' + S, 0, -s * (0.35 + pump * 0.45), 0);
-      this.relaxFingers(S, 0.95);
-    }
-    this.hipsOffset.y = pump * this.prop.measure.height * 0.012;
-    this.add('spine', -0.10 * pump, 0, 0);
-    this.add('head', -0.16 * pump, 0, 0);
-    this.jawTarget = 0.22 * pump;
-  }
-
-  poseThink(dt) {
-    this.poseIdle(dt);
-    this._rate = 7;
-    const t = this.stateTime;
-    const sway = Math.sin(t * 0.8) * 0.05;
-    const S = 'R', s = -1;
-    this.set('clavicle' + S, 0, 0, -s * 0.06);
-    this.set('upperArm' + S, -0.52, s * 0.44, -s * 0.86);
-    this.set('lowerArm' + S, 0, -s * 2.10, 0);
-    this.set('hand' + S, 0.28, 0, s * 0.22);
-    this.relaxFingers(S, 0.45);
-    // Other arm folded to support the elbow.
-    this.set('upperArmL', 0.22, 0.30, -1.02);
-    this.set('lowerArmL', 0, -1.35, 0);
-    this.relaxFingers('L', 0.35);
-    this.add('neck', 0.14, sway, 0);
-    this.add('head', 0.10, sway * 1.4, 0.06);
-    this.eyeSquint = 0.18;
-  }
-
-  poseStretch(dt) {
-    this.poseIdle(dt);
-    this._rate = 8;
-    const t = clamp01(this.stateTime / 1.6);
-    const reach = Math.sin(t * Math.PI);
-    for (const S of ['L', 'R']) {
-      const s = S === 'L' ? 1 : -1;
-      this.set('clavicle' + S, 0, 0, -s * 0.18 * reach);
-      this.set('upperArm' + S, -0.30 * reach, s * 0.12, -s * (1.30 - 1.24 * reach));
-      this.set('lowerArm' + S, 0, -s * (0.22 - 0.18 * reach), 0);
-      this.relaxFingers(S, 0.10);
-    }
-    this.add('spine', -0.16 * reach, 0, 0);
-    this.add('chest', -0.12 * reach, 0, 0);
-    this.add('neck', 0.22 * reach, 0, 0);
-    this.hipsOffset.y = reach * this.prop.measure.height * 0.010;
-    this.jawTarget = Math.max(this.jawTarget, reach * 0.30);
-    this.eyeSquint = reach * 0.75;
-  }
-
-  poseBow(dt) {
-    this.poseIdle(dt);
-    this._rate = 9;
-    const t = clamp01(this.stateTime / 1.1);
-    const b = Math.sin(t * Math.PI) * 0.95;
-    this.set('hips', b * 0.30, 0, 0);
-    this.set('spine', b * 0.45, 0, 0);
-    this.set('chest', b * 0.28, 0, 0);
-    this.set('neck', b * 0.22, 0, 0);
-    this.set('head', b * 0.14, 0, 0);
-    for (const S of ['L', 'R']) {
-      const s = S === 'L' ? 1 : -1;
-      this.set('upperArm' + S, -b * 0.35, s * 0.10, -s * (1.26 - b * 0.10));
-      this.set('lowerArm' + S, 0, -s * (0.22 + b * 0.30), 0);
-      this.relaxFingers(S, 0.25);
-      this.set('upperLeg' + S, b * 0.18, s * 0.10, s * 0.05);
-    }
-  }
-
-  /** Finger curl: 0 = straight, 1 = fist. */
-  relaxFingers(S, amount) {
-    const names = ['index', 'middle', 'ring', 'pinky'];
-    for (let i = 0; i < names.length; i++) {
-      const curl = amount * (0.85 + i * 0.08);
-      const s = S === 'L' ? 1 : -1;
-      this.set(names[i] + S + '1', 0, -s * curl * 0.75, 0);
-      this.set(names[i] + S + '2', 0, -s * curl * 0.95, 0);
-      this.set(names[i] + S + '3', 0, -s * curl * 0.70, 0);
-    }
-    const s = S === 'L' ? 1 : -1;
-    this.set('thumb' + S + '1', 0, -s * amount * 0.25, s * 0.35);
-    this.set('thumb' + S + '2', 0, -s * amount * 0.45, 0);
-    this.set('thumb' + S + '3', 0, -s * amount * 0.40, 0);
-  }
-  gripFingers(S, amount) { this.relaxFingers(S, 0.55 + amount * 0.55); }
-
-  // =========================================================================
-  // Additive layers
-  // =========================================================================
-
-  applyBreathing(dt) {
-    this.breathT += dt * this.profile.breathRate * (1 + this.speed * 0.13);
-    const b = Math.sin(this.breathT * TAU);
-    const depth = 0.0075 * (1 + this.speed * 0.30);
-    this.add('chest', -b * depth * 1.4, 0, 0);
-    this.add('spine', -b * depth * 0.5, 0, 0);
-    const chest = this.bones.chest;
-    if (chest) {
-      const s = 1 + b * depth * 1.8;
-      chest.scale.set(s, 1 + b * depth * 0.6, s);
-    }
-    // Shoulders rise slightly on the inhale.
-    this.add('clavicleL', 0, 0, -b * depth * 0.8);
-    this.add('clavicleR', 0, 0, b * depth * 0.8);
-  }
-
-  applyTurnLean(dt) {
-    const lean = clampv(this.turnRate * 0.20, -0.22, 0.22) * clamp01(this.speed / 2.5);
-    this.add('hips', 0, 0, lean * 0.4);
-    this.add('spine', 0, 0, lean * 0.35);
-    this.add('chest', 0, -lean * 0.25, lean * 0.3);
-    this.add('neck', 0, -lean * 0.35, 0);
-  }
-
-  applyBlink(dt) {
-    const face = this.rig.face;
-    this.blinkTimer -= dt;
-    if (this.blinkTimer <= 0) {
-      this.blinkTimer = (1 / this.profile.blinkRate) * (0.55 + Math.random() * 0.9);
-      this.blinkPhase = 1;
-      // Occasional double blink.
-      if (Math.random() < 0.18) this.blinkTimer = 0.22;
-    }
-    if (this.blinkPhase > 0) {
-      this.blinkPhase -= dt / 0.115;
-      const t = clamp01(this.blinkPhase);
-      // Fast close, slower open.
-      this.blinkValue = t > 0.55 ? (1 - t) / 0.45 : t / 0.55;
-      this.blinkValue = clamp01(this.blinkValue);
-      if (this.blinkPhase <= 0) this.blinkValue = 0;
-    }
-    if (!face) return;
-    const close = Math.max(this.blinkValue, this.eyeSquint || 0);
-    if (face.lidUpperL) face.lidUpperL.rotation.x = close * 1.62;
-    if (face.lidUpperR) face.lidUpperR.rotation.x = close * 1.62;
-    if (face.lidLowerL) face.lidLowerL.rotation.x = -close * 0.42;
-    if (face.lidLowerR) face.lidLowerR.rotation.x = -close * 0.42;
-  }
-
-  applyGaze(dt) {
-    const face = this.rig.face;
-    this.gazeTimer -= dt;
-    if (this.gazeTimer <= 0) {
-      this.gazeTimer = (1 / this.profile.gazeRate) * (0.4 + Math.random() * 1.6);
-      // Saccades are small and quick; occasionally a bigger glance.
-      const big = Math.random() < 0.22;
-      this.gazeTarget.set(
-        (Math.random() - 0.5) * (big ? 0.55 : 0.20),
-        (Math.random() - 0.5) * (big ? 0.30 : 0.12)
-      );
-    }
-    // Saccades snap, they don't glide.
-    this.gazeCurrent.x = damp(this.gazeCurrent.x, this.gazeTarget.x, 0.000002, dt);
-    this.gazeCurrent.y = damp(this.gazeCurrent.y, this.gazeTarget.y, 0.000002, dt);
-    if (!face) return;
-    const yaw = this.gazeCurrent.x + (this.eyeLookYaw || 0);
-    const pitch = this.gazeCurrent.y + (this.eyeLookPitch || 0);
-    if (face.eyeL) { face.eyeL.rotation.y = yaw; face.eyeL.rotation.x = pitch; }
-    if (face.eyeR) { face.eyeR.rotation.y = yaw; face.eyeR.rotation.x = pitch; }
-  }
-
-  applyTalk(dt) {
-    if (this.talking) {
-      this.talkT += dt * (7 + Math.random() * 5);
-      // Layered sine + noise reads as syllables rather than a metronome.
-      const syl = Math.abs(Math.sin(this.talkT * 0.9)) * 0.6 + noise1(this.talkT * 1.7, 31) * 0.5;
-      this.jawTarget = clamp01(syl) * 0.38 * (this.talkIntensity || 1);
-      this.browRaise = damp(this.browRaise, noise1(this.talkT * 0.35, 77) * 0.5, 0.02, dt);
-    } else {
-      this.jawTarget = damp(this.jawTarget, 0, 0.001, dt);
-      this.browRaise = damp(this.browRaise, 0, 0.01, dt);
-    }
-    this.jawOpen = damp(this.jawOpen, this.jawTarget, 0.0005, dt);
-    if (this.bones.jaw) {
-      _e.set(this.jawOpen, 0, 0);
-      this.bones.jaw.quaternion.setFromEuler(_e);
-    }
-    const face = this.rig.face;
-    if (face && face.brows) face.brows.position.y = (face.browRestY || 0) + this.browRaise * this.prop.measure.headH * 0.012;
-  }
-
-  applyLookAt(dt) {
-    if (!this.lookAtWorld || this.lookWeight <= 0.01) {
-      this.headYaw = damp(this.headYaw, 0, 0.004, dt);
-      this.headPitch = damp(this.headPitch, 0, 0.004, dt);
-      this.eyeLookYaw = damp(this.eyeLookYaw || 0, 0, 0.004, dt);
-      this.eyeLookPitch = damp(this.eyeLookPitch || 0, 0, 0.004, dt);
-    } else {
-      const head = this.bones.head;
-      if (!head) return;
-      head.updateWorldMatrix(true, false);
-      _v.setFromMatrixPosition(head.matrixWorld);
-      _v2.copy(this.lookAtWorld).sub(_v);
-      // Convert into the character's local frame.
-      const root = this.rig.root || head;
-      const rootQ = new THREE.Quaternion();
-      (this.rig.rootObject || root).getWorldQuaternion(rootQ);
-      _v2.applyQuaternion(rootQ.invert());
-      const yaw = Math.atan2(_v2.x, _v2.z);
-      const pitch = -Math.atan2(_v2.y, Math.hypot(_v2.x, _v2.z));
-      // Humans turn the head only so far before the eyes do the rest.
-      const clampedYaw = clampv(yaw, -1.15, 1.15) * this.lookWeight;
-      const clampedPitch = clampv(pitch, -0.55, 0.60) * this.lookWeight;
-      this.headYaw = damp(this.headYaw, clampedYaw, 0.0025, dt);
-      this.headPitch = damp(this.headPitch, clampedPitch, 0.0025, dt);
-      this.eyeLookYaw = damp(this.eyeLookYaw || 0, clampv(yaw - this.headYaw, -0.5, 0.5), 0.00001, dt);
-      this.eyeLookPitch = damp(this.eyeLookPitch || 0, clampv(pitch - this.headPitch, -0.3, 0.3), 0.00001, dt);
-    }
-    // Split the turn between neck and head so it doesn't look like an owl.
-    this.add('neck', this.headPitch * 0.38, this.headYaw * 0.42, 0);
-    this.add('head', this.headPitch * 0.62, this.headYaw * 0.58, 0);
-    this.add('chest', 0, this.headYaw * 0.14, 0);
-  }
-
-  // =========================================================================
-  // IK
-  // =========================================================================
-
-  applyFootIK(rootObject, dt) {
-    const m = this.prop.measure;
-    for (const S of ['L', 'R']) {
-      const hip = this.bones['upperLeg' + S];
-      const knee = this.bones['lowerLeg' + S];
-      const foot = this.bones['foot' + S];
-      if (!hip || !knee || !foot) continue;
-      foot.updateWorldMatrix(true, false);
-      _v.setFromMatrixPosition(foot.matrixWorld);
-      const ground = this.groundSampler(_v.x, _v.z);
-      if (!ground) continue;
-      const desiredY = ground.y + m.footH * 0.62;
-      // Only lift the foot; never push it through the floor.
-      const lift = desiredY - _v.y;
-      const w = clamp01(this.isLocomotion() ? clamp01(1 - Math.abs(lift) / (m.height * 0.25)) : 1) * 0.85;
-      if (Math.abs(lift) < 0.0015 || w < 0.02) continue;
-      const target = _v.clone();
-      target.y += lift;
-      // Knee pole: forward and slightly outward from the hip.
-      hip.updateWorldMatrix(true, false);
-      const hipPos = new THREE.Vector3().setFromMatrixPosition(hip.matrixWorld);
-      const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(rootObject.quaternion);
-      const side = new THREE.Vector3(S === 'L' ? 1 : -1, 0, 0).applyQuaternion(rootObject.quaternion);
-      const pole = hipPos.clone().add(fwd.multiplyScalar(m.height * 0.55)).add(side.multiplyScalar(m.height * 0.06));
-      solveTwoBoneIK(hip, knee, foot, target, pole, w);
-      // Roll the foot to match the ground normal.
-      if (ground.normal) {
-        const up = ground.normal;
-        const tilt = Math.atan2(up.z, up.y) * 0.5;
-        const roll = -Math.atan2(up.x, up.y) * 0.5;
-        _e.set(tilt, 0, roll);
-        _q.setFromEuler(_e);
-        foot.quaternion.multiply(_q);
-      }
-    }
-  }
-
-  applyHandIK(rootObject) {
-    for (const S of ['L', 'R']) {
-      const target = this.handTargets[S];
-      const w = this.handWeights[S];
-      if (!target || w <= 0.01) continue;
-      const shoulder = this.bones['upperArm' + S];
-      const elbow = this.bones['lowerArm' + S];
-      const hand = this.bones['hand' + S];
-      if (!shoulder || !elbow || !hand) continue;
-      shoulder.updateWorldMatrix(true, false);
-      const sp = new THREE.Vector3().setFromMatrixPosition(shoulder.matrixWorld);
-      const down = new THREE.Vector3(0, -1, 0);
-      const out = new THREE.Vector3(S === 'L' ? 1 : -1, 0, 0).applyQuaternion(rootObject.quaternion);
-      const pole = sp.clone().add(down.multiplyScalar(this.prop.measure.height * 0.35)).add(out.multiplyScalar(this.prop.measure.height * 0.18));
-      solveTwoBoneIK(shoulder, elbow, hand, target, pole, w);
-    }
-  }
-
-  /** Fire footstep callbacks when a foot passes through the bottom of its arc. */
-  detectFootsteps() {
-    if (!this.onFootstep || !this.isLocomotion()) { this._stepFlag.L = this._stepFlag.R = false; return; }
-    const ph = this.phase;
-    for (const S of ['L', 'R']) {
-      const legPh = (ph + (S === 'L' ? 0 : 0.5)) % 1;
-      // Contact happens around phase 0.25 of each leg's own cycle.
-      const contact = legPh > 0.20 && legPh < 0.34;
-      if (contact && !this._stepFlag[S]) {
-        this._stepFlag[S] = true;
-        this.onFootstep(S, this.speed);
-      } else if (!contact) {
-        this._stepFlag[S] = false;
-      }
-    }
-  }
-}
-
-return { makeMotionProfile, HumanAnimator, STATES };
-})();
-
 __M["human/human"] = (function(){
 // T10 World - the Human entity. Assembles skeleton, body, eyes, hair and
 // clothing into one rig and drives it with the procedural animator.
@@ -60105,6 +60541,54 @@ class Human {
           });
         }
       });
+    }
+  }
+
+  /**
+   * Multiply this person's materials by a colour, so infection (or mind
+   * control, or anything else) reads across a whole street at a glance.
+   * Skin takes it at full strength, clothes at half so they still read as
+   * clothes. Originals are kept, so passing null puts everything back.
+   */
+  setSkinTint(hex, eyeHex) {
+    if (!this._tintBase) {
+      this._tintBase = new Map();
+      const remember = (m) => { if (m && m.color && !this._tintBase.has(m)) this._tintBase.set(m, m.color.getHex()); };
+      remember(this.materials.skin);
+      remember(this.materials.head);
+      for (const k in this.parts) {
+        const part = this.parts[k];
+        if (!part) continue;
+        part.traverse((o) => {
+          if (!o.isMesh) return;
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          for (const m of mats) remember(m);
+        });
+      }
+    }
+
+    const skinSet = new Set([this.materials.skin, this.materials.head]);
+    const tint = hex == null ? null : new THREE.Color(hex);
+    for (const [m, base] of this._tintBase) {
+      if (!m.color) continue;
+      if (tint == null) { m.color.setHex(base); continue; }
+      m.color.setHex(base);
+      // Skin takes the colour outright; everything else is pulled halfway.
+      m.color.lerp(tint, skinSet.has(m) ? 1 : 0.5);
+    }
+    this.skinTint = hex == null ? null : hex;
+
+    if (eyeHex !== undefined) {
+      for (const S of ['L', 'R']) {
+        const pivot = this.face && this.face['eye' + S];
+        if (!pivot) continue;
+        pivot.traverse((o) => {
+          if (!o.isMesh || !o.name.startsWith('eye') || !o.material || !o.material.emissive) return;
+          o.material.emissive.setHex(eyeHex == null ? 0x000000 : eyeHex);
+          o.material.emissiveIntensity = eyeHex == null ? 0 : 1.8;
+          o.material.needsUpdate = true;
+        });
+      }
     }
   }
 
@@ -61163,7 +61647,16 @@ class NPC {
     this.talkPartner = null;
     this.reactCooldown = 0;
     this.phoneTimer = this.rng.range(20, 180);
-    this.controlled = null;      // 'follow' | 'freeze' | 'dance' | ...
+    this.controlled = null;      // 'follow' | 'freeze' | 'dance' | 'apocalypse' | 'mind' | 'love'
+    // End-of-the-world state. All false in a normal city.
+    this.infected = false;
+    this.hostile = false;
+    this.panicking = false;
+    this.downed = 0;
+    this.combatTarget = null;
+    this.attackCooldown = 0;
+    this.infectCooldown = 0;
+    this.abducting = null;
     this.vehicle = null;
     this.indoors = false;
     this.lastLine = '';
@@ -61315,8 +61808,43 @@ class NPC {
     this.activityTimer -= dt;
     if (this.reactCooldown > 0) this.reactCooldown -= dt;
     if (this.talkTimer > 0) this.talkTimer -= dt;
+    if (this.attackCooldown > 0) this.attackCooldown -= dt;
+    if (this.infectCooldown > 0) this.infectCooldown -= dt;
 
-    if (this.controlled === 'follow' && playerPos) {
+    // Knocked down: lie there, then get up angrier than before.
+    if (this.downed > 0) {
+      this.downed -= dt;
+      this.targetSpeed = 0;
+      this.speed = 0;
+      this.human.animator.setState(this.downed > 0.9 ? STATES.LIE : STATES.GETUP);
+      this.human.update(dt, { speed: 0, turnRate: 0, grounded: true, verticalVel: 0 });
+      this.root.position.copy(this.position);
+      return;
+    }
+    // Being lifted into a ship — the saucer drives the position.
+    if (this.abducting) {
+      this.human.update(dt, { speed: 0, turnRate: 0, grounded: false, verticalVel: 1 });
+      return;
+    }
+
+    if (this.infected || this.hostile || this.panicking) {
+      this.updateApocalypse(dt, playerPos);
+      this.human.applyLod(playerPos ? this.position.distanceTo(playerPos) : 100);
+      this.human.update(dt, { speed: this.speed, turnRate: this._turnRate || 0, grounded: true, verticalVel: 0 });
+      return;
+    }
+
+    // Mind-controlled and smitten people both trail you; only the flavour
+    // differs, and love keeps glancing over.
+    if ((this.controlled === 'follow' || this.controlled === 'mind' || this.controlled === 'love') && playerPos) {
+      if (this.controlled === 'love') {
+        this.lookTarget = playerPos;
+        this.loveTimer = (this.loveTimer || 0) - dt;
+        if (this.loveTimer <= 0 && this.position.distanceTo(playerPos) < 4) {
+          this.loveTimer = 5 + this.rng() * 7;
+          this.human.animator.setState(STATES.WAVE);
+        }
+      }
       const d = this.position.distanceTo(playerPos);
       if (d > 3.5) {
         this.destination = { x: playerPos.x, z: playerPos.z };
@@ -61367,6 +61895,145 @@ class NPC {
       grounded: true,
       verticalVel: 0,
     });
+  }
+
+  // -------------------------------------------------------------------------
+  // The end of the world
+  // -------------------------------------------------------------------------
+
+  /** Steer straight at a point, no pathfinding — nobody is being careful now. */
+  chargeAt(dt, tx, tz, speed) {
+    const dx = tx - this.position.x, dz = tz - this.position.z;
+    const dist = Math.hypot(dx, dz);
+    const want = Math.atan2(dx, dz);
+    const prev = this.heading;
+    this.heading = dampAngle(this.heading, want, 0.0002, dt);
+    this._turnRate = wrapAngle(this.heading - prev) / Math.max(dt, 0.001);
+    this.targetSpeed = dist < 1.1 ? 0 : speed;
+    return dist;
+  }
+
+  /**
+   * The nearest person worth going after.
+   * mode 'uninfected' — for the infected, anyone not yet turned.
+   * mode 'anyone'     — for a riot, where everyone is hostile and the whole
+   *                     point is that they still go for each other.
+   */
+  findPrey(radius, mode) {
+    let best = null, bestD = radius;
+    for (const other of this.manager.npcs) {
+      if (other === this || other.indoors || other.abducting || other.downed > 0) continue;
+      if (mode === 'uninfected' && other.infected) continue;
+      const d = this.position.distanceTo(other.position);
+      if (d < bestD) { bestD = d; best = other; }
+    }
+    return best;
+  }
+
+  updateApocalypse(dt, playerPos) {
+    const apo = this.manager.apocalypse;
+    this.path.length = 0;
+
+    if (this.infected) {
+      // Shamble toward the nearest uninfected person, or the player.
+      let tx = null, tz = null, victim = null;
+      const prey = this.findPrey(42, 'uninfected');
+      const dPlayer = playerPos ? this.position.distanceTo(playerPos) : 1e9;
+      const dPrey = prey ? this.position.distanceTo(prey.position) : 1e9;
+      if (dPlayer < dPrey && dPlayer < 42) { tx = playerPos.x; tz = playerPos.z; }
+      else if (prey) { tx = prey.position.x; tz = prey.position.z; victim = prey; }
+
+      if (tx == null) {
+        this.targetSpeed = this.walkSpeed * 0.35;
+        this.heading += dt * 0.3;
+        this.human.animator.setState(STATES.WALK);
+      } else {
+        // Locked on: a steady pursuit that closes the gap, and a lunge inside
+        // eight metres. A pursuer that is always slower than a runner never
+        // catches anybody in an open city, so the outbreak would never spread
+        // past the people it started with. It only shambles with no target.
+        const near = Math.min(dPlayer, dPrey);
+        const pace = near < 8 ? this.walkSpeed * 2.9 : this.walkSpeed * 1.7;
+        const dist = this.chargeAt(dt, tx, tz, pace);
+        if (dist < 1.9 && this.infectCooldown <= 0) {
+          this.infectCooldown = 2.5;
+          if (victim && apo) apo.infect(victim);
+          else if (this.manager.onPlayerAttacked) this.manager.onPlayerAttacked(this, 'infect');
+        }
+        this.human.animator.setState(this.speed > this.walkSpeed * 1.1 ? STATES.RUN : STATES.WALK);
+      }
+    } else if (this.hostile) {
+      // Pick a fight with whoever is closest and keep swinging.
+      if (!this.combatTarget || this.combatTarget.downed > 0 || this.combatTarget.indoors ||
+          this.position.distanceTo(this.combatTarget.position) > 55) {
+        this.combatTarget = this.findPrey(50, 'anyone');
+      }
+      const dPlayer = playerPos ? this.position.distanceTo(playerPos) : 1e9;
+      const goForPlayer = dPlayer < 14 && (!this.combatTarget || dPlayer < this.position.distanceTo(this.combatTarget.position));
+      const tx = goForPlayer ? playerPos.x : (this.combatTarget ? this.combatTarget.position.x : null);
+      const tz = goForPlayer ? playerPos.z : (this.combatTarget ? this.combatTarget.position.z : null);
+
+      if (tx == null) {
+        this.targetSpeed = this.runSpeed * 0.6;
+        this.heading += dt * 0.6;
+        this.human.animator.setState(STATES.RUN);
+      } else {
+        const dist = this.chargeAt(dt, tx, tz, this.runSpeed);
+        if (dist < 1.9 && this.attackCooldown <= 0) {
+          this.attackCooldown = 1.1 + this.rng() * 0.8;
+          this.human.animator.setState(STATES.POINT);   // a swing, telegraphed
+          if (goForPlayer) { if (this.manager.onPlayerAttacked) this.manager.onPlayerAttacked(this, 'hit'); }
+          else if (this.combatTarget) {
+            this.combatTarget.downed = 4 + this.rng() * 6;
+            this.combatTarget.combatTarget = null;
+            if (apo) apo.casualties++;
+            this.combatTarget = null;
+          }
+        } else if (this.attackCooldown > 0.7) {
+          this.human.animator.setState(STATES.POINT);
+        } else {
+          this.human.animator.setState(this.speed > this.walkSpeed * 1.4 ? STATES.RUN : STATES.WALK);
+        }
+      }
+    } else {
+      // Panic: run away from the nearest threat, or just away.
+      let threat = null, bestD = 60;
+      for (const other of this.manager.npcs) {
+        if (!other.infected && !other.hostile) continue;
+        const d = this.position.distanceTo(other.position);
+        if (d < bestD) { bestD = d; threat = other; }
+      }
+      if (apo && apo.saucers.length) {
+        for (const s of apo.saucers) {
+          const d = Math.hypot(s.mesh.position.x - this.position.x, s.mesh.position.z - this.position.z);
+          if (d < bestD) { bestD = d; threat = { position: s.mesh.position }; }
+        }
+      }
+      // You cannot sprint forever. Stamina drains while something is chasing
+      // you and comes back when it isn't, so a crowd eventually gets caught.
+      if (this.stamina == null) this.stamina = 1;
+      this.stamina = clamp01(this.stamina + (threat ? -dt / 18 : dt / 14));
+      const flee = this.runSpeed * lerpv(0.55, 1, this.stamina);
+
+      if (threat) {
+        this.chargeAt(dt, this.position.x * 2 - threat.position.x, this.position.z * 2 - threat.position.z, flee);
+      } else {
+        this.panicTimer = (this.panicTimer || 0) - dt;
+        if (this.panicTimer <= 0) { this.panicTimer = 1.5 + this.rng() * 3; this.panicHeading = this.rng() * TAU; }
+        const h = this.panicHeading || 0;
+        this.chargeAt(dt, this.position.x + Math.sin(h) * 20, this.position.z + Math.cos(h) * 20, flee * 0.9);
+      }
+      this.human.animator.setState(this.speed > this.walkSpeed * 1.3 ? STATES.RUN : STATES.WALK);
+    }
+
+    this.speed = damp(this.speed, this.targetSpeed, 0.0012, dt);
+    const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
+    this.position.x += fx * this.speed * dt;
+    this.position.z += fz * this.speed * dt;
+    this.position.y = this.world.groundAt(this.position.x, this.position.z);
+    this.world.resolveCollision(this.position, 0.35);
+    this.root.position.copy(this.position);
+    this.root.rotation.y = this.heading;
   }
 
   moveAlongPath(dt) {
@@ -64680,6 +65347,41 @@ class World {
   }
 
   /** A safe place to stand: on a sidewalk, above water, clear of colliders. */
+  /** Is there clear ground for `dist` metres along `heading` from here? */
+  isOpenAhead(x, z, heading, dist) {
+    const fx = Math.sin(heading), fz = Math.cos(heading);
+    const probe = new THREE.Vector3();
+    const steps = Math.max(2, Math.round(dist / 1.5));
+    for (let i = 1; i <= steps; i++) {
+      const t = (i / steps) * dist;
+      probe.set(x + fx * t, 0, z + fz * t);
+      probe.y = this.groundAt(probe.x, probe.z) + 1.2;
+      if (this.isWater(probe.x, probe.z)) return false;
+      if (this.resolveCollision(probe, 0.5)) return false;
+    }
+    return true;
+  }
+
+  /**
+   * A heading that looks at something. Facing a wall from 40cm away is the
+   * difference between "I woke up in a city" and "my screen is broken", so we
+   * try down the street both ways, then across it, then anything clear.
+   */
+  openHeadingAt(x, z, road) {
+    const tries = [];
+    if (road) {
+      const along = Math.atan2(road.ux, road.uz);
+      tries.push(along, along + Math.PI);
+      tries.push(along + Math.PI / 2, along - Math.PI / 2);
+    }
+    for (let i = 0; i < 16; i++) tries.push((i / 16) * TAU);
+    // A long clear view first, then settle for merely not-a-wall.
+    for (const dist of [14, 6, 2.5]) {
+      for (const h of tries) if (this.isOpenAhead(x, z, h, dist)) return h;
+    }
+    return road ? Math.atan2(road.ux, road.uz) : 0;
+  }
+
   findSpawnPoint(nearX, nearZ) {
     const sw = this.city.nearestSidewalk(nearX == null ? -40 : nearX, nearZ == null ? 60 : nearZ);
     const p = new THREE.Vector3(sw.x, 0, sw.z);
@@ -64690,6 +65392,7 @@ class World {
       p.z += (Math.random() - 0.5) * 6;
     }
     p.y = this.groundAt(p.x, p.z);
+    p.heading = this.openHeadingAt(p.x, p.z, sw.road);
     return p;
   }
 
@@ -65840,7 +66543,13 @@ class Player {
     this.frozen = false;
     this.noclip = false;
     this.flying = false;
+    this.flySpeed = 2.4;
     this.godMode = false;
+    // Nothing in this city kills you. Under an apocalypse it can knock you
+    // flat for a few seconds — unless you've asked T10 to make you untouchable.
+    this.immortal = false;
+    this.knockedDown = 0;
+    this.timesDowned = 0;
 
     // A single on-foot pace — there is no sprint. Brisk enough to cross a
     // block without feeling like a chore.
@@ -65880,8 +66589,11 @@ class Player {
   spawnOnStreet(x, z) {
     const p = this.world.findSpawnPoint(x, z);
     this.position.copy(p);
-    this.heading = Math.random() * TAU;
+    // Face down the street. A random heading meant waking up nose-first
+    // against a wall about half the time.
+    this.heading = p.heading != null ? p.heading : 0;
     this.yaw = this.heading;
+    this.pitch = 0;
     this.root.position.copy(this.position);
     this.human.animator.setState(STATES.LIE);
     this.getUpTimer = 2.2;
@@ -65911,6 +66623,18 @@ class Player {
     if (!input.suspended) {
       this.yaw = wrapAngle(this.yaw - input.look.x);
       this.pitch = clampv(this.pitch + input.look.y, -1.32, 1.28);
+    }
+
+    // Flat on your back: you can still look around, nothing else.
+    if (this.knockedDown > 0) {
+      this.knockedDown -= dt;
+      this.speed = 0;
+      this.human.animator.setState(this.knockedDown > 1.1 ? STATES.LIE : STATES.GETUP);
+      if (this.knockedDown <= 0) this.human.animator.setState(STATES.IDLE);
+      this.human.update(dt, { speed: 0, turnRate: 0, grounded: true, verticalVel: 0 });
+      this.root.position.copy(this.position);
+      this.updateCamera(dt);
+      return;
     }
 
     if (this.getUpTimer > 0) {
@@ -65971,7 +66695,12 @@ class Player {
     if (this.flying || this.noclip) {
       this.verticalVel = 0;
       const lift = (input.buttons.jump ? 1 : 0) - (input.buttons.crouch ? 1 : 0);
-      this.position.y += lift * 8 * dt;
+      this.position.y += lift * 8 * this.flySpeed * dt;
+      // Flying follows your gaze: nose down and you descend as you move.
+      if (moveLen > 0.02 && Math.abs(this.pitch) > 0.08) {
+        this.position.y -= Math.sin(this.pitch) * targetSpeed * this.flySpeed * my * dt;
+      }
+      this.position.y = Math.min(this.position.y, 620);
       this.grounded = false;
     } else if (this.swimming) {
       this.verticalVel = input.buttons.jump ? 1.6 : -0.4;
@@ -66003,6 +66732,7 @@ class Player {
     }
 
     // --- Horizontal integrate ---
+    if (this.flying || this.noclip) targetSpeed *= this.flySpeed;
     this.speed = damp(this.speed, targetSpeed, 0.0006, dt);
     const moveScale = this.grounded || this.swimming || this.flying ? 1 : 0.72;
     this.position.x += Math.sin(this.heading) * this.speed * moveScale * dt;
@@ -66042,6 +66772,29 @@ class Player {
   onHardLanding(impact) {
     this.camShake = 1.4;
     if (this.onDamage) this.onDamage(impact);
+  }
+
+  /**
+   * Something out there got to you. There is still no health bar and no death
+   * — the worst that happens is you're on the pavement for a few seconds.
+   * @returns true if it landed, false if you're untouchable.
+   */
+  knockDown(seconds, reason) {
+    if (this.immortal || this.godMode || this.flying || this.inVehicle) return false;
+    if (this.knockedDown > 0) return false;
+    this.knockedDown = seconds || 4;
+    this.timesDowned++;
+    this.camShake = 1.5;
+    this.lastDownReason = reason || 'hit';
+    this.human.animator.setState(STATES.LIE);
+    return true;
+  }
+
+  getUp() {
+    if (this.knockedDown <= 0) return false;
+    this.knockedDown = 0;
+    this.human.animator.setState(STATES.IDLE);
+    return true;
   }
 
   updateInVehicle(dt, input) {
@@ -66228,6 +66981,13 @@ class Player {
     this.velocity.set(0, 0, 0);
     this.verticalVel = 0;
     this.root.position.copy(this.position);
+    // Arriving nose-first against a wall is disorienting in first person, so
+    // turn to something open — but only when you'd otherwise be staring at one.
+    if (!this.inVehicle && !this.world.isOpenAhead(x, this.position.z, this.yaw, 3)) {
+      this.heading = this.world.openHeadingAt(x, this.position.z, null);
+      this.yaw = this.heading;
+    }
+    this.root.rotation.y = this.heading;
     if (this.inVehicle) this.inVehicle.teleport(x, z, this.heading);
   }
 
@@ -66455,8 +67215,17 @@ function extendRegistry(R, add) {
     'Enable flight — jump to rise, crouch to descend.',
     (ctx) => { ctx.player.flying = true; return 'Flying on. Jump goes up, crouch goes down.'; });
   add('fly_off', 'Powers', ['stop flying', 'disable flying', 'turn off flying', 'land me'],
-    'Disable flight.',
-    (ctx) => { ctx.player.flying = false; return 'Flying off.'; });
+    'Disable flight and put you back on the ground.',
+    (ctx) => {
+      const p = ctx.player;
+      // Leaving noclip on would keep you floating with no way to come down.
+      p.flying = false;
+      p.noclip = false;
+      p.flySpeed = 2.4;
+      const height = p.position.y - ctx.world.groundAt(p.position.x, p.position.z);
+      if (height > 2) { p.verticalVel = 0; return 'Flying off. Brace — you\'re ' + Math.round(height) + ' metres up.'; }
+      return 'Flying off.';
+    });
   add('noclip_on', 'Powers', ['enable noclip', 'let me walk through walls', 'turn on noclip', 'ghost mode'],
     'Walk through anything.',
     (ctx) => { ctx.player.noclip = true; ctx.player.flying = true; return 'Noclip on. Nothing can stop you.'; });
@@ -68071,6 +68840,479 @@ function extendRegistry4(R, add) {
 return { extendRegistry4 };
 })();
 
+__M["t10/commands5"] = (function(){
+// T10 World - command registry, part five. The end of the world, the powers
+// that let you walk through it, and what you can do to the people in it.
+const { APOCALYPSES, APOCALYPSE_KEYS } = __M["entities/apocalypse"];
+const { STATES } = __M["human/animator"];
+const { clampv, plural } = __M["core/math"];
+
+/** Words that point at each apocalypse, for T10's follow-up question. */
+const APOC_WORDS = {
+  zombie: ['zombie', 'zombies', 'undead', 'walking dead', 'infection', 'outbreak', 'virus', 'plague', 'one'],
+  riot: ['riot', 'purge', 'people turn on each other', 'each other', 'violence', 'war', 'anarchy', 'chaos', 'fight', 'two'],
+  alien: ['alien', 'aliens', 'ufo', 'invasion', 'ships', 'abduction', 'extraterrestrial', 'space', 'three'],
+  meteor: ['meteor', 'meteors', 'asteroid', 'rocks', 'sky is falling', 'impact', 'comet', 'four'],
+  blackout: ['blackout', 'black out', 'darkness', 'dark', 'lights out', 'power cut', 'no power', 'five'],
+  machine: ['machine', 'machines', 'robot', 'robots', 'cars', 'uprising', 'ai', 'six'],
+};
+
+function apocalypseMenu() {
+  return APOCALYPSE_KEYS.map((k, i) => (i + 1) + '. ' + APOCALYPSES[k].name).join('   ');
+}
+
+function extendRegistry5(R, add) {
+  const apo = (ctx) => ctx.apocalypse || (ctx.game && ctx.game.apocalypse);
+
+  // ===== 39. The end of the world ==========================================
+  add('apoc_start', 'Apocalypse',
+    ['start an apocalypse', 'start the apocalypse', 'end the world', 'begin the apocalypse',
+     'i want an apocalypse', 'give me an apocalypse', 'apocalypse', 'destroy the world',
+     'end of the world', 'bring about the end'],
+    'Start an apocalypse — T10 asks you which one.',
+    (ctx) => {
+      const a = apo(ctx);
+      if (!a) return 'I can\'t reach the world right now.';
+      if (a.active) return 'We\'re already in one: ' + a.info.name + '. Say "T10 stop the apocalypse" first, or name another and I\'ll switch.';
+      const choices = APOCALYPSE_KEYS.map((k) => ({
+        words: APOC_WORDS[k],
+        run: (c) => {
+          const name = apo(c).start(k);
+          return name + '. ' + APOCALYPSES[k].blurb + ' Say "T10 stop the apocalypse" when you\'ve had enough.';
+        },
+      }));
+      return ctx.ask('Which apocalypse? ' + apocalypseMenu() + '  — say the word, or the number.', choices);
+    });
+
+  for (const key of APOCALYPSE_KEYS) {
+    const def = APOCALYPSES[key];
+    const words = APOC_WORDS[key].filter((w) => !/^(one|two|three|four|five|six)$/.test(w));
+    add('apoc_' + key, 'Apocalypse',
+      words.flatMap((w) => [
+        'start a ' + w + ' apocalypse', 'give me a ' + w + ' apocalypse', w + ' apocalypse',
+        'start the ' + w, 'i want a ' + w + ' apocalypse',
+      ]),
+      def.name + ' — ' + def.blurb,
+      (ctx) => {
+        const a = apo(ctx);
+        if (!a) return 'I can\'t reach the world right now.';
+        const name = a.start(key);
+        return name + '. ' + def.blurb;
+      });
+  }
+
+  add('apoc_stop', 'Apocalypse',
+    ['stop the apocalypse', 'end the apocalypse', 'put it back', 'make it normal again',
+     'save the world', 'fix the world', 'call it off', 'stop the end of the world'],
+    'End whatever apocalypse is running and put the city back.',
+    (ctx) => {
+      const a = apo(ctx);
+      if (!a || !a.active) return 'Nothing is ending. The city is fine.';
+      const was = a.info.name;
+      a.stop();
+      return was + ' is over. Everyone\'s back to themselves — give them a second to work out what happened.';
+    });
+  add('apoc_status', 'Apocalypse',
+    ['how bad is it', 'what is happening', 'whats happening', 'status report', 'how is the apocalypse going',
+     'how many are left', 'how many survivors'],
+    'Ask how the apocalypse is going.',
+    (ctx) => {
+      const a = apo(ctx);
+      return a ? a.status() : 'Nothing is ending.';
+    });
+  add('apoc_worse', 'Apocalypse',
+    ['make it worse', 'turn it up', 'more of it', 'crank it up'],
+    'Escalate whatever is going on.',
+    (ctx) => {
+      const a = apo(ctx);
+      if (!a || !a.active) return 'Start an apocalypse first — say "T10 start an apocalypse".';
+      if (a.kind === 'zombie') { const n = a.seedInfection(8); return n + ' more turned. It\'s moving faster now.'; }
+      if (a.kind === 'riot') { const n = a.makeHostile(); return n + ' ' + plural('person', n) + ' looking for someone to hit.'; }
+      if (a.kind === 'alien') { a.elapsed += 60; return 'More ships. They\'re not being careful anymore.'; }
+      if (a.kind === 'meteor') { a.spawnTimer = 0; a.elapsed += 30; return 'Heavier. Find cover, or don\'t — you can\'t die anyway.'; }
+      if (a.kind === 'machine') { a.freeTheCars(); return 'Every engine in range just revved.'; }
+      ctx.atmosphere.setWeather('storm');
+      return 'Worse.';
+    });
+  add('apoc_which', 'Apocalypse',
+    ['what apocalypses are there', 'list the apocalypses', 'what ends can you do', 'what kinds of apocalypse'],
+    'List every apocalypse T10 can run.',
+    () => 'Six: ' + APOCALYPSE_KEYS.map((k) => APOCALYPSES[k].name).join(', ') +
+      '. Say "T10 start an apocalypse" and I\'ll ask which.');
+
+  // ===== 40. Viruses =======================================================
+  add('virus_zombie', 'Apocalypse',
+    ['release the zombie virus', 'start the zombie virus', 'zombie virus', 'infect the city',
+     'let the virus out', 'patient zero'],
+    'Release the zombie virus into the city.',
+    (ctx) => {
+      const a = apo(ctx);
+      if (!a) return 'I can\'t reach the world right now.';
+      if (a.kind !== 'zombie') a.start('zombie');
+      else a.seedInfection(3);
+      return 'It\'s out. Three carriers to start with, and it spreads by touch.';
+    });
+  add('virus_infect_one', 'Apocalypse',
+    ['infect that person', 'infect them', 'turn them', 'make them a zombie', 'give them the virus'],
+    'Infect the nearest person.',
+    (ctx) => {
+      const a = apo(ctx);
+      const npc = ctx.npcs.nearestNPC(ctx.player.position, 30);
+      if (!npc) return 'Nobody close enough.';
+      if (!a) return 'I can\'t reach the world right now.';
+      if (!a.active) a.start('zombie');
+      a.infect(npc);
+      return npc.appearance.firstName + ' just turned. Back away.';
+    });
+  add('virus_cure', 'Apocalypse',
+    ['cure the virus', 'cure everyone', 'stop the virus', 'find a cure', 'heal everyone'],
+    'Cure everyone the virus has taken.',
+    (ctx) => {
+      const a = apo(ctx);
+      if (!a) return 'I can\'t reach the world right now.';
+      let n = 0;
+      for (const npc of ctx.npcs.npcs) if (npc.infected) { a.clearNpc(npc); n++; }
+      if (a.kind === 'zombie') a.stop();
+      return n ? n + ' cured. That\'s all of them.' : 'Nobody\'s infected.';
+    });
+  add('virus_count', 'Apocalypse',
+    ['how many are infected', 'how many zombies', 'how many have turned'],
+    'Count the infected.',
+    (ctx) => {
+      let n = 0;
+      for (const npc of ctx.npcs.npcs) if (npc.infected) n++;
+      return n ? n + ' infected within range of you.' : 'None near you. Yet.';
+    });
+  add('virus_rage', 'Apocalypse',
+    ['release the rage virus', 'rage virus', 'make everyone angry', 'give everyone the rage'],
+    'A virus that makes people violent instead of hungry.',
+    (ctx) => {
+      const a = apo(ctx);
+      if (!a) return 'I can\'t reach the world right now.';
+      a.start('riot');
+      return 'Rage virus. Nobody\'s eating anybody — they just want to hit someone.';
+    });
+  add('virus_sleep', 'Apocalypse',
+    ['release the sleeping virus', 'sleeping virus', 'put everyone to sleep', 'make everyone sleep'],
+    'Everyone within range lies down where they stand.',
+    (ctx) => {
+      let n = 0;
+      for (const npc of ctx.npcs.npcs) {
+        if (npc.indoors) continue;
+        npc.controlled = 'freeze';
+        npc.human.animator.setState(STATES.LIE);
+        n++;
+      }
+      return n + ' asleep on the pavement. Say "T10 wake everyone up" when you want them back.';
+    });
+  add('virus_wake', 'Apocalypse',
+    ['wake everyone up', 'wake them up', 'stop the sleeping virus'],
+    'Wake everyone up again.',
+    (ctx) => {
+      let n = 0;
+      for (const npc of ctx.npcs.npcs) if (npc.controlled === 'freeze') { npc.controlled = null; n++; }
+      return n + ' back on their feet.';
+    });
+
+  // ===== 41. Never dying ===================================================
+  add('never_die', 'Powers',
+    ['i never want to die', 'never let me die', 'make me immortal', 'i want to never die',
+     'make me invincible', 'nothing can kill me', 'make me untouchable', 'i cant die'],
+    'Nothing in the world can touch you, ever.',
+    (ctx) => {
+      ctx.player.immortal = true;
+      ctx.player.godMode = true;
+      ctx.player.getUp();
+      return 'Done. Nothing in this city can touch you — not a mob, not a zombie, not a meteor. There was never a health bar anyway; now there isn\'t even a knock-down.';
+    });
+  add('can_die', 'Powers',
+    ['let me die', 'make me mortal', 'i want to be normal again', 'turn off immortality',
+     'make me killable', 'i want to feel it'],
+    'Let the world knock you down again.',
+    (ctx) => {
+      ctx.player.immortal = false;
+      ctx.player.godMode = false;
+      return 'You\'re mortal again — as mortal as this place gets. You still can\'t die. You can end up on the pavement.';
+    });
+  add('get_up_now', 'Powers',
+    ['get me up', 'pick me up', 'help me up', 'get up'],
+    'Get straight back on your feet.',
+    (ctx) => (ctx.player.getUp() ? 'Up you get.' : 'You\'re already standing.'));
+  add('am_i_safe', 'Questions',
+    ['am i safe', 'can i die', 'can anything hurt me', 'am i immortal'],
+    'Ask whether anything can touch you.',
+    (ctx) => {
+      const p = ctx.player;
+      if (p.immortal) return 'Nothing can touch you. You asked for that.';
+      const a = apo(ctx);
+      if (a && a.active) return 'Not especially — ' + a.info.name.toLowerCase() + ' is running and people can put you down for a few seconds. You still can\'t die. Say "T10 never let me die" to be sure.';
+      return 'Completely. Nothing in this city is trying to hurt you' + (p.timesDowned ? ' — though you\'ve been floored ' + p.timesDowned + ' ' + plural('time', p.timesDowned) + ' so far.' : '.');
+    });
+
+  // ===== 42. Flying ========================================================
+  add('fly_fast', 'Powers',
+    ['let me fly faster', 'fly faster', 'faster flying', 'i want to fly fast'],
+    'Fly faster.',
+    (ctx) => {
+      ctx.player.flying = true;
+      ctx.player.flySpeed = clampv(ctx.player.flySpeed * 1.8, 1, 24);
+      return 'Flying at ' + ctx.player.flySpeed.toFixed(1) + '×. Look where you want to go — you follow your own eyes now.';
+    });
+  add('fly_slow', 'Powers',
+    ['fly slower', 'slow down my flying', 'slower flying'],
+    'Fly slower.',
+    (ctx) => {
+      ctx.player.flySpeed = clampv(ctx.player.flySpeed / 1.8, 1, 24);
+      return 'Flying at ' + ctx.player.flySpeed.toFixed(1) + '×.';
+    });
+  add('fly_up_high', 'Powers',
+    ['take me up high', 'fly me up', 'put me in the sky', 'take me above the city'],
+    'Put you high above the city, flying.',
+    (ctx) => {
+      ctx.player.flying = true;
+      ctx.player.teleport(ctx.player.position.x, ctx.player.position.z, ctx.world.groundAt(ctx.player.position.x, ctx.player.position.z) + 180);
+      ctx.player.verticalVel = 0;
+      return '180 metres up. Jump to climb, crouch to drop, and look where you want to go.';
+    });
+  add('fly_superman', 'Powers',
+    ['let me fly like superman', 'superman mode', 'i want to fly properly', 'give me flight'],
+    'Flight, fast, through anything.',
+    (ctx) => {
+      const p = ctx.player;
+      p.flying = true; p.noclip = true; p.flySpeed = 6; p.immortal = true; p.godMode = true;
+      return 'Flight, no walls, nothing can touch you. Go on then.';
+    });
+
+  // ===== 43. Mind control ==================================================
+  const nearest = (ctx, r) => ctx.npcs.nearestNPC(ctx.player.position, r || 30);
+
+  add('mind_control_one', 'Crowd',
+    ['control their mind', 'control that persons mind', 'take over their mind', 'mind control them',
+     'make them obey me', 'control them'],
+    'Take over the nearest person\'s mind.',
+    (ctx) => {
+      const npc = nearest(ctx);
+      if (!npc) return 'Nobody close enough.';
+      npc.controlled = 'mind';
+      npc.human.setSkinTint(0x9fc4ff, 0x6ec8ff);
+      return npc.appearance.firstName + ' is yours. They\'ll follow you anywhere. Say "T10 let them go" to give it back.';
+    });
+  add('mind_control_all', 'Crowd',
+    ['control everyones mind', 'control everyone', 'take over the city', 'make everyone obey me',
+     'mind control everyone', 'everyone obeys me'],
+    'Take over every mind around you.',
+    (ctx) => {
+      let n = 0;
+      for (const npc of ctx.npcs.npcs) {
+        if (npc.indoors) continue;
+        npc.controlled = 'mind';
+        npc.infected = false; npc.hostile = false; npc.panicking = false;
+        npc.human.setSkinTint(0x9fc4ff, 0x6ec8ff);
+        n++;
+      }
+      return n + ' ' + plural('mind', n) + ', all yours. They walk where you walk.';
+    });
+  add('mind_release', 'Crowd',
+    ['let them go', 'release their mind', 'give them their mind back', 'stop controlling them',
+     'release everyone', 'let everyone go'],
+    'Give people their minds back.',
+    (ctx) => {
+      let n = 0;
+      for (const npc of ctx.npcs.npcs) {
+        if (npc.controlled !== 'mind' && npc.controlled !== 'love') continue;
+        npc.controlled = null;
+        npc.human.setSkinTint(null, null);
+        n++;
+      }
+      return n ? n + ' released. They have no idea what just happened.' : 'You aren\'t controlling anyone.';
+    });
+  add('mind_make_them', 'Crowd',
+    ['make them do whatever i say', 'they do what i say', 'make them my puppet'],
+    'The nearest person does whatever you ask from now on.',
+    (ctx) => {
+      const npc = nearest(ctx);
+      if (!npc) return 'Nobody close enough.';
+      npc.controlled = 'mind';
+      return npc.appearance.firstName + ' is listening to you now. Try "T10 make them dance".';
+    });
+  add('mind_army', 'Crowd',
+    ['give me an army', 'make them follow me', 'i want followers', 'build me an army'],
+    'Everyone nearby falls in behind you.',
+    (ctx) => {
+      let n = 0;
+      for (const npc of ctx.npcs.npcs) { if (npc.indoors) continue; npc.controlled = 'follow'; n++; }
+      return n + ' behind you. Don\'t look back, it\'s unsettling.';
+    });
+
+  // ===== 44. Love ==========================================================
+  add('love_one', 'Crowd',
+    ['make them fall in love with me', 'make them love me', 'make that person love me',
+     'make them like me', 'make them fall for me'],
+    'The nearest person falls for you.',
+    (ctx) => {
+      const npc = nearest(ctx);
+      if (!npc) return 'Nobody close enough.';
+      npc.controlled = 'love';
+      npc.mood = 1;
+      return npc.appearance.firstName + ' just fell for you. Completely. They\'ll follow you around and keep looking over.';
+    });
+  add('love_all', 'Crowd',
+    ['make everyone fall in love with me', 'make everyone love me', 'everyone loves me',
+     'make the whole city love me'],
+    'The whole street falls for you.',
+    (ctx) => {
+      let n = 0;
+      for (const npc of ctx.npcs.npcs) {
+        if (npc.indoors) continue;
+        npc.controlled = 'love';
+        npc.infected = false; npc.hostile = false; npc.panicking = false;
+        npc.mood = 1;
+        n++;
+      }
+      return n + ' ' + plural('person', n) + ', all in love with you. This is going to get crowded.';
+    });
+  add('love_stop', 'Crowd',
+    ['nobody loves me', 'break their heart', 'stop them loving me', 'undo the love',
+     'make them stop loving me'],
+    'Undo it.',
+    (ctx) => {
+      let n = 0;
+      for (const npc of ctx.npcs.npcs) if (npc.controlled === 'love') { npc.controlled = null; npc.human.setSkinTint(null, null); n++; }
+      return n ? n + ' over it already.' : 'Nobody\'s in love with you.';
+    });
+  add('love_two', 'Crowd',
+    ['make those two fall in love', 'set them up', 'introduce those two'],
+    'Introduce the two nearest people to each other.',
+    (ctx) => {
+      const a = nearest(ctx, 30);
+      if (!a) return 'Nobody close enough.';
+      const b = ctx.npcs.nearestNPC(a.position, 30, a);
+      if (!b) return 'There\'s only one person near you.';
+      a.controlled = null; b.controlled = null;
+      a.talkPartner = b; b.talkPartner = a;
+      a.talkTimer = b.talkTimer = 40;
+      a.mood = b.mood = 1;
+      a.human.animator.setState(STATES.TALK);
+      b.human.animator.setState(STATES.TALK);
+      return a.appearance.firstName + ' and ' + b.appearance.firstName + '. Give them a minute.';
+    });
+
+  // ===== 45. Other things worth asking for =================================
+  add('crowd_calm', 'Crowd',
+    ['calm everyone down', 'everyone relax', 'settle everyone', 'peace'],
+    'Put everyone back to normal, whatever they were doing.',
+    (ctx) => {
+      const a = apo(ctx);
+      let n = 0;
+      for (const npc of ctx.npcs.npcs) {
+        if (a) a.clearNpc(npc);
+        if (npc.controlled) { npc.controlled = null; npc.human.setSkinTint(null, null); }
+        npc.downed = 0;
+        n++;
+      }
+      return n + ' calm. Nothing is chasing anybody.';
+    });
+  add('crowd_flee', 'Crowd',
+    ['make everyone run away', 'scare everyone', 'make them panic', 'make everyone panic'],
+    'Everyone nearby runs.',
+    (ctx) => {
+      const a = apo(ctx);
+      if (!a) return 'I can\'t reach the world right now.';
+      let n = 0;
+      for (const npc of ctx.npcs.npcs) { if (npc.indoors) continue; a.panic(npc); n++; }
+      return n + ' running. They don\'t know what from.';
+    });
+  add('crowd_fight_me', 'Crowd',
+    ['make everyone attack me', 'everyone come at me', 'make them fight me'],
+    'Turn the street on you.',
+    (ctx) => {
+      const a = apo(ctx);
+      if (!a) return 'I can\'t reach the world right now.';
+      const n = a.makeHostile();
+      return n + ' coming for you. ' + (ctx.player.immortal ? 'They won\'t get anywhere.' : 'Say "T10 never let me die" if you\'d rather stay upright.');
+    });
+  add('down_one', 'Crowd',
+    ['knock them down', 'put them on the floor', 'floor them', 'take them out'],
+    'Put the nearest person on the ground for a few seconds.',
+    (ctx) => {
+      const npc = nearest(ctx, 20);
+      if (!npc) return 'Nobody close enough.';
+      npc.downed = 6;
+      return npc.appearance.firstName + ' is on the pavement. They\'ll be up shortly.';
+    });
+  add('down_all', 'Crowd',
+    ['knock everyone down', 'floor everyone', 'put everyone down'],
+    'Put everyone nearby on the ground.',
+    (ctx) => {
+      let n = 0;
+      for (const npc of ctx.npcs.npcs) { if (npc.indoors) continue; npc.downed = 6; n++; }
+      return n + ' down. Nobody\'s hurt — there\'s no hurt in this city.';
+    });
+  add('apoc_ufo_one', 'Apocalypse',
+    ['send a ufo', 'give me a ufo', 'spawn a flying saucer', 'i want to see a ufo', 'send a ship'],
+    'Put one saucer over your head.',
+    (ctx) => {
+      const a = apo(ctx);
+      if (!a) return 'I can\'t reach the world right now.';
+      a.addSaucer(ctx.player.position);
+      return 'One ship, right above you. Watch what it does to whoever walks underneath.';
+    });
+  add('apoc_meteor_one', 'Apocalypse',
+    ['drop a meteor', 'send a meteor', 'throw a rock at the city', 'drop one rock'],
+    'Drop a single meteor nearby.',
+    (ctx) => {
+      const a = apo(ctx);
+      if (!a) return 'I can\'t reach the world right now.';
+      a.addMeteor(ctx.player.position);
+      return 'Look up.';
+    });
+  add('apoc_lights_out', 'Apocalypse',
+    ['kill the power', 'cut the power', 'lights out', 'turn off every light'],
+    'Cut every light in the city.',
+    (ctx) => {
+      ctx.forceStreetLights = 0;
+      for (const v of ctx.traffic.vehicles) { v.autoHeadlights = false; v.headlightsOn = false; }
+      return 'Power\'s out. All of it.';
+    });
+  add('apoc_lights_back', 'Apocalypse',
+    ['bring the power back', 'restore the power', 'lights back on', 'fix the power'],
+    'Put the lights back on.',
+    (ctx) => {
+      ctx.forceStreetLights = null;
+      for (const v of ctx.traffic.vehicles) v.autoHeadlights = true;
+      return 'Power\'s back.';
+    });
+  add('apoc_last_person', 'Apocalypse',
+    ['make me the last person alive', 'empty the city', 'remove everyone', 'i want to be alone'],
+    'Clear every person out of the city.',
+    (ctx) => {
+      const n = ctx.npcs.count();
+      ctx.npcs.densityScale = 0;
+      ctx.npcs.clear();
+      return n + ' gone. It\'s just you and the buildings now. Say "T10 bring the people back".';
+    });
+  add('apoc_repopulate', 'Apocalypse',
+    ['bring the people back', 'repopulate the city', 'i want people again', 'put everyone back'],
+    'Fill the city back up.',
+    (ctx) => {
+      ctx.npcs.densityScale = 1;
+      return 'They\'re coming back. Give it a moment.';
+    });
+  add('apoc_survivor', 'Apocalypse',
+    ['am i the only one left', 'is anyone left', 'how many people are left'],
+    'Ask who\'s left.',
+    (ctx) => {
+      const total = ctx.npcs.count();
+      let ok = 0;
+      for (const n of ctx.npcs.npcs) if (!n.infected && !n.hostile && n.downed <= 0) ok++;
+      if (!total) return 'Nobody. Just you.';
+      return total + ' people loaded around you, ' + ok + ' of them still themselves.';
+    });
+}
+
+return { extendRegistry5 };
+})();
+
 __M["t10/commands"] = (function(){
 // T10 World - the T10 assistant's command registry.
 // Every entry here is a real, executable command with its own trigger phrases.
@@ -68093,6 +69335,7 @@ const { EMOTES } = __M["t10/emotes"];
 const { extendRegistry } = __M["t10/commands2"];
 const { extendRegistry3 } = __M["t10/commands3"];
 const { extendRegistry4 } = __M["t10/commands4"];
+const { extendRegistry5 } = __M["t10/commands5"];
 
 function singularWord(word) {
   if (word.length < 4) return word;
@@ -68650,6 +69893,7 @@ function buildRegistry() {
   extendRegistry(R, add);
   extendRegistry3(R, add);
   extendRegistry4(R, add);
+  extendRegistry5(R, add);
   return R;
 }
 
@@ -68797,6 +70041,50 @@ class T10Brain {
     this.showStats = false;
     this.gravityScale = 1;
     this.unknownStreak = 0;
+    // When T10 asks you something, the next thing you say answers it — no
+    // wake word needed, because you're already in the conversation.
+    this.pending = null;
+  }
+
+  /**
+   * Ask a follow-up question.
+   * @param prompt what T10 says
+   * @param choices [{ words:[...], run(ctx) }] — first match wins
+   */
+  ask(prompt, choices) {
+    this.pending = { prompt, choices, asked: Date.now() };
+    return prompt;
+  }
+
+  /** Try to read `text` as the answer to the outstanding question. */
+  answerPending(text) {
+    const p = this.pending;
+    if (!p) return null;
+    const n = normalise(text);
+    if (!n) return null;
+    if (/^(never ?mind|forget it|cancel|nothing|no|stop)$/.test(n)) {
+      this.pending = null;
+      return 'Forget it then.';
+    }
+    const tokens = new Set(matchTokens(n));
+    let best = null, bestScore = 0;
+    for (const c of p.choices) {
+      let score = 0;
+      for (const w of c.words) {
+        if (n === w) score = Math.max(score, 100);
+        else if (n.includes(w)) score = Math.max(score, 60 + w.length);
+        else if (tokens.has(singular(w))) score = Math.max(score, 40);
+      }
+      if (score > bestScore) { bestScore = score; best = c; }
+    }
+    if (!best || bestScore < 30) return null;
+    this.pending = null;
+    try {
+      return best.run(this.ctx) || 'Done.';
+    } catch (err) {
+      console.error('[T10] answer failed', err);
+      return 'Something went wrong with that one.';
+    }
   }
 
   get ctx() {
@@ -68809,11 +70097,13 @@ class T10Brain {
       npcs: g.npcs,
       traffic: g.traffic,
       animals: g.animals,
+      apocalypse: g.apocalypse,
       atmosphere: g.atmosphere,
       scene: g.scene,
       post: g.post,
       registry: this.registry,
       markers: this.markers,
+      ask: (prompt, choices) => self.ask(prompt, choices),
       get lastVehicle() { return self.lastVehicle; },
       set lastVehicle(v) { self.lastVehicle = v; },
       get trafficLightOverride() { return self.trafficLightOverride; },
@@ -68865,6 +70155,17 @@ class T10Brain {
    * @returns { ok, reply, command } — ok:false when the wake word is missing.
    */
   handle(raw) {
+    // An outstanding question gets first refusal on whatever you say next,
+    // with or without the wake word.
+    if (this.pending) {
+      const stripped = stripWakeWord(raw);
+      const answered = this.answerPending(stripped === null ? raw : stripped);
+      if (answered != null) {
+        this.history.push({ input: raw, command: 'answer', reply: answered });
+        return { ok: true, reply: answered, answered: true };
+      }
+    }
+
     const after = stripWakeWord(raw);
     if (after === null) {
       return {
@@ -70297,7 +71598,7 @@ const { settings, QUALITY_PRESETS, PerformanceGovernor } = __M["core/settings"];
 const { InputManager } = __M["core/input"];
 const { audio } = __M["core/audio"];
 const { saveGame, loadGame, hasSave, clearSave, saveInfo } = __M["core/save"];
-const { clamp01, clampv, lerpv, hashString, TAU } = __M["core/math"];
+const { clamp01, clampv, lerpv, hashString, makeRng, TAU } = __M["core/math"];
 const { World, CHUNK_SIZE } = __M["world/world"];
 const { Atmosphere } = __M["render/atmosphere"];
 const { PostProcessor } = __M["render/post"];
@@ -70305,6 +71606,7 @@ const { Player } = __M["player/player"];
 const { NPCManager } = __M["entities/npc"];
 const { TrafficManager } = __M["entities/traffic"];
 const { AnimalManager } = __M["entities/animals"];
+const { Apocalypse } = __M["entities/apocalypse"];
 const { T10Brain } = __M["t10/brain"];
 const { HUD } = __M["ui/hud"];
 const { MapOverlay } = __M["ui/map"];
@@ -70485,12 +71787,20 @@ class Game {
         this.npcs = new NPCManager(this.world, this.scene, this.atmosphere);
         this.traffic = new TrafficManager(this.world, this.scene);
         this.animals = new AnimalManager(this.world, this.scene, this.atmosphere);
+        this.apocalypse = new Apocalypse(this);
+        this.npcs.apocalypse = this.apocalypse;
+        // People only get to lay a hand on you when the world is ending.
+        this.npcs.onPlayerAttacked = (npc, how) => this.onPlayerAttacked(npc, how);
       }],
       ['Bringing T10 online…', () => {
         this.t10 = new T10Brain(this);
       }],
       ['Finding you a street…', () => {
-        const spawn = this.world.findSpawnPoint(-40, 120);
+        // Different worlds wake you up on different streets.
+        const rng = makeRng(this.worldSeed ^ 0x5f3a7);
+        const a = rng() * Math.PI * 2;
+        const r = 90 + rng() * 380;
+        const spawn = this.world.findSpawnPoint(Math.cos(a) * r, Math.sin(a) * r);
         this.player.spawnOnStreet(spawn.x, spawn.z);
         this.player.setCameraMode(settings.get('cameraMode'));
         // Pre-stream the chunks around the spawn so you don't wake into a void.
@@ -70597,6 +71907,7 @@ class Game {
     this.npcs.update(dt, p.position);
     this.traffic.update(dt, focus, p.inVehicle, this.npcs.npcs);
     this.animals.update(dt, p.position, this.traffic.vehicles);
+    if (this.apocalypse) this.apocalypse.update(dt, p.position);
     this.t10.update(dt);
 
     // Interaction prompt.
@@ -70703,6 +72014,28 @@ class Game {
   syncInputSuspend() {
     this.input.setSuspended(this.hud.chatOpen || this.hud.settingsOpen ||
       (this.map && this.map.visible) || (this.book && this.book.visible));
+  }
+
+  /** A hostile or an infected person reached you. */
+  onPlayerAttacked(npc, how) {
+    const p = this.player;
+    if (p.immortal || p.godMode) {
+      if (!this._untouchableSaid || performance.now() - this._untouchableSaid > 20000) {
+        this._untouchableSaid = performance.now();
+        this.t10Say(npc.appearance.firstName + ' went for you and bounced off. You asked to never die.');
+      }
+      return;
+    }
+    if (!p.knockDown(how === 'infect' ? 5 : 4, how)) return;
+    audio.t10Blip('error');
+    // Being floored repeatedly is the point of a purge; being told about it
+    // every four seconds is not.
+    const now = performance.now();
+    if (this._downSaid && now - this._downSaid < 25000) return;
+    this._downSaid = now;
+    this.t10Say(how === 'infect'
+      ? npc.appearance.firstName + ' got hold of you. You\'re down — I\'ll have you up in a moment. Say "T10 never let me die" if you want that to stop happening.'
+      : npc.appearance.firstName + ' put you on the pavement. Say "T10 I never want to die" and nobody touches you again.');
   }
 
   onChatToggled(open) {

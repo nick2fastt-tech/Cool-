@@ -332,6 +332,54 @@ export class Human {
     }
   }
 
+  /**
+   * Multiply this person's materials by a colour, so infection (or mind
+   * control, or anything else) reads across a whole street at a glance.
+   * Skin takes it at full strength, clothes at half so they still read as
+   * clothes. Originals are kept, so passing null puts everything back.
+   */
+  setSkinTint(hex, eyeHex) {
+    if (!this._tintBase) {
+      this._tintBase = new Map();
+      const remember = (m) => { if (m && m.color && !this._tintBase.has(m)) this._tintBase.set(m, m.color.getHex()); };
+      remember(this.materials.skin);
+      remember(this.materials.head);
+      for (const k in this.parts) {
+        const part = this.parts[k];
+        if (!part) continue;
+        part.traverse((o) => {
+          if (!o.isMesh) return;
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          for (const m of mats) remember(m);
+        });
+      }
+    }
+
+    const skinSet = new Set([this.materials.skin, this.materials.head]);
+    const tint = hex == null ? null : new THREE.Color(hex);
+    for (const [m, base] of this._tintBase) {
+      if (!m.color) continue;
+      if (tint == null) { m.color.setHex(base); continue; }
+      m.color.setHex(base);
+      // Skin takes the colour outright; everything else is pulled halfway.
+      m.color.lerp(tint, skinSet.has(m) ? 1 : 0.5);
+    }
+    this.skinTint = hex == null ? null : hex;
+
+    if (eyeHex !== undefined) {
+      for (const S of ['L', 'R']) {
+        const pivot = this.face && this.face['eye' + S];
+        if (!pivot) continue;
+        pivot.traverse((o) => {
+          if (!o.isMesh || !o.name.startsWith('eye') || !o.material || !o.material.emissive) return;
+          o.material.emissive.setHex(eyeHex == null ? 0x000000 : eyeHex);
+          o.material.emissiveIntensity = eyeHex == null ? 0 : 1.8;
+          o.material.needsUpdate = true;
+        });
+      }
+    }
+  }
+
   setSkinTone(index) {
     const a = this.appearance;
     a.toneIndex = ((index % SKIN_TONES.length) + SKIN_TONES.length) % SKIN_TONES.length;

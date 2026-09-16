@@ -62,7 +62,16 @@ export class NPC {
     this.talkPartner = null;
     this.reactCooldown = 0;
     this.phoneTimer = this.rng.range(20, 180);
-    this.controlled = null;      // 'follow' | 'freeze' | 'dance' | ...
+    this.controlled = null;      // 'follow' | 'freeze' | 'dance' | 'apocalypse' | 'mind' | 'love'
+    // End-of-the-world state. All false in a normal city.
+    this.infected = false;
+    this.hostile = false;
+    this.panicking = false;
+    this.downed = 0;
+    this.combatTarget = null;
+    this.attackCooldown = 0;
+    this.infectCooldown = 0;
+    this.abducting = null;
     this.vehicle = null;
     this.indoors = false;
     this.lastLine = '';
@@ -214,8 +223,43 @@ export class NPC {
     this.activityTimer -= dt;
     if (this.reactCooldown > 0) this.reactCooldown -= dt;
     if (this.talkTimer > 0) this.talkTimer -= dt;
+    if (this.attackCooldown > 0) this.attackCooldown -= dt;
+    if (this.infectCooldown > 0) this.infectCooldown -= dt;
 
-    if (this.controlled === 'follow' && playerPos) {
+    // Knocked down: lie there, then get up angrier than before.
+    if (this.downed > 0) {
+      this.downed -= dt;
+      this.targetSpeed = 0;
+      this.speed = 0;
+      this.human.animator.setState(this.downed > 0.9 ? STATES.LIE : STATES.GETUP);
+      this.human.update(dt, { speed: 0, turnRate: 0, grounded: true, verticalVel: 0 });
+      this.root.position.copy(this.position);
+      return;
+    }
+    // Being lifted into a ship — the saucer drives the position.
+    if (this.abducting) {
+      this.human.update(dt, { speed: 0, turnRate: 0, grounded: false, verticalVel: 1 });
+      return;
+    }
+
+    if (this.infected || this.hostile || this.panicking) {
+      this.updateApocalypse(dt, playerPos);
+      this.human.applyLod(playerPos ? this.position.distanceTo(playerPos) : 100);
+      this.human.update(dt, { speed: this.speed, turnRate: this._turnRate || 0, grounded: true, verticalVel: 0 });
+      return;
+    }
+
+    // Mind-controlled and smitten people both trail you; only the flavour
+    // differs, and love keeps glancing over.
+    if ((this.controlled === 'follow' || this.controlled === 'mind' || this.controlled === 'love') && playerPos) {
+      if (this.controlled === 'love') {
+        this.lookTarget = playerPos;
+        this.loveTimer = (this.loveTimer || 0) - dt;
+        if (this.loveTimer <= 0 && this.position.distanceTo(playerPos) < 4) {
+          this.loveTimer = 5 + this.rng() * 7;
+          this.human.animator.setState(STATES.WAVE);
+        }
+      }
       const d = this.position.distanceTo(playerPos);
       if (d > 3.5) {
         this.destination = { x: playerPos.x, z: playerPos.z };
@@ -266,6 +310,145 @@ export class NPC {
       grounded: true,
       verticalVel: 0,
     });
+  }
+
+  // -------------------------------------------------------------------------
+  // The end of the world
+  // -------------------------------------------------------------------------
+
+  /** Steer straight at a point, no pathfinding — nobody is being careful now. */
+  chargeAt(dt, tx, tz, speed) {
+    const dx = tx - this.position.x, dz = tz - this.position.z;
+    const dist = Math.hypot(dx, dz);
+    const want = Math.atan2(dx, dz);
+    const prev = this.heading;
+    this.heading = dampAngle(this.heading, want, 0.0002, dt);
+    this._turnRate = wrapAngle(this.heading - prev) / Math.max(dt, 0.001);
+    this.targetSpeed = dist < 1.1 ? 0 : speed;
+    return dist;
+  }
+
+  /**
+   * The nearest person worth going after.
+   * mode 'uninfected' — for the infected, anyone not yet turned.
+   * mode 'anyone'     — for a riot, where everyone is hostile and the whole
+   *                     point is that they still go for each other.
+   */
+  findPrey(radius, mode) {
+    let best = null, bestD = radius;
+    for (const other of this.manager.npcs) {
+      if (other === this || other.indoors || other.abducting || other.downed > 0) continue;
+      if (mode === 'uninfected' && other.infected) continue;
+      const d = this.position.distanceTo(other.position);
+      if (d < bestD) { bestD = d; best = other; }
+    }
+    return best;
+  }
+
+  updateApocalypse(dt, playerPos) {
+    const apo = this.manager.apocalypse;
+    this.path.length = 0;
+
+    if (this.infected) {
+      // Shamble toward the nearest uninfected person, or the player.
+      let tx = null, tz = null, victim = null;
+      const prey = this.findPrey(42, 'uninfected');
+      const dPlayer = playerPos ? this.position.distanceTo(playerPos) : 1e9;
+      const dPrey = prey ? this.position.distanceTo(prey.position) : 1e9;
+      if (dPlayer < dPrey && dPlayer < 42) { tx = playerPos.x; tz = playerPos.z; }
+      else if (prey) { tx = prey.position.x; tz = prey.position.z; victim = prey; }
+
+      if (tx == null) {
+        this.targetSpeed = this.walkSpeed * 0.35;
+        this.heading += dt * 0.3;
+        this.human.animator.setState(STATES.WALK);
+      } else {
+        // Locked on: a steady pursuit that closes the gap, and a lunge inside
+        // eight metres. A pursuer that is always slower than a runner never
+        // catches anybody in an open city, so the outbreak would never spread
+        // past the people it started with. It only shambles with no target.
+        const near = Math.min(dPlayer, dPrey);
+        const pace = near < 8 ? this.walkSpeed * 2.9 : this.walkSpeed * 1.7;
+        const dist = this.chargeAt(dt, tx, tz, pace);
+        if (dist < 1.9 && this.infectCooldown <= 0) {
+          this.infectCooldown = 2.5;
+          if (victim && apo) apo.infect(victim);
+          else if (this.manager.onPlayerAttacked) this.manager.onPlayerAttacked(this, 'infect');
+        }
+        this.human.animator.setState(this.speed > this.walkSpeed * 1.1 ? STATES.RUN : STATES.WALK);
+      }
+    } else if (this.hostile) {
+      // Pick a fight with whoever is closest and keep swinging.
+      if (!this.combatTarget || this.combatTarget.downed > 0 || this.combatTarget.indoors ||
+          this.position.distanceTo(this.combatTarget.position) > 55) {
+        this.combatTarget = this.findPrey(50, 'anyone');
+      }
+      const dPlayer = playerPos ? this.position.distanceTo(playerPos) : 1e9;
+      const goForPlayer = dPlayer < 14 && (!this.combatTarget || dPlayer < this.position.distanceTo(this.combatTarget.position));
+      const tx = goForPlayer ? playerPos.x : (this.combatTarget ? this.combatTarget.position.x : null);
+      const tz = goForPlayer ? playerPos.z : (this.combatTarget ? this.combatTarget.position.z : null);
+
+      if (tx == null) {
+        this.targetSpeed = this.runSpeed * 0.6;
+        this.heading += dt * 0.6;
+        this.human.animator.setState(STATES.RUN);
+      } else {
+        const dist = this.chargeAt(dt, tx, tz, this.runSpeed);
+        if (dist < 1.9 && this.attackCooldown <= 0) {
+          this.attackCooldown = 1.1 + this.rng() * 0.8;
+          this.human.animator.setState(STATES.POINT);   // a swing, telegraphed
+          if (goForPlayer) { if (this.manager.onPlayerAttacked) this.manager.onPlayerAttacked(this, 'hit'); }
+          else if (this.combatTarget) {
+            this.combatTarget.downed = 4 + this.rng() * 6;
+            this.combatTarget.combatTarget = null;
+            if (apo) apo.casualties++;
+            this.combatTarget = null;
+          }
+        } else if (this.attackCooldown > 0.7) {
+          this.human.animator.setState(STATES.POINT);
+        } else {
+          this.human.animator.setState(this.speed > this.walkSpeed * 1.4 ? STATES.RUN : STATES.WALK);
+        }
+      }
+    } else {
+      // Panic: run away from the nearest threat, or just away.
+      let threat = null, bestD = 60;
+      for (const other of this.manager.npcs) {
+        if (!other.infected && !other.hostile) continue;
+        const d = this.position.distanceTo(other.position);
+        if (d < bestD) { bestD = d; threat = other; }
+      }
+      if (apo && apo.saucers.length) {
+        for (const s of apo.saucers) {
+          const d = Math.hypot(s.mesh.position.x - this.position.x, s.mesh.position.z - this.position.z);
+          if (d < bestD) { bestD = d; threat = { position: s.mesh.position }; }
+        }
+      }
+      // You cannot sprint forever. Stamina drains while something is chasing
+      // you and comes back when it isn't, so a crowd eventually gets caught.
+      if (this.stamina == null) this.stamina = 1;
+      this.stamina = clamp01(this.stamina + (threat ? -dt / 18 : dt / 14));
+      const flee = this.runSpeed * lerpv(0.55, 1, this.stamina);
+
+      if (threat) {
+        this.chargeAt(dt, this.position.x * 2 - threat.position.x, this.position.z * 2 - threat.position.z, flee);
+      } else {
+        this.panicTimer = (this.panicTimer || 0) - dt;
+        if (this.panicTimer <= 0) { this.panicTimer = 1.5 + this.rng() * 3; this.panicHeading = this.rng() * TAU; }
+        const h = this.panicHeading || 0;
+        this.chargeAt(dt, this.position.x + Math.sin(h) * 20, this.position.z + Math.cos(h) * 20, flee * 0.9);
+      }
+      this.human.animator.setState(this.speed > this.walkSpeed * 1.3 ? STATES.RUN : STATES.WALK);
+    }
+
+    this.speed = damp(this.speed, this.targetSpeed, 0.0012, dt);
+    const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
+    this.position.x += fx * this.speed * dt;
+    this.position.z += fz * this.speed * dt;
+    this.position.y = this.world.groundAt(this.position.x, this.position.z);
+    this.world.resolveCollision(this.position, 0.35);
+    this.root.position.copy(this.position);
+    this.root.rotation.y = this.heading;
   }
 
   moveAlongPath(dt) {

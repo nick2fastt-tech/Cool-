@@ -159,8 +159,17 @@ export function extendRegistry(R, add) {
     'Enable flight — jump to rise, crouch to descend.',
     (ctx) => { ctx.player.flying = true; return 'Flying on. Jump goes up, crouch goes down.'; });
   add('fly_off', 'Powers', ['stop flying', 'disable flying', 'turn off flying', 'land me'],
-    'Disable flight.',
-    (ctx) => { ctx.player.flying = false; return 'Flying off.'; });
+    'Disable flight and put you back on the ground.',
+    (ctx) => {
+      const p = ctx.player;
+      // Leaving noclip on would keep you floating with no way to come down.
+      p.flying = false;
+      p.noclip = false;
+      p.flySpeed = 2.4;
+      const height = p.position.y - ctx.world.groundAt(p.position.x, p.position.z);
+      if (height > 2) { p.verticalVel = 0; return 'Flying off. Brace — you\'re ' + Math.round(height) + ' metres up.'; }
+      return 'Flying off.';
+    });
   add('noclip_on', 'Powers', ['enable noclip', 'let me walk through walls', 'turn on noclip', 'ghost mode'],
     'Walk through anything.',
     (ctx) => { ctx.player.noclip = true; ctx.player.flying = true; return 'Noclip on. Nothing can stop you.'; });

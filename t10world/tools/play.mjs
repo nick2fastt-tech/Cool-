@@ -174,6 +174,27 @@ const cmds = [
   'T10 how is it running',
   'T10 show all commands',
   'T10',
+  'T10 what apocalypses are there',
+  'T10 start a zombie apocalypse',
+  'T10 how bad is it',
+  'T10 infect that person',
+  'T10 how many are infected',
+  'T10 cure the virus',
+  'T10 start a riot apocalypse',
+  'T10 i never want to die',
+  'T10 am i safe',
+  'T10 make everyone attack me',
+  'T10 stop the apocalypse',
+  'T10 send a ufo',
+  'T10 drop a meteor',
+  'T10 control everyones mind',
+  'T10 let them go',
+  'T10 make everyone fall in love with me',
+  'T10 nobody loves me',
+  'T10 let me fly like superman',
+  'T10 stop flying',
+  'T10 let me die',
+  'T10 calm everyone down',
   'T10 flurbulate the widget',
 ];
 const replies = [];
@@ -187,6 +208,18 @@ for (const c of cmds) {
   await page.waitForTimeout(500);
 }
 await page.waitForTimeout(1500);
+// T10 asking a follow-up question, and the answer landing without a wake word.
+const askFlow = await page.evaluate(()=>{
+  const g = window.__t10;
+  const q = g.t10.handle('T10 start an apocalypse');
+  const pending = !!g.t10.pending;
+  const a = g.t10.handle('alien');
+  return { asked: q.reply.slice(0, 60), pending, answered: !!a.answered, reply: a.reply.slice(0, 70),
+    kind: g.apocalypse.kind };
+});
+log('ask flow:', JSON.stringify(askFlow));
+await page.evaluate(()=>{ window.__t10.t10.handle('T10 stop the apocalypse'); });
+
 const bookOpen = await page.evaluate(()=>!!(window.__t10.book && window.__t10.book.visible));
 log('command book opened by bare "T10":', bookOpen);
 await page.screenshot({ path: SHOT+'/07a-book.png' });

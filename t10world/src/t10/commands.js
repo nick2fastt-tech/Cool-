@@ -19,6 +19,7 @@ import { EMOTES } from './emotes.js';
 import { extendRegistry } from './commands2.js';
 import { extendRegistry3 } from './commands3.js';
 import { extendRegistry4 } from './commands4.js';
+import { extendRegistry5 } from './commands5.js';
 
 function singularWord(word) {
   if (word.length < 4) return word;
@@ -576,5 +577,6 @@ export function buildRegistry() {
   extendRegistry(R, add);
   extendRegistry3(R, add);
   extendRegistry4(R, add);
+  extendRegistry5(R, add);
   return R;
 }

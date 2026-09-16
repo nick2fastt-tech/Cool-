@@ -926,6 +926,41 @@ export class World {
   }
 
   /** A safe place to stand: on a sidewalk, above water, clear of colliders. */
+  /** Is there clear ground for `dist` metres along `heading` from here? */
+  isOpenAhead(x, z, heading, dist) {
+    const fx = Math.sin(heading), fz = Math.cos(heading);
+    const probe = new THREE.Vector3();
+    const steps = Math.max(2, Math.round(dist / 1.5));
+    for (let i = 1; i <= steps; i++) {
+      const t = (i / steps) * dist;
+      probe.set(x + fx * t, 0, z + fz * t);
+      probe.y = this.groundAt(probe.x, probe.z) + 1.2;
+      if (this.isWater(probe.x, probe.z)) return false;
+      if (this.resolveCollision(probe, 0.5)) return false;
+    }
+    return true;
+  }
+
+  /**
+   * A heading that looks at something. Facing a wall from 40cm away is the
+   * difference between "I woke up in a city" and "my screen is broken", so we
+   * try down the street both ways, then across it, then anything clear.
+   */
+  openHeadingAt(x, z, road) {
+    const tries = [];
+    if (road) {
+      const along = Math.atan2(road.ux, road.uz);
+      tries.push(along, along + Math.PI);
+      tries.push(along + Math.PI / 2, along - Math.PI / 2);
+    }
+    for (let i = 0; i < 16; i++) tries.push((i / 16) * TAU);
+    // A long clear view first, then settle for merely not-a-wall.
+    for (const dist of [14, 6, 2.5]) {
+      for (const h of tries) if (this.isOpenAhead(x, z, h, dist)) return h;
+    }
+    return road ? Math.atan2(road.ux, road.uz) : 0;
+  }
+
   findSpawnPoint(nearX, nearZ) {
     const sw = this.city.nearestSidewalk(nearX == null ? -40 : nearX, nearZ == null ? 60 : nearZ);
     const p = new THREE.Vector3(sw.x, 0, sw.z);
@@ -936,6 +971,7 @@ export class World {
       p.z += (Math.random() - 0.5) * 6;
     }
     p.y = this.groundAt(p.x, p.z);
+    p.heading = this.openHeadingAt(p.x, p.z, sw.road);
     return p;
   }
 
