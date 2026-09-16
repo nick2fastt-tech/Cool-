@@ -254,11 +254,11 @@ export class HUD {
     // Action buttons, bottom right.
     const pad = el('div', 't10-pad', wrap);
     this.touchButtons = {};
+    // No Run (there is one pace) and no View (first/third lives in Settings).
     const defs = [
       { id: 'interact', label: 'E', hint: 'Use', cls: 'big' },
       { id: 'jump', label: '↑', hint: 'Jump' },
-      { id: 'sprint', label: '»', hint: 'Run' },
-      { id: 'camera', label: '◎', hint: 'View' },
+      { id: 'crouch', label: '↓', hint: 'Crouch' },
     ];
     for (const d of defs) {
       const b = el('button', 't10-touch-btn ' + (d.cls || ''), pad);

@@ -233,10 +233,45 @@ await page.evaluate(()=>{ window.__t10.map.hide(); });
 await page.waitForTimeout(1500);
 await page.screenshot({ path: SHOT+'/07-after-commands.png' });
 
+// --- viewport resilience ---
+// A mobile browser reporting a zero-height viewport once used to leave a
+// zero-height drawing buffer and a NaN projection matrix: a black screen that
+// never recovered, because no further resize event fires.
+log('--- viewport ---');
+const viewport = await page.evaluate(async ()=>{
+  const g = window.__t10;
+  const read = () => { const c = g.renderer.domElement;
+    return { w:c.width, h:c.height, finite:Number.isFinite(g.camera.projectionMatrix.elements[0]) }; };
+  const pump = async (n) => { for (let f=0;f<n;f++) await new Promise(r=>requestAnimationFrame(()=>r())); };
+  const healthy = read();
+  Object.defineProperty(window, 'innerHeight', { get: () => 0, configurable: true });
+  window.dispatchEvent(new Event('resize'));
+  await pump(4);
+  const afterZero = read();
+  Object.defineProperty(window, 'innerHeight', { get: () => 760, configurable: true });
+  // Break it outright, with no event at all, and let the frame loop notice.
+  g.renderer.setSize(300, 0, true);
+  g.camera.aspect = NaN; g.camera.updateProjectionMatrix();
+  await pump(40);
+  const healed = read();
+  return { healthy, afterZero, healed,
+    ok: afterZero.h > 0 && afterZero.finite && healed.h > 0 && healed.finite };
+});
+log('viewport:', JSON.stringify(viewport));
+if (!viewport.ok) { errors.push('VIEWPORT: black-screen guard failed'); log('>>> VIEWPORT GUARD FAILED'); }
+
 // --- touch joystick + drag-to-look ---
 log('--- touch input ---');
 await page.evaluate(()=>{ window.__t10.t10.handle('T10 low quality'); });
 await page.waitForTimeout(2000);
+const padHints = await page.evaluate(()=>{
+  const g = window.__t10;
+  if (!g.hud.touchWrap) { g.hud.isTouch = true; g.hud.buildTouchControls(); }
+  return [...g.hud.touchWrap.querySelectorAll('.t10-pad:not(.t10-pad-vehicle) .t10-touch-hint')].map(n=>n.textContent);
+});
+log('touch buttons:', JSON.stringify(padHints));
+if (padHints.some(h=>/run|view/i.test(h))) { errors.push('HUD: Run/View button still present'); log('>>> RUN/VIEW BUTTON STILL PRESENT'); }
+
 const touchMoved = await page.evaluate(async ()=>{
   const g = window.__t10;
   const el = g.renderer.domElement;

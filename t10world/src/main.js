@@ -62,6 +62,26 @@ export class Game {
     this.creator = new CharacterCreator(this.renderer, this.uiRoot, (appearance) => this.startWorld(appearance));
 
     window.addEventListener('resize', () => this.onResize());
+    window.addEventListener('orientationchange', () => {
+      // Safari reports the old size until after the rotation settles.
+      this.onResize();
+      setTimeout(() => this.onResize(), 120);
+      setTimeout(() => this.onResize(), 500);
+    });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', () => this.onResize());
+      window.visualViewport.addEventListener('scroll', () => this.onResize());
+    }
+    // A lost context is otherwise a silent black screen.
+    this.canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      this.contextLost = true;
+      if (this.hud) this.hud.say('Graphics context lost. Reload the page to carry on.', 't10');
+    });
+    this.canvas.addEventListener('webglcontextrestored', () => {
+      this.contextLost = false;
+      this.onResize();
+    });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) audio.suspend(); else audio.resume();
     });
@@ -103,8 +123,29 @@ export class Game {
     this.camera.position.set(0, 2, 6);
   }
 
+  /**
+   * The viewport, never zero. Mobile browsers report a zero height while the
+   * URL bar animates or the device rotates, and one zero reading used to leave
+   * a zero-height drawing buffer and a non-finite projection matrix — a black
+   * screen that never came back, because no further resize event fires.
+   */
+  viewportSize() {
+    const vv = window.visualViewport;
+    const candidatesW = [vv && vv.width, window.innerWidth,
+      document.documentElement && document.documentElement.clientWidth,
+      this.container && this.container.clientWidth];
+    const candidatesH = [vv && vv.height, window.innerHeight,
+      document.documentElement && document.documentElement.clientHeight,
+      this.container && this.container.clientHeight];
+    const pick = (list, fallback) => {
+      for (const v of list) if (Number.isFinite(v) && v > 0) return Math.round(v);
+      return fallback;
+    };
+    return { w: Math.max(1, pick(candidatesW, 360)), h: Math.max(1, pick(candidatesH, 640)) };
+  }
+
   onResize() {
-    const w = window.innerWidth, h = window.innerHeight;
+    const { w, h } = this.viewportSize();
     const dpr = Math.min(window.devicePixelRatio || 1, settings.preset.pixelRatioCap);
     const scale = settings.preset.renderScale * (this.governor ? this.governor.scale : 1);
     this.renderer.setPixelRatio(dpr * scale);
@@ -113,7 +154,27 @@ export class Game {
       this.camera.aspect = w / h;
       this.camera.updateProjectionMatrix();
     }
-    if (this.post) this.post.setSize(Math.round(w * dpr * scale), Math.round(h * dpr * scale));
+    if (this.post) this.post.setSize(Math.max(1, Math.round(w * dpr * scale)), Math.max(1, Math.round(h * dpr * scale)));
+    this._viewW = w;
+    this._viewH = h;
+  }
+
+  /**
+   * Cheap insurance, run a few times a second: if the drawing buffer has lost
+   * its size or the projection matrix has gone non-finite, put it back. Nothing
+   * else notices a broken viewport, because the browser only tells you once.
+   */
+  checkViewport() {
+    const canvas = this.renderer.domElement;
+    const bad = !canvas.width || !canvas.height ||
+      !Number.isFinite(this.camera.projectionMatrix.elements[0]) ||
+      !Number.isFinite(this.camera.aspect) || this.camera.aspect <= 0;
+    if (bad) { this.onResize(); return true; }
+    // A pixel of drift while the URL bar moves isn't worth reallocating render
+    // targets for; a real change is.
+    const { w, h } = this.viewportSize();
+    if (Math.abs(w - this._viewW) > 2 || Math.abs(h - this._viewH) > 2) { this.onResize(); return true; }
+    return false;
   }
 
   bindGlobalKeys() {
@@ -287,6 +348,9 @@ export class Game {
       const s = this.governor.update(rawDt);
       if (Math.abs(s - prev) > 0.001) this.onResize();
     }
+
+    // A few times a second is plenty, and it costs nothing when all is well.
+    if ((this.frame & 15) === 0) this.checkViewport();
 
     this.input.update(dt);
     this.updateGameplay(dt);
