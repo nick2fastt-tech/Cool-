@@ -177,6 +177,12 @@ const DEFAULTS = {
   showInteractPrompts: true,
   motionBlurAmount: 0.5,
   autoQuality: true,
+  qualityPinned: false,
+  // Content rating. 18 is the default and shows the violence in full; 16
+  // tones the blood down. Nothing here is hidden behind a paywall or a
+  // prompt — it is one switch in Settings.
+  maturity: 18,
+  goreLevel: 1,
   hapticFeedback: true,
   leftHandedTouch: false,
   keyBindings: {
@@ -185,6 +191,7 @@ const DEFAULTS = {
     interact: 'KeyE', enterVehicle: 'KeyF', t10: 'KeyT',
     camera: 'KeyV', settings: 'Escape', map: 'KeyM',
     handbrake: 'Space', horn: 'KeyH', lights: 'KeyL', signalLeft: 'KeyQ', signalRight: 'KeyR',
+    reload: 'KeyR', holster: 'KeyG',
   },
 };
 
@@ -211,10 +218,19 @@ class SettingsStore {
     this.emit('keyBindings', this.data.keyBindings);
   }
 
+  setMaturity(age) {
+    const a = age >= 18 ? 18 : 16;
+    this.data.maturity = a;
+    this.data.goreLevel = a >= 18 ? 1 : 0.35;
+    this.save();
+    this.emit('maturity', a);
+    return a;
+  }
+
   setQuality(name) {
     if (!QUALITY_PRESETS[name]) return false;
     this.data.quality = name;
-    this.data.autoQuality = false;
+    this.data.qualityPinned = true;
     this.save();
     this.emit('quality', name);
     return true;
@@ -247,15 +263,11 @@ class SettingsStore {
 
   /** First launch: guess a sane preset from the device instead of dumping ULTRA on a phone. */
   detectDefaults() {
-    const mem = navigator.deviceMemory || 4;
-    const cores = navigator.hardwareConcurrency || 4;
-    const touch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
-    const small = Math.min(screen.width, screen.height) < 820;
-    let q = 'high';
-    if (touch && small) q = mem >= 6 && cores >= 8 ? 'medium' : 'low';
-    else if (cores >= 12 && mem >= 8) q = 'ultra';
-    else if (cores <= 4 || mem <= 4) q = 'medium';
-    this.data.quality = q;
+    // Everyone starts on HIGH, phone or desktop. The frame governor trims the
+    // load to hold the frame rate rather than handing anyone a downgraded
+    // world up front, and it gives the detail back as soon as there's headroom.
+    this.data.quality = 'high';
+    this.data.autoQuality = true;
     this.save();
   }
 
@@ -269,13 +281,28 @@ class SettingsStore {
 export const settings = new SettingsStore();
 
 /**
+ * The live load multiplier, 0.3–1, published by the frame governor so every
+ * system can trim itself without reaching into the game object.
+ */
+export const perf = { load: 1 };
+
+/**
  * Adaptive resolution. Nudges render scale between 0.55 and the preset ceiling so a
  * mid-range phone keeps a playable framerate instead of dropping to a slideshow.
+ */
+/**
+ * Holds the frame rate without changing the preset you chose.
+ *
+ * Two dials. `load` trims how much world is simulated and streamed — crowd
+ * size, traffic, draw distance — and `scale` trims render resolution. Load
+ * goes first, because forty people on a sharp screen reads better than
+ * ninety on a blurry one, and it comes back last for the same reason.
  */
 export class PerformanceGovernor {
   constructor() {
     this.samples = [];
     this.scale = 1;
+    this.load = 1;
     this.cooldown = 2;
     this.targetMs = 1000 / 55;
     this.enabled = true;
@@ -286,11 +313,16 @@ export class PerformanceGovernor {
     if (this.samples.length > 90) this.samples.shift();
     this.cooldown -= dt;
     if (this.cooldown > 0 || this.samples.length < 60) return this.scale;
-    this.cooldown = 1.5;
+    this.cooldown = 1.2;
     const sorted = this.samples.slice().sort((a, b) => a - b);
     const median = sorted[Math.floor(sorted.length * 0.5)];
-    if (median > this.targetMs * 1.28) this.scale = Math.max(0.55, this.scale - 0.08);
-    else if (median < this.targetMs * 0.82) this.scale = Math.min(1, this.scale + 0.05);
+    if (median > this.targetMs * 1.28) {
+      if (this.load > 0.3) this.load = Math.max(0.3, this.load - 0.12);
+      else this.scale = Math.max(0.55, this.scale - 0.08);
+    } else if (median < this.targetMs * 0.82) {
+      if (this.scale < 1) this.scale = Math.min(1, this.scale + 0.05);
+      else this.load = Math.min(1, this.load + 0.05);
+    }
     return this.scale;
   }
   get fps() {

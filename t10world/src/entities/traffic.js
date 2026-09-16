@@ -5,7 +5,7 @@ import * as THREE from '../../vendor/three.module.js';
 import { Vehicle, VEHICLE_TYPES, CIVILIAN_TYPES, EMERGENCY_TYPES } from './vehicle.js';
 import { BLOCK_SIZE, CITY_RADIUS, ROAD_TYPES } from '../world/city.js';
 import { clamp01, clampv, lerpv, wrapAngle, makeRng, TAU } from '../core/math.js';
-import { settings } from '../core/settings.js';
+import { settings, perf } from '../core/settings.js';
 
 const DIRS = [
   { x: 0, z: 1, heading: 0 },            // north (+Z)
@@ -27,7 +27,7 @@ export class TrafficManager {
     this.grid = new Map();
   }
 
-  get budget() { return Math.round(settings.preset.vehicleBudget * this.densityScale); }
+  get budget() { return Math.round(settings.preset.vehicleBudget * this.densityScale * perf.load); }
 
   /** Snap a position to the nearest lane centre travelling in `dirIndex`. */
   laneAnchor(x, z, dirIndex, roadType) {
@@ -144,6 +144,20 @@ export class TrafficManager {
 
     this.despawnFar(px, pz, keepDist + 90);
     this.spawnTimer -= dt;
+    // Shed the furthest car when the governor tightens the budget.
+    if (this.vehicles.length > this.budget) {
+      let worst = null, worstD = -1;
+      for (const v of this.vehicles) {
+        if (v.isPlayerVehicle || v.driver || v.protected) continue;
+        const d = Math.hypot(v.position.x - focus.x, v.position.z - focus.z);
+        if (d > worstD) { worstD = d; worst = v; }
+      }
+      if (worst && worstD > 70) {
+        worst.dispose();
+        this.vehicles.splice(this.vehicles.indexOf(worst), 1);
+      }
+    }
+
     if (this.spawnTimer <= 0 && this.vehicles.length < this.budget) {
       this.spawnTimer = 0.18;
       for (let a = 0; a < 3 && this.vehicles.length < this.budget; a++) {

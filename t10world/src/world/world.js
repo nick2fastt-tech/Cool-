@@ -13,7 +13,7 @@ import {
   setWetness, setGroundFrost, refreshGroundFrost, updateWaterTime, metalMaterial,
 } from './materials.js';
 import { makeRng, fbm2, ridged2, clamp01, clampv, lerpv, smooth01, hash2, TAU } from '../core/math.js';
-import { settings } from '../core/settings.js';
+import { settings, perf } from '../core/settings.js';
 
 export const CHUNK_SIZE = 120;
 
@@ -156,7 +156,8 @@ export class World {
     // Draw distance governs fog and the far plane; geometry streaming is capped
     // well below it, because buildings past ~600m cost chunks and add nothing
     // the horizon haze doesn't already give you.
-    const streamDistance = Math.min(preset.drawDistance, 620);
+    // The governor trims how far we stream before it touches resolution.
+    const streamDistance = Math.min(preset.drawDistance, 620) * lerpv(0.55, 1, perf.load);
     const radius = Math.ceil(streamDistance / CHUNK_SIZE);
     const ccx = Math.floor(focusX / CHUNK_SIZE);
     const ccz = Math.floor(focusZ / CHUNK_SIZE);
@@ -200,7 +201,7 @@ export class World {
     for (const [key, chunk] of this.chunks) {
       if (!wanted.has(key)) {
         const dx = chunk.centerX - focusX, dz = chunk.centerZ - focusZ;
-        if (Math.hypot(dx, dz) > streamDistance + CHUNK_SIZE * 2) this.disposeChunk(key);
+        if (Math.hypot(dx, dz) > streamDistance + CHUNK_SIZE) this.disposeChunk(key);
       }
     }
 

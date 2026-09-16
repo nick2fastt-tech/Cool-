@@ -98,7 +98,7 @@ export class Apocalypse {
       if (g.t10) g.t10.forceStreetLights = 0;
       for (const v of g.traffic.vehicles) { v.autoHeadlights = false; v.headlightsOn = false; }
     }
-    if (kind === 'zombie') this.seedInfection(3);
+    if (kind === 'zombie') this.beginOutbreak();
     if (kind === 'riot') this.makeHostile();
     if (kind === 'machine') this.freeTheCars();
 
@@ -132,6 +132,7 @@ export class Apocalypse {
     if (npc.infected || npc.hostile || npc.panicking) npc.human.setSkinTint(null, null);
     npc.infected = false;
     npc.hostile = false;
+    npc.turning = 0;
     npc.panicking = false;
     npc.downed = 0;
     npc.combatTarget = null;
@@ -142,6 +143,31 @@ export class Apocalypse {
   // -------------------------------------------------------------------------
   // Seeding
   // -------------------------------------------------------------------------
+  /**
+   * The outbreak opens on one person. They stop, double over where you can see
+   * them, and come up wrong — and only then does it start spreading.
+   */
+  beginOutbreak() {
+    const g = this.game;
+    const p = g.player.position;
+    let best = null, bestD = 1e9;
+    for (const npc of g.npcs.npcs) {
+      if (npc.indoors) continue;
+      const d = npc.position.distanceTo(p);
+      // Close enough to watch, far enough not to be on top of you.
+      if (d < 6 || d > 40) continue;
+      if (d < bestD) { bestD = d; best = npc; }
+    }
+    if (!best) { this.seedInfection(1); return null; }
+    this.patientZero = best;
+    best.controlled = 'apocalypse';
+    best.panicking = false;
+    best.turning = 3.2;
+    best.human.animator.setState(STATES.IDLE);
+    g.t10Say('Don\'t move. Watch ' + best.appearance.firstName + '.');
+    return best;
+  }
+
   seedInfection(n) {
     const pool = this.game.npcs.npcs.filter((x) => !x.infected && !x.indoors);
     for (let i = 0; i < n && pool.length; i++) {
@@ -202,6 +228,23 @@ export class Apocalypse {
     if (!this.kind) return;
     this.elapsed += dt;
     const g = this.game;
+
+    // The outbreak waits for its first victim before it goes anywhere.
+    if (this.patientZero) {
+      const z = this.patientZero;
+      if (z.turning > 0) {
+        z.turning -= dt;
+        // Doubling over, then still, then up.
+        z.human.animator.setState(z.turning > 2.1 ? STATES.THINK : z.turning > 0.8 ? STATES.CROUCH : STATES.GETUP);
+        z.targetSpeed = 0; z.speed = 0;
+        return;
+      }
+      this.patientZero = null;
+      this.infect(z);
+      if (this.game.gore) this.game.gore.pool(z.position.x, z.position.z, 1.2);
+      g.t10Say(z.appearance.firstName + ' is gone. It spreads by touch — don\'t let them reach you.');
+      audio.t10Blip('error');
+    }
 
     // Anyone who streams in after it starts joins whatever is happening.
     for (const npc of g.npcs.npcs) {

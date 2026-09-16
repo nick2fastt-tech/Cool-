@@ -312,6 +312,11 @@ export class InputManager {
       b.enterVehicle = this.isDown('enterVehicle') || this.virtual('enterVehicle') || !!(gp && gp.pad.buttons[3] && gp.pad.buttons[3].pressed);
       b.handbrake = this.virtual('handbrake') || !!(gp && gp.pad.buttons[0] && gp.pad.buttons[0].pressed);
       b.horn = this.isDown('horn') || this.virtual('horn');
+      // Firing is the left mouse only once the pointer is locked, so that
+      // click-and-drag to look never lets off a round.
+      b.fire = (this.pointerLocked && this.mouseLeft) || this.virtual('fire');
+      b.aim = (this.pointerLocked && this.mouseRight) || this.virtual('aim');
+      b.reload = this.isDown('reload') || this.virtual('reload');
     }
     for (const k in b) this.edges[k] = b[k] && !prev[k];
 

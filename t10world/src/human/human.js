@@ -240,17 +240,31 @@ export class Human {
     a.outfitName = outfit.name;
     a.shoes = outfit.shoes;
 
-    // Base layer first so removing an outfit never leaves a bare character.
-    const basePieces = BASE_LAYER[a.gender] || BASE_LAYER.male;
-    const base = buildGarment(this.prop, this.skeletonData.boneIndex, basePieces, { segments: Math.max(6, segments - 2) });
-    const baseMesh = new THREE.SkinnedMesh(base.geometry, base.materials);
-    baseMesh.name = 'baselayer';
-    baseMesh.castShadow = this.opts.shadows;
-    baseMesh.receiveShadow = this.opts.shadows;
-    baseMesh.bind(this.skeleton, this.parts.body.bindMatrix);
-    if (baseMesh.geometry.boundingSphere) baseMesh.geometry.boundingSphere.radius *= 1.6;
-    this.root.add(baseMesh);
-    this.parts.base = baseMesh;
+    // Base layer first so removing an outfit never leaves a bare character —
+    // but only the parts the outfit doesn't already cover, or it pokes through.
+    const covers = { top: false, bottom: false };
+    if (!a.nude) for (const piece of outfit.pieces) {
+      if (piece.type === 'bottom') covers.bottom = true;
+      if (piece.type === 'top') { covers.top = true; if (piece.kind === 'dress') covers.bottom = true; }
+    }
+    // Where the outfit covers, the base layer is pulled in tight so it sits
+    // strictly inside and can't poke through; where it doesn't, it stays as is.
+    // Removing it outright left a hole at the crotch of every trouser.
+    const basePieces = (BASE_LAYER[a.gender] || BASE_LAYER.male)
+      .map((piece) => (covers[piece.type]
+        ? Object.assign({}, piece, { inflate: piece.inflate * 0.25 })
+        : piece));
+    if (basePieces.length) {
+      const base = buildGarment(this.prop, this.skeletonData.boneIndex, basePieces, { segments: Math.max(6, segments - 2) });
+      const baseMesh = new THREE.SkinnedMesh(base.geometry, base.materials);
+      baseMesh.name = 'baselayer';
+      baseMesh.castShadow = this.opts.shadows;
+      baseMesh.receiveShadow = this.opts.shadows;
+      baseMesh.bind(this.skeleton, this.parts.body.bindMatrix);
+      if (baseMesh.geometry.boundingSphere) baseMesh.geometry.boundingSphere.radius *= 1.6;
+      this.root.add(baseMesh);
+      this.parts.base = baseMesh;
+    }
 
     if (!a.nude) {
       const g = buildGarment(this.prop, this.skeletonData.boneIndex, outfit.pieces, { segments });

@@ -195,6 +195,22 @@ const cmds = [
   'T10 stop flying',
   'T10 let me die',
   'T10 calm everyone down',
+  'T10 how many guns are there',
+  'T10 give me a sniper rifle',
+  'T10 what am i holding',
+  'T10 give me the apex assault rifle',
+  'T10 give me the best gun',
+  'T10 reload',
+  'T10 how am i shooting',
+  'T10 put the gun away',
+  'T10 what rating is this',
+  'T10 set the rating to 16',
+  'T10 set the rating to 18',
+  'T10 more blood',
+  'T10 clean up the blood',
+  'T10 slow down time',
+  'T10 normal speed',
+  'T10 reset everything',
   'T10 flurbulate the widget',
 ];
 const replies = [];
@@ -232,6 +248,101 @@ await page.screenshot({ path: SHOT+'/07c-map-wide.png' });
 await page.evaluate(()=>{ window.__t10.map.hide(); });
 await page.waitForTimeout(1500);
 await page.screenshot({ path: SHOT+'/07-after-commands.png' });
+
+// --- control directions ---
+// Forward must be forward and right must be right, in both camera modes.
+// First and third person once used opposite yaw conventions, so on the default
+// first-person view pushing the stick forward walked you backwards.
+// Guns actually fire, hit people and leave blood.
+log('--- shooting ---');
+const shooting = await page.evaluate(async ()=>{
+  const g = window.__t10;
+  const pump = async (n)=>{ for (let f=0;f<n;f++) await new Promise(r=>requestAnimationFrame(()=>r())); };
+  g.t10.handle('T10 give me an assault rifle');
+  const npc = g.npcs.npcs.slice().sort((a,b)=>a.position.distanceTo(g.player.position)-b.position.distanceTo(g.player.position))[0];
+  if (!npc) return { error: 'nobody around' };
+  // Stand the target dead ahead and look at it.
+  const p = g.player;
+  p.pitch = 0; p.heading = p.yaw;
+  await pump(6);
+  // Stand the target on the aim line itself, chest-high, so the test is about
+  // the weapon and not about whatever the terrain is doing under our feet.
+  const VV = g.camera.position.constructor;
+  const aimDir = new VV(); g.camera.getWorldDirection(aimDir);
+  const aim = g.camera.position.clone().addScaledVector(aimDir, 9);
+  npc.position.set(aim.x, aim.y - 1.15, aim.z);
+  npc.root.position.copy(npc.position);
+  npc.indoors = false; npc.downed = 0; npc.hitPoints = 100; npc.controlled = 'freeze';
+  await pump(2);
+  const goreBefore = g.gore.decals.length;
+  const shotsBefore = g.arsenal.shotsFired;
+  // Keep the target on its feet between rounds — a body on the ground is a
+  // much smaller target, which is correct but not what we're measuring here.
+  for (let i=0;i<14;i++) {
+    npc.downed = 0; npc.hitPoints = 100;
+    g.arsenal.cooldown = 0; g.arsenal.pullTrigger(); await pump(1);
+  }
+  const landed = g.arsenal.hits;
+  npc.downed = 0;
+  await pump(10);
+  return { armed: g.arsenal.armed, weapon: g.arsenal.weapon.name,
+    shots: g.arsenal.shotsFired - shotsBefore, hits: landed,
+    targetDown: landed > 0, decals: g.gore.decals.length - goreBefore,
+    drops: g.gore.dropCount };
+});
+log('shooting:', JSON.stringify(shooting));
+if (!shooting.error && (!shooting.hits || !shooting.targetDown || shooting.decals <= 0)) {
+  errors.push('SHOOTING: shots did not land or did not bleed');
+  log('>>> SHOOTING FAILED');
+}
+await page.screenshot({ path: SHOT+'/12-shooting.png' });
+await page.evaluate(()=>{ window.__t10.t10.handle('T10 reset everything'); });
+
+log('--- control directions ---');
+const dirs = await page.evaluate(async ()=>{
+  const g = window.__t10, p = g.player;
+  const V = g.camera.position.constructor;
+  const pump = async (n)=>{ for (let f=0;f<n;f++) await new Promise(r=>requestAnimationFrame(()=>r())); };
+  const fwd = () => { const v = new V(); g.camera.getWorldDirection(v); return v; };
+  const rgt = () => new V(1,0,0).applyQuaternion(g.camera.quaternion);
+  const res = {};
+  const startMode = p.cameraMode;
+  for (const mode of ['first','third']) {
+    p.setCameraMode(mode); p.yaw=0; p.heading=0; p.pitch=0; await pump(20);
+    const F = fwd().clone(), R = rgt().clone(); const r = {};
+    g.input.isTouch = true;
+    let a = p.position.clone(); g.input.stick.x=0; g.input.stick.y=-1; await pump(25);
+    let d = p.position.clone().sub(a); r.stickUp = d.x*F.x+d.z*F.z > 0 ? 'FORWARD':'BACKWARD';
+    g.input.stick.x=0; g.input.stick.y=0; g.input.releaseStick(); await pump(6);
+    p.yaw=0; p.heading=0; await pump(12);
+    const R2 = rgt().clone(); a = p.position.clone();
+    g.input.stick.x=1; g.input.stick.y=0; await pump(25);
+    d = p.position.clone().sub(a); r.stickRight = d.x*R2.x+d.z*R2.z > 0 ? 'RIGHT':'LEFT';
+    g.input.stick.x=0; g.input.stick.y=0; g.input.releaseStick(); g.input.isTouch=false; await pump(6);
+    p.yaw=0; p.heading=0; p.pitch=0; await pump(12);
+    const b0 = fwd().clone(); const el = g.renderer.domElement;
+    el.dispatchEvent(new MouseEvent('mousedown',{clientX:450,clientY:300,bubbles:true}));
+    for (let i=1;i<=12;i++) document.dispatchEvent(new MouseEvent('mousemove',{clientX:450+i*10,clientY:300,bubbles:true}));
+    window.dispatchEvent(new MouseEvent('mouseup',{clientX:570,clientY:300,bubbles:true}));
+    await pump(8);
+    const a1 = fwd().clone();
+    r.dragRight = (b0.z*a1.x - b0.x*a1.z) > 0 ? 'LEFT':'RIGHT';
+    p.yaw=0; p.heading=0; p.pitch=0; await pump(12);
+    const y0 = fwd().y;
+    el.dispatchEvent(new MouseEvent('mousedown',{clientX:450,clientY:200,bubbles:true}));
+    for (let i=1;i<=12;i++) document.dispatchEvent(new MouseEvent('mousemove',{clientX:450,clientY:200+i*10,bubbles:true}));
+    window.dispatchEvent(new MouseEvent('mouseup',{clientX:450,clientY:320,bubbles:true}));
+    await pump(8);
+    r.dragDown = fwd().y < y0 ? 'DOWN':'UP';
+    p.pitch = 0; res[mode] = r;
+  }
+  p.setCameraMode(startMode);
+  res.ok = ['first','third'].every(m => res[m].stickUp==='FORWARD' && res[m].stickRight==='RIGHT'
+    && res[m].dragRight==='RIGHT' && res[m].dragDown==='DOWN');
+  return res;
+});
+log('directions:', JSON.stringify(dirs));
+if (!dirs.ok) { errors.push('CONTROLS: a direction is inverted'); log('>>> CONTROL DIRECTION INVERTED'); }
 
 // --- viewport resilience ---
 // A mobile browser reporting a zero-height viewport once used to leave a

@@ -60,11 +60,15 @@ export function computeProportions(p) {
   const hipY = H * 0.53;
   const crotchY = H * (0.485 - (p.legLength - 1) * 0.06);
 
-  // Widths. Male shoulders are wider relative to hips; female the inverse.
-  const shoulderHalf = H * (female ? 0.098 : 0.115) * p.shoulderWidth * (1 + m * 0.10 + w * 0.05);
-  const hipHalf = H * (female ? 0.086 : 0.079) * p.hipWidth * (1 + w * 0.17);
-  const waistHalf = H * (female ? 0.058 : 0.067) * (1 + w * 0.42 - m * 0.03);
-  const chestHalf = H * (female ? 0.079 : 0.090) * (1 + m * 0.13 + w * 0.16);
+  // Widths, as fractions of stature. The female figures were cut too narrow
+  // across the board and the waist was over-cinched, which read as a cartoon
+  // hourglass rather than a person; these are the usual adult ratios —
+  // biacromial ~0.22H, bi-trochanteric ~0.19H, waist ~0.14H — so shoulders and
+  // hips come out close to level with a waist that is defined but not tiny.
+  const shoulderHalf = H * (female ? 0.109 : 0.115) * p.shoulderWidth * (1 + m * 0.10 + w * 0.05);
+  const hipHalf = H * (female ? 0.094 : 0.079) * p.hipWidth * (1 + w * 0.17);
+  const waistHalf = H * (female ? 0.070 : 0.067) * (1 + w * 0.42 - m * 0.03);
+  const chestHalf = H * (female ? 0.085 : 0.090) * (1 + m * 0.13 + w * 0.16);
 
   // Leg chain
   const legTotal = (crotchY) * 1.0;
@@ -149,13 +153,13 @@ export function computeProportions(p) {
       eyeLine, eyeSep,
       // Limb radii used by the mesh builder.
       neckR: H * (female ? 0.0265 : 0.0305) * (1 + w * 0.12),
-      thighR: H * (female ? 0.0455 : 0.0435) * (1 + w * 0.34 + m * 0.14),
+      thighR: H * (female ? 0.0475 : 0.0435) * (1 + w * 0.34 + m * 0.14),
       kneeR: H * 0.0400 * (1 + w * 0.18 + m * 0.05),
-      calfR: H * (female ? 0.0345 : 0.0355) * (1 + w * 0.22 + m * 0.18),
+      calfR: H * (female ? 0.0360 : 0.0355) * (1 + w * 0.22 + m * 0.18),
       ankleR: H * 0.0215 * (1 + w * 0.12),
-      upperArmR: H * (female ? 0.0245 : 0.0285) * (1 + w * 0.22 + m * 0.26),
+      upperArmR: H * (female ? 0.0258 : 0.0285) * (1 + w * 0.22 + m * 0.26),
       elbowR: H * 0.0238 * (1 + w * 0.12 + m * 0.06),
-      forearmR: H * (female ? 0.0215 : 0.0245) * (1 + w * 0.18 + m * 0.20),
+      forearmR: H * (female ? 0.0224 : 0.0245) * (1 + w * 0.18 + m * 0.20),
       wristR: H * 0.0178 * (1 + w * 0.10),
       handThick: H * 0.0092 * p.handSize,
       fingerR: H * 0.0049 * p.handSize * (1 + w * 0.12),

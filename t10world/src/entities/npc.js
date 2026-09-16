@@ -8,7 +8,7 @@ import { generateAppearance, describeAppearance, PERSONALITIES } from '../human/
 import { STATES } from '../human/animator.js';
 import { BLOCK_SIZE, CITY_RADIUS, ROAD_TYPES } from '../world/city.js';
 import { clamp01, clampv, lerpv, damp, dampAngle, wrapAngle, makeRng, TAU, distToSeg2D } from '../core/math.js';
-import { settings } from '../core/settings.js';
+import { settings, perf } from '../core/settings.js';
 import { audio } from '../core/audio.js';
 
 export const ACTIVITIES = {
@@ -72,6 +72,8 @@ export class NPC {
     this.attackCooldown = 0;
     this.infectCooldown = 0;
     this.abducting = null;
+    this.turning = 0;
+    this.hitPoints = 100;
     this.vehicle = null;
     this.indoors = false;
     this.lastLine = '';
@@ -236,6 +238,15 @@ export class NPC {
       this.root.position.copy(this.position);
       return;
     }
+    // Patient zero, mid-turn. The apocalypse drives the pose; stand still.
+    if (this.turning > 0) {
+      this.targetSpeed = 0;
+      this.speed = 0;
+      this.path.length = 0;
+      this.human.update(dt, { speed: 0, turnRate: 0, grounded: true, verticalVel: 0 });
+      this.root.position.copy(this.position);
+      return;
+    }
     // Being lifted into a ship — the saucer drives the position.
     if (this.abducting) {
       this.human.update(dt, { speed: 0, turnRate: 0, grounded: false, verticalVel: 1 });
@@ -372,7 +383,16 @@ export class NPC {
         const dist = this.chargeAt(dt, tx, tz, pace);
         if (dist < 1.9 && this.infectCooldown <= 0) {
           this.infectCooldown = 2.5;
-          if (victim && apo) apo.infect(victim);
+          if (victim && apo) {
+            const gore = this.manager.gore;
+            if (gore) {
+              const dx = victim.position.x - this.position.x, dz = victim.position.z - this.position.z;
+              const len = Math.hypot(dx, dz) || 1;
+              gore.hit(victim.position.x, victim.position.y, victim.position.z, 1, dx / len, dz / len);
+              gore.pool(victim.position.x, victim.position.z, 1.5);
+            }
+            apo.infect(victim);
+          }
           else if (this.manager.onPlayerAttacked) this.manager.onPlayerAttacked(this, 'infect');
         }
         this.human.animator.setState(this.speed > this.walkSpeed * 1.1 ? STATES.RUN : STATES.WALK);
@@ -399,8 +419,16 @@ export class NPC {
           this.human.animator.setState(STATES.POINT);   // a swing, telegraphed
           if (goForPlayer) { if (this.manager.onPlayerAttacked) this.manager.onPlayerAttacked(this, 'hit'); }
           else if (this.combatTarget) {
-            this.combatTarget.downed = 4 + this.rng() * 6;
-            this.combatTarget.combatTarget = null;
+            const t = this.combatTarget;
+            t.downed = 4 + this.rng() * 6;
+            t.combatTarget = null;
+            const gore = this.manager.gore;
+            if (gore) {
+              const dx = t.position.x - this.position.x, dz = t.position.z - this.position.z;
+              const len = Math.hypot(dx, dz) || 1;
+              gore.hit(t.position.x, t.position.y, t.position.z, 0.75, dx / len, dz / len);
+              gore.pool(t.position.x, t.position.z, 1.1);
+            }
             if (apo) apo.casualties++;
             this.combatTarget = null;
           }
@@ -667,7 +695,7 @@ export class NPCManager {
     this.spawnCounter = 0;
   }
 
-  get budget() { return Math.round(settings.preset.npcBudget * this.densityScale); }
+  get budget() { return Math.round(settings.preset.npcBudget * this.densityScale * perf.load); }
 
   spawnNear(px, pz, minDist, maxDist, opts) {
     opts = opts || {};
@@ -707,8 +735,25 @@ export class NPCManager {
     if (!this.enabled) return;
     this.listener = playerPos;
     const drawD = settings.preset.drawDistance;
-    const keep = Math.min(drawD * 0.6, 220);
+    const keep = Math.min(drawD * 0.6, 220) * lerpv(0.6, 1, perf.load);
     this.despawnFar(playerPos.x, playerPos.z, keep + 60);
+
+    // When the governor cuts the budget, shed the people furthest away rather
+    // than waiting for them to wander out of range — a couple at a time, so
+    // nobody vanishes out of the corner of your eye in a crowd.
+    if (this.npcs.length > this.budget) {
+      let over = Math.min(2, this.npcs.length - this.budget);
+      while (over-- > 0) {
+        let worst = null, worstD = -1;
+        for (const n of this.npcs) {
+          if (n.controlled || n.infected || n.hostile) continue;
+          const d = n.position.distanceTo(playerPos);
+          if (d > worstD) { worstD = d; worst = n; }
+        }
+        if (!worst || worstD < 55) break;
+        this.remove(worst);
+      }
+    }
 
     // Spawn a couple per frame at most so building never spikes the frame time.
     this.spawnTimer -= dt;

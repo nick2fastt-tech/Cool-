@@ -140,9 +140,12 @@ function buildSleeve(b, piece, prop, BI, segments, side) {
   const end = piece.sleeves === 'long' ? 1.0 : piece.sleeves === 'threequarter' ? 0.55 : 0.36;
 
   const pts = [];
-  // Shoulder cap overlapping the torso.
-  pts.push({ pos: sh.clone().lerp(el, -0.26), r: m.upperArmR * 0.88 + inflate * 0.5, w: [[BI('chest'), 0.72], [BI('upperArm' + S), 0.28]] });
-  pts.push({ pos: sh.clone().lerp(el, -0.06), r: m.upperArmR * 1.16 + inflate, w: [[BI('upperArm' + S), 0.7], [BI('chest'), 0.3]] });
+  // The shoulder cap starts inside the torso and is wide enough to meet it.
+  // A narrow cap sitting on the joint leaves a notch at the deltoid, which is
+  // the first thing you notice on a wide-shouldered figure.
+  pts.push({ pos: sh.clone().lerp(el, -0.52), r: m.upperArmR * 1.05 + inflate * 0.6, w: [[BI('chest'), 0.85], [BI('upperArm' + S), 0.15]] });
+  pts.push({ pos: sh.clone().lerp(el, -0.24), r: m.upperArmR * 1.32 + inflate, w: [[BI('chest'), 0.6], [BI('upperArm' + S), 0.4]] });
+  pts.push({ pos: sh.clone().lerp(el, -0.06), r: m.upperArmR * 1.20 + inflate, w: [[BI('upperArm' + S), 0.7], [BI('chest'), 0.3]] });
   pts.push({ pos: sh.clone().lerp(el, 0.06), r: m.upperArmR * 1.16 + inflate, w: [[BI('upperArm' + S), 0.9], [BI('chest'), 0.1]] });
   if (end <= 0.42) {
     pts.push({ pos: sh.clone().lerp(el, end * 0.6), r: m.upperArmR * 1.18 + inflate, w: [[BI('upperArm' + S), 1]] });
@@ -174,7 +177,10 @@ function buildBottomPiece(b, piece, prop, BI, segments) {
 
   // Waistband down to the crotch.
   const yTop = piece.yTop(m);
-  const yBot = m.crotchY - m.height * 0.012;
+  // The seat is capped at the crotch; that cap has to sit low enough and
+  // narrow enough to be buried where the two leg tubes overlap, or it shows
+  // between the thighs as a flat dark panel.
+  const yBot = m.crotchY - m.height * 0.030;
   const steps = 6;
   const sections = [];
   for (let i = 0; i <= steps; i++) {
@@ -183,7 +189,7 @@ function buildBottomPiece(b, piece, prop, BI, segments) {
     const pr = bodyProfileAtY(y, m, 0, bellyAmt, gluteAmt);
     // Pinch the seat in toward the crotch so the legs read as legs and the
     // garment doesn't end in a skirt-wide hem.
-    const pinch = lerpv(0.86, 1.0, smooth01(clamp01(f / 0.55)));
+    const pinch = lerpv(0.70, 1.0, smooth01(clamp01(f / 0.55)));
     sections.push({
       center: new THREE.Vector3(0, y, 0),
       v: f, weights: torsoWeightsAt(y, m, BI),
@@ -294,10 +300,10 @@ export const OUTFITS = {
       id: 'f_tank_leggings', name: 'Tank & Leggings',
       blurb: 'Fitted tank, full-length leggings, running shoes.',
       pieces: [
-        { type: 'top', kind: 'tank', fabric: 'lycra', color: 0x2c3440, inflate: 0.0050, sleeves: 'none',
+        { type: 'top', kind: 'tank', fabric: 'lycra', color: 0x2c3440, inflate: 0.0062, sleeves: 'none',
           yTop: (m) => m.chestY + m.height * 0.036, yBottom: (m) => m.hipY + m.height * 0.010,
           neckline: 'strap', strapWidth: 0.0075 },
-        { type: 'bottom', kind: 'leggings', fabric: 'lycra', color: 0x1d2128, inflate: 0.0038,
+        { type: 'bottom', kind: 'leggings', fabric: 'lycra', color: 0x1d2128, inflate: 0.0064,
           yTop: (m) => m.waistY + m.height * 0.010, legEnd: 0.98 },
       ],
       shoes: { kind: 'runner', color: 0x22262e, accent: 0xd2456a },
@@ -311,6 +317,41 @@ export const OUTFITS = {
           neckline: 'strap', strapWidth: 0.0090, flare: 0.30 },
       ],
       shoes: { kind: 'sandal', color: 0x6a4a34, accent: 0x4a3222 },
+    },
+    {
+      id: 'f_hoodie_jeans', name: 'Hoodie & Jeans',
+      blurb: 'Oversized hoodie, high-waisted jeans, canvas trainers.',
+      pieces: [
+        { type: 'top', kind: 'hoodie', fabric: 'knit', color: 0x5b6472, inflate: 0.0128, sleeves: 'long',
+          yTop: (m) => m.shoulderY + m.height * 0.004, yBottom: (m) => m.hipY - m.height * 0.010,
+          neckline: 'crew', hood: true },
+        { type: 'bottom', kind: 'jeans', fabric: 'denim', color: 0x2f3c4e, inflate: 0.0074,
+          yTop: (m) => m.waistY + m.height * 0.012, legEnd: 0.97, legFlare: 0.06 },
+      ],
+      shoes: { kind: 'sneaker', color: 0x1f2329, accent: 0xe4e0d6 },
+    },
+    {
+      id: 'f_blouse_culottes', name: 'Blouse & Culottes',
+      blurb: 'Tucked blouse, wide cropped culottes, flat shoes.',
+      pieces: [
+        { type: 'top', kind: 'tee', fabric: 'cotton', color: 0xeae4d8, inflate: 0.0078, sleeves: 'short',
+          yTop: (m) => m.shoulderY, yBottom: (m) => m.waistY - m.height * 0.004, neckline: 'crew' },
+        { type: 'bottom', kind: 'skirt', fabric: 'cotton', color: 0x3c3a4a, inflate: 0.0082,
+          yTop: (m) => m.waistY + m.height * 0.006, legEnd: 0.42, legFlare: 0.55 },
+      ],
+      shoes: { kind: 'sandal', color: 0x2b2830, accent: 0x191720 },
+    },
+    {
+      id: 'f_jacket_cargo', name: 'Jacket & Cargos',
+      blurb: 'Zipped work jacket, cargo trousers, heavy boots.',
+      pieces: [
+        { type: 'top', kind: 'hoodie', fabric: 'denim', color: 0x3e4a44, inflate: 0.0132, sleeves: 'long',
+          yTop: (m) => m.shoulderY + m.height * 0.004, yBottom: (m) => m.hipY + m.height * 0.004,
+          neckline: 'crew' },
+        { type: 'bottom', kind: 'joggers', fabric: 'cotton', color: 0x4a4636, inflate: 0.0108,
+          yTop: (m) => m.waistY - m.height * 0.002, legEnd: 0.95, legFlare: 0.14 },
+      ],
+      shoes: { kind: 'boot', color: 0x2a2520, accent: 0x15120f },
     },
   ],
   male: [
@@ -348,6 +389,41 @@ export const OUTFITS = {
           yTop: (m) => m.waistY, legEnd: 0.93, legFlare: -0.05 },
       ],
       shoes: { kind: 'sneaker', color: 0x2c2f35, accent: 0xb8b2a6 },
+    },
+    {
+      id: 'm_shirt_chinos', name: 'Shirt & Chinos',
+      blurb: 'Open button-down over a tee, chinos, leather shoes.',
+      pieces: [
+        { type: 'top', kind: 'hoodie', fabric: 'cotton', color: 0x58697d, inflate: 0.0120, sleeves: 'long',
+          yTop: (m) => m.shoulderY + m.height * 0.002, yBottom: (m) => m.hipY + m.height * 0.010,
+          neckline: 'crew' },
+        { type: 'bottom', kind: 'jeans', fabric: 'cotton', color: 0x8a7f6a, inflate: 0.0086,
+          yTop: (m) => m.waistY - m.height * 0.006, legEnd: 0.96, legFlare: 0.08 },
+      ],
+      shoes: { kind: 'boot', color: 0x3a2b21, accent: 0x241a14 },
+    },
+    {
+      id: 'm_track', name: 'Track Suit',
+      blurb: 'Zip-up track top and matching bottoms, running shoes.',
+      pieces: [
+        { type: 'top', kind: 'hoodie', fabric: 'lycra', color: 0x223347, inflate: 0.0108, sleeves: 'long',
+          yTop: (m) => m.shoulderY + m.height * 0.003, yBottom: (m) => m.hipY, neckline: 'crew' },
+        { type: 'bottom', kind: 'joggers', fabric: 'lycra', color: 0x1b2634, inflate: 0.0092,
+          yTop: (m) => m.waistY, legEnd: 0.96, legFlare: -0.04 },
+      ],
+      shoes: { kind: 'runner', color: 0x20242b, accent: 0x3fb37a },
+    },
+    {
+      id: 'm_vest_cargo', name: 'Vest & Cargos',
+      blurb: 'Work vest over bare arms, cargo trousers, heavy boots.',
+      pieces: [
+        { type: 'top', kind: 'tank', fabric: 'knit', color: 0x6e6a5c, inflate: 0.0062, sleeves: 'none',
+          yTop: (m) => m.chestY + m.height * 0.040, yBottom: (m) => m.hipY + m.height * 0.006,
+          neckline: 'strap', strapWidth: 0.0125 },
+        { type: 'bottom', kind: 'joggers', fabric: 'cotton', color: 0x4f4a3a, inflate: 0.0110,
+          yTop: (m) => m.waistY - m.height * 0.002, legEnd: 0.95, legFlare: 0.15 },
+      ],
+      shoes: { kind: 'boot', color: 0x2e2620, accent: 0x191411 },
     },
   ],
 };

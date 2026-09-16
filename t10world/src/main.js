@@ -1,7 +1,7 @@
 // T10 World - application entry point. Boots the renderer, runs the creator,
 // then builds and drives the living world.
 import * as THREE from '../vendor/three.module.js';
-import { settings, QUALITY_PRESETS, PerformanceGovernor } from './core/settings.js';
+import { settings, QUALITY_PRESETS, PerformanceGovernor, perf } from './core/settings.js';
 import { InputManager } from './core/input.js';
 import { audio } from './core/audio.js';
 import { saveGame, loadGame, hasSave, clearSave, saveInfo } from './core/save.js';
@@ -14,6 +14,8 @@ import { NPCManager } from './entities/npc.js';
 import { TrafficManager } from './entities/traffic.js';
 import { AnimalManager } from './entities/animals.js';
 import { Apocalypse } from './entities/apocalypse.js';
+import { Gore } from './entities/gore.js';
+import { Arsenal } from './player/arsenal.js';
 import { T10Brain } from './t10/brain.js';
 import { HUD } from './ui/hud.js';
 import { MapOverlay } from './ui/map.js';
@@ -48,6 +50,7 @@ export class Game {
     this.accumTime = 0;
     this.frame = 0;
     this.gravityScale = 1;
+    this.timeScale = 1;
     this.statsVisible = false;
     this.worldName = DEFAULT_WORLD_NAME;
     this.worldSeed = hashString(DEFAULT_WORLD_NAME);
@@ -255,10 +258,13 @@ export class Game {
         this.npcs = new NPCManager(this.world, this.scene, this.atmosphere);
         this.traffic = new TrafficManager(this.world, this.scene);
         this.animals = new AnimalManager(this.world, this.scene, this.atmosphere);
+        this.gore = new Gore(this);
+        this.arsenal = new Arsenal(this);
         this.apocalypse = new Apocalypse(this);
         this.npcs.apocalypse = this.apocalypse;
         // People only get to lay a hand on you when the world is ending.
         this.npcs.onPlayerAttacked = (npc, how) => this.onPlayerAttacked(npc, how);
+        this.npcs.gore = this.gore;
       }],
       ['Bringing T10 online…', () => {
         this.t10 = new T10Brain(this);
@@ -326,7 +332,8 @@ export class Game {
   // -------------------------------------------------------------------------
   tick() {
     const rawDt = this.clock.getDelta();
-    const dt = Math.min(rawDt, 0.1);
+    // timeScale drives bullet time; the governor still samples real frame time.
+    const dt = Math.min(rawDt, 0.1) * (this.timeScale == null ? 1 : this.timeScale);
     this.frame++;
 
     if (this.phase === 'creator') {
@@ -344,9 +351,17 @@ export class Game {
 
     // --- Adaptive resolution ---
     if (settings.get('autoQuality')) {
-      const prev = this.governor.scale;
+      const prevScale = this.governor.scale;
+      const prevLoad = this.governor.load;
       const s = this.governor.update(rawDt);
-      if (Math.abs(s - prev) > 0.001) this.onResize();
+      perf.load = this.governor.load;
+      if (Math.abs(s - prevScale) > 0.001) this.onResize();
+      // Shadows are the single most expensive thing left when the load has
+      // already been cut in half, so they go before the picture gets soft.
+      if (Math.abs(this.governor.load - prevLoad) > 0.001) {
+        const wantShadows = settings.preset.shadows && this.governor.load > 0.45;
+        if (wantShadows !== this._shadowsOn) { this._shadowsOn = wantShadows; this.setShadows(wantShadows); }
+      }
     }
 
     // A few times a second is plenty, and it costs nothing when all is well.
@@ -379,6 +394,13 @@ export class Game {
     this.traffic.update(dt, focus, p.inVehicle, this.npcs.npcs);
     this.animals.update(dt, p.position, this.traffic.vehicles);
     if (this.apocalypse) this.apocalypse.update(dt, p.position);
+    if (this.gore) this.gore.update(dt, focus);
+    if (this.arsenal) {
+      this.arsenal.aiming = !!this.input.buttons.aim;
+      this.arsenal.update(dt, this.input);
+      if (this.input.edges.reload) this.arsenal.reload();
+      this.hud.setArmed(this.arsenal.armed);
+    }
     this.t10.update(dt);
 
     // Interaction prompt.
@@ -498,6 +520,11 @@ export class Game {
       return;
     }
     if (!p.knockDown(how === 'infect' ? 5 : 4, how)) return;
+    if (this.gore) {
+      const dx = p.position.x - npc.position.x, dz = p.position.z - npc.position.z;
+      const len = Math.hypot(dx, dz) || 1;
+      this.gore.hit(p.position.x, p.position.y, p.position.z, how === 'infect' ? 0.85 : 0.6, dx / len, dz / len);
+    }
     audio.t10Blip('error');
     // Being floored repeatedly is the point of a purge; being told about it
     // every four seconds is not.

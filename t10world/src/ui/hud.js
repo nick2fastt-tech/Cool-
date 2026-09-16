@@ -55,6 +55,10 @@ export class HUD {
     this.stats = el('div', 't10-stats', r);
     this.stats.style.display = 'none';
 
+    // Crosshair — the only thing that ever joins the HUD, and only while armed.
+    this.crosshair = el('div', 't10-cross', r);
+    this.crosshair.style.display = 'none';
+
     this.buildChat();
     this.buildSettings();
     if (this.isTouch) this.buildTouchControls();
@@ -187,6 +191,18 @@ export class HUD {
       this.viewButtons[mode] = b;
     }
 
+    // Content rating. 18 is the default; 16 keeps the same world with much
+    // less blood.
+    el('div', 't10-set-label', this.settings, 'Content');
+    const mRow = el('div', 't10-set-row', this.settings);
+    this.maturityButtons = {};
+    for (const [age, label] of [[18, '18+'], [16, '16+']]) {
+      const b = el('button', 't10-set-btn', mRow, label);
+      b.addEventListener('click', () => { settings.setMaturity(age); this.refreshSettings(); });
+      this.maturityButtons[age] = b;
+    }
+    this.maturityBlurb = el('div', 't10-set-blurb', this.settings, '');
+
     el('div', 't10-set-label', this.settings, 'Controls');
     const cRow = el('div', 't10-set-row', this.settings);
     const invBtn = el('button', 't10-set-btn', cRow, 'Invert Y: off');
@@ -222,11 +238,25 @@ export class HUD {
     // T10 can change quality too, so the blurb tracks the setting rather than
     // whichever button was last clicked.
     if (this.qualityBlurb) this.qualityBlurb.textContent = QUALITY_PRESETS[q].blurb;
+    if (this.maturityButtons) {
+      const age = settings.get('maturity');
+      for (const k of [18, 16]) this.maturityButtons[k].classList.toggle('active', k === age);
+      this.maturityBlurb.textContent = age >= 18
+        ? 'Full violence and gore. This is how it ships.'
+        : 'The same world, with the blood turned right down.';
+    }
     if (this.viewButtons && this.game.player) {
       const m = this.game.player.cameraMode;
       this.viewButtons.first.classList.toggle('active', m === 'first');
       this.viewButtons.third.classList.toggle('active', m === 'third');
     }
+  }
+
+  setArmed(on) {
+    if (this._armed === on) return;
+    this._armed = on;
+    if (this.crosshair) this.crosshair.style.display = on ? 'block' : 'none';
+    if (this.weaponPad) this.weaponPad.style.display = on && this.isTouch ? 'flex' : 'none';
   }
 
   toggleSettings() { this.setSettingsOpen(!this.settingsOpen); }
@@ -283,6 +313,32 @@ export class HUD {
       b.addEventListener('mouseup', up);
       b.addEventListener('mouseleave', up);
       this.touchButtons[d.id] = b;
+    }
+
+    // Weapon buttons, shown only while you're armed.
+    this.weaponPad = el('div', 't10-pad t10-pad-weapon', wrap);
+    this.weaponPad.style.display = 'none';
+    for (const d of [
+      { id: 'reload', label: '⟳', hint: 'Reload' },
+      { id: 'aim', label: '◉', hint: 'Aim' },
+      { id: 'fire', label: '●', hint: 'Fire', cls: 'fire' },
+    ]) {
+      const b = el('button', 't10-touch-btn ' + (d.cls || ''), this.weaponPad);
+      el('span', 't10-touch-glyph', b, d.label);
+      el('span', 't10-touch-hint', b, d.hint);
+      const down = (e) => {
+        e.preventDefault();
+        if (e.changedTouches) for (const t of e.changedTouches) this.game.input.claimTouch(t.identifier);
+        b.classList.add('down');
+        this.game.input.setVirtual(d.id, true);
+      };
+      const up = (e) => { if (e) e.preventDefault(); b.classList.remove('down'); this.game.input.setVirtual(d.id, false); };
+      b.addEventListener('touchstart', down, { passive: false });
+      b.addEventListener('touchend', up, { passive: false });
+      b.addEventListener('touchcancel', up, { passive: false });
+      b.addEventListener('mousedown', down);
+      b.addEventListener('mouseup', up);
+      b.addEventListener('mouseleave', up);
     }
 
     // Vehicle-specific buttons, shown only while driving.

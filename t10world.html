@@ -129,6 +129,18 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:var(--ink);c
   background:rgba(7,9,12,.55);border:1px solid var(--line);border-radius:9px;padding:9px 12px;
   white-space:pre;backdrop-filter:blur(8px)}
 
+/* ---------- crosshair + weapon pad ---------- */
+.t10-cross{position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;
+  pointer-events:none;z-index:12;opacity:.85}
+.t10-cross::before,.t10-cross::after{content:"";position:absolute;background:rgba(235,245,240,.85);
+  box-shadow:0 0 3px rgba(0,0,0,.8)}
+.t10-cross::before{left:12px;top:0;width:2px;height:9px;box-shadow:0 0 3px rgba(0,0,0,.8),0 17px 0 rgba(235,245,240,.85)}
+.t10-cross::after{top:12px;left:0;height:2px;width:9px;box-shadow:0 0 3px rgba(0,0,0,.8),17px 0 0 rgba(235,245,240,.85)}
+.t10-pad-weapon{right:auto;left:calc(18px + var(--safe-l,0px));bottom:calc(150px + var(--safe-b))}
+.t10-touch-btn.fire{width:82px;height:82px;background:rgba(200,60,50,.16);border-color:rgba(230,90,80,.5)}
+.t10-touch-btn.fire .t10-touch-glyph{color:#ff8b7d;font-size:26px}
+.t10-touch-btn.fire.down{background:rgba(230,90,80,.34)}
+
 /* ---------- command book ---------- */
 .t10-book{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
   width:min(800px,calc(100vw - 24px));height:min(80vh,680px);display:flex;flex-direction:column;
@@ -53808,6 +53820,12 @@ const DEFAULTS = {
   showInteractPrompts: true,
   motionBlurAmount: 0.5,
   autoQuality: true,
+  qualityPinned: false,
+  // Content rating. 18 is the default and shows the violence in full; 16
+  // tones the blood down. Nothing here is hidden behind a paywall or a
+  // prompt — it is one switch in Settings.
+  maturity: 18,
+  goreLevel: 1,
   hapticFeedback: true,
   leftHandedTouch: false,
   keyBindings: {
@@ -53816,6 +53834,7 @@ const DEFAULTS = {
     interact: 'KeyE', enterVehicle: 'KeyF', t10: 'KeyT',
     camera: 'KeyV', settings: 'Escape', map: 'KeyM',
     handbrake: 'Space', horn: 'KeyH', lights: 'KeyL', signalLeft: 'KeyQ', signalRight: 'KeyR',
+    reload: 'KeyR', holster: 'KeyG',
   },
 };
 
@@ -53842,10 +53861,19 @@ class SettingsStore {
     this.emit('keyBindings', this.data.keyBindings);
   }
 
+  setMaturity(age) {
+    const a = age >= 18 ? 18 : 16;
+    this.data.maturity = a;
+    this.data.goreLevel = a >= 18 ? 1 : 0.35;
+    this.save();
+    this.emit('maturity', a);
+    return a;
+  }
+
   setQuality(name) {
     if (!QUALITY_PRESETS[name]) return false;
     this.data.quality = name;
-    this.data.autoQuality = false;
+    this.data.qualityPinned = true;
     this.save();
     this.emit('quality', name);
     return true;
@@ -53878,15 +53906,11 @@ class SettingsStore {
 
   /** First launch: guess a sane preset from the device instead of dumping ULTRA on a phone. */
   detectDefaults() {
-    const mem = navigator.deviceMemory || 4;
-    const cores = navigator.hardwareConcurrency || 4;
-    const touch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
-    const small = Math.min(screen.width, screen.height) < 820;
-    let q = 'high';
-    if (touch && small) q = mem >= 6 && cores >= 8 ? 'medium' : 'low';
-    else if (cores >= 12 && mem >= 8) q = 'ultra';
-    else if (cores <= 4 || mem <= 4) q = 'medium';
-    this.data.quality = q;
+    // Everyone starts on HIGH, phone or desktop. The frame governor trims the
+    // load to hold the frame rate rather than handing anyone a downgraded
+    // world up front, and it gives the detail back as soon as there's headroom.
+    this.data.quality = 'high';
+    this.data.autoQuality = true;
     this.save();
   }
 
@@ -53900,13 +53924,28 @@ class SettingsStore {
 const settings = new SettingsStore();
 
 /**
+ * The live load multiplier, 0.3–1, published by the frame governor so every
+ * system can trim itself without reaching into the game object.
+ */
+const perf = { load: 1 };
+
+/**
  * Adaptive resolution. Nudges render scale between 0.55 and the preset ceiling so a
  * mid-range phone keeps a playable framerate instead of dropping to a slideshow.
+ */
+/**
+ * Holds the frame rate without changing the preset you chose.
+ *
+ * Two dials. `load` trims how much world is simulated and streamed — crowd
+ * size, traffic, draw distance — and `scale` trims render resolution. Load
+ * goes first, because forty people on a sharp screen reads better than
+ * ninety on a blurry one, and it comes back last for the same reason.
  */
 class PerformanceGovernor {
   constructor() {
     this.samples = [];
     this.scale = 1;
+    this.load = 1;
     this.cooldown = 2;
     this.targetMs = 1000 / 55;
     this.enabled = true;
@@ -53917,11 +53956,16 @@ class PerformanceGovernor {
     if (this.samples.length > 90) this.samples.shift();
     this.cooldown -= dt;
     if (this.cooldown > 0 || this.samples.length < 60) return this.scale;
-    this.cooldown = 1.5;
+    this.cooldown = 1.2;
     const sorted = this.samples.slice().sort((a, b) => a - b);
     const median = sorted[Math.floor(sorted.length * 0.5)];
-    if (median > this.targetMs * 1.28) this.scale = Math.max(0.55, this.scale - 0.08);
-    else if (median < this.targetMs * 0.82) this.scale = Math.min(1, this.scale + 0.05);
+    if (median > this.targetMs * 1.28) {
+      if (this.load > 0.3) this.load = Math.max(0.3, this.load - 0.12);
+      else this.scale = Math.max(0.55, this.scale - 0.08);
+    } else if (median < this.targetMs * 0.82) {
+      if (this.scale < 1) this.scale = Math.min(1, this.scale + 0.05);
+      else this.load = Math.min(1, this.load + 0.05);
+    }
     return this.scale;
   }
   get fps() {
@@ -53931,7 +53975,7 @@ class PerformanceGovernor {
   }
 }
 
-return { PerformanceGovernor, QUALITY_PRESETS, QUALITY_ORDER, settings };
+return { PerformanceGovernor, QUALITY_PRESETS, QUALITY_ORDER, settings, perf };
 })();
 
 __M["core/audio"] = (function(){
@@ -54153,6 +54197,39 @@ class AudioEngine {
       setTimeout(() => this.tone({ freq: 1320, dur: 0.06, gain: 0.035, type: 'square' }), 45);
     }
   }
+  /** A shot. Heavier guns get more low end and a longer tail. */
+  gunshot(opts) {
+    opts = opts || {};
+    const heft = clamp01(opts.heft == null ? 0.5 : opts.heft);
+    if (opts.quiet) {
+      this.noiseBurst({ dur: 0.10 + heft * 0.06, gain: 0.10 + heft * 0.06, freq: 900 - heft * 380, q: 1.1, sweep: 0.35, type: 'bandpass' });
+      this.tone({ freq: 160 - heft * 60, dur: 0.07, gain: 0.05, type: 'sine' });
+      return;
+    }
+    this.noiseBurst({ dur: 0.12 + heft * 0.22, gain: 0.26 + heft * 0.22, freq: 2600 - heft * 1500, q: 0.6, sweep: 0.18 });
+    this.tone({ freq: 120 - heft * 62, dur: 0.14 + heft * 0.20, gain: 0.20 + heft * 0.20, type: 'sine', sweep: 0.4 });
+    // Slap-back off the buildings.
+    if (heft > 0.35) setTimeout(() => this.noiseBurst({ dur: 0.30, gain: 0.05 + heft * 0.06, freq: 700, q: 1.6, sweep: 0.3, type: 'bandpass' }), 70 + heft * 60);
+  }
+
+  dryFire() { this.noiseBurst({ dur: 0.05, gain: 0.08, freq: 2400, q: 2.2, sweep: 0.5 }); }
+
+  reloadClick(stage) {
+    if (stage === 'out') this.noiseBurst({ dur: 0.08, gain: 0.10, freq: 1400, q: 2.0, sweep: 0.6 });
+    else this.noiseBurst({ dur: 0.10, gain: 0.13, freq: 900, q: 1.6, sweep: 0.5 });
+  }
+
+  bulletImpact(surface) {
+    const hard = surface === 'asphalt' || surface === 'concrete' || surface === 'sidewalk';
+    this.noiseBurst({ dur: 0.09, gain: 0.13, freq: hard ? 3200 : 1500, q: 1.4, sweep: 0.3 });
+  }
+
+  explosion(size) {
+    const k = clamp01((size || 5) / 10);
+    this.noiseBurst({ dur: 0.7 + k * 0.7, gain: 0.32 + k * 0.2, freq: 900 - k * 500, q: 0.5, sweep: 0.12 });
+    this.tone({ freq: 62 - k * 24, dur: 0.8 + k * 0.5, gain: 0.30 + k * 0.2, type: 'sine', sweep: 0.3 });
+  }
+
   cash() {
     for (let i = 0; i < 3; i++) setTimeout(() => this.tone({ freq: 1200 + i * 320, dur: 0.11, gain: 0.07, type: 'triangle' }), i * 55);
   }
@@ -54628,6 +54705,11 @@ class InputManager {
       b.enterVehicle = this.isDown('enterVehicle') || this.virtual('enterVehicle') || !!(gp && gp.pad.buttons[3] && gp.pad.buttons[3].pressed);
       b.handbrake = this.virtual('handbrake') || !!(gp && gp.pad.buttons[0] && gp.pad.buttons[0].pressed);
       b.horn = this.isDown('horn') || this.virtual('horn');
+      // Firing is the left mouse only once the pointer is locked, so that
+      // click-and-drag to look never lets off a round.
+      b.fire = (this.pointerLocked && this.mouseLeft) || this.virtual('fire');
+      b.aim = (this.pointerLocked && this.mouseRight) || this.virtual('aim');
+      b.reload = this.isDown('reload') || this.virtual('reload');
     }
     for (const k in b) this.edges[k] = b[k] && !prev[k];
 
@@ -55470,7 +55552,7 @@ const THREE = __THREE;
 const { GeometryBatcher, boxUV, cylinderUV, transformed, disposeGroup } = __M["world/geomutils"];
 const { paintedMaterial, foliageMaterial } = __M["world/materials"];
 const { clamp01, clampv, lerpv, damp, dampAngle, wrapAngle, makeRng, TAU, noise1 } = __M["core/math"];
-const { settings } = __M["core/settings"];
+const { settings, perf } = __M["core/settings"];
 const { audio } = __M["core/audio"];
 
 const ANIMAL_TYPES = {
@@ -55827,7 +55909,7 @@ class AnimalManager {
     this.densityScale = 1;
   }
 
-  get budget() { return Math.round(settings.preset.animalBudget * this.densityScale); }
+  get budget() { return Math.round(settings.preset.animalBudget * this.densityScale * perf.load); }
 
   typesFor(x, z) {
     const d = this.world.city.districtAt(x, z);
@@ -55989,11 +56071,15 @@ function computeProportions(p) {
   const hipY = H * 0.53;
   const crotchY = H * (0.485 - (p.legLength - 1) * 0.06);
 
-  // Widths. Male shoulders are wider relative to hips; female the inverse.
-  const shoulderHalf = H * (female ? 0.098 : 0.115) * p.shoulderWidth * (1 + m * 0.10 + w * 0.05);
-  const hipHalf = H * (female ? 0.086 : 0.079) * p.hipWidth * (1 + w * 0.17);
-  const waistHalf = H * (female ? 0.058 : 0.067) * (1 + w * 0.42 - m * 0.03);
-  const chestHalf = H * (female ? 0.079 : 0.090) * (1 + m * 0.13 + w * 0.16);
+  // Widths, as fractions of stature. The female figures were cut too narrow
+  // across the board and the waist was over-cinched, which read as a cartoon
+  // hourglass rather than a person; these are the usual adult ratios —
+  // biacromial ~0.22H, bi-trochanteric ~0.19H, waist ~0.14H — so shoulders and
+  // hips come out close to level with a waist that is defined but not tiny.
+  const shoulderHalf = H * (female ? 0.109 : 0.115) * p.shoulderWidth * (1 + m * 0.10 + w * 0.05);
+  const hipHalf = H * (female ? 0.094 : 0.079) * p.hipWidth * (1 + w * 0.17);
+  const waistHalf = H * (female ? 0.070 : 0.067) * (1 + w * 0.42 - m * 0.03);
+  const chestHalf = H * (female ? 0.085 : 0.090) * (1 + m * 0.13 + w * 0.16);
 
   // Leg chain
   const legTotal = (crotchY) * 1.0;
@@ -56078,13 +56164,13 @@ function computeProportions(p) {
       eyeLine, eyeSep,
       // Limb radii used by the mesh builder.
       neckR: H * (female ? 0.0265 : 0.0305) * (1 + w * 0.12),
-      thighR: H * (female ? 0.0455 : 0.0435) * (1 + w * 0.34 + m * 0.14),
+      thighR: H * (female ? 0.0475 : 0.0435) * (1 + w * 0.34 + m * 0.14),
       kneeR: H * 0.0400 * (1 + w * 0.18 + m * 0.05),
-      calfR: H * (female ? 0.0345 : 0.0355) * (1 + w * 0.22 + m * 0.18),
+      calfR: H * (female ? 0.0360 : 0.0355) * (1 + w * 0.22 + m * 0.18),
       ankleR: H * 0.0215 * (1 + w * 0.12),
-      upperArmR: H * (female ? 0.0245 : 0.0285) * (1 + w * 0.22 + m * 0.26),
+      upperArmR: H * (female ? 0.0258 : 0.0285) * (1 + w * 0.22 + m * 0.26),
       elbowR: H * 0.0238 * (1 + w * 0.12 + m * 0.06),
-      forearmR: H * (female ? 0.0215 : 0.0245) * (1 + w * 0.18 + m * 0.20),
+      forearmR: H * (female ? 0.0224 : 0.0245) * (1 + w * 0.18 + m * 0.20),
       wristR: H * 0.0178 * (1 + w * 0.10),
       handThick: H * 0.0092 * p.handSize,
       fingerR: H * 0.0049 * p.handSize * (1 + w * 0.12),
@@ -56451,7 +56537,12 @@ class HumanAnimator {
     this.applyLookAt(dt);
 
     // ---- Commit: slerp bones toward the target pose ------------------------
-    const rate = 1 - Math.exp(-this._rate * dt);
+    // Each pose sets its own responsiveness, and switching pose used to adopt
+    // the new one instantly — so a change of state snapped rather than blended.
+    // Ease into it over a quarter of a second.
+    const settle = clamp01(this.stateTime / 0.28);
+    const rateNow = lerpv(Math.min(this._rate, 7), this._rate, settle);
+    const rate = 1 - Math.exp(-rateNow * dt);
     for (const name in this.bones) {
       const b = this.bones[name];
       const t = this._target[name];
@@ -56566,6 +56657,26 @@ class HumanAnimator {
       this.set('foot' + S, -free * 0.10, s * p.toeOut, 0);
       this.set('toe' + S, 0, 0, 0);
     }
+
+    // Turning on the spot: pick the feet up and shuffle round rather than
+    // pivoting rigidly, which is what standing still and rotating looked like.
+    const turn = clampv(this.turnRate, -3, 3);
+    if (Math.abs(turn) > 0.22) {
+      this.turnPhase = (this.turnPhase || 0) + Math.abs(turn) * dt * 0.75;
+      const step = Math.sin(this.turnPhase * TAU);
+      const amt = clamp01((Math.abs(turn) - 0.22) / 1.5);
+      for (const S of ['L', 'R']) {
+        const sgn = S === 'L' ? 1 : -1;
+        const lift = Math.max(0, step * sgn) * amt;
+        this.add('upperLeg' + S, -lift * 0.26, -turn * 0.06 * amt, 0);
+        this.add('lowerLeg' + S, lift * 0.38, 0, 0);
+        this.add('foot' + S, -lift * 0.16, 0, 0);
+      }
+      this.hipsOffset.y -= Math.abs(step) * amt * this.prop.measure.height * 0.005;
+      // Lead with the head and shoulders, the way people actually turn.
+      this.add('chest', 0, -turn * 0.05 * amt, 0);
+      this.add('head', 0, -turn * 0.09 * amt, 0);
+    }
   }
 
   poseLocomotion(dt) {
@@ -56583,7 +56694,12 @@ class HumanAnimator {
     const armAmp = lerpv(0.34, lerpv(0.85, 1.15, sprint), run) * p.armSwing;
     const elbowBase = lerpv(0.30, lerpv(1.30, 1.65, sprint), run) * p.armBend;
     const bounce = lerpv(0.014, lerpv(0.030, 0.042, sprint), run) * p.bounce;
-    const lean = lerpv(0.03, lerpv(0.16, 0.30, sprint), run) * p.lean;
+    // Lean from speed, plus a bit more from acceleration, so setting off and
+    // pulling up read as effort rather than a speed slider moving.
+    const accel = clampv((spd - (this._lastSpd == null ? spd : this._lastSpd)) / Math.max(dt, 0.001), -9, 9);
+    this._lastSpd = spd;
+    this.accelLean = lerpv(this.accelLean || 0, accel * 0.035, clamp01(dt * 6));
+    const lean = lerpv(0.03, lerpv(0.16, 0.30, sprint), run) * p.lean + this.accelLean;
     const swayAmt = lerpv(0.075, 0.045, run) * p.hipSway;
 
     // Vertical bob peaks twice per cycle; lateral sway once.
@@ -57447,7 +57563,7 @@ class Apocalypse {
       if (g.t10) g.t10.forceStreetLights = 0;
       for (const v of g.traffic.vehicles) { v.autoHeadlights = false; v.headlightsOn = false; }
     }
-    if (kind === 'zombie') this.seedInfection(3);
+    if (kind === 'zombie') this.beginOutbreak();
     if (kind === 'riot') this.makeHostile();
     if (kind === 'machine') this.freeTheCars();
 
@@ -57481,6 +57597,7 @@ class Apocalypse {
     if (npc.infected || npc.hostile || npc.panicking) npc.human.setSkinTint(null, null);
     npc.infected = false;
     npc.hostile = false;
+    npc.turning = 0;
     npc.panicking = false;
     npc.downed = 0;
     npc.combatTarget = null;
@@ -57491,6 +57608,31 @@ class Apocalypse {
   // -------------------------------------------------------------------------
   // Seeding
   // -------------------------------------------------------------------------
+  /**
+   * The outbreak opens on one person. They stop, double over where you can see
+   * them, and come up wrong — and only then does it start spreading.
+   */
+  beginOutbreak() {
+    const g = this.game;
+    const p = g.player.position;
+    let best = null, bestD = 1e9;
+    for (const npc of g.npcs.npcs) {
+      if (npc.indoors) continue;
+      const d = npc.position.distanceTo(p);
+      // Close enough to watch, far enough not to be on top of you.
+      if (d < 6 || d > 40) continue;
+      if (d < bestD) { bestD = d; best = npc; }
+    }
+    if (!best) { this.seedInfection(1); return null; }
+    this.patientZero = best;
+    best.controlled = 'apocalypse';
+    best.panicking = false;
+    best.turning = 3.2;
+    best.human.animator.setState(STATES.IDLE);
+    g.t10Say('Don\'t move. Watch ' + best.appearance.firstName + '.');
+    return best;
+  }
+
   seedInfection(n) {
     const pool = this.game.npcs.npcs.filter((x) => !x.infected && !x.indoors);
     for (let i = 0; i < n && pool.length; i++) {
@@ -57551,6 +57693,23 @@ class Apocalypse {
     if (!this.kind) return;
     this.elapsed += dt;
     const g = this.game;
+
+    // The outbreak waits for its first victim before it goes anywhere.
+    if (this.patientZero) {
+      const z = this.patientZero;
+      if (z.turning > 0) {
+        z.turning -= dt;
+        // Doubling over, then still, then up.
+        z.human.animator.setState(z.turning > 2.1 ? STATES.THINK : z.turning > 0.8 ? STATES.CROUCH : STATES.GETUP);
+        z.targetSpeed = 0; z.speed = 0;
+        return;
+      }
+      this.patientZero = null;
+      this.infect(z);
+      if (this.game.gore) this.game.gore.pool(z.position.x, z.position.z, 1.2);
+      g.t10Say(z.appearance.firstName + ' is gone. It spreads by touch — don\'t let them reach you.');
+      audio.t10Blip('error');
+    }
 
     // Anyone who streams in after it starts joins whatever is happening.
     for (const npc of g.npcs.npcs) {
@@ -57772,6 +57931,288 @@ function buildSaucer() {
 }
 
 return { Apocalypse, APOCALYPSES, APOCALYPSE_KEYS };
+})();
+
+__M["entities/gore"] = (function(){
+// T10 World - blood. Sprays when someone is hit, pools where they land, dries
+// and fades over a few minutes, and smears under anyone who walks through it.
+//
+// Everything is one instanced quad mesh per kind plus one particle buffer, so a
+// street full of it costs four draw calls no matter how bad it gets.
+const THREE = __THREE;
+const { clamp01, clampv, lerpv, makeRng, TAU } = __M["core/math"];
+const { settings } = __M["core/settings"];
+
+const MAX_DECALS = 420;
+const MAX_DROPS = 900;
+
+/** Blood, wet and dried, painted once into a canvas. */
+function bloodTexture(seed, dried) {
+  const S = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const ctx = c.getContext('2d');
+  const rng = makeRng(seed);
+  ctx.clearRect(0, 0, S, S);
+
+  const base = dried ? [88, 20, 18] : [140, 12, 14];
+  const blobs = 5 + rng.int(0, 5);
+  for (let i = 0; i < blobs; i++) {
+    const a = rng() * TAU;
+    const r = rng.range(0, S * 0.22);
+    const x = S / 2 + Math.cos(a) * r;
+    const y = S / 2 + Math.sin(a) * r;
+    const rad = rng.range(S * 0.12, S * 0.30);
+    const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
+    const dark = rng.range(0.55, 1);
+    g.addColorStop(0, 'rgba(' + Math.round(base[0] * dark) + ',' + Math.round(base[1] * dark) + ',' + Math.round(base[2] * dark) + ',0.95)');
+    g.addColorStop(0.7, 'rgba(' + Math.round(base[0] * dark * 0.7) + ',' + Math.round(base[1] * 0.6) + ',' + Math.round(base[2] * 0.6) + ',0.7)');
+    g.addColorStop(1, 'rgba(40,6,6,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, rad, 0, TAU); ctx.fill();
+  }
+  // Flecks thrown out from the middle.
+  for (let i = 0; i < 26; i++) {
+    const a = rng() * TAU;
+    const r = rng.range(S * 0.2, S * 0.48);
+    const x = S / 2 + Math.cos(a) * r, y = S / 2 + Math.sin(a) * r;
+    const rad = rng.range(1, 4.5);
+    ctx.fillStyle = 'rgba(' + base[0] + ',' + base[1] + ',' + base[2] + ',' + rng.range(0.35, 0.9) + ')';
+    ctx.beginPath(); ctx.arc(x, y, rad, 0, TAU); ctx.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.needsUpdate = true;
+  return t;
+}
+
+class Gore {
+  constructor(game) {
+    this.game = game;
+    this.rng = makeRng(0x9a3f17);
+    this.group = new THREE.Group();
+    this.group.name = 'gore';
+    this.group.matrixAutoUpdate = false;
+    game.scene.add(this.group);
+
+    this.decals = [];
+    this.dropCount = 0;
+    this.buildDecals();
+    this.buildDrops();
+  }
+
+  get level() { return settings.get('goreLevel'); }
+
+  buildDecals() {
+    this.decalMats = [];
+    this.decalMesh = [0, 1].map((i) => {
+      // Each mesh owns its geometry so it can carry its own per-instance alpha.
+      const geo = new THREE.PlaneGeometry(1, 1);
+      geo.rotateX(-Math.PI / 2);
+      const alpha = new THREE.InstancedBufferAttribute(new Float32Array(MAX_DECALS).fill(1), 1);
+      alpha.setUsage(THREE.DynamicDrawUsage);
+      geo.setAttribute('aAlpha', alpha);
+
+      const mat = new THREE.MeshBasicMaterial({
+        map: bloodTexture(0x1234 + i * 77, i === 1),
+        transparent: true, depthWrite: false,
+        polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
+      });
+      // Three.js has no per-instance opacity, so we add one.
+      mat.onBeforeCompile = (sh) => {
+        sh.vertexShader = 'attribute float aAlpha;\nvarying float vAlpha;\n' +
+          sh.vertexShader.replace('void main() {', 'void main() {\n\tvAlpha = aAlpha;');
+        sh.fragmentShader = 'varying float vAlpha;\n' +
+          sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n\tdiffuseColor.a *= vAlpha;');
+      };
+      this.decalMats.push(mat);
+
+      const m = new THREE.InstancedMesh(geo, mat, MAX_DECALS);
+      m.count = 0;
+      m.frustumCulled = false;
+      m.renderOrder = 4;
+      m.matrixAutoUpdate = false;
+      m.castShadow = false;
+      m.receiveShadow = false;
+      m.userData.wantsShadow = false;
+      m.alphaAttr = alpha;
+      this.group.add(m);
+      return m;
+    });
+    this._m = new THREE.Matrix4();
+    this._q = new THREE.Quaternion();
+    this._p = new THREE.Vector3();
+    this._s = new THREE.Vector3();
+    this._up = new THREE.Vector3(0, 1, 0);
+  }
+
+  buildDrops() {
+    const geo = new THREE.BufferGeometry();
+    this.dropPos = new Float32Array(MAX_DROPS * 3);
+    this.dropVel = new Float32Array(MAX_DROPS * 3);
+    this.dropLife = new Float32Array(MAX_DROPS);
+    this.dropSize = new Float32Array(MAX_DROPS);
+    geo.setAttribute('position', new THREE.BufferAttribute(this.dropPos, 3));
+    geo.setAttribute('aLife', new THREE.BufferAttribute(this.dropLife, 1));
+    geo.setAttribute('aSize', new THREE.BufferAttribute(this.dropSize, 1));
+    geo.setDrawRange(0, 0);
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { uColor: { value: new THREE.Color(0x9b0f12) } },
+      vertexShader: `
+        attribute float aLife;
+        attribute float aSize;
+        varying float vLife;
+        void main(){
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          gl_Position = projectionMatrix * mv;
+          gl_PointSize = clamp(aSize * 160.0 / -mv.z, 1.0, 22.0);
+          vLife = aLife;
+        }`,
+      fragmentShader: `
+        uniform vec3 uColor;
+        varying float vLife;
+        void main(){
+          vec2 d = gl_PointCoord - 0.5;
+          float m = smoothstep(0.5, 0.05, length(d));
+          gl_FragColor = vec4(uColor, m * clamp(vLife, 0.0, 1.0));
+        }`,
+      transparent: true, depthWrite: false, fog: false,
+    });
+    this.drops = new THREE.Points(geo, mat);
+    this.drops.frustumCulled = false;
+    this.drops.renderOrder = 890;
+    this.drops.matrixAutoUpdate = false;
+    this.group.add(this.drops);
+    this.dropGeo = geo;
+  }
+
+  // -------------------------------------------------------------------------
+
+  /**
+   * Somebody got hit here.
+   * @param amount 0..1 — a shove versus something that ends badly.
+   */
+  hit(x, y, z, amount, dirX, dirZ) {
+    const level = this.level;
+    if (level <= 0) return;
+    const a = clamp01(amount) * lerpv(0.45, 1, level);
+    this.spray(x, y + 0.9, z, Math.round(lerpv(6, 42, a)), dirX || 0, dirZ || 0, a);
+    this.splat(x, z, lerpv(0.5, 1.9, a) * lerpv(0.6, 1, level), a);
+  }
+
+  /** A body hitting the ground leaves a pool that keeps growing for a moment. */
+  pool(x, z, size) {
+    if (this.level <= 0) return;
+    this.splat(x, z, (size || 1.4) * lerpv(0.6, 1.25, this.level), 0.9);
+  }
+
+  /** One decal on the ground. */
+  splat(x, z, size, wetness) {
+    const g = this.game;
+    const y = (g.world ? g.world.groundAt(x, z) : 0) + 0.015 + this.rng() * 0.004;
+    const rec = {
+      x, y, z,
+      size: size * this.rng.range(0.8, 1.3),
+      rot: this.rng() * TAU,
+      age: 0,
+      // Wet for the first half-minute, then dried and slowly fading.
+      life: lerpv(120, 260, clamp01(wetness)),
+      alpha: 1,
+    };
+    this.decals.push(rec);
+    if (this.decals.length > MAX_DECALS * 2) this.decals.splice(0, this.decals.length - MAX_DECALS * 2);
+    return rec;
+  }
+
+  /** A burst of droplets. */
+  spray(x, y, z, count, dirX, dirZ, force) {
+    const n = Math.min(count, MAX_DROPS - this.dropCount);
+    for (let i = 0; i < n; i++) {
+      const k = this.dropCount++;
+      const i3 = k * 3;
+      this.dropPos[i3] = x + (this.rng() - 0.5) * 0.3;
+      this.dropPos[i3 + 1] = y + (this.rng() - 0.5) * 0.4;
+      this.dropPos[i3 + 2] = z + (this.rng() - 0.5) * 0.3;
+      const spread = 2.6 + force * 4;
+      this.dropVel[i3] = dirX * (2 + force * 5) + (this.rng() - 0.5) * spread;
+      this.dropVel[i3 + 1] = this.rng.range(1.2, 4.5) * (0.6 + force);
+      this.dropVel[i3 + 2] = dirZ * (2 + force * 5) + (this.rng() - 0.5) * spread;
+      this.dropLife[k] = 1;
+      this.dropSize[k] = this.rng.range(0.012, 0.05);
+    }
+  }
+
+  clear() {
+    this.decals.length = 0;
+    this.dropCount = 0;
+    for (const m of this.decalMesh) m.count = 0;
+    this.dropGeo.setDrawRange(0, 0);
+  }
+
+  // -------------------------------------------------------------------------
+  update(dt, focus) {
+    // ---- Droplets: ballistic, and they leave a mark where they land. ----
+    for (let i = this.dropCount - 1; i >= 0; i--) {
+      const i3 = i * 3;
+      this.dropVel[i3 + 1] -= 16 * dt;
+      this.dropPos[i3] += this.dropVel[i3] * dt;
+      this.dropPos[i3 + 1] += this.dropVel[i3 + 1] * dt;
+      this.dropPos[i3 + 2] += this.dropVel[i3 + 2] * dt;
+      this.dropLife[i] -= dt * 0.55;
+      const ground = this.game.world ? this.game.world.groundAt(this.dropPos[i3], this.dropPos[i3 + 2]) : 0;
+      const landed = this.dropPos[i3 + 1] <= ground + 0.02;
+      if (landed || this.dropLife[i] <= 0) {
+        if (landed && this.rng() < 0.4) this.splat(this.dropPos[i3], this.dropPos[i3 + 2], this.rng.range(0.12, 0.34), 0.5);
+        // Swap the last drop into this slot.
+        const last = --this.dropCount;
+        if (last !== i) {
+          const l3 = last * 3;
+          for (let k = 0; k < 3; k++) { this.dropPos[i3 + k] = this.dropPos[l3 + k]; this.dropVel[i3 + k] = this.dropVel[l3 + k]; }
+          this.dropLife[i] = this.dropLife[last];
+          this.dropSize[i] = this.dropSize[last];
+        }
+      }
+    }
+    this.dropGeo.setDrawRange(0, this.dropCount);
+    this.dropGeo.attributes.position.needsUpdate = true;
+    this.dropGeo.attributes.aLife.needsUpdate = true;
+    this.dropGeo.attributes.aSize.needsUpdate = true;
+
+    // ---- Decals: age, dry out, fade, and only the near ones get drawn. ----
+    const wet = [], dry = [];
+    for (let i = this.decals.length - 1; i >= 0; i--) {
+      const d = this.decals[i];
+      d.age += dt;
+      if (d.age > d.life) { this.decals.splice(i, 1); continue; }
+      if (focus) {
+        const dx = d.x - focus.x, dz = d.z - focus.z;
+        if (dx * dx + dz * dz > 160 * 160) continue;
+      }
+      const t = d.age / d.life;
+      d.alpha = t > 0.75 ? 1 - (t - 0.75) / 0.25 : 1;
+      (d.age < 26 ? wet : dry).push(d);
+    }
+
+    for (let k = 0; k < 2; k++) {
+      const list = k === 0 ? wet : dry;
+      const mesh = this.decalMesh[k];
+      const n = Math.min(list.length, MAX_DECALS);
+      for (let i = 0; i < n; i++) {
+        const d = list[i];
+        this._p.set(d.x, d.y, d.z);
+        this._q.setFromAxisAngle(this._up, d.rot);
+        this._s.set(d.size, 1, d.size);
+        this._m.compose(this._p, this._q, this._s);
+        mesh.setMatrixAt(i, this._m);
+        mesh.alphaAttr.setX(i, d.alpha);
+      }
+      mesh.count = n;
+      if (n) { mesh.instanceMatrix.needsUpdate = true; mesh.alphaAttr.needsUpdate = true; }
+    }
+  }
+}
+
+return { Gore };
 })();
 
 __M["human/meshbuilder"] = (function(){
@@ -59837,9 +60278,12 @@ function buildSleeve(b, piece, prop, BI, segments, side) {
   const end = piece.sleeves === 'long' ? 1.0 : piece.sleeves === 'threequarter' ? 0.55 : 0.36;
 
   const pts = [];
-  // Shoulder cap overlapping the torso.
-  pts.push({ pos: sh.clone().lerp(el, -0.26), r: m.upperArmR * 0.88 + inflate * 0.5, w: [[BI('chest'), 0.72], [BI('upperArm' + S), 0.28]] });
-  pts.push({ pos: sh.clone().lerp(el, -0.06), r: m.upperArmR * 1.16 + inflate, w: [[BI('upperArm' + S), 0.7], [BI('chest'), 0.3]] });
+  // The shoulder cap starts inside the torso and is wide enough to meet it.
+  // A narrow cap sitting on the joint leaves a notch at the deltoid, which is
+  // the first thing you notice on a wide-shouldered figure.
+  pts.push({ pos: sh.clone().lerp(el, -0.52), r: m.upperArmR * 1.05 + inflate * 0.6, w: [[BI('chest'), 0.85], [BI('upperArm' + S), 0.15]] });
+  pts.push({ pos: sh.clone().lerp(el, -0.24), r: m.upperArmR * 1.32 + inflate, w: [[BI('chest'), 0.6], [BI('upperArm' + S), 0.4]] });
+  pts.push({ pos: sh.clone().lerp(el, -0.06), r: m.upperArmR * 1.20 + inflate, w: [[BI('upperArm' + S), 0.7], [BI('chest'), 0.3]] });
   pts.push({ pos: sh.clone().lerp(el, 0.06), r: m.upperArmR * 1.16 + inflate, w: [[BI('upperArm' + S), 0.9], [BI('chest'), 0.1]] });
   if (end <= 0.42) {
     pts.push({ pos: sh.clone().lerp(el, end * 0.6), r: m.upperArmR * 1.18 + inflate, w: [[BI('upperArm' + S), 1]] });
@@ -59871,7 +60315,10 @@ function buildBottomPiece(b, piece, prop, BI, segments) {
 
   // Waistband down to the crotch.
   const yTop = piece.yTop(m);
-  const yBot = m.crotchY - m.height * 0.012;
+  // The seat is capped at the crotch; that cap has to sit low enough and
+  // narrow enough to be buried where the two leg tubes overlap, or it shows
+  // between the thighs as a flat dark panel.
+  const yBot = m.crotchY - m.height * 0.030;
   const steps = 6;
   const sections = [];
   for (let i = 0; i <= steps; i++) {
@@ -59880,7 +60327,7 @@ function buildBottomPiece(b, piece, prop, BI, segments) {
     const pr = bodyProfileAtY(y, m, 0, bellyAmt, gluteAmt);
     // Pinch the seat in toward the crotch so the legs read as legs and the
     // garment doesn't end in a skirt-wide hem.
-    const pinch = lerpv(0.86, 1.0, smooth01(clamp01(f / 0.55)));
+    const pinch = lerpv(0.70, 1.0, smooth01(clamp01(f / 0.55)));
     sections.push({
       center: new THREE.Vector3(0, y, 0),
       v: f, weights: torsoWeightsAt(y, m, BI),
@@ -59991,10 +60438,10 @@ const OUTFITS = {
       id: 'f_tank_leggings', name: 'Tank & Leggings',
       blurb: 'Fitted tank, full-length leggings, running shoes.',
       pieces: [
-        { type: 'top', kind: 'tank', fabric: 'lycra', color: 0x2c3440, inflate: 0.0050, sleeves: 'none',
+        { type: 'top', kind: 'tank', fabric: 'lycra', color: 0x2c3440, inflate: 0.0062, sleeves: 'none',
           yTop: (m) => m.chestY + m.height * 0.036, yBottom: (m) => m.hipY + m.height * 0.010,
           neckline: 'strap', strapWidth: 0.0075 },
-        { type: 'bottom', kind: 'leggings', fabric: 'lycra', color: 0x1d2128, inflate: 0.0038,
+        { type: 'bottom', kind: 'leggings', fabric: 'lycra', color: 0x1d2128, inflate: 0.0064,
           yTop: (m) => m.waistY + m.height * 0.010, legEnd: 0.98 },
       ],
       shoes: { kind: 'runner', color: 0x22262e, accent: 0xd2456a },
@@ -60008,6 +60455,41 @@ const OUTFITS = {
           neckline: 'strap', strapWidth: 0.0090, flare: 0.30 },
       ],
       shoes: { kind: 'sandal', color: 0x6a4a34, accent: 0x4a3222 },
+    },
+    {
+      id: 'f_hoodie_jeans', name: 'Hoodie & Jeans',
+      blurb: 'Oversized hoodie, high-waisted jeans, canvas trainers.',
+      pieces: [
+        { type: 'top', kind: 'hoodie', fabric: 'knit', color: 0x5b6472, inflate: 0.0128, sleeves: 'long',
+          yTop: (m) => m.shoulderY + m.height * 0.004, yBottom: (m) => m.hipY - m.height * 0.010,
+          neckline: 'crew', hood: true },
+        { type: 'bottom', kind: 'jeans', fabric: 'denim', color: 0x2f3c4e, inflate: 0.0074,
+          yTop: (m) => m.waistY + m.height * 0.012, legEnd: 0.97, legFlare: 0.06 },
+      ],
+      shoes: { kind: 'sneaker', color: 0x1f2329, accent: 0xe4e0d6 },
+    },
+    {
+      id: 'f_blouse_culottes', name: 'Blouse & Culottes',
+      blurb: 'Tucked blouse, wide cropped culottes, flat shoes.',
+      pieces: [
+        { type: 'top', kind: 'tee', fabric: 'cotton', color: 0xeae4d8, inflate: 0.0078, sleeves: 'short',
+          yTop: (m) => m.shoulderY, yBottom: (m) => m.waistY - m.height * 0.004, neckline: 'crew' },
+        { type: 'bottom', kind: 'skirt', fabric: 'cotton', color: 0x3c3a4a, inflate: 0.0082,
+          yTop: (m) => m.waistY + m.height * 0.006, legEnd: 0.42, legFlare: 0.55 },
+      ],
+      shoes: { kind: 'sandal', color: 0x2b2830, accent: 0x191720 },
+    },
+    {
+      id: 'f_jacket_cargo', name: 'Jacket & Cargos',
+      blurb: 'Zipped work jacket, cargo trousers, heavy boots.',
+      pieces: [
+        { type: 'top', kind: 'hoodie', fabric: 'denim', color: 0x3e4a44, inflate: 0.0132, sleeves: 'long',
+          yTop: (m) => m.shoulderY + m.height * 0.004, yBottom: (m) => m.hipY + m.height * 0.004,
+          neckline: 'crew' },
+        { type: 'bottom', kind: 'joggers', fabric: 'cotton', color: 0x4a4636, inflate: 0.0108,
+          yTop: (m) => m.waistY - m.height * 0.002, legEnd: 0.95, legFlare: 0.14 },
+      ],
+      shoes: { kind: 'boot', color: 0x2a2520, accent: 0x15120f },
     },
   ],
   male: [
@@ -60045,6 +60527,41 @@ const OUTFITS = {
           yTop: (m) => m.waistY, legEnd: 0.93, legFlare: -0.05 },
       ],
       shoes: { kind: 'sneaker', color: 0x2c2f35, accent: 0xb8b2a6 },
+    },
+    {
+      id: 'm_shirt_chinos', name: 'Shirt & Chinos',
+      blurb: 'Open button-down over a tee, chinos, leather shoes.',
+      pieces: [
+        { type: 'top', kind: 'hoodie', fabric: 'cotton', color: 0x58697d, inflate: 0.0120, sleeves: 'long',
+          yTop: (m) => m.shoulderY + m.height * 0.002, yBottom: (m) => m.hipY + m.height * 0.010,
+          neckline: 'crew' },
+        { type: 'bottom', kind: 'jeans', fabric: 'cotton', color: 0x8a7f6a, inflate: 0.0086,
+          yTop: (m) => m.waistY - m.height * 0.006, legEnd: 0.96, legFlare: 0.08 },
+      ],
+      shoes: { kind: 'boot', color: 0x3a2b21, accent: 0x241a14 },
+    },
+    {
+      id: 'm_track', name: 'Track Suit',
+      blurb: 'Zip-up track top and matching bottoms, running shoes.',
+      pieces: [
+        { type: 'top', kind: 'hoodie', fabric: 'lycra', color: 0x223347, inflate: 0.0108, sleeves: 'long',
+          yTop: (m) => m.shoulderY + m.height * 0.003, yBottom: (m) => m.hipY, neckline: 'crew' },
+        { type: 'bottom', kind: 'joggers', fabric: 'lycra', color: 0x1b2634, inflate: 0.0092,
+          yTop: (m) => m.waistY, legEnd: 0.96, legFlare: -0.04 },
+      ],
+      shoes: { kind: 'runner', color: 0x20242b, accent: 0x3fb37a },
+    },
+    {
+      id: 'm_vest_cargo', name: 'Vest & Cargos',
+      blurb: 'Work vest over bare arms, cargo trousers, heavy boots.',
+      pieces: [
+        { type: 'top', kind: 'tank', fabric: 'knit', color: 0x6e6a5c, inflate: 0.0062, sleeves: 'none',
+          yTop: (m) => m.chestY + m.height * 0.040, yBottom: (m) => m.hipY + m.height * 0.006,
+          neckline: 'strap', strapWidth: 0.0125 },
+        { type: 'bottom', kind: 'joggers', fabric: 'cotton', color: 0x4f4a3a, inflate: 0.0110,
+          yTop: (m) => m.waistY - m.height * 0.002, legEnd: 0.95, legFlare: 0.15 },
+      ],
+      shoes: { kind: 'boot', color: 0x2e2620, accent: 0x191411 },
     },
   ],
 };
@@ -60452,17 +60969,31 @@ class Human {
     a.outfitName = outfit.name;
     a.shoes = outfit.shoes;
 
-    // Base layer first so removing an outfit never leaves a bare character.
-    const basePieces = BASE_LAYER[a.gender] || BASE_LAYER.male;
-    const base = buildGarment(this.prop, this.skeletonData.boneIndex, basePieces, { segments: Math.max(6, segments - 2) });
-    const baseMesh = new THREE.SkinnedMesh(base.geometry, base.materials);
-    baseMesh.name = 'baselayer';
-    baseMesh.castShadow = this.opts.shadows;
-    baseMesh.receiveShadow = this.opts.shadows;
-    baseMesh.bind(this.skeleton, this.parts.body.bindMatrix);
-    if (baseMesh.geometry.boundingSphere) baseMesh.geometry.boundingSphere.radius *= 1.6;
-    this.root.add(baseMesh);
-    this.parts.base = baseMesh;
+    // Base layer first so removing an outfit never leaves a bare character —
+    // but only the parts the outfit doesn't already cover, or it pokes through.
+    const covers = { top: false, bottom: false };
+    if (!a.nude) for (const piece of outfit.pieces) {
+      if (piece.type === 'bottom') covers.bottom = true;
+      if (piece.type === 'top') { covers.top = true; if (piece.kind === 'dress') covers.bottom = true; }
+    }
+    // Where the outfit covers, the base layer is pulled in tight so it sits
+    // strictly inside and can't poke through; where it doesn't, it stays as is.
+    // Removing it outright left a hole at the crotch of every trouser.
+    const basePieces = (BASE_LAYER[a.gender] || BASE_LAYER.male)
+      .map((piece) => (covers[piece.type]
+        ? Object.assign({}, piece, { inflate: piece.inflate * 0.25 })
+        : piece));
+    if (basePieces.length) {
+      const base = buildGarment(this.prop, this.skeletonData.boneIndex, basePieces, { segments: Math.max(6, segments - 2) });
+      const baseMesh = new THREE.SkinnedMesh(base.geometry, base.materials);
+      baseMesh.name = 'baselayer';
+      baseMesh.castShadow = this.opts.shadows;
+      baseMesh.receiveShadow = this.opts.shadows;
+      baseMesh.bind(this.skeleton, this.parts.body.bindMatrix);
+      if (baseMesh.geometry.boundingSphere) baseMesh.geometry.boundingSphere.radius *= 1.6;
+      this.root.add(baseMesh);
+      this.parts.base = baseMesh;
+    }
 
     if (!a.nude) {
       const g = buildGarment(this.prop, this.skeletonData.boneIndex, outfit.pieces, { segments });
@@ -61593,7 +62124,7 @@ const { generateAppearance, describeAppearance, PERSONALITIES } = __M["human/app
 const { STATES } = __M["human/animator"];
 const { BLOCK_SIZE, CITY_RADIUS, ROAD_TYPES } = __M["world/city"];
 const { clamp01, clampv, lerpv, damp, dampAngle, wrapAngle, makeRng, TAU, distToSeg2D } = __M["core/math"];
-const { settings } = __M["core/settings"];
+const { settings, perf } = __M["core/settings"];
 const { audio } = __M["core/audio"];
 
 const ACTIVITIES = {
@@ -61657,6 +62188,8 @@ class NPC {
     this.attackCooldown = 0;
     this.infectCooldown = 0;
     this.abducting = null;
+    this.turning = 0;
+    this.hitPoints = 100;
     this.vehicle = null;
     this.indoors = false;
     this.lastLine = '';
@@ -61821,6 +62354,15 @@ class NPC {
       this.root.position.copy(this.position);
       return;
     }
+    // Patient zero, mid-turn. The apocalypse drives the pose; stand still.
+    if (this.turning > 0) {
+      this.targetSpeed = 0;
+      this.speed = 0;
+      this.path.length = 0;
+      this.human.update(dt, { speed: 0, turnRate: 0, grounded: true, verticalVel: 0 });
+      this.root.position.copy(this.position);
+      return;
+    }
     // Being lifted into a ship — the saucer drives the position.
     if (this.abducting) {
       this.human.update(dt, { speed: 0, turnRate: 0, grounded: false, verticalVel: 1 });
@@ -61957,7 +62499,16 @@ class NPC {
         const dist = this.chargeAt(dt, tx, tz, pace);
         if (dist < 1.9 && this.infectCooldown <= 0) {
           this.infectCooldown = 2.5;
-          if (victim && apo) apo.infect(victim);
+          if (victim && apo) {
+            const gore = this.manager.gore;
+            if (gore) {
+              const dx = victim.position.x - this.position.x, dz = victim.position.z - this.position.z;
+              const len = Math.hypot(dx, dz) || 1;
+              gore.hit(victim.position.x, victim.position.y, victim.position.z, 1, dx / len, dz / len);
+              gore.pool(victim.position.x, victim.position.z, 1.5);
+            }
+            apo.infect(victim);
+          }
           else if (this.manager.onPlayerAttacked) this.manager.onPlayerAttacked(this, 'infect');
         }
         this.human.animator.setState(this.speed > this.walkSpeed * 1.1 ? STATES.RUN : STATES.WALK);
@@ -61984,8 +62535,16 @@ class NPC {
           this.human.animator.setState(STATES.POINT);   // a swing, telegraphed
           if (goForPlayer) { if (this.manager.onPlayerAttacked) this.manager.onPlayerAttacked(this, 'hit'); }
           else if (this.combatTarget) {
-            this.combatTarget.downed = 4 + this.rng() * 6;
-            this.combatTarget.combatTarget = null;
+            const t = this.combatTarget;
+            t.downed = 4 + this.rng() * 6;
+            t.combatTarget = null;
+            const gore = this.manager.gore;
+            if (gore) {
+              const dx = t.position.x - this.position.x, dz = t.position.z - this.position.z;
+              const len = Math.hypot(dx, dz) || 1;
+              gore.hit(t.position.x, t.position.y, t.position.z, 0.75, dx / len, dz / len);
+              gore.pool(t.position.x, t.position.z, 1.1);
+            }
             if (apo) apo.casualties++;
             this.combatTarget = null;
           }
@@ -62252,7 +62811,7 @@ class NPCManager {
     this.spawnCounter = 0;
   }
 
-  get budget() { return Math.round(settings.preset.npcBudget * this.densityScale); }
+  get budget() { return Math.round(settings.preset.npcBudget * this.densityScale * perf.load); }
 
   spawnNear(px, pz, minDist, maxDist, opts) {
     opts = opts || {};
@@ -62292,8 +62851,25 @@ class NPCManager {
     if (!this.enabled) return;
     this.listener = playerPos;
     const drawD = settings.preset.drawDistance;
-    const keep = Math.min(drawD * 0.6, 220);
+    const keep = Math.min(drawD * 0.6, 220) * lerpv(0.6, 1, perf.load);
     this.despawnFar(playerPos.x, playerPos.z, keep + 60);
+
+    // When the governor cuts the budget, shed the people furthest away rather
+    // than waiting for them to wander out of range — a couple at a time, so
+    // nobody vanishes out of the corner of your eye in a crowd.
+    if (this.npcs.length > this.budget) {
+      let over = Math.min(2, this.npcs.length - this.budget);
+      while (over-- > 0) {
+        let worst = null, worstD = -1;
+        for (const n of this.npcs) {
+          if (n.controlled || n.infected || n.hostile) continue;
+          const d = n.position.distanceTo(playerPos);
+          if (d > worstD) { worstD = d; worst = n; }
+        }
+        if (!worst || worstD < 55) break;
+        this.remove(worst);
+      }
+    }
 
     // Spawn a couple per frame at most so building never spikes the frame time.
     this.spawnTimer -= dt;
@@ -63020,7 +63596,7 @@ const THREE = __THREE;
 const { Vehicle, VEHICLE_TYPES, CIVILIAN_TYPES, EMERGENCY_TYPES } = __M["entities/vehicle"];
 const { BLOCK_SIZE, CITY_RADIUS, ROAD_TYPES } = __M["world/city"];
 const { clamp01, clampv, lerpv, wrapAngle, makeRng, TAU } = __M["core/math"];
-const { settings } = __M["core/settings"];
+const { settings, perf } = __M["core/settings"];
 
 const DIRS = [
   { x: 0, z: 1, heading: 0 },            // north (+Z)
@@ -63042,7 +63618,7 @@ class TrafficManager {
     this.grid = new Map();
   }
 
-  get budget() { return Math.round(settings.preset.vehicleBudget * this.densityScale); }
+  get budget() { return Math.round(settings.preset.vehicleBudget * this.densityScale * perf.load); }
 
   /** Snap a position to the nearest lane centre travelling in `dirIndex`. */
   laneAnchor(x, z, dirIndex, roadType) {
@@ -63159,6 +63735,20 @@ class TrafficManager {
 
     this.despawnFar(px, pz, keepDist + 90);
     this.spawnTimer -= dt;
+    // Shed the furthest car when the governor tightens the budget.
+    if (this.vehicles.length > this.budget) {
+      let worst = null, worstD = -1;
+      for (const v of this.vehicles) {
+        if (v.isPlayerVehicle || v.driver || v.protected) continue;
+        const d = Math.hypot(v.position.x - focus.x, v.position.z - focus.z);
+        if (d > worstD) { worstD = d; worst = v; }
+      }
+      if (worst && worstD > 70) {
+        worst.dispose();
+        this.vehicles.splice(this.vehicles.indexOf(worst), 1);
+      }
+    }
+
     if (this.spawnTimer <= 0 && this.vehicles.length < this.budget) {
       this.spawnTimer = 0.18;
       for (let a = 0; a < 3 && this.vehicles.length < this.budget; a++) {
@@ -63340,6 +63930,276 @@ class TrafficManager {
 }
 
 return { TrafficManager };
+})();
+
+__M["entities/weapons"] = (function(){
+// T10 World - the armoury. Twenty families crossed with twenty patterns makes
+// four hundred distinct guns, each with its own stats and its own model, built
+// from the family silhouette and the pattern's modifications.
+//
+// Nothing is an asset: a gun's mesh is assembled from boxes and cylinders the
+// first time you hold it, then cached.
+const THREE = __THREE;
+const { boxUV, cylinderUV, transformed } = __M["world/geomutils"];
+const { metalMaterial, paintedMaterial } = __M["world/materials"];
+const { clampv, lerpv, makeRng } = __M["core/math"];
+
+/**
+ * A family is a shape and a role. Lengths are in metres; `rpm` is rounds per
+ * minute, `spread` is radians of cone at the muzzle.
+ */
+const WEAPON_FAMILIES = [
+  { id: 'pistol',    name: 'Pistol',            cls: 'Sidearm',  dmg: 34, rpm: 420,  mag: 15,  range: 55,  spread: 0.012, recoil: 0.9,  reload: 1.5, barrel: 0.13, body: 0.20, stock: 0, grip: 1, auto: false, pellets: 1, weight: 0.9 },
+  { id: 'revolver',  name: 'Revolver',          cls: 'Sidearm',  dmg: 62, rpm: 160,  mag: 6,   range: 65,  spread: 0.010, recoil: 1.9,  reload: 2.8, barrel: 0.16, body: 0.17, stock: 0, grip: 1, auto: false, pellets: 1, weight: 1.2, cylinder: true },
+  { id: 'machpist',  name: 'Machine Pistol',    cls: 'Sidearm',  dmg: 24, rpm: 1100, mag: 24,  range: 42,  spread: 0.030, recoil: 1.1,  reload: 1.7, barrel: 0.12, body: 0.22, stock: 0, grip: 1, auto: true,  pellets: 1, weight: 1.1 },
+  { id: 'smg',       name: 'SMG',               cls: 'Automatic', dmg: 27, rpm: 900, mag: 32,  range: 60,  spread: 0.022, recoil: 1.0,  reload: 2.1, barrel: 0.20, body: 0.34, stock: 1, grip: 1, auto: true,  pellets: 1, weight: 2.6 },
+  { id: 'pdw',       name: 'PDW',               cls: 'Automatic', dmg: 30, rpm: 780, mag: 40,  range: 75,  spread: 0.018, recoil: 1.0,  reload: 2.0, barrel: 0.23, body: 0.33, stock: 1, grip: 1, auto: true,  pellets: 1, weight: 2.8 },
+  { id: 'carbine',   name: 'Carbine',           cls: 'Rifle',    dmg: 38, rpm: 700,  mag: 30,  range: 130, spread: 0.014, recoil: 1.3,  reload: 2.3, barrel: 0.34, body: 0.40, stock: 1, grip: 1, auto: true,  pellets: 1, weight: 3.2 },
+  { id: 'assault',   name: 'Assault Rifle',     cls: 'Rifle',    dmg: 42, rpm: 640,  mag: 30,  range: 170, spread: 0.012, recoil: 1.5,  reload: 2.4, barrel: 0.42, body: 0.42, stock: 1, grip: 1, auto: true,  pellets: 1, weight: 3.6 },
+  { id: 'battle',    name: 'Battle Rifle',      cls: 'Rifle',    dmg: 58, rpm: 480,  mag: 20,  range: 220, spread: 0.010, recoil: 2.1,  reload: 2.6, barrel: 0.50, body: 0.46, stock: 1, grip: 1, auto: true,  pellets: 1, weight: 4.3 },
+  { id: 'bullpup',   name: 'Bullpup',           cls: 'Rifle',    dmg: 40, rpm: 720,  mag: 30,  range: 165, spread: 0.012, recoil: 1.3,  reload: 2.5, barrel: 0.46, body: 0.30, stock: 0, grip: 1, auto: true,  pellets: 1, weight: 3.4, bullpup: true },
+  { id: 'dmr',       name: 'Marksman Rifle',    cls: 'Precision', dmg: 78, rpm: 260, mag: 15,  range: 300, spread: 0.005, recoil: 2.4,  reload: 2.7, barrel: 0.58, body: 0.48, stock: 1, grip: 1, auto: false, pellets: 1, weight: 4.6, scope: true },
+  { id: 'sniper',    name: 'Sniper Rifle',      cls: 'Precision', dmg: 130, rpm: 48, mag: 5,   range: 520, spread: 0.002, recoil: 3.6,  reload: 3.4, barrel: 0.68, body: 0.52, stock: 1, grip: 0, auto: false, pellets: 1, weight: 6.2, scope: true, bolt: true },
+  { id: 'antimat',   name: 'Anti-Materiel',     cls: 'Precision', dmg: 240, rpm: 34, mag: 5,   range: 700, spread: 0.002, recoil: 5.2,  reload: 4.2, barrel: 0.86, body: 0.60, stock: 1, grip: 1, auto: false, pellets: 1, weight: 11.5, scope: true, muzzle: true },
+  { id: 'pump',      name: 'Pump Shotgun',      cls: 'Shotgun',  dmg: 22, rpm: 70,   mag: 6,   range: 32,  spread: 0.075, recoil: 3.0,  reload: 3.6, barrel: 0.46, body: 0.44, stock: 1, grip: 0, auto: false, pellets: 9, weight: 3.4 },
+  { id: 'semishot',  name: 'Semi Shotgun',      cls: 'Shotgun',  dmg: 20, rpm: 150,  mag: 8,   range: 34,  spread: 0.070, recoil: 2.6,  reload: 3.2, barrel: 0.44, body: 0.46, stock: 1, grip: 1, auto: false, pellets: 9, weight: 3.6 },
+  { id: 'autoshot',  name: 'Auto Shotgun',      cls: 'Shotgun',  dmg: 17, rpm: 300,  mag: 12,  range: 30,  spread: 0.085, recoil: 2.4,  reload: 3.0, barrel: 0.40, body: 0.48, stock: 1, grip: 1, auto: true,  pellets: 8, weight: 4.4 },
+  { id: 'lmg',       name: 'Light Machine Gun', cls: 'Support',  dmg: 44, rpm: 720,  mag: 100, range: 200, spread: 0.020, recoil: 1.8,  reload: 5.2, barrel: 0.56, body: 0.52, stock: 1, grip: 1, auto: true,  pellets: 1, weight: 8.4, bipod: true },
+  { id: 'minigun',   name: 'Minigun',           cls: 'Support',  dmg: 30, rpm: 2400, mag: 300, range: 150, spread: 0.034, recoil: 1.2,  reload: 7.0, barrel: 0.62, body: 0.58, stock: 0, grip: 1, auto: true,  pellets: 1, weight: 22, rotary: true, spinUp: 0.55 },
+  { id: 'grenade',   name: 'Grenade Launcher',  cls: 'Heavy',    dmg: 140, rpm: 55,  mag: 6,   range: 110, spread: 0.014, recoil: 3.2,  reload: 4.0, barrel: 0.30, body: 0.44, stock: 1, grip: 1, auto: false, pellets: 1, weight: 6.8, bore: 0.05, blast: 5.5 },
+  { id: 'rocket',    name: 'Rocket Launcher',   cls: 'Heavy',    dmg: 260, rpm: 22,  mag: 1,   range: 240, spread: 0.008, recoil: 4.4,  reload: 4.6, barrel: 0.90, body: 0.24, stock: 0, grip: 1, auto: false, pellets: 1, weight: 9.5, bore: 0.07, blast: 9 },
+  { id: 'railgun',   name: 'Railgun',           cls: 'Exotic',   dmg: 200, rpm: 40,  mag: 4,   range: 600, spread: 0.0,   recoil: 3.0,  reload: 3.8, barrel: 0.74, body: 0.46, stock: 1, grip: 1, auto: false, pellets: 1, weight: 7.6, scope: true, exotic: true },
+];
+
+/**
+ * A pattern is a make and a set of modifications. Multipliers are applied on
+ * top of the family, so a Compact Sniper really is shorter, faster to bring up
+ * and less accurate than a Match one.
+ */
+const WEAPON_PATTERNS = [
+  { id: 'std',     name: 'Standard',    dmg: 1.00, rpm: 1.00, mag: 1.00, range: 1.00, spread: 1.00, recoil: 1.00, tint: 0x3b4046 },
+  { id: 'mk2',     name: 'Mk II',       dmg: 1.06, rpm: 1.04, mag: 1.00, range: 1.05, spread: 0.94, recoil: 0.96, tint: 0x343a41 },
+  { id: 'mk3',     name: 'Mk III',      dmg: 1.12, rpm: 1.08, mag: 1.10, range: 1.10, spread: 0.88, recoil: 0.92, tint: 0x2d3338 },
+  { id: 'compact', name: 'Compact',     dmg: 0.92, rpm: 1.10, mag: 0.80, range: 0.72, spread: 1.30, recoil: 0.85, tint: 0x40464d, len: 0.70 },
+  { id: 'long',    name: 'Longbarrel',  dmg: 1.14, rpm: 0.92, mag: 1.00, range: 1.45, spread: 0.72, recoil: 1.15, tint: 0x363c43, len: 1.35 },
+  { id: 'match',   name: 'Match',       dmg: 1.10, rpm: 0.96, mag: 1.00, range: 1.25, spread: 0.55, recoil: 0.80, tint: 0x23272b, scope: true },
+  { id: 'tac',     name: 'Tactical',    dmg: 1.00, rpm: 1.06, mag: 1.15, range: 1.05, spread: 0.85, recoil: 0.88, tint: 0x2a2f33, rail: true },
+  { id: 'sup',     name: 'Suppressed',  dmg: 0.94, rpm: 1.00, mag: 1.00, range: 0.92, spread: 0.80, recoil: 0.72, tint: 0x1e2226, suppressor: true, quiet: true },
+  { id: 'heavy',   name: 'Heavy',       dmg: 1.30, rpm: 0.78, mag: 0.85, range: 1.12, spread: 1.05, recoil: 1.45, tint: 0x30353a, bulk: 1.18 },
+  { id: 'light',   name: 'Lightweight', dmg: 0.90, rpm: 1.18, mag: 0.90, range: 0.95, spread: 1.10, recoil: 0.78, tint: 0x555c63, bulk: 0.86 },
+  { id: 'drum',    name: 'Drum',        dmg: 1.00, rpm: 1.00, mag: 2.20, range: 1.00, spread: 1.08, recoil: 1.10, tint: 0x353b41, drum: true },
+  { id: 'burst',   name: 'Burst',       dmg: 1.08, rpm: 1.30, mag: 1.00, range: 1.05, spread: 0.90, recoil: 1.05, tint: 0x2f343a, burst: 3 },
+  { id: 'rapid',   name: 'Rapid',       dmg: 0.86, rpm: 1.55, mag: 1.20, range: 0.92, spread: 1.20, recoil: 1.12, tint: 0x3a4148 },
+  { id: 'vet',     name: 'Veteran',     dmg: 1.18, rpm: 1.05, mag: 1.05, range: 1.15, spread: 0.78, recoil: 0.86, tint: 0x4a3f30 },
+  { id: 'proto',   name: 'Prototype',   dmg: 1.24, rpm: 1.12, mag: 1.10, range: 1.20, spread: 0.70, recoil: 0.90, tint: 0x2b3a44, glow: 0x39c9ff },
+  { id: 'gold',    name: 'Gilded',      dmg: 1.15, rpm: 1.05, mag: 1.00, range: 1.10, spread: 0.82, recoil: 0.90, tint: 0xc9a227, shiny: true },
+  { id: 'rust',    name: 'Salvaged',    dmg: 0.82, rpm: 0.90, mag: 0.85, range: 0.80, spread: 1.45, recoil: 1.25, tint: 0x6a4a34 },
+  { id: 'urban',   name: 'Urban',       dmg: 1.00, rpm: 1.02, mag: 1.00, range: 0.98, spread: 0.96, recoil: 0.96, tint: 0x8d949b },
+  { id: 'night',   name: 'Nightstalker', dmg: 1.05, rpm: 1.04, mag: 1.05, range: 1.02, spread: 0.84, recoil: 0.88, tint: 0x14181c, suppressor: true, quiet: true },
+  { id: 'apex',    name: 'Apex',        dmg: 1.35, rpm: 1.15, mag: 1.25, range: 1.30, spread: 0.60, recoil: 0.75, tint: 0x191d21, scope: true, rail: true, glow: 0xff8a2b },
+];
+
+/** The full catalogue: every family in every pattern. */
+const WEAPONS = [];
+const BY_ID = new Map();
+
+for (const fam of WEAPON_FAMILIES) {
+  for (const pat of WEAPON_PATTERNS) {
+    const id = fam.id + '_' + pat.id;
+    const w = {
+      id,
+      family: fam.id,
+      pattern: pat.id,
+      name: pat.id === 'std' ? fam.name : pat.name + ' ' + fam.name,
+      cls: fam.cls,
+      damage: Math.round(fam.dmg * pat.dmg),
+      rpm: Math.round(fam.rpm * pat.rpm),
+      mag: Math.max(1, Math.round(fam.mag * pat.mag)),
+      range: Math.round(fam.range * pat.range),
+      spread: fam.spread * pat.spread,
+      recoil: fam.recoil * pat.recoil,
+      reload: +(fam.reload * lerpv(1, 0.85, pat.mag > 1 ? 0 : 1)).toFixed(2),
+      auto: !!fam.auto,
+      burst: pat.burst || 0,
+      pellets: fam.pellets,
+      weight: +(fam.weight * (pat.bulk || 1)).toFixed(1),
+      quiet: !!pat.quiet,
+      blast: fam.blast || 0,
+      spinUp: fam.spinUp || 0,
+      fam, pat,
+    };
+    w.dps = Math.round(w.damage * w.pellets * (w.rpm / 60));
+    WEAPONS.push(w);
+    BY_ID.set(id, w);
+  }
+}
+
+function weaponById(id) { return BY_ID.get(id) || null; }
+
+/** Best match for a spoken name, e.g. "gilded sniper" or "ak" -> closest gun. */
+function findWeapon(query) {
+  const q = String(query || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!q) return null;
+  const words = q.split(' ').filter(Boolean);
+  let best = null, bestScore = 0;
+  for (const w of WEAPONS) {
+    const name = w.name.toLowerCase();
+    let score = 0;
+    if (name === q) score = 100;
+    else if (name.includes(q)) score = 60 + q.length;
+    else {
+      for (const word of words) {
+        if (word.length < 2) continue;
+        if (name.includes(word)) score += 8 + word.length;
+        if (w.cls.toLowerCase() === word) score += 6;
+      }
+      // Prefer the plain pattern when only the family was named.
+      if (w.pattern === 'std') score += 3;
+    }
+    if (score > bestScore) { bestScore = score; best = w; }
+  }
+  return bestScore >= 8 ? best : null;
+}
+
+// ---------------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------------
+const meshCache = new Map();
+
+/** Build (or fetch) the mesh for a gun. Shared — clone before parenting. */
+function weaponMesh(w) {
+  if (meshCache.has(w.id)) return meshCache.get(w.id);
+  const fam = w.fam, pat = w.pat;
+  const lenK = pat.len || 1;
+  const bulk = pat.bulk || 1;
+
+  const body = paintedMaterial(pat.tint, pat.shiny ? 0.18 : 0.62);
+  const dark = metalMaterial(pat.shiny ? 0xd8b23a : 0x24282c, pat.shiny ? 0.15 : 0.42);
+  const grip = paintedMaterial(pat.id === 'vet' ? 0x53402b : 0x1b1e21, 0.78);
+
+  const group = new THREE.Group();
+  const add = (mat, geo) => { const m = new THREE.Mesh(geo, mat); m.castShadow = false; m.receiveShadow = false; group.add(m); };
+
+  const bodyLen = fam.body * lenK;
+  const barrelLen = fam.barrel * lenK;
+  const h = 0.075 * bulk;
+
+  // Receiver.
+  add(body, transformed(boxUV(bodyLen, h, 0.055 * bulk, 1, 1), bodyLen * 0.5, 0, 0, 0));
+  // Barrel. The cylinder helper builds along Y, so every tube here is laid
+  // along X by hand — the gun points down its own +X axis.
+  const bore = (fam.bore || 0.011) * bulk;
+  const barrelGeo = cylinderUV(bore, bore * 1.08, barrelLen, fam.rotary ? 12 : 8, 1, 1);
+  barrelGeo.rotateZ(Math.PI / 2);
+  barrelGeo.translate(bodyLen + barrelLen * 0.5, 0.004, 0);
+  add(dark, barrelGeo);
+
+  if (fam.rotary) {
+    // Minigun: a ring of barrels around the axis.
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const g = cylinderUV(bore * 0.7, bore * 0.7, barrelLen, 6, 1, 1);
+      g.rotateZ(Math.PI / 2);
+      g.translate(bodyLen + barrelLen * 0.5, 0.004 + Math.sin(a) * 0.035, Math.cos(a) * 0.035);
+      add(dark, g);
+    }
+  }
+
+  // Grip.
+  const gripGeo = boxUV(0.045, 0.13 * bulk, 0.04, 1, 1);
+  gripGeo.translate(bodyLen * (fam.bullpup ? 0.28 : 0.20), -0.095 * bulk, 0);
+  add(grip, gripGeo);
+
+  // Fore grip.
+  if (fam.grip) {
+    const fg = boxUV(0.04, 0.085, 0.036, 1, 1);
+    fg.translate(bodyLen + barrelLen * 0.32, -0.062, 0);
+    add(grip, fg);
+  }
+
+  // Stock.
+  if (fam.stock) {
+    const st = boxUV(0.17 * lenK, 0.075, 0.045, 1, 1);
+    st.translate(-0.085 * lenK, -0.012, 0);
+    add(grip, st);
+  }
+
+  // Magazine, or a drum, or a revolver cylinder.
+  if (fam.cylinder) {
+    const cyl = cylinderUV(0.035, 0.035, 0.05, 10, 1, 1);
+    cyl.rotateZ(Math.PI / 2);
+    cyl.translate(bodyLen * 0.62, -0.006, 0);
+    add(dark, cyl);
+  } else if (pat.drum) {
+    const drum = cylinderUV(0.072, 0.072, 0.05, 14, 1, 1);
+    drum.rotateX(Math.PI / 2);
+    drum.translate(bodyLen * 0.52, -0.105, 0);
+    add(dark, drum);
+  } else if (w.mag > 1) {
+    const magLen = clampv(0.06 + w.mag * 0.0022, 0.07, 0.21);
+    const mg = boxUV(0.035, magLen, 0.05, 1, 1);
+    mg.translate(bodyLen * (fam.bullpup ? 0.74 : 0.52), -0.04 - magLen * 0.5, 0);
+    add(dark, mg);
+  }
+
+  // Optic.
+  if (fam.scope || pat.scope) {
+    const tube = cylinderUV(0.021, 0.021, fam.scope ? 0.20 : 0.11, 10, 1, 1);
+    tube.rotateZ(Math.PI / 2);
+    tube.translate(bodyLen * 0.58, h * 0.5 + 0.03, 0);
+    add(dark, tube);
+    const mount = boxUV(0.03, 0.03, 0.03, 1, 1);
+    mount.translate(bodyLen * 0.58, h * 0.5 + 0.012, 0);
+    add(dark, mount);
+  } else if (pat.rail) {
+    const rail = boxUV(bodyLen * 0.5, 0.012, 0.03, 1, 1);
+    rail.translate(bodyLen * 0.6, h * 0.5 + 0.007, 0);
+    add(dark, rail);
+  }
+
+  // Suppressor.
+  if (pat.suppressor) {
+    const sup = cylinderUV(bore * 2.6, bore * 2.6, 0.16, 10, 1, 1);
+    sup.rotateZ(Math.PI / 2);
+    sup.translate(bodyLen + barrelLen + 0.08, 0.004, 0);
+    add(dark, sup);
+  } else if (fam.muzzle) {
+    const brake = cylinderUV(bore * 2.2, bore * 2.2, 0.06, 8, 1, 1);
+    brake.rotateZ(Math.PI / 2);
+    brake.translate(bodyLen + barrelLen + 0.03, 0.004, 0);
+    add(dark, brake);
+  }
+
+  if (fam.bipod) {
+    for (const side of [-1, 1]) {
+      const leg = boxUV(0.012, 0.11, 0.012, 1, 1);
+      leg.translate(bodyLen + barrelLen * 0.6, -0.075, side * 0.03);
+      add(dark, leg);
+    }
+  }
+
+  // A prototype or apex pattern glows a little.
+  if (pat.glow) {
+    const glowMat = new THREE.MeshStandardMaterial({
+      color: 0x101418, emissive: pat.glow, emissiveIntensity: 2.2, roughness: 0.4,
+    });
+    const strip = boxUV(bodyLen * 0.6, 0.008, 0.01, 1, 1);
+    strip.translate(bodyLen * 0.55, 0.004, 0.031);
+    add(glowMat, strip);
+  }
+
+  // Where the muzzle actually is, for flashes and tracers.
+  group.userData.muzzle = new THREE.Vector3(
+    bodyLen + barrelLen + (pat.suppressor ? 0.16 : 0.02), 0.004, 0
+  );
+  group.userData.weaponId = w.id;
+  meshCache.set(w.id, group);
+  return group;
+}
+
+const WEAPON_CLASSES = [...new Set(WEAPON_FAMILIES.map((f) => f.cls))];
+
+return { weaponById, findWeapon, weaponMesh, WEAPON_FAMILIES, WEAPON_PATTERNS, WEAPONS, WEAPON_CLASSES };
 })();
 
 __M["world/buildings"] = (function(){
@@ -64434,7 +65294,7 @@ const Props = __M["world/props"];
 const { GeometryBatcher, groundPlane, ribbon, transformed, boxUV, disposeGroup, mergeGeometries } = __M["world/geomutils"];
 const { asphaltMaterial, concreteMaterial, grassMaterial, dirtMaterial, sandMaterial, roadMaterial, sidewalkMaterial, waterMaterial, paintedMaterial, setFacadeNightFactor, setWetness, setGroundFrost, refreshGroundFrost, updateWaterTime, metalMaterial } = __M["world/materials"];
 const { makeRng, fbm2, ridged2, clamp01, clampv, lerpv, smooth01, hash2, TAU } = __M["core/math"];
-const { settings } = __M["core/settings"];
+const { settings, perf } = __M["core/settings"];
 
 const CHUNK_SIZE = 120;
 
@@ -64577,7 +65437,8 @@ class World {
     // Draw distance governs fog and the far plane; geometry streaming is capped
     // well below it, because buildings past ~600m cost chunks and add nothing
     // the horizon haze doesn't already give you.
-    const streamDistance = Math.min(preset.drawDistance, 620);
+    // The governor trims how far we stream before it touches resolution.
+    const streamDistance = Math.min(preset.drawDistance, 620) * lerpv(0.55, 1, perf.load);
     const radius = Math.ceil(streamDistance / CHUNK_SIZE);
     const ccx = Math.floor(focusX / CHUNK_SIZE);
     const ccz = Math.floor(focusZ / CHUNK_SIZE);
@@ -64621,7 +65482,7 @@ class World {
     for (const [key, chunk] of this.chunks) {
       if (!wanted.has(key)) {
         const dx = chunk.centerX - focusX, dz = chunk.centerZ - focusZ;
-        if (Math.hypot(dx, dz) > streamDistance + CHUNK_SIZE * 2) this.disposeChunk(key);
+        if (Math.hypot(dx, dz) > streamDistance + CHUNK_SIZE) this.disposeChunk(key);
       }
     }
 
@@ -66558,6 +67419,7 @@ class Player {
     this.swimSpeed = 2.2;
     this.jumpVelocity = 5.4;
     this.speedMultiplier = 1;
+    this.strength = 1;
     this.jumpMultiplier = 1;
 
     this.cameraMode = settings.get('cameraMode');
@@ -66621,8 +67483,12 @@ class Player {
   update(dt, input, npcManager, trafficManager) {
     // --- Look ---
     if (!input.suspended) {
+      // One convention for the whole game: forward is (sin yaw, cos yaw) and
+      // screen-right is cross(forward, up) = (-cos yaw, sin yaw), so turning
+      // right lowers yaw. Positive pitch raises the view. A drag to the right
+      // turns right; a drag downward looks down.
       this.yaw = wrapAngle(this.yaw - input.look.x);
-      this.pitch = clampv(this.pitch + input.look.y, -1.32, 1.28);
+      this.pitch = clampv(this.pitch - input.look.y, -1.32, 1.28);
     }
 
     // Flat on your back: you can still look around, nothing else.
@@ -66660,7 +67526,7 @@ class Player {
     const mx = input.move.x, my = input.move.y;
     const moveLen = Math.hypot(mx, my);
     const camForwardX = Math.sin(this.yaw), camForwardZ = Math.cos(this.yaw);
-    const camRightX = Math.cos(this.yaw), camRightZ = -Math.sin(this.yaw);
+    const camRightX = -Math.cos(this.yaw), camRightZ = Math.sin(this.yaw);
     let wishX = camForwardX * my + camRightX * mx;
     let wishZ = camForwardZ * my + camRightZ * mx;
     const wishLen = Math.hypot(wishX, wishZ);
@@ -66924,7 +67790,7 @@ class Player {
         _v.addScaledVector(_v2.set(Math.sin(this.inVehicle.heading), 0, Math.cos(this.inVehicle.heading)), 0.22);
       }
       cam.position.copy(_v);
-      cam.rotation.set(this.pitch + shakeY, this.yaw + shakeX, 0, 'YXZ');
+      cam.rotation.set(this.pitch + shakeY, this.yaw + Math.PI + shakeX, 0, 'YXZ');
     } else {
       const anchor = _v.set(this.position.x, this.position.y + this.camHeight * (this.crouching ? 0.7 : 1), this.position.z);
       if (this.inVehicle) {
@@ -66938,7 +67804,7 @@ class Player {
       const offZ = Math.cos(this.yaw) * Math.cos(this.pitch);
       _v2.set(anchor.x - offX * dist, anchor.y - offY * dist + 0.25, anchor.z - offZ * dist);
       // Shoulder offset so the character isn't dead centre.
-      const rightX = Math.cos(this.yaw), rightZ = -Math.sin(this.yaw);
+      const rightX = -Math.cos(this.yaw), rightZ = Math.sin(this.yaw);
       const shoulder = this.inVehicle ? 0 : this.camOffsetX;
       _v2.x += rightX * shoulder;
       _v2.z += rightZ * shoulder;
@@ -67025,6 +67891,429 @@ class Player {
 }
 
 return { Player };
+})();
+
+__M["player/arsenal"] = (function(){
+// T10 World - holding a gun and using it. Equip, fire, reload, and what the
+// bullet does when it arrives.
+//
+// Bullets are hitscan: one ray from the camera, cone spread from the weapon's
+// accuracy, tested against people first and then the world. Heavy weapons add
+// a blast radius. Everything you can see — flash, tracer, shells — lives in
+// one small pool so firing a minigun doesn't allocate.
+const THREE = __THREE;
+const { weaponById, weaponMesh, WEAPONS } = __M["entities/weapons"];
+const { clamp01, clampv, lerpv, makeRng, TAU } = __M["core/math"];
+const { audio } = __M["core/audio"];
+const { settings } = __M["core/settings"];
+
+const TRACERS = 24;
+
+class Arsenal {
+  constructor(game) {
+    this.game = game;
+    this.rng = makeRng(0x7c1a99);
+    this.weapon = null;
+    this.ammo = 0;
+    this.reserve = 0;
+    this.cooldown = 0;
+    this.reloading = 0;
+    this.spin = 0;
+    this.burstLeft = 0;
+    this.shotsFired = 0;
+    this.hits = 0;
+    this.infiniteAmmo = true;   // T10 is not going to make you count rounds.
+
+    this.group = new THREE.Group();
+    this.group.name = 'arsenal';
+    game.scene.add(this.group);
+
+    this.buildEffects();
+  }
+
+  get armed() { return !!this.weapon; }
+
+  buildEffects() {
+    // Muzzle flash: two crossed additive quads.
+    const flashMat = new THREE.MeshBasicMaterial({
+      color: 0xffd9a0, transparent: true, opacity: 0, depthWrite: false,
+      blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    });
+    this.flashMat = flashMat;
+    this.flash = new THREE.Group();
+    for (let i = 0; i < 2; i++) {
+      const q = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.42), flashMat);
+      q.rotation.x = i * Math.PI / 2;
+      this.flash.add(q);
+    }
+    this.flash.visible = false;
+    this.group.add(this.flash);
+    this.flashLight = new THREE.PointLight(0xffc478, 0, 14, 2);
+    this.group.add(this.flashLight);
+
+    // Tracers: a pool of thin stretched boxes.
+    const tracerGeo = new THREE.BoxGeometry(1, 0.016, 0.016);
+    tracerGeo.translate(0.5, 0, 0);
+    const tracerMat = new THREE.MeshBasicMaterial({
+      color: 0xffd489, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending,
+    });
+    this.tracerMesh = new THREE.InstancedMesh(tracerGeo, tracerMat, TRACERS);
+    this.tracerMesh.count = 0;
+    this.tracerMesh.frustumCulled = false;
+    this.tracerMesh.matrixAutoUpdate = false;
+    this.group.add(this.tracerMesh);
+    this.tracers = [];
+    this._m = new THREE.Matrix4();
+    this._q = new THREE.Quaternion();
+    this._v = new THREE.Vector3();
+    this._v2 = new THREE.Vector3();
+    this._dir = new THREE.Vector3();
+  }
+
+  // -------------------------------------------------------------------------
+
+  /** Put a gun in your hands. Accepts an id or a weapon record. */
+  equip(w) {
+    const weapon = typeof w === 'string' ? weaponById(w) : w;
+    if (!weapon) return null;
+    this.unequip();
+    this.weapon = weapon;
+    this.ammo = weapon.mag;
+    this.reserve = weapon.mag * 6;
+    this.reloading = 0;
+    this.spin = 0;
+
+    this.view = weaponMesh(weapon).clone(true);
+    this.muzzleLocal = weaponMesh(weapon).userData.muzzle.clone();
+    this.game.scene.add(this.view);
+    this.updateViewModel(0, true);
+    return weapon;
+  }
+
+  unequip() {
+    if (this.view) { this.game.scene.remove(this.view); this.view = null; }
+    this.weapon = null;
+    this.flash.visible = false;
+    this.flashLight.intensity = 0;
+    return true;
+  }
+
+  /** Where the muzzle is in the world right now. */
+  muzzleWorld(out) {
+    out = out || new THREE.Vector3();
+    if (this.view) out.copy(this.muzzleLocal).applyMatrix4(this.view.matrixWorld);
+    else out.copy(this.game.camera.position);
+    return out;
+  }
+
+  /**
+   * The gun is carried on the camera: down and to the right in first person,
+   * pulled in beside the shoulder in third. That keeps it pointing exactly
+   * where the shot goes, which matters more than where the hands are.
+   */
+  updateViewModel(dt, snap) {
+    if (!this.view) return;
+    const cam = this.game.camera;
+    const p = this.game.player;
+    const first = p.cameraMode === 'first';
+    const kick = this.kick || 0;
+
+    const right = this._v.set(1, 0, 0).applyQuaternion(cam.quaternion);
+    const up = this._v2.set(0, 1, 0).applyQuaternion(cam.quaternion);
+    const fwd = this._dir.set(0, 0, -1).applyQuaternion(cam.quaternion);
+
+    const sway = Math.sin(p.human.animator.phase * TAU) * clamp01(p.speed / p.walkSpeed) * 0.012;
+    // First person hangs it off the camera; third person puts it where the
+    // character's hands are, or it floats out beside them three metres away.
+    const target = first
+      ? cam.position.clone()
+        .addScaledVector(right, 0.17)
+        .addScaledVector(up, -0.16 + sway)
+        .addScaledVector(fwd, 0.26 - kick * 0.09)
+      : new THREE.Vector3(p.position.x, p.position.y + p.eyeHeight * 0.74 + sway, p.position.z)
+        .addScaledVector(right, 0.34)
+        .addScaledVector(fwd, 0.30 - kick * 0.09);
+
+    if (snap) this.view.position.copy(target);
+    else this.view.position.lerp(target, clamp01(dt * 22));
+    this.view.quaternion.copy(cam.quaternion);
+    // The model points down its own +X and the camera looks down -Z, so the
+    // gun's frame turns +90° about Y: R_y(90°)·(1,0,0) = (0,0,-1). Turning it
+    // the other way pointed the barrel out of the back of your head.
+    this.view.rotateY(Math.PI / 2);
+    this.view.rotateZ(kick * 0.5);
+    this.view.updateMatrixWorld();
+  }
+
+  // -------------------------------------------------------------------------
+
+  /** @returns a short string for T10 to say, or null if nothing happened. */
+  pullTrigger() {
+    const w = this.weapon;
+    if (!w) return null;
+    if (this.reloading > 0) return null;
+    if (this.cooldown > 0) return null;
+    if (this.ammo <= 0) {
+      if (this.infiniteAmmo) { this.reload(); return null; }
+      audio.dryFire();
+      this.cooldown = 0.35;
+      return 'Empty. Say "T10 reload".';
+    }
+    // A minigun has to wind up before it will do anything.
+    if (w.spinUp && this.spin < 1) return null;
+
+    this.fireOnce();
+    if (w.burst) this.burstLeft = w.burst - 1;
+    return null;
+  }
+
+  fireOnce() {
+    const w = this.weapon;
+    const g = this.game;
+    const cam = g.camera;
+    this.ammo--;
+    this.shotsFired++;
+    this.cooldown = 60 / Math.max(1, w.rpm);
+
+    const origin = cam.position.clone();
+    const base = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+
+    let anyHit = null;
+    for (let p = 0; p < w.pellets; p++) {
+      const dir = base.clone();
+      if (w.spread > 0) {
+        const a = this.rng() * TAU;
+        const r = Math.sqrt(this.rng()) * w.spread * (this.aiming ? 0.45 : 1);
+        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cam.quaternion);
+        const up = new THREE.Vector3(0, 1, 0).applyQuaternion(cam.quaternion);
+        dir.addScaledVector(right, Math.cos(a) * r).addScaledVector(up, Math.sin(a) * r).normalize();
+      }
+      const hit = this.castBullet(origin, dir, w.range);
+      if (hit && !anyHit) anyHit = hit;
+      this.addTracer(this.muzzleWorld(), hit ? hit.point : origin.clone().addScaledVector(dir, w.range));
+    }
+
+    if (w.blast && anyHit) this.explode(anyHit.point, w.blast, w.damage);
+
+    // Flash, kick, noise.
+    this.flashTimer = w.quiet ? 0.02 : 0.055;
+    this.kick = Math.min(1.4, (this.kick || 0) + w.recoil * 0.12);
+    const p = g.player;
+    p.pitch = clampv(p.pitch + w.recoil * 0.0075 * (this.aiming ? 0.6 : 1), -1.32, 1.28);
+    p.yaw += (this.rng() - 0.5) * w.recoil * 0.004;
+    p.camShake = Math.min(1.4, p.camShake + w.recoil * 0.04);
+    audio.gunshot({ heft: clamp01(w.damage / 160), quiet: w.quiet });
+  }
+
+  /** One ray: people first, then the world. */
+  castBullet(origin, dir, maxDist) {
+    const g = this.game;
+    let best = null, bestT = maxDist;
+
+    // People. Each is a 0.42m capsule from the ground to the top of the head.
+    if (g.npcs) {
+      for (const npc of g.npcs.npcs) {
+        if (npc.indoors) continue;
+        // Someone on the ground is still there to hit — just a lot flatter.
+        const t = raySegment(origin, dir, npc.position, npc.downed > 0 ? 0.55 : 1.75, npc.downed > 0 ? 0.6 : 0.42, bestT);
+        if (t != null && t < bestT) {
+          bestT = t;
+          best = { npc, t, point: origin.clone().addScaledVector(dir, t) };
+        }
+      }
+    }
+
+    // World: march the collider hash. Coarse, but the city is boxes.
+    const step = 0.55;
+    const probe = new THREE.Vector3();
+    for (let t = 0.6; t < Math.min(bestT, maxDist); t += step) {
+      probe.copy(origin).addScaledVector(dir, t);
+      const ground = g.world.groundAt(probe.x, probe.z);
+      if (probe.y <= ground) {
+        if (t < bestT) { bestT = t; best = { world: true, t, point: probe.clone().setY(ground + 0.01), surface: g.world.surfaceAt(probe.x, probe.z) }; }
+        break;
+      }
+      const c = probe.clone();
+      if (g.world.resolveCollision(c, 0.05)) {
+        if (t < bestT) { bestT = t; best = { world: true, t, point: probe.clone(), surface: 'concrete' }; }
+        break;
+      }
+    }
+
+    if (best && best.npc) this.hitPerson(best.npc, dir, best.point);
+    else if (best) this.hitWorld(best);
+    return best;
+  }
+
+  hitPerson(npc, dir, point) {
+    const w = this.weapon;
+    this.hits++;
+    const g = this.game;
+    // A head shot is anything in the top 22cm.
+    const head = point.y > npc.position.y + 1.45;
+    const dmg = w.damage * (head ? 2.2 : 1) * (g.player.strength || 1);
+    npc.hitPoints = (npc.hitPoints == null ? 100 : npc.hitPoints) - dmg;
+    if (g.gore) {
+      g.gore.hit(point.x, point.y - 0.9, point.z, clamp01(dmg / 90) * (head ? 1 : 0.8), dir.x, dir.z);
+      if (head) g.gore.spray(point.x, point.y, point.z, 30, dir.x, dir.z, 1);
+    }
+    if (npc.hitPoints <= 0) {
+      npc.hitPoints = 100;
+      npc.downed = head ? 999 : 14 + this.rng() * 10;
+      npc.combatTarget = null;
+      if (g.gore) g.gore.pool(npc.position.x, npc.position.z, head ? 2.1 : 1.5);
+      if (g.apocalypse) g.apocalypse.casualties++;
+    } else {
+      npc.downed = Math.max(npc.downed, 1.2);
+    }
+  }
+
+  hitWorld(hit) {
+    if (this.game.gore) {
+      // Dust and chips, reusing the droplet pool with a grey tint would need a
+      // second buffer; a small mark is enough and costs nothing.
+    }
+    audio.bulletImpact(hit.surface);
+  }
+
+  explode(point, radius, damage) {
+    const g = this.game;
+    audio.explosion(radius);
+    if (g.atmosphere) g.atmosphere.lightning = Math.max(g.atmosphere.lightning || 0, 0.7);
+    if (g.npcs) {
+      for (const npc of g.npcs.npcs) {
+        const d = npc.position.distanceTo(point);
+        if (d > radius) continue;
+        npc.downed = Math.max(npc.downed, lerpv(16, 4, d / radius));
+        if (g.gore) {
+          g.gore.hit(npc.position.x, npc.position.y, npc.position.z, 1, (npc.position.x - point.x) / (d || 1), (npc.position.z - point.z) / (d || 1));
+          g.gore.pool(npc.position.x, npc.position.z, 1.8);
+        }
+        if (g.apocalypse) g.apocalypse.casualties++;
+      }
+    }
+    const p = g.player;
+    const pd = p.position.distanceTo(point);
+    if (pd < radius) { p.camShake = 1.5; p.knockDown(4, 'blast'); }
+  }
+
+  reload() {
+    const w = this.weapon;
+    if (!w || this.reloading > 0 || this.ammo >= w.mag) return false;
+    this.reloading = w.reload;
+    audio.reloadClick('out');
+    return true;
+  }
+
+  addTracer(from, to) {
+    if (this.tracers.length >= TRACERS) this.tracers.shift();
+    this.tracers.push({ from: from.clone(), to: to.clone(), life: 0.07 });
+  }
+
+  // -------------------------------------------------------------------------
+  update(dt, input) {
+    // Tracers fade fast.
+    for (let i = this.tracers.length - 1; i >= 0; i--) {
+      this.tracers[i].life -= dt;
+      if (this.tracers[i].life <= 0) this.tracers.splice(i, 1);
+    }
+    const n = this.tracers.length;
+    for (let i = 0; i < n; i++) {
+      const t = this.tracers[i];
+      const d = this._dir.copy(t.to).sub(t.from);
+      const len = d.length() || 0.001;
+      d.divideScalar(len);
+      this._q.setFromUnitVectors(new THREE.Vector3(1, 0, 0), d);
+      this._m.compose(t.from, this._q, new THREE.Vector3(len, 1, 1));
+      this.tracerMesh.setMatrixAt(i, this._m);
+    }
+    this.tracerMesh.count = n;
+    if (n) this.tracerMesh.instanceMatrix.needsUpdate = true;
+
+    if (!this.weapon) { this.flash.visible = false; this.flashLight.intensity = 0; return; }
+    const w = this.weapon;
+
+    if (this.cooldown > 0) this.cooldown -= dt;
+    this.kick = Math.max(0, (this.kick || 0) - dt * 6);
+
+    if (this.reloading > 0) {
+      this.reloading -= dt;
+      if (this.reloading <= 0) {
+        const want = w.mag - this.ammo;
+        const take = this.infiniteAmmo ? want : Math.min(want, this.reserve);
+        this.ammo += take;
+        if (!this.infiniteAmmo) this.reserve -= take;
+        audio.reloadClick('in');
+      }
+    }
+
+    // Trigger. Touch uses a dedicated button; on desktop it's the left mouse.
+    const held = input && (input.buttons.fire || (input.mouseLeft && !input.isTypingNow));
+    if (w.spinUp) {
+      this.spin = clamp01(this.spin + (held ? dt / w.spinUp : -dt / (w.spinUp * 0.7)));
+    }
+    if (this.burstLeft > 0 && this.cooldown <= 0) {
+      this.burstLeft--;
+      this.fireOnce();
+    } else if (held && (w.auto || !this.firedThisPress)) {
+      if (this.pullTrigger() === null && !w.auto) this.firedThisPress = true;
+    }
+    if (!held) this.firedThisPress = false;
+    if (!this.infiniteAmmo && this.ammo <= 0 && this.reloading <= 0) this.reload();
+
+    // Muzzle flash.
+    if (this.flashTimer > 0) {
+      this.flashTimer -= dt;
+      const m = this.muzzleWorld();
+      this.flash.position.copy(m);
+      this.flash.visible = true;
+      this.flash.rotation.z += 1.1;
+      const k = clamp01(this.flashTimer / 0.055);
+      this.flashMat.opacity = k * 0.9;
+      const s = lerpv(0.6, 1.5, clamp01(w.damage / 140)) * (0.7 + k * 0.6);
+      this.flash.scale.setScalar(s);
+      this.flashLight.position.copy(m);
+      this.flashLight.intensity = k * lerpv(3, 14, clamp01(w.damage / 160));
+    } else {
+      this.flash.visible = false;
+      this.flashLight.intensity = 0;
+    }
+
+    this.updateViewModel(dt, false);
+  }
+
+  status() {
+    if (!this.weapon) return 'You\'re empty-handed.';
+    const w = this.weapon;
+    return w.name + ' — ' + w.damage + ' damage, ' + w.rpm + ' rpm, ' + w.mag + ' round magazine, ' +
+      w.range + 'm, ' + (w.auto ? 'automatic' : w.burst ? w.burst + '-round burst' : 'semi-automatic') +
+      (w.quiet ? ', suppressed' : '') + '. ' + this.ammo + ' loaded.';
+  }
+}
+
+/**
+ * Ray against an upright capsule, returned as the distance along the ray.
+ * Cheap enough to run against every person on screen for every pellet.
+ */
+function raySegment(origin, dir, base, height, radius, maxT) {
+  // Work in the horizontal plane first, then check the height band.
+  const ox = origin.x - base.x, oz = origin.z - base.z;
+  const a = dir.x * dir.x + dir.z * dir.z;
+  if (a < 1e-6) return null;
+  const b = 2 * (ox * dir.x + oz * dir.z);
+  const c = ox * ox + oz * oz - radius * radius;
+  const disc = b * b - 4 * a * c;
+  if (disc < 0) return null;
+  const sq = Math.sqrt(disc);
+  let t = (-b - sq) / (2 * a);
+  if (t < 0.4) t = (-b + sq) / (2 * a);
+  if (t < 0.4 || t > maxT) return null;
+  const y = origin.y + dir.y * t;
+  if (y < base.y - 0.1 || y > base.y + height) return null;
+  return t;
+}
+
+return { Arsenal };
 })();
 
 __M["t10/emotes"] = (function(){
@@ -69313,6 +70602,292 @@ function extendRegistry5(R, add) {
 return { extendRegistry5 };
 })();
 
+__M["t10/commands6"] = (function(){
+// T10 World - command registry, part six. The armoury, the blood, the content
+// rating, and the rest of what people ask for once they have a gun.
+const { WEAPONS, WEAPON_FAMILIES, WEAPON_PATTERNS, WEAPON_CLASSES, findWeapon, weaponById } = __M["entities/weapons"];
+const { settings } = __M["core/settings"];
+const { clampv, plural } = __M["core/math"];
+
+function extendRegistry6(R, add) {
+  const arm = (ctx) => ctx.game.arsenal;
+
+  // ===== 46. The armoury ===================================================
+  // One command per family, so "T10 give me a shotgun" is a real command and
+  // not a fuzzy match, and one catch-all that can name any of the 400.
+  for (const fam of WEAPON_FAMILIES) {
+    const n = fam.name.toLowerCase();
+    add('gun_' + fam.id, 'Weapons',
+      ['give me a ' + n, 'i want a ' + n, 'spawn a ' + n, 'hand me a ' + n, 'get me a ' + n, n],
+      fam.name + ' — ' + fam.dmg + ' damage, ' + fam.rpm + ' rpm, ' + fam.mag + ' rounds.',
+      (ctx) => {
+        const a = arm(ctx);
+        if (!a) return 'No armoury loaded.';
+        const w = a.equip(fam.id + '_std');
+        return w.name + '. ' + w.damage + ' damage, ' + w.rpm + ' rpm, ' + w.mag + ' rounds, ' + w.range + 'm.';
+      });
+  }
+
+  add('gun_named', 'Weapons',
+    ['give me the', 'i want the', 'hand me the', 'give me a gun called', 'equip the'],
+    'Ask for any of the 400 guns by name.',
+    (ctx, m) => {
+      const a = arm(ctx);
+      if (!a) return 'No armoury loaded.';
+      const w = findWeapon(m.rest || '');
+      if (!w) return 'I don\'t have anything called "' + (m.rest || '') + '". Say "T10 what guns do you have".';
+      a.equip(w);
+      return w.name + '. ' + w.damage + ' damage, ' + w.rpm + ' rpm, ' + w.mag + ' rounds, ' + w.range + 'm.';
+    }, { capturesRest: true, priority: -1 });
+
+  add('gun_random', 'Weapons',
+    ['give me a gun', 'give me any gun', 'arm me', 'i want a gun', 'surprise me with a gun'],
+    'Any gun at all.',
+    (ctx) => {
+      const a = arm(ctx);
+      if (!a) return 'No armoury loaded.';
+      const w = WEAPONS[Math.floor(Math.random() * WEAPONS.length)];
+      a.equip(w);
+      return w.name + '. ' + w.damage + ' damage, ' + w.rpm + ' rpm, ' + w.mag + ' rounds.';
+    });
+  add('gun_best', 'Weapons',
+    ['give me the best gun', 'what is the strongest gun', 'give me the most powerful gun', 'best weapon'],
+    'The heaviest hitter in the armoury.',
+    (ctx) => {
+      const a = arm(ctx);
+      const w = WEAPONS.slice().sort((x, y) => y.damage * y.pellets - x.damage * x.pellets)[0];
+      if (a) a.equip(w);
+      return w.name + ' — ' + w.damage + ' a shot' + (w.pellets > 1 ? ' × ' + w.pellets + ' pellets' : '') + ', ' + w.range + 'm. Nothing hits harder.';
+    });
+  add('gun_fastest', 'Weapons',
+    ['give me the fastest gun', 'highest fire rate', 'give me the fastest firing gun'],
+    'The fastest-firing gun in the armoury.',
+    (ctx) => {
+      const a = arm(ctx);
+      const w = WEAPONS.slice().sort((x, y) => y.rpm - x.rpm)[0];
+      if (a) a.equip(w);
+      return w.name + ' — ' + w.rpm + ' rounds a minute. Hold on to it.';
+    });
+  add('gun_holster', 'Weapons',
+    ['put the gun away', 'holster', 'disarm me', 'i dont want a gun', 'drop the gun', 'unarm me'],
+    'Put the gun away.',
+    (ctx) => {
+      const a = arm(ctx);
+      if (!a || !a.armed) return 'You\'re already empty-handed.';
+      const was = a.weapon.name;
+      a.unequip();
+      return was + ' away.';
+    });
+  add('gun_reload', 'Weapons', ['reload', 'reload my gun', 'fill it up', 'new magazine'],
+    'Reload.',
+    (ctx) => {
+      const a = arm(ctx);
+      if (!a || !a.armed) return 'You\'re not holding anything.';
+      return a.reload() ? 'Reloading.' : 'It\'s already full.';
+    });
+  add('gun_what', 'Weapons', ['what am i holding', 'what gun is this', 'tell me about this gun', 'gun stats'],
+    'Ask about the gun in your hands.',
+    (ctx) => { const a = arm(ctx); return a ? a.status() : 'No armoury loaded.'; });
+  add('gun_count', 'Weapons', ['how many guns are there', 'how many guns do you have', 'what guns do you have'],
+    'Ask how big the armoury is.',
+    () => WEAPONS.length + ' guns — ' + WEAPON_FAMILIES.length + ' families in ' +
+      WEAPON_PATTERNS.length + ' patterns, across ' + WEAPON_CLASSES.length + ' classes: ' +
+      WEAPON_CLASSES.join(', ') + '. Name any of them, or say "T10 list the shotguns".');
+  for (const cls of WEAPON_CLASSES) {
+    const c = cls.toLowerCase();
+    add('gun_list_' + c, 'Weapons',
+      ['list the ' + c + 's', 'what ' + c + 's are there', 'show me the ' + c + 's'],
+      'List the ' + c + ' guns.',
+      () => {
+        const fams = WEAPON_FAMILIES.filter((f) => f.cls === cls).map((f) => f.name);
+        return cls + ': ' + fams.join(', ') + '. Each comes in ' + WEAPON_PATTERNS.length +
+          ' patterns — try "T10 give me an apex ' + fams[0].toLowerCase() + '".';
+      });
+  }
+  add('gun_patterns', 'Weapons', ['what patterns are there', 'list the gun patterns', 'what versions of guns'],
+    'List the gun patterns.',
+    () => WEAPON_PATTERNS.map((p) => p.name).join(', ') + '. Put any of those in front of any gun.');
+  add('gun_infinite', 'Weapons', ['give me infinite ammo', 'never run out of ammo', 'unlimited ammo'],
+    'Never run out.',
+    (ctx) => { const a = arm(ctx); if (a) a.infiniteAmmo = true; return 'You\'ll never run dry.'; });
+  add('gun_finite', 'Weapons', ['make ammo count', 'limited ammo', 'i want to run out of ammo'],
+    'Make ammunition finite.',
+    (ctx) => { const a = arm(ctx); if (a) a.infiniteAmmo = false; return 'Count your rounds now.'; });
+  add('gun_accuracy', 'Weapons', ['how am i shooting', 'what is my accuracy', 'how many shots have i fired'],
+    'Ask how your shooting is going.',
+    (ctx) => {
+      const a = arm(ctx);
+      if (!a || !a.shotsFired) return 'You haven\'t fired a shot.';
+      return a.shotsFired + ' fired, ' + a.hits + ' hits — ' + Math.round((a.hits / a.shotsFired) * 100) + '%.';
+    });
+  add('gun_arm_everyone', 'Weapons', ['arm everyone', 'give everyone a gun', 'everyone gets a gun'],
+    'Hand the whole street a gun — and see what they do with it.',
+    (ctx) => {
+      const a = ctx.apocalypse || ctx.game.apocalypse;
+      if (!a) return 'I can\'t reach the world right now.';
+      const n = a.makeHostile();
+      return n + ' armed and hostile. That was your idea.';
+    });
+
+  // ===== 47. Blood =========================================================
+  add('gore_more', 'World', ['more blood', 'more gore', 'make it bloodier', 'turn up the gore'],
+    'Turn the blood up.',
+    (ctx) => {
+      settings.set('goreLevel', Math.min(1, settings.get('goreLevel') + 0.3));
+      return 'Gore at ' + Math.round(settings.get('goreLevel') * 100) + '%.';
+    });
+  add('gore_less', 'World', ['less blood', 'less gore', 'tone down the gore', 'turn down the gore'],
+    'Turn the blood down.',
+    (ctx) => {
+      settings.set('goreLevel', Math.max(0, settings.get('goreLevel') - 0.3));
+      return 'Gore at ' + Math.round(settings.get('goreLevel') * 100) + '%.';
+    });
+  add('gore_clean', 'World', ['clean up the blood', 'wash the streets', 'clear the blood', 'clean the city'],
+    'Wash the streets down.',
+    (ctx) => { if (ctx.game.gore) ctx.game.gore.clear(); return 'Streets are clean. For now.'; });
+  add('gore_off', 'World', ['no blood', 'turn off the blood', 'no gore'],
+    'No blood at all.',
+    () => { settings.set('goreLevel', 0); return 'No blood.'; });
+
+  // ===== 48. Content rating ================================================
+  add('rating_18', 'Settings', ['set the rating to 18', 'eighteen plus', 'make it 18 plus', 'full violence', 'adult mode'],
+    'Full violence — the default.',
+    () => { settings.setMaturity(18); return 'Rated 18. Violence and gore in full, which is how it ships.'; });
+  add('rating_16', 'Settings', ['set the rating to 16', 'sixteen plus', 'make it 16 plus', 'tone it down', 'teen mode'],
+    'Toned-down violence.',
+    () => { settings.setMaturity(16); return 'Rated 16. Same world, much less blood.'; });
+  add('rating_what', 'Settings', ['what rating is this', 'what is the rating', 'how violent is this'],
+    'Ask what the content rating is set to.',
+    () => 'Rated ' + settings.get('maturity') + ', gore at ' + Math.round(settings.get('goreLevel') * 100) +
+      '%. Say "T10 set the rating to 16" to tone it down.');
+
+  // ===== 49. Twenty more things to ask for =================================
+  add('perf_uncap', 'Settings', ['stop the game adjusting itself', 'lock the quality', 'stop auto quality'],
+    'Stop the game trimming itself to hold the frame rate.',
+    (ctx) => { settings.set('autoQuality', false); return 'Locked. It won\'t trim itself now — if it stutters, that\'s on you.'; });
+  add('perf_auto_on', 'Settings', ['adjust yourself', 'keep it smooth', 'turn auto quality back on'],
+    'Let the game trim itself to hold the frame rate.',
+    (ctx) => { settings.set('autoQuality', true); return 'I\'ll keep it smooth.'; });
+  add('world_bodies', 'Questions', ['how many people have gone down', 'what is the body count', 'how many casualties'],
+    'Ask the body count.',
+    (ctx) => {
+      const a = ctx.apocalypse || ctx.game.apocalypse;
+      const n = a ? (a.casualties || 0) : 0;
+      return n ? n + ' ' + plural('person', n) + ' put on the ground so far.' : 'Nobody\'s gone down yet.';
+    });
+  add('time_bullet', 'Powers', ['slow down time', 'bullet time', 'slow motion', 'make everything slow'],
+    'Slow the world down.',
+    (ctx) => { ctx.game.timeScale = 0.35; return 'Everything slows down. Say "T10 normal speed" to come out of it.'; });
+  add('time_normal_speed', 'Powers', ['normal speed', 'stop slow motion', 'speed back up', 'end bullet time'],
+    'Back to normal speed.',
+    (ctx) => { ctx.game.timeScale = 1; return 'Normal speed.'; });
+  add('time_fast', 'Powers', ['speed everything up', 'fast forward the world', 'double speed'],
+    'Run the world fast.',
+    (ctx) => { ctx.game.timeScale = 2; return 'Double speed. Hold on.'; });
+  add('crowd_watch', 'Crowd', ['make everyone watch me', 'everyone look at me', 'all eyes on me'],
+    'Everyone turns and stares.',
+    (ctx) => {
+      let n = 0;
+      for (const npc of ctx.npcs.npcs) { if (npc.indoors) continue; npc.lookTarget = ctx.player.position; npc.controlled = 'freeze'; n++; }
+      return n + ' pairs of eyes. Say "T10 calm everyone down" when it gets uncomfortable.';
+    });
+  add('crowd_scatter', 'Crowd', ['scatter everyone', 'send them all away', 'clear the street'],
+    'Send everyone off in different directions.',
+    (ctx) => {
+      const a = ctx.apocalypse || ctx.game.apocalypse;
+      let n = 0;
+      for (const npc of ctx.npcs.npcs) { if (npc.indoors) continue; if (a) a.panic(npc); n++; }
+      return n + ' scattering.';
+    });
+  add('me_bulletproof', 'Powers', ['make me bulletproof', 'bullets bounce off me', 'nothing can shoot me'],
+    'Bullets stop mattering.',
+    (ctx) => { ctx.player.immortal = true; return 'Bulletproof. Nothing lands.'; });
+  add('me_strong', 'Powers', ['make me strong', 'give me strength', 'make me hit harder'],
+    'Hit much harder.',
+    (ctx) => { ctx.player.strength = 4; return 'You hit four times as hard now.'; });
+  add('me_fast', 'Powers', ['make me fast', 'give me speed', 'let me move quickly'],
+    'Move much faster on foot.',
+    (ctx) => { ctx.player.speedMultiplier = 3; return 'Three times the pace.'; });
+  add('me_normal_speed', 'Powers', ['normal pace', 'stop me being fast', 'normal walking speed'],
+    'Back to a normal walk.',
+    (ctx) => { ctx.player.speedMultiplier = 1; return 'Normal pace.'; });
+  add('gun_headshots', 'Weapons', ['do headshots matter', 'how does damage work', 'how do i shoot'],
+    'Ask how shooting works.',
+    (ctx) => (ctx.game.input && ctx.game.input.isTouch
+      ? 'Aim with the drag, tap FIRE. Head shots do more than double. Nobody dies — they go down and get back up.'
+      : 'Click once to lock the mouse, then hold to fire. R reloads, right mouse steadies your aim. Head shots do more than double. Nobody dies — they go down and get back up.'));
+  add('gun_shoot_that', 'Weapons', ['shoot that person', 'take them down', 'drop them'],
+    'Put the nearest person on the ground.',
+    (ctx) => {
+      const npc = ctx.npcs.nearestNPC(ctx.player.position, 40);
+      if (!npc) return 'Nobody close enough.';
+      npc.downed = 12;
+      if (ctx.game.gore) {
+        ctx.game.gore.hit(npc.position.x, npc.position.y, npc.position.z, 1, 0, 1);
+        ctx.game.gore.pool(npc.position.x, npc.position.z, 1.6);
+      }
+      return npc.appearance.firstName + ' is down.';
+    });
+  add('world_quiet', 'World', ['make the city quiet', 'silence the city', 'empty the streets for a bit'],
+    'Everyone indoors, no traffic.',
+    (ctx) => {
+      ctx.npcs.densityScale = 0.15;
+      ctx.traffic.densityScale = 0;
+      ctx.traffic.clear(ctx.player.inVehicle);
+      return 'Gone quiet. Say "T10 make the streets packed" to bring it back.';
+    });
+  add('gun_akimbo', 'Weapons', ['give me two guns', 'akimbo', 'dual wield'],
+    'Ask T10 about dual wielding.',
+    (ctx) => {
+      const a = arm(ctx);
+      if (a) a.equip('machpist_rapid');
+      return 'One pair of hands, so one gun — but a Rapid Machine Pistol is the next best thing. 1705 rpm.';
+    });
+  add('world_ragdoll', 'World', ['make everyone fall over', 'everyone hit the deck', 'drop everyone'],
+    'Everyone goes down at once.',
+    (ctx) => {
+      let n = 0;
+      for (const npc of ctx.npcs.npcs) { if (npc.indoors) continue; npc.downed = 8; n++; }
+      return n + ' down.';
+    });
+  add('gun_range', 'Weapons', ['how far does this shoot', 'what is my range', 'how far can i shoot'],
+    'Ask the range of what you\'re holding.',
+    (ctx) => {
+      const a = arm(ctx);
+      if (!a || !a.armed) return 'You\'re not holding anything.';
+      return a.weapon.name + ' reaches ' + a.weapon.range + ' metres.';
+    });
+  add('gun_compare', 'Weapons', ['what is the best sniper', 'what is the best shotgun', 'what is the best rifle', 'what is the best pistol'],
+    'Ask which is best in a class.',
+    (ctx, m) => {
+      const text = m.text || '';
+      const fam = WEAPON_FAMILIES.find((f) => text.includes(f.id) || text.includes(f.name.toLowerCase().split(' ')[0]));
+      const pool = fam ? WEAPONS.filter((w) => w.family === fam.id) : WEAPONS;
+      const best = pool.slice().sort((a, b) => b.dps - a.dps)[0];
+      return best.name + ' — ' + best.dps + ' damage a second. Say "T10 give me the ' + best.name.toLowerCase() + '".';
+    });
+  add('world_reset_everything', 'World', ['reset everything', 'put the world back', 'undo everything'],
+    'Put the whole world back to normal.',
+    (ctx) => {
+      const a = ctx.apocalypse || ctx.game.apocalypse;
+      if (a) a.stop();
+      if (ctx.game.gore) ctx.game.gore.clear();
+      if (ctx.game.arsenal) ctx.game.arsenal.unequip();
+      ctx.game.timeScale = 1;
+      const p = ctx.player;
+      p.flying = false; p.noclip = false; p.immortal = false; p.godMode = false;
+      p.speedMultiplier = 1; p.jumpMultiplier = 1; p.strength = 1;
+      p.getUp();
+      for (const npc of ctx.npcs.npcs) { npc.controlled = null; npc.downed = 0; npc.human.setSkinTint(null, null); }
+      ctx.npcs.densityScale = 1; ctx.traffic.densityScale = 1; ctx.animals.densityScale = 1;
+      ctx.atmosphere.setWeather('fair');
+      return 'Everything back the way it was. Clean streets, calm people, empty hands.';
+    });
+}
+
+return { extendRegistry6 };
+})();
+
 __M["t10/commands"] = (function(){
 // T10 World - the T10 assistant's command registry.
 // Every entry here is a real, executable command with its own trigger phrases.
@@ -69336,6 +70911,7 @@ const { extendRegistry } = __M["t10/commands2"];
 const { extendRegistry3 } = __M["t10/commands3"];
 const { extendRegistry4 } = __M["t10/commands4"];
 const { extendRegistry5 } = __M["t10/commands5"];
+const { extendRegistry6 } = __M["t10/commands6"];
 
 function singularWord(word) {
   if (word.length < 4) return word;
@@ -69894,6 +71470,7 @@ function buildRegistry() {
   extendRegistry3(R, add);
   extendRegistry4(R, add);
   extendRegistry5(R, add);
+  extendRegistry6(R, add);
   return R;
 }
 
@@ -70119,7 +71696,7 @@ class T10Brain {
         const p = g.player.position;
         const h = g.player.cameraMode === 'first' ? g.player.yaw : g.player.heading;
         const fx = Math.sin(h), fz = Math.cos(h);
-        const rx = Math.cos(h), rz = -Math.sin(h);
+        const rx = -Math.cos(h), rz = Math.sin(h);
         return {
           x: p.x + fx * (dist || 3) + rx * (lateral || 0),
           z: p.z + fz * (dist || 3) + rz * (lateral || 0),
@@ -70336,6 +71913,10 @@ class HUD {
     this.stats = el('div', 't10-stats', r);
     this.stats.style.display = 'none';
 
+    // Crosshair — the only thing that ever joins the HUD, and only while armed.
+    this.crosshair = el('div', 't10-cross', r);
+    this.crosshair.style.display = 'none';
+
     this.buildChat();
     this.buildSettings();
     if (this.isTouch) this.buildTouchControls();
@@ -70468,6 +72049,18 @@ class HUD {
       this.viewButtons[mode] = b;
     }
 
+    // Content rating. 18 is the default; 16 keeps the same world with much
+    // less blood.
+    el('div', 't10-set-label', this.settings, 'Content');
+    const mRow = el('div', 't10-set-row', this.settings);
+    this.maturityButtons = {};
+    for (const [age, label] of [[18, '18+'], [16, '16+']]) {
+      const b = el('button', 't10-set-btn', mRow, label);
+      b.addEventListener('click', () => { settings.setMaturity(age); this.refreshSettings(); });
+      this.maturityButtons[age] = b;
+    }
+    this.maturityBlurb = el('div', 't10-set-blurb', this.settings, '');
+
     el('div', 't10-set-label', this.settings, 'Controls');
     const cRow = el('div', 't10-set-row', this.settings);
     const invBtn = el('button', 't10-set-btn', cRow, 'Invert Y: off');
@@ -70503,11 +72096,25 @@ class HUD {
     // T10 can change quality too, so the blurb tracks the setting rather than
     // whichever button was last clicked.
     if (this.qualityBlurb) this.qualityBlurb.textContent = QUALITY_PRESETS[q].blurb;
+    if (this.maturityButtons) {
+      const age = settings.get('maturity');
+      for (const k of [18, 16]) this.maturityButtons[k].classList.toggle('active', k === age);
+      this.maturityBlurb.textContent = age >= 18
+        ? 'Full violence and gore. This is how it ships.'
+        : 'The same world, with the blood turned right down.';
+    }
     if (this.viewButtons && this.game.player) {
       const m = this.game.player.cameraMode;
       this.viewButtons.first.classList.toggle('active', m === 'first');
       this.viewButtons.third.classList.toggle('active', m === 'third');
     }
+  }
+
+  setArmed(on) {
+    if (this._armed === on) return;
+    this._armed = on;
+    if (this.crosshair) this.crosshair.style.display = on ? 'block' : 'none';
+    if (this.weaponPad) this.weaponPad.style.display = on && this.isTouch ? 'flex' : 'none';
   }
 
   toggleSettings() { this.setSettingsOpen(!this.settingsOpen); }
@@ -70564,6 +72171,32 @@ class HUD {
       b.addEventListener('mouseup', up);
       b.addEventListener('mouseleave', up);
       this.touchButtons[d.id] = b;
+    }
+
+    // Weapon buttons, shown only while you're armed.
+    this.weaponPad = el('div', 't10-pad t10-pad-weapon', wrap);
+    this.weaponPad.style.display = 'none';
+    for (const d of [
+      { id: 'reload', label: '⟳', hint: 'Reload' },
+      { id: 'aim', label: '◉', hint: 'Aim' },
+      { id: 'fire', label: '●', hint: 'Fire', cls: 'fire' },
+    ]) {
+      const b = el('button', 't10-touch-btn ' + (d.cls || ''), this.weaponPad);
+      el('span', 't10-touch-glyph', b, d.label);
+      el('span', 't10-touch-hint', b, d.hint);
+      const down = (e) => {
+        e.preventDefault();
+        if (e.changedTouches) for (const t of e.changedTouches) this.game.input.claimTouch(t.identifier);
+        b.classList.add('down');
+        this.game.input.setVirtual(d.id, true);
+      };
+      const up = (e) => { if (e) e.preventDefault(); b.classList.remove('down'); this.game.input.setVirtual(d.id, false); };
+      b.addEventListener('touchstart', down, { passive: false });
+      b.addEventListener('touchend', up, { passive: false });
+      b.addEventListener('touchcancel', up, { passive: false });
+      b.addEventListener('mousedown', down);
+      b.addEventListener('mouseup', up);
+      b.addEventListener('mouseleave', up);
     }
 
     // Vehicle-specific buttons, shown only while driving.
@@ -71594,7 +73227,7 @@ __M["main"] = (function(){
 // T10 World - application entry point. Boots the renderer, runs the creator,
 // then builds and drives the living world.
 const THREE = __THREE;
-const { settings, QUALITY_PRESETS, PerformanceGovernor } = __M["core/settings"];
+const { settings, QUALITY_PRESETS, PerformanceGovernor, perf } = __M["core/settings"];
 const { InputManager } = __M["core/input"];
 const { audio } = __M["core/audio"];
 const { saveGame, loadGame, hasSave, clearSave, saveInfo } = __M["core/save"];
@@ -71607,6 +73240,8 @@ const { NPCManager } = __M["entities/npc"];
 const { TrafficManager } = __M["entities/traffic"];
 const { AnimalManager } = __M["entities/animals"];
 const { Apocalypse } = __M["entities/apocalypse"];
+const { Gore } = __M["entities/gore"];
+const { Arsenal } = __M["player/arsenal"];
 const { T10Brain } = __M["t10/brain"];
 const { HUD } = __M["ui/hud"];
 const { MapOverlay } = __M["ui/map"];
@@ -71641,6 +73276,7 @@ class Game {
     this.accumTime = 0;
     this.frame = 0;
     this.gravityScale = 1;
+    this.timeScale = 1;
     this.statsVisible = false;
     this.worldName = DEFAULT_WORLD_NAME;
     this.worldSeed = hashString(DEFAULT_WORLD_NAME);
@@ -71848,10 +73484,13 @@ class Game {
         this.npcs = new NPCManager(this.world, this.scene, this.atmosphere);
         this.traffic = new TrafficManager(this.world, this.scene);
         this.animals = new AnimalManager(this.world, this.scene, this.atmosphere);
+        this.gore = new Gore(this);
+        this.arsenal = new Arsenal(this);
         this.apocalypse = new Apocalypse(this);
         this.npcs.apocalypse = this.apocalypse;
         // People only get to lay a hand on you when the world is ending.
         this.npcs.onPlayerAttacked = (npc, how) => this.onPlayerAttacked(npc, how);
+        this.npcs.gore = this.gore;
       }],
       ['Bringing T10 online…', () => {
         this.t10 = new T10Brain(this);
@@ -71919,7 +73558,8 @@ class Game {
   // -------------------------------------------------------------------------
   tick() {
     const rawDt = this.clock.getDelta();
-    const dt = Math.min(rawDt, 0.1);
+    // timeScale drives bullet time; the governor still samples real frame time.
+    const dt = Math.min(rawDt, 0.1) * (this.timeScale == null ? 1 : this.timeScale);
     this.frame++;
 
     if (this.phase === 'creator') {
@@ -71937,9 +73577,17 @@ class Game {
 
     // --- Adaptive resolution ---
     if (settings.get('autoQuality')) {
-      const prev = this.governor.scale;
+      const prevScale = this.governor.scale;
+      const prevLoad = this.governor.load;
       const s = this.governor.update(rawDt);
-      if (Math.abs(s - prev) > 0.001) this.onResize();
+      perf.load = this.governor.load;
+      if (Math.abs(s - prevScale) > 0.001) this.onResize();
+      // Shadows are the single most expensive thing left when the load has
+      // already been cut in half, so they go before the picture gets soft.
+      if (Math.abs(this.governor.load - prevLoad) > 0.001) {
+        const wantShadows = settings.preset.shadows && this.governor.load > 0.45;
+        if (wantShadows !== this._shadowsOn) { this._shadowsOn = wantShadows; this.setShadows(wantShadows); }
+      }
     }
 
     // A few times a second is plenty, and it costs nothing when all is well.
@@ -71972,6 +73620,13 @@ class Game {
     this.traffic.update(dt, focus, p.inVehicle, this.npcs.npcs);
     this.animals.update(dt, p.position, this.traffic.vehicles);
     if (this.apocalypse) this.apocalypse.update(dt, p.position);
+    if (this.gore) this.gore.update(dt, focus);
+    if (this.arsenal) {
+      this.arsenal.aiming = !!this.input.buttons.aim;
+      this.arsenal.update(dt, this.input);
+      if (this.input.edges.reload) this.arsenal.reload();
+      this.hud.setArmed(this.arsenal.armed);
+    }
     this.t10.update(dt);
 
     // Interaction prompt.
@@ -72091,6 +73746,11 @@ class Game {
       return;
     }
     if (!p.knockDown(how === 'infect' ? 5 : 4, how)) return;
+    if (this.gore) {
+      const dx = p.position.x - npc.position.x, dz = p.position.z - npc.position.z;
+      const len = Math.hypot(dx, dz) || 1;
+      this.gore.hit(p.position.x, p.position.y, p.position.z, how === 'infect' ? 0.85 : 0.6, dx / len, dz / len);
+    }
     audio.t10Blip('error');
     // Being floored repeatedly is the point of a purge; being told about it
     // every four seconds is not.

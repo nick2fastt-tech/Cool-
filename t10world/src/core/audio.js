@@ -216,6 +216,39 @@ export class AudioEngine {
       setTimeout(() => this.tone({ freq: 1320, dur: 0.06, gain: 0.035, type: 'square' }), 45);
     }
   }
+  /** A shot. Heavier guns get more low end and a longer tail. */
+  gunshot(opts) {
+    opts = opts || {};
+    const heft = clamp01(opts.heft == null ? 0.5 : opts.heft);
+    if (opts.quiet) {
+      this.noiseBurst({ dur: 0.10 + heft * 0.06, gain: 0.10 + heft * 0.06, freq: 900 - heft * 380, q: 1.1, sweep: 0.35, type: 'bandpass' });
+      this.tone({ freq: 160 - heft * 60, dur: 0.07, gain: 0.05, type: 'sine' });
+      return;
+    }
+    this.noiseBurst({ dur: 0.12 + heft * 0.22, gain: 0.26 + heft * 0.22, freq: 2600 - heft * 1500, q: 0.6, sweep: 0.18 });
+    this.tone({ freq: 120 - heft * 62, dur: 0.14 + heft * 0.20, gain: 0.20 + heft * 0.20, type: 'sine', sweep: 0.4 });
+    // Slap-back off the buildings.
+    if (heft > 0.35) setTimeout(() => this.noiseBurst({ dur: 0.30, gain: 0.05 + heft * 0.06, freq: 700, q: 1.6, sweep: 0.3, type: 'bandpass' }), 70 + heft * 60);
+  }
+
+  dryFire() { this.noiseBurst({ dur: 0.05, gain: 0.08, freq: 2400, q: 2.2, sweep: 0.5 }); }
+
+  reloadClick(stage) {
+    if (stage === 'out') this.noiseBurst({ dur: 0.08, gain: 0.10, freq: 1400, q: 2.0, sweep: 0.6 });
+    else this.noiseBurst({ dur: 0.10, gain: 0.13, freq: 900, q: 1.6, sweep: 0.5 });
+  }
+
+  bulletImpact(surface) {
+    const hard = surface === 'asphalt' || surface === 'concrete' || surface === 'sidewalk';
+    this.noiseBurst({ dur: 0.09, gain: 0.13, freq: hard ? 3200 : 1500, q: 1.4, sweep: 0.3 });
+  }
+
+  explosion(size) {
+    const k = clamp01((size || 5) / 10);
+    this.noiseBurst({ dur: 0.7 + k * 0.7, gain: 0.32 + k * 0.2, freq: 900 - k * 500, q: 0.5, sweep: 0.12 });
+    this.tone({ freq: 62 - k * 24, dur: 0.8 + k * 0.5, gain: 0.30 + k * 0.2, type: 'sine', sweep: 0.3 });
+  }
+
   cash() {
     for (let i = 0; i < 3; i++) setTimeout(() => this.tone({ freq: 1200 + i * 320, dur: 0.11, gain: 0.07, type: 'triangle' }), i * 55);
   }

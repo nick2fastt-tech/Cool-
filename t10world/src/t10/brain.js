@@ -216,7 +216,7 @@ export class T10Brain {
         const p = g.player.position;
         const h = g.player.cameraMode === 'first' ? g.player.yaw : g.player.heading;
         const fx = Math.sin(h), fz = Math.cos(h);
-        const rx = Math.cos(h), rz = -Math.sin(h);
+        const rx = -Math.cos(h), rz = Math.sin(h);
         return {
           x: p.x + fx * (dist || 3) + rx * (lateral || 0),
           z: p.z + fz * (dist || 3) + rz * (lateral || 0),

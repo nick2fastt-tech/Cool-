@@ -52,6 +52,7 @@ export class Player {
     this.swimSpeed = 2.2;
     this.jumpVelocity = 5.4;
     this.speedMultiplier = 1;
+    this.strength = 1;
     this.jumpMultiplier = 1;
 
     this.cameraMode = settings.get('cameraMode');
@@ -115,8 +116,12 @@ export class Player {
   update(dt, input, npcManager, trafficManager) {
     // --- Look ---
     if (!input.suspended) {
+      // One convention for the whole game: forward is (sin yaw, cos yaw) and
+      // screen-right is cross(forward, up) = (-cos yaw, sin yaw), so turning
+      // right lowers yaw. Positive pitch raises the view. A drag to the right
+      // turns right; a drag downward looks down.
       this.yaw = wrapAngle(this.yaw - input.look.x);
-      this.pitch = clampv(this.pitch + input.look.y, -1.32, 1.28);
+      this.pitch = clampv(this.pitch - input.look.y, -1.32, 1.28);
     }
 
     // Flat on your back: you can still look around, nothing else.
@@ -154,7 +159,7 @@ export class Player {
     const mx = input.move.x, my = input.move.y;
     const moveLen = Math.hypot(mx, my);
     const camForwardX = Math.sin(this.yaw), camForwardZ = Math.cos(this.yaw);
-    const camRightX = Math.cos(this.yaw), camRightZ = -Math.sin(this.yaw);
+    const camRightX = -Math.cos(this.yaw), camRightZ = Math.sin(this.yaw);
     let wishX = camForwardX * my + camRightX * mx;
     let wishZ = camForwardZ * my + camRightZ * mx;
     const wishLen = Math.hypot(wishX, wishZ);
@@ -418,7 +423,7 @@ export class Player {
         _v.addScaledVector(_v2.set(Math.sin(this.inVehicle.heading), 0, Math.cos(this.inVehicle.heading)), 0.22);
       }
       cam.position.copy(_v);
-      cam.rotation.set(this.pitch + shakeY, this.yaw + shakeX, 0, 'YXZ');
+      cam.rotation.set(this.pitch + shakeY, this.yaw + Math.PI + shakeX, 0, 'YXZ');
     } else {
       const anchor = _v.set(this.position.x, this.position.y + this.camHeight * (this.crouching ? 0.7 : 1), this.position.z);
       if (this.inVehicle) {
@@ -432,7 +437,7 @@ export class Player {
       const offZ = Math.cos(this.yaw) * Math.cos(this.pitch);
       _v2.set(anchor.x - offX * dist, anchor.y - offY * dist + 0.25, anchor.z - offZ * dist);
       // Shoulder offset so the character isn't dead centre.
-      const rightX = Math.cos(this.yaw), rightZ = -Math.sin(this.yaw);
+      const rightX = -Math.cos(this.yaw), rightZ = Math.sin(this.yaw);
       const shoulder = this.inVehicle ? 0 : this.camOffsetX;
       _v2.x += rightX * shoulder;
       _v2.z += rightZ * shoulder;

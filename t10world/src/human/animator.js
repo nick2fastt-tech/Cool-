@@ -191,7 +191,12 @@ export class HumanAnimator {
     this.applyLookAt(dt);
 
     // ---- Commit: slerp bones toward the target pose ------------------------
-    const rate = 1 - Math.exp(-this._rate * dt);
+    // Each pose sets its own responsiveness, and switching pose used to adopt
+    // the new one instantly — so a change of state snapped rather than blended.
+    // Ease into it over a quarter of a second.
+    const settle = clamp01(this.stateTime / 0.28);
+    const rateNow = lerpv(Math.min(this._rate, 7), this._rate, settle);
+    const rate = 1 - Math.exp(-rateNow * dt);
     for (const name in this.bones) {
       const b = this.bones[name];
       const t = this._target[name];
@@ -306,6 +311,26 @@ export class HumanAnimator {
       this.set('foot' + S, -free * 0.10, s * p.toeOut, 0);
       this.set('toe' + S, 0, 0, 0);
     }
+
+    // Turning on the spot: pick the feet up and shuffle round rather than
+    // pivoting rigidly, which is what standing still and rotating looked like.
+    const turn = clampv(this.turnRate, -3, 3);
+    if (Math.abs(turn) > 0.22) {
+      this.turnPhase = (this.turnPhase || 0) + Math.abs(turn) * dt * 0.75;
+      const step = Math.sin(this.turnPhase * TAU);
+      const amt = clamp01((Math.abs(turn) - 0.22) / 1.5);
+      for (const S of ['L', 'R']) {
+        const sgn = S === 'L' ? 1 : -1;
+        const lift = Math.max(0, step * sgn) * amt;
+        this.add('upperLeg' + S, -lift * 0.26, -turn * 0.06 * amt, 0);
+        this.add('lowerLeg' + S, lift * 0.38, 0, 0);
+        this.add('foot' + S, -lift * 0.16, 0, 0);
+      }
+      this.hipsOffset.y -= Math.abs(step) * amt * this.prop.measure.height * 0.005;
+      // Lead with the head and shoulders, the way people actually turn.
+      this.add('chest', 0, -turn * 0.05 * amt, 0);
+      this.add('head', 0, -turn * 0.09 * amt, 0);
+    }
   }
 
   poseLocomotion(dt) {
@@ -323,7 +348,12 @@ export class HumanAnimator {
     const armAmp = lerpv(0.34, lerpv(0.85, 1.15, sprint), run) * p.armSwing;
     const elbowBase = lerpv(0.30, lerpv(1.30, 1.65, sprint), run) * p.armBend;
     const bounce = lerpv(0.014, lerpv(0.030, 0.042, sprint), run) * p.bounce;
-    const lean = lerpv(0.03, lerpv(0.16, 0.30, sprint), run) * p.lean;
+    // Lean from speed, plus a bit more from acceleration, so setting off and
+    // pulling up read as effort rather than a speed slider moving.
+    const accel = clampv((spd - (this._lastSpd == null ? spd : this._lastSpd)) / Math.max(dt, 0.001), -9, 9);
+    this._lastSpd = spd;
+    this.accelLean = lerpv(this.accelLean || 0, accel * 0.035, clamp01(dt * 6));
+    const lean = lerpv(0.03, lerpv(0.16, 0.30, sprint), run) * p.lean + this.accelLean;
     const swayAmt = lerpv(0.075, 0.045, run) * p.hipSway;
 
     // Vertical bob peaks twice per cycle; lateral sway once.

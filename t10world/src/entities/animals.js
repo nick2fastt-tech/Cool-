@@ -4,7 +4,7 @@ import * as THREE from '../../vendor/three.module.js';
 import { GeometryBatcher, boxUV, cylinderUV, transformed, disposeGroup } from '../world/geomutils.js';
 import { paintedMaterial, foliageMaterial } from '../world/materials.js';
 import { clamp01, clampv, lerpv, damp, dampAngle, wrapAngle, makeRng, TAU, noise1 } from '../core/math.js';
-import { settings } from '../core/settings.js';
+import { settings, perf } from '../core/settings.js';
 import { audio } from '../core/audio.js';
 
 export const ANIMAL_TYPES = {
@@ -361,7 +361,7 @@ export class AnimalManager {
     this.densityScale = 1;
   }
 
-  get budget() { return Math.round(settings.preset.animalBudget * this.densityScale); }
+  get budget() { return Math.round(settings.preset.animalBudget * this.densityScale * perf.load); }
 
   typesFor(x, z) {
     const d = this.world.city.districtAt(x, z);
