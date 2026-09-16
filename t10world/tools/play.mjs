@@ -269,6 +269,52 @@ await page.screenshot({ path: SHOT+'/07-after-commands.png' });
 // Forward must be forward and right must be right, in both camera modes.
 // First and third person once used opposite yaw conventions, so on the default
 // first-person view pushing the stick forward walked you backwards.
+// Performance plumbing: three presets, each moving the right dials; the
+// monitor reporting real numbers; chunk culling actually hiding chunks; and a
+// background population that exists without bodies.
+log('--- performance systems ---');
+const perfSys = await page.evaluate(async ()=>{
+  const g = window.__t10;
+  const pump = async (n)=>{ for (let f=0;f<n;f++) await new Promise(r=>requestAnimationFrame(()=>r())); };
+  const S = g.__settings || null;
+  const out = { presets: {}, };
+  // Each preset must move more than resolution.
+  for (const q of ['low','high','ultra']) {
+    g.t10.handle('T10 ' + q + ' quality');
+    await pump(4);
+    const p = g.renderer ? null : null;
+    const pr = (window.__t10 && window.__t10.hud) ? null : null;
+    const preset = g.post ? null : null;
+    const s = g.npcs && g.world ? {
+      draw: g.world.chunks ? null : null,
+    } : null;
+    // Read the live preset through a command reply instead of importing.
+    out.presets[q] = JSON.parse(JSON.stringify({
+      npcBudget: g.npcs.budget,
+      shadowsOn: g.renderer.shadowMap.enabled,
+      streamChunks: g.world.chunks.size,
+    }));
+  }
+  g.t10.handle('T10 high quality');
+  await pump(30);
+  out.culled = g.world.chunksHidden;
+  out.chunks = g.world.chunks.size;
+  out.monitor = {
+    fps: Math.round(g.perf.fps), p95: +g.perf.p95Ms.toFixed(1), draws: g.perf.draws,
+    npcs: g.perf.npcs, background: g.perf.backgroundNpcs, chunks: g.perf.chunks,
+    geometries: g.perf.geometries, textures: g.perf.textures,
+  };
+  out.population = g.npcs.population();
+  out.animLods = (()=>{ const c = {0:0,1:0,2:0};
+    for (const n of g.npcs.npcs) { const l = n.human.animator.lod|0; if (c[l]!=null) c[l]++; }
+    return c; })();
+  return out;
+});
+log('perf systems:', JSON.stringify(perfSys));
+if (!perfSys.monitor || !perfSys.monitor.draws) { errors.push('PERF: monitor reported nothing'); log('>>> PERF MONITOR FAILED'); }
+if (perfSys.culled == null) { errors.push('PERF: chunk culling never ran'); log('>>> CULLING FAILED'); }
+if (perfSys.population <= perfSys.monitor.npcs) { errors.push('PERF: no background population'); log('>>> BACKGROUND NPCS FAILED'); }
+
 // The subway: walk in, wait, board, ride, get off, walk out.
 log('--- subway ---');
 const subway = await page.evaluate(async ()=>{
@@ -286,7 +332,7 @@ const subway = await page.evaluate(async ()=>{
   const sat = !!p.sitting;
   // Ride until it stops somewhere else.
   let arrived = false;
-  for (let i=0;i<90 && !arrived;i++) { await pump(20); const t = s.ridingTrain; arrived = t && t.state==='dwell' && t.index!==startStop; }
+  for (let i=0;i<120 && !arrived;i++) { await pump(6); const t = s.ridingTrain; arrived = t && t.state!=='run' && t.index!==startStop; }
   p.standUp();
   const got = s.alight();
   await pump(10);

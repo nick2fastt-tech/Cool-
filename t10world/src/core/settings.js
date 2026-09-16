@@ -10,159 +10,160 @@ const STORAGE_KEY = 't10world.settings.v1';
 export const QUALITY_PRESETS = {
   low: {
     label: 'LOW',
-    blurb: 'Runs on almost anything. Simple lighting, short draw distance.',
+    blurb: 'Built for phones. Short view, simple light, small crowds — and it stays smooth.',
+    // ---- Render ----
     pixelRatioCap: 1.0,
-    renderScale: 0.72,
+    renderScale: 0.70,
+    antialias: false,
+    // ---- Shadows ----
     shadows: false,
     shadowMapSize: 512,
-    shadowDistance: 40,
+    shadowDistance: 35,
     cascades: 1,
-    drawDistance: 240,
-    fogStart: 90,
-    npcBudget: 26,
-    npcDetailDistance: 22,
-    vehicleBudget: 14,
-    animalBudget: 8,
+    contactShadows: false,
+    // ---- World detail ----
+    drawDistance: 260,
+    streamDistance: 300,
+    fogStart: 95,
     propDensity: 0.45,
-    treeDensity: 0.4,
+    treeDensity: 0.40,
     grassDensity: 0.0,
+    interiorDetail: 0,
+    lodBias: 1.7,           // multiplies every LOD switch distance down
+    // ---- Simulation ----
+    npcBudget: 24,
+    npcDetailDistance: 20,
+    npcSimDistance: 90,     // full AI inside this, cheap steering beyond
+    backgroundNpcs: 40,     // people tracked with no body at all
+    vehicleBudget: 12,
+    animalBudget: 6,
+    physicsRate: 1,         // vehicle substeps
+    // ---- Effects ----
     bloom: false,
     ssr: false,
     ssao: false,
     motionBlur: false,
-    contactShadows: false,
     reflectionProbe: false,
-    rainParticles: 900,
+    volumetricLight: false,
+    rainParticles: 700,
+    goreBudget: 0.45,       // scales decals, droplets and gibs
     puddles: false,
+    // ---- Textures and characters ----
     anisotropy: 2,
     textureSize: 256,
-    humanSegments: 6,     // radial segments on limbs
-    humanLodBias: 1.6,
+    humanSegments: 6,
+    humanLodBias: 1.7,
     fingerBones: false,
     facialAnimation: false,
-    interiorDetail: 0,
-    volumetricLight: false,
+    animationRate: 22,      // full-quality animation updates per second
     windowLights: 0.5,
     maxDynamicLights: 2,
-    antialias: false,
   },
-  medium: {
-    label: 'MEDIUM',
-    blurb: 'Balanced. Soft shadows, full crowd life, decent distance.',
-    pixelRatioCap: 1.35,
-    renderScale: 0.9,
-    shadows: true,
-    shadowMapSize: 1024,
-    shadowDistance: 70,
-    cascades: 1,
-    drawDistance: 420,
-    fogStart: 160,
-    npcBudget: 55,
-    npcDetailDistance: 34,
-    vehicleBudget: 26,
-    animalBudget: 16,
-    propDensity: 0.75,
-    treeDensity: 0.7,
-    grassDensity: 0.35,
-    bloom: true,
-    ssr: false,
-    ssao: true,
-    motionBlur: false,
-    contactShadows: true,
-    reflectionProbe: false,
-    rainParticles: 2200,
-    puddles: true,
-    anisotropy: 4,
-    textureSize: 512,
-    humanSegments: 8,
-    humanLodBias: 1.0,
-    fingerBones: true,
-    facialAnimation: true,
-    interiorDetail: 1,
-    volumetricLight: false,
-    windowLights: 0.75,
-    maxDynamicLights: 5,
-    antialias: true,
-  },
+
   high: {
     label: 'HIGH',
-    blurb: 'Full detail world. Crisp shadows, ambient occlusion, dense crowds.',
+    blurb: 'Balanced. Real shadows, wet-road reflections, busy streets, detailed people.',
     pixelRatioCap: 1.75,
     renderScale: 1.0,
+    antialias: true,
+
     shadows: true,
     shadowMapSize: 2048,
-    shadowDistance: 110,
+    shadowDistance: 120,
     cascades: 2,
+    contactShadows: true,
+
     drawDistance: 700,
-    fogStart: 280,
-    npcBudget: 95,
-    npcDetailDistance: 48,
-    vehicleBudget: 44,
-    animalBudget: 28,
+    streamDistance: 620,
+    fogStart: 300,
     propDensity: 1.0,
     treeDensity: 1.0,
     grassDensity: 0.7,
+    interiorDetail: 2,
+    lodBias: 1.0,
+
+    npcBudget: 90,
+    npcDetailDistance: 46,
+    npcSimDistance: 220,
+    backgroundNpcs: 160,
+    vehicleBudget: 42,
+    animalBudget: 18,
+    physicsRate: 2,
+
     bloom: true,
-    ssr: false,
+    ssr: true,
     ssao: true,
-    motionBlur: true,
-    contactShadows: true,
+    motionBlur: false,
     reflectionProbe: true,
+    volumetricLight: false,
     rainParticles: 4200,
+    goreBudget: 1.0,
     puddles: true,
+
     anisotropy: 8,
-    textureSize: 1024,
-    humanSegments: 12,
-    humanLodBias: 0.7,
+    textureSize: 512,
+    humanSegments: 10,
+    humanLodBias: 1.0,
     fingerBones: true,
     facialAnimation: true,
-    interiorDetail: 2,
-    volumetricLight: true,
+    animationRate: 60,
     windowLights: 1.0,
-    maxDynamicLights: 9,
-    antialias: true,
+    maxDynamicLights: 8,
   },
+
   ultra: {
     label: 'ULTRA',
-    blurb: 'RTX renders. Screen-space ray-traced reflections, volumetric light, full crowds.',
+    blurb: 'Everything on. Ray-marched reflections, deep shadows, dense crowds, the longest view.',
     pixelRatioCap: 2.0,
     renderScale: 1.0,
+    antialias: true,
+
     shadows: true,
     shadowMapSize: 4096,
-    shadowDistance: 165,
+    shadowDistance: 180,
     cascades: 3,
+    contactShadows: true,
+
     drawDistance: 1100,
-    fogStart: 420,
-    npcBudget: 150,
-    npcDetailDistance: 70,
-    vehicleBudget: 70,
-    animalBudget: 44,
-    propDensity: 1.0,
-    treeDensity: 1.0,
+    streamDistance: 820,
+    fogStart: 480,
+    propDensity: 1.35,
+    treeDensity: 1.4,
     grassDensity: 1.0,
+    interiorDetail: 3,
+    lodBias: 0.62,
+
+    npcBudget: 150,
+    npcDetailDistance: 72,
+    npcSimDistance: 340,
+    backgroundNpcs: 300,
+    vehicleBudget: 64,
+    animalBudget: 30,
+    physicsRate: 3,
+
     bloom: true,
     ssr: true,
     ssao: true,
     motionBlur: true,
-    contactShadows: true,
     reflectionProbe: true,
-    rainParticles: 7000,
+    volumetricLight: true,
+    rainParticles: 9000,
+    goreBudget: 1.6,
     puddles: true,
+
     anisotropy: 16,
     textureSize: 1024,
-    humanSegments: 16,
-    humanLodBias: 0.5,
+    humanSegments: 14,
+    humanLodBias: 0.6,
     fingerBones: true,
     facialAnimation: true,
-    interiorDetail: 3,
-    volumetricLight: true,
+    animationRate: 60,
     windowLights: 1.0,
     maxDynamicLights: 14,
-    antialias: true,
   },
 };
 
-export const QUALITY_ORDER = ['low', 'medium', 'high', 'ultra'];
+export const QUALITY_ORDER = ['low', 'high', 'ultra'];
 
 const DEFAULTS = {
   quality: 'high',
@@ -307,7 +308,7 @@ export class PerformanceGovernor {
     this.targetMs = 1000 / 55;
     this.enabled = true;
   }
-  update(dt) {
+  update(dt, monitor) {
     if (!this.enabled) return this.scale;
     this.samples.push(dt * 1000);
     if (this.samples.length > 90) this.samples.shift();
@@ -315,7 +316,14 @@ export class PerformanceGovernor {
     if (this.cooldown > 0 || this.samples.length < 60) return this.scale;
     this.cooldown = 1.2;
     const sorted = this.samples.slice().sort((a, b) => a - b);
-    const median = sorted[Math.floor(sorted.length * 0.5)];
+    // Judge on the median, but let the monitor's 95th percentile and its heap
+    // pressure force a cut too: a good average with a stutter every second is
+    // worse to play than a slightly lower ceiling.
+    let median = sorted[Math.floor(sorted.length * 0.5)];
+    if (monitor) {
+      if (monitor.p95Ms > this.targetMs * 1.9) median = Math.max(median, this.targetMs * 1.4);
+      if (monitor.heapPressure > 0.85) median = Math.max(median, this.targetMs * 1.4);
+    }
     if (median > this.targetMs * 1.28) {
       if (this.load > 0.3) this.load = Math.max(0.3, this.load - 0.12);
       else this.scale = Math.max(0.55, this.scale - 0.08);

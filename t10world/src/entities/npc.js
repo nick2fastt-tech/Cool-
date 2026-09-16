@@ -786,15 +786,85 @@ export class NPCManager {
   }
 
   despawnFar(px, pz, maxDist) {
+    // Anyone who leaves keeps existing — they just stop having a body.
+    if (!this.background) this.background = [];
     for (let i = this.npcs.length - 1; i >= 0; i--) {
       const n = this.npcs[i];
       if (n.protected || n.controlled === 'follow') continue;
       if (Math.hypot(n.position.x - px, n.position.z - pz) > maxDist) {
+        this.background.push({
+          x: n.position.x, z: n.position.z, tx: n.position.x, tz: n.position.z,
+          speed: n.walkSpeed, retarget: 0,
+        });
         n.dispose();
         this.npcs.splice(i, 1);
       }
     }
   }
+
+  /**
+   * People the city has but the renderer doesn't: a position, a destination and
+   * a speed, ticked a couple of times a second with no mesh, no skeleton and no
+   * animation. They're what makes the population larger than the crowd you can
+   * see, and they materialise into real NPCs when you get near one.
+   */
+  updateBackground(dt, playerPos) {
+    const preset = settings.preset;
+    const want = Math.round((preset.backgroundNpcs || 0) * this.densityScale * perf.load);
+    if (!this.background) this.background = [];
+    const bg = this.background;
+
+    // Top up and trim. These cost a few numbers each.
+    const ring = (preset.streamDistance || 620) * 0.9;
+    while (bg.length < want) {
+      const a = this.rng() * TAU;
+      const r = 120 + this.rng() * ring;
+      const x = playerPos.x + Math.cos(a) * r;
+      const z = playerPos.z + Math.sin(a) * r;
+      bg.push({ x, z, tx: x, tz: z, speed: 1.1 + this.rng() * 0.8, retarget: 0 });
+    }
+    if (bg.length > want) bg.length = want;
+
+    // Two ticks a second is plenty for someone you cannot see.
+    this._bgAccum = (this._bgAccum || 0) + dt;
+    if (this._bgAccum < 0.5) return;
+    const step = this._bgAccum;
+    this._bgAccum = 0;
+
+    for (let i = bg.length - 1; i >= 0; i--) {
+      const b = bg[i];
+      b.retarget -= step;
+      if (b.retarget <= 0) {
+        b.retarget = 12 + this.rng() * 40;
+        const a = this.rng() * TAU;
+        const r = 40 + this.rng() * 180;
+        b.tx = b.x + Math.cos(a) * r;
+        b.tz = b.z + Math.sin(a) * r;
+      }
+      const dx = b.tx - b.x, dz = b.tz - b.z;
+      const d = Math.hypot(dx, dz) || 1;
+      const move = Math.min(d, b.speed * step);
+      b.x += (dx / d) * move;
+      b.z += (dz / d) * move;
+
+      const pd = Math.hypot(b.x - playerPos.x, b.z - playerPos.z);
+      // Walked into view: give them a body, if there's room.
+      if (pd < 70 && this.npcs.length < this.budget) {
+        if (this.spawnNear(0, 0, 0, 0, { x: b.x, z: b.z })) { bg.splice(i, 1); continue; }
+      }
+      // Wandered off the edge of the world: recycle them to the far side.
+      if (pd > ring * 1.3) {
+        const a = this.rng() * TAU;
+        const r = 140 + this.rng() * ring * 0.6;
+        b.x = playerPos.x + Math.cos(a) * r;
+        b.z = playerPos.z + Math.sin(a) * r;
+        b.retarget = 0;
+      }
+    }
+  }
+
+  /** Count of everyone the city is tracking, bodies and background together. */
+  population() { return this.npcs.length + (this.background ? this.background.length : 0); }
 
   update(dt, playerPos) {
     if (!this.enabled) return;
@@ -831,8 +901,13 @@ export class NPCManager {
       }
     }
 
-    // Update with distance-based rate limiting.
+    this.updateBackground(dt, playerPos);
+
+    // Update with distance-based rate limiting. Three tiers, matching what you
+    // can actually make out: full AI and animation close up, simplified in the
+    // middle, and out past the simulation radius just enough to keep walking.
     const near = settings.preset.npcDetailDistance;
+    const simD = settings.preset.npcSimDistance || near * 5;
     for (const n of this.npcs) {
       if (n.indoors) {
         n.activityTimer -= dt;
@@ -841,14 +916,15 @@ export class NPCManager {
       }
       const d = n.position.distanceTo(playerPos);
       let lod = 0;
-      if (d > near * 2.4) lod = 2;
+      if (d > simD) lod = 3;
+      else if (d > near * 2.4) lod = 2;
       else if (d > near) lod = 1;
       if (lod === 0) {
         n.update(dt, playerPos, 0);
       } else {
         // Coarser update tick for distant people; they still walk and arrive.
         n.updateAccumulator += dt;
-        const interval = lod === 1 ? 1 / 20 : 1 / 8;
+        const interval = lod === 1 ? 1 / 20 : lod === 2 ? 1 / 8 : 1 / 3;
         if (n.updateAccumulator >= interval) {
           n.update(n.updateAccumulator, playerPos, lod);
           n.updateAccumulator = 0;

@@ -460,7 +460,12 @@ export class Human {
     const near = preset.npcDetailDistance;
     this.visibleDetail = distance < near ? 1 : distance < near * 2.2 ? 0.5 : 0.2;
     const facial = this.visibleDetail > 0.6 && preset.facialAnimation;
-    if (this.animator) this.animator.rig.facial = facial;
+    if (this.animator) {
+      this.animator.rig.facial = facial;
+      // Three animation tiers, matching what you can actually resolve:
+      // full up close, no face or fingers in the middle, body pose only far off.
+      this.animator.setLod(this.visibleDetail > 0.6 ? 0 : this.visibleDetail > 0.25 ? 1 : 2);
+    }
     if (this.face) {
       const show = this.visibleDetail > 0.3;
       for (const S of ['L', 'R']) {

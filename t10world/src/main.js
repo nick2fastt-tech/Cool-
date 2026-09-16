@@ -2,6 +2,7 @@
 // then builds and drives the living world.
 import * as THREE from '../vendor/three.module.js';
 import { settings, QUALITY_PRESETS, PerformanceGovernor, perf } from './core/settings.js';
+import { PerfMonitor } from './core/perfmon.js';
 import { InputManager } from './core/input.js';
 import { audio } from './core/audio.js';
 import { saveGame, loadGame, hasSave, clearSave, saveInfo } from './core/save.js';
@@ -48,6 +49,7 @@ export class Game {
     this.phase = 'boot';
     this.clock = new THREE.Clock();
     this.governor = new PerformanceGovernor();
+    this.perf = new PerfMonitor();
     this.accumTime = 0;
     this.frame = 0;
     this.gravityScale = 1;
@@ -379,6 +381,7 @@ export class Game {
     // timeScale drives bullet time; the governor still samples real frame time.
     const dt = Math.min(rawDt, 0.1) * (this.timeScale == null ? 1 : this.timeScale);
     this.frame++;
+    if (this.phase === 'playing') this.perf.sample(rawDt, this);
 
     if (this.phase === 'creator') {
       this.creator.update(dt);
@@ -397,7 +400,7 @@ export class Game {
     if (settings.get('autoQuality')) {
       const prevScale = this.governor.scale;
       const prevLoad = this.governor.load;
-      const s = this.governor.update(rawDt);
+      const s = this.governor.update(rawDt, this.perf);
       perf.load = this.governor.load;
       if (Math.abs(s - prevScale) > 0.001) this.onResize();
       // Shadows are the single most expensive thing left when the load has
@@ -431,6 +434,7 @@ export class Game {
     this.world.setWetness(wet);
     this.world.setSnow(snow * clamp01(this.atmosphere.current.rain * 1.6));
     if (this.post) this.post.wetness = wet;
+    this.world.cullCamera = this.camera;
     this.world.update(dt, focus.x, focus.z, this.frame < 120 ? 10 : 5);
 
     p.update(dt, this.input, this.npcs, this.traffic);
@@ -509,6 +513,7 @@ export class Game {
         break;
       }
       case 'door': {
+        this.player.human.animator.setState(STATES.DOOR);
         const name = result.lot && result.lot.name;
         this.hud.say(name ? 'The door to ' + name + ' is locked from the inside.' : 'Locked.');
         audio.doorClose();
@@ -702,14 +707,9 @@ export class Game {
   }
 
   updateStats() {
-    const w = this.world.stats();
-    const fps = Math.round(this.governor.fps);
-    const info = this.lastRenderInfo || this.renderer.info.render;
     this.hud.updateStats(
-      fps + ' fps  ·  ' + settings.preset.label +
-      '\n' + info.calls + ' draws  ·  ' + Math.round(info.triangles / 1000) + 'k tris' +
-      '\n' + this.npcs.count() + ' people  ·  ' + this.traffic.count() + ' cars  ·  ' + this.animals.count() + ' animals' +
-      '\n' + w.chunks + ' chunks  ·  ' + this.atmosphere.clockString() + '  ·  ' + this.atmosphere.weatherName()
+      this.perf.summary(settings.preset.label, this.governor.load, this.governor.scale) +
+      '\n' + this.atmosphere.clockString() + '  ·  ' + this.atmosphere.weatherName()
     );
   }
 

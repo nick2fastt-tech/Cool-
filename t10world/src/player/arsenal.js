@@ -72,6 +72,22 @@ export class Arsenal {
     this._v = new THREE.Vector3();
     this._v2 = new THREE.Vector3();
     this._dir = new THREE.Vector3();
+    // Scratch, so firing allocates nothing. A shotgun marching nine pellets
+    // through a three-hundred-step loop was the worst offender in the game.
+    this._sA = new THREE.Vector3();
+    this._sB = new THREE.Vector3();
+    this._sC = new THREE.Vector3();
+    this._sD = new THREE.Vector3();
+    this._sE = new THREE.Vector3();
+    this._axisX = new THREE.Vector3(1, 0, 0);
+    this._scale = new THREE.Vector3();
+    this._tracerFrom = new THREE.Vector3();
+    this._tracerEnd = new THREE.Vector3();
+    this._zero = new THREE.Vector3();
+    this._probe = new THREE.Vector3();
+    this._probe2 = new THREE.Vector3();
+    this._vm3 = new THREE.Vector3();
+    this._vmT = new THREE.Vector3();
   }
 
   // -------------------------------------------------------------------------
@@ -126,7 +142,7 @@ export class Arsenal {
 
     const right = this._v.set(1, 0, 0).applyQuaternion(cam.quaternion);
     const up = this._v2.set(0, 1, 0).applyQuaternion(cam.quaternion);
-    const fwd = this._dir.set(0, 0, -1).applyQuaternion(cam.quaternion);
+    const fwd = this._vm3.set(0, 0, -1).applyQuaternion(cam.quaternion);
 
     const sway = Math.sin(p.human.animator.phase * TAU) * clamp01(p.speed / p.walkSpeed) * 0.012;
 
@@ -138,7 +154,7 @@ export class Arsenal {
 
     let target;
     if (first) {
-      target = cam.position.clone()
+      target = this._vmT.copy(cam.position)
         .addScaledVector(right, 0.17)
         .addScaledVector(up, -0.16 + sway)
         .addScaledVector(fwd, 0.26 - kick * 0.09);
@@ -148,10 +164,10 @@ export class Arsenal {
       const handBone = p.human.boneMap && p.human.boneMap.handR;
       if (handBone) {
         handBone.updateWorldMatrix(true, false);
-        target = new THREE.Vector3().setFromMatrixPosition(handBone.matrixWorld);
+        target = this._vmT.setFromMatrixPosition(handBone.matrixWorld);
         target.addScaledVector(fwd, 0.12 - kick * 0.06).addScaledVector(up, -0.02);
       } else {
-        target = new THREE.Vector3(p.position.x, p.position.y + p.eyeHeight * 0.74 + sway, p.position.z)
+        target = this._vmT.set(p.position.x, p.position.y + p.eyeHeight * 0.74 + sway, p.position.z)
           .addScaledVector(right, 0.30)
           .addScaledVector(fwd, 0.30 - kick * 0.09);
       }
@@ -198,22 +214,23 @@ export class Arsenal {
     this.shotsFired++;
     this.cooldown = 60 / Math.max(1, w.rpm);
 
-    const origin = cam.position.clone();
-    const base = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+    const origin = this._sA.copy(cam.position);
+    const base = this._sB.set(0, 0, -1).applyQuaternion(cam.quaternion);
+    const right = this._sC.set(1, 0, 0).applyQuaternion(cam.quaternion);
+    const up = this._sD.set(0, 1, 0).applyQuaternion(cam.quaternion);
 
     let anyHit = null;
     for (let p = 0; p < w.pellets; p++) {
-      const dir = base.clone();
+      const dir = this._sE.copy(base);
       if (w.spread > 0) {
         const a = this.rng() * TAU;
         const r = Math.sqrt(this.rng()) * w.spread * (this.aiming ? 0.45 : 1);
-        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cam.quaternion);
-        const up = new THREE.Vector3(0, 1, 0).applyQuaternion(cam.quaternion);
         dir.addScaledVector(right, Math.cos(a) * r).addScaledVector(up, Math.sin(a) * r).normalize();
       }
       const hit = this.castBullet(origin, dir, w.range);
       if (hit && !anyHit) anyHit = hit;
-      this.addTracer(this.muzzleWorld(), hit ? hit.point : origin.clone().addScaledVector(dir, w.range));
+      this._tracerEnd.copy(hit ? hit.point : origin).add(hit ? this._zero : this._dir.copy(dir).multiplyScalar(w.range));
+      this.addTracer(this.muzzleWorld(this._tracerFrom), this._tracerEnd);
     }
 
     if (w.blast && anyHit) this.explode(anyHit.point, w.blast, w.damage);
@@ -246,21 +263,28 @@ export class Arsenal {
       }
     }
 
-    // World: march the collider hash. Coarse, but the city is boxes.
-    const step = 0.55;
-    const probe = new THREE.Vector3();
-    for (let t = 0.6; t < Math.min(bestT, maxDist); t += step) {
+    // World: march the collider hash. The city is boxes, so precision only
+    // matters up close — the step grows with distance, which turns a
+    // three-hundred-iteration loop into about forty.
+    const probe = this._probe;
+    const scratch = this._probe2;
+    const limit = Math.min(bestT, maxDist);
+    let t = 0.6;
+    while (t < limit) {
       probe.copy(origin).addScaledVector(dir, t);
       const ground = g.world.groundAt(probe.x, probe.z);
       if (probe.y <= ground) {
-        if (t < bestT) { bestT = t; best = { world: true, t, point: probe.clone().setY(ground + 0.01), surface: g.world.surfaceAt(probe.x, probe.z) }; }
+        if (t < bestT) {
+          bestT = t;
+          best = { world: true, t, point: probe.clone().setY(ground + 0.01), surface: g.world.surfaceAt(probe.x, probe.z) };
+        }
         break;
       }
-      const c = probe.clone();
-      if (g.world.resolveCollision(c, 0.05)) {
+      if (g.world.resolveCollision(scratch.copy(probe), 0.05)) {
         if (t < bestT) { bestT = t; best = { world: true, t, point: probe.clone(), surface: 'concrete' }; }
         break;
       }
+      t += t < 20 ? 0.5 : t < 60 ? 1.6 : 4.0;
     }
 
     if (best && best.npc) this.hitPerson(best.npc, dir, best.point);
@@ -346,8 +370,8 @@ export class Arsenal {
       const d = this._dir.copy(t.to).sub(t.from);
       const len = d.length() || 0.001;
       d.divideScalar(len);
-      this._q.setFromUnitVectors(new THREE.Vector3(1, 0, 0), d);
-      this._m.compose(t.from, this._q, new THREE.Vector3(len, 1, 1));
+      this._q.setFromUnitVectors(this._axisX, d);
+      this._m.compose(t.from, this._q, this._scale.set(len, 1, 1));
       this.tracerMesh.setMatrixAt(i, this._m);
     }
     this.tracerMesh.count = n;

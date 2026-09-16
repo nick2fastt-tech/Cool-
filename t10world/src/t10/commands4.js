@@ -437,7 +437,7 @@ export function extendRegistry4(R, add) {
     'Drop the settings until it runs smoothly.',
     (ctx) => {
       const fps = ctx.game.governor ? ctx.game.governor.fps : 60;
-      const order = ['ultra', 'high', 'medium', 'low'];
+      const order = ['ultra', 'high', 'low'];
       const now = order.indexOf(settings.get('quality'));
       if (fps > 50) return 'It\'s already running at ' + Math.round(fps) + ' fps. Nothing to fix.';
       if (now >= order.length - 1) {

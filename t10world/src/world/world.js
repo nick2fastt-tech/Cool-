@@ -156,8 +156,10 @@ export class World {
     // Draw distance governs fog and the far plane; geometry streaming is capped
     // well below it, because buildings past ~600m cost chunks and add nothing
     // the horizon haze doesn't already give you.
-    // The governor trims how far we stream before it touches resolution.
-    const streamDistance = Math.min(preset.drawDistance, 620) * lerpv(0.55, 1, perf.load);
+    // Streaming distance is its own preset dial now, not a clamp on the draw
+    // distance — LOW pulls the world in close, ULTRA keeps it out at 820m.
+    // The governor trims it before it touches resolution.
+    const streamDistance = (preset.streamDistance || Math.min(preset.drawDistance, 620)) * lerpv(0.55, 1, perf.load);
     const radius = Math.ceil(streamDistance / CHUNK_SIZE);
     const ccx = Math.floor(focusX / CHUNK_SIZE);
     const ccz = Math.floor(focusZ / CHUNK_SIZE);
@@ -205,10 +207,42 @@ export class World {
       }
     }
 
+    this.cullChunks();
     this.updateLights(focusX, focusZ);
     this.city.updateSignals(this.time);
     this.updateTrafficLights();
     updateWaterTime(this.time);
+  }
+
+  /**
+   * Coarse occlusion: a chunk is a 120m box, so testing its bounding sphere
+   * against the camera frustum once and hiding the whole group skips forty-odd
+   * per-mesh tests inside three.js. Cheap, and it is most of what per-object
+   * culling was costing on a phone.
+   */
+  cullChunks() {
+    const cam = this.cullCamera;
+    if (!cam) return 0;
+    if (!this._frustum) {
+      this._frustum = new THREE.Frustum();
+      this._cullMat = new THREE.Matrix4();
+      this._cullSphere = new THREE.Sphere(new THREE.Vector3(), CHUNK_SIZE * 0.72);
+    }
+    cam.updateMatrixWorld();
+    this._cullMat.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    this._frustum.setFromProjectionMatrix(this._cullMat);
+    let hidden = 0;
+    for (const chunk of this.chunks.values()) {
+      // Tall buildings poke well above the chunk centre, so the sphere is
+      // centred halfway up the tallest thing a chunk can hold.
+      this._cullSphere.center.set(chunk.centerX, 40, chunk.centerZ);
+      this._cullSphere.radius = CHUNK_SIZE * 0.72 + 80;
+      const visible = this._frustum.intersectsSphere(this._cullSphere);
+      if (chunk.group.visible !== visible) chunk.group.visible = visible;
+      if (!visible) hidden++;
+    }
+    this.chunksHidden = hidden;
+    return hidden;
   }
 
   queued(key) { return this.queuedKeys.has(key); }

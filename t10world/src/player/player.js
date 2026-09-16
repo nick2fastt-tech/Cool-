@@ -131,7 +131,7 @@ export class Player {
     if (this.knockedDown > 0) {
       this.knockedDown -= dt;
       this.speed = 0;
-      this.human.animator.setState(this.knockedDown > 1.1 ? STATES.LIE : STATES.GETUP);
+      this.human.animator.setState(this.knockedDown > 1.1 ? STATES.LIE : STATES.RECOVER);
       if (this.knockedDown <= 0) this.human.animator.setState(STATES.IDLE);
       this.human.update(dt, { speed: 0, turnRate: 0, grounded: true, verticalVel: 0 });
       this.root.position.copy(this.position);
@@ -375,6 +375,8 @@ export class Player {
     setTimeout(() => v.openDoor(this.seatIndex === 0 ? 0 : 1, false), 900);
     this.camDistanceTarget = Math.max(5.5, v.spec.l * 1.35);
     this.human.animator.footIK.enabled = false;
+    // A beat of ducking into the seat before the drive pose takes over.
+    this.human.animator.setState(STATES.BOARD);
     audio.carDoor(true);
     return true;
   }

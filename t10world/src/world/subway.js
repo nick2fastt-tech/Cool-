@@ -367,6 +367,11 @@ export class Subway {
     const target = stops[t.index];
 
     if (t.state === 'dwell') {
+      // The train waits a little longer if you're on the platform beside it.
+      if (this.playerStation && this.playerStation.line === line &&
+          this.playerStation.index === t.index && !this.ridingTrain) {
+        t.timer = Math.max(t.timer, 2.5);
+      }
       t.timer -= dt;
       t.doorsOpen = clamp01(t.doorsOpen + dt * 1.6);
       if (t.timer <= 0) {
@@ -499,7 +504,8 @@ export class Subway {
     if (!stop) return null;
     for (const t of this.trains) {
       if (t.line !== stop.line) continue;
-      if (t.state === 'run' || t.doorsOpen < 0.6) continue;
+      // Stopped, with the doors at least part way open.
+      if (t.state === 'run' || t.doorsOpen < 0.35) continue;
       if (t.index !== stop.index) continue;
       return t;
     }
@@ -524,7 +530,9 @@ export class Subway {
   alight() {
     const t = this.ridingTrain;
     if (!t) return false;
-    if (t.state === 'run' || t.doorsOpen < 0.5) return false;
+    // Anything but moving. Being a fraction late as the doors close shouldn't
+    // trap you on the train until the next station.
+    if (t.state === 'run') return false;
     const stop = this.stops.find((s) => s.line === t.line && s.index === t.index);
     this.ridingTrain = null;
     this._lastRidePos = null;

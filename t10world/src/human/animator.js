@@ -48,6 +48,7 @@ export const STATES = {
   PHONE: 'phone', EAT: 'eat', EXERCISE: 'exercise', CARRY: 'carry', AIM: 'aim', DEAD: 'dead',
   SALUTE: 'salute', CLAP: 'clap', POINT: 'point', CHEER: 'cheer', THINK: 'think',
   STRETCH: 'stretch', BOW: 'bow',
+  DRINK: 'drink', DOOR: 'door', BOARD: 'board', ALIGHT: 'alight', RECOVER: 'recover',
 };
 
 export class HumanAnimator {
@@ -107,6 +108,26 @@ export class HumanAnimator {
     this._rate = 14;
   }
 
+  /** Every bone, cached — for..in over an object allocates and is slower. */
+  allBoneNames() {
+    if (!this._allNames) this._allNames = Object.keys(this.bones);
+    return this._allNames;
+  }
+
+  /**
+   * The bones that carry the silhouette at distance: spine, limbs, head.
+   * Fingers and toes are dropped, which is roughly half the skeleton.
+   */
+  coarseBoneNames() {
+    if (this._coarseNames) return this._coarseNames;
+    this._coarseNames = this.allBoneNames().filter((n) =>
+      !/^(thumb|index|middle|ring|pinky|finger)/i.test(n) && !/^toe/i.test(n));
+    return this._coarseNames;
+  }
+
+  /** 0 full, 1 no face or fingers, 2 body pose only, 3 frozen. */
+  setLod(level) { this.lod = level | 0; }
+
   setState(state, opts) {
     if (this.state === state) return;
     this.prevState = this.state;
@@ -162,6 +183,10 @@ export class HumanAnimator {
       case STATES.SWIM: this.poseSwim(dt); break;
       case STATES.LIE: this.poseLie(dt); break;
       case STATES.GETUP: this.poseGetUp(dt); break;
+      case STATES.DRINK: this.poseDrink(dt); break;
+      case STATES.DOOR: this.poseDoor(dt); break;
+      case STATES.BOARD: case STATES.ALIGHT: this.poseBoard(dt); break;
+      case STATES.RECOVER: this.poseRecover(dt); break;
       case STATES.DANCE: this.poseDance(dt); break;
       case STATES.WAVE: this.poseWave(dt); break;
       case STATES.PHONE: this.posePhone(dt); break;
@@ -184,12 +209,15 @@ export class HumanAnimator {
     this.applyBreathing(dt);
     if (this.weaponAim) this.applyWeaponPose(dt);
     this.applyTurnLean(dt);
-    if (this.rig.facial !== false) {
+    // Animation LOD. 0 is everything; 1 drops the face; 2 is the body pose
+    // only; 3 is frozen and never reaches here at all.
+    const lod = this.lod || 0;
+    if (lod === 0 && this.rig.facial !== false) {
       this.applyBlink(dt);
       this.applyGaze(dt);
       this.applyTalk(dt);
     }
-    this.applyLookAt(dt);
+    if (lod <= 1) this.applyLookAt(dt);
 
     // ---- Commit: slerp bones toward the target pose ------------------------
     // Each pose sets its own responsiveness, and switching pose used to adopt
@@ -198,10 +226,14 @@ export class HumanAnimator {
     const settle = clamp01(this.stateTime / 0.28);
     const rateNow = lerpv(Math.min(this._rate, 7), this._rate, settle);
     const rate = 1 - Math.exp(-rateNow * dt);
-    for (const name in this.bones) {
+    // Far away, fingers and toes are sub-pixel — skip them and the slerp cost
+    // that goes with them. This is most of what an animation LOD buys you.
+    const names = lod >= 1 ? this.coarseBoneNames() : this.allBoneNames();
+    for (let i = 0; i < names.length; i++) {
+      const name = names[i];
       const b = this.bones[name];
       const t = this._target[name];
-      if (!t) continue;
+      if (!b || !t) continue;
       b.quaternion.slerp(t, rate);
     }
 
@@ -217,8 +249,8 @@ export class HumanAnimator {
     // ---- IK passes --------------------------------------------------------
     if (rootObject) {
       rootObject.updateMatrixWorld(true);
-      if (this.footIK.enabled && this.groundSampler && this.isGroundedState()) this.applyFootIK(rootObject, dt);
-      if (this.handTargets.L || this.handTargets.R) this.applyHandIK(rootObject);
+      if (lod === 0 && this.footIK.enabled && this.groundSampler && this.isGroundedState()) this.applyFootIK(rootObject, dt);
+      if (lod <= 1 && (this.handTargets.L || this.handTargets.R)) this.applyHandIK(rootObject);
     }
 
     this.detectFootsteps();
@@ -352,28 +384,38 @@ export class HumanAnimator {
     const walkAmt = 1 - run;
     const ph = this.phase * TAU;
 
+    // Acceleration, and the start/stop weighting it drives. The first stride
+    // out of a standstill is longer and lower, and the last one plants and
+    // settles — without these, walking looks like a speed slider being dragged.
+    const accel = clampv((spd - (this._lastSpd == null ? spd : this._lastSpd)) / Math.max(dt, 0.001), -9, 9);
+    this._lastSpd = spd;
+    this.accelLean = lerpv(this.accelLean || 0, accel * 0.035, clamp01(dt * 6));
+    this.startT = clamp01((this.startT == null ? 0 : this.startT) + (accel > 1.2 ? dt * 3.2 : -dt * 1.4));
+    this.stopT = clamp01((this.stopT == null ? 0 : this.stopT) + (accel < -1.4 ? dt * 3.6 : -dt * 2.2));
+    const push = this.startT * (1 - clamp01(spd / 2.2));   // only while still slow
+    const plant = this.stopT;
+
     // Amplitudes ramp continuously from walk through sprint.
-    const thighAmp = lerpv(0.40, lerpv(0.70, 0.88, sprint), run) * p.strideScale;
+    const thighAmp = lerpv(0.40, lerpv(0.70, 0.88, sprint), run) * p.strideScale * (1 + push * 0.45 - plant * 0.30);
     const kneeAmp = lerpv(0.95, lerpv(1.85, 2.25, sprint), run);
     const armAmp = lerpv(0.34, lerpv(0.85, 1.15, sprint), run) * p.armSwing;
     const elbowBase = lerpv(0.30, lerpv(1.30, 1.65, sprint), run) * p.armBend;
     const bounce = lerpv(0.014, lerpv(0.030, 0.042, sprint), run) * p.bounce;
-    // Lean from speed, plus a bit more from acceleration, so setting off and
-    // pulling up read as effort rather than a speed slider moving.
-    const accel = clampv((spd - (this._lastSpd == null ? spd : this._lastSpd)) / Math.max(dt, 0.001), -9, 9);
-    this._lastSpd = spd;
-    this.accelLean = lerpv(this.accelLean || 0, accel * 0.035, clamp01(dt * 6));
+    // Lean from speed, plus a bit more from acceleration.
     const lean = lerpv(0.03, lerpv(0.16, 0.30, sprint), run) * p.lean + this.accelLean;
+
     const swayAmt = lerpv(0.075, 0.045, run) * p.hipSway;
 
     // Vertical bob peaks twice per cycle; lateral sway once.
-    this.hipsOffset.y = (-Math.abs(Math.cos(ph)) * bounce + bounce * 0.42) * this.prop.measure.height;
+    // Push off drops the hips and drives them forward; planting sinks them.
+    this.hipsOffset.y = (-Math.abs(Math.cos(ph)) * bounce + bounce * 0.42
+      - push * 0.020 - plant * 0.016) * this.prop.measure.height;
     this.hipsOffset.x = Math.sin(ph) * swayAmt * this.prop.measure.height * 0.12;
     this.hipsOffset.z = -lean * this.prop.measure.height * 0.03;
 
     const pelvisYaw = Math.sin(ph) * lerpv(0.10, 0.18, run);
     const pelvisRoll = -Math.sin(ph) * swayAmt * 0.5;
-    this.set('hips', lean * 0.45, pelvisYaw, pelvisRoll);
+    this.set('hips', lean * 0.45 + push * 0.14 - plant * 0.10, pelvisYaw, pelvisRoll);
     this.set('spine', lean * 0.30, -pelvisYaw * 0.55, -pelvisRoll * 0.4);
     this.set('chest', lean * 0.22, -pelvisYaw * 0.85 * p.shoulderRoll, -pelvisRoll * 0.3);
     this.set('neck', -lean * 0.42, pelvisYaw * 0.25, 0);
@@ -411,6 +453,93 @@ export class HumanAnimator {
       this.set('lowerArm' + S, 0, -s * (elbowBase + Math.max(0, -armSwing) * 0.35), 0);
       this.set('hand' + S, Math.sin(armPh) * 0.12, 0, s * 0.06);
       this.relaxFingers(S, lerpv(0.38, 0.72, run));
+    }
+  }
+
+  /** Raising something to the mouth and lowering it again. */
+  poseDrink(dt) {
+    this._rate = 9;
+    const t = this.stateTime;
+    // Up over half a second, held, then down.
+    const lift = clamp01(Math.min(t / 0.5, 1) - Math.max(0, (t - 2.6) / 0.6));
+    this.poseIdle(dt);
+    const s = -1;   // right hand does the work
+    this.setBlend('upperArmR', -0.42 * lift, s * 0.30 * lift, -s * (1.30 - 0.42 * lift), 1);
+    this.setBlend('lowerArmR', 0, -s * (0.22 + 1.85 * lift), 0, 1);
+    this.setBlend('handR', -0.35 * lift, 0, s * 0.18, 1);
+    this.setBlend('head', 0.06 + 0.10 * lift, 0, 0, 0.7);
+    this.setBlend('neck', -0.04 - 0.08 * lift, 0, 0, 0.7);
+    this.relaxFingers('R', 0.95);
+  }
+
+  /** Reaching for a handle, turning it, and pushing through. */
+  poseDoor(dt) {
+    this._rate = 10;
+    const t = clamp01(this.stateTime / 1.1);
+    const reach = Math.sin(clamp01(t * 1.6) * Math.PI * 0.5);
+    const push = clamp01((t - 0.45) / 0.55);
+    this.poseIdle(dt);
+    const s = -1;
+    this.setBlend('upperArmR', -0.72 * reach, s * 0.22, -s * (1.30 - 0.78 * reach), 1);
+    this.setBlend('lowerArmR', 0, -s * (0.22 + 0.72 * reach), 0, 1);
+    this.setBlend('handR', 0, 0, s * (0.06 + 0.5 * reach), 1);
+    this.setBlend('chest', 0.05 * reach + 0.10 * push, -0.16 * reach, 0, 0.8);
+    this.setBlend('spine', 0.04 * push, -0.08 * reach, 0, 0.6);
+    this.relaxFingers('R', 0.9);
+  }
+
+  /** Ducking into a car seat, or climbing back out of one. */
+  poseBoard(dt) {
+    this._rate = 11;
+    const out = this.state === STATES.ALIGHT;
+    let t = clamp01(this.stateTime / 0.9);
+    if (out) t = 1 - t;
+    // Head down, one leg in, hand on the roof.
+    const duck = Math.sin(clamp01(t) * Math.PI);
+    const m = this.prop.measure;
+    this.hipsOffset.y = -duck * m.height * 0.10;
+    this.set('hips', 0.22 * duck, 0.22 * duck, 0);
+    this.set('spine', 0.20 * duck, -0.10 * duck, 0);
+    this.set('chest', 0.16 * duck, -0.12 * duck, 0);
+    this.set('neck', -0.28 * duck, 0, 0);
+    this.set('head', -0.20 * duck, 0.08 * duck, 0);
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      const lead = S === 'R' ? 1 : 0.4;   // right leg goes in first
+      this.set('upperLeg' + S, -0.85 * duck * lead, s * 0.12, s * 0.06);
+      this.set('lowerLeg' + S, 1.15 * duck * lead, 0, 0);
+      this.set('foot' + S, 0.25 * duck, s * 0.08, 0);
+      // Left hand up on the door frame.
+      const grab = S === 'L' ? duck : duck * 0.35;
+      this.set('upperArm' + S, -1.05 * grab, s * 0.22, -s * (1.30 - 0.86 * grab));
+      this.set('lowerArm' + S, 0, -s * (0.25 + 0.95 * grab), 0);
+      this.relaxFingers(S, 0.85);
+    }
+  }
+
+  /** Pushing up off the floor after being knocked down. */
+  poseRecover(dt) {
+    this._rate = 8;
+    const t = clamp01(this.stateTime / 1.4);
+    const m = this.prop.measure;
+    const down = 1 - t;
+    this.hipsOffset.y = -down * m.height * 0.34;
+    this.set('hips', -0.55 * down, 0, 0);
+    this.set('spine', 0.30 * down, 0, 0);
+    this.set('chest', 0.22 * down, 0, 0);
+    this.set('neck', -0.30 * down, 0, 0);
+    this.set('head', -0.12 * down, 0, 0);
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      // Arms take the weight early, legs gather under you late.
+      const brace = Math.max(0, 1 - t * 1.6);
+      this.set('upperArm' + S, -0.35 - 0.55 * brace, s * 0.34, -s * (1.30 - 0.70 * brace));
+      this.set('lowerArm' + S, 0, -s * (0.30 + 0.85 * brace), 0);
+      const tuck = Math.max(0, 1 - Math.abs(t - 0.55) * 3);
+      this.set('upperLeg' + S, -0.95 * tuck, s * 0.16, s * 0.05);
+      this.set('lowerLeg' + S, 1.45 * tuck, 0, 0);
+      this.set('foot' + S, 0.2 * tuck, s * 0.08, 0);
+      this.relaxFingers(S, 0.6);
     }
   }
 
@@ -903,6 +1032,7 @@ export class HumanAnimator {
 
   /** Finger curl: 0 = straight, 1 = fist. */
   relaxFingers(S, amount) {
+    if (this.lod >= 1) return;   // fingers aren't visible out here
     const names = ['index', 'middle', 'ring', 'pinky'];
     for (let i = 0; i < names.length; i++) {
       const curl = amount * (0.85 + i * 0.08);

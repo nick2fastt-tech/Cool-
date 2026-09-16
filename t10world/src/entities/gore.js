@@ -5,7 +5,7 @@
 // street full of it costs four draw calls no matter how bad it gets.
 import * as THREE from '../../vendor/three.module.js';
 import { clamp01, clampv, lerpv, makeRng, TAU } from '../core/math.js';
-import { settings } from '../core/settings.js';
+import { settings, perf } from '../core/settings.js';
 
 const MAX_DECALS = 420;
 const MAX_DROPS = 900;
@@ -81,6 +81,14 @@ export class Gore {
   }
 
   get level() { return settings.get('goreLevel'); }
+
+  /** How much of the pool this device should actually use, right now. */
+  get budget() {
+    return clamp01((settings.preset.goreBudget == null ? 1 : settings.preset.goreBudget) * perf.load);
+  }
+  get decalCap() { return Math.max(40, Math.round(MAX_DECALS * this.budget)); }
+  get gibCap() { return Math.max(12, Math.round(MAX_GIBS * this.budget)); }
+  get dropCap() { return Math.max(80, Math.round(MAX_DROPS * this.budget)); }
 
   buildDecals() {
     this.decalMats = [];
@@ -227,7 +235,8 @@ export class Gore {
 
     const n = Math.round(lerpv(5, 22, a) * level);
     let made = 0;
-    for (let i = 0; i < n && this.gibs.length < MAX_GIBS; i++) {
+    const gibCap = this.gibCap;
+    for (let i = 0; i < n && this.gibs.length < gibCap; i++) {
       // Mostly flesh, some bone, a rib or two, and the head's contents only
       // when it was the head.
       const roll = this.rng();
@@ -294,13 +303,14 @@ export class Gore {
       alpha: 1,
     };
     this.decals.push(rec);
-    if (this.decals.length > MAX_DECALS * 2) this.decals.splice(0, this.decals.length - MAX_DECALS * 2);
+    const cap = this.decalCap;
+    if (this.decals.length > cap) this.decals.splice(0, this.decals.length - cap);
     return rec;
   }
 
   /** A burst of droplets. */
   spray(x, y, z, count, dirX, dirZ, force) {
-    const n = Math.min(count, MAX_DROPS - this.dropCount);
+    const n = Math.min(count, this.dropCap - this.dropCount);
     for (let i = 0; i < n; i++) {
       const k = this.dropCount++;
       const i3 = k * 3;
