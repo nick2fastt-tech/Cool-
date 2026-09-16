@@ -9,6 +9,19 @@ import { settings } from '../core/settings.js';
 
 const MAX_DECALS = 420;
 const MAX_DROPS = 900;
+const MAX_GIBS = 160;
+
+/**
+ * What comes out of a person. Each kind is one instanced mesh, so however much
+ * of it ends up on the pavement it is five draw calls.
+ */
+const GIB_KINDS = [
+  { id: 'flesh',  color: 0x8e1b18, rough: 0.52, scale: [0.055, 0.14], weight: 1.0 },
+  { id: 'organ',  color: 0x5e0f14, rough: 0.34, scale: [0.070, 0.16], weight: 1.1 },
+  { id: 'bone',   color: 0xdfd6c0, rough: 0.72, scale: [0.045, 0.11], weight: 0.9 },
+  { id: 'rib',    color: 0xe6dcc4, rough: 0.70, scale: [0.090, 0.17], weight: 0.95 },
+  { id: 'brain',  color: 0xc98b96, rough: 0.30, scale: [0.075, 0.13], weight: 1.05 },
+];
 
 /** Blood, wet and dried, painted once into a canvas. */
 function bloodTexture(seed, dried) {
@@ -61,8 +74,10 @@ export class Gore {
 
     this.decals = [];
     this.dropCount = 0;
+    this.gibs = [];
     this.buildDecals();
     this.buildDrops();
+    this.buildGibs();
   }
 
   get level() { return settings.get('goreLevel'); }
@@ -150,6 +165,101 @@ export class Gore {
     this.dropGeo = geo;
   }
 
+  buildGibs() {
+    this.gibMesh = {};
+    for (const kind of GIB_KINDS) {
+      let geo;
+      if (kind.id === 'rib') {
+        // A curved sliver of cage, not a lump.
+        geo = new THREE.TorusGeometry(0.5, 0.075, 5, 9, Math.PI * 1.15);
+        geo.scale(1, 1, 0.42);
+      } else if (kind.id === 'brain') {
+        geo = new THREE.SphereGeometry(0.5, 7, 5);
+        geo.scale(1, 0.82, 1.12);
+        // Lobe it, so it isn't a ball.
+        const pos = geo.attributes.position;
+        for (let i = 0; i < pos.count; i++) {
+          const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+          const f = 1 + Math.sin(x * 9) * 0.07 + Math.sin(z * 11 + y * 5) * 0.06;
+          pos.setXYZ(i, x * f, y * f, z * f);
+        }
+        geo.computeVertexNormals();
+      } else if (kind.id === 'bone') {
+        geo = new THREE.CylinderGeometry(0.16, 0.22, 1, 5, 1);
+      } else {
+        geo = new THREE.IcosahedronGeometry(0.5, 0);
+        // Knock it out of shape so no two chunks read the same.
+        const pos = geo.attributes.position;
+        const rng = makeRng(kind.id === 'organ' ? 31 : 17);
+        for (let i = 0; i < pos.count; i++) {
+          const f = 0.66 + rng() * 0.7;
+          pos.setXYZ(i, pos.getX(i) * f, pos.getY(i) * f * 0.8, pos.getZ(i) * f);
+        }
+        geo.computeVertexNormals();
+      }
+      const mat = new THREE.MeshStandardMaterial({
+        color: kind.color, roughness: kind.rough, metalness: 0.02,
+      });
+      const mesh = new THREE.InstancedMesh(geo, mat, MAX_GIBS);
+      mesh.count = 0;
+      mesh.frustumCulled = false;
+      mesh.castShadow = false;
+      mesh.receiveShadow = true;
+      mesh.userData.wantsShadow = false;
+      mesh.matrixAutoUpdate = false;
+      this.group.add(mesh);
+      this.gibMesh[kind.id] = mesh;
+    }
+    this._gq = new THREE.Quaternion();
+    this._ge = new THREE.Euler();
+  }
+
+  /**
+   * Take someone apart. `amount` 0..1 decides how much of them there is and
+   * whether the head goes with it.
+   */
+  gib(x, y, z, amount, dirX, dirZ) {
+    const level = this.level;
+    if (level <= 0) return 0;
+    const a = clamp01(amount);
+    // 16+ keeps the blood but not the pieces.
+    if (level < 0.6) { this.hit(x, y, z, a, dirX, dirZ); return 0; }
+
+    const n = Math.round(lerpv(5, 22, a) * level);
+    let made = 0;
+    for (let i = 0; i < n && this.gibs.length < MAX_GIBS; i++) {
+      // Mostly flesh, some bone, a rib or two, and the head's contents only
+      // when it was the head.
+      const roll = this.rng();
+      let kind = roll < 0.44 ? 'flesh' : roll < 0.66 ? 'organ' : roll < 0.84 ? 'bone' : 'rib';
+      if (a > 0.85 && i < 2) kind = 'brain';
+      const def = GIB_KINDS.find((k) => k.id === kind);
+      const spread = 2.2 + a * 5.5;
+      this.gibs.push({
+        kind,
+        x: x + (this.rng() - 0.5) * 0.34,
+        y: y + 0.4 + this.rng() * 0.9,
+        z: z + (this.rng() - 0.5) * 0.34,
+        vx: (dirX || 0) * (1.6 + a * 4) + (this.rng() - 0.5) * spread,
+        vy: this.rng.range(1.6, 5.4) * (0.55 + a),
+        vz: (dirZ || 0) * (1.6 + a * 4) + (this.rng() - 0.5) * spread,
+        rx: this.rng() * TAU, ry: this.rng() * TAU, rz: this.rng() * TAU,
+        spinX: (this.rng() - 0.5) * 13, spinY: (this.rng() - 0.5) * 13, spinZ: (this.rng() - 0.5) * 13,
+        size: this.rng.range(def.scale[0], def.scale[1]) * lerpv(0.8, 1.15, a),
+        drag: def.weight,
+        rest: 0,
+        age: 0,
+        life: 55 + this.rng() * 50,
+        bleed: 0.6,
+      });
+      made++;
+    }
+    // A burst of spray and a pool to go with it.
+    this.spray(x, y + 0.8, z, Math.round(lerpv(20, 60, a)), dirX || 0, dirZ || 0, a);
+    this.pool(x, z, lerpv(1.4, 2.6, a));
+    return made;
+  }
+
   // -------------------------------------------------------------------------
 
   /**
@@ -209,6 +319,8 @@ export class Gore {
   clear() {
     this.decals.length = 0;
     this.dropCount = 0;
+    this.gibs.length = 0;
+    for (const k of GIB_KINDS) if (this.gibMesh) this.gibMesh[k.id].count = 0;
     for (const m of this.decalMesh) m.count = 0;
     this.dropGeo.setDrawRange(0, 0);
   }
@@ -241,6 +353,58 @@ export class Gore {
     this.dropGeo.attributes.position.needsUpdate = true;
     this.dropGeo.attributes.aLife.needsUpdate = true;
     this.dropGeo.attributes.aSize.needsUpdate = true;
+
+    // ---- Gibs: ballistic until they settle, then they lie there. ----
+    if (this.gibs.length) {
+      const counts = {};
+      for (const k of GIB_KINDS) counts[k.id] = 0;
+      for (let i = this.gibs.length - 1; i >= 0; i--) {
+        const g = this.gibs[i];
+        g.age += dt;
+        if (g.age > g.life) { this.gibs.splice(i, 1); continue; }
+        if (g.rest <= 0) {
+          g.vy -= 15.5 * dt * g.drag;
+          g.x += g.vx * dt; g.y += g.vy * dt; g.z += g.vz * dt;
+          g.rx += g.spinX * dt; g.ry += g.spinY * dt; g.rz += g.spinZ * dt;
+          const ground = (this.game.world ? this.game.world.groundAt(g.x, g.z) : 0) + g.size * 0.45;
+          if (g.y <= ground) {
+            g.y = ground;
+            // It leaves a mark every time it lands, until it stops bouncing.
+            if (g.bleed > 0.05) { this.splat(g.x, g.z, g.size * this.rng.range(2.4, 5.0), 0.8); g.bleed *= 0.45; }
+            if (Math.abs(g.vy) < 1.2) {
+              g.rest = 1;
+              g.vx = g.vz = g.vy = 0;
+              g.spinX = g.spinY = g.spinZ = 0;
+              // Lie flat.
+              g.rx = Math.PI * 0.5 * (this.rng() < 0.5 ? 1 : -1) * 0.8;
+            } else {
+              g.vy = -g.vy * 0.28;
+              g.vx *= 0.5; g.vz *= 0.5;
+              g.spinX *= 0.4; g.spinY *= 0.4; g.spinZ *= 0.4;
+            }
+          }
+        }
+        const mesh = this.gibMesh[g.kind];
+        const slot = counts[g.kind];
+        if (mesh && slot < MAX_GIBS) {
+          this._p.set(g.x, g.y, g.z);
+          this._ge.set(g.rx, g.ry, g.rz);
+          this._gq.setFromEuler(this._ge);
+          const fade = g.age > g.life - 6 ? clamp01((g.life - g.age) / 6) : 1;
+          this._s.setScalar(g.size * fade);
+          this._m.compose(this._p, this._gq, this._s);
+          mesh.setMatrixAt(slot, this._m);
+          counts[g.kind] = slot + 1;
+        }
+      }
+      for (const k of GIB_KINDS) {
+        const mesh = this.gibMesh[k.id];
+        mesh.count = counts[k.id];
+        if (counts[k.id]) mesh.instanceMatrix.needsUpdate = true;
+      }
+    } else {
+      for (const k of GIB_KINDS) this.gibMesh[k.id].count = 0;
+    }
 
     // ---- Decals: age, dry out, fade, and only the near ones get drawn. ----
     const wet = [], dry = [];

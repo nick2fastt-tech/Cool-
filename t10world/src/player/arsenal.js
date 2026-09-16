@@ -96,6 +96,8 @@ export class Arsenal {
 
   unequip() {
     if (this.view) { this.game.scene.remove(this.view); this.view = null; }
+    const p = this.game.player;
+    if (p && p.human && p.human.animator) p.human.animator.weaponAim = null;
     this.weapon = null;
     this.flash.visible = false;
     this.flashLight.intensity = 0;
@@ -127,19 +129,36 @@ export class Arsenal {
     const fwd = this._dir.set(0, 0, -1).applyQuaternion(cam.quaternion);
 
     const sway = Math.sin(p.human.animator.phase * TAU) * clamp01(p.speed / p.walkSpeed) * 0.012;
-    // First person hangs it off the camera; third person puts it where the
-    // character's hands are, or it floats out beside them three metres away.
-    const target = first
-      ? cam.position.clone()
+
+    // Tell the body it's holding something, so the arms come up and the chest
+    // squares to the target. In first person nobody sees the body, so skip it.
+    p.human.animator.weaponAim = first ? null : {
+      weight: 1, pitch: p.pitch, aiming: !!this.aiming,
+    };
+
+    let target;
+    if (first) {
+      target = cam.position.clone()
         .addScaledVector(right, 0.17)
         .addScaledVector(up, -0.16 + sway)
-        .addScaledVector(fwd, 0.26 - kick * 0.09)
-      : new THREE.Vector3(p.position.x, p.position.y + p.eyeHeight * 0.74 + sway, p.position.z)
-        .addScaledVector(right, 0.34)
-        .addScaledVector(fwd, 0.30 - kick * 0.09);
+        .addScaledVector(fwd, 0.26 - kick * 0.09);
+    } else {
+      // Third person puts the gun in the hand that is holding it. The pose
+      // above has already put that hand out in front of the chest.
+      const handBone = p.human.boneMap && p.human.boneMap.handR;
+      if (handBone) {
+        handBone.updateWorldMatrix(true, false);
+        target = new THREE.Vector3().setFromMatrixPosition(handBone.matrixWorld);
+        target.addScaledVector(fwd, 0.12 - kick * 0.06).addScaledVector(up, -0.02);
+      } else {
+        target = new THREE.Vector3(p.position.x, p.position.y + p.eyeHeight * 0.74 + sway, p.position.z)
+          .addScaledVector(right, 0.30)
+          .addScaledVector(fwd, 0.30 - kick * 0.09);
+      }
+    }
 
     if (snap) this.view.position.copy(target);
-    else this.view.position.lerp(target, clamp01(dt * 22));
+    else this.view.position.lerp(target, clamp01(dt * (first ? 22 : 30)));
     this.view.quaternion.copy(cam.quaternion);
     // The model points down its own +X and the camera looks down -Z, so the
     // gun's frame turns +90° about Y: R_y(90°)·(1,0,0) = (0,0,-1). Turning it
@@ -352,7 +371,9 @@ export class Arsenal {
     }
 
     // Trigger. Touch uses a dedicated button; on desktop it's the left mouse.
-    const held = input && (input.buttons.fire || (input.mouseLeft && !input.isTypingNow));
+    // USE doubles as the trigger, so one button covers shooting, sitting,
+    // talking and doors — which is what it has to be on a phone.
+    const held = this.triggerHeld || (input && input.buttons.fire);
     if (w.spinUp) {
       this.spin = clamp01(this.spin + (held ? dt / w.spinUp : -dt / (w.spinUp * 0.7)));
     }

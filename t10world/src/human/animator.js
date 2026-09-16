@@ -182,6 +182,7 @@ export class HumanAnimator {
 
     // ---- Additive layers -------------------------------------------------
     this.applyBreathing(dt);
+    if (this.weaponAim) this.applyWeaponPose(dt);
     this.applyTurnLean(dt);
     if (this.rig.facial !== false) {
       this.applyBlink(dt);
@@ -243,6 +244,15 @@ export class HumanAnimator {
     _e.set(x || 0, y || 0, z || 0, order || 'XYZ');
     t.setFromEuler(_e);
   }
+  /** Slerp a bone's target part-way toward a rotation. */
+  setBlend(name, x, y, z, w, order) {
+    const t = this._target[name];
+    if (!t) return;
+    _e.set(x || 0, y || 0, z || 0, order || 'XYZ');
+    _q.setFromEuler(_e);
+    t.slerp(_q, clamp01(w));
+  }
+
   /** Add a rotation on top of whatever the pose set. */
   add(name, x, y, z, order) {
     const t = this._target[name];
@@ -1075,6 +1085,40 @@ export class HumanAnimator {
         foot.quaternion.multiply(_q);
       }
     }
+  }
+
+  /**
+   * Holding a gun, on top of whatever else the body is doing. Both hands come
+   * up on the weapon, the elbows tuck in, and the chest turns toward the aim —
+   * so walking, turning and the idle sway all still read underneath.
+   */
+  applyWeaponPose(dt) {
+    const a = this.weaponAim;
+    const w = clamp01(a.weight == null ? 1 : a.weight);
+    if (w <= 0.01) return;
+    const pitch = clampv(a.pitch || 0, -1.0, 1.0);
+    const ready = a.aiming ? 1 : 0.72;   // shouldered versus carried at the chest
+
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      const lead = S === 'L' ? 1 : 0;    // the left hand reaches further forward
+      // The arms bind in a T-pose, so |z| near zero is straight out sideways —
+      // bringing them down to the body is what the large z does, and the
+      // forward reach is x.
+      this.setBlend('clavicle' + S, 0, -s * 0.06, -s * 0.10 * ready, w);
+      this.setBlend('upperArm' + S,
+        (-0.48 - lead * 0.20) * ready - pitch * 0.55,
+        s * (0.28 + lead * 0.20),
+        -s * (1.06 - lead * 0.18),
+        w);
+      this.setBlend('lowerArm' + S, 0, -s * (1.52 - lead * 0.22), 0, w);
+      this.setBlend('hand' + S, 0.10, 0, s * 0.12, w);
+      this.relaxFingers(S, 0.9);
+    }
+    // Square up to the target and brace.
+    this.setBlend('chest', 0.06 * ready - pitch * 0.10, -0.16 * ready, 0, w * 0.8);
+    this.setBlend('spine', 0.04 * ready, -0.08 * ready, 0, w * 0.6);
+    this.setBlend('neck', -pitch * 0.25, 0.06 * ready, 0, w * 0.5);
   }
 
   applyHandIK(rootObject) {

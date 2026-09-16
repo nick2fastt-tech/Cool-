@@ -53,6 +53,9 @@ export class Player {
     this.jumpVelocity = 5.4;
     this.speedMultiplier = 1;
     this.strength = 1;
+    this.isZombie = false;
+    this.inSubway = false;
+    this.groundOverride = null;
     this.jumpMultiplier = 1;
 
     this.cameraMode = settings.get('cameraMode');
@@ -187,8 +190,12 @@ export class Player {
     const turnRate = wrapAngle(this.heading - prevHeading) / Math.max(dt, 0.0001);
 
     // --- Vertical ---
-    const groundY = this.world.supportAt(this.position.x, this.position.z, this.position.y);
-    const waterHere = this.world.isWater(this.position.x, this.position.z);
+    // Underground the terrain means nothing; the platform or the train floor is
+    // the ground.
+    const groundY = this.groundOverride != null
+      ? this.groundOverride
+      : this.world.supportAt(this.position.x, this.position.z, this.position.y);
+    const waterHere = this.groundOverride == null && this.world.isWater(this.position.x, this.position.z);
     this.swimming = waterHere && this.position.y < WATER_LEVEL + 0.3;
 
     if (this.flying || this.noclip) {
@@ -236,7 +243,7 @@ export class Player {
     const moveScale = this.grounded || this.swimming || this.flying ? 1 : 0.72;
     this.position.x += Math.sin(this.heading) * this.speed * moveScale * dt;
     this.position.z += Math.cos(this.heading) * this.speed * moveScale * dt;
-    if (!this.noclip) this.world.resolveCollision(this.position, 0.36);
+    if (!this.noclip && this.groundOverride == null) this.world.resolveCollision(this.position, 0.36);
 
     // Keep the player inside the world.
     const LIM = 1180;
@@ -271,6 +278,41 @@ export class Player {
   onHardLanding(impact) {
     this.camShake = 1.4;
     if (this.onDamage) this.onDamage(impact);
+  }
+
+  /** Sit where you are — on a train, a bench, a platform. */
+  sitDownHere() {
+    if (this.sitting) return false;
+    this.sitting = { x: this.position.x, z: this.position.z, here: true };
+    this.speed = 0;
+    this.human.animator.setState(STATES.SIT);
+    return true;
+  }
+
+  standUp() {
+    if (!this.sitting) return false;
+    this.sitting = null;
+    this.human.animator.setState(STATES.IDLE);
+    return true;
+  }
+
+  /**
+   * Turn, or turn back. As a zombie you're slower, everything living runs from
+   * you, the infected leave you alone, and USE on someone close feeds.
+   */
+  setZombie(on) {
+    if (this.isZombie === !!on) return this.isZombie;
+    this.isZombie = !!on;
+    const a = this.appearance;
+    if (this.isZombie) {
+      this._preZombie = { speed: this.walkSpeed, tone: a.toneIndex };
+      this.walkSpeed = 1.85;
+      this.human.setSkinTint(0x8fe070, 0xd4ff5a);
+    } else {
+      this.walkSpeed = (this._preZombie && this._preZombie.speed) || 2.45;
+      this.human.setSkinTint(null, null);
+    }
+    return this.isZombie;
   }
 
   /**

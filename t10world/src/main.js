@@ -7,6 +7,7 @@ import { audio } from './core/audio.js';
 import { saveGame, loadGame, hasSave, clearSave, saveInfo } from './core/save.js';
 import { clamp01, clampv, lerpv, hashString, makeRng, TAU } from './core/math.js';
 import { World, CHUNK_SIZE } from './world/world.js';
+import { Subway } from './world/subway.js';
 import { Atmosphere } from './render/atmosphere.js';
 import { PostProcessor } from './render/post.js';
 import { Player } from './player/player.js';
@@ -217,6 +218,29 @@ export class Game {
     return this.worldName;
   }
 
+  /** Options chosen on the creation screen, applied as the world is built. */
+  applyWorldOptions(opts) {
+    this.worldOptions = Object.assign({
+      where: 'downtown', time: 9.5, weather: 'fair', busy: 1, quality: 'high', maturity: 18,
+    }, opts || {});
+    if (this.worldOptions.quality) { settings.setQuality(this.worldOptions.quality); this.applyQuality(); }
+    if (this.worldOptions.maturity) settings.setMaturity(this.worldOptions.maturity);
+    return this.worldOptions;
+  }
+
+  /** A point inside a named district, for the creation screen's start choice. */
+  findDistrictPoint(key, rng) {
+    for (let i = 0; i < 1200; i++) {
+      const a = (i * 2.399963) % (Math.PI * 2);
+      const r = ((i + (rng ? rng() : 0)) / 1200) * 1100;
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (this.world.city.districtAt(x, z) !== key) continue;
+      if (this.world.isWater(x, z)) continue;
+      return { x, z };
+    }
+    return null;
+  }
+
   showCreator() {
     this.phase = 'creator';
     this.creator.open();
@@ -260,6 +284,8 @@ export class Game {
         this.animals = new AnimalManager(this.world, this.scene, this.atmosphere);
         this.gore = new Gore(this);
         this.arsenal = new Arsenal(this);
+        this.subway = new Subway(this);
+        this.subway.buildEntrances(this.world);
         this.apocalypse = new Apocalypse(this);
         this.npcs.apocalypse = this.apocalypse;
         // People only get to lay a hand on you when the world is ending.
@@ -270,11 +296,29 @@ export class Game {
         this.t10 = new T10Brain(this);
       }],
       ['Finding you a street…', () => {
-        // Different worlds wake you up on different streets.
+        const o = this.worldOptions || {};
+        // Different worlds wake you up on different streets, and the option
+        // chosen on the creation screen decides which part of town.
         const rng = makeRng(this.worldSeed ^ 0x5f3a7);
-        const a = rng() * Math.PI * 2;
-        const r = 90 + rng() * 380;
-        const spawn = this.world.findSpawnPoint(Math.cos(a) * r, Math.sin(a) * r);
+        let sx, sz;
+        const district = o.where && o.where !== 'random' ? o.where : null;
+        if (district) {
+          const spot = this.findDistrictPoint(district, rng);
+          if (spot) { sx = spot.x; sz = spot.z; }
+        }
+        if (sx == null) {
+          const a = rng() * Math.PI * 2;
+          const r = 90 + rng() * 380;
+          sx = Math.cos(a) * r; sz = Math.sin(a) * r;
+        }
+        if (o.time != null) this.atmosphere.timeOfDay = o.time;
+        if (o.weather) this.atmosphere.setWeather(o.weather, true);
+        if (o.busy != null) {
+          this.npcs.densityScale = o.busy;
+          this.traffic.densityScale = o.busy;
+          this.animals.densityScale = o.busy;
+        }
+        const spawn = this.world.findSpawnPoint(sx, sz);
         this.player.spawnOnStreet(spawn.x, spawn.z);
         this.player.setCameraMode(settings.get('cameraMode'));
         // Pre-stream the chunks around the spawn so you don't wake into a void.
@@ -393,10 +437,14 @@ export class Game {
     this.npcs.update(dt, p.position);
     this.traffic.update(dt, focus, p.inVehicle, this.npcs.npcs);
     this.animals.update(dt, p.position, this.traffic.vehicles);
+    if (this.npcs) this.npcs.playerIsZombie = p.isZombie;
     if (this.apocalypse) this.apocalypse.update(dt, p.position);
     if (this.gore) this.gore.update(dt, focus);
+    if (this.subway) this.subway.update(dt, focus);
     if (this.arsenal) {
       this.arsenal.aiming = !!this.input.buttons.aim;
+      // Holding USE keeps an automatic firing.
+      this.arsenal.triggerHeld = !!this.input.buttons.interact;
       this.arsenal.update(dt, this.input);
       if (this.input.edges.reload) this.arsenal.reload();
       this.hud.setArmed(this.arsenal.armed);
@@ -439,8 +487,16 @@ export class Game {
   // -------------------------------------------------------------------------
   // Interaction
   // -------------------------------------------------------------------------
+  /**
+   * USE is the whole game in one button. Armed, it fires; in a seat, it gets
+   * you up; on a train platform, it gets you on; otherwise it does whatever
+   * you're standing next to.
+   */
   doInteract() {
     if (this.phase !== 'playing' || this.hud.chatOpen) return;
+    if (this.arsenal && this.arsenal.armed) { this.arsenal.pullTrigger(); return; }
+    if (this.subway && this.doSubway()) return;
+    if (this.player.isZombie && this.doZombieBite()) return;
     const result = this.player.interact(this);
     if (!result) return;
     switch (result.kind) {
@@ -534,6 +590,65 @@ export class Game {
     this.t10Say(how === 'infect'
       ? npc.appearance.firstName + ' got hold of you. You\'re down — I\'ll have you up in a moment. Say "T10 never let me die" if you want that to stop happening.'
       : npc.appearance.firstName + ' put you on the pavement. Say "T10 I never want to die" and nobody touches you again.');
+  }
+
+  /**
+   * USE, underground. Board a waiting train, get off one, or climb back out
+   * to the street. @returns true if it did something.
+   */
+  doSubway() {
+    const sub = this.subway;
+    const p = this.player;
+    if (sub.ridingTrain) {
+      if (p.sitting) { p.standUp(); return true; }
+      if (sub.alight()) { this.t10Say('Off at ' + (sub.playerStation ? sub.playerStation.name : 'the platform') + '.'); return true; }
+      // Moving: sit down instead.
+      if (p.sitDownHere()) { this.t10Say('Take a seat.'); return true; }
+      return true;
+    }
+    if (p.inSubway) {
+      if (p.sitting) { p.standUp(); return true; }
+      const t = sub.board();
+      if (t) { this.t10Say('Aboard the ' + t.line.name + '. Use again to sit down.'); return true; }
+      // Near the stairs? Back up to the street.
+      const st = sub.playerStation;
+      if (st && Math.hypot(p.position.x - st.x, p.position.z - st.z) > 12) {
+        sub.leave();
+        this.t10Say('Back on the street.');
+        return true;
+      }
+      if (p.sitDownHere()) { this.t10Say('Waiting.'); return true; }
+      return false;
+    }
+    // Street level: the nearest entrance.
+    const t = p.interactTarget;
+    if (t && t.action === 'subway') {
+      const stop = sub.enter(t.stopKey);
+      if (stop) { this.t10Say(stop.line.name + ', ' + stop.name + '. Trains every minute or so.'); return true; }
+    }
+    return false;
+  }
+
+  /** Reach for whoever is closest and take a bite. @returns true if you did. */
+  doZombieBite() {
+    const p = this.player;
+    const npc = this.npcs.nearestNPC(p.position, 2.6);
+    if (!npc || npc.infected) return false;
+    const dx = npc.position.x - p.position.x, dz = npc.position.z - p.position.z;
+    const len = Math.hypot(dx, dz) || 1;
+    if (this.gore) {
+      this.gore.hit(npc.position.x, npc.position.y, npc.position.z, 1, dx / len, dz / len);
+      this.gore.gib(npc.position.x, npc.position.y + 0.6, npc.position.z, 0.6, dx / len, dz / len);
+      this.gore.pool(npc.position.x, npc.position.z, 1.7);
+    }
+    npc.downed = 8;
+    npc.reanimate = 4 + Math.random() * 6;
+    npc.controlled = 'apocalypse';
+    if (this.apocalypse) this.apocalypse.casualties++;
+    p.camShake = Math.min(1.2, p.camShake + 0.5);
+    audio.spawnPop();
+    this.t10Say(npc.appearance.firstName + '. They\'ll be up again shortly, and they won\'t be themselves.');
+    return true;
   }
 
   onChatToggled(open) {
@@ -684,6 +799,36 @@ export function boot() {
   }
   refreshHint();
 
+  // ---- Option chips -----------------------------------------------------
+  // Each group is a row of buttons where one is on; the chosen values are
+  // handed to the game when the world is created.
+  const options = { where: 'downtown', time: 9.5, weather: 'fair', busy: 1, quality: 'high', maturity: 18 };
+  const numeric = { time: true, busy: true, maturity: true };
+  for (const key of Object.keys(options)) {
+    const row = document.getElementById('t10-opt-' + key);
+    if (!row) continue;
+    const chips = [...row.querySelectorAll('.world-chip')];
+    for (const chip of chips) {
+      chip.addEventListener('click', () => {
+        for (const c of chips) c.classList.toggle('on', c === chip);
+        const raw = chip.getAttribute('data-v');
+        options[key] = numeric[key] ? parseFloat(raw) : raw;
+        audio.init();
+        audio.ui('tick');
+      });
+    }
+  }
+
+  const advToggle = document.getElementById('t10-adv-toggle');
+  const advBody = document.getElementById('t10-adv');
+  if (advToggle && advBody) {
+    advToggle.addEventListener('click', () => {
+      const open = advBody.classList.toggle('open');
+      advToggle.innerHTML = open ? 'Fewer options \u25b4' : 'More options \u25be';
+      if (open) setTimeout(() => advBody.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 60);
+    });
+  }
+
   const saved = saveInfo();
   if (continueBtn && saved) {
     continueBtn.style.display = '';
@@ -700,6 +845,7 @@ export function boot() {
     startBtn.addEventListener('click', () => {
       audio.init();
       game.setWorldIdentity((nameInput && nameInput.value) || (nameInput && nameInput.placeholder) || suggested);
+      game.applyWorldOptions(options);
       hideSplash();
       game.showCreator();
     });

@@ -133,6 +133,10 @@ export class Apocalypse {
     npc.infected = false;
     npc.hostile = false;
     npc.turning = 0;
+    npc.feeding = 0;
+    npc.beingEaten = null;
+    npc.beingEatenBy = null;
+    npc.reanimate = 0;
     npc.panicking = false;
     npc.downed = 0;
     npc.combatTarget = null;
@@ -255,6 +259,15 @@ export class Apocalypse {
       else if (crowd === 'panic') this.panic(npc);
       else if (crowd === 'infect' && this.rng() < 0.12) this.infect(npc);
       else this.panic(npc);
+    }
+
+    // In an outbreak the dead don't stay down. Anyone on the ground who isn't
+    // already being eaten starts a clock.
+    if (this.kind === 'zombie' || this.alwaysReanimate) {
+      for (const npc of g.npcs.npcs) {
+        if (npc.infected || npc.reanimate > 0 || npc.beingEatenBy) continue;
+        if (npc.downed > 2.5) npc.reanimate = 5 + this.rng() * 9;
+      }
     }
 
     if (this.kind === 'blackout' && g.t10) g.t10.forceStreetLights = 0;

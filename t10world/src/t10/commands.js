@@ -21,6 +21,7 @@ import { extendRegistry3 } from './commands3.js';
 import { extendRegistry4 } from './commands4.js';
 import { extendRegistry5 } from './commands5.js';
 import { extendRegistry6 } from './commands6.js';
+import { extendRegistry7 } from './commands7.js';
 
 function singularWord(word) {
   if (word.length < 4) return word;
@@ -580,5 +581,6 @@ export function buildRegistry() {
   extendRegistry4(R, add);
   extendRegistry5(R, add);
   extendRegistry6(R, add);
+  extendRegistry7(R, add);
   return R;
 }

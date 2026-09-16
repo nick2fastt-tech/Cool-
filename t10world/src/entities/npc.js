@@ -73,6 +73,9 @@ export class NPC {
     this.infectCooldown = 0;
     this.abducting = null;
     this.turning = 0;
+    this.feeding = 0;          // a zombie at a body
+    this.beingEaten = null;    // ...and the body it's at
+    this.reanimate = 0;        // seconds until this corpse gets back up
     this.hitPoints = 100;
     this.vehicle = null;
     this.indoors = false;
@@ -228,12 +231,28 @@ export class NPC {
     if (this.attackCooldown > 0) this.attackCooldown -= dt;
     if (this.infectCooldown > 0) this.infectCooldown -= dt;
 
-    // Knocked down: lie there, then get up angrier than before.
+    // Knocked down: lie there, then get up — or, in an outbreak, get up wrong.
     if (this.downed > 0) {
       this.downed -= dt;
+      if (this.reanimate > 0) {
+        this.reanimate -= dt;
+        if (this.reanimate <= 0) {
+          const apo = this.manager.apocalypse;
+          this.downed = 0;
+          this.reanimate = 0;
+          if (apo) apo.infect(this);
+          if (this.manager.gore) this.manager.gore.pool(this.position.x, this.position.z, 1.1);
+          this.human.animator.setState(STATES.GETUP);
+          this.human.update(dt, { speed: 0, turnRate: 0, grounded: true, verticalVel: 0 });
+          return;
+        }
+        // Twitching, while whatever is in them decides.
+        this.human.animator.setState(STATES.LIE);
+      } else {
+        this.human.animator.setState(this.downed > 0.9 ? STATES.LIE : STATES.GETUP);
+      }
       this.targetSpeed = 0;
       this.speed = 0;
-      this.human.animator.setState(this.downed > 0.9 ? STATES.LIE : STATES.GETUP);
       this.human.update(dt, { speed: 0, turnRate: 0, grounded: true, verticalVel: 0 });
       this.root.position.copy(this.position);
       return;
@@ -361,10 +380,45 @@ export class NPC {
     this.path.length = 0;
 
     if (this.infected) {
+      // Mid-meal: crouched over the body, and it bleeds while you do.
+      if (this.feeding > 0) {
+        const meal = this.beingEaten;
+        this.feeding -= dt;
+        this.targetSpeed = 0;
+        this.speed = 0;
+        this.human.animator.setState(STATES.CROUCH);
+        if (meal) {
+          meal.downed = Math.max(meal.downed, this.feeding + 0.5);
+          this.feedTick = (this.feedTick || 0) - dt;
+          if (this.feedTick <= 0) {
+            this.feedTick = 0.45;
+            const gore = this.manager.gore;
+            if (gore) {
+              gore.spray(meal.position.x, meal.position.y + 0.35, meal.position.z, 9, 0, 0, 0.7);
+              if (this.rng() < 0.5) gore.gib(meal.position.x, meal.position.y + 0.3, meal.position.z, 0.32, 0, 0);
+            }
+          }
+        }
+        if (this.feeding <= 0) {
+          if (meal) {
+            // What's left of them gets up in a minute or so.
+            meal.beingEatenBy = null;
+            meal.reanimate = 4 + this.rng() * 6;
+            meal.downed = Math.max(meal.downed, meal.reanimate + 0.5);
+            const gore = this.manager.gore;
+            if (gore) gore.gib(meal.position.x, meal.position.y + 0.4, meal.position.z, 0.75, 0, 0);
+          }
+          this.beingEaten = null;
+        }
+        return;
+      }
+
       // Shamble toward the nearest uninfected person, or the player.
       let tx = null, tz = null, victim = null;
       const prey = this.findPrey(42, 'uninfected');
-      const dPlayer = playerPos ? this.position.distanceTo(playerPos) : 1e9;
+      // One of their own is not a meal.
+      const playerIsOne = this.manager.playerIsZombie;
+      const dPlayer = (playerPos && !playerIsOne) ? this.position.distanceTo(playerPos) : 1e9;
       const dPrey = prey ? this.position.distanceTo(prey.position) : 1e9;
       if (dPlayer < dPrey && dPlayer < 42) { tx = playerPos.x; tz = playerPos.z; }
       else if (prey) { tx = prey.position.x; tz = prey.position.z; victim = prey; }
@@ -391,7 +445,14 @@ export class NPC {
               gore.hit(victim.position.x, victim.position.y, victim.position.z, 1, dx / len, dz / len);
               gore.pool(victim.position.x, victim.position.z, 1.5);
             }
-            apo.infect(victim);
+            // They don't just get tagged — they get pulled down and eaten,
+            // and what's left of them gets up afterwards.
+            victim.downed = 6 + this.rng() * 3;
+            victim.beingEatenBy = this;
+            victim.controlled = 'apocalypse';
+            this.beingEaten = victim;
+            this.feeding = 4 + this.rng() * 3;
+            this.feedTick = 0;
           }
           else if (this.manager.onPlayerAttacked) this.manager.onPlayerAttacked(this, 'infect');
         }
@@ -441,6 +502,10 @@ export class NPC {
     } else {
       // Panic: run away from the nearest threat, or just away.
       let threat = null, bestD = 60;
+      if (this.manager.playerIsZombie && playerPos) {
+        const d = this.position.distanceTo(playerPos);
+        if (d < bestD) { bestD = d; threat = { position: playerPos }; }
+      }
       for (const other of this.manager.npcs) {
         if (!other.infected && !other.hostile) continue;
         const d = this.position.distanceTo(other.position);

@@ -211,6 +211,22 @@ const cmds = [
   'T10 slow down time',
   'T10 normal speed',
   'T10 reset everything',
+  'T10 where is the subway',
+  'T10 what subway lines are there',
+  'T10 take me down there',
+  'T10 get on the train',
+  'T10 sit down',
+  'T10 stand up',
+  'T10 get me out of the subway',
+  'T10 turn me into a zombie',
+  'T10 am i a zombie',
+  'T10 turn me back',
+  'T10 tear them apart',
+  'T10 how much mess is there',
+  'T10 give me an apex',
+  'T10 make the blood green',
+  'T10 clean up the blood',
+  'T10 reset everything',
   'T10 flurbulate the widget',
 ];
 const replies = [];
@@ -253,6 +269,70 @@ await page.screenshot({ path: SHOT+'/07-after-commands.png' });
 // Forward must be forward and right must be right, in both camera modes.
 // First and third person once used opposite yaw conventions, so on the default
 // first-person view pushing the stick forward walked you backwards.
+// The subway: walk in, wait, board, ride, get off, walk out.
+log('--- subway ---');
+const subway = await page.evaluate(async ()=>{
+  const g = window.__t10, s = g.subway, p = g.player;
+  const pump = async (n)=>{ for (let f=0;f<n;f++) await new Promise(r=>requestAnimationFrame(()=>r())); };
+  if (!s) return { error: 'no subway' };
+  const near = s.stops.slice().sort((a,b)=>Math.hypot(a.x-p.position.x,a.z-p.position.z)-Math.hypot(b.x-p.position.x,b.z-p.position.z))[0];
+  s.enter(near.key);
+  await pump(20);
+  const onPlatform = { under: !!p.inSubway, y: +p.position.y.toFixed(1), station: s.playerStation && s.playerStation.name };
+  let boarded = false;
+  for (let i=0;i<50 && !boarded;i++) { await pump(20); boarded = !!s.board(); }
+  const startStop = s.ridingTrain ? s.ridingTrain.index : -1;
+  p.sitDownHere();
+  const sat = !!p.sitting;
+  // Ride until it stops somewhere else.
+  let arrived = false;
+  for (let i=0;i<90 && !arrived;i++) { await pump(20); const t = s.ridingTrain; arrived = t && t.state==='dwell' && t.index!==startStop; }
+  p.standUp();
+  const got = s.alight();
+  await pump(10);
+  const after = s.playerStation && s.playerStation.name;
+  s.leave();
+  await pump(10);
+  return { stops: s.stops.length, lines: 3, onPlatform, boarded, sat, arrived, got,
+    from: onPlatform.station, to: after, backUp: !p.inSubway, y: +p.position.y.toFixed(1) };
+});
+log('subway:', JSON.stringify(subway));
+if (subway.error || !subway.boarded || !subway.arrived || !subway.got || !subway.backUp) {
+  errors.push('SUBWAY: could not ride a train end to end');
+  log('>>> SUBWAY FAILED');
+}
+await page.screenshot({ path: SHOT+'/13-subway.png' });
+
+// Gibs and reanimation.
+log('--- gore and reanimation ---');
+const flesh = await page.evaluate(async ()=>{
+  const g = window.__t10;
+  const pump = async (n)=>{ for (let f=0;f<n;f++) await new Promise(r=>requestAnimationFrame(()=>r())); };
+  g.t10.handle('T10 set the rating to 18');
+  const npc = g.npcs.npcs[0];
+  if (!npc) return { error: 'nobody' };
+  const before = g.gore.gibs.length;
+  const made = g.gore.gib(npc.position.x, npc.position.y + 0.8, npc.position.z, 1, 0, 1);
+  await pump(40);
+  const kinds = {};
+  for (const gb of g.gore.gibs) kinds[gb.kind] = (kinds[gb.kind]||0)+1;
+  // Reanimation: put someone down during an outbreak and wait for them.
+  g.t10.handle('T10 start a zombie apocalypse');
+  const victim = g.npcs.npcs.find(n=>!n.infected && n!==npc);
+  let rose = false;
+  if (victim) {
+    victim.downed = 6; victim.reanimate = 0.4;
+    for (let i=0;i<40 && !rose;i++) { await pump(6); rose = !!victim.infected; }
+  }
+  g.t10.handle('T10 stop the apocalypse');
+  return { made, kinds, landed: g.gore.gibs.filter(x=>x.rest>0).length, rose };
+});
+log('gore:', JSON.stringify(flesh));
+if (flesh.error || !flesh.made || !flesh.rose) {
+  errors.push('GORE: gibs or reanimation failed');
+  log('>>> GORE FAILED');
+}
+
 // Guns actually fire, hit people and leave blood.
 log('--- shooting ---');
 const shooting = await page.evaluate(async ()=>{

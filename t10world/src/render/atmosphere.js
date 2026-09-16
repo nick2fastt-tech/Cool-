@@ -204,6 +204,38 @@ export class Atmosphere {
     this.scene.fog = new THREE.Fog(0x9ec4e8, 120, 700);
   }
 
+  /** Underground there is no sky and no sun; the station lights do the work. */
+  setUnderground(on) {
+    if (this.underground === !!on) return;
+    this.underground = !!on;
+    if (this.sky) this.sky.visible = !this.underground;
+    if (this.sun) this.sun.visible = !this.underground;
+    if (this.moon) this.moon.visible = !this.underground;
+    if (this.cloudGroup) this.cloudGroup.visible = !this.underground;
+    if (this.rain) this.rain.visible = !this.underground;
+    if (this.underground) {
+      this._savedHemi = this.hemi.intensity;
+      this._savedAmbient = this.ambient.intensity;
+      this._savedFill = this.fill.intensity;
+      this._savedFog = this.scene.fog ? { near: this.scene.fog.near, far: this.scene.fog.far, color: this.scene.fog.color.getHex() } : null;
+      this.hemi.intensity = 0.12;
+      this.ambient.intensity = 0.16;
+      this.fill.intensity = 0.05;
+      if (this.scene.fog) { this.scene.fog.near = 4; this.scene.fog.far = 90; this.scene.fog.color.setHex(0x06080a); }
+      this.scene.background = new THREE.Color(0x05070a);
+    } else {
+      if (this._savedHemi != null) this.hemi.intensity = this._savedHemi;
+      if (this._savedAmbient != null) this.ambient.intensity = this._savedAmbient;
+      if (this._savedFill != null) this.fill.intensity = this._savedFill;
+      if (this._savedFog && this.scene.fog) {
+        this.scene.fog.near = this._savedFog.near;
+        this.scene.fog.far = this._savedFog.far;
+        this.scene.fog.color.setHex(this._savedFog.color);
+      }
+      this.scene.background = null;
+    }
+  }
+
   applyShadowSettings() {
     const p = settings.preset;
     this.sun.castShadow = p.shadows;

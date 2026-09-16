@@ -32,11 +32,13 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:var(--ink);c
 #t10-ui button,#t10-ui input,#t10-ui .t10-chat,#t10-ui .t10-settings,#t10-ui .t10-creator,#t10-ui .t10-touch{pointer-events:auto}
 
 /* ---------- Splash ---------- */
-#t10-splash{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;
-  background:radial-gradient(circle at 50% 40%,#101a17 0%,#07090c 62%);transition:opacity .6s ease}
+#t10-splash{position:fixed;inset:0;z-index:100;display:block;overflow-y:auto;overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  background:radial-gradient(circle at 50% 30%,#101a17 0%,#07090c 62%);transition:opacity .6s ease}
 #t10-splash.gone{opacity:0;pointer-events:none}
-.splash-inner{text-align:center;padding:24px;max-width:560px}
-.splash-mark{width:104px;height:104px;margin:0 auto 26px;border-radius:50%;position:relative;
+.splash-inner{text-align:center;padding:max(24px,env(safe-area-inset-top)) 18px calc(34px + env(safe-area-inset-bottom));
+  max-width:560px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;justify-content:center}
+.splash-mark{width:84px;height:84px;margin:0 auto 20px;flex:0 0 auto;border-radius:50%;position:relative;
   background:radial-gradient(circle at 50% 45%,#0e1512 0%,#05070a 70%);
   border:2px solid var(--t10-green);box-shadow:0 0 42px var(--t10-green-glow),inset 0 0 26px rgba(47,217,138,.18)}
 .splash-mark::after{content:"T10";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
@@ -45,8 +47,8 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:var(--ink);c
 .splash-mark::before{content:"";position:absolute;inset:-9px;border-radius:50%;border:1px solid rgba(47,217,138,.28);
   animation:ring 3.2s ease-in-out infinite}
 @keyframes ring{0%,100%{transform:scale(1);opacity:.7}50%{transform:scale(1.07);opacity:.25}}
-.splash-title{font:700 40px/1.05 ui-sans-serif,system-ui;letter-spacing:.16em;margin:0 0 12px}
-.splash-tag{color:var(--muted);font-size:15px;line-height:1.6;margin:0 0 30px}
+.splash-title{font:700 clamp(27px,8vw,40px)/1.05 ui-sans-serif,system-ui;letter-spacing:.16em;margin:0 0 10px}
+.splash-tag{color:var(--muted);font-size:14px;line-height:1.6;margin:0 0 22px}
 .splash-tag b{color:var(--t10-green);font-weight:600}
 .splash-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
 .splash-btn{appearance:none;border:1px solid var(--t10-green);background:rgba(47,217,138,.10);color:var(--t10-green);
@@ -70,8 +72,21 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:var(--ink);c
 .world-dice:hover{background:rgba(47,217,138,.22)}
 .world-hint{margin:10px 2px 14px;color:#5d6862;font-size:11.5px;line-height:1.6}
 .world-hint b{color:#9ad9bb;font-weight:600}
-.world-form .splash-btns{justify-content:stretch}
+.world-form .splash-btns{justify-content:stretch;margin-top:4px}
 .world-form .splash-btn{flex:1;padding:14px 20px}
+.world-sep{height:1px;background:rgba(47,217,138,.14);margin:16px -18px}
+.world-group{margin-bottom:13px}
+.world-chips{display:flex;gap:6px;flex-wrap:wrap}
+.world-chip{appearance:none;background:rgba(47,217,138,.06);border:1px solid rgba(47,217,138,.16);
+  color:#8fb8a4;font:500 12.5px/1 ui-sans-serif,system-ui;padding:9px 12px;border-radius:999px;
+  cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease}
+.world-chip:hover{background:rgba(47,217,138,.14);color:var(--t10-green)}
+.world-chip.on{background:rgba(47,217,138,.22);border-color:var(--t10-green);color:var(--t10-green)}
+.world-adv{border:none;background:none;color:#5d6862;font:500 12px/1 ui-sans-serif,system-ui;
+  cursor:pointer;padding:6px 0;text-align:left;display:block}
+.world-adv:hover{color:#9ad9bb}
+.world-adv-body{display:none}
+.world-adv-body.open{display:block}
 
 /* ---------- Loading ---------- */
 .t10-loading{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;
@@ -372,6 +387,70 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border:none;border-ra
         <button class="world-dice" id="t10-dice" title="Random name">&#9860;</button>
       </div>
       <p class="world-hint" id="t10-seedhint">The name shapes the city &mdash; different names, different streets.</p>
+
+      <div class="world-sep"></div>
+
+      <div class="world-group">
+        <label class="world-label">Start where</label>
+        <div class="world-chips" id="t10-opt-where">
+          <button class="world-chip on" data-v="downtown">Downtown</button>
+          <button class="world-chip" data-v="residential">Residential</button>
+          <button class="world-chip" data-v="beach">Beachfront</button>
+          <button class="world-chip" data-v="countryside">Countryside</button>
+          <button class="world-chip" data-v="random">Anywhere</button>
+        </div>
+      </div>
+
+      <div class="world-group">
+        <label class="world-label">Time of day</label>
+        <div class="world-chips" id="t10-opt-time">
+          <button class="world-chip" data-v="7">Early</button>
+          <button class="world-chip on" data-v="9.5">Morning</button>
+          <button class="world-chip" data-v="13">Midday</button>
+          <button class="world-chip" data-v="18.5">Sunset</button>
+          <button class="world-chip" data-v="1">Night</button>
+        </div>
+      </div>
+
+      <button class="world-adv" id="t10-adv-toggle">More options &#9662;</button>
+      <div class="world-adv-body" id="t10-adv">
+        <div class="world-group">
+          <label class="world-label">Weather</label>
+          <div class="world-chips" id="t10-opt-weather">
+            <button class="world-chip on" data-v="fair">Fair</button>
+            <button class="world-chip" data-v="cloudy">Cloudy</button>
+            <button class="world-chip" data-v="rain">Rain</button>
+            <button class="world-chip" data-v="storm">Storm</button>
+            <button class="world-chip" data-v="fog">Fog</button>
+            <button class="world-chip" data-v="snow">Snow</button>
+          </div>
+        </div>
+        <div class="world-group">
+          <label class="world-label">How busy</label>
+          <div class="world-chips" id="t10-opt-busy">
+            <button class="world-chip" data-v="0.35">Quiet</button>
+            <button class="world-chip on" data-v="1">Normal</button>
+            <button class="world-chip" data-v="1.8">Packed</button>
+          </div>
+        </div>
+        <div class="world-group">
+          <label class="world-label">Quality</label>
+          <div class="world-chips" id="t10-opt-quality">
+            <button class="world-chip" data-v="low">Low</button>
+            <button class="world-chip" data-v="medium">Medium</button>
+            <button class="world-chip on" data-v="high">High</button>
+            <button class="world-chip" data-v="ultra">Ultra &middot; RTX</button>
+          </div>
+        </div>
+        <div class="world-group">
+          <label class="world-label">Content</label>
+          <div class="world-chips" id="t10-opt-maturity">
+            <button class="world-chip on" data-v="18">18+ &middot; full gore</button>
+            <button class="world-chip" data-v="16">16+ &middot; toned down</button>
+          </div>
+        </div>
+      </div>
+
       <div class="splash-btns">
         <button class="splash-btn" id="t10-start">Create world</button>
         <button class="splash-btn ghost" id="t10-continue" style="display:none">Continue</button>
@@ -56528,6 +56607,7 @@ class HumanAnimator {
 
     // ---- Additive layers -------------------------------------------------
     this.applyBreathing(dt);
+    if (this.weaponAim) this.applyWeaponPose(dt);
     this.applyTurnLean(dt);
     if (this.rig.facial !== false) {
       this.applyBlink(dt);
@@ -56589,6 +56669,15 @@ class HumanAnimator {
     _e.set(x || 0, y || 0, z || 0, order || 'XYZ');
     t.setFromEuler(_e);
   }
+  /** Slerp a bone's target part-way toward a rotation. */
+  setBlend(name, x, y, z, w, order) {
+    const t = this._target[name];
+    if (!t) return;
+    _e.set(x || 0, y || 0, z || 0, order || 'XYZ');
+    _q.setFromEuler(_e);
+    t.slerp(_q, clamp01(w));
+  }
+
   /** Add a rotation on top of whatever the pose set. */
   add(name, x, y, z, order) {
     const t = this._target[name];
@@ -57423,6 +57512,40 @@ class HumanAnimator {
     }
   }
 
+  /**
+   * Holding a gun, on top of whatever else the body is doing. Both hands come
+   * up on the weapon, the elbows tuck in, and the chest turns toward the aim —
+   * so walking, turning and the idle sway all still read underneath.
+   */
+  applyWeaponPose(dt) {
+    const a = this.weaponAim;
+    const w = clamp01(a.weight == null ? 1 : a.weight);
+    if (w <= 0.01) return;
+    const pitch = clampv(a.pitch || 0, -1.0, 1.0);
+    const ready = a.aiming ? 1 : 0.72;   // shouldered versus carried at the chest
+
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      const lead = S === 'L' ? 1 : 0;    // the left hand reaches further forward
+      // The arms bind in a T-pose, so |z| near zero is straight out sideways —
+      // bringing them down to the body is what the large z does, and the
+      // forward reach is x.
+      this.setBlend('clavicle' + S, 0, -s * 0.06, -s * 0.10 * ready, w);
+      this.setBlend('upperArm' + S,
+        (-0.48 - lead * 0.20) * ready - pitch * 0.55,
+        s * (0.28 + lead * 0.20),
+        -s * (1.06 - lead * 0.18),
+        w);
+      this.setBlend('lowerArm' + S, 0, -s * (1.52 - lead * 0.22), 0, w);
+      this.setBlend('hand' + S, 0.10, 0, s * 0.12, w);
+      this.relaxFingers(S, 0.9);
+    }
+    // Square up to the target and brace.
+    this.setBlend('chest', 0.06 * ready - pitch * 0.10, -0.16 * ready, 0, w * 0.8);
+    this.setBlend('spine', 0.04 * ready, -0.08 * ready, 0, w * 0.6);
+    this.setBlend('neck', -pitch * 0.25, 0.06 * ready, 0, w * 0.5);
+  }
+
   applyHandIK(rootObject) {
     for (const S of ['L', 'R']) {
       const target = this.handTargets[S];
@@ -57598,6 +57721,10 @@ class Apocalypse {
     npc.infected = false;
     npc.hostile = false;
     npc.turning = 0;
+    npc.feeding = 0;
+    npc.beingEaten = null;
+    npc.beingEatenBy = null;
+    npc.reanimate = 0;
     npc.panicking = false;
     npc.downed = 0;
     npc.combatTarget = null;
@@ -57720,6 +57847,15 @@ class Apocalypse {
       else if (crowd === 'panic') this.panic(npc);
       else if (crowd === 'infect' && this.rng() < 0.12) this.infect(npc);
       else this.panic(npc);
+    }
+
+    // In an outbreak the dead don't stay down. Anyone on the ground who isn't
+    // already being eaten starts a clock.
+    if (this.kind === 'zombie' || this.alwaysReanimate) {
+      for (const npc of g.npcs.npcs) {
+        if (npc.infected || npc.reanimate > 0 || npc.beingEatenBy) continue;
+        if (npc.downed > 2.5) npc.reanimate = 5 + this.rng() * 9;
+      }
     }
 
     if (this.kind === 'blackout' && g.t10) g.t10.forceStreetLights = 0;
@@ -57945,6 +58081,19 @@ const { settings } = __M["core/settings"];
 
 const MAX_DECALS = 420;
 const MAX_DROPS = 900;
+const MAX_GIBS = 160;
+
+/**
+ * What comes out of a person. Each kind is one instanced mesh, so however much
+ * of it ends up on the pavement it is five draw calls.
+ */
+const GIB_KINDS = [
+  { id: 'flesh',  color: 0x8e1b18, rough: 0.52, scale: [0.055, 0.14], weight: 1.0 },
+  { id: 'organ',  color: 0x5e0f14, rough: 0.34, scale: [0.070, 0.16], weight: 1.1 },
+  { id: 'bone',   color: 0xdfd6c0, rough: 0.72, scale: [0.045, 0.11], weight: 0.9 },
+  { id: 'rib',    color: 0xe6dcc4, rough: 0.70, scale: [0.090, 0.17], weight: 0.95 },
+  { id: 'brain',  color: 0xc98b96, rough: 0.30, scale: [0.075, 0.13], weight: 1.05 },
+];
 
 /** Blood, wet and dried, painted once into a canvas. */
 function bloodTexture(seed, dried) {
@@ -57997,8 +58146,10 @@ class Gore {
 
     this.decals = [];
     this.dropCount = 0;
+    this.gibs = [];
     this.buildDecals();
     this.buildDrops();
+    this.buildGibs();
   }
 
   get level() { return settings.get('goreLevel'); }
@@ -58086,6 +58237,101 @@ class Gore {
     this.dropGeo = geo;
   }
 
+  buildGibs() {
+    this.gibMesh = {};
+    for (const kind of GIB_KINDS) {
+      let geo;
+      if (kind.id === 'rib') {
+        // A curved sliver of cage, not a lump.
+        geo = new THREE.TorusGeometry(0.5, 0.075, 5, 9, Math.PI * 1.15);
+        geo.scale(1, 1, 0.42);
+      } else if (kind.id === 'brain') {
+        geo = new THREE.SphereGeometry(0.5, 7, 5);
+        geo.scale(1, 0.82, 1.12);
+        // Lobe it, so it isn't a ball.
+        const pos = geo.attributes.position;
+        for (let i = 0; i < pos.count; i++) {
+          const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+          const f = 1 + Math.sin(x * 9) * 0.07 + Math.sin(z * 11 + y * 5) * 0.06;
+          pos.setXYZ(i, x * f, y * f, z * f);
+        }
+        geo.computeVertexNormals();
+      } else if (kind.id === 'bone') {
+        geo = new THREE.CylinderGeometry(0.16, 0.22, 1, 5, 1);
+      } else {
+        geo = new THREE.IcosahedronGeometry(0.5, 0);
+        // Knock it out of shape so no two chunks read the same.
+        const pos = geo.attributes.position;
+        const rng = makeRng(kind.id === 'organ' ? 31 : 17);
+        for (let i = 0; i < pos.count; i++) {
+          const f = 0.66 + rng() * 0.7;
+          pos.setXYZ(i, pos.getX(i) * f, pos.getY(i) * f * 0.8, pos.getZ(i) * f);
+        }
+        geo.computeVertexNormals();
+      }
+      const mat = new THREE.MeshStandardMaterial({
+        color: kind.color, roughness: kind.rough, metalness: 0.02,
+      });
+      const mesh = new THREE.InstancedMesh(geo, mat, MAX_GIBS);
+      mesh.count = 0;
+      mesh.frustumCulled = false;
+      mesh.castShadow = false;
+      mesh.receiveShadow = true;
+      mesh.userData.wantsShadow = false;
+      mesh.matrixAutoUpdate = false;
+      this.group.add(mesh);
+      this.gibMesh[kind.id] = mesh;
+    }
+    this._gq = new THREE.Quaternion();
+    this._ge = new THREE.Euler();
+  }
+
+  /**
+   * Take someone apart. `amount` 0..1 decides how much of them there is and
+   * whether the head goes with it.
+   */
+  gib(x, y, z, amount, dirX, dirZ) {
+    const level = this.level;
+    if (level <= 0) return 0;
+    const a = clamp01(amount);
+    // 16+ keeps the blood but not the pieces.
+    if (level < 0.6) { this.hit(x, y, z, a, dirX, dirZ); return 0; }
+
+    const n = Math.round(lerpv(5, 22, a) * level);
+    let made = 0;
+    for (let i = 0; i < n && this.gibs.length < MAX_GIBS; i++) {
+      // Mostly flesh, some bone, a rib or two, and the head's contents only
+      // when it was the head.
+      const roll = this.rng();
+      let kind = roll < 0.44 ? 'flesh' : roll < 0.66 ? 'organ' : roll < 0.84 ? 'bone' : 'rib';
+      if (a > 0.85 && i < 2) kind = 'brain';
+      const def = GIB_KINDS.find((k) => k.id === kind);
+      const spread = 2.2 + a * 5.5;
+      this.gibs.push({
+        kind,
+        x: x + (this.rng() - 0.5) * 0.34,
+        y: y + 0.4 + this.rng() * 0.9,
+        z: z + (this.rng() - 0.5) * 0.34,
+        vx: (dirX || 0) * (1.6 + a * 4) + (this.rng() - 0.5) * spread,
+        vy: this.rng.range(1.6, 5.4) * (0.55 + a),
+        vz: (dirZ || 0) * (1.6 + a * 4) + (this.rng() - 0.5) * spread,
+        rx: this.rng() * TAU, ry: this.rng() * TAU, rz: this.rng() * TAU,
+        spinX: (this.rng() - 0.5) * 13, spinY: (this.rng() - 0.5) * 13, spinZ: (this.rng() - 0.5) * 13,
+        size: this.rng.range(def.scale[0], def.scale[1]) * lerpv(0.8, 1.15, a),
+        drag: def.weight,
+        rest: 0,
+        age: 0,
+        life: 55 + this.rng() * 50,
+        bleed: 0.6,
+      });
+      made++;
+    }
+    // A burst of spray and a pool to go with it.
+    this.spray(x, y + 0.8, z, Math.round(lerpv(20, 60, a)), dirX || 0, dirZ || 0, a);
+    this.pool(x, z, lerpv(1.4, 2.6, a));
+    return made;
+  }
+
   // -------------------------------------------------------------------------
 
   /**
@@ -58145,6 +58391,8 @@ class Gore {
   clear() {
     this.decals.length = 0;
     this.dropCount = 0;
+    this.gibs.length = 0;
+    for (const k of GIB_KINDS) if (this.gibMesh) this.gibMesh[k.id].count = 0;
     for (const m of this.decalMesh) m.count = 0;
     this.dropGeo.setDrawRange(0, 0);
   }
@@ -58177,6 +58425,58 @@ class Gore {
     this.dropGeo.attributes.position.needsUpdate = true;
     this.dropGeo.attributes.aLife.needsUpdate = true;
     this.dropGeo.attributes.aSize.needsUpdate = true;
+
+    // ---- Gibs: ballistic until they settle, then they lie there. ----
+    if (this.gibs.length) {
+      const counts = {};
+      for (const k of GIB_KINDS) counts[k.id] = 0;
+      for (let i = this.gibs.length - 1; i >= 0; i--) {
+        const g = this.gibs[i];
+        g.age += dt;
+        if (g.age > g.life) { this.gibs.splice(i, 1); continue; }
+        if (g.rest <= 0) {
+          g.vy -= 15.5 * dt * g.drag;
+          g.x += g.vx * dt; g.y += g.vy * dt; g.z += g.vz * dt;
+          g.rx += g.spinX * dt; g.ry += g.spinY * dt; g.rz += g.spinZ * dt;
+          const ground = (this.game.world ? this.game.world.groundAt(g.x, g.z) : 0) + g.size * 0.45;
+          if (g.y <= ground) {
+            g.y = ground;
+            // It leaves a mark every time it lands, until it stops bouncing.
+            if (g.bleed > 0.05) { this.splat(g.x, g.z, g.size * this.rng.range(2.4, 5.0), 0.8); g.bleed *= 0.45; }
+            if (Math.abs(g.vy) < 1.2) {
+              g.rest = 1;
+              g.vx = g.vz = g.vy = 0;
+              g.spinX = g.spinY = g.spinZ = 0;
+              // Lie flat.
+              g.rx = Math.PI * 0.5 * (this.rng() < 0.5 ? 1 : -1) * 0.8;
+            } else {
+              g.vy = -g.vy * 0.28;
+              g.vx *= 0.5; g.vz *= 0.5;
+              g.spinX *= 0.4; g.spinY *= 0.4; g.spinZ *= 0.4;
+            }
+          }
+        }
+        const mesh = this.gibMesh[g.kind];
+        const slot = counts[g.kind];
+        if (mesh && slot < MAX_GIBS) {
+          this._p.set(g.x, g.y, g.z);
+          this._ge.set(g.rx, g.ry, g.rz);
+          this._gq.setFromEuler(this._ge);
+          const fade = g.age > g.life - 6 ? clamp01((g.life - g.age) / 6) : 1;
+          this._s.setScalar(g.size * fade);
+          this._m.compose(this._p, this._gq, this._s);
+          mesh.setMatrixAt(slot, this._m);
+          counts[g.kind] = slot + 1;
+        }
+      }
+      for (const k of GIB_KINDS) {
+        const mesh = this.gibMesh[k.id];
+        mesh.count = counts[k.id];
+        if (counts[k.id]) mesh.instanceMatrix.needsUpdate = true;
+      }
+    } else {
+      for (const k of GIB_KINDS) this.gibMesh[k.id].count = 0;
+    }
 
     // ---- Decals: age, dry out, fade, and only the near ones get drawn. ----
     const wet = [], dry = [];
@@ -62189,6 +62489,9 @@ class NPC {
     this.infectCooldown = 0;
     this.abducting = null;
     this.turning = 0;
+    this.feeding = 0;          // a zombie at a body
+    this.beingEaten = null;    // ...and the body it's at
+    this.reanimate = 0;        // seconds until this corpse gets back up
     this.hitPoints = 100;
     this.vehicle = null;
     this.indoors = false;
@@ -62344,12 +62647,28 @@ class NPC {
     if (this.attackCooldown > 0) this.attackCooldown -= dt;
     if (this.infectCooldown > 0) this.infectCooldown -= dt;
 
-    // Knocked down: lie there, then get up angrier than before.
+    // Knocked down: lie there, then get up — or, in an outbreak, get up wrong.
     if (this.downed > 0) {
       this.downed -= dt;
+      if (this.reanimate > 0) {
+        this.reanimate -= dt;
+        if (this.reanimate <= 0) {
+          const apo = this.manager.apocalypse;
+          this.downed = 0;
+          this.reanimate = 0;
+          if (apo) apo.infect(this);
+          if (this.manager.gore) this.manager.gore.pool(this.position.x, this.position.z, 1.1);
+          this.human.animator.setState(STATES.GETUP);
+          this.human.update(dt, { speed: 0, turnRate: 0, grounded: true, verticalVel: 0 });
+          return;
+        }
+        // Twitching, while whatever is in them decides.
+        this.human.animator.setState(STATES.LIE);
+      } else {
+        this.human.animator.setState(this.downed > 0.9 ? STATES.LIE : STATES.GETUP);
+      }
       this.targetSpeed = 0;
       this.speed = 0;
-      this.human.animator.setState(this.downed > 0.9 ? STATES.LIE : STATES.GETUP);
       this.human.update(dt, { speed: 0, turnRate: 0, grounded: true, verticalVel: 0 });
       this.root.position.copy(this.position);
       return;
@@ -62477,10 +62796,45 @@ class NPC {
     this.path.length = 0;
 
     if (this.infected) {
+      // Mid-meal: crouched over the body, and it bleeds while you do.
+      if (this.feeding > 0) {
+        const meal = this.beingEaten;
+        this.feeding -= dt;
+        this.targetSpeed = 0;
+        this.speed = 0;
+        this.human.animator.setState(STATES.CROUCH);
+        if (meal) {
+          meal.downed = Math.max(meal.downed, this.feeding + 0.5);
+          this.feedTick = (this.feedTick || 0) - dt;
+          if (this.feedTick <= 0) {
+            this.feedTick = 0.45;
+            const gore = this.manager.gore;
+            if (gore) {
+              gore.spray(meal.position.x, meal.position.y + 0.35, meal.position.z, 9, 0, 0, 0.7);
+              if (this.rng() < 0.5) gore.gib(meal.position.x, meal.position.y + 0.3, meal.position.z, 0.32, 0, 0);
+            }
+          }
+        }
+        if (this.feeding <= 0) {
+          if (meal) {
+            // What's left of them gets up in a minute or so.
+            meal.beingEatenBy = null;
+            meal.reanimate = 4 + this.rng() * 6;
+            meal.downed = Math.max(meal.downed, meal.reanimate + 0.5);
+            const gore = this.manager.gore;
+            if (gore) gore.gib(meal.position.x, meal.position.y + 0.4, meal.position.z, 0.75, 0, 0);
+          }
+          this.beingEaten = null;
+        }
+        return;
+      }
+
       // Shamble toward the nearest uninfected person, or the player.
       let tx = null, tz = null, victim = null;
       const prey = this.findPrey(42, 'uninfected');
-      const dPlayer = playerPos ? this.position.distanceTo(playerPos) : 1e9;
+      // One of their own is not a meal.
+      const playerIsOne = this.manager.playerIsZombie;
+      const dPlayer = (playerPos && !playerIsOne) ? this.position.distanceTo(playerPos) : 1e9;
       const dPrey = prey ? this.position.distanceTo(prey.position) : 1e9;
       if (dPlayer < dPrey && dPlayer < 42) { tx = playerPos.x; tz = playerPos.z; }
       else if (prey) { tx = prey.position.x; tz = prey.position.z; victim = prey; }
@@ -62507,7 +62861,14 @@ class NPC {
               gore.hit(victim.position.x, victim.position.y, victim.position.z, 1, dx / len, dz / len);
               gore.pool(victim.position.x, victim.position.z, 1.5);
             }
-            apo.infect(victim);
+            // They don't just get tagged — they get pulled down and eaten,
+            // and what's left of them gets up afterwards.
+            victim.downed = 6 + this.rng() * 3;
+            victim.beingEatenBy = this;
+            victim.controlled = 'apocalypse';
+            this.beingEaten = victim;
+            this.feeding = 4 + this.rng() * 3;
+            this.feedTick = 0;
           }
           else if (this.manager.onPlayerAttacked) this.manager.onPlayerAttacked(this, 'infect');
         }
@@ -62557,6 +62918,10 @@ class NPC {
     } else {
       // Panic: run away from the nearest threat, or just away.
       let threat = null, bestD = 60;
+      if (this.manager.playerIsZombie && playerPos) {
+        const d = this.position.distanceTo(playerPos);
+        if (d < bestD) { bestD = d; threat = { position: playerPos }; }
+      }
       for (const other of this.manager.npcs) {
         if (!other.infected && !other.hostile) continue;
         const d = this.position.distanceTo(other.position);
@@ -66283,6 +66648,558 @@ const TREE_INDEX_MAX = Props.TREE_KINDS.length - 1;
 return { World, CHUNK_SIZE };
 })();
 
+__M["world/subway"] = (function(){
+// T10 World - the subway. Three lines under the city, with stations you walk
+// into from the street, platforms, and trains you can board, ride and sit on.
+//
+// Nothing here streams with the surface chunks: a platform is built when a
+// train or the player gets near it and torn down when they leave, so the whole
+// system is a handful of groups no matter how big the network is.
+const THREE = __THREE;
+const { boxUV, cylinderUV, transformed, disposeGroup, GeometryBatcher } = __M["world/geomutils"];
+const { metalMaterial, paintedMaterial, concreteMaterial } = __M["world/materials"];
+const { clamp01, clampv, lerpv, makeRng, TAU } = __M["core/math"];
+const { audio } = __M["core/audio"];
+
+const PLATFORM_Y = -11.5;
+const PLATFORM_HALF_LEN = 46;     // half the length of a platform
+const PLATFORM_W = 9;             // walkable width, one side of the track
+const TUNNEL_H = 6.4;
+const TRACK_OFFSET = 7.2;         // track centre from the platform centreline
+
+/**
+ * Three lines, laid on the city's own grid so the stations land on real
+ * streets. Names are the stops, in order.
+ */
+const SUBWAY_LINES = [
+  {
+    id: 'A', name: 'A Line', color: 0x2f6fd9, axis: 'z', at: -45,
+    stops: [
+      { name: 'Northgate', v: -700 },
+      { name: 'Iris Street', v: -420 },
+      { name: 'Midtown', v: -160 },
+      { name: 'T10 Plaza', v: 60 },
+      { name: 'Union', v: 300 },
+      { name: 'Harbour End', v: 560 },
+    ],
+  },
+  {
+    id: 'C', name: 'C Line', color: 0xd98f2f, axis: 'x', at: 150,
+    stops: [
+      { name: 'Westfield', v: -660 },
+      { name: 'Civic Centre', v: -330 },
+      { name: 'Grand Central', v: -30 },
+      { name: 'Eastside', v: 270 },
+      { name: 'Stadium', v: 600 },
+    ],
+  },
+  {
+    id: 'F', name: 'F Line', color: 0x3fb37a, axis: 'x', at: -330,
+    stops: [
+      { name: 'Riverside', v: -560 },
+      { name: 'Apartment Row', v: -240 },
+      { name: 'Northside', v: 40 },
+      { name: 'Fir Street', v: 330 },
+      { name: 'The Yards', v: 640 },
+    ],
+  },
+];
+
+/** World position of a stop. Lines run along one axis at a fixed offset. */
+function stopPos(line, stop) {
+  return line.axis === 'z'
+    ? { x: line.at, z: stop.v }
+    : { x: stop.v, z: line.at };
+}
+
+/** Unit vector along the line. */
+function lineDir(line) {
+  return line.axis === 'z' ? { x: 0, z: 1 } : { x: 1, z: 0 };
+}
+
+class Subway {
+  constructor(game) {
+    this.game = game;
+    this.rng = makeRng(0x5b0a11);
+    this.root = new THREE.Group();
+    this.root.name = 'subway';
+    this.root.matrixAutoUpdate = false;
+    game.scene.add(this.root);
+
+    this.platforms = new Map();   // key -> { group, line, stop }
+    this.trains = [];
+    this.entrances = [];
+    this.playerStation = null;    // the stop the player is standing in
+    this.ridingTrain = null;
+
+    this.buildStops();
+    this.buildTrains();
+  }
+
+  /** Flat list of every stop, with its line and world position. */
+  buildStops() {
+    this.stops = [];
+    for (const line of SUBWAY_LINES) {
+      line.stops.forEach((stop, i) => {
+        const p = stopPos(line, stop);
+        this.stops.push({
+          key: line.id + ':' + i, line, stop, index: i,
+          x: p.x, z: p.z, name: stop.name,
+        });
+      });
+    }
+  }
+
+  /** One train per line, running back and forth along it. */
+  buildTrains() {
+    for (const line of SUBWAY_LINES) {
+      const t = {
+        line,
+        index: 0,
+        dir: 1,
+        state: 'dwell',
+        timer: 4,
+        pos: line.stops[0].v,
+        speed: 0,
+        group: null,
+        doorsOpen: 0,
+        riders: [],
+      };
+      this.trains.push(t);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Street entrances — registered with the world so USE picks them up.
+  // -------------------------------------------------------------------------
+
+  /** Called once the world exists; adds a stair head above every stop. */
+  buildEntrances(world) {
+    for (const s of this.stops) {
+      // Put the head on the nearest pavement so it isn't in the road.
+      const sw = world.city.nearestSidewalk(s.x, s.z);
+      const y = world.groundAt(sw.x, sw.z);
+      const g = new THREE.Group();
+      g.position.set(sw.x, y, sw.z);
+      g.matrixAutoUpdate = false;
+      g.updateMatrix();
+
+      const b = new GeometryBatcher();
+      const rail = metalMaterial(0x2a2e33, 0.5);
+      const kiosk = paintedMaterial(0x1d2227, 0.66);
+      const trim = paintedMaterial(s.line.color, 0.4);
+
+      // Stair mouth: a dark opening with a railed surround and a lit sign.
+      b.add(concreteMaterial(0x8e8a82), transformed(boxUV(4.6, 0.32, 3.4, 1, 1), 0, 0.16, 0, 0));
+      b.add(kiosk, transformed(boxUV(4.2, 0.9, 3.0, 1, 1), 0, 0.45, 0, 0));
+      b.add(paintedMaterial(0x07090b, 0.95), transformed(boxUV(3.2, 0.7, 2.0, 1, 1), 0, 0.62, 0, 0));
+      for (const sx of [-1, 1]) {
+        b.add(rail, transformed(cylinderUV(0.05, 0.05, 1.1, 6, 1, 1), sx * 1.8, 1.0, 1.3, 0));
+        b.add(rail, transformed(cylinderUV(0.05, 0.05, 1.1, 6, 1, 1), sx * 1.8, 1.0, -1.3, 0));
+        b.add(rail, transformed(boxUV(0.08, 0.08, 2.8, 1, 1), sx * 1.8, 1.5, 0, 0));
+      }
+      // Sign pole with the line's colour.
+      b.add(rail, transformed(cylinderUV(0.06, 0.06, 3.0, 6, 1, 1), 2.5, 1.5, 0, 0));
+      b.add(trim, transformed(boxUV(0.9, 0.9, 0.1, 1, 1), 2.5, 2.9, 0, 0));
+      b.build(g, { name: 'subway-entrance', castShadow: true });
+
+      this.root.add(g);
+      const it = {
+        x: sw.x, y, z: sw.z, radius: 3.2,
+        type: 'subway', label: s.line.name + ' — ' + s.name,
+        action: 'subway', stopKey: s.key,
+      };
+      world.registerInteractable(it);
+      this.entrances.push({ group: g, it, stop: s });
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Platforms
+  // -------------------------------------------------------------------------
+
+  ensurePlatform(stop) {
+    if (this.platforms.has(stop.key)) return this.platforms.get(stop.key);
+    const group = new THREE.Group();
+    group.position.set(stop.x, PLATFORM_Y, stop.z);
+    const d = lineDir(stop.line);
+    group.rotation.y = stop.line.axis === 'z' ? 0 : Math.PI / 2;
+    group.matrixAutoUpdate = false;
+    group.updateMatrix();
+
+    const b = new GeometryBatcher();
+    const wall = concreteMaterial(0xdad5c8);
+    const floor = concreteMaterial(0x9a958c);
+    const dark = paintedMaterial(0x0a0c0f, 0.95);
+    const steel = metalMaterial(0x4a5058, 0.42);
+    const trim = paintedMaterial(stop.line.color, 0.36);
+    const L = PLATFORM_HALF_LEN;
+
+    // Platform slab, one metre above the track bed.
+    b.add(floor, transformed(boxUV(PLATFORM_W, 1.0, L * 2, 3, 12), -PLATFORM_W * 0.5 - 0.6, 0.5, 0, 0));
+    // Yellow edge strip.
+    b.add(paintedMaterial(0xd8b13a, 0.6), transformed(boxUV(0.7, 0.06, L * 2, 1, 12), -1.0, 1.03, 0, 0));
+    // Track bed and rails.
+    b.add(dark, transformed(boxUV(TRACK_OFFSET, 0.4, L * 2.6, 2, 14), 1.4, 0.2, 0, 0));
+    for (const r of [-0.72, 0.72]) {
+      b.add(steel, transformed(boxUV(0.1, 0.14, L * 2.6, 1, 40), 1.4 + r, 0.47, 0, 0));
+    }
+    // Back wall, tiled, with the line's stripe.
+    b.add(wall, transformed(boxUV(0.5, TUNNEL_H, L * 2, 1, 10), -PLATFORM_W - 0.85, TUNNEL_H * 0.5, 0, 0));
+    b.add(trim, transformed(boxUV(0.06, 0.55, L * 2, 1, 10), -PLATFORM_W - 0.58, 2.5, 0, 0));
+    // Far wall past the track.
+    b.add(concreteMaterial(0x6a665f), transformed(boxUV(0.5, TUNNEL_H, L * 2, 1, 10), 5.6, TUNNEL_H * 0.5, 0, 0));
+    // Ceiling.
+    b.add(concreteMaterial(0x5d5a55), transformed(boxUV(PLATFORM_W + 8, 0.5, L * 2, 6, 12), -2.0, TUNNEL_H, 0, 0));
+
+    // Columns down the platform, benches between them.
+    for (let i = -3; i <= 3; i++) {
+      const v = i * (L / 3.4);
+      b.add(steel, transformed(boxUV(0.34, TUNNEL_H - 1.0, 0.34, 1, 1), -PLATFORM_W * 0.5 - 0.6, 1.0 + (TUNNEL_H - 1.0) * 0.5, v, 0));
+      if (i % 2 === 0) {
+        b.add(paintedMaterial(0x3a3128, 0.7), transformed(boxUV(1.1, 0.12, 2.2, 1, 1), -PLATFORM_W - 0.2, 1.46, v, 0));
+        b.add(steel, transformed(boxUV(0.9, 0.42, 0.12, 1, 1), -PLATFORM_W - 0.2, 1.24, v - 1.0, 0));
+        b.add(steel, transformed(boxUV(0.9, 0.42, 0.12, 1, 1), -PLATFORM_W - 0.2, 1.24, v + 1.0, 0));
+      }
+    }
+    b.build(group, { name: 'subway-platform', castShadow: false, receiveShadow: true });
+
+    // Strip lights along the ceiling.
+    const lightMat = new THREE.MeshBasicMaterial({ color: 0xfff2d8 });
+    for (let i = -4; i <= 4; i++) {
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.08, 1.2), lightMat);
+      strip.position.set(-3.0, TUNNEL_H - 0.35, i * (L / 4.5));
+      strip.matrixAutoUpdate = false;
+      strip.updateMatrix();
+      group.add(strip);
+    }
+    const lamp = new THREE.PointLight(0xffeccc, 2.4, 34, 2);
+    lamp.position.set(-4, TUNNEL_H - 1.0, 0);
+    group.add(lamp);
+
+    this.root.add(group);
+    const rec = { group, stop, lamp };
+    this.platforms.set(stop.key, rec);
+    return rec;
+  }
+
+  disposePlatform(key) {
+    const rec = this.platforms.get(key);
+    if (!rec) return;
+    disposeGroup(rec.group);
+    this.platforms.delete(key);
+  }
+
+  // -------------------------------------------------------------------------
+  // Trains
+  // -------------------------------------------------------------------------
+
+  buildTrainMesh(line) {
+    const group = new THREE.Group();
+    const body = paintedMaterial(0xb9bec4, 0.34);
+    const dark = paintedMaterial(0x23272c, 0.5);
+    const glass = new THREE.MeshStandardMaterial({
+      color: 0x2a3a46, roughness: 0.08, metalness: 0.2, transparent: true, opacity: 0.55,
+    });
+    const trim = paintedMaterial(line.color, 0.3);
+    const seat = paintedMaterial(0x2e3f5c, 0.72);
+    const CARS = 3, CAR_L = 17.5, CAR_W = 3.1, CAR_H = 3.4;
+
+    for (let c = 0; c < CARS; c++) {
+      const off = (c - (CARS - 1) / 2) * (CAR_L + 0.8);
+      const b = new GeometryBatcher();
+      // Shell: floor, roof, two long sides with a window band, two ends.
+      b.add(dark, transformed(boxUV(CAR_W, 0.25, CAR_L, 2, 8), 0, 0.12, off, 0));
+      b.add(body, transformed(boxUV(CAR_W, 0.22, CAR_L, 2, 8), 0, CAR_H, off, 0));
+      for (const sx of [-1, 1]) {
+        // Below the windows.
+        b.add(body, transformed(boxUV(0.14, 1.15, CAR_L, 1, 8), sx * CAR_W * 0.5, 0.82, off, 0));
+        // Window band.
+        b.add(glass, transformed(boxUV(0.08, 1.15, CAR_L - 1.2, 1, 8), sx * CAR_W * 0.5, 2.05, off, 0));
+        // Above the windows, with the line stripe.
+        b.add(body, transformed(boxUV(0.14, 0.7, CAR_L, 1, 8), sx * CAR_W * 0.5, 2.95, off, 0));
+        b.add(trim, transformed(boxUV(0.03, 0.22, CAR_L, 1, 8), sx * CAR_W * 0.5 + sx * 0.08, 1.48, off, 0));
+      }
+      b.add(body, transformed(boxUV(CAR_W, CAR_H, 0.2, 2, 2), 0, CAR_H * 0.5, off - CAR_L * 0.5, 0));
+      b.add(body, transformed(boxUV(CAR_W, CAR_H, 0.2, 2, 2), 0, CAR_H * 0.5, off + CAR_L * 0.5, 0));
+      // Bench seats down both sides, and grab poles.
+      for (const sx of [-1, 1]) {
+        for (const seg of [-1, 1]) {
+          b.add(seat, transformed(boxUV(0.62, 0.1, CAR_L * 0.36, 1, 3), sx * (CAR_W * 0.5 - 0.42), 0.68, off + seg * CAR_L * 0.22, 0));
+          b.add(seat, transformed(boxUV(0.1, 0.72, CAR_L * 0.36, 1, 3), sx * (CAR_W * 0.5 - 0.10), 1.06, off + seg * CAR_L * 0.22, 0));
+        }
+      }
+      for (let i = -2; i <= 2; i++) {
+        b.add(metalMaterial(0x9aa0a6, 0.3), transformed(cylinderUV(0.035, 0.035, CAR_H - 0.5, 6, 1, 1), 0, (CAR_H - 0.5) * 0.5 + 0.2, off + i * 3.2, 0));
+      }
+      b.build(group, { name: 'subway-car', castShadow: false, receiveShadow: false });
+
+      // Doors: two per side per car, and they slide.
+      for (const sx of [-1, 1]) {
+        for (const dz of [-CAR_L * 0.26, CAR_L * 0.26]) {
+          for (const leaf of [-1, 1]) {
+            const door = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.15, 0.78), dark);
+            door.position.set(sx * CAR_W * 0.5, 1.28, off + dz + leaf * 0.40);
+            door.userData.slide = { base: off + dz + leaf * 0.40, dir: leaf, open: 0.78 };
+            group.add(door);
+          }
+        }
+      }
+    }
+
+    const interior = new THREE.PointLight(0xfff0d8, 1.8, 26, 2);
+    interior.position.set(0, 2.6, 0);
+    group.add(interior);
+    group.userData.carLen = CAR_L;
+    group.userData.cars = CARS;
+    group.userData.halfLen = (CARS * (CAR_L + 0.8)) * 0.5;
+    return group;
+  }
+
+  ensureTrainMesh(t) {
+    if (t.group) return t.group;
+    t.group = this.buildTrainMesh(t.line);
+    t.doors = [];
+    t.group.traverse((o) => { if (o.userData && o.userData.slide) t.doors.push(o); });
+    this.root.add(t.group);
+    return t.group;
+  }
+
+  hideTrain(t) {
+    if (!t.group) return;
+    disposeGroup(t.group);
+    t.group = null;
+    t.doors = null;
+  }
+
+  /** Where a train is, in world space. */
+  trainPos(t) {
+    return t.line.axis === 'z'
+      ? { x: t.line.at, z: t.pos }
+      : { x: t.pos, z: t.line.at };
+  }
+
+  // -------------------------------------------------------------------------
+  update(dt, focus) {
+    const g = this.game;
+    const player = g.player;
+    const underground = !!player.inSubway;
+
+    // Which stops matter right now: the one you're in, and the ones any train
+    // is approaching.
+    const wanted = new Set();
+    if (this.playerStation) wanted.add(this.playerStation.key);
+
+    for (const t of this.trains) {
+      this.updateTrain(dt, t, wanted);
+    }
+
+    // Build what's wanted, drop what isn't.
+    for (const key of wanted) {
+      const stop = this.stops.find((s) => s.key === key);
+      if (stop) this.ensurePlatform(stop);
+    }
+    for (const key of [...this.platforms.keys()]) {
+      if (!wanted.has(key)) this.disposePlatform(key);
+    }
+
+    this.root.visible = underground;
+    // The city above is pointless while you're down here, and expensive.
+    if (underground !== this._wasUnder) {
+      this._wasUnder = underground;
+      if (g.world) g.world.root.visible = !underground;
+      if (g.atmosphere) g.atmosphere.setUnderground(underground);
+    }
+  }
+
+  updateTrain(dt, t, wanted) {
+    const line = t.line;
+    const stops = line.stops;
+    const target = stops[t.index];
+
+    if (t.state === 'dwell') {
+      t.timer -= dt;
+      t.doorsOpen = clamp01(t.doorsOpen + dt * 1.6);
+      if (t.timer <= 0) {
+        t.state = 'closing';
+        t.timer = 1.2;
+        if (this.ridingTrain === t) this.game.t10Say('Doors closing. Next stop: ' + this.nextStopName(t) + '.');
+      }
+    } else if (t.state === 'closing') {
+      t.timer -= dt;
+      t.doorsOpen = clamp01(t.doorsOpen - dt * 1.4);
+      if (t.timer <= 0) {
+        t.state = 'run';
+        // Turn round at the ends of the line.
+        if (t.index + t.dir < 0 || t.index + t.dir >= stops.length) t.dir *= -1;
+        t.index += t.dir;
+      }
+    } else {
+      t.doorsOpen = clamp01(t.doorsOpen - dt * 2);
+      const dest = stops[t.index].v;
+      const gap = dest - t.pos;
+      const dist = Math.abs(gap);
+      // Accelerate away, coast, brake into the platform.
+      const want = clampv(Math.sqrt(Math.max(0, dist - 2)) * 3.4, 0, 22);
+      t.speed = lerpv(t.speed, want, clamp01(dt * 1.1));
+      t.pos += Math.sign(gap) * t.speed * dt;
+      if (dist < 1.2) {
+        t.pos = dest;
+        t.speed = 0;
+        t.state = 'dwell';
+        t.timer = 6;
+        if (this.ridingTrain === t) {
+          this.game.t10Say('This is ' + stops[t.index].name + '. Use to get off.');
+          audio.ui('tick');
+        }
+      }
+    }
+
+    // A train is only worth drawing when you might see it.
+    const p = this.trainPos(t);
+    const near = this.ridingTrain === t ||
+      (this.playerStation && this.playerStation.line === line &&
+       Math.abs((line.axis === 'z' ? this.playerStation.z : this.playerStation.x) - t.pos) < 200);
+    if (near) {
+      const mesh = this.ensureTrainMesh(t);
+      mesh.position.set(p.x, PLATFORM_Y, p.z);
+      mesh.rotation.y = line.axis === 'z' ? 0 : Math.PI / 2;
+      // Offset onto the track, which sits beside the platform.
+      const d = lineDir(line);
+      mesh.position.x += (line.axis === 'z' ? TRACK_OFFSET * 0.6 : 0);
+      mesh.position.z += (line.axis === 'x' ? -TRACK_OFFSET * 0.6 : 0);
+      mesh.updateMatrixWorld();
+      for (const door of t.doors) {
+        const s = door.userData.slide;
+        const slide = s.open * t.doorsOpen * s.dir;
+        if (line.axis === 'z') door.position.z = s.base + slide;
+        else door.position.z = s.base + slide;
+      }
+      // Keep the station it's sitting in loaded.
+      if (t.state !== 'run') {
+        const st = this.stops.find((x) => x.line === line && x.index === t.index);
+        if (st) wanted.add(st.key);
+      }
+    } else if (t.group) {
+      this.hideTrain(t);
+    }
+
+    // Riders move with the train.
+    if (this.ridingTrain === t) {
+      const player = this.game.player;
+      const d = lineDir(line);
+      if (this._lastRidePos == null) this._lastRidePos = t.pos;
+      const delta = t.pos - this._lastRidePos;
+      this._lastRidePos = t.pos;
+      player.position.x += d.x * delta;
+      player.position.z += d.z * delta;
+      player.root.position.copy(player.position);
+    } else if (this.ridingTrain == null) {
+      this._lastRidePos = null;
+    }
+  }
+
+  nextStopName(t) {
+    const stops = t.line.stops;
+    let i = t.index + t.dir;
+    if (i < 0 || i >= stops.length) i = t.index - t.dir;
+    return stops[clampv(i, 0, stops.length - 1)].name;
+  }
+
+  // -------------------------------------------------------------------------
+  // Getting in and out
+  // -------------------------------------------------------------------------
+
+  /** Walk down into a station. @returns the stop, or null. */
+  enter(stopKey) {
+    const stop = this.stops.find((s) => s.key === stopKey);
+    if (!stop) return null;
+    const g = this.game;
+    this.playerStation = stop;
+    this.ensurePlatform(stop);
+    g.player.inSubway = true;
+    // Stand back from the platform edge.
+    const d = lineDir(stop.line);
+    const nx = -d.z, nz = d.x;
+    g.player.teleport(stop.x + nx * 5.0, stop.z + nz * 5.0, PLATFORM_Y + 1.0);
+    g.player.groundOverride = PLATFORM_Y + 1.0;
+    g.player.verticalVel = 0;
+    audio.doorOpen();
+    return stop;
+  }
+
+  /** Back up to the street. */
+  leave() {
+    const g = this.game;
+    const stop = this.playerStation;
+    this.ridingTrain = null;
+    this.playerStation = null;
+    g.player.inSubway = false;
+    g.player.groundOverride = null;
+    if (stop) {
+      const sw = g.world.city.nearestSidewalk(stop.x, stop.z);
+      g.player.teleport(sw.x + 3.4, sw.z, g.world.groundAt(sw.x + 3.4, sw.z));
+    }
+    audio.doorClose();
+    return true;
+  }
+
+  /** The train standing at this platform with its doors open, if any. */
+  trainAtPlatform() {
+    const stop = this.playerStation;
+    if (!stop) return null;
+    for (const t of this.trains) {
+      if (t.line !== stop.line) continue;
+      if (t.state === 'run' || t.doorsOpen < 0.6) continue;
+      if (t.index !== stop.index) continue;
+      return t;
+    }
+    return null;
+  }
+
+  board() {
+    const t = this.trainAtPlatform();
+    if (!t) return null;
+    const g = this.game;
+    const p = this.trainPos(t);
+    const d = lineDir(t.line);
+    this.ridingTrain = t;
+    this._lastRidePos = t.pos;
+    g.player.teleport(p.x + (t.line.axis === 'z' ? TRACK_OFFSET * 0.6 : 0),
+      p.z + (t.line.axis === 'x' ? -TRACK_OFFSET * 0.6 : 0), PLATFORM_Y + 0.4);
+    g.player.groundOverride = PLATFORM_Y + 0.4;
+    g.player.verticalVel = 0;
+    return t;
+  }
+
+  alight() {
+    const t = this.ridingTrain;
+    if (!t) return false;
+    if (t.state === 'run' || t.doorsOpen < 0.5) return false;
+    const stop = this.stops.find((s) => s.line === t.line && s.index === t.index);
+    this.ridingTrain = null;
+    this._lastRidePos = null;
+    if (stop) {
+      this.playerStation = stop;
+      this.ensurePlatform(stop);
+      const d = lineDir(stop.line);
+      const nx = -d.z, nz = d.x;
+      this.game.player.teleport(stop.x + nx * 4.2, stop.z + nz * 4.2, PLATFORM_Y + 1.0);
+      this.game.player.groundOverride = PLATFORM_Y + 1.0;
+    }
+    return true;
+  }
+
+  dispose() {
+    for (const key of [...this.platforms.keys()]) this.disposePlatform(key);
+    for (const t of this.trains) this.hideTrain(t);
+    disposeGroup(this.root);
+  }
+}
+
+return { Subway, PLATFORM_Y, SUBWAY_LINES };
+})();
+
 __M["render/atmosphere"] = (function(){
 // T10 World - sky, day/night cycle and weather.
 // A physically-flavoured sky dome drives the sun, ambient and fog together, so
@@ -66488,6 +67405,38 @@ class Atmosphere {
     this.scene.add(this.fill);
 
     this.scene.fog = new THREE.Fog(0x9ec4e8, 120, 700);
+  }
+
+  /** Underground there is no sky and no sun; the station lights do the work. */
+  setUnderground(on) {
+    if (this.underground === !!on) return;
+    this.underground = !!on;
+    if (this.sky) this.sky.visible = !this.underground;
+    if (this.sun) this.sun.visible = !this.underground;
+    if (this.moon) this.moon.visible = !this.underground;
+    if (this.cloudGroup) this.cloudGroup.visible = !this.underground;
+    if (this.rain) this.rain.visible = !this.underground;
+    if (this.underground) {
+      this._savedHemi = this.hemi.intensity;
+      this._savedAmbient = this.ambient.intensity;
+      this._savedFill = this.fill.intensity;
+      this._savedFog = this.scene.fog ? { near: this.scene.fog.near, far: this.scene.fog.far, color: this.scene.fog.color.getHex() } : null;
+      this.hemi.intensity = 0.12;
+      this.ambient.intensity = 0.16;
+      this.fill.intensity = 0.05;
+      if (this.scene.fog) { this.scene.fog.near = 4; this.scene.fog.far = 90; this.scene.fog.color.setHex(0x06080a); }
+      this.scene.background = new THREE.Color(0x05070a);
+    } else {
+      if (this._savedHemi != null) this.hemi.intensity = this._savedHemi;
+      if (this._savedAmbient != null) this.ambient.intensity = this._savedAmbient;
+      if (this._savedFill != null) this.fill.intensity = this._savedFill;
+      if (this._savedFog && this.scene.fog) {
+        this.scene.fog.near = this._savedFog.near;
+        this.scene.fog.far = this._savedFog.far;
+        this.scene.fog.color.setHex(this._savedFog.color);
+      }
+      this.scene.background = null;
+    }
   }
 
   applyShadowSettings() {
@@ -66901,7 +67850,7 @@ __M["render/post"] = (function(){
 // occlusion and the T10 vision modes, composited in as few passes as the
 // quality preset allows.
 const THREE = __THREE;
-const { settings } = __M["core/settings"];
+const { settings, perf } = __M["core/settings"];
 const { clamp01, lerpv } = __M["core/math"];
 
 const QUAD_VERT = `
@@ -66982,35 +67931,114 @@ uniform float uNear;
 uniform float uFar;
 uniform float uStrength;
 uniform float uWet;
+uniform float uSteps;
+uniform mat4 uProj;
+uniform mat4 uInvProj;
 
-float linearDepth(vec2 uv) {
-  float z = texture2D(tDepth, uv).x;
+float rawDepth(vec2 uv) { return texture2D(tDepth, uv).x; }
+
+float linearDepth(float z) {
   float ndc = z * 2.0 - 1.0;
   return (2.0 * uNear * uFar) / (uFar + uNear - ndc * (uFar - uNear));
 }
 
+/** View-space position from a UV and its depth sample. */
+vec3 viewPos(vec2 uv, float z) {
+  vec4 clip = vec4(uv * 2.0 - 1.0, z * 2.0 - 1.0, 1.0);
+  vec4 v = uInvProj * clip;
+  return v.xyz / v.w;
+}
+
 void main() {
   vec4 base = texture2D(tDiffuse, vUv);
-  // Reconstruct a crude surface slope from depth to find flat ground.
-  float dC = linearDepth(vUv);
-  float dU = linearDepth(vUv + vec2(0.0, uTexel.y * 2.0));
-  float dD = linearDepth(vUv - vec2(0.0, uTexel.y * 2.0));
-  float slope = abs(dU - dD);
-  float flat_ = 1.0 - smoothstep(0.02, 0.25, slope / max(dC, 1.0));
-  float ground = smoothstep(0.62, 0.30, vUv.y) * flat_;
-  float amount = ground * uStrength * (0.30 + uWet * 0.70);
-  if (amount < 0.01 || dC > uFar * 0.4) { gl_FragColor = base; return; }
+  float z = rawDepth(vUv);
+  // Sky: nothing to reflect off.
+  if (z >= 0.9999 || uStrength < 0.01) { gl_FragColor = base; return; }
 
-  // Mirror upward from the horizon and blur slightly with distance.
-  float horizon = 0.62;
-  vec2 ruv = vec2(vUv.x, horizon + (horizon - vUv.y) * 0.92);
-  ruv.x += sin(vUv.y * 90.0) * 0.0016 * uWet;
-  vec3 refl = vec3(0.0);
-  refl += texture2D(tDiffuse, ruv).rgb * 0.5;
-  refl += texture2D(tDiffuse, ruv + vec2(uTexel.x * 2.0, 0.0)).rgb * 0.25;
-  refl += texture2D(tDiffuse, ruv - vec2(uTexel.x * 2.0, 0.0)).rgb * 0.25;
-  float fade = smoothstep(0.0, 0.25, ruv.y) * step(ruv.y, 1.0);
-  gl_FragColor = vec4(mix(base.rgb, refl, clamp(amount * fade, 0.0, 0.55)), base.a);
+  vec3 P = viewPos(vUv, z);
+  // Rebuild the surface normal from neighbouring depth, picking the smaller
+  // difference on each axis so we don't smear across silhouettes.
+  vec3 px = viewPos(vUv + vec2(uTexel.x, 0.0), rawDepth(vUv + vec2(uTexel.x, 0.0))) - P;
+  vec3 mx = P - viewPos(vUv - vec2(uTexel.x, 0.0), rawDepth(vUv - vec2(uTexel.x, 0.0)));
+  vec3 py = viewPos(vUv + vec2(0.0, uTexel.y), rawDepth(vUv + vec2(0.0, uTexel.y))) - P;
+  vec3 my = P - viewPos(vUv - vec2(0.0, uTexel.y), rawDepth(vUv - vec2(0.0, uTexel.y)));
+  vec3 dx = length(px) < length(mx) ? px : mx;
+  vec3 dy = length(py) < length(my) ? py : my;
+  vec3 N = normalize(cross(dx, dy));
+  if (N.y < 0.0) N = -N;
+
+  // Only near-horizontal surfaces reflect: roads, pavements, water, glass
+  // that happens to be lying flat. Wetness decides how much.
+  float flatness = smoothstep(0.55, 0.92, N.y);
+  float amount = flatness * uStrength * (0.22 + uWet * 0.78);
+  if (amount < 0.012) { gl_FragColor = base; return; }
+
+  vec3 V = normalize(P);
+  vec3 R = reflect(V, N);
+  // Grazing angles reflect far more than head-on ones.
+  float fresnel = pow(1.0 - max(dot(-V, N), 0.0), 3.0);
+  amount *= mix(0.25, 1.0, fresnel);
+
+  // March the reflected ray in view space, projecting to screen each step.
+  float steps = max(6.0, uSteps);
+  float stride = mix(0.55, 2.2, clamp(-P.z / 60.0, 0.0, 1.0));
+  vec3 hitColor = vec3(0.0);
+  float hit = 0.0;
+  vec2 hitUv = vUv;
+  vec3 march = P;
+  for (int i = 0; i < 32; i++) {
+    if (float(i) >= steps) break;
+    march += R * stride;
+    if (march.z > -uNear) break;
+    vec4 clip = uProj * vec4(march, 1.0);
+    vec2 uv = (clip.xy / clip.w) * 0.5 + 0.5;
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) break;
+    float sceneZ = linearDepth(rawDepth(uv));
+    float rayZ = -march.z;
+    float diff = rayZ - sceneZ;
+    // In front of the surface, but not so far behind it that we've punched
+    // through a foreground object.
+    if (diff > 0.02 && diff < stride * 2.4) {
+      // One binary refinement so the hit doesn't stair-step.
+      vec3 a = march - R * stride, bpt = march;
+      for (int k = 0; k < 4; k++) {
+        vec3 mid = (a + bpt) * 0.5;
+        vec4 mc = uProj * vec4(mid, 1.0);
+        vec2 muv = (mc.xy / mc.w) * 0.5 + 0.5;
+        if (linearDepth(rawDepth(muv)) < -mid.z) bpt = mid; else a = mid;
+      }
+      vec4 fc = uProj * vec4((a + bpt) * 0.5, 1.0);
+      hitUv = (fc.xy / fc.w) * 0.5 + 0.5;
+      hitColor = texture2D(tDiffuse, hitUv).rgb;
+      hit = 1.0;
+      break;
+    }
+  }
+
+  // Ripple the sample a little when the ground is wet.
+  if (hit > 0.5 && uWet > 0.01) {
+    vec2 ripple = vec2(sin(vUv.y * 140.0 + vUv.x * 30.0), cos(vUv.x * 120.0)) * 0.0022 * uWet;
+    hitColor = mix(hitColor, texture2D(tDiffuse, clamp(hitUv + ripple, 0.001, 0.999)).rgb, 0.6);
+  }
+
+  // Nothing found: mirror the horizon, which is what the cheap version did and
+  // is still better than a flat surface.
+  if (hit < 0.5) {
+    float horizon = 0.62;
+    vec2 ruv = vec2(vUv.x, horizon + (horizon - vUv.y) * 0.92);
+    ruv.x += sin(vUv.y * 90.0) * 0.0016 * uWet;
+    if (ruv.y > 0.0 && ruv.y < 1.0) {
+      hitColor = texture2D(tDiffuse, ruv).rgb;
+      hit = smoothstep(0.0, 0.25, ruv.y) * 0.55;
+    }
+  }
+
+  // Fade out at the edges of the screen, where there is nothing to sample.
+  vec2 edge = smoothstep(vec2(0.0), vec2(0.14), hitUv) * smoothstep(vec2(0.0), vec2(0.14), 1.0 - hitUv);
+  float border = edge.x * edge.y;
+
+  float k = clamp(amount * hit * border, 0.0, 0.55);
+  gl_FragColor = vec4(mix(base.rgb, hitColor, k), base.a);
 }`;
 
 const COMPOSITE_FRAG = `
@@ -67222,6 +68250,9 @@ class PostProcessor {
     this.matSSR = makeMaterial(SSR_FRAG, {
       tDiffuse: { value: null }, tDepth: { value: null },
       uTexel: { value: new THREE.Vector2() },
+      uSteps: { value: 20 },
+      uProj: { value: new THREE.Matrix4() },
+      uInvProj: { value: new THREE.Matrix4() },
       uNear: { value: 0.1 }, uFar: { value: 1000 },
       uStrength: { value: 0.8 }, uWet: { value: 0 },
     });
@@ -67296,6 +68327,11 @@ class PostProcessor {
       this.matSSR.uniforms.uNear.value = this.camera.near;
       this.matSSR.uniforms.uFar.value = this.camera.far;
       this.matSSR.uniforms.uWet.value = this.wetness;
+      // Ray count follows the frame governor, so a phone on ULTRA gets shorter
+      // rays rather than a slideshow.
+      this.matSSR.uniforms.uSteps.value = Math.round(lerpv(7, 28, perf.load));
+      this.matSSR.uniforms.uProj.value.copy(this.camera.projectionMatrix);
+      this.matSSR.uniforms.uInvProj.value.copy(this.camera.projectionMatrixInverse);
       this.blit(this.matSSR, this.rtSSR);
       sourceTex = this.rtSSR.texture;
     }
@@ -67420,6 +68456,9 @@ class Player {
     this.jumpVelocity = 5.4;
     this.speedMultiplier = 1;
     this.strength = 1;
+    this.isZombie = false;
+    this.inSubway = false;
+    this.groundOverride = null;
     this.jumpMultiplier = 1;
 
     this.cameraMode = settings.get('cameraMode');
@@ -67554,8 +68593,12 @@ class Player {
     const turnRate = wrapAngle(this.heading - prevHeading) / Math.max(dt, 0.0001);
 
     // --- Vertical ---
-    const groundY = this.world.supportAt(this.position.x, this.position.z, this.position.y);
-    const waterHere = this.world.isWater(this.position.x, this.position.z);
+    // Underground the terrain means nothing; the platform or the train floor is
+    // the ground.
+    const groundY = this.groundOverride != null
+      ? this.groundOverride
+      : this.world.supportAt(this.position.x, this.position.z, this.position.y);
+    const waterHere = this.groundOverride == null && this.world.isWater(this.position.x, this.position.z);
     this.swimming = waterHere && this.position.y < WATER_LEVEL + 0.3;
 
     if (this.flying || this.noclip) {
@@ -67603,7 +68646,7 @@ class Player {
     const moveScale = this.grounded || this.swimming || this.flying ? 1 : 0.72;
     this.position.x += Math.sin(this.heading) * this.speed * moveScale * dt;
     this.position.z += Math.cos(this.heading) * this.speed * moveScale * dt;
-    if (!this.noclip) this.world.resolveCollision(this.position, 0.36);
+    if (!this.noclip && this.groundOverride == null) this.world.resolveCollision(this.position, 0.36);
 
     // Keep the player inside the world.
     const LIM = 1180;
@@ -67638,6 +68681,41 @@ class Player {
   onHardLanding(impact) {
     this.camShake = 1.4;
     if (this.onDamage) this.onDamage(impact);
+  }
+
+  /** Sit where you are — on a train, a bench, a platform. */
+  sitDownHere() {
+    if (this.sitting) return false;
+    this.sitting = { x: this.position.x, z: this.position.z, here: true };
+    this.speed = 0;
+    this.human.animator.setState(STATES.SIT);
+    return true;
+  }
+
+  standUp() {
+    if (!this.sitting) return false;
+    this.sitting = null;
+    this.human.animator.setState(STATES.IDLE);
+    return true;
+  }
+
+  /**
+   * Turn, or turn back. As a zombie you're slower, everything living runs from
+   * you, the infected leave you alone, and USE on someone close feeds.
+   */
+  setZombie(on) {
+    if (this.isZombie === !!on) return this.isZombie;
+    this.isZombie = !!on;
+    const a = this.appearance;
+    if (this.isZombie) {
+      this._preZombie = { speed: this.walkSpeed, tone: a.toneIndex };
+      this.walkSpeed = 1.85;
+      this.human.setSkinTint(0x8fe070, 0xd4ff5a);
+    } else {
+      this.walkSpeed = (this._preZombie && this._preZombie.speed) || 2.45;
+      this.human.setSkinTint(null, null);
+    }
+    return this.isZombie;
   }
 
   /**
@@ -67992,6 +69070,8 @@ class Arsenal {
 
   unequip() {
     if (this.view) { this.game.scene.remove(this.view); this.view = null; }
+    const p = this.game.player;
+    if (p && p.human && p.human.animator) p.human.animator.weaponAim = null;
     this.weapon = null;
     this.flash.visible = false;
     this.flashLight.intensity = 0;
@@ -68023,19 +69103,36 @@ class Arsenal {
     const fwd = this._dir.set(0, 0, -1).applyQuaternion(cam.quaternion);
 
     const sway = Math.sin(p.human.animator.phase * TAU) * clamp01(p.speed / p.walkSpeed) * 0.012;
-    // First person hangs it off the camera; third person puts it where the
-    // character's hands are, or it floats out beside them three metres away.
-    const target = first
-      ? cam.position.clone()
+
+    // Tell the body it's holding something, so the arms come up and the chest
+    // squares to the target. In first person nobody sees the body, so skip it.
+    p.human.animator.weaponAim = first ? null : {
+      weight: 1, pitch: p.pitch, aiming: !!this.aiming,
+    };
+
+    let target;
+    if (first) {
+      target = cam.position.clone()
         .addScaledVector(right, 0.17)
         .addScaledVector(up, -0.16 + sway)
-        .addScaledVector(fwd, 0.26 - kick * 0.09)
-      : new THREE.Vector3(p.position.x, p.position.y + p.eyeHeight * 0.74 + sway, p.position.z)
-        .addScaledVector(right, 0.34)
-        .addScaledVector(fwd, 0.30 - kick * 0.09);
+        .addScaledVector(fwd, 0.26 - kick * 0.09);
+    } else {
+      // Third person puts the gun in the hand that is holding it. The pose
+      // above has already put that hand out in front of the chest.
+      const handBone = p.human.boneMap && p.human.boneMap.handR;
+      if (handBone) {
+        handBone.updateWorldMatrix(true, false);
+        target = new THREE.Vector3().setFromMatrixPosition(handBone.matrixWorld);
+        target.addScaledVector(fwd, 0.12 - kick * 0.06).addScaledVector(up, -0.02);
+      } else {
+        target = new THREE.Vector3(p.position.x, p.position.y + p.eyeHeight * 0.74 + sway, p.position.z)
+          .addScaledVector(right, 0.30)
+          .addScaledVector(fwd, 0.30 - kick * 0.09);
+      }
+    }
 
     if (snap) this.view.position.copy(target);
-    else this.view.position.lerp(target, clamp01(dt * 22));
+    else this.view.position.lerp(target, clamp01(dt * (first ? 22 : 30)));
     this.view.quaternion.copy(cam.quaternion);
     // The model points down its own +X and the camera looks down -Z, so the
     // gun's frame turns +90° about Y: R_y(90°)·(1,0,0) = (0,0,-1). Turning it
@@ -68248,7 +69345,9 @@ class Arsenal {
     }
 
     // Trigger. Touch uses a dedicated button; on desktop it's the left mouse.
-    const held = input && (input.buttons.fire || (input.mouseLeft && !input.isTypingNow));
+    // USE doubles as the trigger, so one button covers shooting, sitting,
+    // talking and doors — which is what it has to be on a phone.
+    const held = this.triggerHeld || (input && input.buttons.fire);
     if (w.spinUp) {
       this.spin = clamp01(this.spin + (held ? dt / w.spinUp : -dt / (w.spinUp * 0.7)));
     }
@@ -70805,8 +71904,8 @@ function extendRegistry6(R, add) {
   add('me_strong', 'Powers', ['make me strong', 'give me strength', 'make me hit harder'],
     'Hit much harder.',
     (ctx) => { ctx.player.strength = 4; return 'You hit four times as hard now.'; });
-  add('me_fast', 'Powers', ['make me fast', 'give me speed', 'let me move quickly'],
-    'Move much faster on foot.',
+  add('me_very_fast', 'Powers', ['make me really fast', 'triple my speed', 'let me move very quickly'],
+    'Move three times as fast on foot.',
     (ctx) => { ctx.player.speedMultiplier = 3; return 'Three times the pace.'; });
   add('me_normal_speed', 'Powers', ['normal pace', 'stop me being fast', 'normal walking speed'],
     'Back to a normal walk.',
@@ -70888,6 +71987,445 @@ function extendRegistry6(R, add) {
 return { extendRegistry6 };
 })();
 
+__M["t10/commands7"] = (function(){
+// T10 World - command registry, part seven. The subway, being a zombie, what
+// comes out of people, and the long tail of everything else.
+const { SUBWAY_LINES, PLATFORM_Y } = __M["world/subway"];
+const { WEAPONS, WEAPON_FAMILIES, WEAPON_PATTERNS } = __M["entities/weapons"];
+const { APOCALYPSE_KEYS, APOCALYPSES } = __M["entities/apocalypse"];
+const { STATES } = __M["human/animator"];
+const { settings } = __M["core/settings"];
+const { clampv, plural, TAU } = __M["core/math"];
+
+function extendRegistry7(R, add) {
+  const sub = (ctx) => ctx.game.subway;
+  const gore = (ctx) => ctx.game.gore;
+  const apo = (ctx) => ctx.apocalypse || ctx.game.apocalypse;
+
+  // ===== 50. The subway ====================================================
+  add('sub_find', 'Subway',
+    ['where is the subway', 'where is the nearest station', 'find me a subway', 'where can i get the train',
+     'is there a subway', 'take me to the subway'],
+    'Find the nearest subway entrance.',
+    (ctx) => {
+      const s = sub(ctx);
+      if (!s) return 'No subway down there.';
+      const p = ctx.player.position;
+      const near = s.stops.slice().sort((a, b) =>
+        Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z))[0];
+      const d = Math.round(Math.hypot(near.x - p.x, near.z - p.z));
+      return near.line.name + ' at ' + near.name + ', ' + d + 'm away. Say "T10 take me down there" to skip the walk.';
+    });
+  add('sub_enter', 'Subway',
+    ['take me down there', 'get me on the platform', 'take me into the subway', 'go down to the platform',
+     'take me to the platform'],
+    'Go straight down onto the nearest platform.',
+    (ctx) => {
+      const s = sub(ctx);
+      if (!s) return 'No subway down there.';
+      const p = ctx.player.position;
+      const near = s.stops.slice().sort((a, b) =>
+        Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z))[0];
+      s.enter(near.key);
+      return s.playerStation.line.name + ', ' + near.name + '. Wait for the train and press use.';
+    });
+  add('sub_leave', 'Subway',
+    ['get me out of the subway', 'take me back up', 'leave the station', 'back to the street', 'get out of here'],
+    'Back up to the street.',
+    (ctx) => {
+      const s = sub(ctx);
+      if (!s || !ctx.player.inSubway) return 'You\'re not underground.';
+      s.leave();
+      return 'Back on the street.';
+    });
+  add('sub_board', 'Subway', ['get on the train', 'board the train', 'get me on', 'ride the train'],
+    'Board the train at the platform.',
+    (ctx) => {
+      const s = sub(ctx);
+      if (!s) return 'No subway down there.';
+      if (s.ridingTrain) return 'You\'re already on it.';
+      const t = s.board();
+      return t ? 'Aboard the ' + t.line.name + '. Use again to sit.' : 'No train at the platform yet. Give it a minute.';
+    });
+  add('sub_off', 'Subway', ['get off the train', 'this is my stop', 'let me off'],
+    'Get off at the current stop.',
+    (ctx) => {
+      const s = sub(ctx);
+      if (!s || !s.ridingTrain) return 'You\'re not on a train.';
+      return s.alight() ? 'Off at ' + (s.playerStation ? s.playerStation.name : 'the platform') + '.' : 'Not stopped yet — wait for the doors.';
+    });
+  add('sub_sit', 'Subway', ['sit down', 'take a seat', 'find me a seat'],
+    'Sit down.',
+    (ctx) => (ctx.player.sitDownHere() ? 'Sitting.' : 'You\'re already sitting. Use to get up.'));
+  add('sub_stand', 'Subway', ['stand up', 'get up', 'on my feet'],
+    'Stand up.',
+    (ctx) => (ctx.player.standUp() ? 'Up.' : 'You\'re already standing.'));
+  add('sub_lines', 'Subway', ['what subway lines are there', 'list the subway lines', 'how many lines are there',
+    'what trains are there'],
+    'List the subway lines.',
+    () => SUBWAY_LINES.map((l) => l.name + ' (' + l.stops.length + ' stops: ' +
+      l.stops.map((s) => s.name).join(', ') + ')').join('. ') + '.');
+  add('sub_where_train', 'Subway', ['where is the train', 'when is the next train', 'how long until the train'],
+    'Ask where the trains are.',
+    (ctx) => {
+      const s = sub(ctx);
+      if (!s) return 'No subway down there.';
+      return s.trains.map((t) => t.line.name + ' is ' +
+        (t.state === 'run' ? 'between stops' : 'at ' + t.line.stops[t.index].name)).join('; ') + '.';
+    });
+
+  for (const line of SUBWAY_LINES) {
+    const n = line.name.toLowerCase();
+    const short = line.id.toLowerCase();
+    add('sub_line_' + short, 'Subway',
+      ['take me to the ' + n, 'put me on the ' + n, 'i want the ' + n, 'take me to the ' + short + ' train'],
+      'Go to the ' + line.name + '.',
+      (ctx) => {
+        const s = sub(ctx);
+        if (!s) return 'No subway down there.';
+        const p = ctx.player.position;
+        const near = s.stops.filter((x) => x.line === line)
+          .sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z))[0];
+        s.enter(near.key);
+        return line.name + ' at ' + near.name + '.';
+      });
+    add('sub_about_' + short, 'Subway',
+      ['what is the ' + n, 'tell me about the ' + n, 'where does the ' + n + ' go'],
+      'Ask about the ' + line.name + '.',
+      () => line.name + ' runs ' + (line.axis === 'z' ? 'north to south' : 'east to west') + ' through ' +
+        line.stops.map((s) => s.name).join(', ') + '.');
+
+    for (const stop of line.stops) {
+      const sn = stop.name.toLowerCase();
+      add('sub_stop_' + short + '_' + sn.replace(/[^a-z0-9]+/g, '_'), 'Subway',
+        ['take me to ' + sn + ' subway station', 'take me to the ' + sn + ' stop', 'go to the ' + sn + ' platform'],
+        'Go to ' + stop.name + ' on the ' + line.name + '.',
+        (ctx) => {
+          const s = sub(ctx);
+          if (!s) return 'No subway down there.';
+          const target = s.stops.find((x) => x.line === line && x.stop === stop);
+          s.enter(target.key);
+          return line.name + ', ' + stop.name + '.';
+        });
+    }
+  }
+
+  // ===== 51. Being one of them =============================================
+  add('zom_become', 'Apocalypse',
+    ['turn me into a zombie', 'make me a zombie', 'i want to be a zombie', 'infect me', 'make me one of them'],
+    'Become a zombie yourself.',
+    (ctx) => {
+      ctx.player.setZombie(true);
+      const a = apo(ctx);
+      if (a && !a.active) a.start('zombie');
+      return 'You\'re one of them. Slower, greener, and nothing living will come near you. Use on someone to feed.';
+    });
+  add('zom_cure_me', 'Apocalypse',
+    ['turn me back', 'cure me', 'i dont want to be a zombie', 'make me human again', 'make me normal'],
+    'Stop being a zombie.',
+    (ctx) => (ctx.player.setZombie(false) === false ? 'You\'re yourself again.' : 'You\'re yourself again.'));
+  add('zom_am_i', 'Questions', ['am i a zombie', 'what am i'],
+    'Ask what you are.',
+    (ctx) => (ctx.player.isZombie ? 'You\'re a zombie. They leave you alone; everyone else runs.' : 'You\'re alive, as far as I can tell.'));
+  add('zom_feed', 'Apocalypse', ['feed', 'eat someone', 'bite them', 'take a bite'],
+    'Feed on whoever is closest.',
+    (ctx) => {
+      if (!ctx.player.isZombie) return 'You\'d have to be one of them first. Say "T10 turn me into a zombie".';
+      return ctx.game.doZombieBite() ? 'Done.' : 'Nobody close enough.';
+    });
+  add('zom_reanimate_on', 'Apocalypse',
+    ['make the dead come back', 'everyone who dies turns', 'the dead rise', 'make bodies reanimate'],
+    'Anyone put on the ground gets back up as one of them.',
+    (ctx) => {
+      const a = apo(ctx);
+      if (!a) return 'I can\'t reach the world right now.';
+      a.alwaysReanimate = true;
+      return 'Nothing stays down now. Whoever hits the pavement gets back up wrong.';
+    });
+  add('zom_reanimate_off', 'Apocalypse',
+    ['let the dead stay down', 'stop bodies reanimating', 'no more reanimation'],
+    'The dead stay down.',
+    (ctx) => {
+      const a = apo(ctx);
+      if (a) a.alwaysReanimate = false;
+      for (const n of ctx.npcs.npcs) n.reanimate = 0;
+      return 'They stay down.';
+    });
+  add('zom_horde', 'Apocalypse', ['give me a horde', 'send a horde', 'surround me with zombies'],
+    'A crowd of them, right where you\'re standing.',
+    (ctx) => {
+      const a = apo(ctx);
+      if (!a) return 'I can\'t reach the world right now.';
+      if (!a.active) a.start('zombie');
+      let n = 0;
+      const p = ctx.player.position;
+      for (const npc of ctx.npcs.npcs) {
+        if (npc.indoors || npc.infected) continue;
+        const ang = (n / 12) * TAU;
+        const r = 9 + (n % 3) * 4;
+        npc.position.set(p.x + Math.cos(ang) * r, 0, p.z + Math.sin(ang) * r);
+        npc.position.y = ctx.world.groundAt(npc.position.x, npc.position.z);
+        npc.root.position.copy(npc.position);
+        a.infect(npc);
+        if (++n >= 24) break;
+      }
+      return n + ' of them, all around you.';
+    });
+  add('zom_count_feeding', 'Questions', ['how many are feeding', 'is anyone being eaten'],
+    'Ask how many are mid-meal.',
+    (ctx) => {
+      let n = 0;
+      for (const x of ctx.npcs.npcs) if (x.feeding > 0) n++;
+      return n ? n + ' of them are eating someone right now.' : 'Nobody is being eaten. Yet.';
+    });
+  add('zom_slow', 'Apocalypse', ['make the zombies slow', 'slow zombies', 'classic zombies'],
+    'Slow, shambling zombies.',
+    (ctx) => {
+      for (const n of ctx.npcs.npcs) if (n.infected) n.walkSpeed = 0.8;
+      ctx.game.zombieSpeed = 0.8;
+      return 'Slow ones. You can outwalk them — until you\'re cornered.';
+    });
+  add('zom_fast', 'Apocalypse', ['make the zombies fast', 'fast zombies', 'sprinters'],
+    'Fast zombies.',
+    (ctx) => {
+      for (const n of ctx.npcs.npcs) if (n.infected) n.walkSpeed = 2.4;
+      ctx.game.zombieSpeed = 2.4;
+      return 'They sprint now. Good luck.';
+    });
+
+  // ===== 52. What comes out of people ======================================
+  add('gib_them', 'World', ['tear them apart', 'gib them', 'blow them apart', 'take them apart'],
+    'Take the nearest person apart.',
+    (ctx) => {
+      const npc = ctx.npcs.nearestNPC(ctx.player.position, 30);
+      if (!npc) return 'Nobody close enough.';
+      const g = gore(ctx);
+      if (!g) return 'No gore system loaded.';
+      const n = g.gib(npc.position.x, npc.position.y + 0.8, npc.position.z, 1, 0, 1);
+      npc.downed = 999;
+      if (ctx.game.apocalypse) ctx.game.apocalypse.casualties++;
+      return n ? npc.appearance.firstName + ', in ' + n + ' pieces.' : 'Turn the gore up first — you\'re on 16.';
+    });
+  add('gib_everyone', 'World', ['tear everyone apart', 'gib everyone', 'blow everyone apart'],
+    'Take everyone nearby apart.',
+    (ctx) => {
+      const g = gore(ctx);
+      if (!g) return 'No gore system loaded.';
+      let n = 0;
+      for (const npc of ctx.npcs.npcs) {
+        if (npc.indoors) continue;
+        g.gib(npc.position.x, npc.position.y + 0.8, npc.position.z, 1, 0, 1);
+        npc.downed = 999;
+        n++;
+      }
+      return n + ' of them. The street is a mess.';
+    });
+  add('gib_count', 'Questions', ['how much mess is there', 'how much blood is there', 'how bad is the mess'],
+    'Ask how messy it has got.',
+    (ctx) => {
+      const g = gore(ctx);
+      if (!g) return 'Nothing to report.';
+      return g.decals.length + ' patches of blood, ' + g.gibs.length + ' ' + plural('piece', g.gibs.length) +
+        ' on the ground, ' + g.dropCount + ' still in the air.';
+    });
+
+  // ===== 53. Guns, the rest of it ==========================================
+  for (const fam of WEAPON_FAMILIES) {
+    const n = fam.name.toLowerCase();
+    add('gun_about_' + fam.id, 'Weapons',
+      ['tell me about the ' + n, 'what is a ' + n, 'how good is a ' + n],
+      'Ask about the ' + fam.name + '.',
+      () => {
+        const best = WEAPONS.filter((w) => w.family === fam.id).sort((a, b) => b.dps - a.dps)[0];
+        return fam.name + ': ' + fam.cls + ', ' + fam.dmg + ' damage, ' + fam.rpm + ' rpm, ' +
+          fam.mag + ' rounds, ' + fam.range + 'm. Best pattern is the ' + best.name + ' at ' + best.dps + ' dps.';
+      });
+  }
+  add('gun_quietest', 'Weapons', ['give me the quietest gun', 'give me a silent gun', 'something quiet'],
+    'The quietest thing in the armoury.',
+    (ctx) => {
+      const w = WEAPONS.filter((x) => x.quiet).sort((a, b) => b.dps - a.dps)[0];
+      if (ctx.game.arsenal) ctx.game.arsenal.equip(w);
+      return w.name + '. Nobody two streets over will hear it.';
+    });
+  add('gun_longest', 'Weapons', ['give me the longest range gun', 'what reaches furthest', 'longest range'],
+    'The longest reach in the armoury.',
+    (ctx) => {
+      const w = WEAPONS.slice().sort((a, b) => b.range - a.range)[0];
+      if (ctx.game.arsenal) ctx.game.arsenal.equip(w);
+      return w.name + ' — ' + w.range + ' metres.';
+    });
+  add('gun_biggest_mag', 'Weapons', ['give me the biggest magazine', 'most ammo', 'the gun that holds the most'],
+    'The biggest magazine in the armoury.',
+    (ctx) => {
+      const w = WEAPONS.slice().sort((a, b) => b.mag - a.mag)[0];
+      if (ctx.game.arsenal) ctx.game.arsenal.equip(w);
+      return w.name + ' — ' + w.mag + ' rounds.';
+    });
+
+  // One per pattern: "T10 give me an apex" hands you the best apex there is.
+  for (const pat of WEAPON_PATTERNS) {
+    const n = pat.name.toLowerCase();
+    add('gun_pat_' + pat.id, 'Weapons',
+      ['give me an ' + n, 'give me a ' + n + ' gun', 'i want ' + n + ' gear', n + ' weapon'],
+      'The best ' + pat.name + ' gun in the armoury.',
+      (ctx) => {
+        const pool = WEAPONS.filter((w) => w.pattern === pat.id).sort((a, b) => b.dps - a.dps);
+        const w = pool[0];
+        if (ctx.game.arsenal) ctx.game.arsenal.equip(w);
+        return w.name + ' — ' + w.damage + ' damage, ' + w.rpm + ' rpm, ' + w.dps + ' dps. ' +
+          pool.length + ' guns come in this pattern.';
+      });
+  }
+
+  // ===== 54. The long tail =================================================
+  const QUICK = [
+    ['world_rain_blood', 'World', ['make it rain blood', 'blood rain', 'red rain'],
+      'Rain, but wrong.',
+      (ctx) => { ctx.atmosphere.setWeather('storm'); if (ctx.game.gore) for (let i = 0; i < 60; i++) { const a = Math.random() * TAU, r = Math.random() * 30; ctx.game.gore.splat(ctx.player.position.x + Math.cos(a) * r, ctx.player.position.z + Math.sin(a) * r, 0.5 + Math.random(), 1); } return 'It\'s coming down red.'; }],
+    ['world_silence_crowd', 'Crowd', ['tell everyone to be quiet', 'silence the crowd', 'stop them talking'],
+      'Nobody says anything.',
+      (ctx) => { let n = 0; for (const x of ctx.npcs.npcs) { x.talkTimer = 0; x.talkPartner = null; n++; } return n + ' gone quiet.'; }],
+    ['me_heal', 'Powers', ['patch me up', 'heal me', 'fix me up'],
+      'Back on your feet, unmarked.',
+      (ctx) => { ctx.player.getUp(); ctx.player.camShake = 0; return 'Good as new. You were never really hurt.'; }],
+    ['world_daylight', 'Time', ['give me perfect light', 'best light', 'golden hour'],
+      'The best light of the day.',
+      (ctx) => { ctx.atmosphere.timeOfDay = 18.1; ctx.atmosphere.setWeather('fair'); return 'Golden hour. Look west.'; }],
+    ['me_tall_view', 'Travel', ['put me somewhere with a view', 'best view in the city', 'take me somewhere high'],
+      'Somewhere with a view.',
+      (ctx) => { let best = null; for (const l of ctx.world.city.lots) if (!best || l.height > best.height) best = l; if (!best) return 'Nothing built yet.'; ctx.player.teleport(best.x, best.z, ctx.world.groundAt(best.x, best.z) + best.height + 0.4); ctx.player.verticalVel = 0; return Math.round(best.height) + ' metres up. That\'s the best there is.'; }],
+    ['gun_drop_all', 'Weapons', ['disarm everyone', 'take everyones guns', 'nobody has a gun'],
+      'Nobody is armed.',
+      (ctx) => { const a = apo(ctx); let n = 0; for (const x of ctx.npcs.npcs) { if (x.hostile) { x.hostile = false; x.controlled = null; x.human.setSkinTint(null, null); n++; } } return n + ' stood down.'; }],
+    ['world_clear_bodies', 'World', ['clear the bodies', 'get rid of the bodies', 'clean up the dead'],
+      'Remove everyone on the ground.',
+      (ctx) => { let n = 0; for (let i = ctx.npcs.npcs.length - 1; i >= 0; i--) { const x = ctx.npcs.npcs[i]; if (x.downed > 0) { ctx.npcs.remove(x); n++; } } return n + ' cleared.'; }],
+    ['sub_all_stations', 'Subway', ['list the stations', 'what stations are there', 'how many stations'],
+      'List every station.',
+      (ctx) => { const s = sub(ctx); return s ? s.stops.length + ' stations: ' + s.stops.map((x) => x.name).join(', ') + '.' : 'No subway.'; }],
+    ['sub_ride_end', 'Subway', ['ride to the end of the line', 'take me to the end of the line'],
+      'Ride to the last stop.',
+      (ctx) => { const s = sub(ctx); if (!s) return 'No subway.'; const p = ctx.player.position; const line = SUBWAY_LINES[0]; const last = s.stops.filter((x) => x.line === line).slice(-1)[0]; s.enter(last.key); return 'End of the ' + line.name + ': ' + last.name + '.'; }],
+    ['world_ultra', 'Settings', ['make it look as good as possible', 'best graphics', 'max out the graphics', 'give me rtx'],
+      'Everything on.',
+      (ctx) => { settings.setQuality('ultra'); ctx.applyQuality(); return 'ULTRA. Ray-traced screen-space reflections, ambient occlusion, volumetric light, full crowds. I\'ll trim the load if your device starts struggling rather than let it stutter.'; }],
+  ];
+  for (const [id, cat, patterns, help, run] of QUICK) add(id, cat, patterns, help, run);
+
+  const MORE = [
+    ['sub_hide', 'Subway', ['hide me underground', 'get me somewhere safe', 'somewhere they cant follow'],
+      'Somewhere with one way in.',
+      (ctx) => { const s = sub(ctx); if (!s) return 'No subway.'; const p = ctx.player.position;
+        const near = s.stops.slice().sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z))[0];
+        s.enter(near.key); return near.name + '. One way in, one way out. Good luck.'; }],
+    ['zom_outrun', 'Questions', ['can i outrun them', 'are they faster than me', 'how fast are zombies'],
+      'Ask whether you can outrun them.',
+      (ctx) => { const sp = ctx.game.zombieSpeed || 1.3; return sp < 2 ? 'They shamble at about ' + sp.toFixed(1) + ' metres a second. You walk at ' + ctx.player.walkSpeed.toFixed(1) + '. You can outwalk them on a straight road — not in a stairwell.' : 'They sprint. No.'; }],
+    ['gore_spray_here', 'World', ['make a mess here', 'spray blood here', 'blood on the floor'],
+      'Put blood where you\'re standing.',
+      (ctx) => { const g = gore(ctx); if (!g) return 'No gore system loaded.'; const p = ctx.player.position;
+        g.spray(p.x, p.y + 1.2, p.z, 60, 0, 1, 1); g.pool(p.x, p.z, 2.2); return 'Done. Mind your shoes.'; }],
+    ['gore_gib_here', 'World', ['drop some body parts', 'put remains here', 'leave some pieces'],
+      'Leave remains on the ground.',
+      (ctx) => { const g = gore(ctx); if (!g) return 'No gore system loaded.'; const p = ctx.player.position;
+        const n = g.gib(p.x, p.y + 1.0, p.z, 0.9, 0, 0); return n + ' ' + plural('piece', n) + '.'; }],
+    ['world_apocalypse_everywhere', 'Apocalypse', ['make it happen everywhere', 'spread it across the city'],
+      'Push the outbreak out across the whole city.',
+      (ctx) => { const a = apo(ctx); if (!a || !a.active) return 'Start something first.'; const n = a.seedInfection(30); return 'Seeded across everyone loaded. It goes where you go.'; }],
+    ['me_carry_gun_third', 'Camera', ['let me see myself holding it', 'show me holding the gun'],
+      'Third person, so you can see what you\'re carrying.',
+      (ctx) => { ctx.player.setCameraMode('third'); ctx.game.hud.refreshSettings(); return 'Third person. That\'s you, and that\'s what you\'re holding.'; }],
+    ['world_option_where', 'Questions', ['where did i start', 'what did i choose', 'what are my world settings'],
+      'Ask what you chose when the world was made.',
+      (ctx) => { const o = ctx.game.worldOptions || {}; return 'You started in ' + (o.where || 'downtown') + ', at ' +
+        (o.time != null ? o.time + ':00' : 'morning') + ', ' + (o.weather || 'fair') + ', ' +
+        (o.busy === 1 ? 'normal' : o.busy > 1 ? 'packed' : 'quiet') + ' streets, on ' + settings.get('quality').toUpperCase() + '.'; }],
+    ['world_busy_more', 'Crowd', ['more people', 'busier streets', 'fill the streets'],
+      'More people.',
+      (ctx) => { ctx.npcs.densityScale = clampv(ctx.npcs.densityScale * 1.6, 0.1, 4); return 'Busier. Density ' + ctx.npcs.densityScale.toFixed(1) + '×.'; }],
+    ['world_busy_less', 'Crowd', ['fewer people', 'quieter streets', 'thin the crowd'],
+      'Fewer people.',
+      (ctx) => { ctx.npcs.densityScale = clampv(ctx.npcs.densityScale / 1.6, 0.05, 4); return 'Quieter. Density ' + ctx.npcs.densityScale.toFixed(1) + '×.'; }],
+    ['gun_third_check', 'Weapons', ['how do i hold it', 'am i holding it right'],
+      'Ask how the gun is being carried.',
+      (ctx) => { const a = ctx.game.arsenal; if (!a || !a.armed) return 'You\'re not holding anything.';
+        return 'Right hand on the grip, left forward on the fore-end, chest square to where you\'re looking. In first person you just see the gun.'; }],
+    ['sub_train_count', 'Subway', ['how many trains are there', 'how many subway trains'],
+      'Ask how many trains are running.',
+      (ctx) => { const s = sub(ctx); return s ? s.trains.length + ' trains, one per line, running end to end and back.' : 'No subway.'; }],
+    ['world_make_it_night_forever', 'Time', ['make it night forever', 'permanent night', 'stop the sun coming up'],
+      'Hold the clock at night.',
+      (ctx) => { ctx.atmosphere.timeOfDay = 1; ctx.atmosphere.paused = true; return 'One in the morning, and it stays that way.'; }],
+  ];
+  for (const [id, cat, patterns, help, run] of MORE) add(id, cat, patterns, help, run);
+
+  // Per-emotion crowd reactions, per-colour blood, per-hour subway service —
+  // the families that make the long tail addressable rather than vague.
+  const MOODS = [
+    ['terrified', 'panic'], ['furious', 'hostile'], ['calm', 'clear'], ['hungry', 'infect'],
+  ];
+  for (const [word, mode] of MOODS) {
+    add('crowd_mood_' + word, 'Crowd',
+      ['make everyone ' + word, 'everyone is ' + word, 'turn everyone ' + word],
+      'Make everyone ' + word + '.',
+      (ctx) => {
+        const a = apo(ctx);
+        if (!a) return 'I can\'t reach the world right now.';
+        let n = 0;
+        for (const npc of ctx.npcs.npcs) {
+          if (npc.indoors) continue;
+          if (mode === 'panic') a.panic(npc);
+          else if (mode === 'hostile') a.makeHostile(npc);
+          else if (mode === 'infect') a.infect(npc);
+          else a.clearNpc(npc);
+          n++;
+        }
+        return n + ' ' + word + '.';
+      });
+  }
+
+  const BLOOD_COLORS = [
+    ['black', 0x241012], ['green', 0x2f7a2a], ['blue', 0x1d3f8e], ['purple', 0x4a1d6e], ['gold', 0xb08a1e],
+  ];
+  for (const [name, hex] of BLOOD_COLORS) {
+    add('gore_color_' + name, 'World',
+      ['make the blood ' + name, name + ' blood'],
+      'Make the blood ' + name + '.',
+      (ctx) => {
+        const g = gore(ctx);
+        if (!g) return 'No gore system loaded.';
+        for (const m of g.decalMats) m.color.setHex(hex);
+        g.drops.material.uniforms.uColor.value.setHex(hex);
+        return name[0].toUpperCase() + name.slice(1) + ' blood. Nobody has commented.';
+      });
+  }
+
+  // Ask T10 to put a specific apocalypse underground, because a platform with
+  // no way out is its own kind of bad.
+  for (const key of APOCALYPSE_KEYS) {
+    add('sub_apoc_' + key, 'Subway',
+      ['start a ' + key + ' apocalypse in the subway', key + ' in the subway', 'bring the ' + key + ' underground'],
+      APOCALYPSES[key].name + ', underground.',
+      (ctx) => {
+        const s = sub(ctx);
+        const a = apo(ctx);
+        if (!s || !a) return 'I can\'t reach the world right now.';
+        if (!ctx.player.inSubway) {
+          const p = ctx.player.position;
+          const near = s.stops.slice().sort((x, y) =>
+            Math.hypot(x.x - p.x, x.z - p.z) - Math.hypot(y.x - p.x, y.z - p.z))[0];
+          s.enter(near.key);
+        }
+        a.start(key);
+        return APOCALYPSES[key].name + ', and you\'re eleven metres under the street.';
+      });
+  }
+}
+
+return { extendRegistry7 };
+})();
+
 __M["t10/commands"] = (function(){
 // T10 World - the T10 assistant's command registry.
 // Every entry here is a real, executable command with its own trigger phrases.
@@ -70912,6 +72450,7 @@ const { extendRegistry3 } = __M["t10/commands3"];
 const { extendRegistry4 } = __M["t10/commands4"];
 const { extendRegistry5 } = __M["t10/commands5"];
 const { extendRegistry6 } = __M["t10/commands6"];
+const { extendRegistry7 } = __M["t10/commands7"];
 
 function singularWord(word) {
   if (word.length < 4) return word;
@@ -71471,6 +73010,7 @@ function buildRegistry() {
   extendRegistry4(R, add);
   extendRegistry5(R, add);
   extendRegistry6(R, add);
+  extendRegistry7(R, add);
   return R;
 }
 
@@ -73233,6 +74773,7 @@ const { audio } = __M["core/audio"];
 const { saveGame, loadGame, hasSave, clearSave, saveInfo } = __M["core/save"];
 const { clamp01, clampv, lerpv, hashString, makeRng, TAU } = __M["core/math"];
 const { World, CHUNK_SIZE } = __M["world/world"];
+const { Subway } = __M["world/subway"];
 const { Atmosphere } = __M["render/atmosphere"];
 const { PostProcessor } = __M["render/post"];
 const { Player } = __M["player/player"];
@@ -73443,6 +74984,29 @@ class Game {
     return this.worldName;
   }
 
+  /** Options chosen on the creation screen, applied as the world is built. */
+  applyWorldOptions(opts) {
+    this.worldOptions = Object.assign({
+      where: 'downtown', time: 9.5, weather: 'fair', busy: 1, quality: 'high', maturity: 18,
+    }, opts || {});
+    if (this.worldOptions.quality) { settings.setQuality(this.worldOptions.quality); this.applyQuality(); }
+    if (this.worldOptions.maturity) settings.setMaturity(this.worldOptions.maturity);
+    return this.worldOptions;
+  }
+
+  /** A point inside a named district, for the creation screen's start choice. */
+  findDistrictPoint(key, rng) {
+    for (let i = 0; i < 1200; i++) {
+      const a = (i * 2.399963) % (Math.PI * 2);
+      const r = ((i + (rng ? rng() : 0)) / 1200) * 1100;
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (this.world.city.districtAt(x, z) !== key) continue;
+      if (this.world.isWater(x, z)) continue;
+      return { x, z };
+    }
+    return null;
+  }
+
   showCreator() {
     this.phase = 'creator';
     this.creator.open();
@@ -73486,6 +75050,8 @@ class Game {
         this.animals = new AnimalManager(this.world, this.scene, this.atmosphere);
         this.gore = new Gore(this);
         this.arsenal = new Arsenal(this);
+        this.subway = new Subway(this);
+        this.subway.buildEntrances(this.world);
         this.apocalypse = new Apocalypse(this);
         this.npcs.apocalypse = this.apocalypse;
         // People only get to lay a hand on you when the world is ending.
@@ -73496,11 +75062,29 @@ class Game {
         this.t10 = new T10Brain(this);
       }],
       ['Finding you a street…', () => {
-        // Different worlds wake you up on different streets.
+        const o = this.worldOptions || {};
+        // Different worlds wake you up on different streets, and the option
+        // chosen on the creation screen decides which part of town.
         const rng = makeRng(this.worldSeed ^ 0x5f3a7);
-        const a = rng() * Math.PI * 2;
-        const r = 90 + rng() * 380;
-        const spawn = this.world.findSpawnPoint(Math.cos(a) * r, Math.sin(a) * r);
+        let sx, sz;
+        const district = o.where && o.where !== 'random' ? o.where : null;
+        if (district) {
+          const spot = this.findDistrictPoint(district, rng);
+          if (spot) { sx = spot.x; sz = spot.z; }
+        }
+        if (sx == null) {
+          const a = rng() * Math.PI * 2;
+          const r = 90 + rng() * 380;
+          sx = Math.cos(a) * r; sz = Math.sin(a) * r;
+        }
+        if (o.time != null) this.atmosphere.timeOfDay = o.time;
+        if (o.weather) this.atmosphere.setWeather(o.weather, true);
+        if (o.busy != null) {
+          this.npcs.densityScale = o.busy;
+          this.traffic.densityScale = o.busy;
+          this.animals.densityScale = o.busy;
+        }
+        const spawn = this.world.findSpawnPoint(sx, sz);
         this.player.spawnOnStreet(spawn.x, spawn.z);
         this.player.setCameraMode(settings.get('cameraMode'));
         // Pre-stream the chunks around the spawn so you don't wake into a void.
@@ -73619,10 +75203,14 @@ class Game {
     this.npcs.update(dt, p.position);
     this.traffic.update(dt, focus, p.inVehicle, this.npcs.npcs);
     this.animals.update(dt, p.position, this.traffic.vehicles);
+    if (this.npcs) this.npcs.playerIsZombie = p.isZombie;
     if (this.apocalypse) this.apocalypse.update(dt, p.position);
     if (this.gore) this.gore.update(dt, focus);
+    if (this.subway) this.subway.update(dt, focus);
     if (this.arsenal) {
       this.arsenal.aiming = !!this.input.buttons.aim;
+      // Holding USE keeps an automatic firing.
+      this.arsenal.triggerHeld = !!this.input.buttons.interact;
       this.arsenal.update(dt, this.input);
       if (this.input.edges.reload) this.arsenal.reload();
       this.hud.setArmed(this.arsenal.armed);
@@ -73665,8 +75253,16 @@ class Game {
   // -------------------------------------------------------------------------
   // Interaction
   // -------------------------------------------------------------------------
+  /**
+   * USE is the whole game in one button. Armed, it fires; in a seat, it gets
+   * you up; on a train platform, it gets you on; otherwise it does whatever
+   * you're standing next to.
+   */
   doInteract() {
     if (this.phase !== 'playing' || this.hud.chatOpen) return;
+    if (this.arsenal && this.arsenal.armed) { this.arsenal.pullTrigger(); return; }
+    if (this.subway && this.doSubway()) return;
+    if (this.player.isZombie && this.doZombieBite()) return;
     const result = this.player.interact(this);
     if (!result) return;
     switch (result.kind) {
@@ -73760,6 +75356,65 @@ class Game {
     this.t10Say(how === 'infect'
       ? npc.appearance.firstName + ' got hold of you. You\'re down — I\'ll have you up in a moment. Say "T10 never let me die" if you want that to stop happening.'
       : npc.appearance.firstName + ' put you on the pavement. Say "T10 I never want to die" and nobody touches you again.');
+  }
+
+  /**
+   * USE, underground. Board a waiting train, get off one, or climb back out
+   * to the street. @returns true if it did something.
+   */
+  doSubway() {
+    const sub = this.subway;
+    const p = this.player;
+    if (sub.ridingTrain) {
+      if (p.sitting) { p.standUp(); return true; }
+      if (sub.alight()) { this.t10Say('Off at ' + (sub.playerStation ? sub.playerStation.name : 'the platform') + '.'); return true; }
+      // Moving: sit down instead.
+      if (p.sitDownHere()) { this.t10Say('Take a seat.'); return true; }
+      return true;
+    }
+    if (p.inSubway) {
+      if (p.sitting) { p.standUp(); return true; }
+      const t = sub.board();
+      if (t) { this.t10Say('Aboard the ' + t.line.name + '. Use again to sit down.'); return true; }
+      // Near the stairs? Back up to the street.
+      const st = sub.playerStation;
+      if (st && Math.hypot(p.position.x - st.x, p.position.z - st.z) > 12) {
+        sub.leave();
+        this.t10Say('Back on the street.');
+        return true;
+      }
+      if (p.sitDownHere()) { this.t10Say('Waiting.'); return true; }
+      return false;
+    }
+    // Street level: the nearest entrance.
+    const t = p.interactTarget;
+    if (t && t.action === 'subway') {
+      const stop = sub.enter(t.stopKey);
+      if (stop) { this.t10Say(stop.line.name + ', ' + stop.name + '. Trains every minute or so.'); return true; }
+    }
+    return false;
+  }
+
+  /** Reach for whoever is closest and take a bite. @returns true if you did. */
+  doZombieBite() {
+    const p = this.player;
+    const npc = this.npcs.nearestNPC(p.position, 2.6);
+    if (!npc || npc.infected) return false;
+    const dx = npc.position.x - p.position.x, dz = npc.position.z - p.position.z;
+    const len = Math.hypot(dx, dz) || 1;
+    if (this.gore) {
+      this.gore.hit(npc.position.x, npc.position.y, npc.position.z, 1, dx / len, dz / len);
+      this.gore.gib(npc.position.x, npc.position.y + 0.6, npc.position.z, 0.6, dx / len, dz / len);
+      this.gore.pool(npc.position.x, npc.position.z, 1.7);
+    }
+    npc.downed = 8;
+    npc.reanimate = 4 + Math.random() * 6;
+    npc.controlled = 'apocalypse';
+    if (this.apocalypse) this.apocalypse.casualties++;
+    p.camShake = Math.min(1.2, p.camShake + 0.5);
+    audio.spawnPop();
+    this.t10Say(npc.appearance.firstName + '. They\'ll be up again shortly, and they won\'t be themselves.');
+    return true;
   }
 
   onChatToggled(open) {
@@ -73910,6 +75565,36 @@ function boot() {
   }
   refreshHint();
 
+  // ---- Option chips -----------------------------------------------------
+  // Each group is a row of buttons where one is on; the chosen values are
+  // handed to the game when the world is created.
+  const options = { where: 'downtown', time: 9.5, weather: 'fair', busy: 1, quality: 'high', maturity: 18 };
+  const numeric = { time: true, busy: true, maturity: true };
+  for (const key of Object.keys(options)) {
+    const row = document.getElementById('t10-opt-' + key);
+    if (!row) continue;
+    const chips = [...row.querySelectorAll('.world-chip')];
+    for (const chip of chips) {
+      chip.addEventListener('click', () => {
+        for (const c of chips) c.classList.toggle('on', c === chip);
+        const raw = chip.getAttribute('data-v');
+        options[key] = numeric[key] ? parseFloat(raw) : raw;
+        audio.init();
+        audio.ui('tick');
+      });
+    }
+  }
+
+  const advToggle = document.getElementById('t10-adv-toggle');
+  const advBody = document.getElementById('t10-adv');
+  if (advToggle && advBody) {
+    advToggle.addEventListener('click', () => {
+      const open = advBody.classList.toggle('open');
+      advToggle.innerHTML = open ? 'Fewer options \u25b4' : 'More options \u25be';
+      if (open) setTimeout(() => advBody.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 60);
+    });
+  }
+
   const saved = saveInfo();
   if (continueBtn && saved) {
     continueBtn.style.display = '';
@@ -73926,6 +75611,7 @@ function boot() {
     startBtn.addEventListener('click', () => {
       audio.init();
       game.setWorldIdentity((nameInput && nameInput.value) || (nameInput && nameInput.placeholder) || suggested);
+      game.applyWorldOptions(options);
       hideSplash();
       game.showCreator();
     });

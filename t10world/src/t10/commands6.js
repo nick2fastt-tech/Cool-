@@ -200,8 +200,8 @@ export function extendRegistry6(R, add) {
   add('me_strong', 'Powers', ['make me strong', 'give me strength', 'make me hit harder'],
     'Hit much harder.',
     (ctx) => { ctx.player.strength = 4; return 'You hit four times as hard now.'; });
-  add('me_fast', 'Powers', ['make me fast', 'give me speed', 'let me move quickly'],
-    'Move much faster on foot.',
+  add('me_very_fast', 'Powers', ['make me really fast', 'triple my speed', 'let me move very quickly'],
+    'Move three times as fast on foot.',
     (ctx) => { ctx.player.speedMultiplier = 3; return 'Three times the pace.'; });
   add('me_normal_speed', 'Powers', ['normal pace', 'stop me being fast', 'normal walking speed'],
     'Back to a normal walk.',

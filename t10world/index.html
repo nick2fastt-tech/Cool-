@@ -32,11 +32,13 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:var(--ink);c
 #t10-ui button,#t10-ui input,#t10-ui .t10-chat,#t10-ui .t10-settings,#t10-ui .t10-creator,#t10-ui .t10-touch{pointer-events:auto}
 
 /* ---------- Splash ---------- */
-#t10-splash{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;
-  background:radial-gradient(circle at 50% 40%,#101a17 0%,#07090c 62%);transition:opacity .6s ease}
+#t10-splash{position:fixed;inset:0;z-index:100;display:block;overflow-y:auto;overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  background:radial-gradient(circle at 50% 30%,#101a17 0%,#07090c 62%);transition:opacity .6s ease}
 #t10-splash.gone{opacity:0;pointer-events:none}
-.splash-inner{text-align:center;padding:24px;max-width:560px}
-.splash-mark{width:104px;height:104px;margin:0 auto 26px;border-radius:50%;position:relative;
+.splash-inner{text-align:center;padding:max(24px,env(safe-area-inset-top)) 18px calc(34px + env(safe-area-inset-bottom));
+  max-width:560px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;justify-content:center}
+.splash-mark{width:84px;height:84px;margin:0 auto 20px;flex:0 0 auto;border-radius:50%;position:relative;
   background:radial-gradient(circle at 50% 45%,#0e1512 0%,#05070a 70%);
   border:2px solid var(--t10-green);box-shadow:0 0 42px var(--t10-green-glow),inset 0 0 26px rgba(47,217,138,.18)}
 .splash-mark::after{content:"T10";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
@@ -45,8 +47,8 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:var(--ink);c
 .splash-mark::before{content:"";position:absolute;inset:-9px;border-radius:50%;border:1px solid rgba(47,217,138,.28);
   animation:ring 3.2s ease-in-out infinite}
 @keyframes ring{0%,100%{transform:scale(1);opacity:.7}50%{transform:scale(1.07);opacity:.25}}
-.splash-title{font:700 40px/1.05 ui-sans-serif,system-ui;letter-spacing:.16em;margin:0 0 12px}
-.splash-tag{color:var(--muted);font-size:15px;line-height:1.6;margin:0 0 30px}
+.splash-title{font:700 clamp(27px,8vw,40px)/1.05 ui-sans-serif,system-ui;letter-spacing:.16em;margin:0 0 10px}
+.splash-tag{color:var(--muted);font-size:14px;line-height:1.6;margin:0 0 22px}
 .splash-tag b{color:var(--t10-green);font-weight:600}
 .splash-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
 .splash-btn{appearance:none;border:1px solid var(--t10-green);background:rgba(47,217,138,.10);color:var(--t10-green);
@@ -70,8 +72,21 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:var(--ink);c
 .world-dice:hover{background:rgba(47,217,138,.22)}
 .world-hint{margin:10px 2px 14px;color:#5d6862;font-size:11.5px;line-height:1.6}
 .world-hint b{color:#9ad9bb;font-weight:600}
-.world-form .splash-btns{justify-content:stretch}
+.world-form .splash-btns{justify-content:stretch;margin-top:4px}
 .world-form .splash-btn{flex:1;padding:14px 20px}
+.world-sep{height:1px;background:rgba(47,217,138,.14);margin:16px -18px}
+.world-group{margin-bottom:13px}
+.world-chips{display:flex;gap:6px;flex-wrap:wrap}
+.world-chip{appearance:none;background:rgba(47,217,138,.06);border:1px solid rgba(47,217,138,.16);
+  color:#8fb8a4;font:500 12.5px/1 ui-sans-serif,system-ui;padding:9px 12px;border-radius:999px;
+  cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease}
+.world-chip:hover{background:rgba(47,217,138,.14);color:var(--t10-green)}
+.world-chip.on{background:rgba(47,217,138,.22);border-color:var(--t10-green);color:var(--t10-green)}
+.world-adv{border:none;background:none;color:#5d6862;font:500 12px/1 ui-sans-serif,system-ui;
+  cursor:pointer;padding:6px 0;text-align:left;display:block}
+.world-adv:hover{color:#9ad9bb}
+.world-adv-body{display:none}
+.world-adv-body.open{display:block}
 
 /* ---------- Loading ---------- */
 .t10-loading{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;
@@ -372,6 +387,70 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border:none;border-ra
         <button class="world-dice" id="t10-dice" title="Random name">&#9860;</button>
       </div>
       <p class="world-hint" id="t10-seedhint">The name shapes the city &mdash; different names, different streets.</p>
+
+      <div class="world-sep"></div>
+
+      <div class="world-group">
+        <label class="world-label">Start where</label>
+        <div class="world-chips" id="t10-opt-where">
+          <button class="world-chip on" data-v="downtown">Downtown</button>
+          <button class="world-chip" data-v="residential">Residential</button>
+          <button class="world-chip" data-v="beach">Beachfront</button>
+          <button class="world-chip" data-v="countryside">Countryside</button>
+          <button class="world-chip" data-v="random">Anywhere</button>
+        </div>
+      </div>
+
+      <div class="world-group">
+        <label class="world-label">Time of day</label>
+        <div class="world-chips" id="t10-opt-time">
+          <button class="world-chip" data-v="7">Early</button>
+          <button class="world-chip on" data-v="9.5">Morning</button>
+          <button class="world-chip" data-v="13">Midday</button>
+          <button class="world-chip" data-v="18.5">Sunset</button>
+          <button class="world-chip" data-v="1">Night</button>
+        </div>
+      </div>
+
+      <button class="world-adv" id="t10-adv-toggle">More options &#9662;</button>
+      <div class="world-adv-body" id="t10-adv">
+        <div class="world-group">
+          <label class="world-label">Weather</label>
+          <div class="world-chips" id="t10-opt-weather">
+            <button class="world-chip on" data-v="fair">Fair</button>
+            <button class="world-chip" data-v="cloudy">Cloudy</button>
+            <button class="world-chip" data-v="rain">Rain</button>
+            <button class="world-chip" data-v="storm">Storm</button>
+            <button class="world-chip" data-v="fog">Fog</button>
+            <button class="world-chip" data-v="snow">Snow</button>
+          </div>
+        </div>
+        <div class="world-group">
+          <label class="world-label">How busy</label>
+          <div class="world-chips" id="t10-opt-busy">
+            <button class="world-chip" data-v="0.35">Quiet</button>
+            <button class="world-chip on" data-v="1">Normal</button>
+            <button class="world-chip" data-v="1.8">Packed</button>
+          </div>
+        </div>
+        <div class="world-group">
+          <label class="world-label">Quality</label>
+          <div class="world-chips" id="t10-opt-quality">
+            <button class="world-chip" data-v="low">Low</button>
+            <button class="world-chip" data-v="medium">Medium</button>
+            <button class="world-chip on" data-v="high">High</button>
+            <button class="world-chip" data-v="ultra">Ultra &middot; RTX</button>
+          </div>
+        </div>
+        <div class="world-group">
+          <label class="world-label">Content</label>
+          <div class="world-chips" id="t10-opt-maturity">
+            <button class="world-chip on" data-v="18">18+ &middot; full gore</button>
+            <button class="world-chip" data-v="16">16+ &middot; toned down</button>
+          </div>
+        </div>
+      </div>
+
       <div class="splash-btns">
         <button class="splash-btn" id="t10-start">Create world</button>
         <button class="splash-btn ghost" id="t10-continue" style="display:none">Continue</button>
