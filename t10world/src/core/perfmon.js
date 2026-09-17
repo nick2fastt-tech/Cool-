@@ -40,6 +40,16 @@ export class PerfMonitor {
     this.sampled = 0;
     this._sorted = new Float32Array(120);
     this._heapAt = 0;
+
+    // Thermal estimate. No browser will tell us the temperature, but sustained
+    // throttling has a signature we can see: the same workload getting slower
+    // the longer the session runs. We track a slow average of frame time and
+    // the best that average ever was; a persistent drift upward from that best,
+    // after the first minute, is the phone backing itself off.
+    this.thermal = 0;        // 0..1
+    this.sustainedMs = 0;    // ~30s exponential average
+    this.bestMs = 0;         // the lowest sustained average seen this session
+    this.elapsed = 0;        // seconds of play
   }
 
   /** Call once per frame with the real elapsed time, before anything trims. */
@@ -50,7 +60,27 @@ export class PerfMonitor {
     if (this.count < this.frames.length) this.count++;
     this.frame++;
     this.sampled++;
+    this.elapsed += dtSeconds;
     if (ms > 33.4) this.stutters++;
+
+    // Slow average, ignoring the single-frame spikes a hitch produces.
+    const clamped = ms > 120 ? 120 : ms;
+    if (!this.sustainedMs) this.sustainedMs = clamped;
+    else this.sustainedMs += (clamped - this.sustainedMs) * Math.min(1, dtSeconds / 30);
+    if (this.elapsed > 12) {
+      if (!this.bestMs || this.sustainedMs < this.bestMs) this.bestMs = this.sustainedMs;
+      if (this.elapsed > 45 && this.bestMs > 0) {
+        // 10% slower than this session's best is the floor of the estimate;
+        // 45% slower is as hot as the scale goes.
+        const drift = this.sustainedMs / this.bestMs;
+        const want = drift <= 1.10 ? 0 : Math.min(1, (drift - 1.10) / 0.35);
+        // Rises over about ten seconds, falls over about thirty, so a passing
+        // heavy scene doesn't read as heat and a real cooldown is believed.
+        const rate = want > this.thermal ? dtSeconds / 10 : dtSeconds / 30;
+        this.thermal += (want - this.thermal) * Math.min(1, rate);
+        if (this.thermal < 0.004) this.thermal = 0;
+      }
+    }
 
     // Summarise a few times a second, not every frame.
     if ((this.frame & 15) !== 0) return this;
@@ -107,12 +137,21 @@ export class PerfMonitor {
   }
 
   /** True when the device is struggling badly enough to act on. */
-  get overloaded() { return this.p95Ms > 26 || this.heapPressure > 0.82; }
+  get overloaded() { return this.p95Ms > 26 || this.heapPressure > 0.82 || this.thermal > 0.6; }
+
+  /** What the thermal estimate means in words. */
+  get thermalLabel() {
+    if (this.thermal > 0.66) return 'hot';
+    if (this.thermal > 0.33) return 'warm';
+    return 'cool';
+  }
 
   /** One line for the stats readout. */
-  summary(quality, load, scale) {
+  summary(quality, load, scale, note) {
     return Math.round(this.fps) + ' fps  ·  ' + this.frameMs.toFixed(1) + 'ms (p95 ' + this.p95Ms.toFixed(1) + ')\n' +
-      quality + '  ·  load ' + load.toFixed(2) + '  ·  res ' + scale.toFixed(2) + '\n' +
+      quality + '  ·  load ' + load.toFixed(2) + '  ·  res ' + scale.toFixed(2) +
+      '  ·  ' + this.thermalLabel + '\n' +
+      (note ? note + '\n' : '') +
       this.draws + ' draws  ·  ' + (this.tris / 1000).toFixed(0) + 'k tris  ·  ' +
       this.geometries + ' geo  ·  ' + this.textures + ' tex\n' +
       this.npcs + ' people (+' + this.backgroundNpcs + ' background)  ·  ' +

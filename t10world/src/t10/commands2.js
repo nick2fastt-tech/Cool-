@@ -180,12 +180,22 @@ export function extendRegistry(R, add) {
     'Nothing can hurt you.', (ctx) => { ctx.player.godMode = true; return 'God mode on.'; });
   add('god_off', 'Powers', ['disable god mode', 'god mode off', 'make me mortal'],
     'Turn god mode off.', (ctx) => { ctx.player.godMode = false; return 'God mode off.'; });
+  // Invisibility is a power, not a hidden mesh: it also stops everyone's AI
+  // being told where you are, so nothing follows, flees or feeds on you.
   add('invisible_on', 'Powers', ['make me invisible', 'turn me invisible', 'hide me'],
-    'Turn invisible.',
-    (ctx) => { ctx.player.root.visible = false; return 'Nobody can see you.'; });
+    'Turn invisible — nobody can see you, not even the infected.',
+    (ctx) => {
+      if (ctx.game.powers) return ctx.game.usePower('invisible') || 'Nobody can see you.';
+      ctx.player.root.visible = false;
+      return 'Nobody can see you.';
+    });
   add('invisible_off', 'Powers', ['make me visible', 'turn me visible', 'show me again'],
     'Become visible again.',
-    (ctx) => { ctx.player.root.visible = true; return 'You\'re visible again.'; });
+    (ctx) => {
+      if (ctx.game.powers && ctx.game.powers.stop('invisible')) return 'You\'re visible again.';
+      ctx.player.root.visible = true;
+      return 'You\'re visible again.';
+    });
   const SCALES = [['giant', 2.2], ['big', 1.4], ['normal size', 1], ['small', 0.7], ['tiny', 0.4]];
   for (const [name, s] of SCALES) {
     add('scale_' + name.replace(/\s+/g, '_'), 'Powers',
@@ -220,8 +230,12 @@ export function extendRegistry(R, add) {
       ['make me ' + e.name, 'i want to ' + e.name, e.name, 'let me ' + e.name],
       'Make your character ' + e.name + '.',
       (ctx) => { ctx.player.human.animator.setState(e.state); ctx.player.sitting = e.state === STATES.SIT ? {} : null; return 'Doing it.'; });
+    // "make everyone sit down" belongs to the crowd action below, which seats
+    // people properly; every other emote keeps the natural phrasing.
     add('crowd_emote_' + e.id, 'Crowd',
-      ['make everyone ' + e.name, 'tell everyone to ' + e.name, 'everyone ' + e.name],
+      e.id === 'sit'
+        ? ['make everybody sit', 'get everyone to sit', 'have everyone sit down']
+        : ['make everyone ' + e.name, 'tell everyone to ' + e.name, 'everyone ' + e.name],
       'Make everyone nearby ' + e.name + '.',
       (ctx) => {
         const n = ctx.npcs.forEachNear(ctx.player.position, 60, (npc) => {
@@ -505,12 +519,13 @@ export function extendRegistry(R, add) {
       const n = ctx.world.clearSpawnedProps();
       return 'Removed ' + n + ' things I\'d placed.';
     });
-  add('world_save', 'World', ['save the game', 'save my world', 'save', 'save progress'],
-    'Save your world.',
-    (ctx) => (ctx.save() ? 'Saved.' : 'Couldn\'t save — storage is blocked in this browser.'));
-  add('world_load', 'World', ['load the game', 'load my world', 'load my save', 'restore my save'],
-    'Load your last save.',
-    (ctx) => (ctx.load() ? 'Loaded your last save.' : 'No save found.'));
+  add('world_save', 'World', ['save the game', 'save my world', 'save', 'save progress', 'save this world'],
+    'Save this world to its slot.',
+    (ctx) => (ctx.save() ? 'Saved. ' + ctx.game.worldName + ' is on disk, with everything in it.'
+      : 'Couldn\'t save — storage is blocked in this browser.'));
+  add('world_load', 'World', ['load the game', 'load my world', 'load my save', 'restore my save', 'go back to my last save'],
+    'Throw away everything since the last save and read this world back in.',
+    (ctx) => (ctx.load() ? 'Back to the last save of ' + ctx.game.worldName + '.' : 'No save of this world yet.'));
   add('world_streetlights_on', 'World', ['turn on the street lights', 'street lights on', 'light up the city'],
     'Force street lights on.',
     (ctx) => { ctx.forceStreetLights = 1; return 'Every light in the city, on.'; });

@@ -49,6 +49,7 @@ export const STATES = {
   SALUTE: 'salute', CLAP: 'clap', POINT: 'point', CHEER: 'cheer', THINK: 'think',
   STRETCH: 'stretch', BOW: 'bow',
   DRINK: 'drink', DOOR: 'door', BOARD: 'board', ALIGHT: 'alight', RECOVER: 'recover',
+  POWER: 'power',
 };
 
 export class HumanAnimator {
@@ -194,6 +195,7 @@ export class HumanAnimator {
       case STATES.EXERCISE: this.poseExercise(dt); break;
       case STATES.CARRY: this.poseCarry(dt); break;
       case STATES.USE: this.poseUse(dt); break;
+      case STATES.POWER: this.posePower(dt); break;
       case STATES.SALUTE: this.poseSalute(dt); break;
       case STATES.CLAP: this.poseClap(dt); break;
       case STATES.POINT: this.posePoint(dt); break;
@@ -885,6 +887,40 @@ export class HumanAnimator {
     this.set('hand' + S, 0, 0, s * 0.1);
     this.relaxFingers(S, 0.15 + reach * 0.4);
     this.set('chest', 0.03, -s * 0.10 * reach, 0);
+  }
+
+  /**
+   * Using a power: both arms come up and push out in front, the chest opens,
+   * and the whole thing snaps back. `stateOpts.style` picks the shape —
+   * 'push' throws it forward, 'raise' lifts it overhead, 'self' pulls it in.
+   */
+  posePower(dt) {
+    this.poseIdle(dt);
+    this._rate = 16;
+    const t = this.stateTime;
+    // A fast wind-up and a slower release, so it reads as effort.
+    const wind = clamp01(t / 0.14);
+    const hold = clamp01((0.75 - t) / 0.3);
+    const k = wind * hold;
+    const style = (this.stateOpts && this.stateOpts.style) || 'push';
+    for (const S of ['L', 'R']) {
+      const s = S === 'L' ? 1 : -1;
+      if (style === 'raise') {
+        this.set('upperArm' + S, -0.35 * k, s * 0.1, -s * (1.06 - 1.55 * k));
+        this.set('lowerArm' + S, 0, -s * 0.15 * k, 0);
+      } else if (style === 'self') {
+        this.set('upperArm' + S, -0.75 * k, s * 0.35 * k, -s * (1.06 - 0.5 * k));
+        this.set('lowerArm' + S, 0, -s * (0.2 + 1.25 * k), 0);
+      } else {
+        this.set('upperArm' + S, -1.25 * k, s * 0.12, -s * (1.06 - 0.72 * k));
+        this.set('lowerArm' + S, 0, -s * (0.18 + 0.28 * k), 0);
+      }
+      this.set('hand' + S, 0.25 * k, 0, s * 0.18 * k);
+      this.relaxFingers(S, 0.1 + k * 0.55);
+    }
+    this.set('chest', -0.12 * k, 0, 0);
+    this.set('spine', -0.06 * k, 0, 0);
+    this.set('neck', style === 'raise' ? -0.28 * k : 0.06 * k, 0, 0);
   }
 
   poseDead(dt) {

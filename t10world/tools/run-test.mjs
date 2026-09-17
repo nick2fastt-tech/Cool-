@@ -3,7 +3,9 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 
-const ROOT = process.argv[3] || path.resolve('.');
+// Resolve it: a relative root like "." would not match the absolute path the
+// traversal guard below compares against, and every request would 403.
+const ROOT = path.resolve(process.argv[3] || '.');
 const PAGE = process.argv[2] || '/tools/test-human.html';
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.css': 'text/css' };
 

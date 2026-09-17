@@ -2,6 +2,7 @@
 // By design there is almost nothing here: a settings button top-right, the T10
 // orb top-centre, a contextual prompt, and the touch controls on mobile.
 import { settings, QUALITY_PRESETS, QUALITY_ORDER } from '../core/settings.js';
+import { POWERS, ENERGY_MAX } from '../player/powers.js';
 import { audio } from '../core/audio.js';
 import { clamp01 } from '../core/math.js';
 
@@ -59,9 +60,102 @@ export class HUD {
     this.crosshair = el('div', 't10-cross', r);
     this.crosshair.style.display = 'none';
 
+    this.buildPowers();
     this.buildChat();
     this.buildSettings();
     if (this.isTouch) this.buildTouchControls();
+  }
+
+  // -------------------------------------------------------------------------
+  // The sixteen powers. One dock button opens a grid; every tile is a power
+  // with its glyph, its key, its cost and a cooldown sweep. The same grid is
+  // the mobile button set and the desktop reference card, so the two can't
+  // drift apart.
+  buildPowers() {
+    const r = this.root;
+    this.powerDock = el('div', 't10-power-dock', r);
+
+    this.energyWrap = el('div', 't10-energy', this.powerDock);
+    this.energyFill = el('div', 't10-energy-fill', this.energyWrap);
+    this.energyLabel = el('span', 't10-energy-label', this.powerDock, '');
+
+    this.powerBtn = el('button', 't10-power-btn', this.powerDock);
+    this.powerBtn.setAttribute('aria-label', 'Powers');
+    el('span', 't10-power-btn-glyph', this.powerBtn, '✷');
+    this.powerBtn.addEventListener('click', (e) => { e.preventDefault(); this.togglePowers(); });
+    this.powerBtn.addEventListener('touchstart', (e) => { e.stopPropagation(); }, { passive: true });
+
+    this.powerGrid = el('div', 't10-power-grid', r);
+    this.powerGrid.style.display = 'none';
+    const head = el('div', 't10-power-head', this.powerGrid);
+    el('span', 't10-power-title', head, 'Powers');
+    this.powerHint = el('span', 't10-power-sub', head, '');
+    const close = el('button', 't10-power-close', head, '×');
+    close.addEventListener('click', (e) => { e.preventDefault(); this.setPowersOpen(false); });
+
+    const list = el('div', 't10-power-list', this.powerGrid);
+    this.powerTiles = {};
+    for (const def of POWERS) {
+      const b = el('button', 't10-power-tile', list);
+      b.type = 'button';
+      const sweep = el('span', 't10-power-sweep', b);
+      el('span', 't10-power-glyph', b, def.glyph);
+      el('span', 't10-power-name', b, def.name);
+      const meta = el('span', 't10-power-meta', b);
+      el('span', 't10-power-key', meta, keyGlyph(def.key));
+      el('span', 't10-power-cost', meta, def.cost + 'e');
+      b.title = def.blurb;
+      b.style.setProperty('--p', '#' + def.color.toString(16).padStart(6, '0'));
+      const fire = (e) => {
+        e.preventDefault();
+        if (e.changedTouches) for (const t of e.changedTouches) this.game.input.claimTouch(t.identifier);
+        this.game.usePower(def.id);
+      };
+      b.addEventListener('touchstart', fire, { passive: false });
+      b.addEventListener('click', (e) => { if (!this.isTouch) fire(e); });
+      this.powerTiles[def.id] = { button: b, sweep };
+    }
+  }
+
+  togglePowers() { this.setPowersOpen(this.powerGrid.style.display === 'none'); }
+
+  setPowersOpen(open) {
+    this.powerGrid.style.display = open ? 'flex' : 'none';
+    this.powerBtn.classList.toggle('active', open);
+    audio.ui(open ? 'open' : 'close');
+    if (open && this.game.powers) this.updatePowers(this.game.powers, true);
+    // A full-screen panel takes the controls, the same as the map or the book.
+    if (this.game.syncInputSuspend) this.game.syncInputSuspend();
+  }
+
+  get powersOpen() { return this.powerGrid && this.powerGrid.style.display !== 'none'; }
+
+  /** Energy bar always, tiles only while the grid is open. */
+  updatePowers(powers, force) {
+    if (!powers || !this.energyFill) return;
+    const pct = clamp01(powers.energy / ENERGY_MAX);
+    this.energyFill.style.height = (pct * 100).toFixed(1) + '%';
+    this.energyFill.classList.toggle('low', pct < 0.25);
+    const activeCount = Object.keys(powers.active).length;
+    this.powerBtn.classList.toggle('running', activeCount > 0);
+    if (this._energyShown !== Math.round(pct * 20) || force) {
+      this._energyShown = Math.round(pct * 20);
+      this.energyLabel.textContent = Math.round(powers.energy);
+    }
+    if (!this.powersOpen) return;
+    for (const def of POWERS) {
+      const t = this.powerTiles[def.id];
+      if (!t) continue;
+      const cd = powers.cooldowns[def.id] || 0;
+      const on = powers.active[def.id] != null;
+      const afford = powers.energy >= def.cost;
+      t.button.classList.toggle('cooling', cd > 0);
+      t.button.classList.toggle('poor', !afford && cd <= 0);
+      t.button.classList.toggle('on', on);
+      const k = def.cooldown ? clamp01(cd / def.cooldown) : 0;
+      t.sweep.style.transform = 'scaleY(' + k.toFixed(3) + ')';
+    }
+    this.powerHint.textContent = powers.status();
   }
 
   // -------------------------------------------------------------------------
@@ -420,6 +514,14 @@ export class HUD {
     void this.orb.offsetWidth;
     this.orb.classList.add('pulse');
   }
+}
+
+/** 'Digit1' -> '1', 'KeyZ' -> 'Z'. */
+function keyGlyph(code) {
+  if (!code) return '';
+  if (code.startsWith('Digit')) return code.slice(5);
+  if (code.startsWith('Key')) return code.slice(3);
+  return code;
 }
 
 function gearSVG() {

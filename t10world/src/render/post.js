@@ -472,7 +472,7 @@ export class PostProcessor {
     let sourceTex = this.rtScene.texture;
 
     // 2) Screen-space reflections.
-    if (this.ssrEnabled) {
+    if (this.ssrEnabled && perf.reflections > 0.02) {
       this.matSSR.uniforms.tDiffuse.value = sourceTex;
       this.matSSR.uniforms.tDepth.value = this.rtScene.depthTexture;
       this.matSSR.uniforms.uTexel.value.set(1 / this.width, 1 / this.height);
@@ -481,7 +481,7 @@ export class PostProcessor {
       this.matSSR.uniforms.uWet.value = this.wetness;
       // Ray count follows the frame governor, so a phone on ULTRA gets shorter
       // rays rather than a slideshow.
-      this.matSSR.uniforms.uSteps.value = Math.round(lerpv(7, 28, perf.load));
+      this.matSSR.uniforms.uSteps.value = Math.round(lerpv(4, 28, perf.reflections));
       this.matSSR.uniforms.uProj.value.copy(this.camera.projectionMatrix);
       this.matSSR.uniforms.uInvProj.value.copy(this.camera.projectionMatrixInverse);
       this.blit(this.matSSR, this.rtSSR);

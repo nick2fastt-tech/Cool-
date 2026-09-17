@@ -164,8 +164,11 @@ export class T10Brain {
       return 'Forget it then.';
     }
     const tokens = new Set(matchTokens(n));
-    let best = null, bestScore = 0;
+    let best = null, bestScore = 0, fallback = null;
     for (const c of p.choices) {
+      // A choice of ['*'] catches whatever else you said — that's how a
+      // question with a free-text answer ("describe it") gets its answer.
+      if (c.words.length === 1 && c.words[0] === '*') { fallback = c; continue; }
       let score = 0;
       for (const w of c.words) {
         if (n === w) score = Math.max(score, 100);
@@ -174,10 +177,13 @@ export class T10Brain {
       }
       if (score > bestScore) { bestScore = score; best = c; }
     }
-    if (!best || bestScore < 30) return null;
+    if (!best || bestScore < 30) {
+      if (!fallback) return null;
+      best = fallback;
+    }
     this.pending = null;
     try {
-      return best.run(this.ctx) || 'Done.';
+      return best.run(this.ctx, text) || 'Done.';
     } catch (err) {
       console.error('[T10] answer failed', err);
       return 'Something went wrong with that one.';
@@ -242,7 +248,7 @@ export class T10Brain {
       setShadows: (on) => g.setShadows(on),
       applyQuality: () => g.applyQuality(),
       save: () => g.save(),
-      load: () => g.load(),
+      load: () => g.reloadWorld(),
       pop: () => audio.spawnPop(),
     };
   }

@@ -38,14 +38,14 @@ export const PERSONALITIES = [
 ];
 
 export const VOICE_PRESETS = [
-  { id: 'v1', name: 'Low & Warm', pitch: 0.72, rate: 0.94 },
-  { id: 'v2', name: 'Deep', pitch: 0.58, rate: 0.90 },
-  { id: 'v3', name: 'Even', pitch: 0.95, rate: 1.0 },
-  { id: 'v4', name: 'Bright', pitch: 1.18, rate: 1.05 },
-  { id: 'v5', name: 'Light & Quick', pitch: 1.34, rate: 1.16 },
-  { id: 'v6', name: 'Soft', pitch: 1.05, rate: 0.88 },
-  { id: 'v7', name: 'Gravelly', pitch: 0.66, rate: 0.84 },
-  { id: 'v8', name: 'Clipped', pitch: 1.0, rate: 1.22 },
+  { id: 'warm', name: 'Low & Warm', pitch: 0.72, rate: 0.94 },
+  { id: 'deep', name: 'Deep', pitch: 0.58, rate: 0.90 },
+  { id: 'even', name: 'Even', pitch: 0.95, rate: 1.0 },
+  { id: 'bright', name: 'Bright', pitch: 1.18, rate: 1.05 },
+  { id: 'quick', name: 'Light & Quick', pitch: 1.34, rate: 1.16 },
+  { id: 'soft', name: 'Soft', pitch: 1.05, rate: 0.88 },
+  { id: 'gravel', name: 'Gravelly', pitch: 0.66, rate: 0.84 },
+  { id: 'clipped', name: 'Clipped', pitch: 1.0, rate: 1.22 },
 ];
 
 export const OCCUPATIONS = [

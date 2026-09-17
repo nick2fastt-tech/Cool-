@@ -217,7 +217,9 @@ export class NPC {
   // -------------------------------------------------------------------------
   update(dt, playerPos, lod) {
     this.lodLevel = lod;
-    if (this.controlled === 'freeze') {
+    // Frozen, or mid-mutation: they stay where they are. The mutation system
+    // owns the pose and the tremor from here.
+    if (this.controlled === 'freeze' || this.controlled === 'mutating') {
       this.targetSpeed = 0;
       this.speed = 0;
       this.human.animator.setState(STATES.IDLE);
@@ -906,8 +908,17 @@ export class NPCManager {
     // Update with distance-based rate limiting. Three tiers, matching what you
     // can actually make out: full AI and animation close up, simplified in the
     // middle, and out past the simulation radius just enough to keep walking.
-    const near = settings.preset.npcDetailDistance;
-    const simD = settings.preset.npcSimDistance || near * 5;
+    const near = settings.preset.npcDetailDistance * perf.lodBias;
+    const simD = (settings.preset.npcSimDistance || near * 5) * perf.physics;
+    // Invisibility: the city keeps streaming around you, but nobody's AI is
+    // told where you are, so nothing follows, flees or feeds on you.
+    const seen = this.playerHidden ? null : playerPos;
+    // How often anybody is re-posed. The preset sets the ceiling (22 a second
+    // on LOW, sixty otherwise) and the governor's animation dial pulls it down
+    // from there; the tiers below divide it again by distance.
+    const animK = Math.max(0.3, perf.animation);
+    const fullRate = (settings.preset.animationRate || 60) * animK;
+    const fullInterval = fullRate >= 58 ? 0 : 1 / fullRate;
     for (const n of this.npcs) {
       if (n.indoors) {
         n.activityTimer -= dt;
@@ -919,14 +930,15 @@ export class NPCManager {
       if (d > simD) lod = 3;
       else if (d > near * 2.4) lod = 2;
       else if (d > near) lod = 1;
-      if (lod === 0) {
-        n.update(dt, playerPos, 0);
+      if (lod === 0 && !fullInterval) {
+        n.update(dt, seen, 0);
       } else {
         // Coarser update tick for distant people; they still walk and arrive.
         n.updateAccumulator += dt;
-        const interval = lod === 1 ? 1 / 20 : lod === 2 ? 1 / 8 : 1 / 3;
+        const interval = lod === 0 ? fullInterval
+          : lod === 1 ? 1 / (20 * animK) : lod === 2 ? 1 / (8 * animK) : 1 / (3 * animK);
         if (n.updateAccumulator >= interval) {
-          n.update(n.updateAccumulator, playerPos, lod);
+          n.update(n.updateAccumulator, seen, lod);
           n.updateAccumulator = 0;
         }
       }
@@ -957,6 +969,9 @@ export class NPCManager {
   remove(npc) {
     const i = this.npcs.indexOf(npc);
     if (i >= 0) this.npcs.splice(i, 1);
+    // Anything holding on to this person — a creature hunting them, a mutation
+    // running on them — checks this flag rather than searching the list.
+    npc.removed = true;
     npc.dispose();
   }
 

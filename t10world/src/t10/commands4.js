@@ -279,7 +279,8 @@ export function extendRegistry4(R, add) {
       const name = (m.rest || '').trim().slice(0, 28);
       if (!name) return 'Name it something.';
       const old = ctx.game.worldName;
-      ctx.game.worldName = name;
+      ctx.game.setWorldIdentity(name);
+      ctx.game.save();
       return 'It was ' + old + '. Now it\'s ' + name + '. The streets stay as they are — the seed is locked once a world exists.';
     }, { capturesRest: true });
   add('my_name', 'Questions', ['what is my name', 'whats my name', 'who am i', 'what do you call me'],

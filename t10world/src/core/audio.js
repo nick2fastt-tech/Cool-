@@ -275,6 +275,99 @@ export class AudioEngine {
     (t[kind] || t.bird)();
   }
 
+  /**
+   * Creature voices. Every species names one of these; `pitch` shifts it so a
+   * brute and a crawler saying "growl" don't sound like the same animal.
+   */
+  creature(kind, pitch, pan) {
+    const k = pitch || 1;
+    const p = pan || 0;
+    const v = {
+      growl: () => {
+        this.tone({ freq: 70 * k, dur: 0.55, gain: 0.13, type: 'sawtooth', slide: 0.7, pan: p });
+        this.noiseBurst({ dur: 0.5, gain: 0.09, freq: 260 * k, q: 2.2, sweep: 0.5, pan: p });
+      },
+      roar: () => {
+        this.tone({ freq: 55 * k, dur: 1.1, gain: 0.20, type: 'sawtooth', slide: 0.55, pan: p });
+        this.tone({ freq: 82 * k, dur: 0.95, gain: 0.12, type: 'square', slide: 0.6, pan: p });
+        this.noiseBurst({ dur: 1.0, gain: 0.14, freq: 420 * k, q: 1.2, sweep: 0.35, pan: p });
+      },
+      screech: () => {
+        this.tone({ freq: 1500 * k, dur: 0.7, gain: 0.11, type: 'sawtooth', slide: 0.45, pan: p });
+        this.tone({ freq: 2100 * k, dur: 0.6, gain: 0.06, type: 'square', slide: 0.6, pan: p });
+        this.noiseBurst({ dur: 0.55, gain: 0.08, freq: 3200 * k, q: 3.0, sweep: 0.4, pan: p });
+      },
+      hiss: () => { this.noiseBurst({ dur: 0.6, gain: 0.10, freq: 5200 * k, q: 1.4, sweep: 0.35, pan: p }); },
+      chitter: () => {
+        for (let i = 0; i < 5; i++) {
+          setTimeout(() => this.tone({ freq: (900 + Math.random() * 700) * k, dur: 0.045, gain: 0.05, type: 'square', pan: p }), i * 55);
+        }
+      },
+      groan: () => {
+        this.tone({ freq: 108 * k, dur: 1.2, gain: 0.10, type: 'sawtooth', slide: 0.75, pan: p });
+        this.noiseBurst({ dur: 1.0, gain: 0.05, freq: 520 * k, q: 3.0, sweep: 0.6, pan: p });
+      },
+      chime: () => {
+        this.tone({ freq: 880 * k, dur: 0.9, gain: 0.06, type: 'sine', slide: 1.35, pan: p });
+        this.tone({ freq: 1320 * k, dur: 0.7, gain: 0.035, type: 'sine', slide: 1.5, pan: p });
+      },
+      rumble: () => {
+        this.tone({ freq: 40 * k, dur: 1.4, gain: 0.18, type: 'sine', slide: 0.8, pan: p });
+        this.noiseBurst({ dur: 1.2, gain: 0.08, freq: 150 * k, q: 0.8, sweep: 0.5, bus: 'ambient', pan: p });
+      },
+      /** A soft body-change sound with nothing wet about it. */
+      shift: () => {
+        this.noiseBurst({ dur: 0.75, gain: 0.07, freq: 380 * k, q: 2.6, sweep: 1.7, pan: p });
+        this.tone({ freq: 190 * k, dur: 0.6, gain: 0.05, type: 'triangle', slide: 1.6, pan: p });
+      },
+    };
+    (v[kind] || v.growl)();
+  }
+
+  /**
+   * Power sounds. Eight textures, pitched per power, so no two of the sixteen
+   * sound the same when they go off.
+   */
+  power(kind, pitch) {
+    const k = pitch || 1;
+    const v = {
+      whoosh: () => {
+        this.noiseBurst({ dur: 0.45, gain: 0.14, freq: 900 * k, q: 0.9, sweep: 3.2 });
+        this.tone({ freq: 180 * k, dur: 0.35, gain: 0.08, type: 'sine', slide: 2.4 });
+      },
+      boom: () => {
+        this.tone({ freq: 74 * k, dur: 0.6, gain: 0.22, type: 'sine', slide: 0.4 });
+        this.noiseBurst({ dur: 0.5, gain: 0.18, freq: 640 * k, q: 0.7, sweep: 0.2 });
+      },
+      chime: () => {
+        this.tone({ freq: 660 * k, dur: 0.8, gain: 0.09, type: 'sine', slide: 1.5 });
+        this.tone({ freq: 990 * k, dur: 0.6, gain: 0.05, type: 'triangle', slide: 1.5 });
+      },
+      zap: () => {
+        this.noiseBurst({ dur: 0.18, gain: 0.2, freq: 3800 * k, q: 1.6, sweep: 0.2 });
+        this.tone({ freq: 1400 * k, dur: 0.14, gain: 0.1, type: 'square', slide: 0.25 });
+      },
+      hum: () => {
+        this.tone({ freq: 120 * k, dur: 1.1, gain: 0.10, type: 'triangle', slide: 1.08 });
+        this.tone({ freq: 181 * k, dur: 1.0, gain: 0.05, type: 'sine', slide: 1.12 });
+      },
+      crackle: () => {
+        for (let i = 0; i < 6; i++) {
+          setTimeout(() => this.noiseBurst({ dur: 0.05, gain: 0.09, freq: (2200 + Math.random() * 2600) * k, q: 3, sweep: 0.5 }), i * 32);
+        }
+      },
+      warp: () => {
+        this.tone({ freq: 520 * k, dur: 0.32, gain: 0.12, type: 'sawtooth', slide: 0.22 });
+        this.tone({ freq: 210 * k, dur: 0.4, gain: 0.08, type: 'sine', slide: 3.4 });
+      },
+      pop: () => {
+        this.noiseBurst({ dur: 0.14, gain: 0.13, freq: 1500 * k, q: 1.2, sweep: 2.2 });
+        this.tone({ freq: 300 * k, dur: 0.12, gain: 0.09, type: 'triangle', slide: 2.0 });
+      },
+    };
+    (v[kind] || v.whoosh)();
+  }
+
   // ---- Continuous loops -----------------------------------------------------
 
   startAmbience() {

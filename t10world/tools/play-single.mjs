@@ -32,9 +32,60 @@ const info = await page.evaluate(()=>{
   const ui = { book: !!(g.book && g.book.visible), map: !!(g.map && g.map.visible), view: g.player.cameraMode,
     immortal: g.player.immortal, apocalypse: g.apocalypse.kind };
   if (g.book) g.book.hide();
-  return { phase:g.phase, commands:g.t10.commandCount(), npcs:g.npcs.count(), cars:g.traffic.count(), ui, replies };
+  // The newest systems, checked through the bundle rather than the modules:
+  // a mis-wrapped module would still boot and only fall over here.
+  const systems = {
+    powers: g.powers ? Object.keys(g.hud.powerTiles || {}).length : 0,
+    energySpent: false,
+    creatures: 0,
+    mutationStages: 0,
+    features: g.__features ? g.__features.featureCount() : 0,
+    worlds: g.__save ? g.__save.listWorlds().length : 0,
+    ladder: g.governor ? g.governor.stepName : null,
+  };
+  if (g.powers) {
+    g.powers.energy = 100;
+    const before = g.powers.energy;
+    g.powers.use('blast');
+    systems.energySpent = g.powers.energy < before;
+    g.powers.stopAll();
+  }
+  // Mutation first: it needs somebody on their feet, and a monster loose in a
+  // crowd this small (a software renderer cuts the budget to a handful) would
+  // put all of them on the ground before we got here.
+  if (g.mutations) {
+    const npc = g.mutations.eligibleNear(g.player.position, 400);
+    systems.mutationTarget = !!npc;
+    if (npc && g.mutations.begin(npc, 'brute')) {
+      const seen = new Set([1]);
+      for (let i = 0; i < 120 && g.mutations.active.length; i++) {
+        g.mutations.update(0.25);
+        if (g.mutations.active[0]) seen.add(g.mutations.active[0].stage);
+      }
+      systems.mutationStages = seen.size + 1;   // plus the one it finished on
+    }
+    if (g.creatures) g.creatures.clear();
+  }
+  if (g.creatures) {
+    const p = g.player.position;
+    g.creatures.spawn('brute', p.x + 6, p.z + 6, {});
+    g.creatures.spawn('gargoyle', p.x - 6, p.z + 6, {});
+    for (let i = 0; i < 20; i++) g.creatures.update(0.1, p);
+    systems.creatures = g.creatures.count();
+    g.creatures.clear();
+  }
+  return { phase:g.phase, commands:g.t10.commandCount(), npcs:g.npcs.count(), cars:g.traffic.count(), ui, systems, replies };
 });
 console.log(JSON.stringify(info,null,1));
+const sys = info.systems || {};
+const bad = [];
+if (sys.powers !== 16) bad.push('powers grid has ' + sys.powers + ' tiles, expected 16');
+if (!sys.energySpent) bad.push('a power fired without costing energy');
+if (sys.creatures < 2) bad.push('creatures did not survive a spawn in the bundle');
+if (sys.mutationTarget && sys.mutationStages < 3) bad.push('the mutation did not run through its stages');
+if (!sys.mutationTarget) console.log('note: nobody was eligible to mutate in this run, so that check was skipped');
+if (sys.features < 500) bad.push('the feature library has ' + sys.features + ' entries, expected 500+');
+for (const b of bad) { errors.push('SYSTEM: ' + b); console.log('>>> ' + b); }
 await page.waitForTimeout(2500);
 await page.screenshot({ path: process.env.SHOT || '/tmp/single.png' });
 console.log(errors.length ? 'RESULT: FAIL' : 'RESULT: PASS');

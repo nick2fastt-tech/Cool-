@@ -1,0 +1,85 @@
+<!doctype html><html><head><meta charset="utf-8"><title>T10 creature test</title>
+<style>body{margin:0;background:#11151a}canvas{display:block}</style></head>
+<body><canvas id="c" width="1600" height="900"></canvas>
+<script type="module">
+window.__results = { logs: [], errors: [], done: false };
+const log = (...a) => { window.__results.logs.push(a.map(String).join(' ')); console.log(...a); };
+window.addEventListener('error', (e) => window.__results.errors.push('window:' + e.message));
+try {
+  const THREE = await import('../vendor/three.module.js');
+  const { settings } = await import('../src/core/settings.js');
+  settings.setQuality('high');
+  const { CREATURES, CREATURE_IDS, CreatureManager, Creature } = await import('../src/entities/creatures.js');
+
+  // A world stub: flat ground, no collision, no streaming.
+  const world = {
+    groundAt: () => 0,
+    normalAt: () => new THREE.Vector3(0, 1, 0),
+    resolveCollision: () => false,
+    spawnedProps: [],
+  };
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x11151a);
+  const game = {
+    scene, world,
+    player: { position: new THREE.Vector3(0, 0, 0), invisible: false, isZombie: false, knockDown: () => false, camShake: 0 },
+    npcs: { npcs: [], within: () => [] },
+    powers: null, gore: null, apocalypse: null,
+  };
+  const M = new CreatureManager(game);
+  log('species', CREATURE_IDS.length);
+
+  // One of each, in a grid, so every body plan is visible at once.
+  const cols = 6;
+  const made = [];
+  for (let i = 0; i < CREATURE_IDS.length; i++) {
+    const id = CREATURE_IDS[i];
+    const x = (i % cols) * 5.2 - (cols - 1) * 2.6;
+    const z = Math.floor(i / cols) * 6.5;
+    const c = M.spawn(id, x, z, {});
+    if (!c) { log('FAILED to spawn', id); continue; }
+    c.heading = Math.PI;                 // face the camera
+    c.group.rotation.y = c.heading;
+    made.push(c);
+    const box = new THREE.Box3().setFromObject(c.group);
+    const h = box.max.y - box.min.y;
+    let tris = 0, meshes = 0;
+    c.group.traverse((o) => { if (o.isMesh && o.geometry.index) { tris += o.geometry.index.count / 3; meshes++; } });
+    log(id.padEnd(11), 'h=' + h.toFixed(2) + 'm', 'want=' + CREATURES[id].build.height.toFixed(2),
+        'tris=' + tris, 'meshes=' + meshes,
+        'legs=' + c.refs.legs.length, 'arms=' + c.refs.arms.length, 'wings=' + c.refs.wings.length,
+        'heads=' + c.refs.heads.length, 'eyes=' + c.refs.eyes.length);
+  }
+  log('spawned', made.length, 'of', CREATURE_IDS.length);
+
+  // Animate a little so the pose is not the bind pose.
+  for (const c of made) { c.state = 'hunt'; c.speed = c.spec.stats.chase * 0.6; c.targetSpeed = c.speed; }
+  for (let f = 0; f < 40; f++) for (const c of made) c.animate(1 / 30);
+
+  const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true });
+  renderer.setSize(1600, 900, false);
+  scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x2a2a28, 1.5));
+  const key = new THREE.DirectionalLight(0xffffff, 1.6);
+  key.position.set(6, 12, 9);
+  scene.add(key);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(120, 120),
+    new THREE.MeshStandardMaterial({ color: 0x2a3138, roughness: 1 }));
+  ground.rotation.x = -Math.PI / 2;
+  scene.add(ground);
+  const cam = new THREE.PerspectiveCamera(42, 1600 / 900, 0.1, 200);
+  cam.position.set(0, 9, -22);
+  cam.lookAt(0, 1.6, 8);
+  renderer.render(scene, cam);
+  log('render OK', renderer.info.render.triangles, 'tris', renderer.info.render.calls, 'calls');
+
+  // A second view, closer, to check the detail on the big ones.
+  window.__closeUp = () => {
+    cam.position.set(-6, 2.6, -7);
+    cam.lookAt(-6, 1.4, 0);
+    renderer.render(scene, cam);
+  };
+} catch (e) {
+  window.__results.errors.push(e.stack || String(e));
+}
+window.__results.done = true;
+</script></body></html>

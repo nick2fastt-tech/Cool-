@@ -44,6 +44,13 @@ export class Player {
     this.immortal = false;
     this.knockedDown = 0;
     this.timesDowned = 0;
+    // Powers set these. godLanding is a countdown of forgiving landings;
+    // invisible hides you from everyone with eyes.
+    this.godLanding = 0;
+    this.invisible = false;
+    this.sizeStep = 0;
+    this.powerPose = 0;
+    this.powerPoseOpts = null;
 
     // A single on-foot pace — there is no sprint. Brisk enough to cross a
     // block without feeling like a chore.
@@ -126,6 +133,8 @@ export class Player {
       this.yaw = wrapAngle(this.yaw - input.look.x);
       this.pitch = clampv(this.pitch - input.look.y, -1.32, 1.28);
     }
+
+    if (this.godLanding > 0) this.godLanding -= dt;
 
     // Flat on your back: you can still look around, nothing else.
     if (this.knockedDown > 0) {
@@ -228,7 +237,7 @@ export class Player {
           audio.land(impact);
           this.camShake = Math.min(1.2, this.camShake + clamp01(impact / 14));
           this.human.animator.setState(STATES.LAND);
-          if (impact > 17 && !this.godMode) this.onHardLanding(impact);
+          if (impact > 17 && !this.godMode && this.godLanding <= 0) this.onHardLanding(impact);
         }
         this.verticalVel = 0;
         this.grounded = true;
@@ -256,7 +265,11 @@ export class Player {
 
     // --- Animation state ---
     const a = this.human.animator;
-    if (this.sitting) a.setState(STATES.SIT);
+    // A power being cast owns the pose for a moment, even while you keep
+    // walking — otherwise the cast would be overwritten on the next frame.
+    if (this.powerPose > 0) this.powerPose -= dt;
+    if (this.powerPose > 0 && this.grounded && !this.sitting) a.setState(STATES.POWER, this.powerPoseOpts);
+    else if (this.sitting) a.setState(STATES.SIT);
     else if (this.swimming) a.setState(STATES.SWIM);
     else if (!this.grounded && !this.flying) a.setState(this.verticalVel > 0.5 ? STATES.JUMP : STATES.FALL);
     else if (a.state === STATES.LAND && a.stateTime < 0.3) { /* let the landing play */ }
@@ -329,6 +342,13 @@ export class Player {
     this.lastDownReason = reason || 'hit';
     this.human.animator.setState(STATES.LIE);
     return true;
+  }
+
+  /** Play the casting pose for a moment. `style` is push, raise or self. */
+  castPose(style) {
+    this.powerPose = 0.8;
+    this.powerPoseOpts = { style: style || 'push' };
+    this.human.animator.setState(STATES.POWER, this.powerPoseOpts);
   }
 
   getUp() {

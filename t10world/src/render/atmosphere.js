@@ -3,7 +3,7 @@
 // "make it night" or "make it rain" changes the whole look of the world.
 import * as THREE from '../../vendor/three.module.js';
 import { clamp01, clampv, lerpv, smooth01, smoothstep, makeRng, noise1, TAU, damp } from '../core/math.js';
-import { settings } from '../core/settings.js';
+import { settings, perf } from '../core/settings.js';
 import { audio } from '../core/audio.js';
 
 const SKY_VERT = `
@@ -242,7 +242,8 @@ export class Atmosphere {
     if (!p.shadows) return;
     const s = this.sun.shadow;
     s.mapSize.set(p.shadowMapSize, p.shadowMapSize);
-    const d = p.shadowDistance;
+    // The governor can pull the shadow distance in without changing the preset.
+    const d = p.shadowDistance * (this.shadowScale == null ? 1 : this.shadowScale);
     s.camera.left = -d; s.camera.right = d;
     s.camera.top = d; s.camera.bottom = -d;
     s.camera.near = 1;
@@ -251,6 +252,24 @@ export class Atmosphere {
     s.normalBias = 0.035;
     s.camera.updateProjectionMatrix();
     if (s.map) { s.map.dispose(); s.map = null; }
+  }
+
+  /**
+   * Pull the shadow cascade in or push it back out without touching the
+   * preset — the fourth rung of the performance ladder.
+   */
+  setShadowScale(scale) {
+    const k = clampv(scale == null ? 1 : scale, 0.25, 1);
+    if (this.shadowScale != null && Math.abs(this.shadowScale - k) < 0.02) return;
+    this.shadowScale = k;
+    const p = settings.preset;
+    if (!p.shadows || !this.sun.castShadow) return;
+    const s = this.sun.shadow;
+    const d = p.shadowDistance * k;
+    s.camera.left = -d; s.camera.right = d;
+    s.camera.top = d; s.camera.bottom = -d;
+    s.camera.far = d * 4.5;
+    s.camera.updateProjectionMatrix();
   }
 
   buildClouds() {
@@ -440,7 +459,7 @@ export class Atmosphere {
     this.moon.visible = this.moon.intensity > 0.005;
 
     if (focus) {
-      const d = settings.preset.shadowDistance;
+      const d = settings.preset.shadowDistance * (this.shadowScale == null ? 1 : this.shadowScale);
       this.sun.position.copy(focus).addScaledVector(sunDir, Math.max(60, d * 1.6));
       this.sun.target.position.copy(focus);
       this.sun.target.updateMatrixWorld();
@@ -531,7 +550,10 @@ export class Atmosphere {
     if (!this.rain.visible || !focus) return;
     const pos = this.rain.geometry.attributes.position;
     const arr = pos.array;
-    const active = Math.round(this.rainCount * amount);
+    // The particle dial decides how many of the buffer's drops are alive, and
+    // the draw range means the rest cost nothing to skip.
+    const active = Math.round(this.rainCount * amount * perf.particles);
+    this.rain.geometry.setDrawRange(0, Math.max(1, active));
     const windX = Math.cos(this.windPhase * 0.3) * this.current.wind * 6;
     const windZ = Math.sin(this.windPhase * 0.23) * this.current.wind * 6;
     this.rainMat.uniforms.uWind.value.set(windX, windZ);

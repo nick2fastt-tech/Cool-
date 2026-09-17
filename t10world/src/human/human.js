@@ -9,7 +9,7 @@ import { buildGarment, buildShoe, OUTFITS, BASE_LAYER, getOutfit } from './cloth
 import { skinTexture, skinRoughnessTexture, faceTexture, irisTexture, SKIN_TONES, EYE_COLORS, HAIR_COLORS } from './textures.js';
 import { HumanAnimator, makeMotionProfile, STATES } from './animator.js';
 import { makeRng, clamp01, clampv, lerpv } from '../core/math.js';
-import { settings } from '../core/settings.js';
+import { settings, perf } from '../core/settings.js';
 
 /** Quantize the face descriptor so many NPCs can share one painted texture. */
 function faceDescriptor(a, tier) {
@@ -457,7 +457,10 @@ export class Human {
   /** Cheap distance LOD: drop facial detail and slow the rig when far away. */
   applyLod(distance) {
     const preset = settings.preset;
-    const near = preset.npcDetailDistance;
+    // The preset sets the radius and its own bias divides it — 1.7 on LOW drops
+    // faces and fingers at a third of the distance, 0.6 on ULTRA keeps them
+    // nearly twice as far out — and the governor's LOD dial pulls it in again.
+    const near = preset.npcDetailDistance / (preset.humanLodBias || 1) * perf.lodBias;
     this.visibleDetail = distance < near ? 1 : distance < near * 2.2 ? 0.5 : 0.2;
     const facial = this.visibleDetail > 0.6 && preset.facialAnimation;
     if (this.animator) {

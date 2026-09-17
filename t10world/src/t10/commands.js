@@ -22,6 +22,7 @@ import { extendRegistry4 } from './commands4.js';
 import { extendRegistry5 } from './commands5.js';
 import { extendRegistry6 } from './commands6.js';
 import { extendRegistry7 } from './commands7.js';
+import { extendRegistry8 } from './commands8.js';
 
 function singularWord(word) {
   if (word.length < 4) return word;
@@ -88,7 +89,12 @@ export class CommandRegistry {
     this.categories = new Map();
   }
   add(def) {
-    if (!def.id || this.byId.has(def.id)) def.id = (def.id || 'cmd') + '_' + this.commands.length;
+    if (!def.id || this.byId.has(def.id)) {
+      // Two commands asked for the same id. Keep both — one of them is usually
+      // a generated family member — but record it so the checker can see it.
+      if (def.id) (this.renamed = this.renamed || []).push({ id: def.id, from: this.byId.get(def.id).category, to: def.category });
+      def.id = (def.id || 'cmd') + '_' + this.commands.length;
+    }
     def.patterns = def.patterns.map((p) => p.toLowerCase());
     def.tokens = def.patterns.map((p) => p.split(/\s+/).filter(Boolean));
     // Pattern tokens are singularised the same way input is, so plural phrasing
@@ -510,17 +516,17 @@ export function buildRegistry() {
       'Change the weather to ' + w.name + '.',
       (ctx) => { ctx.atmosphere.setWeather(id); return 'Weather turning ' + n + '.'; });
   }
-  add('weather_rain_on', 'Weather', ['make it rain', 'i want rain', 'start the rain', 'let it rain'],
+  add('weather_rain_on', 'Weather', ['i want rain', 'start the rain', 'let it rain', 'rain please'],
     'Start rain.', (ctx) => { ctx.atmosphere.setWeather('rain'); return 'Rain on the way.'; });
   add('weather_rain_off', 'Weather', ['stop the rain', 'make the rain stop', 'no more rain', 'dry it up'],
     'Stop rain.', (ctx) => { ctx.atmosphere.setWeather('fair'); return 'Clearing up.'; });
   add('weather_storm_on', 'Weather', ['make a storm', 'i want a thunderstorm', 'bring the thunder', 'make it storm'],
     'Bring in a thunderstorm.', (ctx) => { ctx.atmosphere.setWeather('storm'); return 'Storm rolling in. Watch the sky.'; });
-  add('weather_clear', 'Weather', ['clear the sky', 'make it sunny', 'clear skies', 'blue sky', 'nice weather'],
+  add('weather_clear_sky', 'Weather', ['clear the sky', 'make it sunny', 'clear skies', 'blue sky', 'nice weather'],
     'Clear the sky.', (ctx) => { ctx.atmosphere.setWeather('clear'); return 'Clear skies.'; });
   add('weather_fog_on', 'Weather', ['make it foggy', 'bring the fog', 'i want fog'],
     'Roll in fog.', (ctx) => { ctx.atmosphere.setWeather('fog'); return 'Fog coming in.'; });
-  add('weather_wind_on', 'Weather', ['make it windy', 'i want wind', 'pick up the wind'],
+  add('weather_wind_on', 'Weather', ['i want wind', 'pick up the wind', 'get the wind going'],
     'Make it windy.', (ctx) => { ctx.atmosphere.setWeather('windy'); return 'Wind picking up.'; });
   add('weather_random', 'Weather', ['random weather', 'surprise me with the weather', 'change the weather'],
     'Pick random weather.',
@@ -582,5 +588,6 @@ export function buildRegistry() {
   extendRegistry5(R, add);
   extendRegistry6(R, add);
   extendRegistry7(R, add);
+  extendRegistry8(R, add);
   return R;
 }

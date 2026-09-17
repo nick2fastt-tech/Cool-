@@ -263,6 +263,23 @@ export class Arsenal {
       }
     }
 
+    // Creatures. A capsule sized from the species' own height and bulk, so a
+    // leviathan is the target it looks like and a wisp is the target it looks
+    // like. Without this you could spawn twenty monsters and shoot through
+    // every one of them.
+    if (g.creatures) {
+      for (const c of g.creatures.creatures) {
+        if (c.buried > 0) continue;
+        const h = c.spec.build.height * c.scale;
+        const r = Math.max(0.3, h * (c.spec.build.bulk || 0.3) * 0.9);
+        const t = raySegment(origin, dir, c.position, h, r, bestT);
+        if (t != null && t < bestT) {
+          bestT = t;
+          best = { creature: c, t, point: origin.clone().addScaledVector(dir, t) };
+        }
+      }
+    }
+
     // World: march the collider hash. The city is boxes, so precision only
     // matters up close — the step grows with distance, which turns a
     // three-hundred-iteration loop into about forty.
@@ -288,6 +305,7 @@ export class Arsenal {
     }
 
     if (best && best.npc) this.hitPerson(best.npc, dir, best.point);
+    else if (best && best.creature) this.hitCreature(best.creature, dir, best.point);
     else if (best) this.hitWorld(best);
     return best;
   }
@@ -315,6 +333,21 @@ export class Arsenal {
     }
   }
 
+  /** Same idea as a person, but a creature has its own health and its own end. */
+  hitCreature(creature, dir, point) {
+    const w = this.weapon;
+    this.hits++;
+    const g = this.game;
+    const h = creature.spec.build.height * creature.scale;
+    const head = point.y > creature.position.y + h * 0.78;
+    const dmg = w.damage * (head ? 2.0 : 1) * (g.player.strength || 1);
+    if (g.gore) g.gore.hit(point.x, point.y, point.z, clamp01(dmg / 90) * 0.7, dir.x, dir.z);
+    creature.say();
+    if (creature.damage(dmg, 'player') && g.gore) {
+      g.gore.pool(creature.position.x, creature.position.z, 1.2 + h * 0.3);
+    }
+  }
+
   hitWorld(hit) {
     if (this.game.gore) {
       // Dust and chips, reusing the droplet pool with a grey tint would need a
@@ -337,6 +370,18 @@ export class Arsenal {
           g.gore.pool(npc.position.x, npc.position.z, 1.8);
         }
         if (g.apocalypse) g.apocalypse.casualties++;
+      }
+    }
+    if (g.creatures) {
+      // Iterate backwards: anything the blast kills removes itself from this list.
+      for (let i = g.creatures.creatures.length - 1; i >= 0; i--) {
+        const c = g.creatures.creatures[i];
+        const d = c.position.distanceTo(point);
+        if (d > radius) continue;
+        const dmg = lerpv(damage || 60, (damage || 60) * 0.3, d / radius);
+        if (g.gore) g.gore.hit(c.position.x, c.position.y + 0.6, c.position.z, 0.8,
+          (c.position.x - point.x) / (d || 1), (c.position.z - point.z) / (d || 1));
+        c.damage(dmg, 'player');
       }
     }
     const p = g.player;

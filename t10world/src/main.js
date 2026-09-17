@@ -5,7 +5,13 @@ import { settings, QUALITY_PRESETS, PerformanceGovernor, perf } from './core/set
 import { PerfMonitor } from './core/perfmon.js';
 import { InputManager } from './core/input.js';
 import { audio } from './core/audio.js';
-import { saveGame, loadGame, hasSave, clearSave, saveInfo } from './core/save.js';
+import {
+  listWorlds, createWorld, saveWorld, loadWorld, getWorld, renameWorld, duplicateWorld,
+  deleteWorld, deleteAllWorlds, lastWorld, worldCount, migrateLegacySave, libraryBytes,
+} from './core/save.js';
+// Imported whole so the test harness can reach the library API, and so the
+// module is in the bundle even though nothing here calls it directly.
+import * as featureLibrary from './t10/features.js';
 import { clamp01, clampv, lerpv, hashString, makeRng, TAU } from './core/math.js';
 import { World, CHUNK_SIZE } from './world/world.js';
 import { Subway } from './world/subway.js';
@@ -17,7 +23,10 @@ import { TrafficManager } from './entities/traffic.js';
 import { AnimalManager } from './entities/animals.js';
 import { Apocalypse } from './entities/apocalypse.js';
 import { Gore } from './entities/gore.js';
+import { CreatureManager } from './entities/creatures.js';
+import { Mutations } from './entities/mutation.js';
 import { Arsenal } from './player/arsenal.js';
+import { Powers, POWERS, POWER_BY_ID, ENERGY_MAX } from './player/powers.js';
 import { T10Brain } from './t10/brain.js';
 import { HUD } from './ui/hud.js';
 import { MapOverlay } from './ui/map.js';
@@ -35,6 +44,9 @@ const WORLD_NAME_PARTS = [
   ['haven', 'reach', 'fall', 'gate', 'harbour', 'ridge', 'shore', 'crest', 'point', 'vale',
    'water', 'hollow', 'field', 'bay', 'run', 'stone', 'mere', 'cross', 'wick', 'moor'],
 ];
+
+/** Key code -> power id, so the sixteen powers each have a PC binding. */
+export const POWER_KEYS = new Map(POWERS.map((p) => [p.key, p.id]));
 
 export function randomWorldName() {
   const a = WORLD_NAME_PARTS[0][Math.floor(Math.random() * WORLD_NAME_PARTS[0].length)];
@@ -57,6 +69,7 @@ export class Game {
     this.statsVisible = false;
     this.worldName = DEFAULT_WORLD_NAME;
     this.worldSeed = hashString(DEFAULT_WORLD_NAME);
+    this.worldId = null;
 
     this.setupRenderer();
     this.setupScene();
@@ -187,6 +200,7 @@ export class Game {
     window.addEventListener('keydown', (e) => {
       const typing = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA');
       if (e.code === 'Escape') {
+        if (this.hud.powersOpen) { this.hud.setPowersOpen(false); e.preventDefault(); return; }
         if (this.book.visible) { this.book.hide(); e.preventDefault(); return; }
         if (this.map.visible) { this.map.hide(); e.preventDefault(); return; }
         if (this.hud.chatOpen) { this.hud.setChatOpen(false); e.preventDefault(); return; }
@@ -201,6 +215,9 @@ export class Game {
       else if (e.code === settings.get('keyBindings').camera) { this.player.toggleCameraMode(); this.hud.refreshSettings(); }
       else if (e.code === settings.get('keyBindings').interact) this.doInteract();
       else if (e.code === settings.get('keyBindings').enterVehicle) this.doVehicleToggle();
+      // Not while a panel has the controls — firing lightning at the map is
+      // nobody's intention.
+      else if (POWER_KEYS.has(e.code) && !this.input.suspended) { this.usePower(POWER_KEYS.get(e.code)); e.preventDefault(); }
     });
     this.canvas.addEventListener('mousedown', () => {
       if (this.phase === 'playing' && !this.hud.chatOpen && !this.hud.settingsOpen && !this.input.isTouch) {
@@ -286,9 +303,12 @@ export class Game {
         this.animals = new AnimalManager(this.world, this.scene, this.atmosphere);
         this.gore = new Gore(this);
         this.arsenal = new Arsenal(this);
+        this.powers = new Powers(this);
+        this.creatures = new CreatureManager(this);
         this.subway = new Subway(this);
         this.subway.buildEntrances(this.world);
         this.apocalypse = new Apocalypse(this);
+        this.mutations = new Mutations(this);
         this.npcs.apocalypse = this.apocalypse;
         // People only get to lay a hand on you when the world is ending.
         this.npcs.onPlayerAttacked = (npc, how) => this.onPlayerAttacked(npc, how);
@@ -400,14 +420,15 @@ export class Game {
     if (settings.get('autoQuality')) {
       const prevScale = this.governor.scale;
       const prevLoad = this.governor.load;
+      // The governor owns every perf dial now — it writes them itself.
       const s = this.governor.update(rawDt, this.perf);
-      perf.load = this.governor.load;
       if (Math.abs(s - prevScale) > 0.001) this.onResize();
       // Shadows are the single most expensive thing left when the load has
       // already been cut in half, so they go before the picture gets soft.
       if (Math.abs(this.governor.load - prevLoad) > 0.001) {
-        const wantShadows = settings.preset.shadows && this.governor.load > 0.45;
+        const wantShadows = settings.preset.shadows && perf.shadows > 0.35;
         if (wantShadows !== this._shadowsOn) { this._shadowsOn = wantShadows; this.setShadows(wantShadows); }
+        if (this.atmosphere) this.atmosphere.setShadowScale(perf.shadows);
       }
     }
 
@@ -444,6 +465,9 @@ export class Game {
     if (this.npcs) this.npcs.playerIsZombie = p.isZombie;
     if (this.apocalypse) this.apocalypse.update(dt, p.position);
     if (this.gore) this.gore.update(dt, focus);
+    if (this.powers) this.powers.update(dt);
+    if (this.creatures) this.creatures.update(dt, p.position);
+    if (this.mutations) this.mutations.update(dt);
     if (this.subway) this.subway.update(dt, focus);
     if (this.arsenal) {
       this.arsenal.aiming = !!this.input.buttons.aim;
@@ -472,6 +496,7 @@ export class Game {
     // Ambience follows where you are and what the sky is doing.
     audio.updateAmbience(this.atmosphere.ambientState(p.position, this.world), dt);
 
+    if (this.powers && this.frame % 6 === 0) this.hud.updatePowers(this.powers);
     if (this.statsVisible && this.frame % 12 === 0) this.updateStats();
   }
 
@@ -564,9 +589,18 @@ export class Game {
     audio.t10Blip('reply');
   }
 
+  /** Something with claws reached you. */
+  onCreatureHitPlayer(creature) {
+    this.hud.say(creature.name + ' got you.', 'world');
+    if (this.gore) {
+      const p = this.player.position;
+      this.gore.hit(p.x, p.y + 1.1, p.z, 0.7, Math.sin(creature.heading), Math.cos(creature.heading));
+    }
+  }
+
   /** Any full-screen panel takes the controls away from the world. */
   syncInputSuspend() {
-    this.input.setSuspended(this.hud.chatOpen || this.hud.settingsOpen ||
+    this.input.setSuspended(this.hud.chatOpen || this.hud.settingsOpen || this.hud.powersOpen ||
       (this.map && this.map.visible) || (this.book && this.book.visible));
   }
 
@@ -679,6 +713,18 @@ export class Game {
     if (this.post) this.post.setVisionMode(mode === 'off' && this.hud.chatOpen ? 't10' : mode);
   }
 
+  /**
+   * Fire a power by id and let T10 narrate it. The same path serves a key
+   * press, a touch button and a spoken command, so they can never drift apart.
+   */
+  usePower(id) {
+    if (!this.powers || this.phase !== 'playing') return null;
+    const line = this.powers.use(id);
+    if (line) this.t10Say(line);
+    if (this.hud) this.hud.updatePowers(this.powers);
+    return line;
+  }
+
   setGravity(scale) {
     this.gravityScale = scale;
     if (this.player) {
@@ -708,28 +754,56 @@ export class Game {
 
   updateStats() {
     this.hud.updateStats(
-      this.perf.summary(settings.preset.label, this.governor.load, this.governor.scale) +
+      this.perf.summary(settings.preset.label, this.governor.load, this.governor.scale, this.governor.report()) +
       '\n' + this.atmosphere.clockString() + '  ·  ' + this.atmosphere.weatherName()
     );
   }
 
   // -------------------------------------------------------------------------
-  save() {
-    if (this.phase !== 'playing') return false;
-    return saveGame({
+  /** Everything that makes this world what it is, ready for its slot. */
+  serializeWorld() {
+    return {
       worldName: this.worldName,
       worldSeed: this.worldSeed,
+      options: this.worldOptions || null,
       player: this.player.serialize(),
       time: this.atmosphere.timeOfDay,
       day: this.atmosphere.day,
       weather: this.atmosphere.weather,
-      markers: this.t10.markers,
+      markers: this.t10 ? this.t10.markers : [],
       quality: settings.get('quality'),
-    });
+      maturity: settings.get('maturity'),
+      // World rules — the things T10 can change that ought to survive.
+      rules: {
+        density: this.npcs ? this.npcs.densityScale : 1,
+        traffic: this.traffic ? this.traffic.densityScale : 1,
+        animals: this.animals ? this.animals.densityScale : 1,
+        gravity: this.gravityScale,
+        timeScale: this.timeScale,
+        gore: settings.get('goreLevel'),
+        apocalypse: this.apocalypse && this.apocalypse.kind,
+        reanimate: !!(this.apocalypse && this.apocalypse.alwaysReanimate),
+        zombie: !!this.player.isZombie,
+        immortal: !!this.player.immortal,
+        flying: !!this.player.flying,
+      },
+      // Anything you asked T10 to put in the world.
+      powers: this.powers ? this.powers.serialize() : null,
+      creatures: this.creatures ? this.creatures.serialize() : null,
+      props: this.world && this.world.spawnedProps
+        ? this.world.spawnedProps.map((p) => ({ kind: p.kind, x: p.x, z: p.z, rot: p.rot }))
+        : [],
+    };
   }
 
-  load() {
-    const d = loadGame();
+  save() {
+    if (this.phase !== 'playing') return false;
+    if (!this.worldId) return false;
+    return saveWorld(this.worldId, this.serializeWorld());
+  }
+
+  load(slotData) {
+    const d = slotData || (this.worldId && loadWorld(this.worldId) || {}).data;
     if (!d || this.phase !== 'playing') return false;
     if (d.player) {
       Object.assign(this.player.appearance, d.player.appearance || {});
@@ -746,7 +820,64 @@ export class Game {
     if (d.day != null) this.atmosphere.day = d.day;
     if (d.weather) this.atmosphere.setWeather(d.weather, true);
     if (d.markers) { this.t10.markers.length = 0; for (const m of d.markers) this.t10.markers.push(m); }
+    if (d.maturity) settings.setMaturity(d.maturity);
+    const r = d.rules;
+    if (r) {
+      if (this.npcs && r.density != null) this.npcs.densityScale = r.density;
+      if (this.traffic && r.traffic != null) this.traffic.densityScale = r.traffic;
+      if (this.animals && r.animals != null) this.animals.densityScale = r.animals;
+      if (r.gravity != null) this.setGravity(r.gravity);
+      if (r.timeScale != null) this.timeScale = r.timeScale;
+      if (r.gore != null) settings.set('goreLevel', r.gore);
+      if (r.zombie) this.player.setZombie(true);
+      if (r.immortal) { this.player.immortal = true; this.player.godMode = true; }
+      if (r.flying) this.player.flying = true;
+      if (this.apocalypse) {
+        this.apocalypse.alwaysReanimate = !!r.reanimate;
+        if (r.apocalypse) this.apocalypse.start(r.apocalypse);
+      }
+    }
+    if (d.props && this.world) {
+      for (const p of d.props) this.world.spawnProp(p.kind, p.x, p.z, { rot: p.rot });
+    }
+    if (d.powers && this.powers) this.powers.restore(d.powers);
+    if (d.creatures && this.creatures) this.creatures.restore(d.creatures);
     return true;
+  }
+
+  // -------------------------------------------------------------------------
+  // The world library
+  // -------------------------------------------------------------------------
+  /** Throw away everything since the last save and read this world back in. */
+  reloadWorld() {
+    if (!this.worldId) return false;
+    const slot = loadWorld(this.worldId);
+    if (!slot || !slot.data) return false;
+    return this.load(slot.data);
+  }
+
+  worlds() { return listWorlds(); }
+
+  /** Start a brand-new world and remember it in the library. */
+  beginNewWorld(name, options) {
+    this.setWorldIdentity(name);
+    this.applyWorldOptions(options);
+    const slot = createWorld({ name: this.worldName, seed: this.worldSeed, options: this.worldOptions });
+    this.worldId = slot ? slot.id : null;
+    if (slot) this.worldName = slot.name;
+    return slot;
+  }
+
+  /** Open a world from the library. Returns its saved state, or null. */
+  openWorld(id) {
+    const slot = loadWorld(id);
+    if (!slot) return null;
+    this.worldId = slot.id;
+    this.worldName = slot.name;
+    this.worldSeed = slot.seed >>> 0;
+    if (slot.data && slot.data.options) this.applyWorldOptions(slot.data.options);
+    else if (slot.options) this.applyWorldOptions(slot.options);
+    return slot;
   }
 
   confirmLeave() {
@@ -768,6 +899,15 @@ export function boot() {
   const container = document.getElementById('t10-root') || document.body;
   const game = new Game(container);
   window.__t10 = game;
+  // Hooks the test harness reads. They cost nothing and keep the regressions
+  // from having to reach into module internals.
+  game.__perf = perf;
+  game.__features = featureLibrary;
+  game.__POWERS = POWERS;
+  game.__save = {
+    listWorlds, createWorld, saveWorld, loadWorld, getWorld, renameWorld,
+    duplicateWorld, deleteWorld, deleteAllWorlds, lastWorld, worldCount, libraryBytes,
+  };
 
   const splash = document.getElementById('t10-splash');
   const startBtn = document.getElementById('t10-start');
@@ -829,41 +969,124 @@ export function boot() {
     });
   }
 
-  const saved = saveInfo();
-  if (continueBtn && saved) {
-    continueBtn.style.display = '';
-    continueBtn.textContent = saved.worldName ? 'Continue: ' + saved.worldName : 'Continue';
-  }
-
   const hideSplash = () => {
     if (!splash) return;
     splash.classList.add('gone');
     setTimeout(() => { splash.style.display = 'none'; }, 700);
   };
 
+  // ---- The world library -------------------------------------------------
+  migrateLegacySave();
+  const libraryWrap = document.getElementById('t10-library-wrap');
+  const librarySep = document.getElementById('t10-library-sep');
+  const libraryEl = document.getElementById('t10-library');
+  const libraryCount = document.getElementById('t10-library-count');
+
+  const ago = (t) => {
+    if (!t) return 'never played';
+    const m = Math.round((Date.now() - t) / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return m + ' min ago';
+    const h = Math.round(m / 60);
+    if (h < 24) return h + 'h ago';
+    return Math.round(h / 24) + 'd ago';
+  };
+
+  /** Open a world from the library, restoring everything it had. */
+  const enterWorld = (id) => {
+    audio.init();
+    const slot = game.openWorld(id);
+    if (!slot) return;
+    const data = slot.data;
+    const appearance = (data && data.player && data.player.appearance) || defaultPlayerAppearance('male');
+    hideSplash();
+    game.startWorld(appearance);
+    game.start();
+    if (data) {
+      const check = setInterval(() => {
+        if (game.phase === 'playing') { clearInterval(check); game.load(data); }
+      }, 200);
+    }
+  };
+
+  const renderLibrary = () => {
+    if (!libraryEl) return;
+    const worlds = listWorlds();
+    const has = worlds.length > 0;
+    libraryWrap.style.display = has ? '' : 'none';
+    librarySep.style.display = has ? '' : 'none';
+    if (libraryCount) libraryCount.textContent = has ? '(' + worlds.length + ')' : '';
+    libraryEl.textContent = '';
+
+    for (const w of worlds) {
+      const row = document.createElement('div');
+      row.className = 'world-item';
+
+      const main = document.createElement('button');
+      main.className = 'world-item-main';
+      main.type = 'button';
+      const name = document.createElement('span');
+      name.className = 'world-item-name';
+      name.textContent = w.name;
+      const sub = document.createElement('span');
+      sub.className = 'world-item-sub';
+      sub.textContent = (w.hasData ? ago(w.savedAt) : 'new') +
+        (w.playerName && w.playerName !== 'You' ? '  ·  ' + w.playerName : '') +
+        '  ·  seed ' + (w.seed >>> 0);
+      main.appendChild(name);
+      main.appendChild(sub);
+      main.addEventListener('click', () => enterWorld(w.id));
+      row.appendChild(main);
+
+      const act = (glyph, title, cls, fn) => {
+        const b = document.createElement('button');
+        b.className = 'world-item-act' + (cls ? ' ' + cls : '');
+        b.type = 'button';
+        b.title = title;
+        b.textContent = glyph;
+        b.addEventListener('click', (e) => { e.stopPropagation(); fn(); });
+        row.appendChild(b);
+        return b;
+      };
+      act('\u270e', 'Rename', '', () => {
+        const next = window.prompt('Rename this world', w.name);
+        if (next && next.trim()) { renameWorld(w.id, next.trim()); renderLibrary(); }
+      });
+      act('\u29c9', 'Duplicate', '', () => { duplicateWorld(w.id); renderLibrary(); });
+      act('\u00d7', 'Delete', 'danger', () => {
+        if (window.confirm('Delete "' + w.name + '"? This cannot be undone.')) {
+          deleteWorld(w.id);
+          renderLibrary();
+        }
+      });
+      libraryEl.appendChild(row);
+    }
+  };
+  renderLibrary();
+
+  // "Continue" opens whichever world you were last in.
+  const last = lastWorld();
+  if (continueBtn && last && last.data) {
+    continueBtn.style.display = '';
+    continueBtn.textContent = 'Continue: ' + last.name;
+    continueBtn.addEventListener('click', () => enterWorld(last.id));
+  }
+
   if (startBtn) {
     startBtn.addEventListener('click', () => {
       audio.init();
-      game.setWorldIdentity((nameInput && nameInput.value) || (nameInput && nameInput.placeholder) || suggested);
-      game.applyWorldOptions(options);
+      const slot = game.beginNewWorld(
+        (nameInput && nameInput.value) || (nameInput && nameInput.placeholder) || suggested,
+        options
+      );
+      if (!slot) {
+        // The library is full and every slot has a world in it. Say so rather
+        // than dropping the player into a world that will never save.
+        window.alert('Your library is full (' + worldCount() + ' worlds). Delete one first.');
+        return;
+      }
       hideSplash();
       game.showCreator();
-    });
-  }
-  if (continueBtn) {
-    continueBtn.addEventListener('click', () => {
-      audio.init();
-      const d = loadGame();
-      if (!d) return;
-      game.setWorldIdentity(d.worldName || DEFAULT_WORLD_NAME);
-      if (d.worldSeed) game.worldSeed = d.worldSeed;
-      const a = (d.player && d.player.appearance) || defaultPlayerAppearance('male');
-      hideSplash();
-      game.startWorld(a);
-      game.start();
-      const check = setInterval(() => {
-        if (game.phase === 'playing') { clearInterval(check); game.load(); }
-      }, 200);
     });
   }
   return game;

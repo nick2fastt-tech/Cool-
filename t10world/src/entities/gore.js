@@ -73,6 +73,7 @@ export class Gore {
     game.scene.add(this.group);
 
     this.decals = [];
+    this.decalsMade = 0;
     this.dropCount = 0;
     this.gibs = [];
     this.buildDecals();
@@ -84,7 +85,7 @@ export class Gore {
 
   /** How much of the pool this device should actually use, right now. */
   get budget() {
-    return clamp01((settings.preset.goreBudget == null ? 1 : settings.preset.goreBudget) * perf.load);
+    return clamp01((settings.preset.goreBudget == null ? 1 : settings.preset.goreBudget) * perf.particles);
   }
   get decalCap() { return Math.max(40, Math.round(MAX_DECALS * this.budget)); }
   get gibCap() { return Math.max(12, Math.round(MAX_GIBS * this.budget)); }
@@ -303,6 +304,9 @@ export class Gore {
       alpha: 1,
     };
     this.decals.push(rec);
+    // A running total that never goes down, so "did that shot bleed?" can be
+    // answered without watching an array whose length sits at its cap.
+    this.decalsMade++;
     const cap = this.decalCap;
     if (this.decals.length > cap) this.decals.splice(0, this.decals.length - cap);
     return rec;
@@ -328,6 +332,7 @@ export class Gore {
 
   clear() {
     this.decals.length = 0;
+    this.decalsMade = 0;
     this.dropCount = 0;
     this.gibs.length = 0;
     for (const k of GIB_KINDS) if (this.gibMesh) this.gibMesh[k.id].count = 0;

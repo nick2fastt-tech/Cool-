@@ -159,7 +159,7 @@ export class World {
     // Streaming distance is its own preset dial now, not a clamp on the draw
     // distance — LOW pulls the world in close, ULTRA keeps it out at 820m.
     // The governor trims it before it touches resolution.
-    const streamDistance = (preset.streamDistance || Math.min(preset.drawDistance, 620)) * lerpv(0.55, 1, perf.load);
+    const streamDistance = (preset.streamDistance || Math.min(preset.drawDistance, 620)) * lerpv(0.55, 1, perf.streaming);
     const radius = Math.ceil(streamDistance / CHUNK_SIZE);
     const ccx = Math.floor(focusX / CHUNK_SIZE);
     const ccz = Math.floor(focusZ / CHUNK_SIZE);
@@ -668,7 +668,7 @@ export class World {
   buildNatureInChunk(group, x0, z0, rng) {
     const district = this.city.districtAt(x0 + CHUNK_SIZE / 2, z0 + CHUNK_SIZE / 2);
     if (district !== 'forest' && district !== 'countryside') return;
-    const count = Math.round((district === 'forest' ? 34 : 9) * settings.preset.treeDensity);
+    const count = Math.round((district === 'forest' ? 34 : 9) * settings.preset.treeDensity * perf.vegetation);
     for (let i = 0; i < count; i++) {
       const x = x0 + rng() * CHUNK_SIZE, z = z0 + rng() * CHUNK_SIZE;
       if (this.city.isOnRoad(x, z, 6)) continue;
@@ -920,7 +920,7 @@ export class World {
     group.position.set(x, y, z);
     this.root.add(group);
     const rec = {
-      kind, group, x, y, z,
+      kind, group, x, y, z, rot: opts.rot || 0,
       interactable: { type: kind, x, y, z, label, radius, action, spawned: true },
     };
     this.registerInteractable(rec.interactable);

@@ -285,7 +285,44 @@ export const settings = new SettingsStore();
  * The live load multiplier, 0.3–1, published by the frame governor so every
  * system can trim itself without reaching into the game object.
  */
-export const perf = { load: 1 };
+/**
+ * The live performance dials. Every one is a multiplier the rest of the game
+ * reads directly; the governor below is the only thing that writes them.
+ *
+ *   load       overall simulation budget (crowd, traffic, animals, gore)
+ *   particles  how much of the particle budget is spent
+ *   shadows    shadow distance
+ *   reflections  screen-space reflection quality
+ *   vegetation grass and tree density
+ *   lodBias    <1 pulls LOD transitions nearer, so less is drawn in full
+ *   physics    how far out things are still simulated properly
+ *   streaming  how far the world streams
+ *   animation  how often distant things are re-posed
+ *   thermal    0..1 estimate of sustained throttling, for readouts
+ */
+export const perf = {
+  load: 1, particles: 1, shadows: 1, reflections: 1, vegetation: 1,
+  lodBias: 1, physics: 1, streaming: 1, animation: 1, thermal: 0,
+};
+
+/**
+ * The ladder. Step 0 is everything on; each step after that gives up the next
+ * cheapest-looking thing, in the order the design calls for: distant simulation
+ * and animation first, then particles, shadow distance, reflections, vegetation,
+ * and finally LOD, distant physics and streaming radius. Resolution is last,
+ * and it is the governor's separate dial — it never moves before this ladder
+ * has run out, because a blurry picture is the most visible cut of all.
+ */
+export const PERF_STEPS = [
+  { name: 'everything',        load: 1.00, particles: 1.00, shadows: 1.00, reflections: 1.00, vegetation: 1.00, lodBias: 1.00, physics: 1.00, streaming: 1.00, animation: 1.00 },
+  { name: 'distant sim',       load: 0.86, particles: 1.00, shadows: 1.00, reflections: 1.00, vegetation: 1.00, lodBias: 0.94, physics: 0.85, streaming: 1.00, animation: 0.85 },
+  { name: 'particles',         load: 0.74, particles: 0.62, shadows: 1.00, reflections: 1.00, vegetation: 1.00, lodBias: 0.88, physics: 0.78, streaming: 0.95, animation: 0.75 },
+  { name: 'shadow distance',   load: 0.64, particles: 0.48, shadows: 0.65, reflections: 0.85, vegetation: 0.92, lodBias: 0.80, physics: 0.70, streaming: 0.90, animation: 0.68 },
+  { name: 'reflections',       load: 0.54, particles: 0.38, shadows: 0.50, reflections: 0.45, vegetation: 0.82, lodBias: 0.72, physics: 0.62, streaming: 0.85, animation: 0.60 },
+  { name: 'vegetation',        load: 0.44, particles: 0.30, shadows: 0.40, reflections: 0.25, vegetation: 0.55, lodBias: 0.62, physics: 0.54, streaming: 0.78, animation: 0.52 },
+  { name: 'lod and streaming', load: 0.30, particles: 0.22, shadows: 0.30, reflections: 0.00, vegetation: 0.35, lodBias: 0.50, physics: 0.45, streaming: 0.66, animation: 0.45 },
+];
+
 
 /**
  * Adaptive resolution. Nudges render scale between 0.55 and the preset ceiling so a
@@ -304,15 +341,41 @@ export class PerformanceGovernor {
     this.samples = [];
     this.scale = 1;
     this.load = 1;
+    this.step = 0;               // where we are on the ladder above
     this.cooldown = 2;
-    this.targetMs = 1000 / 55;
+    this.targetMs = 1000 / 60;   // the goal is a steady sixty
     this.enabled = true;
+    this.apply();
   }
+
+  /** Push the current step's dials out to the rest of the game. */
+  apply() {
+    const s = PERF_STEPS[clampv(Math.round(this.step), 0, PERF_STEPS.length - 1)];
+    const t = perf.thermal;
+    // Running hot caps the ceiling as well as the current setting, so the
+    // governor doesn't keep walking back into the wall it just backed off from.
+    const cap = 1 - t * 0.35;
+    perf.load = Math.min(s.load, cap);
+    perf.particles = Math.min(s.particles, cap);
+    perf.shadows = Math.min(s.shadows, cap);
+    perf.reflections = Math.min(s.reflections, cap);
+    perf.vegetation = Math.min(s.vegetation, cap);
+    perf.lodBias = Math.min(s.lodBias, cap);
+    perf.physics = Math.min(s.physics, cap);
+    perf.streaming = Math.min(s.streaming, cap);
+    perf.animation = Math.min(s.animation, cap);
+    this.load = perf.load;
+    return s;
+  }
+
+  get stepName() { return PERF_STEPS[clampv(Math.round(this.step), 0, PERF_STEPS.length - 1)].name; }
+
   update(dt, monitor) {
     if (!this.enabled) return this.scale;
     this.samples.push(dt * 1000);
     if (this.samples.length > 90) this.samples.shift();
     this.cooldown -= dt;
+    if (monitor && monitor.thermal !== perf.thermal) { perf.thermal = monitor.thermal || 0; this.apply(); }
     if (this.cooldown > 0 || this.samples.length < 60) return this.scale;
     this.cooldown = 1.2;
     const sorted = this.samples.slice().sort((a, b) => a - b);
@@ -323,16 +386,34 @@ export class PerformanceGovernor {
     if (monitor) {
       if (monitor.p95Ms > this.targetMs * 1.9) median = Math.max(median, this.targetMs * 1.4);
       if (monitor.heapPressure > 0.85) median = Math.max(median, this.targetMs * 1.4);
+      // Sustained throttling counts as being over budget even when the last
+      // second and a half happened to be fine.
+      if ((monitor.thermal || 0) > 0.6) median = Math.max(median, this.targetMs * 1.3);
     }
+
+    const last = PERF_STEPS.length - 1;
     if (median > this.targetMs * 1.28) {
-      if (this.load > 0.3) this.load = Math.max(0.3, this.load - 0.12);
+      // Down the ladder first, resolution only once it has run out.
+      if (this.step < last) { this.step++; this.apply(); }
       else this.scale = Math.max(0.55, this.scale - 0.08);
     } else if (median < this.targetMs * 0.82) {
+      // Back up in the reverse order: picture quality first, detail after.
       if (this.scale < 1) this.scale = Math.min(1, this.scale + 0.05);
-      else this.load = Math.min(1, this.load + 0.05);
+      else if (this.step > 0) { this.step--; this.apply(); }
     }
     return this.scale;
   }
+
+  /** The stats line's short description of what has been given up. */
+  report() {
+    if (this.step === 0 && this.scale >= 1 && perf.thermal < 0.33) return 'nothing held back';
+    const bits = [];
+    if (this.step > 0) bits.push('cut to ' + this.stepName);
+    if (this.scale < 1) bits.push('resolution ' + Math.round(this.scale * 100) + '%');
+    if (perf.thermal > 0.33) bits.push('running warm');
+    return bits.join(', ');
+  }
+
   get fps() {
     if (!this.samples.length) return 60;
     let s = 0; for (const v of this.samples) s += v;
