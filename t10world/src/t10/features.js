@@ -199,7 +199,7 @@ cat('vehicles', [
 cat('buildings', [
   ['Procedural city blocks', 'Streets, lots and buildings generated from the world seed.', 'live', ''],
   ['Building kinds', 'Houses, apartments, shops, offices, towers, warehouses and malls.', 'live', ''],
-  ['Interiors you can enter', 'Doors that open into a room, not a texture.', 'partial', ''],
+  ['Interiors you can enter', 'Every door opens into a real floor plan with rooms, furniture and walls that stop you.', 'live', 'T10 take me inside'],
   ['Window lights at night', 'Lit windows that come on with the dark.', 'live', ''],
   ['Rooftop detail', 'Vents, tanks, aerials and stairwell housings.', 'live', ''],
   ['Facade styles', 'Brick, glass, concrete, painted render, each with its own texture.', 'live', ''],
@@ -209,18 +209,21 @@ cat('buildings', [
   ['Occlusion by chunk', 'A whole block hidden in one test when it is behind you.', 'live', ''],
   ['Fire escapes', 'Iron stairs down the side of the older blocks.', 'live', ''],
   ['Construction sites', 'A half-built tower with scaffold and a crane.', 'planned', ''],
-  ['Enterable shops with staff', 'A counter, stock, and someone behind it.', 'planned', ''],
+  ['Enterable shops with staff', 'Shelves, stock and a counter are there; the person behind it is not, yet.', 'partial', 'T10 take me into a shop'],
   ['Climbable buildings', 'Hand-holds and ledges instead of flying.', 'planned', ''],
   ['Building damage', 'Broken windows and scorch marks that persist.', 'planned', ''],
   ['Your own building', 'Place a structure and have it stay in the world.', 'planned', ''],
-  ['Interior lighting that reacts', 'Lights that come on as you walk into a room.', 'planned', ''],
+  ['Interior lighting that reacts', 'Ceiling panels in every room, and lamps for the rooms nearest you.', 'live', ''],
   ['Basements and car parks', 'A layer under the street that is not the subway.', 'planned', ''],
   ['Rooftop gardens', 'Green roofs on the newer towers.', 'planned', ''],
   ['Building age', 'Older districts that look older, down to the brickwork.', 'partial', ''],
   ['Neon by district', 'A strip that glows at night and a suburb that does not.', 'partial', ''],
   ['Scaffolding and repairs', 'Buildings that are being worked on this week.', 'planned', ''],
-  ['Interior variety', 'No two flats laid out the same way.', 'planned', ''],
+  ['Interior variety', 'The floor plan comes from the lot, so no two buildings are laid out the same.', 'live', 'T10 what rooms are in here'],
   ['Address system', 'Every door has a number and T10 can send you to it.', 'planned', ''],
+  ['Floor plans from the footprint', 'Rooms are split out of the building\'s own shape, so the inside fits the outside.', 'live', ''],
+  ['Rooms with a purpose', 'Halls, kitchens, bedrooms, wards, classrooms, shop floors, offices, bars — furnished to match.', 'live', 'T10 what rooms are in here'],
+  ['Walk out the way you came', 'The front doorway is a real gap: walk through it and you are back on the street.', 'live', 'T10 take me outside'],
   ['Building density control', 'A denser skyline or a flatter one, set at creation.', 'partial', ''],
 ]);
 
@@ -522,7 +525,7 @@ cat('environment', [
   ['Wetness and frost', 'Surface response shared by every material in the world.', 'live', ''],
   ['Reflection probes', 'Cheap environment reflections on the metal and glass.', 'live', ''],
   ['Dynamic resolution', 'Render scale that moves with the frame time.', 'live', ''],
-  ['Interior ambience', 'Sound and light that change when you go inside.', 'partial', ''],
+  ['Interior ambience', 'The sun stops at the door, the rain stays outside, and the room lights take over.', 'live', ''],
   ['Underground ambience', 'The subway sounds and looks like the subway.', 'live', ''],
   ['Air quality and haze', 'Distant buildings fading into the atmosphere.', 'live', ''],
   ['Light pollution', 'A city glow on the underside of the clouds.', 'planned', ''],
@@ -662,7 +665,7 @@ cat('access', [
 // Mobile optimisation
 // =============================================================================
 cat('mobile', [
-  ['Three presets tuned for phones', 'LOW, HIGH and ULTRA all playable on mobile hardware.', 'live', ''],
+  ['Three presets tuned for phones', 'Every preset is sized to the device it is running on, so ULTRA on a phone is ULTRA a phone can hold.', 'live', 'T10 what quality am I on'],
   ['Aggressive LOD', 'Detail dropped by distance, harder at the lower presets.', 'live', ''],
   ['Occlusion culling by chunk', 'Half the city hidden in one test per block.', 'live', ''],
   ['Asset streaming', 'Chunks built and thrown away around you.', 'live', ''],
@@ -686,6 +689,10 @@ cat('mobile', [
   ['Battery saver mode', 'Cap the frame rate deliberately to save power.', 'planned', ''],
   ['Background pause', 'Stop simulating when the tab is not visible.', 'partial', ''],
   ['Download size', 'No asset files at all — the whole game is code.', 'live', ''],
+  ['Device-sized presets', 'Cores, memory, screen and driver decide the budgets; the preset decides the look.', 'live', 'T10 what quality am I on'],
+  ['ULTRA on a phone', 'Every effect stays on — reflections, ambient occlusion, bloom, volumetrics — at phone-sized numbers.', 'live', ''],
+  ['Streaming yields to the frame', 'A late frame means no chunk is built this frame; a stutter you can feel is never worth it.', 'live', ''],
+  ['Instant reaction to a stall', 'Two frames far over budget take a rung off the ladder without waiting for an average.', 'live', ''],
   ['Progressive world build', 'Chunks built a few per frame so nothing ever spikes.', 'live', ''],
 ]);
 

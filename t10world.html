@@ -347,7 +347,7 @@ html,body{margin:0;padding:0;height:100%;overflow:hidden;background:var(--ink);c
   letter-spacing:.05em;transition:all .16s ease}
 .t10-set-btn:hover{border-color:var(--line);color:var(--text)}
 .t10-set-btn.active{background:rgba(47,217,138,.14);border-color:var(--t10-green);color:var(--t10-green)}
-.t10-set-blurb{font-size:11.5px;color:#6b776f;margin-top:8px;line-height:1.5}
+.t10-set-blurb{font-size:11.5px;color:#6b776f;margin-top:8px;line-height:1.5;white-space:pre-line}
 .t10-set-slider{display:flex;align-items:center;gap:9px;margin-bottom:9px}
 .t10-set-slider-label{flex:0 0 74px;font-size:12px;color:#93a09a}
 .t10-set-slider input[type=range]{flex:1;min-width:0}
@@ -53803,9 +53803,233 @@ const scratch = {
 return { clamp01, clampv, lerpv, invLerp, remap, smooth01, smoothstep, smoother01, pingPong, wrapAngle, angleLerp, damp, dampAngle, moveToward, makeRng, hashString, hash2, hash3, valueNoise2, fbm2, ridged2, noise1, catmullRom, distToSeg2D, plural, metersToFeetInches, feetInchesToMeters, TAU, DEG, scratch };
 })();
 
+__M["core/device"] = (function(){
+// T10 World - what this device can actually do.
+//
+// The three presets say what the game should look like. This says how much of
+// it this machine can carry, so ULTRA on a phone is still ULTRA — every effect
+// on, every system running — at numbers a phone can hold at sixty frames,
+// rather than a desktop's numbers that would melt it.
+//
+// Nothing here is a brand check. It reads the things browsers actually report:
+// touch, screen size, cores, memory and what the GL driver will admit to.
+
+const TIERS = ['phone', 'tablet', 'laptop', 'desktop'];
+
+/**
+ * Per-tier multipliers, by what the number is for. A new preset field only
+ * needs adding to FIELD_GROUP below; the scaling comes for free.
+ *
+ *   distance   how far you can see and how far the world streams
+ *   counts     how many people, cars, animals are simulated
+ *   shadow     shadow map size and distance
+ *   texture    texture resolution and anisotropy
+ *   particles  rain, blood, anything spawned in bulk
+ *   lights     simultaneous dynamic lights
+ *   mesh       how many segments a body is built from
+ *   density    props, trees, grass
+ */
+const TIER_SCALE = {
+  desktop: { distance: 1.00, counts: 1.00, shadow: 1.00, texture: 1.00, particles: 1.00, lights: 1.00, mesh: 1.00, density: 1.00 },
+  laptop:  { distance: 0.84, counts: 0.74, shadow: 0.70, texture: 1.00, particles: 0.70, lights: 0.85, mesh: 0.90, density: 0.92 },
+  tablet:  { distance: 0.66, counts: 0.48, shadow: 0.50, texture: 0.50, particles: 0.42, lights: 0.60, mesh: 0.78, density: 0.80 },
+  phone:   { distance: 0.54, counts: 0.32, shadow: 0.38, texture: 0.50, particles: 0.26, lights: 0.46, mesh: 0.70, density: 0.72 },
+};
+
+/** Which multiplier each preset field takes. Anything unlisted is left alone. */
+const FIELD_GROUP = {
+  drawDistance: 'distance', streamDistance: 'distance', fogStart: 'distance',
+  npcDetailDistance: 'distance', npcSimDistance: 'distance',
+
+  npcBudget: 'counts', backgroundNpcs: 'counts', vehicleBudget: 'counts', animalBudget: 'counts',
+
+  shadowMapSize: 'shadow', shadowDistance: 'shadow',
+
+  textureSize: 'texture', anisotropy: 'texture',
+
+  rainParticles: 'particles', goreBudget: 'particles',
+
+  maxDynamicLights: 'lights',
+
+  humanSegments: 'mesh',
+
+  propDensity: 'density', treeDensity: 'density', grassDensity: 'density',
+};
+
+/** Fields that must stay a power of two. */
+const POW2 = { shadowMapSize: 512, textureSize: 128, anisotropy: 1 };
+/** Fields that must stay whole numbers, with a floor. */
+const INTEGER = {
+  npcBudget: 8, backgroundNpcs: 0, vehicleBudget: 4, animalBudget: 2,
+  maxDynamicLights: 2, humanSegments: 5, rainParticles: 200, cascades: 1,
+  physicsRate: 1, interiorDetail: 0,
+};
+
+/** The nearest power of two, measured the way sizes are felt: on a log scale. */
+function nearPow2(v, min) {
+  if (!(v > 0)) return min;
+  const p = Math.pow(2, Math.round(Math.log2(v)));
+  return Math.max(min, p);
+}
+
+function pow2Down(v, min) {
+  let p = 1;
+  while (p * 2 <= v) p *= 2;
+  return Math.max(min, p);
+}
+
+/**
+ * How hard the device scaling bites, per preset. LOW was already written for a
+ * phone, so scaling it again would gut it; ULTRA was written for a desktop, so
+ * it takes the full adjustment. This is what lets ULTRA mean "everything on,
+ * sized for what you're holding" instead of "everything on, good luck".
+ */
+const PRESET_SENSITIVITY = { low: 0.25, high: 0.70, ultra: 1.00 };
+
+/**
+ * Read the device once. Everything is optional — a browser that reports
+ * nothing lands on 'laptop', which is the safe middle.
+ */
+function detectDevice() {
+  const nav = typeof navigator === 'undefined' ? {} : navigator;
+  const win = typeof window === 'undefined' ? {} : window;
+  const scr = typeof screen === 'undefined' ? {} : screen;
+
+  const touch = (nav.maxTouchPoints || 0) > 0 || ('ontouchstart' in win);
+  const w = scr.width || win.innerWidth || 1280;
+  const h = scr.height || win.innerHeight || 720;
+  const shortSide = Math.min(w, h);
+  const cores = nav.hardwareConcurrency || 4;
+  const memory = nav.deviceMemory || (touch ? 4 : 8);
+  const dpr = win.devicePixelRatio || 1;
+
+  let tier;
+  if (touch && shortSide <= 540) tier = 'phone';
+  else if (touch) tier = 'tablet';
+  else if (cores <= 4 || memory <= 4) tier = 'laptop';
+  else tier = 'desktop';
+
+  // A flagship phone and a budget one are both phones, but not the same phone.
+  // 0 is the weakest thing in the tier, 1 the strongest.
+  const power = Math.max(0, Math.min(1,
+    (Math.min(cores, 12) / 12) * 0.55 + (Math.min(memory, 12) / 12) * 0.45));
+
+  let maxTexture = 4096;
+  try {
+    const c = typeof document !== 'undefined' ? document.createElement('canvas') : null;
+    const gl = c && (c.getContext('webgl2') || c.getContext('webgl'));
+    if (gl) {
+      maxTexture = gl.getParameter(gl.MAX_TEXTURE_SIZE) || 4096;
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      if (ext) {
+        const r = String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || '');
+        // Software rendering is the one case worth naming: it is never fast.
+        if (/swiftshader|llvmpipe|software/i.test(r)) tier = 'phone';
+      }
+      const lose = gl.getExtension('WEBGL_lose_context');
+      if (lose) lose.loseContext();
+    }
+  } catch (e) { /* no WebGL yet; the defaults are fine */ }
+
+  return { tier, power, touch, cores, memory, dpr, screenW: w, screenH: h, maxTexture };
+}
+
+/**
+ * Apply a device to a preset. Booleans are untouched — every effect the preset
+ * turns on stays on — and only the budgets move.
+ * @param base one of QUALITY_PRESETS
+ * @param device from detectDevice()
+ */
+function effectivePreset(base, device, presetName) {
+  const dev = device || { tier: 'desktop', power: 1, dpr: 1, maxTexture: 4096 };
+  const scale = TIER_SCALE[dev.tier] || TIER_SCALE.desktop;
+  // Within a tier, a stronger device gets more of everything countable.
+  const nudge = 0.78 + 0.44 * (dev.power == null ? 1 : dev.power);
+  const name = presetName || (base.label ? String(base.label).toLowerCase() : 'high');
+  const bite = PRESET_SENSITIVITY[name] == null ? 0.7 : PRESET_SENSITIVITY[name];
+  const out = {};
+
+  for (const key in base) {
+    const v = base[key];
+    const group = FIELD_GROUP[key];
+    if (typeof v !== 'number' || !group) { out[key] = v; continue; }
+    let k = scale[group];
+    if (group === 'counts' || group === 'particles') k *= nudge;
+    // Blend toward 1 by how much this preset should feel the device, and never
+    // above it: what the preset says is the ceiling, and the device only ever
+    // takes away. A strong machine gets the preset as written, not more.
+    k = Math.min(1, 1 + (k - 1) * bite);
+    let next = v * k;
+    if (POW2[key] != null) next = nearPow2(next, POW2[key]);
+    else if (INTEGER[key] != null) next = Math.max(INTEGER[key], Math.round(next));
+    else next = Math.round(next * 100) / 100;
+    out[key] = next;
+  }
+
+  // Things that are not a simple multiply.
+  if (dev.tier === 'phone' || dev.tier === 'tablet') {
+    // Cascades cost a full shadow pass each.
+    out.cascades = Math.min(base.cascades, 2);
+    // One full-screen pass for a blur you cannot see at arm's length.
+    out.motionBlur = false;
+  }
+  if (dev.tier === 'phone') {
+    out.physicsRate = Math.max(1, Math.min(base.physicsRate, 2));
+    out.interiorDetail = Math.max(0, Math.min(base.interiorDetail, 2));
+  }
+  // Never ask for a texture the driver will refuse.
+  if (out.textureSize > dev.maxTexture) out.textureSize = pow2Down(dev.maxTexture, 128);
+  if (out.shadowMapSize > dev.maxTexture) out.shadowMapSize = pow2Down(dev.maxTexture, 512);
+  // Rendering at three times the pixels of a phone screen buys nothing.
+  if (dev.dpr && out.pixelRatioCap) out.pixelRatioCap = Math.min(out.pixelRatioCap, dev.tier === 'phone' ? 1.5 : dev.tier === 'tablet' ? 1.75 : out.pixelRatioCap);
+
+  out.deviceTier = dev.tier;
+  return out;
+}
+
+/**
+ * All three presets at once, with their order guaranteed. Scaling each one on
+ * its own can invert a pair — HIGH's gentler adjustment beating ULTRA's harder
+ * one on a field where their base numbers are close — and ULTRA quietly being
+ * worse than HIGH is the kind of thing nobody reports and everybody feels.
+ * Every field the device touches is one where more is better, so a running
+ * maximum up the order is the whole fix.
+ * @param bases { low, high, ultra }
+ */
+function effectivePresets(bases, device, order) {
+  const names = order || ['low', 'high', 'ultra'];
+  const out = {};
+  let previous = null;
+  for (const name of names) {
+    const base = bases[name];
+    if (!base) continue;
+    const next = effectivePreset(base, device, name);
+    if (previous) {
+      for (const key in FIELD_GROUP) {
+        if (typeof next[key] !== 'number' || typeof previous[key] !== 'number') continue;
+        if (next[key] < previous[key]) next[key] = previous[key];
+      }
+    }
+    out[name] = next;
+    previous = next;
+  }
+  return out;
+}
+
+/** One line for the settings panel and the stats readout. */
+function describeDevice(device) {
+  if (!device) return '';
+  const names = { phone: 'phone', tablet: 'tablet', laptop: 'laptop', desktop: 'desktop' };
+  return names[device.tier] + ' · ' + device.cores + ' cores · ' + device.memory + 'GB';
+}
+
+return { detectDevice, effectivePreset, effectivePresets, describeDevice, TIERS, TIER_SCALE, FIELD_GROUP, PRESET_SENSITIVITY };
+})();
+
 __M["core/settings"] = (function(){
 // T10 World - quality presets, user settings, persistence
 const { clamp01, clampv } = __M["core/math"];
+const { detectDevice, effectivePresets, describeDevice } = __M["core/device"];
 
 const STORAGE_KEY = 't10world.settings.v1';
 
@@ -54009,12 +54233,45 @@ class SettingsStore {
     this.load();
   }
 
-  get preset() { return QUALITY_PRESETS[this.data.quality] || QUALITY_PRESETS.high; }
+  /**
+   * The preset as this device will actually run it. The three presets decide
+   * what the game looks like; the device decides how much of it fits. Cached,
+   * because half the engine reads this every frame.
+   */
+  get preset() {
+    if (!this._preset || this._presetFor !== this.data.quality) this.refreshPreset();
+    return this._preset;
+  }
+
+  /** The preset as written, before the device had its say. */
+  get basePreset() { return QUALITY_PRESETS[this.data.quality] || QUALITY_PRESETS.high; }
+
+  get device() {
+    if (!this._device) this._device = detectDevice();
+    return this._device;
+  }
+
+  get deviceLabel() { return describeDevice(this.device); }
+
+  refreshPreset() {
+    this._presetFor = this.data.quality;
+    // All three are computed together so their order is guaranteed.
+    this._presets = effectivePresets(QUALITY_PRESETS, this.device, QUALITY_ORDER);
+    this._preset = this._presets[this.data.quality] || this._presets.high;
+    return this._preset;
+  }
+
+  /** What a given preset would be on this device, without switching to it. */
+  presetFor(name) {
+    if (!this._presets) this.refreshPreset();
+    return this._presets[name] || this._presets.high;
+  }
   get(key) { return this.data[key]; }
 
   set(key, value) {
     if (this.data[key] === value) return;
     this.data[key] = value;
+    if (key === 'quality') this.refreshPreset();
     this.save();
     this.emit(key, value);
   }
@@ -54038,6 +54295,7 @@ class SettingsStore {
     if (!QUALITY_PRESETS[name]) return false;
     this.data.quality = name;
     this.data.qualityPinned = true;
+    this.refreshPreset();
     this.save();
     this.emit('quality', name);
     return true;
@@ -54151,6 +54409,8 @@ class PerformanceGovernor {
     this.cooldown = 2;
     this.targetMs = 1000 / 60;   // the goal is a steady sixty
     this.enabled = true;
+    this.spikes = 0;             // recent frames far over budget
+    this.slowRun = 0;            // frames in a row over budget
     this.apply();
   }
 
@@ -54178,10 +54438,29 @@ class PerformanceGovernor {
 
   update(dt, monitor) {
     if (!this.enabled) return this.scale;
-    this.samples.push(dt * 1000);
+    const ms = dt * 1000;
+    this.samples.push(ms);
     if (this.samples.length > 90) this.samples.shift();
     this.cooldown -= dt;
     if (monitor && monitor.thermal !== perf.thermal) { perf.thermal = monitor.thermal || 0; this.apply(); }
+
+    // A stall you can feel does not wait for the averages. Two frames over four
+    // times the budget, or six in a row over twice it, and a rung comes off
+    // immediately — the ladder is there to be used, not admired.
+    if (ms > this.targetMs * 4) this.spikes++; else this.spikes = Math.max(0, this.spikes - 0.34);
+    if (ms > this.targetMs * 2) this.slowRun++; else this.slowRun = 0;
+    // Not while the world is still building itself: the opening seconds are all
+    // spikes by nature, and knocking the quality down for them helps nobody.
+    const urgent = this.samples.length >= 30 && (this.spikes >= 2 || this.slowRun >= 6);
+    if (urgent && this.step < PERF_STEPS.length - 1) {
+      this.step++;
+      this.apply();
+      this.spikes = 0;
+      this.slowRun = 0;
+      this.cooldown = 0.8;
+      return this.scale;
+    }
+
     if (this.cooldown > 0 || this.samples.length < 60) return this.scale;
     this.cooldown = 1.2;
     const sorted = this.samples.slice().sort((a, b) => a - b);
@@ -65028,6 +65307,25 @@ class NPC {
   // -------------------------------------------------------------------------
   update(dt, playerPos, lod) {
     this.lodLevel = lod;
+    // Somebody who lives or works in the room you walked into. They stay put —
+    // a person wandering off through an interior wall looks far worse than a
+    // person standing still — but they are awake, and you can talk to them.
+    if (this.controlled === 'indoor') {
+      this.targetSpeed = 0;
+      this.speed = 0;
+      this.activityTimer -= dt;
+      if (this.talkTimer > 0) this.talkTimer -= dt;
+      if (this.activityTimer <= 0) {
+        this.activityTimer = this.rng.range(4, 12);
+        this.heading = wrapAngle(this.heading + this.rng.range(-1.3, 1.3));
+        if (this.rng.chance(0.25)) this.human.animator.setState(STATES.PHONE);
+        else this.human.animator.setState(STATES.IDLE);
+      }
+      this.root.rotation.y = dampAngle(this.root.rotation.y, this.heading, 0.06, dt);
+      this.human.update(dt, { speed: 0, turnRate: 0, grounded: true, verticalVel: 0 });
+      return;
+    }
+
     // Frozen, or mid-mutation: they stay where they are. The mutation system
     // owns the pose and the tremor from here.
     if (this.controlled === 'freeze' || this.controlled === 'mutating') {
@@ -65603,7 +65901,9 @@ class NPCManager {
     if (!this.background) this.background = [];
     for (let i = this.npcs.length - 1; i >= 0; i--) {
       const n = this.npcs[i];
-      if (n.protected || n.controlled === 'follow') continue;
+      // People who are following you, and people standing in the room you are
+      // standing in, are not swapped out from under you.
+      if (n.protected || n.controlled === 'follow' || n.controlled === 'indoor') continue;
       if (Math.hypot(n.position.x - px, n.position.z - pz) > maxDist) {
         this.background.push({
           x: n.position.x, z: n.position.z, tx: n.position.x, tz: n.position.z,
@@ -67255,7 +67555,7 @@ cat('vehicles', [
 cat('buildings', [
   ['Procedural city blocks', 'Streets, lots and buildings generated from the world seed.', 'live', ''],
   ['Building kinds', 'Houses, apartments, shops, offices, towers, warehouses and malls.', 'live', ''],
-  ['Interiors you can enter', 'Doors that open into a room, not a texture.', 'partial', ''],
+  ['Interiors you can enter', 'Every door opens into a real floor plan with rooms, furniture and walls that stop you.', 'live', 'T10 take me inside'],
   ['Window lights at night', 'Lit windows that come on with the dark.', 'live', ''],
   ['Rooftop detail', 'Vents, tanks, aerials and stairwell housings.', 'live', ''],
   ['Facade styles', 'Brick, glass, concrete, painted render, each with its own texture.', 'live', ''],
@@ -67265,18 +67565,21 @@ cat('buildings', [
   ['Occlusion by chunk', 'A whole block hidden in one test when it is behind you.', 'live', ''],
   ['Fire escapes', 'Iron stairs down the side of the older blocks.', 'live', ''],
   ['Construction sites', 'A half-built tower with scaffold and a crane.', 'planned', ''],
-  ['Enterable shops with staff', 'A counter, stock, and someone behind it.', 'planned', ''],
+  ['Enterable shops with staff', 'Shelves, stock and a counter are there; the person behind it is not, yet.', 'partial', 'T10 take me into a shop'],
   ['Climbable buildings', 'Hand-holds and ledges instead of flying.', 'planned', ''],
   ['Building damage', 'Broken windows and scorch marks that persist.', 'planned', ''],
   ['Your own building', 'Place a structure and have it stay in the world.', 'planned', ''],
-  ['Interior lighting that reacts', 'Lights that come on as you walk into a room.', 'planned', ''],
+  ['Interior lighting that reacts', 'Ceiling panels in every room, and lamps for the rooms nearest you.', 'live', ''],
   ['Basements and car parks', 'A layer under the street that is not the subway.', 'planned', ''],
   ['Rooftop gardens', 'Green roofs on the newer towers.', 'planned', ''],
   ['Building age', 'Older districts that look older, down to the brickwork.', 'partial', ''],
   ['Neon by district', 'A strip that glows at night and a suburb that does not.', 'partial', ''],
   ['Scaffolding and repairs', 'Buildings that are being worked on this week.', 'planned', ''],
-  ['Interior variety', 'No two flats laid out the same way.', 'planned', ''],
+  ['Interior variety', 'The floor plan comes from the lot, so no two buildings are laid out the same.', 'live', 'T10 what rooms are in here'],
   ['Address system', 'Every door has a number and T10 can send you to it.', 'planned', ''],
+  ['Floor plans from the footprint', 'Rooms are split out of the building\'s own shape, so the inside fits the outside.', 'live', ''],
+  ['Rooms with a purpose', 'Halls, kitchens, bedrooms, wards, classrooms, shop floors, offices, bars — furnished to match.', 'live', 'T10 what rooms are in here'],
+  ['Walk out the way you came', 'The front doorway is a real gap: walk through it and you are back on the street.', 'live', 'T10 take me outside'],
   ['Building density control', 'A denser skyline or a flatter one, set at creation.', 'partial', ''],
 ]);
 
@@ -67578,7 +67881,7 @@ cat('environment', [
   ['Wetness and frost', 'Surface response shared by every material in the world.', 'live', ''],
   ['Reflection probes', 'Cheap environment reflections on the metal and glass.', 'live', ''],
   ['Dynamic resolution', 'Render scale that moves with the frame time.', 'live', ''],
-  ['Interior ambience', 'Sound and light that change when you go inside.', 'partial', ''],
+  ['Interior ambience', 'The sun stops at the door, the rain stays outside, and the room lights take over.', 'live', ''],
   ['Underground ambience', 'The subway sounds and looks like the subway.', 'live', ''],
   ['Air quality and haze', 'Distant buildings fading into the atmosphere.', 'live', ''],
   ['Light pollution', 'A city glow on the underside of the clouds.', 'planned', ''],
@@ -67718,7 +68021,7 @@ cat('access', [
 // Mobile optimisation
 // =============================================================================
 cat('mobile', [
-  ['Three presets tuned for phones', 'LOW, HIGH and ULTRA all playable on mobile hardware.', 'live', ''],
+  ['Three presets tuned for phones', 'Every preset is sized to the device it is running on, so ULTRA on a phone is ULTRA a phone can hold.', 'live', 'T10 what quality am I on'],
   ['Aggressive LOD', 'Detail dropped by distance, harder at the lower presets.', 'live', ''],
   ['Occlusion culling by chunk', 'Half the city hidden in one test per block.', 'live', ''],
   ['Asset streaming', 'Chunks built and thrown away around you.', 'live', ''],
@@ -67742,6 +68045,10 @@ cat('mobile', [
   ['Battery saver mode', 'Cap the frame rate deliberately to save power.', 'planned', ''],
   ['Background pause', 'Stop simulating when the tab is not visible.', 'partial', ''],
   ['Download size', 'No asset files at all — the whole game is code.', 'live', ''],
+  ['Device-sized presets', 'Cores, memory, screen and driver decide the budgets; the preset decides the look.', 'live', 'T10 what quality am I on'],
+  ['ULTRA on a phone', 'Every effect stays on — reflections, ambient occlusion, bloom, volumetrics — at phone-sized numbers.', 'live', ''],
+  ['Streaming yields to the frame', 'A late frame means no chunk is built this frame; a stutter you can feel is never worth it.', 'live', ''],
+  ['Instant reaction to a stall', 'Two frames far over budget take a rung off the ladder without waiting for an average.', 'live', ''],
   ['Progressive world build', 'Chunks built a few per frame so nothing ever spikes.', 'live', ''],
 ]);
 
@@ -68923,6 +69230,10 @@ class World {
     this.nightFactor = 0;
     this.wetness = 0;
     this.spawnedProps = [];
+    // Set while the player is inside a building: that lot's own walls are
+    // ignored and the interior's walls are used instead.
+    this.insideLot = null;
+    this.interiorColliders = null;
 
     this.buildStatic();
   }
@@ -69273,7 +69584,9 @@ class World {
           lot, radius: 2.4, action: 'enter',
         });
       }
-      for (const c of result.colliders) chunk.colliders.push(c);
+      // Remember which lot each collider came from: standing inside a building
+      // means its own walls stop pushing you around.
+      for (const c of result.colliders) { c.lot = lot; chunk.colliders.push(c); }
       for (const l of result.lights) chunk.lights.push(l);
     }
   }
@@ -69642,38 +69955,59 @@ class World {
   }
 
   /** Push a circle out of any building/vehicle collider it overlaps. */
+  /**
+   * While you are inside a building, its own footprint stops being solid and
+   * the interior's walls take over.
+   */
+  setInteriorColliders(list) {
+    this.interiorColliders = list && list.length ? list : null;
+  }
+
   resolveCollision(pos, radius) {
     const cells = 2;
     const cx = Math.floor(pos.x / 20), cz = Math.floor(pos.z / 20);
     let hit = false;
+    if (this.interiorColliders) {
+      for (const c of this.interiorColliders) {
+        if (this.pushOut(pos, radius, c)) hit = true;
+      }
+    }
     for (let i = -cells; i <= cells; i++) {
       for (let j = -cells; j <= cells; j++) {
         const list = this.colliderHash.get((cx + i) + ':' + (cz + j));
         if (!list) continue;
         for (const c of list) {
           if (c.hollow) continue;
-          if (pos.y > (c.h || 6) + 0.5) continue;
-          const dx = pos.x - c.x, dz = pos.z - c.z;
-          const cs = Math.cos(-(c.rot || 0)), sn = Math.sin(-(c.rot || 0));
-          const lx = dx * cs - dz * sn, lz = dx * sn + dz * cs;
-          const hw = c.w * 0.5 + radius, hd = c.d * 0.5 + radius;
-          // Standing on top of it isn't a collision.
-          if (pos.y > (c.baseY || 0) + (c.h || 0) - 0.25) continue;
-          if (Math.abs(lx) < hw && Math.abs(lz) < hd) {
-            // Push out along the shallowest axis.
-            const penX = hw - Math.abs(lx), penZ = hd - Math.abs(lz);
-            let nlx = lx, nlz = lz;
-            if (penX < penZ) nlx = Math.sign(lx || 1) * hw;
-            else nlz = Math.sign(lz || 1) * hd;
-            const cs2 = Math.cos(c.rot || 0), sn2 = Math.sin(c.rot || 0);
-            pos.x = c.x + nlx * cs2 - nlz * sn2;
-            pos.z = c.z + nlx * sn2 + nlz * cs2;
-            hit = true;
-          }
+          if (this.insideLot && c.lot === this.insideLot) continue;
+          if (this.pushOut(pos, radius, c)) hit = true;
         }
       }
     }
     return hit;
+  }
+
+  /** One box against one point. @returns true if it moved. */
+  pushOut(pos, radius, c) {
+    // `h` is the box's height above its own base, so a room on a hill and a
+    // wall at sea level are tested the same way.
+    const top = (c.baseY || 0) + (c.h == null ? 6 : c.h);
+    if (pos.y > top + 0.5) return false;
+    const dx = pos.x - c.x, dz = pos.z - c.z;
+    const cs = Math.cos(-(c.rot || 0)), sn = Math.sin(-(c.rot || 0));
+    const lx = dx * cs - dz * sn, lz = dx * sn + dz * cs;
+    const hw = c.w * 0.5 + radius, hd = c.d * 0.5 + radius;
+    // Standing on top of it isn't a collision.
+    if (pos.y > top - 0.25) return false;
+    if (Math.abs(lx) >= hw || Math.abs(lz) >= hd) return false;
+    // Push out along the shallowest axis.
+    const penX = hw - Math.abs(lx), penZ = hd - Math.abs(lz);
+    let nlx = lx, nlz = lz;
+    if (penX < penZ) nlx = Math.sign(lx || 1) * hw;
+    else nlz = Math.sign(lz || 1) * hd;
+    const cs2 = Math.cos(c.rot || 0), sn2 = Math.sin(c.rot || 0);
+    pos.x = c.x + nlx * cs2 - nlz * sn2;
+    pos.z = c.z + nlx * sn2 + nlz * cs2;
+    return true;
   }
 
   // =========================================================================
@@ -70474,6 +70808,756 @@ class Subway {
 return { Subway, PLATFORM_Y, SUBWAY_LINES };
 })();
 
+__M["world/interiors"] = (function(){
+// T10 World - building interiors. Every door in the city opens into a room you
+// can walk around, generated from the lot it belongs to.
+//
+// Nothing is hand-authored. The lot's footprint is split into rooms by a binary
+// partition; each split leaves a doorway, so the plan is connected by
+// construction and no room is ever walled off. Rooms are then given roles from
+// the building's kind — a house gets a hall, a living room, a kitchen and
+// bedrooms; a shop gets a shop floor and a counter; an office gets a reception
+// and desks — and each role knows how to furnish itself.
+//
+// One interior exists at a time. It is built when you walk in, kept while you
+// are in the building, and thrown away when you leave.
+const THREE = __THREE;
+const { GeometryBatcher, boxUV, cylinderUV, transformed, disposeGroup } = __M["world/geomutils"];
+const { paintedMaterial, concreteMaterial, metalMaterial, glassMaterial, emissiveMaterial } = __M["world/materials"];
+const { clamp01, clampv, lerpv, makeRng, TAU } = __M["core/math"];
+const { settings, perf } = __M["core/settings"];
+const { audio } = __M["core/audio"];
+
+const WALL_T = 0.16;          // partition thickness
+const DOOR_W = 1.30;          // doorway gap
+const MIN_ROOM = 3.0;         // no room narrower than this
+const INSET = 0.55;           // gap between the outside wall and the inside one
+
+/**
+ * What each kind of building is like inside: how tall, how many rooms to aim
+ * for, and which roles those rooms take once they are sorted biggest first.
+ * The first role is always the room you walk into.
+ */
+const INTERIOR_KINDS = {
+  house:      { h: 2.75, span: 15, rooms: 5, roles: ['hall', 'living', 'kitchen', 'bedroom', 'bath', 'bedroom'], floor: 0x8a6a48, wall: 0xd8d2c4, name: 'house' },
+  apartment:  { h: 2.70, span: 17, rooms: 5, roles: ['lobby', 'living', 'kitchen', 'bedroom', 'bath'], floor: 0x7f7a72, wall: 0xd2cec6, name: 'apartment' },
+  shop:       { h: 3.40, span: 18, rooms: 3, roles: ['shopfloor', 'shopfloor', 'storage', 'shopfloor'], floor: 0xb4b0a8, wall: 0xe2ded4, name: 'shop' },
+  store:      { h: 3.40, span: 20, rooms: 3, roles: ['shopfloor', 'shopfloor', 'storage', 'shopfloor'], floor: 0xb4b0a8, wall: 0xe2ded4, name: 'store' },
+  market:     { h: 3.40, span: 20, rooms: 3, roles: ['shopfloor', 'shopfloor', 'storage', 'shopfloor'], floor: 0xb4b0a8, wall: 0xe2ded4, name: 'market' },
+  cafe:       { h: 3.20, span: 15, rooms: 3, roles: ['dining', 'bar', 'kitchen', 'dining'], floor: 0x6f4f38, wall: 0xd8ccb8, name: 'cafe' },
+  diner:      { h: 3.20, span: 16, rooms: 3, roles: ['dining', 'bar', 'kitchen', 'dining'], floor: 0x9a9690, wall: 0xdfe3e0, name: 'diner' },
+  restaurant: { h: 3.40, span: 18, rooms: 4, roles: ['dining', 'dining', 'bar', 'kitchen', 'dining'], floor: 0x5f4432, wall: 0xcfc3b0, name: 'restaurant' },
+  bar:        { h: 3.20, span: 16, rooms: 3, roles: ['bar', 'dining', 'storage', 'dining'], floor: 0x3f3228, wall: 0x6a5a48, name: 'bar' },
+  arcade:     { h: 3.40, span: 17, rooms: 2, roles: ['arcade', 'arcade'], floor: 0x2a2a34, wall: 0x3a3a48, name: 'arcade' },
+  office:     { h: 3.20, span: 22, rooms: 5, roles: ['reception', 'office', 'office', 'meeting', 'storage', 'office'], floor: 0x8e8a82, wall: 0xe4e2dc, name: 'office' },
+  tower:      { h: 3.60, span: 24, rooms: 4, roles: ['reception', 'office', 'meeting', 'office', 'office'], floor: 0x6e6a64, wall: 0xdcdad4, name: 'lobby' },
+  mall:       { h: 4.40, span: 34, rooms: 5, roles: ['concourse', 'shopfloor', 'shopfloor', 'dining', 'storage', 'shopfloor'], floor: 0xc6c2b8, wall: 0xe8e4da, name: 'mall' },
+  warehouse:  { h: 5.20, span: 34, rooms: 2, roles: ['storage', 'storage'], floor: 0x6a6660, wall: 0x8a8880, name: 'warehouse' },
+  industrial: { h: 5.20, span: 32, rooms: 2, roles: ['storage', 'storage'], floor: 0x6a6660, wall: 0x8a8880, name: 'works' },
+  barn:       { h: 4.60, span: 20, rooms: 2, roles: ['storage', 'storage'], floor: 0x6a5238, wall: 0x7a4a34, name: 'barn' },
+  gym:        { h: 4.00, span: 20, rooms: 3, roles: ['gym', 'gym', 'storage', 'gym'], floor: 0x4a4a52, wall: 0xd4d0c8, name: 'gym' },
+  school:     { h: 3.40, span: 24, rooms: 5, roles: ['hall', 'classroom', 'classroom', 'office', 'storage', 'classroom'], floor: 0x9a8f7a, wall: 0xe0dcd0, name: 'school' },
+  hospital:   { h: 3.40, span: 26, rooms: 5, roles: ['reception', 'ward', 'ward', 'office', 'storage', 'ward'], floor: 0xc8ccd0, wall: 0xeef2f4, name: 'hospital' },
+  police:     { h: 3.30, span: 22, rooms: 4, roles: ['reception', 'office', 'office', 'storage', 'office'], floor: 0x7a8088, wall: 0xd6dae0, name: 'station' },
+  fire:       { h: 5.00, span: 24, rooms: 2, roles: ['garage', 'office', 'garage'], floor: 0x5a5e62, wall: 0xc0392b, name: 'fire station' },
+  station:    { h: 5.20, span: 30, rooms: 3, roles: ['concourse', 'reception', 'storage', 'concourse'], floor: 0xa8a49c, wall: 0xdedad0, name: 'station' },
+  church:     { h: 6.00, span: 22, rooms: 2, roles: ['pews', 'office', 'pews'], floor: 0x6a5a44, wall: 0xdcd6c4, name: 'church' },
+  stadium:    { h: 5.00, span: 34, rooms: 3, roles: ['concourse', 'shopfloor', 'storage', 'concourse'], floor: 0x8a8680, wall: 0xcfcbc2, name: 'stadium' },
+  gas:        { h: 3.20, span: 12, rooms: 2, roles: ['shopfloor', 'storage'], floor: 0xb0aca4, wall: 0xdedad2, name: 'shop' },
+};
+
+const DEFAULT_KIND = { h: 3.10, span: 20, rooms: 4, roles: ['lobby', 'office', 'office', 'storage'], floor: 0x8a8680, wall: 0xdedad4, name: 'building' };
+
+function kindPlan(kind) { return INTERIOR_KINDS[kind] || DEFAULT_KIND; }
+
+/** Every building kind that has an inside — which is all of them. */
+function interiorName(lot) {
+  return (lot && lot.name) || kindPlan(lot && lot.kind).name;
+}
+
+// ---------------------------------------------------------------------------
+// The floor plan
+// ---------------------------------------------------------------------------
+/**
+ * Split a rectangle into rooms. Each split records the wall it created and
+ * where the doorway through it goes, so the plan is always walkable.
+ */
+function partition(x, z, w, d, rng, spec, rooms, walls, depth) {
+  const enough = rooms.length + 1 >= spec.rooms;
+  const canSplitX = w >= MIN_ROOM * 2 + WALL_T;
+  const canSplitZ = d >= MIN_ROOM * 2 + WALL_T;
+  if (enough || depth > 4 || (!canSplitX && !canSplitZ)) {
+    rooms.push({ x, z, w, d });
+    return;
+  }
+  // Split the long way, usually.
+  const alongX = canSplitX && (!canSplitZ || (w > d ? rng() < 0.85 : rng() < 0.15));
+  const t = rng.range(0.40, 0.60);
+  if (alongX) {
+    const cut = x - w * 0.5 + w * t;
+    const leftW = cut - (x - w * 0.5) - WALL_T * 0.5;
+    const rightW = (x + w * 0.5) - cut - WALL_T * 0.5;
+    walls.push({ axis: 'x', pos: cut, from: z - d * 0.5, to: z + d * 0.5, door: z + rng.range(-0.28, 0.28) * d });
+    partition(cut - WALL_T * 0.5 - leftW * 0.5, z, leftW, d, rng, spec, rooms, walls, depth + 1);
+    partition(cut + WALL_T * 0.5 + rightW * 0.5, z, rightW, d, rng, spec, rooms, walls, depth + 1);
+  } else {
+    const cut = z - d * 0.5 + d * t;
+    const nearD = cut - (z - d * 0.5) - WALL_T * 0.5;
+    const farD = (z + d * 0.5) - cut - WALL_T * 0.5;
+    walls.push({ axis: 'z', pos: cut, from: x - w * 0.5, to: x + w * 0.5, door: x + rng.range(-0.28, 0.28) * w });
+    partition(x, cut - WALL_T * 0.5 - nearD * 0.5, w, nearD, rng, spec, rooms, walls, depth + 1);
+    partition(x, cut + WALL_T * 0.5 + farD * 0.5, w, farD, rng, spec, rooms, walls, depth + 1);
+  }
+}
+
+/** A complete plan in the lot's local space: rooms, walls, roles, entry point. */
+function planInterior(lot) {
+  const spec = kindPlan(lot.kind);
+  const rng = makeRng((lot.seed ^ 0x51a7c3) >>> 0);
+  const w = Math.min(Math.max(lot.w - INSET * 2, MIN_ROOM * 2), spec.span);
+  const d = Math.min(Math.max(lot.d - INSET * 2, MIN_ROOM * 2), spec.span);
+
+  const rooms = [];
+  const walls = [];
+  partition(0, 0, w, d, rng, spec, rooms, walls, 0);
+
+  // You come in through the middle of the front wall (local +z).
+  const entry = { x: 0, z: d * 0.5 - 1.5 };
+  let entryRoom = rooms[0];
+  let best = Infinity;
+  for (const r of rooms) {
+    const inside = Math.abs(r.x - entry.x) <= r.w * 0.5 && Math.abs(r.z - entry.z) <= r.d * 0.5;
+    const dist = Math.hypot(r.x - entry.x, r.z - entry.z) - (inside ? 1000 : 0);
+    if (dist < best) { best = dist; entryRoom = r; }
+  }
+  // Put the entry inside whichever room owns the front door.
+  entry.x = clampv(entry.x, entryRoom.x - entryRoom.w * 0.5 + 0.9, entryRoom.x + entryRoom.w * 0.5 - 0.9);
+  entry.z = clampv(entry.z, entryRoom.z - entryRoom.d * 0.5 + 0.9, entryRoom.z + entryRoom.d * 0.5 - 0.9);
+
+  // Roles: the entry room takes the first, and the rest go biggest-first down
+  // the list and then round again. Cycling rather than repeating the last one
+  // is the difference between a cafe with a dining room, a bar and a kitchen
+  // and a cafe with three kitchens.
+  const rest = rooms.filter((r) => r !== entryRoom).sort((a, b) => b.w * b.d - a.w * a.d);
+  entryRoom.role = spec.roles[0];
+  const pool = spec.roles.length > 1 ? spec.roles.slice(1) : spec.roles;
+  for (let i = 0; i < rest.length; i++) rest[i].role = pool[i % pool.length];
+  return { w, d, h: spec.h, rooms, walls, entry, entryRoom, spec, rng: (lot.seed ^ 0x51a7c3) >>> 0 };
+}
+
+// ---------------------------------------------------------------------------
+// Furnishing
+// ---------------------------------------------------------------------------
+/** A box, batched, with an optional collider. */
+function piece(ctx, mat, w, h, d, x, y, z, rot, solid) {
+  ctx.b.add(mat, transformed(boxUV(w, h, d, Math.max(1, w), Math.max(1, h)), x, y + h * 0.5, z, rot || 0));
+  if (solid !== false && h > 0.35) ctx.solids.push({ x, z, w, d, rot: rot || 0, h: y + h });
+}
+
+function tube(ctx, mat, r, h, x, y, z) {
+  ctx.b.add(mat, transformed(cylinderUV(r, r, h, 8, 1, 1), x, y + h * 0.5, z, 0));
+}
+
+/** Chairs around a table, four sides. */
+function chairsAround(ctx, pal, x, z, r, rot) {
+  for (let i = 0; i < 4; i++) {
+    const a = rot + i * Math.PI * 0.5;
+    const cx = x + Math.sin(a) * r, cz = z + Math.cos(a) * r;
+    piece(ctx, pal.wood, 0.42, 0.44, 0.42, cx, 0, cz, a, false);
+    piece(ctx, pal.wood, 0.42, 0.46, 0.08, cx + Math.sin(a) * 0.18, 0.44, cz + Math.cos(a) * 0.18, a, false);
+  }
+}
+
+const FURNISH = {
+  hall(ctx, r, pal) {
+    piece(ctx, pal.wood, Math.min(1.1, r.w * 0.4), 0.78, 0.36, r.x, 0, r.z - r.d * 0.5 + 0.4, 0);
+    piece(ctx, pal.dark, 0.08, 1.75, 0.08, r.x + Math.min(1.2, r.w * 0.3), 0, r.z - r.d * 0.5 + 0.35, 0, false);
+    piece(ctx, pal.rug, Math.min(2.2, r.w * 0.6), 0.02, Math.min(1.4, r.d * 0.4), r.x, 0.01, r.z, 0, false);
+  },
+  lobby(ctx, r, pal, rng) {
+    piece(ctx, pal.stone, Math.min(3.0, r.w * 0.5), 1.05, 0.7, r.x, 0, r.z - r.d * 0.5 + 0.9, 0);
+    for (const sx of [-1, 1]) {
+      piece(ctx, pal.soft, 1.7, 0.42, 0.75, r.x + sx * Math.min(2.4, r.w * 0.3), 0, r.z + r.d * 0.18, 0);
+      piece(ctx, pal.soft, 1.7, 0.45, 0.2, r.x + sx * Math.min(2.4, r.w * 0.3), 0.42, r.z + r.d * 0.18 - 0.28, 0, false);
+    }
+    piece(ctx, pal.rug, Math.min(3.4, r.w * 0.6), 0.02, Math.min(2.4, r.d * 0.5), r.x, 0.01, r.z + r.d * 0.15, 0, false);
+  },
+  reception(ctx, r, pal) {
+    piece(ctx, pal.stone, Math.min(3.6, r.w * 0.55), 1.08, 0.72, r.x, 0, r.z - r.d * 0.28, 0);
+    piece(ctx, pal.dark, Math.min(3.8, r.w * 0.58), 0.06, 0.86, r.x, 1.08, r.z - r.d * 0.28, 0, false);
+    piece(ctx, pal.soft, 1.6, 0.42, 0.72, r.x - r.w * 0.25, 0, r.z + r.d * 0.28, 0);
+    piece(ctx, pal.soft, 1.6, 0.45, 0.2, r.x - r.w * 0.25, 0.42, r.z + r.d * 0.28 - 0.26, 0, false);
+  },
+  living(ctx, r, pal, rng) {
+    const sw = Math.min(2.3, r.w * 0.55);
+    piece(ctx, pal.soft, sw, 0.40, 0.9, r.x, 0, r.z + r.d * 0.28, 0);
+    piece(ctx, pal.soft, sw, 0.48, 0.24, r.x, 0.40, r.z + r.d * 0.28 - 0.33, 0, false);
+    for (const sx of [-1, 1]) piece(ctx, pal.soft, 0.22, 0.56, 0.9, r.x + sx * sw * 0.5, 0, r.z + r.d * 0.28, 0, false);
+    piece(ctx, pal.wood, Math.min(1.3, r.w * 0.34), 0.38, 0.6, r.x, 0, r.z, 0);
+    piece(ctx, pal.wood, Math.min(1.7, r.w * 0.42), 0.5, 0.36, r.x, 0, r.z - r.d * 0.35, 0);
+    piece(ctx, pal.screen, Math.min(1.5, r.w * 0.38), 0.85, 0.07, r.x, 0.55, r.z - r.d * 0.35, 0, false);
+    piece(ctx, pal.rug, Math.min(2.6, r.w * 0.6), 0.02, Math.min(1.9, r.d * 0.45), r.x, 0.01, r.z + r.d * 0.05, 0, false);
+  },
+  kitchen(ctx, r, pal) {
+    const runW = Math.min(r.w - 0.6, 4.2);
+    const bz = r.z - r.d * 0.5 + 0.35;
+    piece(ctx, pal.unit, runW, 0.88, 0.62, r.x, 0, bz, 0);
+    piece(ctx, pal.stone, runW + 0.06, 0.06, 0.68, r.x, 0.88, bz, 0, false);
+    piece(ctx, pal.unit, runW * 0.8, 0.62, 0.34, r.x, 1.55, bz - 0.1, 0, false);
+    piece(ctx, pal.metal, 0.72, 1.82, 0.68, r.x + runW * 0.5 - 0.4, 0, bz + 0.9, 0);
+    piece(ctx, pal.metal, 0.58, 0.04, 0.42, r.x - runW * 0.2, 0.9, bz, 0, false);
+    if (r.w > 4 && r.d > 4) {
+      piece(ctx, pal.wood, 1.2, 0.74, 0.85, r.x, 0, r.z + r.d * 0.22, 0);
+      chairsAround(ctx, pal, r.x, r.z + r.d * 0.22, 0.85, 0);
+    }
+  },
+  bedroom(ctx, r, pal, rng) {
+    const bw = Math.min(1.5, r.w * 0.45);
+    piece(ctx, pal.wood, bw, 0.42, 2.0, r.x - r.w * 0.16, 0, r.z, 0);
+    piece(ctx, pal.linen, bw - 0.08, 0.18, 1.9, r.x - r.w * 0.16, 0.42, r.z, 0, false);
+    piece(ctx, pal.linen, bw - 0.3, 0.14, 0.42, r.x - r.w * 0.16, 0.6, r.z - 0.72, 0, false);
+    piece(ctx, pal.wood, bw + 0.1, 0.55, 0.1, r.x - r.w * 0.16, 0.42, r.z - 1.02, 0, false);
+    piece(ctx, pal.wood, 0.45, 0.52, 0.42, r.x - r.w * 0.16 + bw * 0.5 + 0.36, 0, r.z - 0.7, 0, false);
+    piece(ctx, pal.wood, 1.0, 1.95, 0.58, r.x + r.w * 0.32, 0, r.z + r.d * 0.2, 0);
+  },
+  bath(ctx, r, pal) {
+    piece(ctx, pal.porcelain, Math.min(1.65, r.w * 0.6), 0.55, 0.75, r.x, 0, r.z - r.d * 0.5 + 0.45, 0);
+    piece(ctx, pal.porcelain, 0.55, 0.85, 0.42, r.x + r.w * 0.28, 0, r.z + r.d * 0.2, 0, false);
+    piece(ctx, pal.porcelain, 0.42, 0.42, 0.6, r.x - r.w * 0.28, 0, r.z + r.d * 0.24, 0, false);
+    piece(ctx, pal.glass, 0.9, 1.4, 0.05, r.x - r.w * 0.1, 0.4, r.z + r.d * 0.42, 0, false);
+  },
+  shopfloor(ctx, r, pal, rng) {
+    const rows = Math.max(1, Math.floor((r.w - 1.6) / 2.4));
+    for (let i = 0; i < rows; i++) {
+      const x = r.x - (rows - 1) * 1.2 + i * 2.4;
+      const len = Math.min(r.d - 1.8, 6.5);
+      piece(ctx, pal.unit, 0.85, 1.85, len, x, 0, r.z, 0);
+      for (let s = 0; s < 3; s++) {
+        piece(ctx, pal.goods[(i + s) % pal.goods.length], 0.75, 0.24, len - 0.2, x, 0.45 + s * 0.48, r.z, 0, false);
+      }
+    }
+    piece(ctx, pal.stone, Math.min(2.6, r.w * 0.5), 1.05, 0.66, r.x, 0, r.z + r.d * 0.5 - 0.7, 0);
+  },
+  counter(ctx, r, pal) {
+    piece(ctx, pal.stone, Math.min(3.2, r.w * 0.6), 1.05, 0.7, r.x, 0, r.z, 0);
+    piece(ctx, pal.screen, 0.34, 0.26, 0.24, r.x + 0.6, 1.05, r.z, 0, false);
+  },
+  dining(ctx, r, pal, rng) {
+    const cols = Math.max(1, Math.floor((r.w - 1.4) / 2.3));
+    const rows = Math.max(1, Math.floor((r.d - 1.4) / 2.3));
+    for (let i = 0; i < cols; i++) {
+      for (let j = 0; j < rows; j++) {
+        const x = r.x - (cols - 1) * 1.15 + i * 2.3;
+        const z = r.z - (rows - 1) * 1.15 + j * 2.3;
+        piece(ctx, pal.wood, 0.95, 0.74, 0.95, x, 0, z, 0);
+        chairsAround(ctx, pal, x, z, 0.78, 0.4);
+      }
+    }
+  },
+  bar(ctx, r, pal) {
+    const bw = Math.min(r.w - 1.2, 5.5);
+    piece(ctx, pal.wood, bw, 1.12, 0.66, r.x, 0, r.z - r.d * 0.28, 0);
+    piece(ctx, pal.dark, bw + 0.2, 0.08, 0.82, r.x, 1.12, r.z - r.d * 0.28, 0, false);
+    piece(ctx, pal.unit, bw, 1.9, 0.4, r.x, 0, r.z - r.d * 0.5 + 0.3, 0);
+    for (let s = 0; s < 3; s++) {
+      piece(ctx, pal.bottles[s % pal.bottles.length], bw - 0.4, 0.22, 0.18, r.x, 0.75 + s * 0.42, r.z - r.d * 0.5 + 0.25, 0, false);
+    }
+    const stools = Math.max(2, Math.floor(bw / 0.9));
+    for (let i = 0; i < stools; i++) {
+      const x = r.x - (stools - 1) * 0.45 + i * 0.9;
+      tube(ctx, pal.metal, 0.06, 0.72, x, 0, r.z - r.d * 0.28 + 0.75);
+      piece(ctx, pal.soft, 0.36, 0.09, 0.36, x, 0.72, r.z - r.d * 0.28 + 0.75, 0, false);
+    }
+  },
+  office(ctx, r, pal) {
+    const cols = Math.max(1, Math.floor((r.w - 1.2) / 2.2));
+    const rows = Math.max(1, Math.floor((r.d - 1.2) / 2.0));
+    for (let i = 0; i < cols; i++) {
+      for (let j = 0; j < rows; j++) {
+        const x = r.x - (cols - 1) * 1.1 + i * 2.2;
+        const z = r.z - (rows - 1) * 1.0 + j * 2.0;
+        piece(ctx, pal.unit, 1.5, 0.74, 0.75, x, 0, z, 0);
+        piece(ctx, pal.screen, 0.52, 0.34, 0.05, x + 0.3, 0.74, z - 0.2, 0, false);
+        piece(ctx, pal.soft, 0.5, 0.45, 0.5, x - 0.1, 0, z + 0.8, 0, false);
+        piece(ctx, pal.soft, 0.5, 0.5, 0.1, x - 0.1, 0.45, z + 1.02, 0, false);
+      }
+    }
+    piece(ctx, pal.metal, 0.5, 1.4, 0.7, r.x + r.w * 0.5 - 0.5, 0, r.z - r.d * 0.5 + 0.6, 0);
+  },
+  meeting(ctx, r, pal) {
+    const tw = Math.min(r.w - 1.6, 3.4);
+    piece(ctx, pal.wood, tw, 0.74, Math.min(r.d - 1.6, 1.4), r.x, 0, r.z, 0);
+    const n = Math.max(2, Math.floor(tw / 0.8));
+    for (let i = 0; i < n; i++) {
+      const x = r.x - (n - 1) * 0.4 + i * 0.8;
+      for (const sz of [-1, 1]) {
+        piece(ctx, pal.soft, 0.46, 0.45, 0.46, x, 0, r.z + sz * 1.15, 0, false);
+        piece(ctx, pal.soft, 0.46, 0.5, 0.1, x, 0.45, r.z + sz * 1.38, 0, false);
+      }
+    }
+    piece(ctx, pal.screen, Math.min(1.6, r.w * 0.5), 0.9, 0.06, r.x, 1.0, r.z - r.d * 0.5 + 0.2, 0, false);
+  },
+  classroom(ctx, r, pal) {
+    const cols = Math.max(1, Math.floor((r.w - 1.2) / 1.7));
+    const rows = Math.max(1, Math.floor((r.d - 2.4) / 1.5));
+    for (let i = 0; i < cols; i++) {
+      for (let j = 0; j < rows; j++) {
+        const x = r.x - (cols - 1) * 0.85 + i * 1.7;
+        const z = r.z - (rows - 1) * 0.75 + j * 1.5 + 0.5;
+        piece(ctx, pal.wood, 1.2, 0.72, 0.55, x, 0, z, 0);
+        piece(ctx, pal.soft, 0.4, 0.42, 0.4, x, 0, z + 0.6, 0, false);
+      }
+    }
+    piece(ctx, pal.board, Math.min(3.2, r.w * 0.7), 1.2, 0.08, r.x, 0.9, r.z - r.d * 0.5 + 0.15, 0, false);
+    piece(ctx, pal.wood, 1.3, 0.76, 0.6, r.x, 0, r.z - r.d * 0.5 + 1.1, 0);
+  },
+  ward(ctx, r, pal) {
+    const n = Math.max(1, Math.floor((r.w - 1.2) / 2.0));
+    for (let i = 0; i < n; i++) {
+      const x = r.x - (n - 1) * 1.0 + i * 2.0;
+      piece(ctx, pal.metal, 0.95, 0.56, 2.0, x, 0, r.z - r.d * 0.5 + 1.4, 0);
+      piece(ctx, pal.linen, 0.88, 0.16, 1.9, x, 0.56, r.z - r.d * 0.5 + 1.4, 0, false);
+      piece(ctx, pal.metal, 1.0, 0.5, 0.06, x, 0.56, r.z - r.d * 0.5 + 0.45, 0, false);
+      piece(ctx, pal.unit, 0.42, 0.7, 0.42, x + 0.75, 0, r.z - r.d * 0.5 + 0.6, 0, false);
+    }
+  },
+  storage(ctx, r, pal, rng) {
+    const rows = Math.max(1, Math.floor((r.w - 1.4) / 2.6));
+    for (let i = 0; i < rows; i++) {
+      const x = r.x - (rows - 1) * 1.3 + i * 2.6;
+      const len = Math.min(r.d - 1.4, 8);
+      for (let s = 0; s < 3; s++) {
+        piece(ctx, pal.metal, 1.0, 0.1, len, x, 0.5 + s * 0.9, r.z, 0, false);
+      }
+      for (const sz of [-1, 1]) {
+        piece(ctx, pal.metal, 0.1, 2.6, 0.1, x, 0, r.z + sz * len * 0.5, 0, false);
+      }
+      piece(ctx, pal.crate, 1.0, 2.6, len, x, 0, r.z, 0);
+      for (let s = 0; s < 3; s++) {
+        for (let c = 0; c < 3; c++) {
+          if (rng() < 0.35) continue;
+          piece(ctx, pal.crate, 0.7, 0.6, 0.7, x, 0.6 + s * 0.9, r.z - len * 0.3 + c * len * 0.3, 0, false);
+        }
+      }
+    }
+  },
+  garage(ctx, r, pal) {
+    piece(ctx, pal.floorStripe, Math.min(r.w - 1, 4.0), 0.02, Math.min(r.d - 1, 9), r.x, 0.01, r.z, 0, false);
+    piece(ctx, pal.metal, 0.6, 2.2, 0.5, r.x - r.w * 0.5 + 0.5, 0, r.z - r.d * 0.3, 0);
+    for (let i = 0; i < 3; i++) {
+      piece(ctx, pal.crate, 0.6, 0.5, 0.6, r.x + r.w * 0.5 - 0.6, i * 0.5, r.z + r.d * 0.3, 0, i === 0);
+    }
+  },
+  gym(ctx, r, pal) {
+    const n = Math.max(1, Math.floor((r.w - 1.2) / 2.2));
+    for (let i = 0; i < n; i++) {
+      const x = r.x - (n - 1) * 1.1 + i * 2.2;
+      piece(ctx, pal.dark, 0.7, 0.45, 1.7, x, 0, r.z - r.d * 0.2, 0);
+      piece(ctx, pal.metal, 0.5, 1.2, 0.4, x, 0.45, r.z - r.d * 0.2 - 0.6, 0, false);
+      piece(ctx, pal.dark, 1.6, 0.3, 0.5, x, 0, r.z + r.d * 0.25, 0, false);
+    }
+    piece(ctx, pal.mirror, Math.min(r.w - 0.8, 6), 1.9, 0.06, r.x, 0.5, r.z - r.d * 0.5 + 0.12, 0, false);
+  },
+  arcade(ctx, r, pal) {
+    const n = Math.max(2, Math.floor((r.w - 1) / 1.3));
+    for (let i = 0; i < n; i++) {
+      const x = r.x - (n - 1) * 0.65 + i * 1.3;
+      for (const sz of [-1, 1]) {
+        if (r.d < 4 && sz > 0) continue;
+        const z = r.z + sz * (r.d * 0.5 - 0.9);
+        piece(ctx, pal.dark, 0.8, 1.75, 0.7, x, 0, z, 0);
+        piece(ctx, pal.neon[(i + (sz > 0 ? 1 : 0)) % pal.neon.length], 0.62, 0.5, 0.06, x, 1.0, z + (sz > 0 ? -0.38 : 0.38), 0, false);
+      }
+    }
+  },
+  concourse(ctx, r, pal) {
+    const n = Math.max(2, Math.floor(r.w / 6));
+    for (let i = 0; i < n; i++) {
+      const x = r.x - (n - 1) * 3 + i * 6;
+      piece(ctx, pal.stone, 0.7, 4.0, 0.7, x, 0, r.z, 0);
+    }
+    for (const sz of [-1, 1]) {
+      piece(ctx, pal.soft, 2.2, 0.42, 0.6, r.x, 0, r.z + sz * Math.min(r.d * 0.3, 4), 0);
+    }
+  },
+  pews(ctx, r, pal) {
+    const rows = Math.max(2, Math.floor((r.d - 2) / 1.2));
+    for (let i = 0; i < rows; i++) {
+      const z = r.z - r.d * 0.5 + 1.8 + i * 1.2;
+      for (const sx of [-1, 1]) {
+        piece(ctx, pal.wood, Math.min(r.w * 0.38, 3), 0.45, 0.42, r.x + sx * r.w * 0.22, 0, z, 0, false);
+        piece(ctx, pal.wood, Math.min(r.w * 0.38, 3), 0.55, 0.08, r.x + sx * r.w * 0.22, 0.45, z - 0.2, 0, false);
+      }
+    }
+    piece(ctx, pal.stone, 1.6, 1.0, 0.8, r.x, 0, r.z - r.d * 0.5 + 0.9, 0);
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Building the cell
+// ---------------------------------------------------------------------------
+function palette(spec, rng) {
+  return {
+    wood: paintedMaterial(0x8a6640, 0.78),
+    dark: paintedMaterial(0x2a2a30, 0.8),
+    soft: paintedMaterial(rng.pick([0x4a5a6a, 0x6a5a4a, 0x5a6a52, 0x6a4a52]), 0.9),
+    unit: paintedMaterial(0xcfcbc2, 0.7),
+    stone: concreteMaterial(0x9a968e),
+    metal: metalMaterial(0x8a8f95, 0.4),
+    glass: glassMaterial(0x9fc4d8, 0.35),
+    linen: paintedMaterial(0xe8e4dc, 0.95),
+    porcelain: paintedMaterial(0xf2f4f4, 0.4),
+    rug: paintedMaterial(rng.pick([0x7a4a42, 0x3f5a52, 0x5a4a6a, 0x6a6a4a]), 0.95),
+    screen: paintedMaterial(0x14181e, 0.35),
+    board: paintedMaterial(0x2a4a3a, 0.85),
+    crate: paintedMaterial(0x9a7a4a, 0.9),
+    mirror: metalMaterial(0xc8d2d8, 0.12),
+    floorStripe: paintedMaterial(0xc8a83a, 0.8),
+    goods: [paintedMaterial(0xc0553a, 0.8), paintedMaterial(0x3a7ac0, 0.8), paintedMaterial(0x4aa05a, 0.8), paintedMaterial(0xd0a83a, 0.8)],
+    bottles: [paintedMaterial(0x4a7a3a, 0.4), paintedMaterial(0x8a5a2a, 0.4), paintedMaterial(0x6a4a7a, 0.4)],
+    neon: [emissiveMaterial(0xff4a7a, 1.6), emissiveMaterial(0x4affd0, 1.6), emissiveMaterial(0xffd44a, 1.6)],
+  };
+}
+
+/**
+ * Build one interior. Everything is in the lot's local space inside a group
+ * that carries the lot's position and rotation, so the plan lines up with the
+ * building above it.
+ */
+function buildInterior(game, lot) {
+  const plan = planInterior(lot);
+  const spec = plan.spec;
+  const rng = makeRng(plan.rng);
+  const pal = palette(spec, rng);
+  const floorY = game.world.groundAt(lot.x, lot.z);
+  const rot = lot.rot || 0;
+
+  const group = new THREE.Group();
+  group.name = 'interior';
+  group.position.set(lot.x, floorY, lot.z);
+  group.rotation.y = rot;
+  group.matrixAutoUpdate = false;
+  group.updateMatrix();
+
+  const b = new GeometryBatcher();
+  const ctx = { b, solids: [] };
+  const W = plan.w, D = plan.d, H = plan.h;
+
+  const floorMat = paintedMaterial(spec.floor, 0.86);
+  const wallMat = paintedMaterial(spec.wall, 0.92);
+  const ceilMat = paintedMaterial(0xe8e6e0, 0.95);
+
+  // Shell: floor, ceiling, four outside walls with a gap for the front door.
+  b.add(floorMat, transformed(boxUV(W, 0.14, D, W * 0.5, D * 0.5), 0, -0.07, 0, 0));
+  b.add(ceilMat, transformed(boxUV(W, 0.14, D, W * 0.4, D * 0.4), 0, H + 0.07, 0, 0));
+  b.add(wallMat, transformed(boxUV(W + WALL_T * 2, H, WALL_T, W, H), 0, H * 0.5, -D * 0.5 - WALL_T * 0.5, 0));
+  for (const sx of [-1, 1]) {
+    b.add(wallMat, transformed(boxUV(WALL_T, H, D, D, H), sx * (W * 0.5 + WALL_T * 0.5), H * 0.5, 0, 0));
+  }
+  // Front wall, split around the doorway you came through.
+  const gapHalf = 1.1;
+  for (const sx of [-1, 1]) {
+    const segW = W * 0.5 - gapHalf;
+    if (segW > 0.05) {
+      b.add(wallMat, transformed(boxUV(segW, H, WALL_T, segW, H),
+        sx * (gapHalf + segW * 0.5), H * 0.5, D * 0.5 + WALL_T * 0.5, 0));
+    }
+  }
+  // Lintel over the doorway, and a glass door panel you can see the street through.
+  b.add(wallMat, transformed(boxUV(gapHalf * 2, H - 2.3, WALL_T, 2, 1), 0, 2.3 + (H - 2.3) * 0.5, D * 0.5 + WALL_T * 0.5, 0));
+
+  // Outside walls are solid.
+  ctx.solids.push({ x: 0, z: -D * 0.5 - WALL_T, w: W + 1, d: WALL_T * 2, rot: 0, h: H });
+  for (const sx of [-1, 1]) ctx.solids.push({ x: sx * (W * 0.5 + WALL_T), z: 0, w: WALL_T * 2, d: D + 1, rot: 0, h: H });
+  for (const sx of [-1, 1]) {
+    const segW = W * 0.5 - gapHalf;
+    if (segW > 0.05) ctx.solids.push({ x: sx * (gapHalf + segW * 0.5), z: D * 0.5 + WALL_T, w: segW, d: WALL_T * 2, rot: 0, h: H });
+  }
+
+  // Partitions, each with a doorway cut through it.
+  for (const wall of plan.walls) {
+    const doorHalf = DOOR_W * 0.5;
+    if (wall.axis === 'x') {
+      const dz = clampv(wall.door, wall.from + doorHalf + 0.2, wall.to - doorHalf - 0.2);
+      for (const side of [-1, 1]) {
+        const a = side < 0 ? wall.from : dz + doorHalf;
+        const bEdge = side < 0 ? dz - doorHalf : wall.to;
+        const len = bEdge - a;
+        if (len <= 0.05) continue;
+        b.add(wallMat, transformed(boxUV(WALL_T, H, len, len, H), wall.pos, H * 0.5, a + len * 0.5, 0));
+        ctx.solids.push({ x: wall.pos, z: a + len * 0.5, w: WALL_T, d: len, rot: 0, h: H });
+      }
+      b.add(wallMat, transformed(boxUV(WALL_T, H - 2.1, DOOR_W, 1, 1), wall.pos, 2.1 + (H - 2.1) * 0.5, dz, 0));
+    } else {
+      const dx = clampv(wall.door, wall.from + doorHalf + 0.2, wall.to - doorHalf - 0.2);
+      for (const side of [-1, 1]) {
+        const a = side < 0 ? wall.from : dx + doorHalf;
+        const bEdge = side < 0 ? dx - doorHalf : wall.to;
+        const len = bEdge - a;
+        if (len <= 0.05) continue;
+        b.add(wallMat, transformed(boxUV(len, H, WALL_T, len, H), a + len * 0.5, H * 0.5, wall.pos, 0));
+        ctx.solids.push({ x: a + len * 0.5, z: wall.pos, w: len, d: WALL_T, rot: 0, h: H });
+      }
+      b.add(wallMat, transformed(boxUV(DOOR_W, H - 2.1, WALL_T, 1, 1), dx, 2.1 + (H - 2.1) * 0.5, wall.pos, 0));
+    }
+  }
+
+  // Furniture and ceiling lights, room by room.
+  const lampMat = emissiveMaterial(0xfff2d8, 1.5);
+  const lights = [];
+  for (const room of plan.rooms) {
+    const fn = FURNISH[room.role] || FURNISH.storage;
+    try { fn(ctx, room, pal, rng); } catch (e) { console.warn('[T10] furnishing failed', room.role, e); }
+    const lw = Math.min(room.w * 0.5, 1.3), ld = Math.min(room.d * 0.5, 1.3);
+    b.add(lampMat, transformed(boxUV(lw, 0.06, ld, 1, 1), room.x, H - 0.09, room.z, 0));
+    lights.push({ x: room.x, z: room.z, y: H - 0.3, room });
+  }
+
+  b.build(group, { name: 'interior', castShadow: false, receiveShadow: true });
+  group.traverse((o) => { if (o.isMesh) { o.matrixAutoUpdate = false; o.updateMatrix(); } });
+
+  // Colliders in world space, so the world's own resolver can use them.
+  const c = Math.cos(rot), s = Math.sin(rot);
+  const colliders = ctx.solids.map((q) => ({
+    x: lot.x + q.x * c - q.z * s,
+    z: lot.z + q.x * s + q.z * c,
+    // h is measured from the floor, and baseY says where that floor is.
+    w: q.w, d: q.d, rot: rot + (q.rot || 0), h: q.h || H, baseY: floorY,
+  }));
+
+  const toWorld = (lx, lz) => ({ x: lot.x + lx * c - lz * s, z: lot.z + lx * s + lz * c });
+  const entryWorld = toWorld(plan.entry.x, plan.entry.z);
+
+  return {
+    lot, plan, group, colliders, floorY, height: H,
+    name: interiorName(lot),
+    entry: { x: entryWorld.x, z: entryWorld.z, y: floorY },
+    lightSpots: lights.map((l) => Object.assign(toWorld(l.x, l.z), { y: floorY + l.y })),
+    rooms: plan.rooms.map((r) => Object.assign({ role: r.role, w: r.w, d: r.d }, toWorld(r.x, r.z))),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The manager
+// ---------------------------------------------------------------------------
+class Interiors {
+  constructor(game) {
+    this.game = game;
+    this.scene = game.scene;
+    this.cells = new Map();       // lot -> cell, at most KEEP of them
+    this.current = null;
+    this.lamps = [];
+    this.ambient = null;
+    this.rng = makeRng(0x2f81bd);
+  }
+
+  get inside() { return !!this.current; }
+  get KEEP() { return 2; }
+
+  key(lot) { return lot.x.toFixed(1) + ':' + lot.z.toFixed(1); }
+
+  /** Build or fetch the interior for a lot. */
+  ensure(lot) {
+    const k = this.key(lot);
+    const had = this.cells.get(k);
+    if (had) return had;
+    let cell;
+    try {
+      cell = buildInterior(this.game, lot);
+    } catch (e) {
+      console.warn('[T10] could not build an interior', e);
+      return null;
+    }
+    cell.key = k;
+    this.cells.set(k, cell);
+    // Keep at most a couple built; the rest go back to the heap.
+    while (this.cells.size > this.KEEP) {
+      const oldest = this.cells.keys().next().value;
+      if (oldest === k || (this.current && this.current.key === oldest)) break;
+      this.dispose(oldest);
+    }
+    return cell;
+  }
+
+  dispose(key) {
+    const cell = this.cells.get(key);
+    if (!cell) return;
+    if (cell.group.parent) cell.group.parent.remove(cell.group);
+    disposeGroup(cell.group);
+    this.cells.delete(key);
+  }
+
+  clear() {
+    if (this.current) this.leave();
+    for (const k of [...this.cells.keys()]) this.dispose(k);
+  }
+
+  /**
+   * Walk in. Returns the interior, or null if this door leads nowhere.
+   * @param door the door interactable, which carries its lot
+   */
+  enter(door) {
+    const lot = door && door.lot;
+    if (!lot) return null;
+    const cell = this.ensure(lot);
+    if (!cell) return null;
+    if (this.current && this.current !== cell) this.leave(true);
+
+    this.current = cell;
+    this.scene.add(cell.group);
+    const g = this.game;
+
+    // The lot's own walls stop being solid while you are inside them, and the
+    // interior's walls take over.
+    g.world.insideLot = lot;
+    g.world.setInteriorColliders(cell.colliders);
+
+    g.player.indoors = cell;
+    g.player.teleport(cell.entry.x, cell.entry.z, cell.floorY + 0.02);
+    g.player.groundOverride = cell.floorY;
+    g.player.verticalVel = 0;
+
+    this.addLights(cell);
+    this.populate(cell);
+    if (g.atmosphere) g.atmosphere.setIndoors(true);
+    audio.doorOpen();
+    return cell;
+  }
+
+  /** Back out to the street. */
+  leave(quiet) {
+    const cell = this.current;
+    if (!cell) return false;
+    const g = this.game;
+    this.current = null;
+    this.removeLights();
+    this.depopulate(cell);
+    if (cell.group.parent) cell.group.parent.remove(cell.group);
+
+    g.world.insideLot = null;
+    g.world.setInteriorColliders(null);
+    g.player.indoors = null;
+    g.player.groundOverride = null;
+
+    // Step back out through the door you came in by.
+    const lot = cell.lot;
+    const rot = lot.rot || 0;
+    const outX = lot.x - Math.sin(rot) * (lot.d * 0.5 + 2.2);
+    const outZ = lot.z + Math.cos(rot) * (lot.d * 0.5 + 2.2);
+    g.player.teleport(outX, outZ, g.world.groundAt(outX, outZ));
+    g.player.verticalVel = 0;
+    if (g.atmosphere) g.atmosphere.setIndoors(false);
+    if (!quiet) audio.doorClose();
+    return true;
+  }
+
+  /**
+   * A couple of people who belong here. They stand where they are — the crowd
+   * AI does not know about interior walls, and someone strolling through a
+   * kitchen wall would be worse than an empty room — but they are alive, they
+   * look around, and you can talk to them.
+   */
+  populate(cell) {
+    const npcs = this.game.npcs;
+    if (!npcs || !npcs.enabled) return;
+    cell.people = [];
+    // Never more than the room count, and never more than the crowd budget likes.
+    const want = Math.min(cell.rooms.length - 1, Math.round(clampv(cell.rooms.length * 0.5, 0, 3) * perf.load));
+    const spare = cell.rooms.filter((r) => r.role !== 'hall' && r.role !== 'lobby');
+    for (let i = 0; i < want && i < spare.length; i++) {
+      const room = spare[i];
+      const jx = (this.rng() - 0.5) * Math.min(room.w, 2) * 0.5;
+      const jz = (this.rng() - 0.5) * Math.min(room.d, 2) * 0.5;
+      const npc = npcs.spawnNear(0, 0, 0, 0, { x: room.x + jx, z: room.z + jz });
+      if (!npc) continue;
+      npc.position.y = cell.floorY;
+      npc.root.position.copy(npc.position);
+      npc.controlled = 'indoor';
+      npc.activity = 'work';
+      npc.activityTimer = 2;
+      npc.interiorOf = cell;
+      cell.people.push(npc);
+    }
+  }
+
+  /** They go when you do. */
+  depopulate(cell) {
+    const npcs = this.game.npcs;
+    if (!cell || !cell.people) return;
+    for (const npc of cell.people) {
+      if (npcs && !npc.removed) npcs.remove(npc);
+    }
+    cell.people = null;
+  }
+
+  /** Lights for the rooms nearest you, within the preset's budget. */
+  addLights(cell) {
+    this.removeLights();
+    const budget = Math.max(2, Math.round(settings.preset.maxDynamicLights * 0.5 * perf.load));
+    const spots = cell.lightSpots.slice(0, budget);
+    for (const s of spots) {
+      const l = new THREE.PointLight(0xffeccd, 0.85, 13, 2);
+      l.position.set(s.x, s.y, s.z);
+      l.castShadow = false;
+      this.scene.add(l);
+      this.lamps.push(l);
+    }
+    if (!this.ambient) {
+      this.ambient = new THREE.AmbientLight(0xbfc8d4, 0.42);
+      this.scene.add(this.ambient);
+    }
+  }
+
+  removeLights() {
+    for (const l of this.lamps) this.scene.remove(l);
+    this.lamps.length = 0;
+    if (this.ambient) { this.scene.remove(this.ambient); this.ambient = null; }
+  }
+
+  /** The doorway you came in by, for the prompt and for USE. */
+  exitPrompt() {
+    const cell = this.current;
+    if (!cell) return null;
+    const p = this.game.player.position;
+    const d = Math.hypot(p.x - cell.entry.x, p.z - cell.entry.z);
+    return d < 3.0 ? { label: 'Leave the ' + cell.name, distance: d } : null;
+  }
+
+  /** Which room you are standing in. */
+  roomAt(x, z) {
+    const cell = this.current;
+    if (!cell) return null;
+    let best = null, bd = Infinity;
+    for (const r of cell.rooms) {
+      const d = Math.hypot(r.x - x, r.z - z);
+      if (d < bd) { bd = d; best = r; }
+    }
+    return best;
+  }
+
+  update(dt) {
+    const cell = this.current;
+    if (!cell) return;
+    // Walking out through the front door is the same as asking to leave.
+    const p = this.game.player.position;
+    const lot = cell.lot;
+    const rot = lot.rot || 0;
+    const dx = p.x - lot.x, dz = p.z - lot.z;
+    const lz = -dx * Math.sin(rot) + dz * Math.cos(rot);
+    if (lz > cell.plan.d * 0.5 + 0.9) this.leave();
+  }
+
+  status() {
+    if (!this.current) return 'You\'re outside.';
+    const room = this.roomAt(this.game.player.position.x, this.game.player.position.z);
+    return 'Inside the ' + this.current.name + (room ? ', in the ' + room.role : '') +
+      '. ' + this.current.rooms.length + ' rooms. Say "T10 take me outside" to leave.';
+  }
+}
+
+return { kindPlan, interiorName, planInterior, buildInterior, Interiors, INTERIOR_KINDS };
+})();
+
 __M["render/atmosphere"] = (function(){
 // T10 World - sky, day/night cycle and weather.
 // A physically-flavoured sky dome drives the sun, ambient and fog together, so
@@ -70679,6 +71763,27 @@ class Atmosphere {
     this.scene.add(this.fill);
 
     this.scene.fog = new THREE.Fog(0x9ec4e8, 120, 700);
+  }
+
+  /**
+   * Indoors: the sky is still out there through the door, but the sun does not
+   * reach you and the weather stops at the threshold.
+   */
+  setIndoors(on) {
+    if (this.indoors === !!on) return;
+    this.indoors = !!on;
+    if (this.indoors) {
+      this._inHemi = this.hemi.intensity;
+      this._inAmbient = this.ambient.intensity;
+      this._inSun = this.sun.intensity;
+      this.hemi.intensity *= 0.35;
+      this.ambient.intensity = Math.max(this.ambient.intensity, 0.22);
+      this.sun.intensity *= 0.25;
+    } else {
+      if (this._inHemi != null) this.hemi.intensity = this._inHemi;
+      if (this._inAmbient != null) this.ambient.intensity = this._inAmbient;
+      if (this._inSun != null) this.sun.intensity = this._inSun;
+    }
   }
 
   /** Underground there is no sky and no sun; the station lights do the work. */
@@ -71023,7 +72128,8 @@ class Atmosphere {
     const snow = clamp01(this.current.snow || 0);
     this.rainMat.uniforms.uOpacity.value = amount * 0.85;
     this.rainMat.uniforms.uSnow.value = snow;
-    this.rain.visible = amount > 0.02;
+    // Rain stops at the threshold: underground and indoors there is none.
+    this.rain.visible = amount > 0.02 && !this.underground && !this.indoors;
     if (!this.rain.visible || !focus) return;
     const pos = this.rain.geometry.attributes.position;
     const arr = pos.array;
@@ -71762,6 +72868,8 @@ class Player {
     this.isZombie = false;
     this.inSubway = false;
     this.groundOverride = null;
+    // The interior you are standing in, or null out on the street.
+    this.indoors = null;
     this.jumpMultiplier = 1;
 
     this.cameraMode = settings.get('cameraMode');
@@ -71951,7 +73059,11 @@ class Player {
     const moveScale = this.grounded || this.swimming || this.flying ? 1 : 0.72;
     this.position.x += Math.sin(this.heading) * this.speed * moveScale * dt;
     this.position.z += Math.cos(this.heading) * this.speed * moveScale * dt;
-    if (!this.noclip && this.groundOverride == null) this.world.resolveCollision(this.position, 0.36);
+    // Underground the floor is the only thing there is, so collision is off.
+    // Indoors it is very much on — walls are the whole point of a room.
+    if (!this.noclip && (this.groundOverride == null || this.indoors)) {
+      this.world.resolveCollision(this.position, 0.36);
+    }
 
     // Keep the player inside the world.
     const LIM = 1180;
@@ -72193,7 +73305,13 @@ class Player {
         anchor.copy(this.inVehicle.position);
         anchor.y += this.inVehicle.spec.h * 0.85;
       }
-      this.camDistance = damp(this.camDistance, this.camDistanceTarget, 0.01, dt);
+      // Indoors the camera comes in close and loses the shoulder offset: a
+      // four-metre room has nowhere to put a camera four metres back, and one
+      // that keeps clipping through the wall behind you is worse than one that
+      // sits over your shoulder.
+      let want = this.camDistanceTarget;
+      if (this.indoors) want = Math.min(want, 1.85);
+      this.camDistance = damp(this.camDistance, want, this.indoors ? 0.004 : 0.01, dt);
       const dist = this.camDistance;
       const offX = Math.sin(this.yaw) * Math.cos(this.pitch);
       const offY = Math.sin(this.pitch);
@@ -72201,7 +73319,7 @@ class Player {
       _v2.set(anchor.x - offX * dist, anchor.y - offY * dist + 0.25, anchor.z - offZ * dist);
       // Shoulder offset so the character isn't dead centre.
       const rightX = -Math.cos(this.yaw), rightZ = Math.sin(this.yaw);
-      const shoulder = this.inVehicle ? 0 : this.camOffsetX;
+      const shoulder = this.inVehicle ? 0 : this.camOffsetX * (this.indoors ? 0.45 : 1);
       _v2.x += rightX * shoulder;
       _v2.z += rightZ * shoulder;
 
@@ -74258,6 +75376,11 @@ function extendRegistry(R, add) {
       p.root.visible = true; p.root.scale.setScalar(1);
       ctx.setGravity(1);
       ctx.world.clearSpawnedProps();
+      // Reset means outside, on the street, with nothing held open.
+      if (ctx.game.interiors) ctx.game.interiors.clear();
+      if (ctx.game.creatures) ctx.game.creatures.clear();
+      if (ctx.game.mutations) ctx.game.mutations.cureAll();
+      if (ctx.game.powers) ctx.game.powers.stopAll();
       ctx.trafficLightOverride = null;
       ctx.forceStreetLights = null;
       return 'World reset. Fresh start.';
@@ -76463,6 +77586,7 @@ const { POWERS, ENERGY_MAX } = __M["player/powers"];
 const { CREATURES, CREATURE_IDS, CREATURE_FAMILIES } = __M["entities/creatures"];
 const { STRAINS, STRAIN_IDS, STAGES } = __M["entities/mutation"];
 const { CATEGORIES, featuresIn, featureStats, searchFeatures, liveIdeas } = __M["t10/features"];
+const { INTERIOR_KINDS, kindPlan } = __M["world/interiors"];
 const { settings, QUALITY_ORDER } = __M["core/settings"];
 const { clampv, plural } = __M["core/math"];
 
@@ -76734,6 +77858,100 @@ function extendRegistry8(R, add) {
     'Every strain and what it turns someone into.',
     () => STRAIN_IDS.map((id) => STRAINS[id].name + ' → ' + (CREATURES[STRAINS[id].becomes] || { name: STRAINS[id].becomes }).name).join(', ') + '.');
 
+
+  // ===== 66. Going inside ==================================================
+  const nearestDoor = (ctx, radius) => {
+    const p = ctx.player.position;
+    let best = null, bd = radius || 60;
+    for (const chunk of ctx.world.chunks.values()) {
+      for (const it of chunk.interactables) {
+        if (it.action !== 'enter') continue;
+        const d = Math.hypot(it.x - p.x, it.z - p.z);
+        if (d < bd) { bd = d; best = it; }
+      }
+    }
+    return best;
+  };
+
+  add('go_inside', 'Inside',
+    ['take me inside', 'let me in', 'go inside', 'take me in', 'open this door',
+     'let me into this building', 'i want to go inside', 'take me indoors'],
+    'Walk into the nearest building.',
+    (ctx) => {
+      const I = ctx.game.interiors;
+      if (!I) return 'There\'s nothing to go into.';
+      if (I.inside) return I.status();
+      const door = nearestDoor(ctx, 70);
+      if (!door) return 'No door close enough. Walk up to one and I\'ll open it.';
+      const cell = I.enter(door);
+      if (!cell) return 'That one won\'t open.';
+      return 'Inside the ' + cell.name + '. ' + cell.rooms.length + ' rooms — have a look around.';
+    });
+
+  add('go_outside', 'Inside',
+    ['take me outside', 'let me out', 'go outside', 'get me out of here', 'back to the street',
+     'leave the building', 'i want to go outside'],
+    'Step back out onto the street.',
+    (ctx) => {
+      const I = ctx.game.interiors;
+      if (!I || !I.inside) return 'You\'re already outside.';
+      const name = I.current.name;
+      I.leave();
+      return 'Out of the ' + name + ' and back on the street.';
+    });
+
+  add('inside_where', 'Inside',
+    ['where am i inside', 'what room is this', 'what is in here', 'am i inside',
+     'what building is this inside'],
+    'What you are standing in.',
+    (ctx) => (ctx.game.interiors ? ctx.game.interiors.status() : 'You\'re outside.'));
+
+  // Several kinds share a word — a police station and Union Station are both
+  // "a station" — so the commands are keyed by the word, not the kind.
+  const BY_NAME = new Map();
+  for (const kind of Object.keys(INTERIOR_KINDS)) {
+    const n = INTERIOR_KINDS[kind].name;
+    if (!BY_NAME.has(n)) BY_NAME.set(n, []);
+    BY_NAME.get(n).push(kind);
+  }
+  for (const [name, kinds] of BY_NAME) {
+    add('go_inside_' + name.replace(/\s+/g, '_'), 'Inside',
+      ['take me into a ' + name, 'find me a ' + name + ' to go into',
+       'take me inside a ' + name, 'let me into a ' + name],
+      'Find a ' + name + ' and go in.',
+      (ctx) => {
+        const I = ctx.game.interiors;
+        if (!I) return 'There\'s nothing to go into.';
+        const p = ctx.player.position;
+        let best = null, bd = 400;
+        for (const lot of ctx.world.city.lotsNear(p.x, p.z, 400)) {
+          if (kinds.indexOf(lot.kind) < 0) continue;
+          const d = Math.hypot(lot.x - p.x, lot.z - p.z);
+          if (d < bd) { bd = d; best = lot; }
+        }
+        if (!best) return 'No ' + name + ' within a few blocks.';
+        const rot = best.rot || 0;
+        // Stand outside its front door first, then walk in.
+        const ox = best.x - Math.sin(rot) * (best.d * 0.5 + 2.4);
+        const oz = best.z + Math.cos(rot) * (best.d * 0.5 + 2.4);
+        ctx.player.teleport(ox, oz, ctx.world.groundAt(ox, oz));
+        const cell = I.enter({ lot: best });
+        return cell ? 'Inside a ' + cell.name + ', ' + Math.round(bd) + ' metres from where you were.'
+          : 'Found one, but the door wouldn\'t open.';
+      });
+  }
+
+  add('inside_rooms', 'Inside',
+    ['what rooms are in here', 'how many rooms', 'list the rooms', 'what is in this building'],
+    'The rooms in the building you are in.',
+    (ctx) => {
+      const I = ctx.game.interiors;
+      if (!I || !I.inside) return 'You\'d have to be inside one first.';
+      const tally = {};
+      for (const r of I.current.rooms) tally[r.role] = (tally[r.role] || 0) + 1;
+      return Object.keys(tally).map((k) => (tally[k] > 1 ? tally[k] + ' ' + k + 's' : 'a ' + k)).join(', ') + '.';
+    });
+
   // ===== 63. Worlds ========================================================
   add('world_list', 'Worlds',
     ['what worlds do i have', 'list my worlds', 'show my worlds', 'how many worlds do i have'],
@@ -76876,9 +78094,25 @@ function extendRegistry8(R, add) {
 
   add('perf_presets', 'Performance',
     ['what quality am i on', 'what preset is this', 'which graphics setting am i using'],
-    'Which preset is active.',
-    () => 'You\'re on ' + String(settings.get('quality')).toUpperCase() + '. The three are ' +
-      QUALITY_ORDER.map((q) => q.toUpperCase()).join(', ') + '.');
+    'Which preset is active, and what it comes out as on this device.',
+    () => {
+      const p = settings.preset;
+      return 'You\'re on ' + String(settings.get('quality')).toUpperCase() + ' — on this ' +
+        settings.device.tier + ' that\'s a ' + Math.round(p.drawDistance) + ' metre view, ' +
+        p.npcBudget + ' people simulated, ' + p.textureSize + 'px textures' +
+        (p.shadows ? ', ' + p.shadowMapSize + 'px shadows' : ', no shadows') + '. The three are ' +
+        QUALITY_ORDER.map((q) => q.toUpperCase()).join(', ') + '.';
+    });
+
+  add('perf_device', 'Performance',
+    ['what device am i on', 'what hardware is this', 'what can this device handle', 'what phone is this'],
+    'What the game worked out about this device.',
+    () => {
+      const d = settings.device;
+      return 'A ' + d.tier + ': ' + d.cores + ' cores, ' + d.memory + 'GB, ' +
+        d.screenW + '×' + d.screenH + ' at ' + d.dpr + '×. Every preset is sized to that — ' +
+        'ULTRA keeps every effect on and shrinks the numbers instead.';
+    });
 }
 
 function namePart(text) {
@@ -78209,7 +79443,15 @@ class HUD {
     }
     // T10 can change quality too, so the blurb tracks the setting rather than
     // whichever button was last clicked.
-    if (this.qualityBlurb) this.qualityBlurb.textContent = QUALITY_PRESETS[q].blurb;
+    if (this.qualityBlurb) {
+      // Say what the preset actually comes out as here, so ULTRA on a phone
+      // reads as a real setting rather than a promise the device can't keep.
+      const p = settings.preset;
+      this.qualityBlurb.textContent = QUALITY_PRESETS[q].blurb + '\n' +
+        'On this ' + settings.device.tier + ': ' + Math.round(p.drawDistance) + 'm view · ' +
+        p.npcBudget + ' people · ' + p.textureSize + 'px textures · ' +
+        (p.shadows ? p.shadowMapSize + ' shadows' : 'no shadows');
+    }
     if (this.maturityButtons) {
       const age = settings.get('maturity');
       for (const k of [18, 16]) this.maturityButtons[k].classList.toggle('active', k === age);
@@ -79360,6 +80602,7 @@ const featureLibrary = __M["t10/features"];
 const { clamp01, clampv, lerpv, hashString, makeRng, TAU } = __M["core/math"];
 const { World, CHUNK_SIZE } = __M["world/world"];
 const { Subway } = __M["world/subway"];
+const { Interiors } = __M["world/interiors"];
 const { Atmosphere } = __M["render/atmosphere"];
 const { PostProcessor } = __M["render/post"];
 const { Player } = __M["player/player"];
@@ -79652,6 +80895,7 @@ class Game {
         this.creatures = new CreatureManager(this);
         this.subway = new Subway(this);
         this.subway.buildEntrances(this.world);
+        this.interiors = new Interiors(this);
         this.apocalypse = new Apocalypse(this);
         this.mutations = new Mutations(this);
         this.npcs.apocalypse = this.apocalypse;
@@ -79746,6 +80990,7 @@ class Game {
     // timeScale drives bullet time; the governor still samples real frame time.
     const dt = Math.min(rawDt, 0.1) * (this.timeScale == null ? 1 : this.timeScale);
     this.frame++;
+    this.lastFrameMs = rawDt * 1000;
     if (this.phase === 'playing') this.perf.sample(rawDt, this);
 
     if (this.phase === 'creator') {
@@ -79801,7 +81046,18 @@ class Game {
     this.world.setSnow(snow * clamp01(this.atmosphere.current.rain * 1.6));
     if (this.post) this.post.wetness = wet;
     this.world.cullCamera = this.camera;
-    this.world.update(dt, focus.x, focus.z, this.frame < 120 ? 10 : 5);
+    // Streaming gives way when the frame is already late: a new chunk is never
+    // worth a stutter you can feel. It can only stand aside for a few frames in
+    // a row, or a slow device would never finish building the city.
+    const lateMs = 1000 / 40;
+    let streamBudget = this.frame < 120 ? 10 : 5;
+    if (this.frame >= 120 && this.lastFrameMs > lateMs && this._streamSkips < 3) {
+      streamBudget = 0;
+      this._streamSkips++;
+    } else {
+      this._streamSkips = 0;
+    }
+    this.world.update(dt, focus.x, focus.z, streamBudget);
 
     p.update(dt, this.input, this.npcs, this.traffic);
     this.npcs.update(dt, p.position);
@@ -79814,6 +81070,7 @@ class Game {
     if (this.creatures) this.creatures.update(dt, p.position);
     if (this.mutations) this.mutations.update(dt);
     if (this.subway) this.subway.update(dt, focus);
+    if (this.interiors) this.interiors.update(dt);
     if (this.arsenal) {
       this.arsenal.aiming = !!this.input.buttons.aim;
       // Holding USE keeps an automatic firing.
@@ -79824,8 +81081,10 @@ class Game {
     }
     this.t10.update(dt);
 
-    // Interaction prompt.
-    const t = p.interactTarget;
+    // Interaction prompt. Indoors, standing by the door you came in by is the
+    // one thing USE does, so it says so.
+    const inside = this.interiors && this.interiors.exitPrompt();
+    const t = inside || p.interactTarget;
     if (t && settings.get('showInteractPrompts')) {
       this.hud.setPrompt(t.label, this.input.isTouch ? '' : keyLabel(settings.get('keyBindings').interact));
     } else {
@@ -79869,6 +81128,7 @@ class Game {
   doInteract() {
     if (this.phase !== 'playing' || this.hud.chatOpen) return;
     if (this.arsenal && this.arsenal.armed) { this.arsenal.pullTrigger(); return; }
+    if (this.interiors && this.doInterior()) return;
     if (this.subway && this.doSubway()) return;
     if (this.player.isZombie && this.doZombieBite()) return;
     const result = this.player.interact(this);
@@ -79884,9 +81144,15 @@ class Game {
       }
       case 'door': {
         this.player.human.animator.setState(STATES.DOOR);
-        const name = result.lot && result.lot.name;
-        this.hud.say(name ? 'The door to ' + name + ' is locked from the inside.' : 'Locked.');
-        audio.doorClose();
+        const cell = this.interiors ? this.interiors.enter(result.door || result.lot && { lot: result.lot }) : null;
+        if (cell) {
+          const room = cell.plan.entryRoom;
+          this.hud.say('Inside the ' + cell.name + '. ' + cell.rooms.length + ' rooms' +
+            (room && room.role ? ', you\'re in the ' + room.role : '') + '.');
+        } else {
+          this.hud.say('That one won\'t open.');
+          audio.doorClose();
+        }
         break;
       }
       case 'atm':
@@ -79947,6 +81213,21 @@ class Game {
   syncInputSuspend() {
     this.input.setSuspended(this.hud.chatOpen || this.hud.settingsOpen || this.hud.powersOpen ||
       (this.map && this.map.visible) || (this.book && this.book.visible));
+  }
+
+  /**
+   * USE, indoors. Near the door you came in by, it takes you back out. The rest
+   * of the time it isn't an interior action at all.
+   * @returns true if it handled the press
+   */
+  doInterior() {
+    if (!this.interiors || !this.interiors.inside) return false;
+    const prompt = this.interiors.exitPrompt();
+    if (!prompt) return false;
+    this.player.human.animator.setState(STATES.DOOR);
+    this.interiors.leave();
+    this.hud.say('Back on the street.');
+    return true;
   }
 
   /** A hostile or an infected person reached you. */
@@ -80105,13 +81386,30 @@ class Game {
   }
 
   // -------------------------------------------------------------------------
+  /** The player as saved: outside the building, if they are in one. */
+  playerStateForSave() {
+    const state = this.player.serialize();
+    const cell = this.interiors && this.interiors.current;
+    if (cell) {
+      const lot = cell.lot;
+      const rot = lot.rot || 0;
+      state.x = lot.x - Math.sin(rot) * (lot.d * 0.5 + 2.4);
+      state.z = lot.z + Math.cos(rot) * (lot.d * 0.5 + 2.4);
+      state.y = this.world.groundAt(state.x, state.z);
+    }
+    return state;
+  }
+
   /** Everything that makes this world what it is, ready for its slot. */
   serializeWorld() {
     return {
       worldName: this.worldName,
       worldSeed: this.worldSeed,
       options: this.worldOptions || null,
-      player: this.player.serialize(),
+      // Saved indoors, you come back on the doorstep: the interior is rebuilt
+      // when you walk in, so a position inside one would drop you into a solid
+      // building next time.
+      player: this.playerStateForSave(),
       time: this.atmosphere.timeOfDay,
       day: this.atmosphere.day,
       weather: this.atmosphere.weather,
@@ -80248,6 +81546,7 @@ function boot() {
   // from having to reach into module internals.
   game.__perf = perf;
   game.__features = featureLibrary;
+  game.__settings = settings;
   game.__POWERS = POWERS;
   game.__save = {
     listWorlds, createWorld, saveWorld, loadWorld, getWorld, renameWorld,

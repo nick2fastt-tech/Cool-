@@ -332,6 +332,136 @@ if (naming.bad) { errors.push('NAMING: a V1/V2/V3 label is on screen'); log('>>>
 if (naming.quality.length !== 3) { errors.push('PRESETS: the quality menu shows '+naming.quality.length+' of LOW/HIGH/ULTRA'); log('>>> PRESET NAMES FAILED'); }
 
 
+// Interiors: walk into a building, find rooms and furniture, be stopped by the
+// walls, and come back out on the street.
+log('--- interiors ---');
+const interiors = await page.evaluate(async ()=>{
+  const g = window.__t10;
+  const pump = async (n)=>{ for (let f=0;f<n;f++) await new Promise(r=>requestAnimationFrame(()=>r())); };
+  const I = g.interiors;
+  if (!I) return { error: 'no interior system' };
+  // The nearest door, whatever building it belongs to.
+  const p = g.player.position;
+  let door = null, bd = 1e9;
+  for (const chunk of g.world.chunks.values()) {
+    for (const it of chunk.interactables) {
+      if (it.action !== 'enter') continue;
+      const d = Math.hypot(it.x - p.x, it.z - p.z);
+      if (d < bd) { bd = d; door = it; }
+    }
+  }
+  if (!door) return { error: 'no door in the loaded chunks' };
+  const out = { doorDistance: Math.round(bd), kind: door.lot.kind };
+
+  const cell = I.enter(door);
+  if (!cell) return Object.assign(out, { error: 'the door would not open' });
+  await pump(3);
+
+  let tris = 0, meshes = 0;
+  cell.group.traverse((o)=>{ if (o.isMesh && o.geometry.index) { tris += o.geometry.index.count/3; meshes++; } });
+  out.built = { rooms: cell.rooms.length, roles: cell.rooms.map(r=>r.role), tris, meshes,
+                colliders: cell.colliders.length, height: +cell.height.toFixed(2) };
+  out.inside = !!g.player.indoors;
+  out.onFloor = Math.abs(g.player.position.y - cell.floorY) < 0.6;
+
+  // The walls have to stop you. Walk hard at each of the four sides and check
+  // you are still within the footprint afterwards.
+  const lot = cell.lot, rot = lot.rot || 0;
+  const span = Math.max(cell.plan.w, cell.plan.d) * 0.5 + 1.2;
+  let escaped = 0;
+  for (const [dx, dz] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+    g.player.teleport(cell.entry.x, cell.entry.z, cell.floorY + 0.02);
+    for (let i=0;i<70;i++) {
+      g.player.position.x += dx * 0.25;
+      g.player.position.z += dz * 0.25;
+      g.world.resolveCollision(g.player.position, 0.36);
+    }
+    const ox = g.player.position.x - lot.x, oz = g.player.position.z - lot.z;
+    const lx = ox * Math.cos(-rot) - oz * Math.sin(-rot);
+    const lz = ox * Math.sin(-rot) + oz * Math.cos(-rot);
+    // The front doorway is a real gap, so leaving that way is allowed.
+    const throughTheDoor = lz > 0 && Math.abs(lx) < 1.4;
+    if (!throughTheDoor && (Math.abs(lx) > span || Math.abs(lz) > span)) escaped++;
+  }
+  out.escaped = escaped;
+
+  // Furniture is solid too: standing in a wall or a desk should push you out.
+  g.player.teleport(cell.entry.x, cell.entry.z, cell.floorY + 0.02);
+  await pump(2);
+
+  I.leave();
+  await pump(2);
+  out.leftInside = !!g.player.indoors;
+  out.backOutside = Math.abs(g.player.position.y - g.world.groundAt(g.player.position.x, g.player.position.z)) < 1.2;
+  out.cellsKept = I.cells.size;
+
+  // T10 can do it too.
+  const said = g.t10.handle('T10 take me inside');
+  out.byVoice = !!g.player.indoors;
+  out.voiceReply = (said.reply || '').slice(0, 60);
+  g.t10.handle('T10 take me outside');
+  out.outAgain = !g.player.indoors;
+  I.clear();
+  return out;
+});
+log('interiors:', JSON.stringify(interiors));
+if (interiors.error) { errors.push('INTERIORS: ' + interiors.error); log('>>> INTERIORS FAILED'); }
+else {
+  if (!interiors.built || interiors.built.rooms < 2) { errors.push('INTERIORS: fewer than two rooms'); log('>>> INTERIOR PLAN FAILED'); }
+  if (!interiors.built || interiors.built.tris < 200) { errors.push('INTERIORS: almost nothing was built'); log('>>> INTERIOR GEOMETRY FAILED'); }
+  if (!interiors.inside || !interiors.onFloor) { errors.push('INTERIORS: entering did not put you on the floor inside'); log('>>> INTERIOR ENTRY FAILED'); }
+  if (interiors.escaped) { errors.push('INTERIORS: walked through ' + interiors.escaped + ' of 4 walls'); log('>>> INTERIOR WALLS FAILED'); }
+  if (interiors.leftInside || !interiors.backOutside) { errors.push('INTERIORS: leaving did not put you back on the street'); log('>>> INTERIOR EXIT FAILED'); }
+  if (!interiors.byVoice || !interiors.outAgain) { errors.push('INTERIORS: T10 could not take you in and out'); log('>>> INTERIOR VOICE FAILED'); }
+}
+// A look around inside, from the middle of the plan.
+await page.evaluate(async ()=>{
+  const g = window.__t10;
+  const I = g.interiors;
+  let door = null, bd = 1e9;
+  const p = g.player.position;
+  for (const chunk of g.world.chunks.values()) {
+    for (const it of chunk.interactables) {
+      if (it.action !== 'enter') continue;
+      const d = Math.hypot(it.x - p.x, it.z - p.z);
+      if (d < bd) { bd = d; door = it; }
+    }
+  }
+  if (!door) return;
+  const cell = I.enter(door);
+  if (!cell) return;
+  // Stand in the doorway looking down the plan, third person so you can see the
+  // room. Face the middle of the building, whichever way the lot is turned.
+  g.player.setCameraMode('third');
+  g.player.yaw = Math.atan2(cell.lot.x - g.player.position.x, cell.lot.z - g.player.position.z);
+  g.player.heading = g.player.yaw;
+  for (let f = 0; f < 6; f++) await new Promise(r=>requestAnimationFrame(()=>r()));
+});
+await page.waitForTimeout(1500);
+await page.screenshot({ path: SHOT+'/sys-5-interior.png' });
+await page.evaluate(()=>{ const g = window.__t10; if (g.interiors) g.interiors.leave(); g.player.setCameraMode('first'); });
+await page.waitForTimeout(600);
+
+// What the device scaling actually produced, in the browser rather than in node.
+const deviceScaling = await page.evaluate(()=>{
+  const s = window.__t10.__settings;
+  if (!s) return { error: 'settings not exposed' };
+  const out = { tier: s.device.tier, cores: s.device.cores, memory: s.device.memory, presets: {} };
+  for (const q of ['low', 'high', 'ultra']) {
+    const p = s.presetFor(q);
+    out.presets[q] = { draw: Math.round(p.drawDistance), npcs: p.npcBudget, tex: p.textureSize,
+      shadow: p.shadowMapSize, lights: p.maxDynamicLights, ssr: !!p.ssr, ssao: !!p.ssao, bloom: !!p.bloom };
+  }
+  return out;
+});
+log('device scaling:', JSON.stringify(deviceScaling));
+if (deviceScaling.error) errors.push('DEVICE: ' + deviceScaling.error);
+else {
+  const u = deviceScaling.presets.ultra, h = deviceScaling.presets.high;
+  if (!u.ssr || !u.ssao || !u.bloom) errors.push('DEVICE: ULTRA lost an effect on this device');
+  if (u.draw < h.draw || u.npcs < h.npcs) errors.push('DEVICE: ULTRA came out below HIGH');
+}
+
 // The powers interface, at phone size, where it has to work first.
 log('--- powers interface ---');
 await page.evaluate(()=>{ const g=window.__t10; g.hud.setPowersOpen(true); g.hud.updatePowers(g.powers, true); });

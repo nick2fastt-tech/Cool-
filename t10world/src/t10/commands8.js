@@ -4,6 +4,7 @@ import { POWERS, ENERGY_MAX } from '../player/powers.js';
 import { CREATURES, CREATURE_IDS, CREATURE_FAMILIES } from '../entities/creatures.js';
 import { STRAINS, STRAIN_IDS, STAGES } from '../entities/mutation.js';
 import { CATEGORIES, featuresIn, featureStats, searchFeatures, liveIdeas } from './features.js';
+import { INTERIOR_KINDS, kindPlan } from '../world/interiors.js';
 import { settings, QUALITY_ORDER } from '../core/settings.js';
 import { clampv, plural } from '../core/math.js';
 
@@ -275,6 +276,100 @@ export function extendRegistry8(R, add) {
     'Every strain and what it turns someone into.',
     () => STRAIN_IDS.map((id) => STRAINS[id].name + ' → ' + (CREATURES[STRAINS[id].becomes] || { name: STRAINS[id].becomes }).name).join(', ') + '.');
 
+
+  // ===== 66. Going inside ==================================================
+  const nearestDoor = (ctx, radius) => {
+    const p = ctx.player.position;
+    let best = null, bd = radius || 60;
+    for (const chunk of ctx.world.chunks.values()) {
+      for (const it of chunk.interactables) {
+        if (it.action !== 'enter') continue;
+        const d = Math.hypot(it.x - p.x, it.z - p.z);
+        if (d < bd) { bd = d; best = it; }
+      }
+    }
+    return best;
+  };
+
+  add('go_inside', 'Inside',
+    ['take me inside', 'let me in', 'go inside', 'take me in', 'open this door',
+     'let me into this building', 'i want to go inside', 'take me indoors'],
+    'Walk into the nearest building.',
+    (ctx) => {
+      const I = ctx.game.interiors;
+      if (!I) return 'There\'s nothing to go into.';
+      if (I.inside) return I.status();
+      const door = nearestDoor(ctx, 70);
+      if (!door) return 'No door close enough. Walk up to one and I\'ll open it.';
+      const cell = I.enter(door);
+      if (!cell) return 'That one won\'t open.';
+      return 'Inside the ' + cell.name + '. ' + cell.rooms.length + ' rooms — have a look around.';
+    });
+
+  add('go_outside', 'Inside',
+    ['take me outside', 'let me out', 'go outside', 'get me out of here', 'back to the street',
+     'leave the building', 'i want to go outside'],
+    'Step back out onto the street.',
+    (ctx) => {
+      const I = ctx.game.interiors;
+      if (!I || !I.inside) return 'You\'re already outside.';
+      const name = I.current.name;
+      I.leave();
+      return 'Out of the ' + name + ' and back on the street.';
+    });
+
+  add('inside_where', 'Inside',
+    ['where am i inside', 'what room is this', 'what is in here', 'am i inside',
+     'what building is this inside'],
+    'What you are standing in.',
+    (ctx) => (ctx.game.interiors ? ctx.game.interiors.status() : 'You\'re outside.'));
+
+  // Several kinds share a word — a police station and Union Station are both
+  // "a station" — so the commands are keyed by the word, not the kind.
+  const BY_NAME = new Map();
+  for (const kind of Object.keys(INTERIOR_KINDS)) {
+    const n = INTERIOR_KINDS[kind].name;
+    if (!BY_NAME.has(n)) BY_NAME.set(n, []);
+    BY_NAME.get(n).push(kind);
+  }
+  for (const [name, kinds] of BY_NAME) {
+    add('go_inside_' + name.replace(/\s+/g, '_'), 'Inside',
+      ['take me into a ' + name, 'find me a ' + name + ' to go into',
+       'take me inside a ' + name, 'let me into a ' + name],
+      'Find a ' + name + ' and go in.',
+      (ctx) => {
+        const I = ctx.game.interiors;
+        if (!I) return 'There\'s nothing to go into.';
+        const p = ctx.player.position;
+        let best = null, bd = 400;
+        for (const lot of ctx.world.city.lotsNear(p.x, p.z, 400)) {
+          if (kinds.indexOf(lot.kind) < 0) continue;
+          const d = Math.hypot(lot.x - p.x, lot.z - p.z);
+          if (d < bd) { bd = d; best = lot; }
+        }
+        if (!best) return 'No ' + name + ' within a few blocks.';
+        const rot = best.rot || 0;
+        // Stand outside its front door first, then walk in.
+        const ox = best.x - Math.sin(rot) * (best.d * 0.5 + 2.4);
+        const oz = best.z + Math.cos(rot) * (best.d * 0.5 + 2.4);
+        ctx.player.teleport(ox, oz, ctx.world.groundAt(ox, oz));
+        const cell = I.enter({ lot: best });
+        return cell ? 'Inside a ' + cell.name + ', ' + Math.round(bd) + ' metres from where you were.'
+          : 'Found one, but the door wouldn\'t open.';
+      });
+  }
+
+  add('inside_rooms', 'Inside',
+    ['what rooms are in here', 'how many rooms', 'list the rooms', 'what is in this building'],
+    'The rooms in the building you are in.',
+    (ctx) => {
+      const I = ctx.game.interiors;
+      if (!I || !I.inside) return 'You\'d have to be inside one first.';
+      const tally = {};
+      for (const r of I.current.rooms) tally[r.role] = (tally[r.role] || 0) + 1;
+      return Object.keys(tally).map((k) => (tally[k] > 1 ? tally[k] + ' ' + k + 's' : 'a ' + k)).join(', ') + '.';
+    });
+
   // ===== 63. Worlds ========================================================
   add('world_list', 'Worlds',
     ['what worlds do i have', 'list my worlds', 'show my worlds', 'how many worlds do i have'],
@@ -417,9 +512,25 @@ export function extendRegistry8(R, add) {
 
   add('perf_presets', 'Performance',
     ['what quality am i on', 'what preset is this', 'which graphics setting am i using'],
-    'Which preset is active.',
-    () => 'You\'re on ' + String(settings.get('quality')).toUpperCase() + '. The three are ' +
-      QUALITY_ORDER.map((q) => q.toUpperCase()).join(', ') + '.');
+    'Which preset is active, and what it comes out as on this device.',
+    () => {
+      const p = settings.preset;
+      return 'You\'re on ' + String(settings.get('quality')).toUpperCase() + ' — on this ' +
+        settings.device.tier + ' that\'s a ' + Math.round(p.drawDistance) + ' metre view, ' +
+        p.npcBudget + ' people simulated, ' + p.textureSize + 'px textures' +
+        (p.shadows ? ', ' + p.shadowMapSize + 'px shadows' : ', no shadows') + '. The three are ' +
+        QUALITY_ORDER.map((q) => q.toUpperCase()).join(', ') + '.';
+    });
+
+  add('perf_device', 'Performance',
+    ['what device am i on', 'what hardware is this', 'what can this device handle', 'what phone is this'],
+    'What the game worked out about this device.',
+    () => {
+      const d = settings.device;
+      return 'A ' + d.tier + ': ' + d.cores + ' cores, ' + d.memory + 'GB, ' +
+        d.screenW + '×' + d.screenH + ' at ' + d.dpr + '×. Every preset is sized to that — ' +
+        'ULTRA keeps every effect on and shrinks the numbers instead.';
+    });
 }
 
 function namePart(text) {

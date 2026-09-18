@@ -800,6 +800,11 @@ export function extendRegistry(R, add) {
       p.root.visible = true; p.root.scale.setScalar(1);
       ctx.setGravity(1);
       ctx.world.clearSpawnedProps();
+      // Reset means outside, on the street, with nothing held open.
+      if (ctx.game.interiors) ctx.game.interiors.clear();
+      if (ctx.game.creatures) ctx.game.creatures.clear();
+      if (ctx.game.mutations) ctx.game.mutations.cureAll();
+      if (ctx.game.powers) ctx.game.powers.stopAll();
       ctx.trafficLightOverride = null;
       ctx.forceStreetLights = null;
       return 'World reset. Fresh start.';

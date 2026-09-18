@@ -45,6 +45,10 @@ export class World {
     this.nightFactor = 0;
     this.wetness = 0;
     this.spawnedProps = [];
+    // Set while the player is inside a building: that lot's own walls are
+    // ignored and the interior's walls are used instead.
+    this.insideLot = null;
+    this.interiorColliders = null;
 
     this.buildStatic();
   }
@@ -395,7 +399,9 @@ export class World {
           lot, radius: 2.4, action: 'enter',
         });
       }
-      for (const c of result.colliders) chunk.colliders.push(c);
+      // Remember which lot each collider came from: standing inside a building
+      // means its own walls stop pushing you around.
+      for (const c of result.colliders) { c.lot = lot; chunk.colliders.push(c); }
       for (const l of result.lights) chunk.lights.push(l);
     }
   }
@@ -764,38 +770,59 @@ export class World {
   }
 
   /** Push a circle out of any building/vehicle collider it overlaps. */
+  /**
+   * While you are inside a building, its own footprint stops being solid and
+   * the interior's walls take over.
+   */
+  setInteriorColliders(list) {
+    this.interiorColliders = list && list.length ? list : null;
+  }
+
   resolveCollision(pos, radius) {
     const cells = 2;
     const cx = Math.floor(pos.x / 20), cz = Math.floor(pos.z / 20);
     let hit = false;
+    if (this.interiorColliders) {
+      for (const c of this.interiorColliders) {
+        if (this.pushOut(pos, radius, c)) hit = true;
+      }
+    }
     for (let i = -cells; i <= cells; i++) {
       for (let j = -cells; j <= cells; j++) {
         const list = this.colliderHash.get((cx + i) + ':' + (cz + j));
         if (!list) continue;
         for (const c of list) {
           if (c.hollow) continue;
-          if (pos.y > (c.h || 6) + 0.5) continue;
-          const dx = pos.x - c.x, dz = pos.z - c.z;
-          const cs = Math.cos(-(c.rot || 0)), sn = Math.sin(-(c.rot || 0));
-          const lx = dx * cs - dz * sn, lz = dx * sn + dz * cs;
-          const hw = c.w * 0.5 + radius, hd = c.d * 0.5 + radius;
-          // Standing on top of it isn't a collision.
-          if (pos.y > (c.baseY || 0) + (c.h || 0) - 0.25) continue;
-          if (Math.abs(lx) < hw && Math.abs(lz) < hd) {
-            // Push out along the shallowest axis.
-            const penX = hw - Math.abs(lx), penZ = hd - Math.abs(lz);
-            let nlx = lx, nlz = lz;
-            if (penX < penZ) nlx = Math.sign(lx || 1) * hw;
-            else nlz = Math.sign(lz || 1) * hd;
-            const cs2 = Math.cos(c.rot || 0), sn2 = Math.sin(c.rot || 0);
-            pos.x = c.x + nlx * cs2 - nlz * sn2;
-            pos.z = c.z + nlx * sn2 + nlz * cs2;
-            hit = true;
-          }
+          if (this.insideLot && c.lot === this.insideLot) continue;
+          if (this.pushOut(pos, radius, c)) hit = true;
         }
       }
     }
     return hit;
+  }
+
+  /** One box against one point. @returns true if it moved. */
+  pushOut(pos, radius, c) {
+    // `h` is the box's height above its own base, so a room on a hill and a
+    // wall at sea level are tested the same way.
+    const top = (c.baseY || 0) + (c.h == null ? 6 : c.h);
+    if (pos.y > top + 0.5) return false;
+    const dx = pos.x - c.x, dz = pos.z - c.z;
+    const cs = Math.cos(-(c.rot || 0)), sn = Math.sin(-(c.rot || 0));
+    const lx = dx * cs - dz * sn, lz = dx * sn + dz * cs;
+    const hw = c.w * 0.5 + radius, hd = c.d * 0.5 + radius;
+    // Standing on top of it isn't a collision.
+    if (pos.y > top - 0.25) return false;
+    if (Math.abs(lx) >= hw || Math.abs(lz) >= hd) return false;
+    // Push out along the shallowest axis.
+    const penX = hw - Math.abs(lx), penZ = hd - Math.abs(lz);
+    let nlx = lx, nlz = lz;
+    if (penX < penZ) nlx = Math.sign(lx || 1) * hw;
+    else nlz = Math.sign(lz || 1) * hd;
+    const cs2 = Math.cos(c.rot || 0), sn2 = Math.sin(c.rot || 0);
+    pos.x = c.x + nlx * cs2 - nlz * sn2;
+    pos.z = c.z + nlx * sn2 + nlz * cs2;
+    return true;
   }
 
   // =========================================================================

@@ -111,6 +111,17 @@ from clear to thunderstorm, rain that wets the roads and changes how they
 reflect, fog, wind and lightning. Night looks nothing like day: windows light up
 building by building, street lights come on, headlights sweep the road.
 
+**Inside** — every door in the city opens. The building's own footprint is split
+into rooms by a binary partition, so the inside fits the outside and no room is
+ever walled off; each room takes a role from what the building is — a house gets
+a hall, a living room, a kitchen, bedrooms and a bathroom; a shop gets aisles
+and a counter; an office gets a reception and desks; a hospital gets wards; a
+church gets pews — and furnishes itself to match. The walls are solid, the
+ceiling lights are on, the rain stops at the threshold, and somebody is usually
+in there. Walk back out through the door you came in by, or say
+`T10 take me outside`. The subway is the same idea underground: three lines,
+trains you board and sit on.
+
 **Worlds** — you can keep as many as you like, and each one is its own
 universe: its own seed and city, its own people, animals and traffic, its own
 weather and hour, its own spawned objects, creature designs and world rules
@@ -180,8 +191,25 @@ together: shadow map size and distance, cascade count, draw and streaming
 distance, prop, tree and grass density, crowd, traffic and animal budgets,
 background population, physics rate, human mesh resolution, whether fingers get
 their own bones, facial animation, animation rate, rain particle count, gore
-budget, texture size and the post-processing chain. ULTRA adds ray-marched
-screen-space reflections.
+budget, texture size and the post-processing chain.
+
+### The preset decides the look; the device decides the numbers
+
+ULTRA on a phone is still ULTRA. Every effect stays on — ray-marched
+screen-space reflections, ambient occlusion, bloom, volumetric light, contact
+shadows, wet roads and puddles — and what shrinks instead is the budgets: view
+distance, how many people and cars are simulated, texture and shadow map size,
+particle counts, dynamic lights.
+
+The game reads the device once at startup (touch, screen size, cores, memory,
+pixel ratio, and what the GL driver will admit to), sorts it into phone, tablet,
+laptop or desktop, and scales each preset by how much that preset was written to
+depend on a desktop: LOW barely moves, because it was already a phone build;
+ULTRA moves the most. The written preset is always the ceiling — a strong
+machine gets exactly what the preset says and no more — and the three are
+computed together so ULTRA can never come out below HIGH on any device. Settings
+shows what yours actually came out as, and `T10 what quality am I on` reads it
+back.
 
 ### Holding the frame rate
 
@@ -199,7 +227,13 @@ Resolution is last, because a soft picture is the most obvious cut of all. It
 climbs back up the same ladder in reverse when there is room. On top of that it
 watches for **thermal throttling** — the same workload getting slower the longer
 a session runs — and holds the ceiling down when it sees it, rather than
-oscillating into a hot phone. `T10 how is performance` reads the whole thing
+oscillating into a hot phone.
+
+Two more things keep a stall from becoming a stutter you feel. Streaming gives
+way: on a frame that is already late, no chunk is built at all, for up to three
+frames in a row. And the governor does not wait for an average — two frames far
+over budget, or six in a row over it, and a rung comes off immediately.
+`T10 how is performance` reads the whole thing
 back.
 
 ---
@@ -216,7 +250,8 @@ src/
   human/       skeleton, parametric body mesh, sculpted head, hair, clothing,
                procedural textures, animator, identity generation
   world/       city layout (roads, blocks, lots, districts), building
-               generation, props, materials, chunk streaming and collision
+               generation, interiors and their floor plans, the subway, props,
+               materials, chunk streaming and collision
   entities/    NPC life simulation, vehicles and physics, traffic AI, animals,
                apocalypses, blood and gibs, the 400-weapon armoury, the
                creature bestiary, the mutation system
@@ -246,6 +281,8 @@ real browser through Playwright and render actual frames:
 node tools/check-commands.mjs                    # registry + feature library, no browser
 node tools/run-test.mjs /tools/test-human.html   # human generation + rig
 node tools/run-test.mjs /tools/test-creatures.html   # every creature, built and rendered
+node tools/run-test.mjs /tools/test-interiors.html   # a floor plan for every building kind
+node tools/play-systems.mjs                      # the newest systems, one boot, fast
 node tools/play.mjs                              # full game, end to end
 node tools/play-single.mjs ../t10world.html      # the bundled build
 ```
@@ -261,6 +298,12 @@ walks you the way you pushed it, that a zero-height viewport heals itself, that
 the touch pad has exactly the buttons it should, that bullets land and bleed,
 that the subway takes you somewhere, that all sixteen powers fire and cost
 energy, that every creature spawns and moves and can be shot, that a mutation
-runs through its stages and produces no gore, that the performance ladder gives
-things up in order and comes back, and that the world library round-trips a
-save.
+runs through its stages and produces no gore, that you can walk into a building
+and not walk out through its walls, that the performance ladder gives things up
+in order and comes back, and that the world library round-trips a save.
+
+`play-systems.mjs` runs the same checks for the newest systems only, on one
+boot, which is a minute rather than twenty. `test-interiors.html` builds a floor
+plan for all twenty-five building kinds and fails if any plan is not a tree —
+one doorway per split means every room is reachable, and the wall count being
+one less than the room count is what proves it.

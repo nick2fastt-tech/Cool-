@@ -331,7 +331,15 @@ export class HUD {
     }
     // T10 can change quality too, so the blurb tracks the setting rather than
     // whichever button was last clicked.
-    if (this.qualityBlurb) this.qualityBlurb.textContent = QUALITY_PRESETS[q].blurb;
+    if (this.qualityBlurb) {
+      // Say what the preset actually comes out as here, so ULTRA on a phone
+      // reads as a real setting rather than a promise the device can't keep.
+      const p = settings.preset;
+      this.qualityBlurb.textContent = QUALITY_PRESETS[q].blurb + '\n' +
+        'On this ' + settings.device.tier + ': ' + Math.round(p.drawDistance) + 'm view · ' +
+        p.npcBudget + ' people · ' + p.textureSize + 'px textures · ' +
+        (p.shadows ? p.shadowMapSize + ' shadows' : 'no shadows');
+    }
     if (this.maturityButtons) {
       const age = settings.get('maturity');
       for (const k of [18, 16]) this.maturityButtons[k].classList.toggle('active', k === age);

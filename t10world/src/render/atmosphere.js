@@ -204,6 +204,27 @@ export class Atmosphere {
     this.scene.fog = new THREE.Fog(0x9ec4e8, 120, 700);
   }
 
+  /**
+   * Indoors: the sky is still out there through the door, but the sun does not
+   * reach you and the weather stops at the threshold.
+   */
+  setIndoors(on) {
+    if (this.indoors === !!on) return;
+    this.indoors = !!on;
+    if (this.indoors) {
+      this._inHemi = this.hemi.intensity;
+      this._inAmbient = this.ambient.intensity;
+      this._inSun = this.sun.intensity;
+      this.hemi.intensity *= 0.35;
+      this.ambient.intensity = Math.max(this.ambient.intensity, 0.22);
+      this.sun.intensity *= 0.25;
+    } else {
+      if (this._inHemi != null) this.hemi.intensity = this._inHemi;
+      if (this._inAmbient != null) this.ambient.intensity = this._inAmbient;
+      if (this._inSun != null) this.sun.intensity = this._inSun;
+    }
+  }
+
   /** Underground there is no sky and no sun; the station lights do the work. */
   setUnderground(on) {
     if (this.underground === !!on) return;
@@ -546,7 +567,8 @@ export class Atmosphere {
     const snow = clamp01(this.current.snow || 0);
     this.rainMat.uniforms.uOpacity.value = amount * 0.85;
     this.rainMat.uniforms.uSnow.value = snow;
-    this.rain.visible = amount > 0.02;
+    // Rain stops at the threshold: underground and indoors there is none.
+    this.rain.visible = amount > 0.02 && !this.underground && !this.indoors;
     if (!this.rain.visible || !focus) return;
     const pos = this.rain.geometry.attributes.position;
     const arr = pos.array;

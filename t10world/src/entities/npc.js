@@ -217,6 +217,25 @@ export class NPC {
   // -------------------------------------------------------------------------
   update(dt, playerPos, lod) {
     this.lodLevel = lod;
+    // Somebody who lives or works in the room you walked into. They stay put —
+    // a person wandering off through an interior wall looks far worse than a
+    // person standing still — but they are awake, and you can talk to them.
+    if (this.controlled === 'indoor') {
+      this.targetSpeed = 0;
+      this.speed = 0;
+      this.activityTimer -= dt;
+      if (this.talkTimer > 0) this.talkTimer -= dt;
+      if (this.activityTimer <= 0) {
+        this.activityTimer = this.rng.range(4, 12);
+        this.heading = wrapAngle(this.heading + this.rng.range(-1.3, 1.3));
+        if (this.rng.chance(0.25)) this.human.animator.setState(STATES.PHONE);
+        else this.human.animator.setState(STATES.IDLE);
+      }
+      this.root.rotation.y = dampAngle(this.root.rotation.y, this.heading, 0.06, dt);
+      this.human.update(dt, { speed: 0, turnRate: 0, grounded: true, verticalVel: 0 });
+      return;
+    }
+
     // Frozen, or mid-mutation: they stay where they are. The mutation system
     // owns the pose and the tremor from here.
     if (this.controlled === 'freeze' || this.controlled === 'mutating') {
@@ -792,7 +811,9 @@ export class NPCManager {
     if (!this.background) this.background = [];
     for (let i = this.npcs.length - 1; i >= 0; i--) {
       const n = this.npcs[i];
-      if (n.protected || n.controlled === 'follow') continue;
+      // People who are following you, and people standing in the room you are
+      // standing in, are not swapped out from under you.
+      if (n.protected || n.controlled === 'follow' || n.controlled === 'indoor') continue;
       if (Math.hypot(n.position.x - px, n.position.z - pz) > maxDist) {
         this.background.push({
           x: n.position.x, z: n.position.z, tx: n.position.x, tz: n.position.z,

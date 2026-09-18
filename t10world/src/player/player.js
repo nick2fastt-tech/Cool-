@@ -63,6 +63,8 @@ export class Player {
     this.isZombie = false;
     this.inSubway = false;
     this.groundOverride = null;
+    // The interior you are standing in, or null out on the street.
+    this.indoors = null;
     this.jumpMultiplier = 1;
 
     this.cameraMode = settings.get('cameraMode');
@@ -252,7 +254,11 @@ export class Player {
     const moveScale = this.grounded || this.swimming || this.flying ? 1 : 0.72;
     this.position.x += Math.sin(this.heading) * this.speed * moveScale * dt;
     this.position.z += Math.cos(this.heading) * this.speed * moveScale * dt;
-    if (!this.noclip && this.groundOverride == null) this.world.resolveCollision(this.position, 0.36);
+    // Underground the floor is the only thing there is, so collision is off.
+    // Indoors it is very much on — walls are the whole point of a room.
+    if (!this.noclip && (this.groundOverride == null || this.indoors)) {
+      this.world.resolveCollision(this.position, 0.36);
+    }
 
     // Keep the player inside the world.
     const LIM = 1180;
@@ -494,7 +500,13 @@ export class Player {
         anchor.copy(this.inVehicle.position);
         anchor.y += this.inVehicle.spec.h * 0.85;
       }
-      this.camDistance = damp(this.camDistance, this.camDistanceTarget, 0.01, dt);
+      // Indoors the camera comes in close and loses the shoulder offset: a
+      // four-metre room has nowhere to put a camera four metres back, and one
+      // that keeps clipping through the wall behind you is worse than one that
+      // sits over your shoulder.
+      let want = this.camDistanceTarget;
+      if (this.indoors) want = Math.min(want, 1.85);
+      this.camDistance = damp(this.camDistance, want, this.indoors ? 0.004 : 0.01, dt);
       const dist = this.camDistance;
       const offX = Math.sin(this.yaw) * Math.cos(this.pitch);
       const offY = Math.sin(this.pitch);
@@ -502,7 +514,7 @@ export class Player {
       _v2.set(anchor.x - offX * dist, anchor.y - offY * dist + 0.25, anchor.z - offZ * dist);
       // Shoulder offset so the character isn't dead centre.
       const rightX = -Math.cos(this.yaw), rightZ = Math.sin(this.yaw);
-      const shoulder = this.inVehicle ? 0 : this.camOffsetX;
+      const shoulder = this.inVehicle ? 0 : this.camOffsetX * (this.indoors ? 0.45 : 1);
       _v2.x += rightX * shoulder;
       _v2.z += rightZ * shoulder;
 

@@ -1,0 +1,73 @@
+<!doctype html><html><head><meta charset="utf-8"><title>T10 interior test</title>
+<style>body{margin:0;background:#11151a}canvas{display:block}</style></head>
+<body><canvas id="c" width="1500" height="900"></canvas>
+<script type="module">
+window.__results = { logs: [], errors: [], done: false };
+const log = (...a) => { window.__results.logs.push(a.map(String).join(' ')); console.log(...a); };
+window.addEventListener('error', (e) => window.__results.errors.push('window:' + e.message));
+try {
+  const THREE = await import('../vendor/three.module.js');
+  const { settings } = await import('../src/core/settings.js');
+  settings.setQuality('high');
+  const { INTERIOR_KINDS, planInterior, buildInterior } = await import('../src/world/interiors.js');
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x11151a);
+  const game = { scene, world: { groundAt: () => 0 } };
+
+  // One of every kind, checked for a sane plan and real geometry.
+  const kinds = Object.keys(INTERIOR_KINDS);
+  let worst = null;
+  for (let i = 0; i < kinds.length; i++) {
+    const kind = kinds[i];
+    const lot = { x: 0, z: 0, w: 22, d: 18, rot: 0.3, kind, seed: (i * 2654435761) >>> 0 };
+    const plan = planInterior(lot);
+    const cell = buildInterior(game, lot);
+    let tris = 0;
+    cell.group.traverse((o) => { if (o.isMesh && o.geometry.index) tris += o.geometry.index.count / 3; });
+    const roles = cell.rooms.map((r) => r.role).join('/');
+    log(kind.padEnd(11), 'rooms=' + plan.rooms.length, 'walls=' + plan.walls.length,
+        'colliders=' + cell.colliders.length, 'tris=' + tris, 'h=' + plan.h, roles.slice(0, 56));
+    if (plan.rooms.length < 2) log('  TOO FEW ROOMS', kind);
+    if (tris < 150) log('  ALMOST NOTHING BUILT', kind);
+    if (!cell.colliders.length) log('  NO WALLS', kind);
+    // Every room must be reachable: with one doorway per split, the wall count
+    // is always one less than the room count.
+    if (plan.walls.length !== plan.rooms.length - 1) log('  PLAN NOT A TREE', kind, plan.walls.length, plan.rooms.length);
+    cell.group.parent && cell.group.parent.remove(cell.group);
+    if (kind === 'house') worst = cell;
+  }
+
+  // Render a house from above with the ceiling off, so the plan is visible.
+  const house = { x: 0, z: 0, w: 16, d: 13, rot: 0, kind: 'house', seed: 0x4a1b2c3d };
+  const cell = buildInterior(game, house);
+  scene.add(cell.group);
+  // Drop the ceiling so the rooms can be seen.
+  cell.group.traverse((o) => { if (o.isMesh) o.frustumCulled = false; });
+  const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true });
+  renderer.setSize(1500, 900, false);
+  scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x30302c, 1.9));
+  const key = new THREE.DirectionalLight(0xffffff, 1.2);
+  key.position.set(5, 14, 6);
+  scene.add(key);
+  const cam = new THREE.PerspectiveCamera(42, 1500 / 900, 0.1, 120);
+  cam.position.set(0.1, 15.5, 0.2);
+  cam.lookAt(0, 0, 0);
+  // Hide the ceiling slab: it is the topmost mesh in the batch.
+  for (const child of cell.group.children) {
+    child.onBeforeRender = () => {};
+  }
+  const ceilingY = cell.height + 0.05;
+  cam.near = 0.1;
+  cam.updateProjectionMatrix();
+  // A clipping plane just under the ceiling shows the plan from above.
+  renderer.localClippingEnabled = true;
+  const plane = new THREE.Plane(new THREE.Vector3(0, -1, 0), ceilingY - 0.35);
+  cell.group.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); o.material.clippingPlanes = [plane]; } });
+  renderer.render(scene, cam);
+  log('render OK', renderer.info.render.triangles, 'tris', renderer.info.render.calls, 'calls');
+} catch (e) {
+  window.__results.errors.push(e.stack || String(e));
+}
+window.__results.done = true;
+</script></body></html>

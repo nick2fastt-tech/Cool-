@@ -15,6 +15,7 @@ import * as featureLibrary from './t10/features.js';
 import { clamp01, clampv, lerpv, hashString, makeRng, TAU } from './core/math.js';
 import { World, CHUNK_SIZE } from './world/world.js';
 import { Subway } from './world/subway.js';
+import { Interiors } from './world/interiors.js';
 import { Atmosphere } from './render/atmosphere.js';
 import { PostProcessor } from './render/post.js';
 import { Player } from './player/player.js';
@@ -307,6 +308,7 @@ export class Game {
         this.creatures = new CreatureManager(this);
         this.subway = new Subway(this);
         this.subway.buildEntrances(this.world);
+        this.interiors = new Interiors(this);
         this.apocalypse = new Apocalypse(this);
         this.mutations = new Mutations(this);
         this.npcs.apocalypse = this.apocalypse;
@@ -401,6 +403,7 @@ export class Game {
     // timeScale drives bullet time; the governor still samples real frame time.
     const dt = Math.min(rawDt, 0.1) * (this.timeScale == null ? 1 : this.timeScale);
     this.frame++;
+    this.lastFrameMs = rawDt * 1000;
     if (this.phase === 'playing') this.perf.sample(rawDt, this);
 
     if (this.phase === 'creator') {
@@ -456,7 +459,18 @@ export class Game {
     this.world.setSnow(snow * clamp01(this.atmosphere.current.rain * 1.6));
     if (this.post) this.post.wetness = wet;
     this.world.cullCamera = this.camera;
-    this.world.update(dt, focus.x, focus.z, this.frame < 120 ? 10 : 5);
+    // Streaming gives way when the frame is already late: a new chunk is never
+    // worth a stutter you can feel. It can only stand aside for a few frames in
+    // a row, or a slow device would never finish building the city.
+    const lateMs = 1000 / 40;
+    let streamBudget = this.frame < 120 ? 10 : 5;
+    if (this.frame >= 120 && this.lastFrameMs > lateMs && this._streamSkips < 3) {
+      streamBudget = 0;
+      this._streamSkips++;
+    } else {
+      this._streamSkips = 0;
+    }
+    this.world.update(dt, focus.x, focus.z, streamBudget);
 
     p.update(dt, this.input, this.npcs, this.traffic);
     this.npcs.update(dt, p.position);
@@ -469,6 +483,7 @@ export class Game {
     if (this.creatures) this.creatures.update(dt, p.position);
     if (this.mutations) this.mutations.update(dt);
     if (this.subway) this.subway.update(dt, focus);
+    if (this.interiors) this.interiors.update(dt);
     if (this.arsenal) {
       this.arsenal.aiming = !!this.input.buttons.aim;
       // Holding USE keeps an automatic firing.
@@ -479,8 +494,10 @@ export class Game {
     }
     this.t10.update(dt);
 
-    // Interaction prompt.
-    const t = p.interactTarget;
+    // Interaction prompt. Indoors, standing by the door you came in by is the
+    // one thing USE does, so it says so.
+    const inside = this.interiors && this.interiors.exitPrompt();
+    const t = inside || p.interactTarget;
     if (t && settings.get('showInteractPrompts')) {
       this.hud.setPrompt(t.label, this.input.isTouch ? '' : keyLabel(settings.get('keyBindings').interact));
     } else {
@@ -524,6 +541,7 @@ export class Game {
   doInteract() {
     if (this.phase !== 'playing' || this.hud.chatOpen) return;
     if (this.arsenal && this.arsenal.armed) { this.arsenal.pullTrigger(); return; }
+    if (this.interiors && this.doInterior()) return;
     if (this.subway && this.doSubway()) return;
     if (this.player.isZombie && this.doZombieBite()) return;
     const result = this.player.interact(this);
@@ -539,9 +557,15 @@ export class Game {
       }
       case 'door': {
         this.player.human.animator.setState(STATES.DOOR);
-        const name = result.lot && result.lot.name;
-        this.hud.say(name ? 'The door to ' + name + ' is locked from the inside.' : 'Locked.');
-        audio.doorClose();
+        const cell = this.interiors ? this.interiors.enter(result.door || result.lot && { lot: result.lot }) : null;
+        if (cell) {
+          const room = cell.plan.entryRoom;
+          this.hud.say('Inside the ' + cell.name + '. ' + cell.rooms.length + ' rooms' +
+            (room && room.role ? ', you\'re in the ' + room.role : '') + '.');
+        } else {
+          this.hud.say('That one won\'t open.');
+          audio.doorClose();
+        }
         break;
       }
       case 'atm':
@@ -602,6 +626,21 @@ export class Game {
   syncInputSuspend() {
     this.input.setSuspended(this.hud.chatOpen || this.hud.settingsOpen || this.hud.powersOpen ||
       (this.map && this.map.visible) || (this.book && this.book.visible));
+  }
+
+  /**
+   * USE, indoors. Near the door you came in by, it takes you back out. The rest
+   * of the time it isn't an interior action at all.
+   * @returns true if it handled the press
+   */
+  doInterior() {
+    if (!this.interiors || !this.interiors.inside) return false;
+    const prompt = this.interiors.exitPrompt();
+    if (!prompt) return false;
+    this.player.human.animator.setState(STATES.DOOR);
+    this.interiors.leave();
+    this.hud.say('Back on the street.');
+    return true;
   }
 
   /** A hostile or an infected person reached you. */
@@ -760,13 +799,30 @@ export class Game {
   }
 
   // -------------------------------------------------------------------------
+  /** The player as saved: outside the building, if they are in one. */
+  playerStateForSave() {
+    const state = this.player.serialize();
+    const cell = this.interiors && this.interiors.current;
+    if (cell) {
+      const lot = cell.lot;
+      const rot = lot.rot || 0;
+      state.x = lot.x - Math.sin(rot) * (lot.d * 0.5 + 2.4);
+      state.z = lot.z + Math.cos(rot) * (lot.d * 0.5 + 2.4);
+      state.y = this.world.groundAt(state.x, state.z);
+    }
+    return state;
+  }
+
   /** Everything that makes this world what it is, ready for its slot. */
   serializeWorld() {
     return {
       worldName: this.worldName,
       worldSeed: this.worldSeed,
       options: this.worldOptions || null,
-      player: this.player.serialize(),
+      // Saved indoors, you come back on the doorstep: the interior is rebuilt
+      // when you walk in, so a position inside one would drop you into a solid
+      // building next time.
+      player: this.playerStateForSave(),
       time: this.atmosphere.timeOfDay,
       day: this.atmosphere.day,
       weather: this.atmosphere.weather,
@@ -903,6 +959,7 @@ export function boot() {
   // from having to reach into module internals.
   game.__perf = perf;
   game.__features = featureLibrary;
+  game.__settings = settings;
   game.__POWERS = POWERS;
   game.__save = {
     listWorlds, createWorld, saveWorld, loadWorld, getWorld, renameWorld,

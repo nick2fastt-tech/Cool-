@@ -1,5 +1,6 @@
 // T10 World - quality presets, user settings, persistence
 import { clamp01, clampv } from './math.js';
+import { detectDevice, effectivePresets, describeDevice } from './device.js';
 
 const STORAGE_KEY = 't10world.settings.v1';
 
@@ -203,12 +204,45 @@ class SettingsStore {
     this.load();
   }
 
-  get preset() { return QUALITY_PRESETS[this.data.quality] || QUALITY_PRESETS.high; }
+  /**
+   * The preset as this device will actually run it. The three presets decide
+   * what the game looks like; the device decides how much of it fits. Cached,
+   * because half the engine reads this every frame.
+   */
+  get preset() {
+    if (!this._preset || this._presetFor !== this.data.quality) this.refreshPreset();
+    return this._preset;
+  }
+
+  /** The preset as written, before the device had its say. */
+  get basePreset() { return QUALITY_PRESETS[this.data.quality] || QUALITY_PRESETS.high; }
+
+  get device() {
+    if (!this._device) this._device = detectDevice();
+    return this._device;
+  }
+
+  get deviceLabel() { return describeDevice(this.device); }
+
+  refreshPreset() {
+    this._presetFor = this.data.quality;
+    // All three are computed together so their order is guaranteed.
+    this._presets = effectivePresets(QUALITY_PRESETS, this.device, QUALITY_ORDER);
+    this._preset = this._presets[this.data.quality] || this._presets.high;
+    return this._preset;
+  }
+
+  /** What a given preset would be on this device, without switching to it. */
+  presetFor(name) {
+    if (!this._presets) this.refreshPreset();
+    return this._presets[name] || this._presets.high;
+  }
   get(key) { return this.data[key]; }
 
   set(key, value) {
     if (this.data[key] === value) return;
     this.data[key] = value;
+    if (key === 'quality') this.refreshPreset();
     this.save();
     this.emit(key, value);
   }
@@ -232,6 +266,7 @@ class SettingsStore {
     if (!QUALITY_PRESETS[name]) return false;
     this.data.quality = name;
     this.data.qualityPinned = true;
+    this.refreshPreset();
     this.save();
     this.emit('quality', name);
     return true;
@@ -345,6 +380,8 @@ export class PerformanceGovernor {
     this.cooldown = 2;
     this.targetMs = 1000 / 60;   // the goal is a steady sixty
     this.enabled = true;
+    this.spikes = 0;             // recent frames far over budget
+    this.slowRun = 0;            // frames in a row over budget
     this.apply();
   }
 
@@ -372,10 +409,29 @@ export class PerformanceGovernor {
 
   update(dt, monitor) {
     if (!this.enabled) return this.scale;
-    this.samples.push(dt * 1000);
+    const ms = dt * 1000;
+    this.samples.push(ms);
     if (this.samples.length > 90) this.samples.shift();
     this.cooldown -= dt;
     if (monitor && monitor.thermal !== perf.thermal) { perf.thermal = monitor.thermal || 0; this.apply(); }
+
+    // A stall you can feel does not wait for the averages. Two frames over four
+    // times the budget, or six in a row over twice it, and a rung comes off
+    // immediately — the ladder is there to be used, not admired.
+    if (ms > this.targetMs * 4) this.spikes++; else this.spikes = Math.max(0, this.spikes - 0.34);
+    if (ms > this.targetMs * 2) this.slowRun++; else this.slowRun = 0;
+    // Not while the world is still building itself: the opening seconds are all
+    // spikes by nature, and knocking the quality down for them helps nobody.
+    const urgent = this.samples.length >= 30 && (this.spikes >= 2 || this.slowRun >= 6);
+    if (urgent && this.step < PERF_STEPS.length - 1) {
+      this.step++;
+      this.apply();
+      this.spikes = 0;
+      this.slowRun = 0;
+      this.cooldown = 0.8;
+      return this.scale;
+    }
+
     if (this.cooldown > 0 || this.samples.length < 60) return this.scale;
     this.cooldown = 1.2;
     const sorted = this.samples.slice().sort((a, b) => a - b);

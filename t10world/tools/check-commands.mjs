@@ -22,7 +22,8 @@ const { buildRegistry } = await import(src + 't10/commands.js');
 const { T10Brain } = await import(src + 't10/brain.js');
 const { FEATURES, featureStats, CATEGORIES } = await import(src + 't10/features.js');
 const { POWERS } = await import(src + 'player/powers.js');
-const { settings } = await import(src + 'core/settings.js');
+const { settings, QUALITY_PRESETS, QUALITY_ORDER } = await import(src + 'core/settings.js');
+const { detectDevice, effectivePresets, FIELD_GROUP } = await import(src + 'core/device.js');
 
 const R = buildRegistry();
 let problems = 0;
@@ -70,6 +71,43 @@ console.log('\npowers    :', POWERS.length, 'with', powerKeys.size, 'distinct ke
 if (keyClashes.length) {
   problems += keyClashes.length;
   for (const k of keyClashes) console.log('   KEY CLASH: ' + k);
+}
+
+// The three presets must stay in order on every device class, and none of them
+// may ask for more than the preset as written. A preset that quietly inverts on
+// a phone is the kind of bug nobody reports and everybody feels.
+const DEVICES = [
+  ['phone', { tier: 'phone', power: 0.3, dpr: 3, maxTexture: 4096 }],
+  ['good phone', { tier: 'phone', power: 1, dpr: 3, maxTexture: 4096 }],
+  ['tablet', { tier: 'tablet', power: 0.6, dpr: 2, maxTexture: 4096 }],
+  ['laptop', { tier: 'laptop', power: 0.5, dpr: 2, maxTexture: 8192 }],
+  ['desktop', { tier: 'desktop', power: 1, dpr: 1, maxTexture: 16384 }],
+];
+const presetProblems = [];
+for (const [label, dev] of DEVICES) {
+  const all = effectivePresets(QUALITY_PRESETS, dev, QUALITY_ORDER);
+  for (let i = 0; i < QUALITY_ORDER.length; i++) {
+    const q = QUALITY_ORDER[i];
+    for (const key in FIELD_GROUP) {
+      const written = QUALITY_PRESETS[q][key];
+      if (typeof written !== 'number') continue;
+      if (all[q][key] > written + 1e-6) presetProblems.push(label + ': ' + q + '.' + key + ' is above the written preset');
+      if (i > 0) {
+        const prev = all[QUALITY_ORDER[i - 1]][key];
+        if (all[q][key] < prev - 1e-6) presetProblems.push(label + ': ' + q + '.' + key + ' (' + all[q][key] + ') is below ' + QUALITY_ORDER[i - 1] + ' (' + prev + ')');
+      }
+    }
+  }
+  const u = all.ultra;
+  // ULTRA keeps every effect on, whatever the device. That is what makes it ULTRA.
+  for (const effect of ['ssr', 'ssao', 'bloom', 'shadows', 'contactShadows', 'puddles', 'reflectionProbe', 'volumetricLight']) {
+    if (QUALITY_PRESETS.ultra[effect] && !u[effect]) presetProblems.push(label + ': ULTRA lost ' + effect);
+  }
+}
+console.log('\npresets   :', DEVICES.length, 'device classes checked,', presetProblems.length, 'problems');
+if (presetProblems.length) {
+  problems += presetProblems.length;
+  for (const p of presetProblems.slice(0, 12)) console.log('   ' + p);
 }
 
 // Every example in the feature library must resolve to a command.
