@@ -201,7 +201,6 @@ export class Game {
     window.addEventListener('keydown', (e) => {
       const typing = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA');
       if (e.code === 'Escape') {
-        if (this.hud.powersOpen) { this.hud.setPowersOpen(false); e.preventDefault(); return; }
         if (this.book.visible) { this.book.hide(); e.preventDefault(); return; }
         if (this.map.visible) { this.map.hide(); e.preventDefault(); return; }
         if (this.hud.chatOpen) { this.hud.setChatOpen(false); e.preventDefault(); return; }
@@ -380,8 +379,9 @@ export class Game {
         ', and it\'s ' + this.atmosphere.clockString() + '.');
     }, 2600);
     setTimeout(() => {
-      this.t10Say('Nothing here needs doing. Tap the orb and say my name if you want something \u2014 "T10 make it rain", "T10 I wanna wear something new". ' +
-        'Say just "T10" on its own to see everything I know: ' + this.t10.commandCount() + ' commands.');
+      // Short enough to read in one glance on a phone. The rest is one tap away.
+      this.t10Say('Nothing here needs doing. Tap the orb and ask me for anything \u2014 ' +
+        'say just "T10" to see all ' + this.t10.commandCount() + ' things I know.');
     }, 8000);
   }
 
@@ -513,7 +513,6 @@ export class Game {
     // Ambience follows where you are and what the sky is doing.
     audio.updateAmbience(this.atmosphere.ambientState(p.position, this.world), dt);
 
-    if (this.powers && this.frame % 6 === 0) this.hud.updatePowers(this.powers);
     if (this.statsVisible && this.frame % 12 === 0) this.updateStats();
   }
 
@@ -624,7 +623,7 @@ export class Game {
 
   /** Any full-screen panel takes the controls away from the world. */
   syncInputSuspend() {
-    this.input.setSuspended(this.hud.chatOpen || this.hud.settingsOpen || this.hud.powersOpen ||
+    this.input.setSuspended(this.hud.chatOpen || this.hud.settingsOpen ||
       (this.map && this.map.visible) || (this.book && this.book.visible));
   }
 
@@ -760,7 +759,6 @@ export class Game {
     if (!this.powers || this.phase !== 'playing') return null;
     const line = this.powers.use(id);
     if (line) this.t10Say(line);
-    if (this.hud) this.hud.updatePowers(this.powers);
     return line;
   }
 

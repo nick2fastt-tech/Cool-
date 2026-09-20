@@ -52,16 +52,17 @@ node tools/build.mjs . ../t10world.html
 | Crouch | `Ctrl` | **↓** button |
 | Use — everything | `E` | **E** button |
 | Enter/exit vehicle | `F` | **↰** button |
-| Powers | `1`–`0`, `Z` `X` `C` `J` `B` `N` | **✷** button, top left |
+| Powers | `1`–`0`, `Z` `X` `C` `J` `B` `N` | ask T10 for them by name |
 | Open T10 | `T` | tap the orb |
 | Map | `M` | `T10 open the map` |
 | Camera 1st/3rd | `V` | Settings |
 | Settings | `Esc` | gear, top right |
 
 There is one walking pace — no sprint button. First or third person is a
-setting, not a button. **Use** is contextual and does everything: fires the
-weapon you're holding, sits you down, boards the train, talks to whoever is in
-front of you.
+setting, not a button. Powers have no buttons at all — you ask T10 for them by
+name. **Use** is contextual and does everything: fires the weapon you're
+holding, sits you down, boards the train, opens the door in front of you, talks
+to whoever is standing there.
 
 Gamepads work when connected. Key bindings live in `src/core/settings.js`.
 
@@ -130,15 +131,17 @@ back up). Create, load, rename, duplicate and delete them from the opening
 screen. Duplicating keeps the seed, so you get the same city and a separate
 history.
 
-**Powers** — sixteen of them, on keys `1`–`0` and `Z` `X` `C` `J` `B` `N`, or a
-grid of tiles on a phone: telekinesis, super jump, super speed, flight, force
-field, time slow, teleportation, gravity control, energy blast, invisibility,
-object duplication, freeze, healing, size change, lightning and creature summon.
-One energy pool feeds all of them and refills on its own; each has its own cost,
-cooldown, casting animation, sound and visual effect, and each one acts on the
-world — telekinesis throws whatever is loose, teleport puts you where you are
-looking, invisibility means nobody's AI is told where you are, and lightning
-actually strikes.
+**Powers** — sixteen of them, and there is no interface for them: you ask.
+`T10 super speed`, `T10 let me fly`, `T10 lightning`. Telekinesis, super jump,
+super speed, flight, force field, time slow, teleportation, gravity control,
+energy blast, invisibility, object duplication, freeze, healing, size change,
+lightning and creature summon. On a keyboard they are also on `1`–`0` and
+`Z` `X` `C` `J` `B` `N`, which is a shortcut rather than a screen. One energy
+pool feeds all of them and refills on its own — `T10 how much energy do I have`
+— and each has its own cost, cooldown, casting animation, sound and visual
+effect. Each one acts on the world: telekinesis throws whatever is loose,
+teleport puts you where you are looking, invisibility means nobody's AI is told
+where you are, and lightning actually strikes.
 
 **Creatures** — twenty fictional species across three families: abnormal zombies
 (runners, brutes, crawlers, screamers, spitters, bloaters, stalkers), mutation

@@ -148,19 +148,31 @@ export function extendRegistry(R, add) {
       'Set your movement speed to ' + name + '.',
       (ctx) => { ctx.player.speedMultiplier = mult; return 'Speed: ' + name + '.'; });
   }
+  // Jump height, permanently. The one-shot Super Jump power owns the bare
+  // phrase "super jump", so these ask to have it set rather than to do it.
   const JUMPS = [['normal jump', 1], ['high jump', 2], ['super jump', 3.4], ['moon jump', 5]];
   for (const [name, mult] of JUMPS) {
     add('jump_' + name.replace(/\s+/g, '_'), 'Powers',
-      ['give me a ' + name, 'i want a ' + name, name],
-      'Set your jump height: ' + name + '.',
-      (ctx) => { ctx.player.jumpMultiplier = mult; return name.charAt(0).toUpperCase() + name.slice(1) + ' enabled.'; });
+      ['set my jump to ' + name, 'give me a permanent ' + name, 'make my jump a ' + name,
+       'i want ' + name + ' all the time'],
+      'Set your jump height permanently: ' + name + '.',
+      (ctx) => {
+        ctx.player.jumpMultiplier = mult;
+        return name.charAt(0).toUpperCase() + name.slice(1) + ' from now on — no energy, no cooldown.';
+      });
   }
   add('fly_on', 'Powers', ['let me fly', 'i want to fly', 'enable flying', 'turn on flying', 'fly mode'],
-    'Enable flight — jump to rise, crouch to descend.',
-    (ctx) => { ctx.player.flying = true; return 'Flying on. Jump goes up, crouch goes down.'; });
-  add('fly_off', 'Powers', ['stop flying', 'disable flying', 'turn off flying', 'land me'],
-    'Disable flight and put you back on the ground.',
+    'Fly — jump to rise, crouch to descend.',
     (ctx) => {
+      // Flight is one of the sixteen: it costs energy and drains while it runs.
+      if (ctx.game.powers) return ctx.game.usePower('flight') || 'Flying on. Jump goes up, crouch goes down.';
+      ctx.player.flying = true;
+      return 'Flying on. Jump goes up, crouch goes down.';
+    });
+  add('fly_off', 'Powers', ['stop flying', 'disable flying', 'turn off flying', 'land me'],
+    'Stop flying and put you back on the ground.',
+    (ctx) => {
+      if (ctx.game.powers) ctx.game.powers.stop('flight');
       const p = ctx.player;
       // Leaving noclip on would keep you floating with no way to come down.
       p.flying = false;

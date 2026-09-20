@@ -1,6 +1,6 @@
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import http from 'http'; import fs from 'fs'; import path from 'path';
-const FILE = path.resolve(process.argv[2]);
+const FILE = path.resolve(process.argv[2] || new URL('../../t10world.html', import.meta.url).pathname);
 const server = http.createServer((req,res)=>{ res.writeHead(200,{'Content-Type':'text/html'}); res.end(fs.readFileSync(FILE)); });
 await new Promise(r=>server.listen(0,r)); const port=server.address().port;
 const browser = await chromium.launch({ executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
@@ -35,7 +35,7 @@ const info = await page.evaluate(()=>{
   // The newest systems, checked through the bundle rather than the modules:
   // a mis-wrapped module would still boot and only fall over here.
   const systems = {
-    powers: g.powers ? Object.keys(g.hud.powerTiles || {}).length : 0,
+    powers: (g.__POWERS || []).length,
     energySpent: false,
     creatures: 0,
     mutationStages: 0,

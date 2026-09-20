@@ -619,7 +619,9 @@ const powersTest = await page.evaluate(async ()=>{
   const out = { fired: [], failed: [], keys: 0, tiles: 0, energyMoved: false };
   const defs = P.constructor && g.__POWERS ? g.__POWERS : null;
   const ids = Object.keys(P.cooldowns);      // just to touch the object
-  const list = (window.__t10.hud && window.__t10.hud.powerTiles) ? Object.keys(window.__t10.hud.powerTiles) : [];
+  // There is no powers interface any more — you ask T10 — so the list comes
+  // from the definitions.
+  const list = (window.__t10.__POWERS || []).map((d) => d.id);
   out.tiles = list.length;
   for (const id of list) {
     P.energy = 100;
@@ -634,10 +636,7 @@ const powersTest = await page.evaluate(async ()=>{
   out.energyMoved = P.energy <= 100;
   // Every power must also answer to a key press.
   const codes = new Set();
-  for (const id of list) {
-    const def = (window.__t10.hud && window.__t10.hud.powerTiles[id]) ? id : null;
-    if (def) codes.add(def);
-  }
+  for (const d of (window.__t10.__POWERS || [])) codes.add(d.key);
   out.keys = codes.size;
   // Clean up: end everything and put the world back.
   g.t10.handle('T10 stop all my powers');

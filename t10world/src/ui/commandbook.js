@@ -35,7 +35,7 @@ export class CommandBook {
     const search = el('div', 't10-book-search', wrap);
     this.input = el('input', 't10-book-input', search);
     this.input.type = 'text';
-    this.input.placeholder = 'Filter — try "car", "hair", "rain"…';
+    this.input.placeholder = 'Filter — try "powers", "car", "inside", "rain"…';
     this.input.addEventListener('input', () => {
       this.query = this.input.value.trim().toLowerCase();
       this.renderList();
@@ -46,7 +46,7 @@ export class CommandBook {
 
     const foot = el('div', 't10-book-foot', wrap);
     el('span', 't10-book-hint', foot,
-      'Tap any line to run it. Everything starts with "T10".');
+      'Tap any line to run it. Everything starts with "T10" — including the powers.');
   }
 
   /** Categories and counts come straight from the registry. */

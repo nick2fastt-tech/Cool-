@@ -2,9 +2,10 @@
 // By design there is almost nothing here: a settings button top-right, the T10
 // orb top-centre, a contextual prompt, and the touch controls on mobile.
 import { settings, QUALITY_PRESETS, QUALITY_ORDER } from '../core/settings.js';
-import { POWERS, ENERGY_MAX } from '../player/powers.js';
 import { audio } from '../core/audio.js';
-import { clamp01 } from '../core/math.js';
+
+/** Longest reply the subtitle overlay shows before pointing at the chat. */
+const SUB_MAX = 240;
 
 function el(tag, cls, parent, text) {
   const n = document.createElement(tag);
@@ -60,102 +61,9 @@ export class HUD {
     this.crosshair = el('div', 't10-cross', r);
     this.crosshair.style.display = 'none';
 
-    this.buildPowers();
     this.buildChat();
     this.buildSettings();
     if (this.isTouch) this.buildTouchControls();
-  }
-
-  // -------------------------------------------------------------------------
-  // The sixteen powers. One dock button opens a grid; every tile is a power
-  // with its glyph, its key, its cost and a cooldown sweep. The same grid is
-  // the mobile button set and the desktop reference card, so the two can't
-  // drift apart.
-  buildPowers() {
-    const r = this.root;
-    this.powerDock = el('div', 't10-power-dock', r);
-
-    this.energyWrap = el('div', 't10-energy', this.powerDock);
-    this.energyFill = el('div', 't10-energy-fill', this.energyWrap);
-    this.energyLabel = el('span', 't10-energy-label', this.powerDock, '');
-
-    this.powerBtn = el('button', 't10-power-btn', this.powerDock);
-    this.powerBtn.setAttribute('aria-label', 'Powers');
-    el('span', 't10-power-btn-glyph', this.powerBtn, '✷');
-    this.powerBtn.addEventListener('click', (e) => { e.preventDefault(); this.togglePowers(); });
-    this.powerBtn.addEventListener('touchstart', (e) => { e.stopPropagation(); }, { passive: true });
-
-    this.powerGrid = el('div', 't10-power-grid', r);
-    this.powerGrid.style.display = 'none';
-    const head = el('div', 't10-power-head', this.powerGrid);
-    el('span', 't10-power-title', head, 'Powers');
-    this.powerHint = el('span', 't10-power-sub', head, '');
-    const close = el('button', 't10-power-close', head, '×');
-    close.addEventListener('click', (e) => { e.preventDefault(); this.setPowersOpen(false); });
-
-    const list = el('div', 't10-power-list', this.powerGrid);
-    this.powerTiles = {};
-    for (const def of POWERS) {
-      const b = el('button', 't10-power-tile', list);
-      b.type = 'button';
-      const sweep = el('span', 't10-power-sweep', b);
-      el('span', 't10-power-glyph', b, def.glyph);
-      el('span', 't10-power-name', b, def.name);
-      const meta = el('span', 't10-power-meta', b);
-      el('span', 't10-power-key', meta, keyGlyph(def.key));
-      el('span', 't10-power-cost', meta, def.cost + 'e');
-      b.title = def.blurb;
-      b.style.setProperty('--p', '#' + def.color.toString(16).padStart(6, '0'));
-      const fire = (e) => {
-        e.preventDefault();
-        if (e.changedTouches) for (const t of e.changedTouches) this.game.input.claimTouch(t.identifier);
-        this.game.usePower(def.id);
-      };
-      b.addEventListener('touchstart', fire, { passive: false });
-      b.addEventListener('click', (e) => { if (!this.isTouch) fire(e); });
-      this.powerTiles[def.id] = { button: b, sweep };
-    }
-  }
-
-  togglePowers() { this.setPowersOpen(this.powerGrid.style.display === 'none'); }
-
-  setPowersOpen(open) {
-    this.powerGrid.style.display = open ? 'flex' : 'none';
-    this.powerBtn.classList.toggle('active', open);
-    audio.ui(open ? 'open' : 'close');
-    if (open && this.game.powers) this.updatePowers(this.game.powers, true);
-    // A full-screen panel takes the controls, the same as the map or the book.
-    if (this.game.syncInputSuspend) this.game.syncInputSuspend();
-  }
-
-  get powersOpen() { return this.powerGrid && this.powerGrid.style.display !== 'none'; }
-
-  /** Energy bar always, tiles only while the grid is open. */
-  updatePowers(powers, force) {
-    if (!powers || !this.energyFill) return;
-    const pct = clamp01(powers.energy / ENERGY_MAX);
-    this.energyFill.style.height = (pct * 100).toFixed(1) + '%';
-    this.energyFill.classList.toggle('low', pct < 0.25);
-    const activeCount = Object.keys(powers.active).length;
-    this.powerBtn.classList.toggle('running', activeCount > 0);
-    if (this._energyShown !== Math.round(pct * 20) || force) {
-      this._energyShown = Math.round(pct * 20);
-      this.energyLabel.textContent = Math.round(powers.energy);
-    }
-    if (!this.powersOpen) return;
-    for (const def of POWERS) {
-      const t = this.powerTiles[def.id];
-      if (!t) continue;
-      const cd = powers.cooldowns[def.id] || 0;
-      const on = powers.active[def.id] != null;
-      const afford = powers.energy >= def.cost;
-      t.button.classList.toggle('cooling', cd > 0);
-      t.button.classList.toggle('poor', !afford && cd <= 0);
-      t.button.classList.toggle('on', on);
-      const k = def.cooldown ? clamp01(cd / def.cooldown) : 0;
-      t.sweep.style.transform = 'scaleY(' + k.toFixed(3) + ')';
-    }
-    this.powerHint.textContent = powers.status();
   }
 
   // -------------------------------------------------------------------------
@@ -171,6 +79,10 @@ export class HUD {
     close.addEventListener('click', () => this.setChatOpen(false));
 
     this.chatLog = el('div', 't10-chat-log', this.chat);
+
+    // Suggestions sit between what was said and where you type, which is where
+    // you look for them.
+    this.suggestions = el('div', 't10-chat-suggest', this.chat);
 
     const form = el('form', 't10-chat-form', this.chat);
     this.chatInput = el('input', 't10-chat-input', form);
@@ -188,19 +100,50 @@ export class HUD {
       this.game.sendToT10(text);
     });
 
-    // Quick suggestions so a new player knows the shape of it.
-    this.suggestions = el('div', 't10-chat-suggest', this.chat);
-    const chips = [
-      'T10 I wanna wear something new',
-      'T10 make it rain',
-      'T10 how much money do I have',
-      'T10 spawn a dog',
-      'T10 take me to the beach',
-      'T10 what can you do',
+    // They follow what is actually happening — indoors you are offered the way
+    // out, armed you are offered the armoury — because a fixed list stops being
+    // useful about a minute in.
+    this.refreshSuggestions();
+  }
+
+  /** Six things worth saying, chosen for where you are and what you're doing. */
+  refreshSuggestions() {
+    if (!this.suggestions) return;
+    const g = this.game;
+    const out = [];
+    const add = (t) => { if (out.length < 6 && out.indexOf(t) < 0) out.push(t); };
+
+    if (g.interiors && g.interiors.inside) {
+      add('T10 what rooms are in here');
+      add('T10 take me outside');
+    } else {
+      add('T10 take me inside');
+    }
+    if (g.apocalypse && g.apocalypse.active) {
+      add('T10 how bad is it');
+      add('T10 stop the apocalypse');
+    }
+    if (g.arsenal && g.arsenal.armed) add('T10 put the gun away');
+    if (g.player && g.player.isZombie) add('T10 turn me back');
+    if (g.creatures && g.creatures.count()) add('T10 what is out there');
+
+    // Then the evergreen ones, in a rotation so it isn't the same six forever.
+    const evergreen = [
+      'T10 super speed', 'T10 let me fly', 'T10 make it rain', 'T10 spawn a dog',
+      'T10 take me to the beach', 'T10 what can you do', 'T10 design a creature',
+      'T10 I wanna wear something new', 'T10 summon a creature', 'T10 make it midnight',
+      'T10 what should I try', 'T10 how is performance',
     ];
-    for (const c of chips) {
-      const b = el('button', 't10-chip', this.suggestions, c);
+    const offset = this._chipRotation = ((this._chipRotation || 0) + 1) % evergreen.length;
+    for (let i = 0; i < evergreen.length && out.length < 6; i++) {
+      add(evergreen[(offset + i) % evergreen.length]);
+    }
+
+    this.suggestions.textContent = '';
+    for (const c of out) {
+      const b = el('button', 't10-chip', this.suggestions, c.replace(/^T10 /, ''));
       b.type = 'button';
+      b.title = c;
       b.addEventListener('click', () => { this.game.sendToT10(c); });
     }
   }
@@ -211,6 +154,8 @@ export class HUD {
     el('span', 't10-msg-text', row, text);
     this.chatLog.scrollTop = this.chatLog.scrollHeight;
     while (this.chatLog.children.length > 80) this.chatLog.removeChild(this.chatLog.firstChild);
+    // What is worth asking next depends on what just happened.
+    if (who === 't10') this.refreshSuggestions();
   }
 
   toggleChat() { this.setChatOpen(!this.chatOpen); }
@@ -222,6 +167,7 @@ export class HUD {
     audio.t10Blip(open ? 'open' : 'close');
     this.game.onChatToggled(open);
     if (open) {
+      this.refreshSuggestions();
       setTimeout(() => this.chatInput.focus(), 30);
       if (this.settingsOpen) this.setSettingsOpen(false);
     } else {
@@ -236,12 +182,21 @@ export class HUD {
 
     const head = el('div', 't10-set-head', this.settings);
     el('span', 't10-set-title', head, 'Settings');
+    this.settingsDevice = el('span', 't10-set-device', head, settings.deviceLabel);
     const close = el('button', 't10-chat-close', head, '×');
     close.addEventListener('click', () => this.setSettingsOpen(false));
 
+    // Each block is a card, so the panel reads as four settings rather than one
+    // long strip of controls.
+    const section = (label) => {
+      const wrap = el('div', 't10-set-card', this.settings);
+      el('div', 't10-set-label', wrap, label);
+      return wrap;
+    };
+
     // Quality
-    el('div', 't10-set-label', this.settings, 'Quality');
-    const qRow = el('div', 't10-set-row', this.settings);
+    const qCard = section('Quality');
+    const qRow = el('div', 't10-set-row', qCard);
     this.qualityButtons = {};
     for (const q of QUALITY_ORDER) {
       const b = el('button', 't10-set-btn', qRow, QUALITY_PRESETS[q].label);
@@ -252,13 +207,13 @@ export class HUD {
       });
       this.qualityButtons[q] = b;
     }
-    this.qualityBlurb = el('div', 't10-set-blurb', this.settings, QUALITY_PRESETS[settings.get('quality')].blurb);
+    this.qualityBlurb = el('div', 't10-set-blurb', qCard, QUALITY_PRESETS[settings.get('quality')].blurb);
 
     // Sound
-    el('div', 't10-set-label', this.settings, 'Sound');
+    const sCard = section('Sound');
     this.volumeSliders = {};
     for (const [key, label] of [['masterVolume', 'Master'], ['sfxVolume', 'Effects'], ['musicVolume', 'Ambience']]) {
-      const row = el('div', 't10-set-slider', this.settings);
+      const row = el('div', 't10-set-slider', sCard);
       el('span', 't10-set-slider-label', row, label);
       const input = el('input', '', row);
       input.type = 'range'; input.min = '0'; input.max = '1'; input.step = '0.05';
@@ -272,9 +227,10 @@ export class HUD {
       this.volumeSliders[key] = input;
     }
 
-    // View
-    el('div', 't10-set-label', this.settings, 'View');
-    const vRow = el('div', 't10-set-row', this.settings);
+    // View and controls, together: they are the same decision from the player's
+    // side — how it feels to move and look.
+    const vCard = section('View and controls');
+    const vRow = el('div', 't10-set-row', vCard);
     this.viewButtons = {};
     for (const [mode, label] of [['first', 'First person'], ['third', 'Third person']]) {
       const b = el('button', 't10-set-btn', vRow, label);
@@ -287,24 +243,37 @@ export class HUD {
 
     // Content rating. 18 is the default; 16 keeps the same world with much
     // less blood.
-    el('div', 't10-set-label', this.settings, 'Content');
-    const mRow = el('div', 't10-set-row', this.settings);
+    const mCard = section('Content');
+    const mRow = el('div', 't10-set-row', mCard);
     this.maturityButtons = {};
     for (const [age, label] of [[18, '18+'], [16, '16+']]) {
       const b = el('button', 't10-set-btn', mRow, label);
       b.addEventListener('click', () => { settings.setMaturity(age); this.refreshSettings(); });
       this.maturityButtons[age] = b;
     }
-    this.maturityBlurb = el('div', 't10-set-blurb', this.settings, '');
+    this.maturityBlurb = el('div', 't10-set-blurb', mCard, '');
 
-    el('div', 't10-set-label', this.settings, 'Controls');
-    const cRow = el('div', 't10-set-row', this.settings);
+    const cRow = el('div', 't10-set-row', vCard);
     const invBtn = el('button', 't10-set-btn', cRow, 'Invert Y: off');
     invBtn.addEventListener('click', () => {
       settings.set('invertY', !settings.get('invertY'));
       invBtn.textContent = 'Invert Y: ' + (settings.get('invertY') ? 'on' : 'off');
+      invBtn.classList.toggle('active', !!settings.get('invertY'));
     });
-    const sensRow = el('div', 't10-set-slider', this.settings);
+    invBtn.textContent = 'Invert Y: ' + (settings.get('invertY') ? 'on' : 'off');
+    invBtn.classList.toggle('active', !!settings.get('invertY'));
+    const promptBtn = el('button', 't10-set-btn', cRow, 'Prompts: on');
+    const syncPrompt = () => {
+      const on = !!settings.get('showInteractPrompts');
+      promptBtn.textContent = 'Prompts: ' + (on ? 'on' : 'off');
+      promptBtn.classList.toggle('active', on);
+    };
+    promptBtn.addEventListener('click', () => {
+      settings.set('showInteractPrompts', !settings.get('showInteractPrompts'));
+      syncPrompt();
+    });
+    syncPrompt();
+    const sensRow = el('div', 't10-set-slider', vCard);
     el('span', 't10-set-slider-label', sensRow, 'Look speed');
     const sens = el('input', '', sensRow);
     sens.type = 'range'; sens.min = '0.2'; sens.max = '2.5'; sens.step = '0.1';
@@ -320,7 +289,7 @@ export class HUD {
     leave.addEventListener('click', () => {
       if (this.game.confirmLeave()) this.setSettingsOpen(false);
     });
-    el('div', 't10-set-foot', this.settings, 'T10 World');
+    el('div', 't10-set-foot', this.settings, 'T10 World · ask T10 for anything else');
     this.refreshSettings();
   }
 
@@ -496,11 +465,27 @@ export class HUD {
   }
 
   say(text, who) {
-    this.subtitle.textContent = text;
-    this.subtitle.className = 't10-subtitle' + (who === 't10' ? ' t10' : '');
+    const full = String(text == null ? '' : text);
+    // A few replies — the full command list, the feature tour — run to a
+    // thousand characters. As a subtitle that is a wall across the screen, and
+    // the whole thing is in the chat log anyway, so the overlay gets the first
+    // couple of sentences and says where the rest is.
+    let line = full;
+    if (full.length > SUB_MAX) {
+      const cut = full.lastIndexOf(' ', SUB_MAX);
+      line = full.slice(0, cut > SUB_MAX * 0.6 ? cut : SUB_MAX).replace(/[,;:\s]+$/, '')
+        + '… tap T10 for the rest.';
+    }
+    this.subtitle.textContent = line;
+    // Centred text is right for a sentence and wrong for a paragraph: past a
+    // couple of lines it becomes a ragged column nobody wants to read on a
+    // phone. Long replies left-align and get a little longer on screen.
+    const long = line.length > 96;
+    this.subtitle.className = 't10-subtitle' + (who === 't10' ? ' t10' : '') + (long ? ' long' : '');
     this.subtitle.style.opacity = '1';
     clearTimeout(this._subTimer);
-    this._subTimer = setTimeout(() => { this.subtitle.style.opacity = '0'; }, 3400);
+    this._subTimer = setTimeout(() => { this.subtitle.style.opacity = '0'; },
+      long ? Math.min(9000, 3400 + line.length * 22) : 3400);
   }
 
   setVehicleMode(on) {
@@ -522,14 +507,6 @@ export class HUD {
     void this.orb.offsetWidth;
     this.orb.classList.add('pulse');
   }
-}
-
-/** 'Digit1' -> '1', 'KeyZ' -> 'Z'. */
-function keyGlyph(code) {
-  if (!code) return '';
-  if (code.startsWith('Digit')) return code.slice(5);
-  if (code.startsWith('Key')) return code.slice(3);
-  return code;
 }
 
 function gearSVG() {

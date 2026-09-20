@@ -53,7 +53,9 @@ const powersTest = await page.evaluate(async ()=>{
   const out = { fired: [], failed: [], keys: 0, tiles: 0, energyMoved: false };
   const defs = P.constructor && g.__POWERS ? g.__POWERS : null;
   const ids = Object.keys(P.cooldowns);      // just to touch the object
-  const list = (window.__t10.hud && window.__t10.hud.powerTiles) ? Object.keys(window.__t10.hud.powerTiles) : [];
+  // There is no powers interface any more — you ask T10 — so the list comes
+  // from the definitions.
+  const list = (window.__t10.__POWERS || []).map((d) => d.id);
   out.tiles = list.length;
   for (const id of list) {
     P.energy = 100;
@@ -68,10 +70,7 @@ const powersTest = await page.evaluate(async ()=>{
   out.energyMoved = P.energy <= 100;
   // Every power must also answer to a key press.
   const codes = new Set();
-  for (const id of list) {
-    const def = (window.__t10.hud && window.__t10.hud.powerTiles[id]) ? id : null;
-    if (def) codes.add(def);
-  }
+  for (const d of (window.__t10.__POWERS || [])) codes.add(d.key);
   out.keys = codes.size;
   // Clean up: end everything and put the world back.
   g.t10.handle('T10 stop all my powers');
@@ -462,44 +461,34 @@ else {
   if (u.draw < h.draw || u.npcs < h.npcs) errors.push('DEVICE: ULTRA came out below HIGH');
 }
 
-// The powers interface, at phone size, where it has to work first.
-log('--- powers interface ---');
-await page.evaluate(()=>{ const g=window.__t10; g.hud.setPowersOpen(true); g.hud.updatePowers(g.powers, true); });
-await page.waitForTimeout(700);
-await page.screenshot({ path: SHOT+'/sys-2-powers.png' });
-const grid = await page.evaluate(()=>{
+// Powers have no interface any more: you ask T10 for them. Nothing of the old
+// dock, energy bar or tile grid may be left on screen, and asking must work.
+log('--- powers by voice ---');
+const byVoice = await page.evaluate(async ()=>{
   const g = window.__t10;
-  // Set the three states up deliberately: one running, one cooling, and an
-  // energy level that leaves most of them out of reach. Firing a power that
-  // happens to still be on cooldown from an earlier section proves nothing.
+  const pump = async (n)=>{ for (let f=0;f<n;f++) await new Promise(r=>requestAnimationFrame(()=>r())); };
   g.powers.energy = 100;
   for (const k in g.powers.cooldowns) delete g.powers.cooldowns[k];
-  g.powers.use('forcefield');          // duration 14s, so it is running
-  g.powers.energy = 10;                // everything dearer than 10 is out
-  g.powers.cooldowns.blast = 0.7;      // one tile mid-sweep
-  g.hud.updatePowers(g.powers, true);
-  const tiles = [...document.querySelectorAll('.t10-power-tile')];
-  const box = document.querySelector('.t10-power-grid').getBoundingClientRect();
+  const before = g.powers.energy;
+  const fired = g.t10.handle('T10 super jump');
+  await pump(2);
+  const status = g.t10.handle('T10 how much energy do i have');
+  const listed = g.t10.handle('T10 what powers do i have');
+  g.powers.stopAll();
+  g.powers.energy = 100;
   return {
-    tiles: tiles.length,
-    onScreen: box.left >= 0 && box.right <= window.innerWidth && box.top >= 0,
-    cooling: tiles.filter(t=>t.classList.contains('cooling')).length,
-    poor: tiles.filter(t=>t.classList.contains('poor')).length,
-    on: tiles.filter(t=>t.classList.contains('on')).length,
-    hint: document.querySelector('.t10-power-sub').textContent.slice(0, 60),
+    leftovers: document.querySelectorAll('.t10-power-dock, .t10-power-grid, .t10-power-tile, .t10-energy').length,
+    fired: (fired.reply || '').slice(0, 40),
+    spent: g.powers.energy <= before,
+    status: (status.reply || '').slice(0, 50),
+    listedAll: ((listed.reply || '').match(/,/g) || []).length >= 15,
   };
 });
-log('power grid:', JSON.stringify(grid));
-if (grid.tiles !== 16) errors.push('UI: the power grid shows ' + grid.tiles + ' tiles');
-if (!grid.onScreen) errors.push('UI: the power grid does not fit a phone screen');
-if (grid.poor < 10) errors.push('UI: only ' + grid.poor + ' tiles marked unaffordable at 10 energy');
-if (!grid.on) errors.push('UI: a running power is not marked as running');
-if (!grid.cooling) errors.push('UI: a cooling power has no sweep');
-await page.waitForTimeout(500);
-await page.screenshot({ path: SHOT+'/sys-3-powers-state.png' });
-await page.evaluate(()=>{ const g=window.__t10; g.hud.setPowersOpen(false); g.powers.stopAll(); g.powers.energy=100; });
-await page.waitForTimeout(600);
-await page.screenshot({ path: SHOT+'/sys-4-dock.png' });
+log('powers by voice:', JSON.stringify(byVoice));
+if (byVoice.leftovers) errors.push('UI: ' + byVoice.leftovers + ' bits of the old powers interface are still on screen');
+if (!byVoice.fired || /don't have/i.test(byVoice.fired)) errors.push('POWERS: asking T10 for one did not fire it');
+if (!byVoice.listedAll) errors.push('POWERS: T10 did not list all sixteen');
+await page.screenshot({ path: SHOT+'/sys-6-clean-hud.png' });
 
 log('--- ERRORS ---');
 if (!errors.length) log('  none');

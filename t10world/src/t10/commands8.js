@@ -41,10 +41,9 @@ export function extendRegistry8(R, add) {
     ['what powers do i have', 'list my powers', 'show me my powers', 'what can i do',
      'open the powers', 'show the powers', 'power list'],
     'List all sixteen powers.',
-    (ctx) => {
-      if (ctx.game.hud) ctx.game.hud.setPowersOpen(true);
-      return 'All sixteen are on screen. ' + POWERS.map((p) => p.name + ' (' + keyLabel(p.key) + ')').join(', ') + '.';
-    });
+    () => 'Sixteen, and you just ask for them by name: ' +
+      POWERS.map((p) => p.name).join(', ') + '. ' +
+      'On a keyboard they\'re on ' + POWERS.map((p) => keyLabel(p.key)).join(' ') + '.');
 
   add('power_energy', 'Powers',
     ['how much energy do i have', 'what is my energy', 'energy', 'am i charged',
