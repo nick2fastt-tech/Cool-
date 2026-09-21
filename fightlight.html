@@ -11,6 +11,8 @@
 <title>FightLight</title>
 <style>
   :root {
+    --volt: #3aa8ff;
+    --volt-soft: #8fd4ff;
     --red: #e4363a;
     --red-dim: #8e1f22;
     --amber: #f2b13c;
@@ -65,7 +67,8 @@
     align-items: center;
     justify-content: center;
     padding: calc(20px + var(--safe-t)) calc(18px + var(--safe-r)) calc(20px + var(--safe-b)) calc(18px + var(--safe-l));
-    background: radial-gradient(ellipse at 50% 38%, rgba(24,27,36,0.80) 0%, rgba(8,9,12,0.93) 58%, rgba(4,5,7,0.97) 100%);
+    background:
+      radial-gradient(ellipse at 50% 34%, rgba(10,38,72,0.78) 0%, rgba(3,9,20,0.94) 52%, rgba(0,2,6,0.985) 100%);
     backdrop-filter: blur(3px) saturate(0.7);
     -webkit-backdrop-filter: blur(3px) saturate(0.7);
     overflow: hidden;
@@ -112,22 +115,42 @@
     letter-spacing: clamp(6px, 2.4vw, 16px);
     text-transform: uppercase;
     line-height: 1;
-    background: linear-gradient(180deg, #ffffff 0%, #b9c0cc 100%);
+    background: linear-gradient(180deg, #ffffff 0%, #9fc6e8 100%);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
-    filter: drop-shadow(0 0 26px rgba(228, 54, 58, 0.45));
+    filter: drop-shadow(0 0 30px rgba(59, 160, 255, 0.55));
     text-align: center;
+    animation: brandPulse 4.5s ease-in-out infinite;
   }
-  .brand .lit { color: var(--red); -webkit-text-fill-color: var(--red); }
+  .brand .lit { color: var(--volt); -webkit-text-fill-color: var(--volt); }
+  @keyframes brandPulse {
+    0%, 100% { filter: drop-shadow(0 0 26px rgba(59,160,255,0.42)); }
+    50%      { filter: drop-shadow(0 0 44px rgba(90,196,255,0.72)); }
+  }
+
+  /* slow electric grid behind the menu */
+  #menu-screen::before, #inventory-screen::before, #settings-screen::before {
+    content: '';
+    position: absolute; inset: -20%;
+    background-image:
+      linear-gradient(rgba(60,150,255,0.055) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(60,150,255,0.055) 1px, transparent 1px);
+    background-size: 46px 46px;
+    mask-image: radial-gradient(ellipse at 50% 40%, #000 10%, transparent 72%);
+    -webkit-mask-image: radial-gradient(ellipse at 50% 40%, #000 10%, transparent 72%);
+    animation: gridDrift 26s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes gridDrift { to { transform: translate3d(46px, 46px, 0); } }
 
   .badge {
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    background: rgba(228, 54, 58, 0.14);
-    border: 1px solid rgba(228, 54, 58, 0.5);
-    color: #ff9295;
+    background: rgba(228, 54, 58, 0.12);
+    border: 1px solid rgba(228, 54, 58, 0.45);
+    color: #ff9ea1;
     font-size: 10px;
     font-weight: 900;
     letter-spacing: 2.4px;
@@ -146,23 +169,68 @@
     letter-spacing: 3.5px;
     text-transform: uppercase;
     cursor: pointer;
-    background: linear-gradient(180deg, #1b1f27 0%, #101318 100%);
-    border: 2px solid var(--line);
+    background: linear-gradient(180deg, #0a1422 0%, #050a12 100%);
+    border: 2px solid rgba(58, 168, 255, 0.28);
     border-radius: 10px;
-    color: var(--txt);
+    color: #dcefff;
     font-family: inherit;
+    overflow: hidden;
+    isolation: isolate;
     transition: transform .08s ease, border-color .18s ease, box-shadow .18s ease, background .18s ease;
     touch-action: manipulation;
   }
   .btn:active { transform: scale(0.96); }
   .btn.primary {
-    border-color: var(--red);
-    box-shadow: 0 0 28px rgba(228, 54, 58, 0.32), inset 0 0 22px rgba(228, 54, 58, 0.1);
+    border-color: var(--volt);
+    box-shadow: 0 0 26px rgba(58, 168, 255, 0.34), inset 0 0 22px rgba(58, 168, 255, 0.12);
   }
-  .btn.primary:active { background: var(--red); box-shadow: 0 0 42px rgba(228,54,58,.6); }
-  .btn.ghost { font-size: 12px; padding: 13px 18px; letter-spacing: 2.5px; color: var(--txt-dim); }
+  .btn.primary:active {
+    background: linear-gradient(180deg, #123a63 0%, #0a2745 100%);
+    box-shadow: 0 0 46px rgba(90, 196, 255, .72), inset 0 0 26px rgba(120, 210, 255, .3);
+  }
+  .btn.ghost { font-size: 12px; padding: 13px 18px; letter-spacing: 2.5px; color: rgba(190, 220, 245, .62); }
   .btn + .btn { margin-top: 11px; }
   .btn[disabled] { opacity: .45; pointer-events: none; }
+
+  /* ---- electric tap ---- */
+  .btn.zapping { border-color: var(--volt-soft); animation: zapFlick .32s steps(2) 1; }
+  @keyframes zapFlick {
+    0%   { box-shadow: 0 0 60px rgba(150,225,255,.95), inset 0 0 34px rgba(150,225,255,.42); }
+    50%  { box-shadow: 0 0 18px rgba(58,168,255,.4), inset 0 0 10px rgba(58,168,255,.16); }
+    100% { box-shadow: 0 0 44px rgba(110,205,255,.7), inset 0 0 22px rgba(110,205,255,.28); }
+  }
+  .zap-ring {
+    position: absolute; border-radius: 50%; pointer-events: none;
+    border: 2px solid rgba(160, 225, 255, .95);
+    box-shadow: 0 0 18px rgba(120, 210, 255, .9), inset 0 0 14px rgba(120,210,255,.6);
+    transform: translate(-50%, -50%) scale(0);
+    animation: zapRing .5s cubic-bezier(.18,.7,.3,1) forwards;
+    z-index: 2;
+  }
+  @keyframes zapRing {
+    0%   { transform: translate(-50%,-50%) scale(0); opacity: 1; }
+    100% { transform: translate(-50%,-50%) scale(1); opacity: 0; }
+  }
+  .zap-arc {
+    position: absolute; height: 2px; pointer-events: none;
+    background: linear-gradient(90deg, rgba(200,240,255,0) 0%, #cdf0ff 35%, #7fd0ff 70%, rgba(127,208,255,0) 100%);
+    box-shadow: 0 0 10px rgba(150, 220, 255, .95);
+    transform-origin: 0 50%;
+    animation: zapArc .38s ease-out forwards;
+    z-index: 2;
+  }
+  @keyframes zapArc {
+    0%   { opacity: 0; transform: scaleX(.1); }
+    18%  { opacity: 1; }
+    100% { opacity: 0; transform: scaleX(1); }
+  }
+  .zap-flash {
+    position: absolute; inset: 0; pointer-events: none; z-index: 1;
+    background: radial-gradient(circle at var(--zx, 50%) var(--zy, 50%),
+      rgba(170,230,255,.55) 0%, rgba(80,180,255,.18) 35%, transparent 70%);
+    animation: zapFade .42s ease-out forwards;
+  }
+  @keyframes zapFade { to { opacity: 0; } }
 
   .hint {
     margin-top: 16px;
@@ -289,31 +357,6 @@
   }
   #btn-equip { margin-top: 16px; }
 
-  /* ---------- Lobby ---------- */
-  #lobby-list {
-    touch-action: pan-y;
-    width: min(390px, 90vw);
-    margin-top: 22px;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    overflow: hidden;
-  }
-  .lobby-row {
-    display: flex; align-items: center; gap: 11px;
-    padding: 12px 15px;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-    font-size: 13px; font-weight: 700; letter-spacing: .8px;
-    opacity: 0; transform: translateX(-12px);
-    transition: opacity .3s ease, transform .3s ease;
-  }
-  .lobby-row.in { opacity: 1; transform: translateX(0); }
-  .lobby-row:last-child { border-bottom: 0; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex: none; box-shadow: 0 0 8px var(--green); }
-  .dot.you { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
-  .lobby-row .tag { margin-left: auto; font-size: 10px; color: var(--txt-dim); letter-spacing: 1.4px; }
-  #lobby-status { margin-top: 20px; font-size: 12px; font-weight: 900; letter-spacing: 3px; color: var(--txt-dim); text-transform: uppercase; }
-
   /* ---------- Cutscene ---------- */
   #cutscene-ui { position: absolute; inset: 0; z-index: 60; display: none; pointer-events: none; }
   .bar { position: absolute; left: 0; width: 100%; height: 9%; background: #000; }
@@ -362,6 +405,12 @@
   #fade { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 380; transition: opacity .45s ease; }
   #vignette { position: absolute; inset: 0; pointer-events: none; z-index: 22;
     box-shadow: inset 0 0 min(28vw, 190px) rgba(0,0,0,0.55); }
+  #blood-screen {
+    position: absolute; inset: -12%; pointer-events: none; z-index: 26; opacity: 0;
+    background-size: cover; background-position: center;
+    transition: opacity .18s ease-out;
+    mix-blend-mode: multiply;
+  }
   #hurt-flash { position: absolute; inset: 0; pointer-events: none; z-index: 24; opacity: 0;
     background: radial-gradient(ellipse at center, rgba(150,0,0,0) 34%, rgba(150,0,6,0.92) 100%);
     transition: opacity .28s ease; }
@@ -394,7 +443,7 @@
   #vitals {
     position: absolute;
     left: calc(16px + var(--safe-l));
-    bottom: calc(158px + var(--safe-b));
+    bottom: calc(150px + var(--safe-b));
     width: min(184px, 44vw);
   }
   .bar-wrap {
@@ -555,21 +604,12 @@
   }
   .abtn:active, .abtn.held { transform: scale(0.92); background: rgba(255,255,255,0.3); }
   .abtn.cooling { opacity: .4; }
-  #btn-fire { width: 84px; height: 84px; font-size: 12px; border-color: var(--red); background: rgba(228,54,58,.4); }
+  #btn-fire {
+    width: 96px; height: 96px; font-size: 13px;
+    border-color: var(--red); background: rgba(228,54,58,.4);
+  }
   #btn-fire:active, #btn-fire.held { background: rgba(228,54,58,.8); }
-  #btn-jump { width: 60px; height: 60px; font-size: 10px; }
-  #btn-reload { width: 54px; height: 54px; font-size: 9px; border-color: var(--amber); color: var(--amber); }
-  #btn-reload.hide { display: none; }
 
-  #left-cluster {
-    position: absolute; left: calc(16px + var(--safe-l)); bottom: calc(24px + var(--safe-b));
-    display: flex; gap: 10px; pointer-events: none; z-index: 22;
-  }
-  #btn-crouch, #btn-cam {
-    width: 50px; height: 50px; font-size: 9px;
-    border-color: rgba(255,255,255,0.5);
-  }
-  #btn-crouch.on { background: rgba(110,200,255,.4); border-color: #6ec8ff; }
 
   /* hotbar */
   #hotbar {
@@ -617,9 +657,7 @@
     #ammo-panel { bottom: calc(220px + var(--safe-b)); }
     #ammo-count { font-size: 22px; }
     #right-cluster { gap: 8px; }
-    #btn-fire { width: 70px; height: 70px; }
-    #btn-jump { width: 52px; height: 52px; }
-    #btn-reload { width: 46px; height: 46px; }
+    #btn-fire { width: 78px; height: 78px; }
     .slot { width: 48px; height: 48px; }
     .slot .ico { font-size: 18px; }
     #stick { width: 102px; height: 102px; }
@@ -632,6 +670,7 @@
 
 <div id="vignette"></div>
 <div id="low-hp"></div>
+<div id="blood-screen"></div>
 <div id="hurt-flash"></div>
 <div id="fade"></div>
 
@@ -670,6 +709,10 @@
     <div class="set-row">
       <div><div class="set-label">Look sensitivity</div><div class="set-sub" id="sens-val">1.00×</div></div>
       <input type="range" id="set-sens" min="30" max="260" value="100" />
+    </div>
+    <div class="set-row">
+      <div><div class="set-label">Camera</div><div class="set-sub">Which way you see the fight</div></div>
+      <div class="seg" id="set-camera"><button data-v="0">First</button><button data-v="1">Third</button></div>
     </div>
     <div class="set-row">
       <div><div class="set-label">Invert vertical</div><div class="set-sub">Drag down to look up</div></div>
@@ -715,14 +758,6 @@
   <div id="inv-grid"></div>
   <button id="btn-equip" class="btn primary">Equip</button>
   <button id="btn-inv-back" class="btn ghost">Back</button>
-</div>
-
-<!-- ============ LOBBY ============ -->
-<div id="lobby-screen" class="screen">
-  <div style="font-size:15px;font-weight:900;letter-spacing:5px;text-transform:uppercase;color:var(--txt-dim)">Matchmaking</div>
-  <div id="lobby-list"></div>
-  <div id="lobby-status">Searching for fighters…</div>
-  <button id="btn-lobby-cancel" class="btn ghost" style="margin-top:22px">Cancel</button>
 </div>
 
 <!-- ============ CUTSCENE ============ -->
@@ -782,18 +817,10 @@
     <div id="stick"><div id="stick-ring"></div><div id="stick-knob"></div></div>
   </div>
 
-  <div id="left-cluster">
-    <button id="btn-crouch" class="abtn">CROUCH</button>
-    <button id="btn-cam" class="abtn">VIEW</button>
-  </div>
-
   <div id="right-cluster">
     <button id="btn-fire" class="abtn">ATTACK</button>
-    <button id="btn-jump" class="abtn">JUMP</button>
-    <button id="btn-reload" class="abtn hide">RELOAD</button>
   </div>
 
-  <div id="hotbar"></div>
 </div>
 
 <!-- ============ RESULTS ============ -->
@@ -943,7 +970,8 @@ var settings = {
   quality: 2,
   volume: 0.8,
   fov: 74,
-  loadout: 'bat'
+  loadout: 'bat',
+  camera: 0
 };
 
 function loadSettings() {
@@ -1355,6 +1383,30 @@ var Audio2 = (function () {
       o.connect(g); g.connect(dry);
       o.start(now + i * 0.05); o.stop(now + i * 0.05 + 0.15);
     });
+  };
+
+  SFX.zap = function () {
+    var now = ctx.currentTime;
+    // a short bright crackle plus a falling ring
+    var n = noise();
+    var bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(4200, now);
+    bp.frequency.exponentialRampToValueAtTime(900, now + 0.16);
+    bp.Q.value = 2.2;
+    var g = ctx.createGain();
+    env(g.gain, now, 0.26, 0.001, 0.17);
+    n.connect(bp); bp.connect(g); g.connect(dry);
+    n.start(now); n.stop(now + 0.2);
+
+    var o = ctx.createOscillator();
+    o.type = 'square';
+    o.frequency.setValueAtTime(1400, now);
+    o.frequency.exponentialRampToValueAtTime(320, now + 0.13);
+    var g2 = ctx.createGain();
+    env(g2.gain, now, 0.09, 0.002, 0.14);
+    o.connect(g2); g2.connect(dry);
+    o.start(now); o.stop(now + 0.16);
   };
 
   SFX.ui = function (up) {
@@ -2160,7 +2212,8 @@ var HITBOXES = [
 ];
 
 function hitboxWorld(fighter, hb, out) {
-  var s = Math.sin(fighter.yaw), c = Math.cos(fighter.yaw);
+  var yaw = fighter.yaw + Math.PI;            // match the rendered rig
+  var s = Math.sin(yaw), c = Math.cos(yaw);
   out.set(
     fighter.pos.x + hb.x * c + hb.z * s,
     fighter.pos.y + hb.y * fighter.crouchScale,
@@ -2211,8 +2264,8 @@ function hasLineOfSight(a, b) {
    elbows → hands, hips → knees → ankles) so walk, aim, flinch and death can
    all be driven procedurally instead of snapping whole limbs about.
    ========================================================================== */
-var SKIN_TONES = [0xf2c9a8, 0xe0aa80, 0xc68a60, 0x9a6440, 0x6f4429, 0xf7d9c0];
-var HAIR_COLORS = [0x1c1410, 0x2e2018, 0x4a3524, 0x6b4a2a, 0x0d0d10, 0x8a7350, 0x3a3a3c];
+var SKIN_TONES = [0x9e846d, 0x8f6d52, 0x7e573d, 0x624029, 0x472b1a, 0xa48d7c];
+var HAIR_COLORS = [0x17110d, 0x241a13, 0x3a2a1c, 0x50381f, 0x0c0c0f, 0x2b2b2e, 0x1e1614];
 var EYE_COLORS = [0x3a5f7a, 0x5a7a3a, 0x6b4a2a, 0x40404a, 0x2c4a63];
 
 /* Everyone in the room was issued the same clothes. Only the body underneath
@@ -2227,7 +2280,7 @@ var UNIFORM = {
   boot: 0x121316,
   belt: 0x17181c
 };
-var ZOMBIE_SKIN = [0x9fa88f, 0xa8ab9c, 0x8e9a86, 0xb0b0a2, 0x94a094];
+var ZOMBIE_SKIN = [0x666e5c, 0x6d7064, 0x5c6455, 0x717167, 0x5f675e];
 
 function capsuleMesh(rTop, rBot, len, mat, segs) {
   var g = new THREE.Group();
@@ -2240,6 +2293,636 @@ function capsuleMesh(rTop, rBot, len, mat, segs) {
   bot.position.y = -len / 2;
   g.add(bot);
   return g;
+}
+
+/* ==========================================================================
+   FACES
+   Stacking lumps onto a ball gives you warts, not a person.  So the work is
+   split in two.  Everything that is really a change of SHAPE — brow ridge,
+   nose, cheekbones, jawline, chin — is sculpted into the head mesh itself by
+   skullPoint().  Everything that is really a change of COLOUR — eyes, brows,
+   lips, stubble, the shadow under a cheekbone — is painted into one
+   equirectangular skin map.  Both are addressed by the same pair of angles,
+   so a painted iris always lands inside its sculpted socket, and the eyelid,
+   the jaw and the hair are all patches of that same sculpted surface and so
+   cannot float, crease or drift.
+
+     az : 0 is straight ahead (+Z), positive towards +X
+     el : 0 is the equator, +PI/2 the crown
+   ========================================================================== */
+
+// The ellipsoid the whole head is hung off.
+var SK_R = 0.0845, SK_SY = 1.33, SK_SZ = 1.16, SK_Y = 0.050;
+
+// Landmarks the sculpt, the paint and the animation all agree on.
+var F_EYE_AZ = 0.368, F_EYE_EL = 0.168, F_EYE_W = 0.180, F_EYE_H = 0.064;
+var F_BROW_EL = 0.452;
+var F_MOUTH_EL = -0.190;                 // the jaw is cut along this line
+var F_LID_BOT = 0.232, F_LID_TOP = 0.306, F_LID_SHUT = 0.062;
+var F_JAW_AZ = 0.62;
+
+function faceU(az) { return 0.25 + az / (Math.PI * 2); }
+function faceV(el) { return 0.5 + el / Math.PI; }
+
+function gaus(v, c, s) { var d = (v - c) / s; return Math.exp(-d * d); }
+function sm01(v) { v = v < 0 ? 0 : v > 1 ? 1 : v; return v * v * (3 - 2 * v); }
+function cssHex(h) { return '#' + ('00000' + (h >>> 0).toString(16)).slice(-6); }
+function cssRGBA(h, a) {
+  return 'rgba(' + ((h >> 16) & 255) + ',' + ((h >> 8) & 255) + ',' + (h & 255) + ',' + a + ')';
+}
+
+/**
+ * One point on the sculpted head, in head-local space.
+ * `push` lifts it along the surface, which is how the eyelids and the hair
+ * shell ride flush over the same form.  `plain` returns the bare ellipsoid,
+ * for pieces that must slide across the surface without catching on it.
+ */
+function skullPoint(az, el, push, zombie, out, plain) {
+  var ce = Math.cos(el), se = Math.sin(el);
+  var dx = ce * Math.sin(az), dy = se, dz = ce * Math.cos(az);
+  var aa = Math.abs(az);
+  var front = Math.max(0, Math.cos(az));
+  var rx = SK_R, ry = SK_R * SK_SY, rz = SK_R * SK_SZ;
+
+  // Below the cheekbones the face narrows hard and shallows.  This is what
+  // makes a jawline rather than a chin drawn on a ball.
+  var low = sm01((0.06 - el) / 0.72);
+  rx *= 1 - 0.44 * low * low;
+  rz *= 1 - 0.16 * low;
+  // The cranium closes in towards the crown.
+  var high = sm01((el - 0.48) / 0.95);
+  rx *= 1 - 0.18 * high;
+  rz *= 1 - 0.13 * high;
+  // The back of a skull stands proud of a sphere; the face is flatter than one.
+  rz *= 1 + 0.055 * Math.max(0, -Math.cos(az)) * (1 - low);
+  rz *= 1 - 0.055 * front * gaus(el, 0.30, 0.45);
+  // And the temples are flat, not round.
+  rx *= 1 - 0.055 * gaus(aa, 1.16, 0.34) * gaus(el, 0.34, 0.42);
+
+  var b = push || 0;
+  if (!plain) {
+    // brow ridge, kept above the eyelid so the lid never snags on it
+    b += (zombie ? 0.0125 : 0.0082) * gaus(el, 0.485, 0.125) * sm01((1.05 - aa) / 0.55);
+    // sockets, dug in around a slight bulge where the eyeball sits
+    b -= (zombie ? 0.0120 : 0.0072) * gaus(el, F_EYE_EL, 0.130) * gaus(aa, 0.44, 0.26);
+    if (!zombie) b += 0.0040 * gaus(el, F_EYE_EL, 0.085) * gaus(aa, F_EYE_AZ, 0.165);
+    // the nose: a ridge from the brow down to the tip, then the wings
+    var nz = sm01((0.46 - el) / 0.26) * sm01((el + 0.050) / 0.075);
+    b += (zombie ? 0.024 : 0.029) * nz * gaus(az, 0, 0.165)
+       * (0.80 + 0.20 * gaus(el, 0.040, 0.15));
+    b += 0.0135 * gaus(el, 0.010, 0.050) * gaus(aa, 0.108, 0.066);
+    b -= 0.0045 * gaus(el, 0.030, 0.070) * gaus(aa, 0.185, 0.055);   // alar crease
+    // cheekbones, and the hollow under them — deeper on the risen
+    b += (zombie ? 0.0115 : 0.0078) * gaus(el, 0.045, 0.120) * gaus(aa, 0.68, 0.25);
+    b -= (zombie ? 0.0135 : 0.0055) * gaus(el, -0.19, 0.165) * gaus(aa, 0.66, 0.24);
+    // lips
+    b += 0.0058 * gaus(el, -0.152, 0.052) * gaus(az, 0, 0.185);
+    b += 0.0052 * gaus(el, -0.258, 0.058) * gaus(az, 0, 0.165);
+    b -= 0.0036 * gaus(el, -0.335, 0.055) * gaus(az, 0, 0.20);
+    b -= 0.0022 * gaus(el, -0.085, 0.052) * gaus(az, 0, 0.052);      // philtrum
+    // chin, and the hard corner of the jaw under the ear
+    b += 0.0138 * gaus(el, -0.49, 0.125) * gaus(az, 0, 0.26);
+    b += 0.0105 * gaus(el, -0.285, 0.155) * gaus(aa, 1.16, 0.21);
+    // temple hollow
+    b -= 0.0035 * gaus(el, 0.46, 0.18) * gaus(aa, 1.10, 0.22);
+  }
+
+  out = out || new THREE.Vector3();
+  return out.set(dx * (rx + b), SK_Y + dy * (ry + b), dz * (rz + b));
+}
+
+/**
+ * A lat/long patch of the sculpted head carrying sphere-standard UVs, so
+ * every piece samples the one painted face map in the right place.  UVs are
+ * allowed to run outside 0..1 — the texture wraps, and because they stay
+ * monotonic across the mesh there is no seam to see.
+ */
+function skullPatch(az0, az1, el0, el1, nAz, nEl, opt) {
+  opt = opt || {};
+  var pushFn = typeof opt.push === 'function' ? opt.push : null;
+  var pushN = pushFn ? 0 : (opt.push || 0);
+  var pos = [], uv = [], nor = [], idx = [];
+  var v = new THREE.Vector3();
+  var pa = new THREE.Vector3(), pb = new THREE.Vector3();
+  var ta = new THREE.Vector3(), tb = new THREE.Vector3(), nv = new THREE.Vector3();
+  var D = 0.004;
+  function at(az, el, o) {
+    return skullPoint(az, el, pushFn ? pushFn(az, el) : pushN, opt.zombie, o, opt.plain);
+  }
+  var i, j;
+  for (j = 0; j <= nEl; j++) {
+    var el = el0 + (el1 - el0) * (j / nEl);
+    for (i = 0; i <= nAz; i++) {
+      var az = az0 + (az1 - az0) * (i / nAz);
+      at(az, el, v);
+      pos.push(v.x, v.y, v.z);
+      uv.push(faceU(az), faceV(el));
+      // Sampled straight off the surface function rather than averaged from
+      // the triangles, so neighbouring patches agree exactly and the joins
+      // between skull, jaw, eyelid and hair disappear.
+      ta.copy(at(az + D, el, pa)).sub(at(az - D, el, pb));
+      tb.copy(at(az, el + D, pa)).sub(at(az, el - D, pb));
+      nv.crossVectors(ta, tb);
+      if (nv.lengthSq() < 1e-14) {
+        nv.set(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az));
+      }
+      nv.normalize();
+      nor.push(nv.x, nv.y, nv.z);
+    }
+  }
+  var row = nAz + 1;
+  for (j = 0; j < nEl; j++) {
+    for (i = 0; i < nAz; i++) {
+      var a = j * row + i, b = a + 1, c = a + row, d = c + 1;
+      idx.push(a, b, c, b, d, c);
+    }
+  }
+  var g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  return g;
+}
+
+/* ---- where the hair stops -----------------------------------------------
+   Read left to right: the middle of the forehead, the rise to the temple,
+   the notch at the temple, the sideburn, up over the ear, then down the neck
+   to the nape. */
+var HAIR_AZ = [0.00, 0.30, 0.60, 0.90, 1.14, 1.36, 1.58, 1.94, 2.18, 2.60, 3.15];
+var HAIRLINES = [
+  [0.585, 0.640, 0.660, 0.630, 0.480, 0.170, 0.340, 0.305, -0.180, -0.420, -0.480],
+  [0.740, 0.755, 0.700, 0.570, 0.395, 0.150, 0.330, 0.295, -0.190, -0.430, -0.490],
+  [0.535, 0.590, 0.625, 0.605, 0.470, 0.125, 0.315, 0.280, -0.240, -0.470, -0.520],
+  [0.880, 0.885, 0.790, 0.600, 0.375, 0.140, 0.325, 0.290, -0.175, -0.400, -0.460]
+];
+
+function hairlineEl(az, style) {
+  az = Math.abs(((az + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+  var tbl = HAIRLINES[((style | 0) % HAIRLINES.length + HAIRLINES.length) % HAIRLINES.length];
+  for (var i = 1; i < HAIR_AZ.length; i++) {
+    if (az <= HAIR_AZ[i] || i === HAIR_AZ.length - 1) {
+      var t = sm01((az - HAIR_AZ[i - 1]) / (HAIR_AZ[i] - HAIR_AZ[i - 1]));
+      return tbl[i - 1] + (tbl[i] - tbl[i - 1]) * t;
+    }
+  }
+  return tbl[0];
+}
+
+/* ---- the painted face ---------------------------------------------------- */
+var FACE_CACHE = {};
+
+function faceTextures(opts) {
+  var key = [opts.skin, opts.brow, opts.eye, opts.zombie ? 1 : 0, opts.variant | 0].join('|');
+  if (FACE_CACHE[key]) return FACE_CACHE[key];
+
+  var zom = !!opts.zombie, skin = opts.skin, vary = opts.variant | 0;
+  var W = (settings.quality >= 1) ? 1024 : 512, H = W >> 1;
+  var PX = W / (Math.PI * 2);            // pixels per radian — equal on both axes
+  var c = document.createElement('canvas'); c.width = W; c.height = H;
+  var x = c.getContext('2d');
+
+  function U(az) { return faceU(az) * W; }
+  function V(el) { return (1 - faceV(el)) * H; }
+  function sh(m) { return shadeHexToInt(skin, m); }
+
+  /** A soft blot of colour, the workhorse for every bit of shading. */
+  function soft(az, el, rad, col, alpha, sx, sy) {
+    var r = rad * PX;
+    x.save();
+    x.translate(U(az), V(el));
+    x.scale(sx === undefined ? 1 : sx, sy === undefined ? 1 : sy);
+    var g = x.createRadialGradient(0, 0, 0, 0, 0, r);
+    g.addColorStop(0, cssRGBA(col, alpha));
+    g.addColorStop(0.55, cssRGBA(col, alpha * 0.55));
+    g.addColorStop(1, cssRGBA(col, 0));
+    x.fillStyle = g;
+    x.beginPath(); x.arc(0, 0, r, 0, 6.2832); x.fill();
+    x.restore();
+  }
+
+  x.fillStyle = cssHex(skin);
+  x.fillRect(0, 0, W, H);
+
+  // Skin is never one flat colour.
+  var i, k;
+  for (i = 0; i < 1100; i++) {
+    var mAz = rand(-2.6, 2.6), mEl = rand(-1.0, 1.1);
+    x.fillStyle = cssRGBA(Math.random() < 0.5 ? sh(0.92) : sh(1.07), rand(0.04, 0.15));
+    x.beginPath();
+    x.arc(U(mAz), V(mEl), rand(0.006, 0.05) * PX, 0, 6.2832);
+    x.fill();
+  }
+
+  // Scalp is darker than the face — if the hairline ever shows through, it
+  // should show shadow, not a bright forehead.
+  for (i = 0; i < W; i++) {
+    var saz = (i / W - 0.25) * Math.PI * 2;
+    x.fillStyle = cssRGBA(sh(zom ? 0.52 : 0.62), 0.85);
+    x.fillRect(i, 0, 1, (0.5 - (hairlineEl(saz, vary) + 0.035) / Math.PI) * H);
+  }
+
+  // ---- modelling: the shadows that make the sculpt read ----
+  soft(0, -0.74, 0.42, sh(0.60), 0.45, 1.8, 0.95);                 // under the jaw
+  soft(0, -0.30, 0.16, sh(0.80), 0.35, 1.9, 0.85);                 // under the lip
+  soft(0, -0.055, 0.115, sh(0.66), 0.55, 1.6, 0.80);               // under the nose
+  [-1, 1].forEach(function (sd) {
+    soft(sd * 0.115, 0.115, 0.135, sh(0.78), 0.45, 0.75, 1.5);     // side of the nose
+    soft(sd * 0.78, -0.10, 0.30, sh(zom ? 0.62 : 0.84), zom ? 0.85 : 0.40, 1.0, 1.25);
+    soft(sd * 1.16, 0.34, 0.26, sh(0.80), 0.40, 0.8, 1.3);         // temple
+    soft(sd * 1.30, -0.30, 0.26, sh(0.72), 0.45, 0.9, 1.2);        // under the cheekbone
+    if (!zom) soft(sd * 0.70, -0.02, 0.24, 0xc4715c, 0.16, 1.1, 1.0);   // a little life
+  });
+
+  if (zom) {
+    // grey-green death mottling, then the veins under it
+    for (i = 0; i < 90; i++) {
+      soft(rand(-2.8, 2.8), rand(-0.8, 1.0), rand(0.05, 0.20),
+           Math.random() < 0.5 ? 0x6d7a63 : 0x8b8f7a, rand(0.10, 0.30),
+           rand(0.7, 1.6), rand(0.7, 1.6));
+    }
+    x.lineCap = 'round';
+    for (i = 0; i < 26; i++) {
+      var vaz = rand(-1.5, 1.5), vel = rand(-0.25, 0.55);
+      x.strokeStyle = cssRGBA(0x3d4a3a, rand(0.20, 0.45));
+      x.lineWidth = rand(0.002, 0.005) * PX;
+      x.beginPath();
+      x.moveTo(U(vaz), V(vel));
+      for (k = 0; k < 3; k++) {
+        vaz += rand(-0.18, 0.18); vel -= rand(0.02, 0.10);
+        x.lineTo(U(vaz), V(vel));
+      }
+      x.stroke();
+    }
+  }
+
+  // ---- eyes ----
+  function eyePath(sd, grow) {
+    var ca = sd * F_EYE_AZ, w = F_EYE_W + (grow || 0), h = F_EYE_H + (grow || 0) * 0.55;
+    var inner = ca - sd * w, outer = ca + sd * w;
+    x.beginPath();
+    x.moveTo(U(inner), V(F_EYE_EL - 0.018));
+    x.bezierCurveTo(U(ca - sd * w * 0.50), V(F_EYE_EL + h * 1.05),
+                    U(ca + sd * w * 0.45), V(F_EYE_EL + h * 1.00),
+                    U(outer), V(F_EYE_EL + 0.028));
+    x.bezierCurveTo(U(ca + sd * w * 0.55), V(F_EYE_EL - h * 0.80),
+                    U(ca - sd * w * 0.50), V(F_EYE_EL - h * 1.00),
+                    U(inner), V(F_EYE_EL - 0.018));
+    x.closePath();
+  }
+
+  var irisCol = zom ? 0x9ef07a : opts.eye;
+  [-1, 1].forEach(function (sd) {
+    // the socket first, so the eye sits inside a shadow
+    soft(sd * F_EYE_AZ, F_EYE_EL + 0.015, 0.27, sh(zom ? 0.34 : 0.74), zom ? 0.9 : 0.50, 1.30, 1.10);
+    // a sick glow leaking out of the socket, so the eyes read from a distance
+    if (zom) soft(sd * F_EYE_AZ, F_EYE_EL, 0.16, 0x4a8a30, 0.45, 1.15, 1.0);
+
+    eyePath(sd, 0);
+    x.save();
+    x.fillStyle = zom ? '#c2c6ae' : '#ddd8cb';
+    x.fill();
+    x.clip();
+    // the sclera is in shadow under the lid, never a flat white slab
+    var gg = x.createLinearGradient(0, V(F_EYE_EL + F_EYE_H), 0, V(F_EYE_EL - F_EYE_H * 0.2));
+    gg.addColorStop(0, 'rgba(48,38,34,0.62)');
+    gg.addColorStop(1, 'rgba(48,38,34,0)');
+    x.fillStyle = gg;
+    x.fillRect(U(sd * F_EYE_AZ) - 0.3 * PX, V(F_EYE_EL + 0.3), 0.6 * PX, 0.6 * PX);
+
+    // iris
+    var ia = sd * (F_EYE_AZ + 0.010), ie = F_EYE_EL + 0.003, ir = (zom ? 0.068 : 0.050) * PX;
+    var ig = x.createRadialGradient(U(ia), V(ie), ir * 0.15, U(ia), V(ie), ir);
+    ig.addColorStop(0, cssHex(shadeHexToInt(irisCol, 1.35)));
+    ig.addColorStop(0.65, cssHex(irisCol));
+    ig.addColorStop(1, cssHex(shadeHexToInt(irisCol, 0.45)));
+    x.fillStyle = ig;
+    x.beginPath(); x.arc(U(ia), V(ie), ir, 0, 6.2832); x.fill();
+    // fibres, then the limbal ring
+    x.strokeStyle = cssRGBA(shadeHexToInt(irisCol, 0.55), 0.5);
+    x.lineWidth = Math.max(1, 0.0015 * PX);
+    for (k = 0; k < 16; k++) {
+      var an = k / 16 * 6.2832;
+      x.beginPath();
+      x.moveTo(U(ia) + Math.cos(an) * ir * 0.35, V(ie) + Math.sin(an) * ir * 0.35);
+      x.lineTo(U(ia) + Math.cos(an) * ir * 0.92, V(ie) + Math.sin(an) * ir * 0.92);
+      x.stroke();
+    }
+    x.strokeStyle = cssRGBA(zom ? 0x2f5a20 : 0x1a1410, 0.75);
+    x.lineWidth = Math.max(1, 0.006 * PX);
+    x.beginPath(); x.arc(U(ia), V(ie), ir * 0.96, 0, 6.2832); x.stroke();
+    // pupil
+    x.fillStyle = zom ? '#0e1a08' : '#0a0a0e';
+    x.beginPath(); x.arc(U(ia), V(ie), ir * (zom ? 0.36 : 0.42), 0, 6.2832); x.fill();
+    // catchlight
+    x.fillStyle = 'rgba(255,255,255,0.9)';
+    x.beginPath();
+    x.arc(U(ia) - sd * ir * 0.30, V(ie) - ir * 0.34, ir * 0.20, 0, 6.2832);
+    x.fill();
+    // the shadow the upper lid throws across the eye
+    var lg = x.createLinearGradient(0, V(F_EYE_EL + F_EYE_H), 0, V(F_EYE_EL));
+    lg.addColorStop(0, 'rgba(25,18,15,0.55)');
+    lg.addColorStop(1, 'rgba(25,18,15,0)');
+    x.fillStyle = lg;
+    x.fillRect(U(sd * F_EYE_AZ) - 0.3 * PX, V(F_EYE_EL + 0.3), 0.6 * PX, 0.6 * PX);
+    x.restore();
+
+    // lash line: painted at the eye's top edge, which is exactly where the
+    // eyelid patch begins, so lid and skull carry the same line and it stays
+    // put whether the eye is open or shut
+    x.save();
+    eyePath(sd, 0);
+    x.clip();
+    x.strokeStyle = cssRGBA(zom ? 0x241d16 : 0x1b1410, 0.95);
+    x.lineWidth = 0.017 * PX;
+    eyePath(sd, 0); x.stroke();
+    x.restore();
+    // lower lid, a lighter line
+    x.strokeStyle = cssRGBA(sh(0.55), 0.55);
+    x.lineWidth = 0.007 * PX;
+    x.beginPath();
+    x.moveTo(U(sd * (F_EYE_AZ - F_EYE_W)), V(F_EYE_EL - 0.028));
+    x.quadraticCurveTo(U(sd * F_EYE_AZ), V(F_EYE_EL - F_EYE_H - 0.020),
+                       U(sd * (F_EYE_AZ + F_EYE_W)), V(F_EYE_EL + 0.014));
+    x.stroke();
+    // and the fold above it
+    x.strokeStyle = cssRGBA(sh(0.62), 0.45);
+    x.lineWidth = 0.010 * PX;
+    x.beginPath();
+    x.moveTo(U(sd * (F_EYE_AZ - F_EYE_W * 0.85)), V(F_EYE_EL + F_EYE_H + 0.045));
+    x.quadraticCurveTo(U(sd * F_EYE_AZ), V(F_EYE_EL + F_EYE_H + 0.085),
+                       U(sd * (F_EYE_AZ + F_EYE_W * 0.95)), V(F_EYE_EL + F_EYE_H + 0.020));
+    x.stroke();
+  });
+
+  // ---- brows ----
+  [-1, 1].forEach(function (sd) {
+    var a0 = sd * (F_EYE_AZ - 0.230), a1 = sd * (F_EYE_AZ + 0.255);
+    var lift = zom ? 0.075 : 0.052, drop = zom ? 0.085 : 0.028;
+    x.beginPath();
+    x.moveTo(U(a0), V(F_BROW_EL - (zom ? 0.050 : 0.008)));
+    x.quadraticCurveTo(U(sd * (F_EYE_AZ - 0.02)), V(F_BROW_EL + lift), U(a1), V(F_BROW_EL - drop));
+    x.quadraticCurveTo(U(sd * (F_EYE_AZ - 0.02)), V(F_BROW_EL + lift * 0.30),
+                       U(a0), V(F_BROW_EL - (zom ? 0.090 : 0.048)));
+    x.closePath();
+    x.fillStyle = cssRGBA(opts.brow, zom ? 0.55 : 0.92);
+    x.fill();
+    // a few strays so it is not a printed decal
+    x.strokeStyle = cssRGBA(opts.brow, 0.55);
+    x.lineWidth = Math.max(1, 0.0022 * PX);
+    for (k = 0; k < 26; k++) {
+      var t = k / 26, baz = a0 + (a1 - a0) * t;
+      var bel = F_BROW_EL + Math.sin(t * 3.14) * lift * 0.55 - t * drop * 0.5;
+      x.beginPath();
+      x.moveTo(U(baz), V(bel - 0.022));
+      x.lineTo(U(baz + sd * 0.030), V(bel + rand(0.012, 0.034)));
+      x.stroke();
+    }
+  });
+
+  // ---- nose ----
+  [-1, 1].forEach(function (sd) {
+    x.fillStyle = cssRGBA(sh(0.42), zom ? 0.85 : 0.7);
+    x.save();
+    x.translate(U(sd * 0.068), V(-0.012));
+    x.rotate(sd * 0.55);
+    x.beginPath();
+    x.ellipse(0, 0, 0.021 * PX, 0.011 * PX, 0, 0, 6.2832);
+    x.fill();
+    x.restore();
+  });
+  soft(0, 0.055, 0.075, sh(1.10), 0.35, 1.0, 1.6);               // light down the ridge
+
+  // ---- mouth ----
+  var lipCol = zom ? 0x6a544f : shadeHexToInt(skin, 0.68);
+  var MW = 0.200;
+  x.beginPath();                                                  // upper lip
+  x.moveTo(U(-MW), V(F_MOUTH_EL + 0.004));
+  x.bezierCurveTo(U(-0.105), V(F_MOUTH_EL + 0.054), U(-0.052), V(F_MOUTH_EL + 0.030),
+                  U(0), V(F_MOUTH_EL + 0.038));
+  x.bezierCurveTo(U(0.052), V(F_MOUTH_EL + 0.030), U(0.105), V(F_MOUTH_EL + 0.054),
+                  U(MW), V(F_MOUTH_EL + 0.004));
+  x.bezierCurveTo(U(0.09), V(F_MOUTH_EL - 0.012), U(-0.09), V(F_MOUTH_EL - 0.012),
+                  U(-MW), V(F_MOUTH_EL + 0.004));
+  x.closePath();
+  x.fillStyle = cssRGBA(lipCol, 0.9); x.fill();
+  x.beginPath();                                                  // lower lip
+  x.moveTo(U(-MW * 0.94), V(F_MOUTH_EL - 0.002));
+  x.bezierCurveTo(U(-0.09), V(F_MOUTH_EL - 0.016), U(0.09), V(F_MOUTH_EL - 0.016),
+                  U(MW * 0.94), V(F_MOUTH_EL - 0.002));
+  x.bezierCurveTo(U(0.10), V(F_MOUTH_EL - 0.082), U(-0.10), V(F_MOUTH_EL - 0.082),
+                  U(-MW * 0.94), V(F_MOUTH_EL - 0.002));
+  x.closePath();
+  x.fillStyle = cssRGBA(shadeHexToInt(lipCol, 1.12), 0.9); x.fill();
+  soft(0, F_MOUTH_EL - 0.042, 0.075, 0xffd8c8, 0.22, 1.7, 0.7);   // highlight
+  x.strokeStyle = cssRGBA(shadeHexToInt(skin, 0.30), 0.9);        // the line between
+  x.lineWidth = 0.011 * PX;
+  x.beginPath();
+  x.moveTo(U(-MW), V(F_MOUTH_EL + 0.004));
+  x.bezierCurveTo(U(-0.07), V(F_MOUTH_EL - 0.012), U(0.07), V(F_MOUTH_EL - 0.012),
+                  U(MW), V(F_MOUTH_EL + 0.004));
+  x.stroke();
+
+  // ---- stubble ----
+  if (!zom && (vary & 1)) {
+    x.save();
+    x.beginPath();
+    x.moveTo(U(-1.05), V(-0.16));
+    x.bezierCurveTo(U(-0.85), V(-0.72), U(0.85), V(-0.72), U(1.05), V(-0.16));
+    x.lineTo(U(1.05), V(-1.1)); x.lineTo(U(-1.05), V(-1.1));
+    x.closePath();
+    x.clip();
+    for (i = 0; i < 4200; i++) {
+      x.fillStyle = cssRGBA(0x241c14, rand(0.10, 0.30));
+      x.fillRect(U(rand(-1.05, 1.05)), V(rand(-1.05, -0.12)),
+                 Math.max(1, 0.0022 * PX), Math.max(1, 0.0022 * PX));
+    }
+    x.restore();
+    // moustache shadow
+    soft(0, F_MOUTH_EL + 0.075, 0.13, 0x241c14, 0.28, 1.5, 0.7);
+  }
+
+  if (zom) {
+    // the mouth has been busy
+    soft(0, F_MOUTH_EL - 0.01, 0.20, 0x4a0a0b, 0.75, 1.5, 1.2);
+    for (i = 0; i < 7; i++) {
+      var raz = rand(-0.16, 0.16);
+      x.strokeStyle = cssRGBA(0x400709, rand(0.5, 0.85));
+      x.lineWidth = rand(0.006, 0.018) * PX;
+      x.lineCap = 'round';
+      x.beginPath();
+      x.moveTo(U(raz), V(F_MOUTH_EL - 0.03));
+      x.quadraticCurveTo(U(raz + rand(-0.05, 0.05)), V(F_MOUTH_EL - 0.25),
+                         U(raz + rand(-0.08, 0.08)), V(F_MOUTH_EL - rand(0.30, 0.62)));
+      x.stroke();
+    }
+    // a cheek torn open to the teeth
+    var taz = (vary & 1) ? 0.66 : -0.66;
+    x.save();
+    x.beginPath();
+    for (k = 0; k <= 14; k++) {
+      var ang = k / 14 * 6.2832;
+      var rr = 1 + Math.sin(k * 2.7) * 0.28;
+      x.lineTo(U(taz + Math.cos(ang) * 0.17 * rr), V(-0.10 + Math.sin(ang) * 0.10 * rr));
+    }
+    x.closePath();
+    x.fillStyle = '#4e0f11'; x.fill();
+    x.clip();
+    x.fillStyle = '#75181a';
+    for (i = 0; i < 40; i++) {
+      x.beginPath();
+      x.arc(U(taz + rand(-0.16, 0.16)), V(-0.10 + rand(-0.09, 0.09)), rand(0.006, 0.022) * PX, 0, 6.2832);
+      x.fill();
+    }
+    x.fillStyle = '#ddd6c0';                                      // teeth through the hole
+    for (i = 0; i < 5; i++) {
+      x.fillRect(U(taz - 0.12 + i * 0.05), V(-0.12), 0.030 * PX, 0.055 * PX);
+    }
+    x.restore();
+    x.strokeStyle = cssRGBA(0x2d0708, 0.8);
+    x.lineWidth = 0.008 * PX;
+    x.beginPath();
+    for (k = 0; k <= 14; k++) {
+      var ang2 = k / 14 * 6.2832, rr2 = 1 + Math.sin(k * 2.7) * 0.28;
+      x.lineTo(U(taz + Math.cos(ang2) * 0.17 * rr2), V(-0.10 + Math.sin(ang2) * 0.10 * rr2));
+    }
+    x.closePath(); x.stroke();
+  }
+
+  var map = new THREE.CanvasTexture(c);
+  map.wrapS = map.wrapT = THREE.RepeatWrapping;
+  map.anisotropy = maxAniso;
+
+  // The risen get a second, tiny map so only the irises glow.
+  var emis = null;
+  if (zom) {
+    var ew = 256, eh = 128;
+    var e2 = document.createElement('canvas'); e2.width = ew; e2.height = eh;
+    var ex = e2.getContext('2d');
+    ex.fillStyle = '#000'; ex.fillRect(0, 0, ew, eh);
+    [-1, 1].forEach(function (sd) {
+      var gx = faceU(sd * (F_EYE_AZ + 0.012)) * ew;
+      var gy = (1 - faceV(F_EYE_EL + 0.004)) * eh;
+      var gr = 0.105 * (ew / (Math.PI * 2));
+      var g2 = ex.createRadialGradient(gx, gy, 0, gx, gy, gr);
+      g2.addColorStop(0, '#b6ff8c');
+      g2.addColorStop(0.45, '#5fbf3a');
+      g2.addColorStop(1, '#000000');
+      ex.fillStyle = g2;
+      ex.beginPath(); ex.arc(gx, gy, gr, 0, 6.2832); ex.fill();
+    });
+    emis = new THREE.CanvasTexture(e2);
+    emis.wrapS = emis.wrapT = THREE.RepeatWrapping;
+  }
+
+  FACE_CACHE[key] = { map: map, emissive: emis };
+  return FACE_CACHE[key];
+}
+
+/* ---- the painted hair ----------------------------------------------------
+   The colour and the SHAPE both live in this one texture: everything above
+   the hairline is opaque, everything below is cut away by alphaTest.  Because
+   the shell mesh is a patch of the same sculpted head, the cut lands exactly
+   on the skin, and the hairline can be any silhouette we like. */
+var HAIR_CACHE = {};
+
+function hairTexture(col, style, zombie) {
+  var key = col + '|' + style + '|' + (zombie ? 1 : 0);
+  if (HAIR_CACHE[key]) return HAIR_CACHE[key];
+
+  var W = (settings.quality >= 1) ? 1024 : 512, H = W >> 1;
+  var PX = W / (Math.PI * 2);
+  var c = document.createElement('canvas'); c.width = W; c.height = H;
+  var x = c.getContext('2d');
+  x.clearRect(0, 0, W, H);
+
+  var i, k;
+  function azAt(px) {
+    var a = (px / W - 0.25) * Math.PI * 2;
+    if (a > Math.PI) a -= Math.PI * 2;
+    return a;
+  }
+  function lineAt(px) {
+    var a = azAt(px);
+    // a ragged edge, not a printed one
+    return hairlineEl(a, style) +
+      (Math.sin(a * 37.3) * 0.5 + Math.sin(a * 91.7) * 0.3 + Math.sin(a * 13.1) * 0.2) * 0.006;
+  }
+
+  // Filled as one antialiased path: per-column rectangles turn into visible
+  // stair steps once alphaTest cuts the silhouette out of them.
+  x.fillStyle = cssHex(col);
+  x.beginPath();
+  x.moveTo(0, 0);
+  for (i = 0; i <= W; i += 2) x.lineTo(i, (0.5 - lineAt(i) / Math.PI) * H);
+  x.lineTo(W, 0);
+  x.closePath();
+  x.fill();
+
+  // Loose strands hanging past the hairline, so the silhouette is hair and
+  // not the rim of a bowl.
+  for (i = 0; i < 34; i++) {
+    var faz = rand(-1.5, 1.5);
+    var fel = hairlineEl(faz, style);
+    var fw = rand(0.010, 0.026), fl = rand(0.012, 0.050);
+    x.beginPath();
+    x.moveTo(U2(faz - fw), V2(fel + 0.02));
+    x.lineTo(U2(faz + rand(-0.02, 0.02)), V2(fel - fl));
+    x.lineTo(U2(faz + fw), V2(fel + 0.02));
+    x.closePath();
+    x.fillStyle = cssHex(shadeHexToInt(col, rand(0.8, 1.2)));
+    x.fill();
+  }
+
+  // strands, kept inside the hair
+  x.globalCompositeOperation = 'source-atop';
+  x.lineCap = 'round';
+  for (i = 0; i < 900; i++) {
+    var saz = rand(-Math.PI, Math.PI), sel = rand(-0.5, 1.5);
+    x.strokeStyle = cssRGBA(Math.random() < 0.55 ? shadeHexToInt(col, 0.6)
+                                                 : shadeHexToInt(col, 1.5), rand(0.12, 0.40));
+    x.lineWidth = rand(0.002, 0.007) * PX;
+    x.beginPath();
+    x.moveTo(U2(saz), V2(sel));
+    x.quadraticCurveTo(U2(saz + rand(-0.10, 0.10)), V2(sel - 0.14),
+                       U2(saz + rand(-0.16, 0.16)), V2(sel - rand(0.18, 0.40)));
+    x.stroke();
+  }
+  function U2(az) { return faceU(az) * W; }
+  function V2(el) { return (1 - faceV(el)) * H; }
+
+  // a darker root shadow along the hairline so it sits on the head
+  for (i = 0; i < W; i++) {
+    var yb = (0.5 - lineAt(i) / Math.PI) * H;
+    var g = x.createLinearGradient(0, yb - 0.09 * PX, 0, yb);
+    g.addColorStop(0, cssRGBA(shadeHexToInt(col, 0.45), 0));
+    g.addColorStop(1, cssRGBA(shadeHexToInt(col, 0.45), 0.7));
+    x.fillStyle = g;
+    x.fillRect(i, yb - 0.09 * PX, 1, 0.09 * PX);
+  }
+  x.globalCompositeOperation = 'source-over';
+
+  if (zombie) {
+    // clumps torn out of the scalp
+    x.globalCompositeOperation = 'destination-out';
+    for (i = 0; i < 38; i++) {
+      var haz = rand(-Math.PI, Math.PI), hel = rand(-0.2, 1.4);
+      var hs = rand(0.6, 1.9);
+      x.beginPath();
+      for (k = 0; k <= 12; k++) {
+        var a2 = k / 12 * 6.2832, rr = rand(0.5, 1.2) * hs;
+        x.lineTo(U2(haz + Math.cos(a2) * 0.15 * rr), V2(hel + Math.sin(a2) * 0.11 * rr));
+      }
+      x.closePath(); x.fill();
+    }
+    x.globalCompositeOperation = 'source-over';
+  }
+
+  var t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = maxAniso;
+  HAIR_CACHE[key] = t;
+  return t;
 }
 
 /**
@@ -2268,11 +2951,8 @@ function createFighterModel(look, zombie) {
   });
   var bootMat = new THREE.MeshStandardMaterial({ color: UNIFORM.boot, roughness: 0.62, metalness: 0.1 });
   var beltMat = new THREE.MeshStandardMaterial({ color: UNIFORM.belt, roughness: 0.7, metalness: 0.15 });
-  var hairMat = new THREE.MeshStandardMaterial({
-    color: zombie ? 0x3a352e : look.hair, roughness: 0.96
-  });
   var stainMat = new THREE.MeshStandardMaterial({ color: 0x4a0d0c, roughness: 0.65 });
-  M.materials = [skinMat, shirtMat, trouserMat, bootMat, hairMat];
+  M.materials = [skinMat, shirtMat, trouserMat, bootMat];
   M.skinMat = skinMat;
   M.shirtMat = shirtMat;
 
@@ -2313,50 +2993,95 @@ function createFighterModel(look, zombie) {
   spine.add(chest);
   M.chest = chest;
 
-  var chestMesh = capsuleMesh(0.198, 0.186, 0.2, shirtMat, 18);
-  chestMesh.position.y = 0.1;
+  // Flattened front to back: a round barrel of a torso was what made
+  // everyone read as a marshmallow up close.
+  var chestMesh = capsuleMesh(0.176, 0.168, 0.21, shirtMat, 20);
+  chestMesh.position.y = 0.095;
+  chestMesh.scale.set(1, 1, 0.70);
   chest.add(chestMesh);
   // shoulder yoke, rounded rather than a slab
-  var yoke = capsuleMesh(0.105, 0.105, 0.3, shirtMat, 12);
+  var yoke = capsuleMesh(0.086, 0.086, 0.285, shirtMat, 12);
   yoke.rotation.z = Math.PI / 2;
-  yoke.position.y = 0.2;
+  yoke.position.y = 0.198;
+  yoke.scale.set(1, 1, 0.78);
   chest.add(yoke);
   // shirt placket and collar so the uniform reads as a shirt
   var placket = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.3, 0.012), shirtShadeMat);
-  placket.position.set(0, 0.08, 0.189);
+  placket.position.set(0, 0.075, 0.121);
   chest.add(placket);
   for (var bt = 0; bt < 4; bt++) {
     var button = new THREE.Mesh(new THREE.CylinderGeometry(0.0055, 0.0055, 0.004, 8), shirtShadeMat);
     button.rotation.x = Math.PI / 2;
-    button.position.set(0, -0.02 + bt * 0.07, 0.196);
+    button.position.set(0, -0.02 + bt * 0.07, 0.126);
     chest.add(button);
   }
-  var collar = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.072, 0.045, 16, 1, true), shirtShadeMat);
-  collar.position.y = 0.255;
+  var collar = new THREE.Mesh(new THREE.CylinderGeometry(0.080, 0.068, 0.042, 16, 1, true), shirtShadeMat);
+  collar.position.y = 0.252;
+  collar.scale.set(1, 1, 0.82);
   chest.add(collar);
   [-1, 1].forEach(function (sd) {
     var flap = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.05, 0.01), shirtShadeMat);
-    flap.position.set(sd * 0.035, 0.246, 0.07);
+    flap.position.set(sd * 0.033, 0.244, 0.052);
     flap.rotation.z = sd * -0.5;
     flap.rotation.x = 0.35;
     chest.add(flap);
   });
   var pocket = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.008), shirtShadeMat);
-  pocket.position.set(-0.075, 0.13, 0.186);
+  pocket.position.set(-0.072, 0.125, 0.119);
   chest.add(pocket);
 
   if (zombie) {
-    // torn, soaked, and missing pieces
-    for (var tr = 0; tr < 5; tr++) {
-      var stain = new THREE.Mesh(new THREE.SphereGeometry(rand(0.03, 0.075), 8, 6), stainMat);
-      stain.scale.set(1, rand(0.8, 1.6), 0.28);
-      stain.position.set(rand(-0.14, 0.14), rand(-0.02, 0.24), 0.17);
+    /* The uniform has been through something. Soaked, torn open over the
+       ribs, hanging in strips at the hem, with the collar half off. */
+    var ragMat = new THREE.MeshStandardMaterial({
+      color: 0x6f6d66, roughness: 0.95, side: THREE.DoubleSide
+    });
+    var rawMat2 = new THREE.MeshStandardMaterial({ color: 0x5a1416, roughness: 0.5 });
+    var ribMat = new THREE.MeshStandardMaterial({ color: 0xd6cfbc, roughness: 0.6 });
+
+    for (var tr = 0; tr < 7; tr++) {
+      var stain = new THREE.Mesh(new THREE.SphereGeometry(rand(0.03, 0.08), 8, 6), stainMat);
+      stain.scale.set(1, rand(0.8, 1.8), 0.24);
+      stain.position.set(rand(-0.15, 0.15), rand(-0.04, 0.24), rand(0.155, 0.185));
       chest.add(stain);
     }
-    var rip = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.07, 0.03), stainMat);
-    rip.position.set(0.07, 0.12, 0.165);
-    rip.rotation.z = 0.5;
-    chest.add(rip);
+
+    // a hole torn open over the ribs
+    var hole = new THREE.Mesh(new THREE.SphereGeometry(0.062, 12, 10), rawMat2);
+    hole.scale.set(1.1, 1.3, 0.35);
+    hole.position.set(0.055, 0.115, 0.168);
+    chest.add(hole);
+    for (var rb = 0; rb < 3; rb++) {
+      var rib = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.009, 0.012), ribMat);
+      rib.position.set(0.055, 0.075 + rb * 0.032, 0.176);
+      rib.rotation.z = 0.12;
+      chest.add(rib);
+    }
+
+    // fabric hanging off the edges of the hole and the hem
+    for (var st = 0; st < 6; st++) {
+      var strip = new THREE.Mesh(new THREE.PlaneGeometry(rand(0.02, 0.045), rand(0.05, 0.13)), ragMat);
+      var sa = Math.random() * Math.PI * 2;
+      strip.position.set(
+        Math.cos(sa) * rand(0.09, 0.17),
+        rand(-0.06, 0.16),
+        0.17 + rand(-0.01, 0.02)
+      );
+      strip.rotation.set(rand(-0.4, 0.4), rand(-0.5, 0.5), rand(-0.7, 0.7));
+      chest.add(strip);
+    }
+
+    // collar torn half away
+    var collarRip = new THREE.Mesh(new THREE.PlaneGeometry(0.07, 0.06), ragMat);
+    collarRip.position.set(-0.06, 0.235, 0.06);
+    collarRip.rotation.set(0.5, 0.6, -0.4);
+    chest.add(collarRip);
+
+    // shoulder seam gone on one side
+    var seam = new THREE.Mesh(new THREE.PlaneGeometry(0.05, 0.08), ragMat);
+    seam.position.set(-0.16, 0.19, 0.08);
+    seam.rotation.set(0.2, -0.9, 0.3);
+    chest.add(seam);
   }
 
   // ------------------------------------------------------------ neck/head ---
@@ -2364,153 +3089,278 @@ function createFighterModel(look, zombie) {
   neck.position.y = 0.28;
   chest.add(neck);
   M.neck = neck;
-  var neckMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.056, 0.068, 0.1, 14), skinMat);
-  neckMesh.position.y = 0.04;
+  // Run it up far enough to disappear under the jaw: stopping short left the
+  // head balanced on the end of a tube.
+  var neckMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.076, 0.126, 16), skinMat);
+  neckMesh.position.y = 0.050;
+  neckMesh.scale.set(1, 1, 0.94);
   neck.add(neckMesh);
-  var throat = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 6), skinMat);
-  throat.position.set(0, 0.055, 0.05);
+  // sternocleidomastoid, the two cords that run up from the collarbones
+  [-1, 1].forEach(function (nsd) {
+    var smc = capsuleMesh(0.014, 0.011, 0.075, skinMat, 8);
+    smc.position.set(nsd * 0.030, 0.045, 0.030);
+    smc.rotation.set(-0.18, 0, nsd * 0.24);
+    neck.add(smc);
+  });
+  var throat = new THREE.Mesh(new THREE.SphereGeometry(0.019, 10, 8), skinMat);
+  throat.scale.set(0.9, 1.25, 0.8);
+  throat.position.set(0, 0.062, 0.050);
   neck.add(throat);
 
   var head = new THREE.Group();
-  head.position.y = 0.1;
+  head.position.y = 0.136;
   neck.add(head);
   M.head = head;
 
-  var skull = new THREE.Mesh(new THREE.SphereGeometry(0.107, 24, 20), skinMat);
-  skull.scale.set(1.0, 1.15, 1.07);
-  skull.position.y = 0.055;
+  /* ------------------------------------------------------------------ head
+     See the FACES section: the shape is sculpted by skullPoint() and the
+     features are painted by faceTextures().  Every piece below — cranium,
+     jaw, eyelids, hair — is a patch of that ONE sculpted surface, so they sit
+     flush by construction instead of by hand-guessed coordinates. */
+  var faceVary = (look.face === undefined) ? 0 : (look.face | 0);
+  var hairStyle = (look.hairStyle === undefined) ? 0 : (look.hairStyle | 0);
+  var faceTex = faceTextures({
+    skin: skinCol,
+    brow: zombie ? 0x33302a : look.hair,
+    eye: zombie ? 0x9ef07a : look.eye,
+    zombie: zombie,
+    variant: faceVary
+  });
+  var faceMat = new THREE.MeshStandardMaterial({
+    map: faceTex.map,
+    emissive: zombie ? 0xffffff : 0x000000,
+    emissiveMap: faceTex.emissive || null,
+    emissiveIntensity: zombie ? 1.7 : 0,
+    roughness: zombie ? 0.93 : 0.66,
+    metalness: 0.0
+  });
+  M.faceMat = faceMat;
+  M.materials.push(faceMat);
+
+  var headDetail = settings.quality >= 1 ? 1 : 0.62;
+  function seg(n) { return Math.max(4, Math.round(n * headDetail)); }
+  function patch(a0, a1, e0, e1, na, ne, push, plain) {
+    return skullPatch(a0, a1, e0, e1, seg(na), seg(ne),
+                      { zombie: zombie, push: push, plain: plain });
+  }
+  var sp = new THREE.Vector3();
+
+  /* Skull, jaw and the back of the jaw all meet along shared edges.  Their
+     grids have to line up tooth for tooth: give two neighbours a different
+     number of segments along an edge they share and every mismatched vertex
+     becomes a T-junction, which shows up as a hairline crack down the face.
+     So one azimuth step is fixed here and every piece is cut from it. */
+  var AZN = seg(64);
+  var AZ_STEP = Math.PI * 2 / AZN;
+  var JAWN = Math.max(4, Math.round(F_JAW_AZ * 2 / AZ_STEP));
+  if (JAWN % 2) JAWN++;                       // symmetric about the nose
+  var JAW_A = JAWN * AZ_STEP / 2;             // the jaw's actual half width
+  var LOW_EL = -Math.PI / 2 + 0.04, LOWN = seg(15);
+
+  // 1. the cranium and the face, down as far as the mouth line
+  var skull = new THREE.Mesh(
+    patch(-Math.PI, Math.PI, F_MOUTH_EL, Math.PI / 2, AZN, seg(36)), faceMat);
   head.add(skull);
   M.skull = skull;
 
-  var cheeks = new THREE.Mesh(new THREE.SphereGeometry(0.088, 16, 12), skinMat);
-  cheeks.scale.set(1.0, 0.72, 1.0);
-  cheeks.position.set(0, 0.012, 0.012);
-  head.add(cheeks);
+  // 2. everything below the mouth line that is NOT the jaw
+  head.add(new THREE.Mesh(
+    patch(JAW_A, Math.PI * 2 - JAW_A, LOW_EL, F_MOUTH_EL, AZN - JAWN, LOWN), faceMat));
+
+  // 3. the jaw: the same surface on a hinge, so an open mouth is a real hole
+  //    in the head rather than a black sticker on the front of it
   var jaw = new THREE.Group();
-  jaw.position.set(0, -0.005, 0);
+  jaw.position.set(0, SK_Y - 0.030, -0.030);
   head.add(jaw);
   M.jaw = jaw;
-  var jawMesh = new THREE.Mesh(new THREE.SphereGeometry(0.068, 14, 10), skinMat);
-  jawMesh.scale.set(1.0, 0.62, 1.0);
-  jawMesh.position.set(0, -0.022, 0.016);
-  jaw.add(jawMesh);
-  var chin = new THREE.Mesh(new THREE.SphereGeometry(0.03, 10, 8), skinMat);
-  chin.scale.set(1.1, 0.8, 0.8);
-  chin.position.set(0, -0.045, 0.062);
-  jaw.add(chin);
+  var jawSkin = new THREE.Mesh(
+    patch(-JAW_A, JAW_A, LOW_EL, F_MOUTH_EL, JAWN, LOWN), faceMat);
+  jawSkin.position.set(0, -(SK_Y - 0.030), 0.030);
+  jaw.add(jawSkin);
+
+  // 4. the dark inside the head, so any gap at the hinge reads as a mouth
+  head.add(new THREE.Mesh(
+    skullPatch(-JAW_A - 0.08, JAW_A + 0.08, -0.66, F_MOUTH_EL + 0.07, seg(20), seg(10),
+               { zombie: zombie, push: -0.018, plain: true }),
+    new THREE.MeshStandardMaterial({
+      color: zombie ? 0x2b0b0c : 0x33130f, roughness: 0.55, side: THREE.DoubleSide
+    })));
+
+  // The risen are the only ones who ever open up, so only they need teeth.
   if (zombie) {
-    var mouth = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), new THREE.MeshStandardMaterial({ color: 0x2a0c0c, roughness: 0.6 }));
-    mouth.scale.set(1.0, 0.7, 0.5);
-    mouth.position.set(0, -0.03, 0.075);
-    jaw.add(mouth);
-    for (var tt = 0; tt < 4; tt++) {
-      var tooth2 = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.012, 0.006), new THREE.MeshStandardMaterial({ color: 0xcfc9b4, roughness: 0.6 }));
-      tooth2.position.set(-0.018 + tt * 0.012, -0.018, 0.086);
-      jaw.add(tooth2);
+    var toothMat = new THREE.MeshStandardMaterial({ color: 0xb9b298, roughness: 0.45 });
+    for (var ti = 0; ti < 5; ti++) {
+      var taz = (ti - 2) * 0.105;
+      var up = new THREE.Mesh(new THREE.BoxGeometry(0.0085, 0.013, 0.005), toothMat);
+      up.position.copy(skullPoint(taz, F_MOUTH_EL + 0.048, -0.019, zombie, sp, true));
+      up.rotation.y = -taz;
+      head.add(up);
+      var lo = new THREE.Mesh(new THREE.BoxGeometry(0.0085, 0.011, 0.005), toothMat);
+      lo.position.copy(skullPoint(taz, F_MOUTH_EL - 0.030, -0.024, zombie, sp, true))
+        .sub(jaw.position);
+      lo.rotation.y = -taz;
+      jaw.add(lo);
     }
-    jaw.rotation.x = 0.22;
   }
 
-  var nose = new THREE.Mesh(new THREE.ConeGeometry(0.021, 0.05, 8), skinMat);
-  nose.rotation.x = Math.PI / 2;
-  nose.scale.set(1, 1, 0.8);
-  nose.position.set(0, 0.032, 0.1);
-  head.add(nose);
-  var noseTip = new THREE.Mesh(new THREE.SphereGeometry(0.016, 10, 8), skinMat);
-  noseTip.position.set(0, 0.022, 0.108);
-  head.add(noseTip);
-
+  // 5. eyelids.  Each one is a cap of the bare ellipsoid hinged on the
+  //    skull's own centre, so closing an eye slides it down the face instead
+  //    of swinging a ball through it.  The lash line is painted at the top
+  //    edge of the eye — which is exactly where the lid begins — so lid and
+  //    skull carry the same line and it never doubles up.
+  //    A rigid cap slid across the face cannot stay on it — the socket is a
+  //    hollow and the brow is a ridge, so it either floated as a slab or sank
+  //    out of sight.  Instead the lid is built TWICE, open and shut, on the
+  //    surface it has to follow, and morphed between the two: at rest it is a
+  //    strip flush with the skin, shut it is a dome over the whole eye.
+  var lidMat = faceMat.clone();
+  lidMat.morphTargets = true;
+  lidMat.morphNormals = true;
+  var lidMeshes = [];
+  var LID_AZ0 = F_EYE_AZ - 0.30, LID_AZ1 = F_EYE_AZ + 0.33;
   [-1, 1].forEach(function (sd) {
-    var ear = new THREE.Mesh(new THREE.SphereGeometry(0.026, 10, 8), skinMat);
-    ear.scale.set(0.42, 1.05, 0.78);
-    ear.position.set(sd * 0.106, 0.045, 0.002);
+    // Azimuths always run low to high, or the left eye comes out inside-out.
+    var a0 = sd > 0 ? LID_AZ0 : -LID_AZ1, a1 = sd > 0 ? LID_AZ1 : -LID_AZ0;
+    var na = seg(18), ne = seg(10);
+    var open = skullPatch(a0, a1, F_LID_BOT, F_LID_TOP, na, ne,
+      { zombie: zombie, push: 0.0008 });
+    var shut = skullPatch(a0, a1, F_LID_SHUT, F_LID_TOP, na, ne,
+      { zombie: zombie, plain: true, push: function (az, el) {
+          var ta = sm01((Math.abs(az) - LID_AZ0) / 0.14) * sm01((LID_AZ1 - Math.abs(az)) / 0.14);
+          var te = 0.35 + 0.65 * sm01((el - F_LID_SHUT) / 0.10);
+          return 0.0018 + 0.0062 * ta * te * sm01((F_LID_TOP - el) / 0.07);
+        } });
+    open.morphAttributes.position = [shut.attributes.position];
+    open.morphAttributes.normal = [shut.attributes.normal];
+    var lid = new THREE.Mesh(open, lidMat);
+    lid.morphTargetInfluences = [0];
+    head.add(lid);
+    lidMeshes.push(lid);
+  });
+  M.eyes = lidMeshes.map(function (m) { return { group: m, lid: m }; });
+  /** 0 is wide open, 1 is shut. */
+  M.setEyesClosed = function (t) {
+    t = clamp(t, 0, 1);
+    for (var i = 0; i < lidMeshes.length; i++) lidMeshes[i].morphTargetInfluences[0] = t;
+  };
+
+  // 6. ears, standing off the bare ellipsoid so the hair can tuck behind them
+  [-1, 1].forEach(function (sd) {
+    var ear = new THREE.Group();
+    // Seated ON the surface, not in it: buried at the old depth the whole ear
+    // vanished into the skull and read as a lump.
+    ear.position.copy(skullPoint(sd * 2.02, 0.050, 0.001, zombie, sp, true));
+    ear.rotation.y = sd * 0.10;
+    ear.rotation.z = -sd * 0.16;
     head.add(ear);
-    var lobe = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6), skinMat);
-    lobe.position.set(sd * 0.104, 0.018, 0.004);
-    head.add(lobe);
+    var shell = new THREE.Mesh(new THREE.SphereGeometry(0.027, 14, 12), skinMat);
+    shell.scale.set(0.40, 1.18, 0.62);
+    ear.add(shell);
+    var lobe = new THREE.Mesh(new THREE.SphereGeometry(0.0125, 10, 8), skinMat);
+    lobe.scale.set(0.42, 0.95, 0.78);
+    lobe.position.set(0, -0.027, -0.001);
+    ear.add(lobe);
+    var conchaMat = new THREE.MeshStandardMaterial({
+      color: shadeHexToInt(skinCol, 0.60), roughness: 0.9
+    });
+    var concha = new THREE.Mesh(new THREE.SphereGeometry(0.0165, 12, 10), conchaMat);
+    concha.scale.set(0.44, 1.0, 0.60);
+    concha.position.set(sd * 0.0075, 0.001, -0.001);
+    ear.add(concha);
+    var tragus = new THREE.Mesh(new THREE.SphereGeometry(0.0062, 8, 6), skinMat);
+    tragus.scale.set(0.7, 1.3, 0.9);
+    tragus.position.set(sd * 0.0045, -0.004, 0.013);
+    ear.add(tragus);
+    if (zombie && sd < 0) {
+      // one ear chewed down to a stub
+      shell.scale.set(0.30, 0.55, 0.60);
+      shell.position.y = -0.008;
+      lobe.visible = false;
+      concha.scale.set(0.42, 0.5, 0.55);
+      concha.position.y = -0.010;
+      var bit = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6),
+        new THREE.MeshStandardMaterial({ color: 0x5a1416, roughness: 0.5 }));
+      bit.scale.set(0.4, 0.7, 0.9);
+      bit.position.set(sd * 0.004, 0.010, 0);
+      ear.add(bit);
+    }
   });
 
-  // eyes — the risen keep theirs shut until they notice you
-  var eyeWhiteMat = new THREE.MeshStandardMaterial({
-    color: zombie ? 0xd8d4c4 : 0xf7f7f3, roughness: 0.2
+  // 7. hair: one shell over the same sculpt, its silhouette cut by alphaTest
+  //    out of the painted map rather than assembled from patches
+  var hairShellMat = new THREE.MeshStandardMaterial({
+    map: hairTexture(zombie ? 0x191612 : look.hair, hairStyle, zombie),
+    alphaTest: 0.45,
+    side: THREE.DoubleSide,
+    roughness: 0.97,
+    metalness: 0.0
   });
-  var irisMat = new THREE.MeshStandardMaterial({
-    color: zombie ? 0xa8a496 : look.eye, roughness: 0.18
-  });
-  var pupilMat = new THREE.MeshBasicMaterial({ color: zombie ? 0x3c3a32 : 0x0a0a10 });
-  M.eyes = [];
-  [-1, 1].forEach(function (sd) {
-    var e = new THREE.Group();
-    var socket = new THREE.Mesh(new THREE.SphereGeometry(0.031, 12, 10), new THREE.MeshStandardMaterial({
-      color: zombie ? 0x5e6055 : shadeHexToInt(skinCol, 0.82), roughness: 0.9
-    }));
-    socket.scale.set(1.1, 1.0, 0.5);
-    socket.position.z = -0.012;
-    e.add(socket);
-    var w = new THREE.Mesh(new THREE.SphereGeometry(0.0255, 14, 12), eyeWhiteMat);
-    e.add(w);
-    var iris = new THREE.Mesh(new THREE.SphereGeometry(0.0135, 10, 8), irisMat);
-    iris.position.z = 0.0155;
-    e.add(iris);
-    var pup = new THREE.Mesh(new THREE.SphereGeometry(0.0062, 8, 6), pupilMat);
-    pup.position.z = 0.0225;
-    e.add(pup);
-    var lid = new THREE.Mesh(new THREE.SphereGeometry(0.0285, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), skinMat);
-    lid.position.y = 0.001;
-    e.add(lid);
-    var lidLow = new THREE.Mesh(new THREE.SphereGeometry(0.0285, 14, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), skinMat);
-    lidLow.position.y = -0.001;
-    lidLow.rotation.x = -0.35;
-    e.add(lidLow);
-    e.position.set(sd * 0.0415, 0.058, 0.086);
-    head.add(e);
-    M.eyes.push({ group: e, lid: lid, lidLow: lidLow });
-  });
-  // Risen zombies start with their eyes shut.
-  if (zombie) M.eyes.forEach(function (e) { e.lid.rotation.x = 1.55; });
-
-  var brow = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.013, 0.022), hairMat);
-  [-1, 1].forEach(function (sd) {
-    var b2 = brow.clone();
-    b2.position.set(sd * 0.042, 0.088, 0.092);
-    b2.rotation.z = sd * (zombie ? 0.18 : -0.08);
-    head.add(b2);
-  });
-  var browRidge = new THREE.Mesh(new THREE.SphereGeometry(0.075, 14, 10), skinMat);
-  browRidge.scale.set(1.2, 0.35, 0.65);
-  browRidge.position.set(0, 0.082, 0.062);
-  head.add(browRidge);
-
-  var hair = new THREE.Mesh(
-    new THREE.SphereGeometry(0.113, 20, 16, 0, Math.PI * 2, 0, Math.PI * (zombie ? 0.5 : 0.56)),
-    hairMat
-  );
-  hair.scale.set(1.0, 1.12, 1.06);
-  hair.position.y = 0.06;
+  M.hairMat = hairShellMat;
+  var HAIR_T = zombie ? 0.0050 : 0.0070;
+  var hair = new THREE.Mesh(skullPatch(-Math.PI, Math.PI, -0.62, Math.PI / 2,
+    AZN, seg(32), {
+      zombie: zombie,
+      push: function (az, el) {
+        return 0.0017
+             + HAIR_T * sm01((el - hairlineEl(az, hairStyle)) / 0.26)
+             + 0.0032 * sm01((el - 0.70) / 0.60);
+      }
+    }), hairShellMat);
   head.add(hair);
-  if (!zombie) {
-    var fringe = new THREE.Mesh(new THREE.SphereGeometry(0.108, 16, 10, 0, Math.PI, 0, Math.PI * 0.3), hairMat);
-    fringe.rotation.y = -Math.PI / 2;
-    fringe.scale.set(1.0, 1.0, 1.1);
-    fringe.position.set(0, 0.1, 0.018);
-    head.add(fringe);
+  M.hair = hair;
+
+  if (zombie) {
+    // dried runs down the chin, on the jaw so they move with it
+    for (var dr = 0; dr < 3; dr++) {
+      var h2 = rand(0.04, 0.085);
+      var drip = new THREE.Mesh(new THREE.BoxGeometry(0.008, h2, 0.007),
+        new THREE.MeshStandardMaterial({ color: 0x3e0708, roughness: 0.7 }));
+      drip.position.set(rand(-0.028, 0.028), SK_Y - 0.108 - h2 / 2, 0.070);
+      drip.position.sub(jaw.position);
+      jaw.add(drip);
+    }
+    jaw.rotation.x = 0.07;
+    M.setEyesClosed(1);   // the risen start with their eyes shut
   }
 
   // ---------------------------------------------------------------- arms ---
   function buildArm(side) {
     var shoulder = new THREE.Group();
-    shoulder.position.set(side * 0.212, 0.19, 0);
+    shoulder.position.set(side * 0.198, 0.188, 0);
     chest.add(shoulder);
 
-    var cap = new THREE.Mesh(new THREE.SphereGeometry(0.076, 14, 12), shirtMat);
+    // On the risen, one sleeve has been torn away entirely.
+    var bareArm = zombie && side > 0;
+    var sleeveMat = bareArm ? skinMat : shirtMat;
+
+    var cap = new THREE.Mesh(new THREE.SphereGeometry(0.066, 16, 12), bareArm ? skinMat : shirtMat);
+    cap.scale.set(1, 0.95, 0.86);
     shoulder.add(cap);
-    var upper = capsuleMesh(0.061, 0.053, 0.17, shirtMat, 12);
+    var upper = capsuleMesh(0.061, 0.053, 0.17, sleeveMat, 12);
     upper.position.y = -0.125;
     shoulder.add(upper);
-    // short sleeve cuff, where the uniform ends and the arm begins
-    var cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.055, 0.02, 14), shirtShadeMat);
-    cuff.position.y = -0.2;
-    shoulder.add(cuff);
+
+    if (bareArm) {
+      // ragged remains of the seam at the shoulder
+      for (var rg = 0; rg < 4; rg++) {
+        var tat = new THREE.Mesh(new THREE.PlaneGeometry(0.03, rand(0.03, 0.06)),
+          new THREE.MeshStandardMaterial({ color: 0x6f6d66, roughness: 0.95, side: THREE.DoubleSide }));
+        var ra = (rg / 4) * Math.PI * 2;
+        tat.position.set(Math.cos(ra) * 0.06, -0.035, Math.sin(ra) * 0.06);
+        tat.rotation.set(rand(-0.4, 0.4), -ra, rand(-0.4, 0.4));
+        shoulder.add(tat);
+      }
+      // and a bite out of the forearm
+      var bite2 = new THREE.Mesh(new THREE.SphereGeometry(0.03, 10, 8),
+        new THREE.MeshStandardMaterial({ color: 0x5a1416, roughness: 0.5 }));
+      bite2.scale.set(1.0, 1.4, 0.5);
+      bite2.position.set(0, -0.14, 0.04);
+      shoulder.add(bite2);
+    } else {
+      var cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.055, 0.02, 14), shirtShadeMat);
+      cuff.position.y = -0.2;
+      shoulder.add(cuff);
+    }
 
     var elbow = new THREE.Group();
     elbow.position.y = -0.245;
@@ -2572,6 +3422,16 @@ function createFighterModel(look, zombie) {
     var hem = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.052, 0.024, 14), trouserShadeMat);
     hem.position.y = -0.33;
     knee.add(hem);
+    if (zombie) {
+      for (var hs = 0; hs < 4; hs++) {
+        var frayed = new THREE.Mesh(new THREE.PlaneGeometry(0.026, rand(0.03, 0.07)),
+          new THREE.MeshStandardMaterial({ color: 0x1f2126, roughness: 0.95, side: THREE.DoubleSide }));
+        var fa = (hs / 4) * Math.PI * 2;
+        frayed.position.set(Math.cos(fa) * 0.05, -0.36, Math.sin(fa) * 0.05);
+        frayed.rotation.set(rand(-0.3, 0.3), -fa, rand(-0.3, 0.3));
+        knee.add(frayed);
+      }
+    }
 
     var ankle = new THREE.Group();
     ankle.position.y = -0.38;
@@ -2721,16 +3581,144 @@ function latheMesh(profile, segments, mat) {
   return new THREE.Mesh(g, mat);
 }
 
+
+/* ---- weapon surfaces -----------------------------------------------------
+   The shapes were all there already; what was missing was anything for the
+   light to catch.  One small map per material family turns flat plastic into
+   worn steel, and it costs four canvases for the whole armoury. */
+var WTEX = null;
+
+function weaponTextures() {
+  if (WTEX) return WTEX;
+  var S = 256;
+
+  function sheet(base) {
+    var c = document.createElement('canvas');
+    c.width = c.height = S;
+    var x = c.getContext('2d');
+    x.fillStyle = base;
+    x.fillRect(0, 0, S, S);
+    return { c: c, x: x };
+  }
+
+  // --- gun steel: machine lines, then the scars of being carried around
+  var st = sheet('#2d3036');
+  var i, k;
+  for (i = 0; i < 1600; i++) {
+    var sy = Math.random() * S;
+    st.x.strokeStyle = (Math.random() < 0.5 ? 'rgba(12,13,17,' : 'rgba(132,140,152,') +
+      rand(0.05, 0.26) + ')';
+    st.x.lineWidth = rand(0.4, 1.5);
+    st.x.beginPath();
+    st.x.moveTo(Math.random() * S, sy);
+    st.x.lineTo(Math.random() * S, sy + rand(-2, 2));
+    st.x.stroke();
+  }
+  for (i = 0; i < 30; i++) {
+    st.x.strokeStyle = 'rgba(158,166,178,' + rand(0.25, 0.6) + ')';
+    st.x.lineWidth = rand(0.8, 2.2);
+    var ax = Math.random() * S, ay = Math.random() * S;
+    st.x.beginPath();
+    st.x.moveTo(ax, ay);
+    st.x.lineTo(ax + rand(-30, 30), ay + rand(-14, 14));
+    st.x.stroke();
+  }
+  for (i = 0; i < 120; i++) {           // finish wear on the high points
+    st.x.fillStyle = 'rgba(96,102,112,' + rand(0.04, 0.14) + ')';
+    st.x.beginPath();
+    st.x.arc(Math.random() * S, Math.random() * S, rand(2, 16), 0, 6.2832);
+    st.x.fill();
+  }
+
+  // --- polymer frame: moulded stipple
+  var pl = sheet('#17181c');
+  for (i = 0; i < 7000; i++) {
+    pl.x.fillStyle = (Math.random() < 0.55 ? 'rgba(48,50,56,' : 'rgba(6,6,8,') +
+      rand(0.2, 0.55) + ')';
+    pl.x.fillRect(Math.random() * S, Math.random() * S, rand(1, 2.4), rand(1, 2.4));
+  }
+
+  // --- bat wood: grain that runs the length of the billet
+  var wd = sheet('#c69456');
+  for (i = 0; i < 260; i++) {
+    var gy = Math.random() * S;
+    wd.x.strokeStyle = (Math.random() < 0.6 ? 'rgba(122,78,36,' : 'rgba(224,186,132,') +
+      rand(0.10, 0.34) + ')';
+    wd.x.lineWidth = rand(0.6, 3.4);
+    wd.x.beginPath();
+    wd.x.moveTo(-10, gy);
+    for (k = 0; k <= 6; k++) wd.x.lineTo(k * S / 6, gy + Math.sin(k * 1.7 + i) * rand(1, 5));
+    wd.x.stroke();
+  }
+  for (i = 0; i < 16; i++) {            // knots
+    var kx = Math.random() * S, ky = Math.random() * S, kr = rand(2, 7);
+    var kg = wd.x.createRadialGradient(kx, ky, 0, kx, ky, kr);
+    kg.addColorStop(0, 'rgba(90,56,24,0.75)');
+    kg.addColorStop(1, 'rgba(90,56,24,0)');
+    wd.x.fillStyle = kg;
+    wd.x.beginPath(); wd.x.arc(kx, ky, kr, 0, 6.2832); wd.x.fill();
+  }
+
+  // --- cast iron: a sand-cast face, pitted and a little rusty at the edges
+  var ir = sheet('#1b1c20');
+  for (i = 0; i < 4200; i++) {
+    ir.x.fillStyle = (Math.random() < 0.5 ? 'rgba(6,6,8,' : 'rgba(62,64,70,') +
+      rand(0.15, 0.5) + ')';
+    ir.x.beginPath();
+    ir.x.arc(Math.random() * S, Math.random() * S, rand(0.6, 2.6), 0, 6.2832);
+    ir.x.fill();
+  }
+  for (i = 0; i < 40; i++) {
+    ir.x.fillStyle = 'rgba(96,52,26,' + rand(0.08, 0.26) + ')';
+    ir.x.beginPath();
+    ir.x.arc(Math.random() * S, Math.random() * S, rand(3, 18), 0, 6.2832);
+    ir.x.fill();
+  }
+
+  // --- polished blade stock: fine grind lines along the length
+  var bl = sheet('#c9d1db');
+  for (i = 0; i < 900; i++) {
+    var by = Math.random() * S;
+    bl.x.strokeStyle = (Math.random() < 0.5 ? 'rgba(120,132,148,' : 'rgba(246,250,255,') +
+      rand(0.06, 0.3) + ')';
+    bl.x.lineWidth = rand(0.4, 1.3);
+    bl.x.beginPath();
+    bl.x.moveTo(-4, by);
+    bl.x.lineTo(S + 4, by + rand(-1.5, 1.5));
+    bl.x.stroke();
+  }
+  for (i = 0; i < 40; i++) {
+    bl.x.fillStyle = 'rgba(96,104,118,' + rand(0.05, 0.18) + ')';
+    bl.x.beginPath();
+    bl.x.arc(Math.random() * S, Math.random() * S, rand(2, 10), 0, 6.2832);
+    bl.x.fill();
+  }
+
+  WTEX = {
+    steel: makeTexture(st.c, [2, 2]),
+    blade: makeTexture(bl.c, [1, 3]),
+    poly: makeTexture(pl.c, [3, 3]),
+    wood: makeTexture(wd.c, [1, 4]),
+    iron: makeTexture(ir.c, [2, 2])
+  };
+  return WTEX;
+}
+
 function buildWeaponMesh(id) {
   var g = new THREE.Group();
   if (id === 'fists' || !id) return g;
+  var WM = weaponTextures();
 
   if (id === 'bat') {
     // Turned from one billet: a real bat is a single lathe profile, so build it
     // that way rather than stacking cylinders.
-    var wood = new THREE.MeshStandardMaterial({ color: 0xc69456, roughness: 0.48, metalness: 0.02 });
-    var woodDark = new THREE.MeshStandardMaterial({ color: 0x8a5a2c, roughness: 0.6 });
-    var tape = new THREE.MeshStandardMaterial({ color: 0x17171a, roughness: 0.94 });
+    var wood = new THREE.MeshStandardMaterial({
+      map: WM.wood, roughness: 0.46, metalness: 0.02
+    });
+    var woodDark = new THREE.MeshStandardMaterial({
+      map: WM.wood, color: 0x6f5030, roughness: 0.62
+    });
+    var tape = new THREE.MeshStandardMaterial({ map: WM.poly, roughness: 0.95 });
 
     var body = latheMesh([
       [0.000, -0.030], [0.034, -0.030], [0.036, -0.014], [0.030, -0.004],
@@ -2760,8 +3748,14 @@ function buildWeaponMesh(id) {
     g.add(knobCap);
 
   } else if (id === 'pan') {
-    var iron = new THREE.MeshStandardMaterial({ color: 0x1b1c20, roughness: 0.38, metalness: 0.9 });
-    var ironWorn = new THREE.MeshStandardMaterial({ color: 0x33353b, roughness: 0.55, metalness: 0.75 });
+    var iron = new THREE.MeshStandardMaterial({
+      map: WM.iron, roughness: 0.42, metalness: 0.88
+    });
+    // left unmapped on purpose: the bare colour reads lighter than the
+    // cast face and is what separates the rivets and the handle band from it
+    var ironWorn = new THREE.MeshStandardMaterial({
+      color: 0x3a3d44, roughness: 0.58, metalness: 0.72
+    });
 
     // dish with a real interior: lathe an L-profile so the pan is hollow
     var dish = latheMesh([
@@ -2799,9 +3793,13 @@ function buildWeaponMesh(id) {
     }
 
   } else if (id === 'knife') {
-    var steel = new THREE.MeshStandardMaterial({ color: 0xc9d1db, roughness: 0.1, metalness: 1.0 });
+    var steel = new THREE.MeshStandardMaterial({
+      map: WM.blade, roughness: 0.12, metalness: 1.0
+    });
     var edge = new THREE.MeshStandardMaterial({ color: 0xf2f6fa, roughness: 0.03, metalness: 1.0 });
-    var scale = new THREE.MeshStandardMaterial({ color: 0x24262b, roughness: 0.78, metalness: 0.05 });
+    var scale = new THREE.MeshStandardMaterial({
+      map: WM.poly, roughness: 0.8, metalness: 0.05
+    });
     var brass = new THREE.MeshStandardMaterial({ color: 0xb08a3c, roughness: 0.3, metalness: 0.9 });
 
     // full-tang handle: two scales sandwiching the steel
@@ -2911,9 +3909,15 @@ function buildWeaponMesh(id) {
 
   } else if (id === 'pistol') {
     // Modern polymer-frame service pistol.
-    var poly = new THREE.MeshStandardMaterial({ color: 0x17181c, roughness: 0.72, metalness: 0.08 });
-    var slideM = new THREE.MeshStandardMaterial({ color: 0x2d3036, roughness: 0.3, metalness: 0.95 });
-    var slideCut = new THREE.MeshStandardMaterial({ color: 0x1d1f24, roughness: 0.42, metalness: 0.9 });
+    var poly = new THREE.MeshStandardMaterial({
+      map: WM.poly, roughness: 0.74, metalness: 0.08
+    });
+    var slideM = new THREE.MeshStandardMaterial({
+      map: WM.steel, roughness: 0.28, metalness: 0.95
+    });
+    var slideCut = new THREE.MeshStandardMaterial({
+      map: WM.steel, color: 0x9ea3ad, roughness: 0.44, metalness: 0.9
+    });
     var bore = new THREE.MeshStandardMaterial({ color: 0x08080a, roughness: 0.9, metalness: 0.3 });
     var sightDot = new THREE.MeshStandardMaterial({
       color: 0xf6f8ff, emissive: 0x99ddff, emissiveIntensity: 0.7, roughness: 0.4
@@ -3039,6 +4043,56 @@ function buildWeaponMesh(id) {
   return g;
 }
 
+/* ------------------------------------------------------- weapon staining -- */
+var weaponBloodMats = null;
+
+/**
+ * A weapon that has been used looks used. Blobs accumulate towards the
+ * business end and stay until the weapon is swapped.
+ */
+function bloodyWeapon(f) {
+  if (!goreOn()) return;
+  if (!weaponBloodMats) {
+    weaponBloodMats = [
+      new THREE.MeshStandardMaterial({ color: 0x4a0507, roughness: 0.32 }),
+      new THREE.MeshStandardMaterial({ color: 0x6a0d0e, roughness: 0.26 }),
+      new THREE.MeshStandardMaterial({ color: 0x2c0203, roughness: 0.45 })
+    ];
+  }
+
+  var meshes = [];
+  if (f.weaponMesh) meshes.push(f.weaponMesh);
+  if (f.isPlayer && viewWeaponMesh) meshes.push(viewWeaponMesh);
+
+  for (var i = 0; i < meshes.length; i++) {
+    var m = meshes[i];
+    if (m.userData.bloodCount === undefined) {
+      m.userData.bloodCount = 0;
+      var bb = new THREE.Box3().setFromObject(m);
+      m.userData.bloodBox = bb;
+    }
+    if (m.userData.bloodCount >= 14) continue;
+    var box = m.userData.bloodBox;
+    if (!box || !isFinite(box.min.y)) continue;
+
+    var n = randInt(2, 4);
+    for (var k = 0; k < n; k++) {
+      m.userData.bloodCount++;
+      var blob = new THREE.Mesh(woundGeo, weaponBloodMats[randInt(0, 2)]);
+      var sc = rand(0.006, 0.019);
+      blob.scale.set(sc * rand(0.7, 2.1), sc * rand(0.7, 1.6), sc * rand(0.7, 1.4));
+      // bias up the weapon towards the striking end
+      var t = Math.pow(Math.random(), 0.45);
+      blob.position.set(
+        rand(box.min.x, box.max.x) * 1.02,
+        lerp(box.min.y, box.max.y, t),
+        rand(box.min.z, box.max.z) * 1.02
+      );
+      m.add(blob);
+    }
+  }
+}
+
 /** Hand pose for a weapon in third person: how the grip sits in the fist. */
 var GRIP = {
   fists:  { pos: [0, 0, 0], rot: [0, 0, 0] },
@@ -3056,14 +4110,17 @@ var GRIP = {
  * frustum is narrow, and anything held close sits off the side of the screen.
  */
 var VIEW_POSE = {
-  fists:  { pos: [0.065, -0.27, -0.52], rot: [0, 0, 0] },
-  bat:    { pos: [0.18, -0.46, -0.74], rot: [-0.74, -0.55, 0.46] },
-  pan:    { pos: [0.3, -0.56, -0.82], rot: [-0.12, -0.62, 0.62] },
-  knife:  { pos: [0.15, -0.36, -0.62], rot: [-0.52, -0.4, 0.3] },
-  bottle: { pos: [0.17, -0.42, -0.68], rot: [-0.62, -0.46, 0.36] },
-  shard:  { pos: [0.16, -0.40, -0.64], rot: [-0.56, -0.46, 0.33] },
-  pistol: { pos: [0.08, -0.235, -0.56], rot: [0, 0, 0] }
+  fists:  { pos: [0.055, -0.227, -0.437], rot: [0, 0, 0] },
+  bat:    { pos: [0.151, -0.386, -0.622], rot: [-0.74, -0.55, 0.46] },
+  pan:    { pos: [0.252, -0.470, -0.689], rot: [-0.12, -0.62, 0.62] },
+  knife:  { pos: [0.126, -0.302, -0.521], rot: [-0.52, -0.4, 0.3] },
+  bottle: { pos: [0.143, -0.353, -0.571], rot: [-0.62, -0.46, 0.36] },
+  shard:  { pos: [0.134, -0.336, -0.538], rot: [-0.56, -0.46, 0.33] },
+  pistol: { pos: [0.067, -0.197, -0.470], rot: [0, 0, 0] }
 };
+
+var portraitLock = false;
+var devFreeze = false;   // test hook: hold the world still for a screenshot
 
 /* ==========================================================================
    EFFECTS — pooled and capped. The original leaked a mesh per blood droplet
@@ -3085,8 +4142,59 @@ var FX = {
 var dropGeo = null, gibGeos = null, tracerGeo = null;
 var dropMats = null, gibMats = null;
 
+/**
+ * Gib kinds. Each one is a distinct shape and material so a pile of them reads
+ * as anatomy rather than as a heap of identical red rocks.
+ */
+var GIB_KINDS = null;
+
+function buildGibKinds() {
+  var fleshMat = new THREE.MeshStandardMaterial({ color: 0x6d1113, roughness: 0.34 });
+  var fleshMat2 = new THREE.MeshStandardMaterial({ color: 0x8a2a22, roughness: 0.42 });
+  var brainMat = new THREE.MeshStandardMaterial({ color: 0xc08a86, roughness: 0.62 });
+  var gutMat = new THREE.MeshStandardMaterial({ color: 0x7a2a1e, roughness: 0.28 });
+  var gutMat2 = new THREE.MeshStandardMaterial({ color: 0x9c5a3a, roughness: 0.3 });
+  var boneMat = new THREE.MeshStandardMaterial({ color: 0xe4ded0, roughness: 0.55 });
+  var skinMat = new THREE.MeshStandardMaterial({
+    color: 0xc98f70, roughness: 0.7, side: THREE.DoubleSide
+  });
+
+  // brain: a lumpy ball with a fissure down the middle
+  var brainGeo = new THREE.IcosahedronGeometry(1, 1);
+  var bp = brainGeo.attributes.position;
+  for (var i = 0; i < bp.count; i++) {
+    var n = 0.82 + Math.random() * 0.3;
+    bp.setXYZ(i, bp.getX(i) * n, bp.getY(i) * n * 0.86, bp.getZ(i) * n);
+  }
+  brainGeo.computeVertexNormals();
+
+  return [
+    { name: 'flesh', geo: new THREE.DodecahedronGeometry(1, 0), mat: fleshMat, scale: [0.6, 1.1], w: 34 },
+    { name: 'flesh2', geo: new THREE.IcosahedronGeometry(1, 0), mat: fleshMat2, scale: [0.5, 1.0], w: 22 },
+    { name: 'gut', geo: new THREE.TorusGeometry(0.7, 0.34, 7, 12), mat: gutMat, scale: [0.7, 1.3], w: 14 },
+    { name: 'gut2', geo: new THREE.CylinderGeometry(0.34, 0.3, 2.1, 8, 1, false), mat: gutMat2, scale: [0.5, 1.0], w: 10 },
+    { name: 'brain', geo: brainGeo, mat: brainMat, scale: [0.7, 1.2], w: 8 },
+    { name: 'bone', geo: new THREE.CylinderGeometry(0.22, 0.26, 2.4, 7), mat: boneMat, scale: [0.5, 0.9], w: 7 },
+    { name: 'skin', geo: new THREE.PlaneGeometry(2, 1.4), mat: skinMat, scale: [0.5, 1.0], w: 5 }
+  ];
+}
+
+function pickGibKind(bias) {
+  var total = 0, i;
+  for (i = 0; i < GIB_KINDS.length; i++) {
+    total += GIB_KINDS[i].w * (bias && bias === GIB_KINDS[i].name ? 8 : 1);
+  }
+  var r = Math.random() * total;
+  for (i = 0; i < GIB_KINDS.length; i++) {
+    r -= GIB_KINDS[i].w * (bias && bias === GIB_KINDS[i].name ? 8 : 1);
+    if (r <= 0) return GIB_KINDS[i];
+  }
+  return GIB_KINDS[0];
+}
+
 function initFXAssets() {
   dropGeo = new THREE.SphereGeometry(1, 6, 5);
+  GIB_KINDS = buildGibKinds();
   gibGeos = [
     new THREE.DodecahedronGeometry(1, 0),
     new THREE.IcosahedronGeometry(1, 0),
@@ -3173,7 +4281,7 @@ function bloodBurst(point, dir, power, count) {
   }
 }
 
-function spawnGibs(point, count, heavy) {
+function spawnGibs(point, count, heavy, bias) {
   if (!goreOn()) return;
   for (var i = 0; i < count; i++) {
     if (FX.gibs.length >= FX.MAX_GIBS) {
@@ -3181,10 +4289,10 @@ function spawnGibs(point, count, heavy) {
       detach(oldest.mesh);
       if (oldest.owned) disposeObject(oldest.mesh);
     }
-    var geo = gibGeos[randInt(0, gibGeos.length - 1)];
-    var m = new THREE.Mesh(geo, gibMats[randInt(0, gibMats.length - 1)]);
-    var s = rand(0.035, heavy ? 0.1 : 0.062);
-    m.scale.set(s * rand(0.7, 1.4), s, s * rand(0.7, 1.4));
+    var kind = pickGibKind(bias);
+    var m = new THREE.Mesh(kind.geo, kind.mat);
+    var s = rand(0.035, heavy ? 0.105 : 0.062) * rand(kind.scale[0], kind.scale[1]);
+    m.scale.set(s * rand(0.75, 1.35), s, s * rand(0.75, 1.35));
     m.position.copy(point).add(new THREE.Vector3(rand(-0.1, 0.1), rand(-0.05, 0.12), rand(-0.1, 0.1)));
     m.castShadow = QUALITY.shadows;
     scene.add(m);
@@ -3268,7 +4376,7 @@ function bulletImpact(point, normal, tag) {
    WOUNDS — a cut keeps bleeding from the part it opened, and keeps painting
    the floor under whoever is carrying it.
    ========================================================================== */
-var woundGeo = null, woundMats = null, mistTex = null;
+var woundGeo = null, woundMats = null, bruiseMats = null, mistTex = null;
 
 function initWoundAssets() {
   woundGeo = new THREE.SphereGeometry(1, 10, 8);
@@ -3277,38 +4385,77 @@ function initWoundAssets() {
     new THREE.MeshStandardMaterial({ color: 0x6b0a0b, roughness: 0.25 }),
     new THREE.MeshStandardMaterial({ color: 0x300203, roughness: 0.4 })
   ];
+  bruiseMats = [
+    new THREE.MeshStandardMaterial({ color: 0x4a2340, roughness: 0.85, transparent: true, opacity: 0.85 }),
+    new THREE.MeshStandardMaterial({ color: 0x2e2a52, roughness: 0.85, transparent: true, opacity: 0.85 }),
+    new THREE.MeshStandardMaterial({ color: 0x5b3320, roughness: 0.85, transparent: true, opacity: 0.85 })
+  ];
   mistTex = TEX.glow;
 }
 
-/** Approximate body radius at each hit zone, for placing a gash on the skin. */
+/** Approximate body radius at each hit zone, for placing a mark on the skin. */
 var PART_RADIUS = {
   head: 0.11, neck: 0.07, chest: 0.2, stomach: 0.18, pelvis: 0.16,
   armL: 0.055, armR: 0.055, legL: 0.08, legR: 0.08, shinL: 0.06, shinR: 0.06
 };
 
-function addWound(f, zoneName, severity) {
+/** Limbs and the neck run close to the surface — they spurt instead of seep. */
+var SPURTING_ZONES = { armL: 1, armR: 1, legL: 1, legR: 1, shinL: 1, shinR: 1, neck: 1 };
+
+/**
+ * Open a wound on a specific body part.
+ * kind: 'cut' (blade), 'gunshot' (round entry), 'bruise' (blunt, no bleed).
+ * A limb or neck hit bleeds faster and sprays in bursts rather than dripping —
+ * that is where the arteries are closest to the outside.
+ */
+function addWound(f, zoneName, severity, kind) {
   if (!goreOn() || !f.alive) return null;
   var host = (f.model.parts && f.model.parts[zoneName]) || f.model.chest;
   var r = PART_RADIUS[zoneName] || 0.12;
+  kind = kind || 'cut';
+  var spurts = !!SPURTING_ZONES[zoneName];
 
   var grp = new THREE.Group();
-  // the cut itself
-  var gash = new THREE.Mesh(woundGeo, woundMats[randInt(0, 2)]);
-  var len = rand(0.035, 0.075) * (0.7 + severity * 0.5);
-  gash.scale.set(len, r * 0.34, r * 0.34);
-  gash.rotation.z = rand(-1.2, 1.2);
-  grp.add(gash);
-  // clotted rim
-  var rim = new THREE.Mesh(woundGeo, woundMats[2]);
-  rim.scale.set(len * 1.35, r * 0.45, r * 0.3);
-  rim.rotation.z = gash.rotation.z;
-  rim.position.z = -0.004;
-  grp.add(rim);
-  // the run of blood down from it
-  var run = new THREE.Mesh(woundGeo, woundMats[0]);
-  run.scale.set(r * 0.16, 0.001, r * 0.3);
-  run.position.y = -0.03;
-  grp.add(run);
+  var run = null;
+
+  if (kind === 'bruise') {
+    var br = new THREE.Mesh(woundGeo, bruiseMats[randInt(0, 2)]);
+    var bs = rand(0.045, 0.085) * (0.7 + severity * 0.6);
+    br.scale.set(bs, bs * rand(0.7, 1.1), r * 0.22);
+    grp.add(br);
+    var halo = new THREE.Mesh(woundGeo, bruiseMats[randInt(0, 2)]);
+    halo.scale.set(bs * 1.5, bs * 1.35, r * 0.16);
+    halo.position.z = -0.003;
+    grp.add(halo);
+  } else if (kind === 'gunshot') {
+    var hole = new THREE.Mesh(woundGeo, woundMats[2]);
+    var hs = rand(0.014, 0.024) * (0.8 + severity * 0.5);
+    hole.scale.set(hs, hs, r * 0.3);
+    grp.add(hole);
+    var ring = new THREE.Mesh(woundGeo, woundMats[0]);
+    ring.scale.set(hs * 2.1, hs * 2.1, r * 0.2);
+    ring.position.z = -0.002;
+    grp.add(ring);
+    run = new THREE.Mesh(woundGeo, woundMats[0]);
+    run.scale.set(r * 0.13, 0.001, r * 0.28);
+    run.position.y = -0.02;
+    grp.add(run);
+  } else {
+    var gash = new THREE.Mesh(woundGeo, woundMats[randInt(0, 2)]);
+    var len = rand(0.035, 0.075) * (0.7 + severity * 0.5);
+    gash.scale.set(len, r * 0.34, r * 0.34);
+    gash.rotation.z = rand(-1.2, 1.2);
+    grp.add(gash);
+    var rim = new THREE.Mesh(woundGeo, woundMats[2]);
+    rim.scale.set(len * 1.35, r * 0.45, r * 0.3);
+    rim.rotation.z = gash.rotation.z;
+    rim.position.z = -0.004;
+    grp.add(rim);
+    run = new THREE.Mesh(woundGeo, woundMats[0]);
+    run.scale.set(r * 0.16, 0.001, r * 0.3);
+    run.position.y = -0.03;
+    grp.add(run);
+  }
 
   var a = Math.random() * Math.PI * 2;
   var tilt = rand(-0.7, 0.7);
@@ -3320,15 +4467,16 @@ function addWound(f, zoneName, severity) {
   grp.lookAt(grp.position.clone().multiplyScalar(2));
   host.add(grp);
 
+  var baseRate = kind === 'bruise' ? 0 : (kind === 'gunshot' ? 2.4 : 1.6) + severity * 3.2;
   var wound = {
-    group: grp, run: run, host: host, zone: zoneName,
-    rate: 1.6 + severity * 3.4,           // hp per second
-    spurt: 0.9 + severity * 0.6,          // seconds of arterial spray
+    group: grp, run: run, host: host, zone: zoneName, kind: kind,
+    spurts: spurts && kind !== 'bruise',
+    rate: baseRate * (spurts ? 1.7 : 1),
+    spurt: kind === 'bruise' ? 0 : (spurts ? 2.6 + severity * 1.4 : 0.9 + severity * 0.6),
     dripT: 0, age: 0
   };
   f.wounds.push(wound);
-  // a fresh cut sprays before it settles into a drip
-  arterialSpurt(f, wound, true);
+  if (kind !== 'bruise') arterialSpurt(f, wound, true);
   return wound;
 }
 
@@ -3345,35 +4493,49 @@ function arterialSpurt(f, w, hard) {
   if (!isFinite(dir.x)) dir.set(0, 1, 0);
   dir.y += 0.35;
   dir.normalize();
-  bloodBurst(p, dir, hard ? 5.5 : 3.2, hard ? 14 : 5);
+  var power = w.spurts ? (hard ? 8 : 5.5) : (hard ? 5.5 : 3.2);
+  var count = w.spurts ? (hard ? 22 : 10) : (hard ? 14 : 5);
+  bloodBurst(p, dir, power, count);
+  // close enough and it goes on you
+  if (player && player.alive && f !== player) {
+    var d = player.pos.distanceTo(p);
+    if (d < 2.6) splashScreenBlood(clamp((2.6 - d) / 2.6, 0, 1) * (hard ? 0.9 : 0.45));
+  } else if (f === player && hard) {
+    splashScreenBlood(0.5);
+  }
 }
 
 function updateWounds(f, dt) {
+  f.bleedRate = 0;
   if (!f.wounds || f.wounds.length === 0) return;
   var bleedTotal = 0;
   for (var i = f.wounds.length - 1; i >= 0; i--) {
     var w = f.wounds[i];
     w.age += dt;
-    // the run of blood below the cut lengthens as it keeps weeping
-    w.run.scale.y = Math.min(0.26, w.run.scale.y + dt * 0.05);
-    w.run.position.y = -0.03 - w.run.scale.y * 0.5;
+    if (w.run) {
+      w.run.scale.y = Math.min(w.spurts ? 0.34 : 0.26, w.run.scale.y + dt * (w.spurts ? 0.09 : 0.05));
+      w.run.position.y = -0.03 - w.run.scale.y * 0.5;
+    }
+    if (w.kind === 'bruise' || !f.alive) continue;
 
-    if (f.alive) {
-      bleedTotal += w.rate * Math.exp(-w.age * 0.05);
-      if (w.spurt > 0) {
-        w.spurt -= dt;
-        w.dripT -= dt;
-        if (w.dripT <= 0) { arterialSpurt(f, w, false); w.dripT = rand(0.1, 0.22); }
-      } else {
-        w.dripT -= dt;
-        if (w.dripT <= 0) {
-          w.dripT = rand(0.18, 0.5);
-          var p = woundWorldPos(w, new THREE.Vector3());
-          bloodBurst(p, new THREE.Vector3(0, -1, 0), 0.9, 2);
-        }
+    bleedTotal += w.rate * Math.exp(-w.age * 0.05);
+    if (w.spurt > 0) {
+      w.spurt -= dt;
+      w.dripT -= dt;
+      if (w.dripT <= 0) {
+        arterialSpurt(f, w, false);
+        w.dripT = w.spurts ? rand(0.05, 0.12) : rand(0.1, 0.22);
+      }
+    } else {
+      w.dripT -= dt;
+      if (w.dripT <= 0) {
+        w.dripT = w.spurts ? rand(0.1, 0.3) : rand(0.18, 0.5);
+        var p = woundWorldPos(w, new THREE.Vector3());
+        bloodBurst(p, new THREE.Vector3(0, -1, 0), 0.9, w.spurts ? 4 : 2);
       }
     }
   }
+  f.bleedRate = bleedTotal;
   if (bleedTotal > 0 && f.alive) {
     f.hp -= bleedTotal * dt;
     if (f.hp <= 0) {
@@ -3384,12 +4546,81 @@ function updateWounds(f, dt) {
 }
 
 function clearWounds(f) {
-  if (!f.wounds) { f.wounds = []; return; }
+  if (!f.wounds) { f.wounds = []; f.bleedRate = 0; return; }
   for (var i = 0; i < f.wounds.length; i++) {
     var w = f.wounds[i];
     if (w.group.parent) w.group.parent.remove(w.group);
   }
   f.wounds.length = 0;
+  f.bleedRate = 0;
+}
+
+/* ---------------------------------------------- blood on the lens -------- */
+var bloodScreenEl = null, bloodScreenT = 0, bloodScreenMax = 0;
+
+function initScreenBlood() {
+  bloodScreenEl = $('blood-screen');
+  // three layered splatters so repeat hits do not look identical
+  var c = document.createElement('canvas');
+  c.width = c.height = 512;
+  var x = c.getContext('2d');
+  function gob(px, py, r, alpha) {
+    var g = x.createRadialGradient(px, py, 0, px, py, r);
+    g.addColorStop(0, 'rgba(96,3,5,' + alpha + ')');
+    g.addColorStop(0.55, 'rgba(74,2,4,' + (alpha * 0.8) + ')');
+    g.addColorStop(1, 'rgba(60,2,3,0)');
+    x.fillStyle = g;
+    x.beginPath();
+    x.arc(px, py, r, 0, 7);
+    x.fill();
+  }
+  // keep the middle of the screen mostly clear so it does not blind you
+  for (var i = 0; i < 34; i++) {
+    var ang = Math.random() * Math.PI * 2;
+    var dist = 196 + Math.random() * 120;
+    gob(256 + Math.cos(ang) * dist, 256 + Math.sin(ang) * dist * 0.82,
+        rand(12, 62), rand(0.35, 0.9));
+  }
+  for (var j = 0; j < 72; j++) {
+    var a2 = Math.random() * Math.PI * 2;
+    var d2 = 168 + Math.random() * 150;
+    gob(256 + Math.cos(a2) * d2, 256 + Math.sin(a2) * d2 * 0.85, rand(3, 14), rand(0.4, 0.95));
+  }
+  // a couple of runs down the glass
+  x.strokeStyle = 'rgba(70,2,4,0.55)';
+  for (var k = 0; k < 7; k++) {
+    x.lineWidth = rand(3, 11);
+    var sx = rand(30, 482);
+    x.beginPath();
+    x.moveTo(sx, rand(40, 200));
+    x.lineTo(sx + rand(-10, 10), rand(240, 470));
+    x.stroke();
+  }
+  bloodScreenEl.style.backgroundImage = 'url(' + c.toDataURL('image/png') + ')';
+}
+
+/** Somebody bled on you. */
+function splashScreenBlood(intensity) {
+  if (!goreOn() || !bloodScreenEl) return;
+  intensity = clamp(intensity, 0, 1);
+  if (intensity <= bloodScreenT / Math.max(0.001, bloodScreenMax) * 0.5) return;
+  bloodScreenMax = 1.6 + intensity * 1.7;
+  bloodScreenT = bloodScreenMax;
+  bloodScreenEl.style.transform = 'scale(' + (1.05 + Math.random() * 0.12) +
+    ') rotate(' + (Math.random() * 360 | 0) + 'deg)';
+  bloodScreenEl.dataset.peak = String(clamp(0.14 + intensity * 0.30, 0, 0.48));
+}
+
+function updateScreenBlood(dt) {
+  if (!bloodScreenEl) return;
+  if (bloodScreenT <= 0) {
+    if (bloodScreenEl.style.opacity !== '0') bloodScreenEl.style.opacity = '0';
+    return;
+  }
+  bloodScreenT -= dt;
+  var peak = parseFloat(bloodScreenEl.dataset.peak || '0.5');
+  var k = clamp(bloodScreenT / bloodScreenMax, 0, 1);
+  bloodScreenEl.style.opacity = (Math.pow(k, 0.6) * peak).toFixed(3);
 }
 
 /** A fine red haze at the point of impact. Sells a hit more than droplets do. */
@@ -3605,12 +4836,13 @@ function Fighter(opts) {
   this.crouchScale = 1;
 
   // The player fights three at once, so they start with a little more in the tank.
-  this.maxHp = this.isPlayer ? 150 : 120;
-  this.hp = this.maxHp;
+  this.maxHp = 100;
+  this.hp = 100;
   this.alive = true;
   this.stamina = 100;
   this.exhausted = false;
   this.wounds = [];
+  this.bleedRate = 0;
   this.severed = {};
 
   this.weapon = 'fists';
@@ -3844,7 +5076,8 @@ Fighter.prototype.meleeStrike = function () {
 
   var mult = zone.mult + (w.headMultBonus && zone.name === 'head' ? w.headMultBonus : 0);
   best.takeDamage(w.dmg * mult, this, dir, point, zone, w.impact);
-  if (w.bleed && best.alive) addWound(best, zone.name, 1.2);
+  if (w.id !== 'fists') bloodyWeapon(this);
+  if (w.bleed && best.alive) addWound(best, zone.name, 1.2, 'cut');
   if (w.stagger) best.staggerT = Math.max(best.staggerT, w.stagger);
 
   if (w.breaks) {
@@ -3892,14 +5125,22 @@ Fighter.prototype.takeDamage = function (amount, from, dir, point, zone, impactK
   spray.normalize();
   bloodBurst(point, spray, 3.2 + amount * 0.09, Math.round(9 + amount * 0.55));
 
-  // A blade opens the body part it landed on, and that part keeps bleeding.
+  // Blades cut, bullets punch a hole, blunt weapons bruise — and an arm or a
+  // knee opens an artery close to the surface, so those spray.
   var w2 = from ? from.info() : null;
   if (zone && this.alive && this.hp > 0 && goreOn()) {
-    var cuts = w2 && (w2.id === 'knife' || w2.id === 'shard' || w2.id === 'bottle');
-    if (cuts) {
-      addWound(this, zone.name, w2.id === 'knife' ? 1.0 : 0.7);
+    var id = w2 ? w2.id : null;
+    if (id === 'pistol') {
+      addWound(this, zone.name, 0.9, 'gunshot');
+    } else if (id === 'knife' || id === 'shard' || id === 'bottle') {
+      addWound(this, zone.name, id === 'knife' ? 1.0 : 0.7, 'cut');
+    } else if (id === 'claws') {
+      if (Math.random() < 0.75) addWound(this, zone.name, 0.8, 'cut');
+    } else if (id === 'bat' || id === 'pan' || id === 'fists') {
+      addWound(this, zone.name, clamp(amount / 42, 0.3, 1.2), 'bruise');
+      if (amount > 30 && Math.random() < 0.45) addWound(this, zone.name, 0.5, 'cut');
     } else if (amount > 26 && Math.random() < 0.5) {
-      addWound(this, zone.name, 0.45);
+      addWound(this, zone.name, 0.45, 'cut');
     }
   }
 
@@ -4005,6 +5246,8 @@ Fighter.prototype.stepPhysics = function (dt, wishDir, wantSprint) {
   if (!w.melee && this.reloadT > 0) base *= 0.82;
   if (this.staggerT > 0) base *= 0.25;
   if (this.exhausted) base *= 0.78;
+  // Bleeding out costs you your legs before it costs you your life.
+  if (this.bleedRate > 0) base *= clamp(1 - this.bleedRate * 0.05, 0.45, 1);
   base *= (this.speedMul || 1);
 
   this.sprinting = sprinting;
@@ -4146,7 +5389,10 @@ Fighter.prototype.stepPhysics = function (dt, wishDir, wantSprint) {
 Fighter.prototype.animate = function (dt, t) {
   var M = this.model;
   M.root.position.copy(this.pos);
-  M.root.rotation.y = this.yaw;
+  // The rig is modelled facing +Z (eyes, nose, shirt placket and pocket are
+  // all at positive Z) but gameplay forward is -Z, so the root has to be spun
+  // half a turn. Without this everyone faces and walks backwards.
+  M.root.rotation.y = this.yaw + Math.PI;
 
   if (!this.alive) { this.animateDeath(dt); return; }
 
@@ -4275,7 +5521,7 @@ Fighter.prototype.animate = function (dt, t) {
     var lidRot = 0;
     if (this.blinkT < 0.12) lidRot = (0.12 - Math.abs(this.blinkT)) * 13;
     if (this.blinkT < -0.02) this.blinkT = rand(1.8, 6);
-    M.eyes.forEach(function (e) { e.lid.rotation.x = clamp(lidRot, 0, 1.6); });
+    M.setEyesClosed(lidRot / 1.55);
   }
 
   // ---- arms --------------------------------------------------------------
@@ -4436,7 +5682,7 @@ Fighter.prototype.animateFeeding = function (dt, t) {
   M.chest.rotation.x = damp(M.chest.rotation.x, 0.3 + bite2 * 0.05, 9, dt);
   M.chest.rotation.y = damp(M.chest.rotation.y, bite * 0.1, 8, dt);
   M.neck.rotation.x = damp(M.neck.rotation.x, 0.5 + bite2 * 0.16, 10, dt);
-  if (M.jaw) M.jaw.rotation.x = 0.18 + Math.abs(bite2) * 0.3;
+  if (M.jaw) M.jaw.rotation.x = 0.12 + Math.abs(bite2) * 0.22;
 
   M.armL.shoulder.rotation.x = damp(M.armL.shoulder.rotation.x, -1.15 + bite * 0.15, 8, dt);
   M.armR.shoulder.rotation.x = damp(M.armR.shoulder.rotation.x, -1.2 - bite * 0.15, 8, dt);
@@ -4471,7 +5717,7 @@ Fighter.prototype.animateRising = function (dt, t) {
 
   // eyelids peel open over the same window
   var openP = clamp((p - 0.34) / 0.4, 0, 1);
-  M.eyes.forEach(function (e) { e.lid.rotation.x = lerp(1.55, 0.12, openP); });
+  M.setEyesClosed(lerp(1, 0.08, openP));
   if (M.jaw) M.jaw.rotation.x = lerp(0.05, 0.3, clamp((p - 0.6) / 0.4, 0, 1));
 
   var legP = clamp((p - 0.55) / 0.45, 0, 1);
@@ -4557,11 +5803,12 @@ function spawnZombie(x, z, yaw) {
     zombie: true,
     skin: pick(ZOMBIE_SKIN),
     hair: HAIR_COLORS[randInt(0, HAIR_COLORS.length - 1)],
-    eye: 0xa8a496
+    eye: 0xa8a496,
+    face: randInt(0, 3), hairStyle: randInt(0, 3)
   });
   zf.isZombie = true;
-  zf.maxHp = 105;
-  zf.hp = 105;
+  zf.maxHp = 100;
+  zf.hp = 100;
   zf.speedMul = 0.6;
   zf.voicePitch = rand(0.5, 0.72);
   zf.setWeapon('claws', true);
@@ -4798,7 +6045,6 @@ function standUpFromChair() {
   if (!playerSitting) return;
   playerSitting = false;
   if (player) player.crouch = false;
-  $('btn-crouch').classList.remove('on');
 }
 
 /* ------------------------------------------------ reanimating the dead --- */
@@ -4806,7 +6052,7 @@ var _paleFrom = null, _paleTo = null, _shirtFrom = null, _shirtTo = null;
 
 function updateRisers(dt) {
   if (!_paleTo) {
-    _paleTo = new THREE.Color(0x9fa88f);
+    _paleTo = new THREE.Color(0x666e5c);
     _shirtFrom = new THREE.Color(UNIFORM.shirt);
     _shirtTo = new THREE.Color(0x7d7a70);
   }
@@ -4821,6 +6067,14 @@ function updateRisers(dt) {
       if (f.model.skinMat) {
         if (!c.from) c.from = new THREE.Color(f.look.skin);
         f.model.skinMat.color.copy(c.from).lerp(_paleTo, c.pale);
+        // The face is textured, so it pales by tint rather than by colour:
+        // white leaves the map alone, and the ratio takes it the same way.
+        if (f.model.faceMat) {
+          f.model.faceMat.color.setRGB(
+            lerp(1, _paleTo.r / Math.max(c.from.r, 0.02), c.pale),
+            lerp(1, _paleTo.g / Math.max(c.from.g, 0.02), c.pale),
+            lerp(1, _paleTo.b / Math.max(c.from.b, 0.02), c.pale));
+        }
       }
       if (f.model.shirtMat) f.model.shirtMat.color.copy(_shirtFrom).lerp(_shirtTo, c.pale);
     }
@@ -4830,8 +6084,8 @@ function updateRisers(dt) {
       // The corpse gets up as itself: same body, new appetite.
       f.isZombie = true;
       f.alive = true;
-      f.maxHp = 95;
-      f.hp = 95;
+      f.maxHp = 100;
+      f.hp = 100;
       f.speedMul = 0.55;
       f.zPose = 'rise';
       f.riseT = 0;
@@ -4843,7 +6097,7 @@ function updateRisers(dt) {
       f.ai = makeBrain(0.75);
       f.ai.zombie = true;
       f.voicePitch = rand(0.5, 0.7);
-      f.model.eyes.forEach(function (e) { e.lid.rotation.x = 1.55; });
+      f.model.setEyesClosed(1);
       f.model.rig.visible = true;
       Audio2.play('death', f.distToCamera(), 0.5);
     }
@@ -4955,9 +6209,64 @@ function pickWanderPoint() {
  * you and they do not stop. While they are feeding they are simply busy — that
  * is the window the level gives you.
  */
+/**
+ * A feeding zombie works at the body: it pulls a piece loose, the piece comes
+ * away wet, and the corpse is visibly missing it afterwards.
+ */
+function zombieTear(z) {
+  var body = z.feedTarget;
+  if (!body) return;
+
+  var at = body.pos.clone();
+  at.y += 0.28;
+  at.x += rand(-0.2, 0.2);
+  at.z += rand(-0.2, 0.2);
+
+  // the piece it just pulled off, tossed up towards its mouth
+  var toMouth = z.pos.clone().sub(body.pos).setY(0);
+  if (toMouth.lengthSq() < 0.01) toMouth.set(0, 0, 1);
+  toMouth.normalize().multiplyScalar(1.4);
+  toMouth.y = 3.0;
+
+  var bias = pick(['gut', 'gut2', 'flesh', 'flesh2', 'brain', 'bone', 'skin']);
+  spawnGibs(at, goreMax() ? randInt(3, 5) : 2, true, bias);
+  bloodBurst(at, new THREE.Vector3(toMouth.x * 0.3, 0.8, toMouth.z * 0.3).normalize(),
+             5.5, goreMax() ? 20 : 11);
+  Audio2.play('flesh', z.distToCamera());
+  if (Math.random() < 0.4) Audio2.play('bone', z.distToCamera());
+
+  // and the body loses a bit more of itself
+  if (!body.eaten) body.eaten = 0;
+  body.eaten++;
+  var strip = ['armL', 'armR', 'legL', 'legR'];
+  if (body.eaten % 3 === 0 && goreOn()) {
+    for (var i = 0; i < strip.length; i++) {
+      var zoneName = strip[(randInt(0, 3) + i) % 4];
+      if (!body.severed[zoneName]) {
+        severLimb(body, zoneName, toMouth.clone().normalize());
+        break;
+      }
+    }
+  }
+
+  if (player && player.alive) {
+    var d = player.pos.distanceTo(at);
+    if (d < 3.2) splashScreenBlood(clamp((3.2 - d) / 3.2, 0, 1) * 0.55);
+  }
+}
+
 function updateZombieAI(f, dt) {
   var ai = f.ai;
-  if (f.zPose === 'feed' || f.zPose === 'rise') {
+  if (f.zPose === 'feed') {
+    f.tearT = (f.tearT === undefined ? rand(0.6, 1.8) : f.tearT) - dt;
+    if (f.tearT <= 0) {
+      f.tearT = rand(1.5, 3.2);
+      zombieTear(f);
+    }
+    f.stepPhysics(dt, ZERO, false);
+    return;
+  }
+  if (f.zPose === 'rise') {
     f.stepPhysics(dt, ZERO, false);
     return;
   }
@@ -5295,13 +6604,44 @@ function buildViewArms(look) {
     fore.position.set(0, 0.008, -0.04);
     fore.rotation.x = Math.PI / 2;
     g.add(fore);
-    var hand = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.05, 0.085), skin);
-    hand.position.set(0, 0.01, -0.145);
+    var cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.049, 0.046, 0.022, 12), sleeve);
+    cuff.rotation.x = Math.PI / 2;
+    cuff.position.set(0, 0.006, -0.062);
+    g.add(cuff);
+
+    var hand = new THREE.Mesh(new THREE.BoxGeometry(0.050, 0.046, 0.072), skin);
+    hand.position.set(0, 0.008, -0.146);
     g.add(hand);
-    var thumb = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 8), skin);
-    thumb.scale.set(1, 1, 1.7);
-    thumb.position.set(side * -0.026, 0.024, -0.15);
+    var knuckles = new THREE.Mesh(new THREE.SphereGeometry(0.026, 10, 8), skin);
+    knuckles.scale.set(0.98, 0.78, 0.70);
+    knuckles.position.set(0, 0.010, -0.178);
+    g.add(knuckles);
+
+    // four fingers curled round whatever is being held
+    for (var fi = 0; fi < 4; fi++) {
+      var fx = (fi - 1.5) * 0.0132;
+      var prox = capsuleMesh(0.0098, 0.0090, 0.024, skin, 6);
+      prox.position.set(fx, -0.006, -0.190);
+      prox.rotation.x = 1.05;
+      g.add(prox);
+      var mid = capsuleMesh(0.0090, 0.0080, 0.022, skin, 6);
+      mid.position.set(fx, -0.028, -0.184);
+      mid.rotation.x = 0.25;
+      g.add(mid);
+      var tip = capsuleMesh(0.0082, 0.0070, 0.016, skin, 6);
+      tip.position.set(fx, -0.042, -0.168);
+      tip.rotation.x = -0.55;
+      g.add(tip);
+    }
+    // thumb, laid along the side of the grip
+    var thumb = capsuleMesh(0.0125, 0.0105, 0.030, skin, 7);
+    thumb.position.set(side * -0.027, 0.006, -0.168);
+    thumb.rotation.set(1.15, 0, side * 0.35);
     g.add(thumb);
+    var thumbTip = capsuleMesh(0.0102, 0.0090, 0.020, skin, 7);
+    thumbTip.position.set(side * -0.030, -0.018, -0.186);
+    thumbTip.rotation.set(0.75, 0, side * 0.3);
+    g.add(thumbTip);
     g.traverse(function (o) { if (o.isMesh) o.castShadow = false; });
     return g;
   }
@@ -5332,9 +6672,9 @@ function setViewWeapon(id) {
   if (!viewArmL || !viewArmR) return;
   var w = WEAPONS[id] || WEAPONS.fists;
   if (id === 'pistol') {
-    viewArmR.position.set(0.095, -0.255, -0.47);
+    viewArmR.position.set(0.080, -0.214, -0.395);
     viewArmR.rotation.set(0.5, 0.3, 0.0);
-    viewArmL.position.set(0.02, -0.275, -0.47);
+    viewArmL.position.set(0.017, -0.231, -0.395);
     viewArmL.rotation.set(0.46, -0.12, 0.0);
     viewArmL.visible = true;
     if (viewMuzzle) {
@@ -5342,17 +6682,17 @@ function setViewWeapon(id) {
       viewFlashSprite.position.copy(viewFlashLight.position);
     }
   } else if (id === 'fists') {
-    viewArmR.position.set(0.15, -0.28, -0.44);
+    viewArmR.position.set(0.126, -0.235, -0.370);
     viewArmR.rotation.set(0.46, 0.4, 0.0);
-    viewArmL.position.set(-0.15, -0.3, -0.44);
+    viewArmL.position.set(-0.126, -0.252, -0.370);
     viewArmL.rotation.set(0.46, -0.4, 0.0);
     viewArmL.visible = true;
   } else {
-    viewArmR.position.set(0.225, -0.45, -0.43);
+    viewArmR.position.set(0.189, -0.378, -0.361);
     viewArmR.rotation.set(0.58, 0.44, 0.0);
     viewArmL.visible = w.id === 'bat' || w.id === 'pan';
     if (viewArmL.visible) {
-      viewArmL.position.set(0.085, -0.53, -0.4);
+      viewArmL.position.set(0.071, -0.445, -0.336);
       viewArmL.rotation.set(0.52, -0.08, 0.0);
     }
   }
@@ -5561,14 +6901,6 @@ function setupInput() {
 
   // ---- action buttons
   bindHold($('btn-fire'), function () { firing = true; fireHeld = true; }, function () { firing = false; fireHeld = false; });
-  bindTap($('btn-jump'), function () { playerJump(); });
-  bindTap($('btn-reload'), function () { if (player) player.startReload(); });
-  bindTap($('btn-crouch'), function () {
-    if (!player) return;
-    player.crouch = !player.crouch;
-    $('btn-crouch').classList.toggle('on', player.crouch);
-  });
-  bindTap($('btn-cam'), function () { toggleCamera(); });
 
   // ---- keyboard
   window.addEventListener('keydown', function (e) {
@@ -5577,7 +6909,7 @@ function setupInput() {
     if (e.code === 'Space') { e.preventDefault(); playerJump(); }
     if (k === 'r') { if (player) player.startReload(); }
     if (k === 'v') toggleCamera();
-    if (k === 'c' || k === 'control') { if (player) { player.crouch = !player.crouch; $('btn-crouch').classList.toggle('on', player.crouch); } }
+    if (k === 'c' || k === 'control') { if (player) player.crouch = !player.crouch; }
     if (k === 'e') tryPickup();
     if (k === 'f' || k === 'enter') { firing = true; fireHeld = true; }
     if (k === 'escape' && state === 'playing' && pointerLocked) document.exitPointerLock();
@@ -5652,6 +6984,74 @@ function aimDirection(out) {
   return out.set(-Math.sin(y) * cp, Math.sin(p), -Math.cos(y) * cp);
 }
 
+/**
+ * Electric tap. A ring, a bloom under the finger, and a handful of arcs that
+ * shoot out from where it was pressed.
+ */
+function zapButton(el, clientX, clientY) {
+  if (!el) return;
+  var r = el.getBoundingClientRect();
+  var x = clientX === undefined ? r.width / 2 : clientX - r.left;
+  var y = clientY === undefined ? r.height / 2 : clientY - r.top;
+
+  el.classList.remove('zapping');
+  void el.offsetWidth;                 // restart the flicker
+  el.classList.add('zapping');
+  setTimeout(function () { el.classList.remove('zapping'); }, 340);
+
+  var flash = document.createElement('span');
+  flash.className = 'zap-flash';
+  flash.style.setProperty('--zx', (x / r.width * 100) + '%');
+  flash.style.setProperty('--zy', (y / r.height * 100) + '%');
+  el.appendChild(flash);
+
+  var reach = Math.max(r.width, r.height) * 1.5;
+  var ring = document.createElement('span');
+  ring.className = 'zap-ring';
+  ring.style.left = x + 'px';
+  ring.style.top = y + 'px';
+  ring.style.width = reach + 'px';
+  ring.style.height = reach + 'px';
+  el.appendChild(ring);
+
+  var arcs = [];
+  var n = 7;
+  for (var i = 0; i < n; i++) {
+    var a = document.createElement('span');
+    a.className = 'zap-arc';
+    var ang = (i / n) * 360 + rand(-22, 22);
+    var len = rand(r.width * 0.3, r.width * 0.62);
+    a.style.left = x + 'px';
+    a.style.top = y + 'px';
+    a.style.width = len + 'px';
+    a.style.transform = 'rotate(' + ang + 'deg)';
+    a.style.animationDelay = (Math.random() * 0.06).toFixed(3) + 's';
+    el.appendChild(a);
+    arcs.push(a);
+  }
+
+  setTimeout(function () {
+    flash.remove();
+    ring.remove();
+    for (var k = 0; k < arcs.length; k++) arcs[k].remove();
+  }, 560);
+
+  Audio2.play('zap');
+}
+
+/** Every menu button crackles when you press it. */
+function wireZaps() {
+  var els = document.querySelectorAll('.btn, .inv-card, .seg button');
+  for (var i = 0; i < els.length; i++) {
+    (function (el) {
+      el.addEventListener('pointerdown', function (e) {
+        if (el.hasAttribute('disabled')) return;
+        zapButton(el, e.clientX, e.clientY);
+      });
+    })(els[i]);
+  }
+}
+
 function bindTap(el, fn) {
   el.addEventListener('pointerdown', function (e) {
     e.preventDefault();
@@ -5687,6 +7087,8 @@ function playerJump() {
 
 function toggleCamera() {
   thirdPerson = !thirdPerson;
+  settings.camera = thirdPerson ? 1 : 0;
+  saveSettings();
   $('crosshair').classList.toggle('on', state === 'playing');
   Audio2.play('ui', !thirdPerson);
   if (player) player.model.root.visible = true;
@@ -5802,6 +7204,7 @@ function updatePlayer(dt) {
 var camForwardV = null;
 
 function updateCamera(dt, t) {
+  if (portraitLock) return;
   if (!player) return;
 
   var pitch = camPitch + recoilPitch;
@@ -5968,12 +7371,13 @@ var heartbeatT = 0;
 function cacheHud() {
   ['hp-fill', 'hp-ghost', 'hp-num', 'sta-fill', 'ammo-weapon', 'ammo-count', 'alive-n',
    'match-timer', 'killfeed', 'crosshair', 'hitmarker', 'toast', 'low-hp', 'hurt-flash',
-   'ch-up', 'ch-dn', 'ch-lf', 'ch-rt', 'ch-dot', 'dmg-dirs', 'hotbar', 'btn-reload'
+   'ch-up', 'ch-dn', 'ch-lf', 'ch-rt', 'ch-dot', 'dmg-dirs', 'hotbar'
   ].forEach(function (id) { hudEls[id] = $(id); });
 }
 
 function updateHotbar() {
   var bar = hudEls['hotbar'];
+  if (!bar) return;                    // hotbar was removed from the HUD
   bar.innerHTML = '';
   var slots = [
     { id: 'fists', n: 1 },
@@ -6027,9 +7431,7 @@ function updateHUD(dt) {
   if (w.melee) {
     ac.textContent = '—';
     ac.className = '';
-    hudEls['btn-reload'].classList.add('hide');
   } else {
-    hudEls['btn-reload'].classList.remove('hide');
     if (player.reloadT > 0) {
       ac.textContent = 'RELOADING';
       ac.className = 'reloading';
@@ -6135,6 +7537,7 @@ function onPlayerHurt(amount, from) {
   }, 70);
 
   camShake = Math.min(1.4, camShake + amount * 0.02);
+  splashScreenBlood(clamp(amount / 38, 0.22, 0.9));
 
   if (from) {
     var el = document.createElement('div');
@@ -6165,7 +7568,7 @@ function onKill(killer, victim, zone) {
 /* ==========================================================================
    MATCH FLOW
    ========================================================================== */
-var state = 'menu';    // menu | settings | lobby | cutscene | playing | results
+var state = 'menu';    // menu | settings | inventory | cutscene | zintro | playing | results
 var transitioning = false;   // true during a fade, so one tap cannot fire twice
 var fighters = [];
 var player = null;
@@ -6177,7 +7580,7 @@ var playerSurvived = 0;
 var deathsSoFar = 0;
 
 function showScreen(id) {
-  ['menu-screen', 'settings-screen', 'inventory-screen', 'lobby-screen', 'results-screen',
+  ['menu-screen', 'settings-screen', 'inventory-screen', 'results-screen',
    'loading-screen', 'error-screen']
     .forEach(function (s) { $(s).classList.toggle('on', s === id); });
 }
@@ -6224,7 +7627,8 @@ function buildRoster() {
     id: 0, name: 'YOU', isPlayer: true,
     skin: SKIN_TONES[randInt(0, SKIN_TONES.length - 1)],
     hair: HAIR_COLORS[randInt(0, HAIR_COLORS.length - 1)],
-    eye: EYE_COLORS[randInt(0, EYE_COLORS.length - 1)]
+    eye: EYE_COLORS[randInt(0, EYE_COLORS.length - 1)],
+    face: randInt(0, 3), hairStyle: randInt(0, 3)
   });
   fighters.push(player);
 
@@ -6233,7 +7637,8 @@ function buildRoster() {
       id: i, name: name(),
       skin: SKIN_TONES[(palette[i] + i) % SKIN_TONES.length],
       hair: HAIR_COLORS[palette[i] % HAIR_COLORS.length],
-      eye: EYE_COLORS[i % EYE_COLORS.length]
+      eye: EYE_COLORS[i % EYE_COLORS.length],
+      face: palette[i] % 4, hairStyle: (palette[i] + i) % 4
     });
     f.ai = makeBrain(rand(0.8, 1.15));
     f.voicePitch = f.ai.voice;
@@ -6276,7 +7681,6 @@ function placeForFight() {
   hudEls['dmg-dirs'].innerHTML = '';
   dmgIndicators.length = 0;
   $('hurt-flash').style.opacity = '0';
-  $('btn-crouch').classList.remove('on');
 
   var order = [0, 1, 2, 3].sort(function () { return Math.random() - 0.5; });
   fighters.forEach(function (f, i) {
@@ -6285,8 +7689,8 @@ function placeForFight() {
     f.vel.set(0, 0, 0);
     f.yaw = sp.yaw;
     f.pitch = 0;
-    f.maxHp = f.isPlayer ? 150 : 120;
-    f.hp = f.maxHp;
+    f.maxHp = 100;
+    f.hp = 100;
     f.alive = true;
     f.stamina = 100;
     f.exhausted = false;
@@ -6303,6 +7707,8 @@ function placeForFight() {
     f.model.head.visible = true;
     clearWounds(f);
     f.severed = {};
+    f.eaten = 0;
+    f.tearT = undefined;
     f.zPose = null;
     f.riseT = 0;
     [f.model.armL.shoulder, f.model.armR.shoulder,
@@ -6320,7 +7726,7 @@ function placeForFight() {
   camYaw = player.yaw;
   camPitch = 0;
   camDist = 3.1;
-  thirdPerson = false;
+  thirdPerson = settings.camera === 1;
 
   // Scatter weapons around the arena. One per fighter plus a couple of spares,
   // so everybody has to move and fight for the good ones.
@@ -6410,14 +7816,18 @@ function updateCutscene(flowDt) {
   var dt = Math.min(flowDt, 0.05);
   var A = cut.actors;
 
-  // camera: slow dolly around the group, at roughly eye level
-  var p = cut.t / 12.2;
-  var ang = -1.55 + p * 0.7;
-  var radius = lerp(6.8, 4.4, clamp(p * 1.3, 0, 1));
-  var h = lerp(3.0, 1.55, clamp(p * 1.2, 0, 1));
+  // Camera sits square to the line between the man with the bottle and the
+  // man he is about to hit, so the swing plays across frame rather than into
+  // it, and dollies in as the scene tightens.
+  var p = clamp(cut.t / 12.2, 0, 1);
+  var pivotX = 0.3, pivotZ = 2.5;
+  var out = lerp(1.0, 0.58, p);
+  var drift = Math.sin(p * 1.4) * 1.6;
   placeCineCamera(
-    Math.sin(ang) * radius, h, Math.cos(ang) * radius + 2.2,
-    0.1, 1.3, 2.1
+    pivotX + (2.0 + drift - pivotX) * out,
+    lerp(2.7, 1.55, p),
+    pivotZ + (8.8 - pivotZ) * out,
+    pivotX, 1.32, pivotZ
   );
   viewRig.visible = false;
 
@@ -6533,70 +7943,23 @@ function endMatch() {
   }
 }
 
-/* ------------------------------------------------------------- lobby ----- */
-var lobbyTimer = 0, lobbyStep = 0, lobbyCancelled = false, lobbyFound = false;
-
-function startLobby() {
-  setState('lobby');
-  showScreen('lobby-screen');
-  lobbyCancelled = false;
-  lobbyFound = false;
-  lobbyStep = 0;
-  lobbyTimer = 0;
-  $('lobby-status').textContent = 'Searching for fighters…';
-
-  var list = $('lobby-list');
-  list.innerHTML = '';
-  var roster = ['YOU'];
-  var used = { YOU: 1 };
-  while (roster.length < 4) {
-    var n = pick(NAMES);
-    if (!used[n]) { used[n] = 1; roster.push(n); }
-  }
-  lobbyNames = roster;
-  roster.forEach(function (n, i) {
-    var row = document.createElement('div');
-    row.className = 'lobby-row';
-    row.innerHTML = '<div class="dot' + (i === 0 ? ' you' : '') + '"></div>' + n +
-      '<span class="tag">' + (i === 0 ? 'READY' : 'CONNECTING') + '</span>';
-    list.appendChild(row);
-  });
-  list.children[0].classList.add('in');
-}
-var lobbyNames = [];
-
-function updateLobby(dt) {
-  if (lobbyCancelled) return;
-  lobbyTimer += dt;
-  var list = $('lobby-list');
-  var want = Math.min(4, 1 + Math.floor(lobbyTimer / 0.55));
-  while (lobbyStep < want - 1) {
-    lobbyStep++;
-    var row = list.children[lobbyStep];
-    if (row) {
-      row.classList.add('in');
-      row.querySelector('.tag').textContent = 'READY';
-      Audio2.play('ui', true);
+/**
+ * Straight into it. There is nobody to wait for — the other three are already
+ * in the room.
+ */
+function startMatch() {
+  if (transitioning) return;
+  transitioning = true;
+  fadeTo(1, function () {
+    transitioning = false;
+    showScreen(null);
+    prepareMatch();
+    for (var i = 1; i < fighters.length; i++) {
+      if (!fighters[i].name) fighters[i].name = pick(NAMES);
     }
-  }
-  if (lobbyTimer > 2.4 && !lobbyFound) {
-    lobbyFound = true;
-    $('lobby-status').textContent = 'Match found — entering the room';
-    Audio2.play('ui', true);
-  }
-  if (lobbyTimer > 3.2 && !transitioning) {
-    lobbyCancelled = true;
-    transitioning = true;
-    fadeTo(1, function () {
-      transitioning = false;
-      showScreen(null);
-      prepareMatch();
-      // Give the AI the names the player just watched connect.
-      for (var i = 1; i < fighters.length; i++) fighters[i].name = lobbyNames[i] || fighters[i].name;
-      startCutscene();
-      fadeTo(0);
-    }, 470);
-  }
+    startCutscene();
+    fadeTo(0);
+  }, 470);
 }
 
 /* ==========================================================================
@@ -6630,7 +7993,7 @@ function tick() {
     }
   }
 
-  if (state === 'playing') {
+  if (state === 'playing' && !devFreeze) {
     matchTime += flowDt;
     updatePlayer(dt);
     for (var i = 0; i < fighters.length; i++) {
@@ -6654,10 +8017,6 @@ function tick() {
   } else if (state === 'zintro') {
     updateZombieIntro(flowDt, t);
     for (var zi = 0; zi < fighters.length; zi++) fighters[zi].animate(dt, t);
-  } else if (state === 'lobby') {
-    updateLobby(flowDt);
-    menuCamera(t);
-    for (var k = 0; k < fighters.length; k++) fighters[k].animate(dt, t);
   } else {
     menuCamera(t);
     for (var m = 0; m < fighters.length; m++) fighters[m].animate(dt, t);
@@ -6665,6 +8024,7 @@ function tick() {
   }
 
   updateFX(dt);
+  updateScreenBlood(flowDt);
 
   // world flash: the shot should light the room, not just the gun
   if (player && player.muzzleFlash > 0 && state === 'playing') {
@@ -6692,6 +8052,7 @@ function tick() {
 var ZERO = null;
 
 function menuCamera(t) {
+  if (portraitLock) { if (viewRig) viewRig.visible = false; return; }
   var a = t * 0.11;
   camera.position.set(Math.sin(a) * 9.5, 2.6 + Math.sin(t * 0.3) * 0.35, Math.cos(a) * 9.5);
   camera.lookAt(0, 1.5, 0);
@@ -6759,6 +8120,7 @@ function initInventory() {
       selectLoadout(id);
       Audio2.play('ui', true);
     });
+    card.addEventListener('pointerdown', function (e) { zapButton(card, e.clientX, e.clientY); });
     grid.appendChild(card);
   });
 
@@ -6841,6 +8203,7 @@ function syncSettingsUI() {
   $('vol-val').textContent = Math.round(settings.volume * 100) + '%';
   $('set-fov').value = String(settings.fov);
   $('fov-val').textContent = settings.fov + '°';
+  segSelect('set-camera', settings.camera);
   segSelect('set-invert', settings.invertY);
   segSelect('set-assist', settings.assist);
   segSelect('set-gore', settings.gore);
@@ -6870,7 +8233,7 @@ function setupMenu() {
   $('btn-play').addEventListener('click', function () {
     Audio2.resume();
     Audio2.play('ui', true);
-    startLobby();
+    startMatch();
   });
   $('btn-inventory').addEventListener('click', function () {
     Audio2.resume();
@@ -6894,12 +8257,6 @@ function setupMenu() {
     showScreen('settings-screen');
   });
   $('btn-settings-back').addEventListener('click', function () {
-    Audio2.play('ui', false);
-    setState('menu');
-    showScreen('menu-screen');
-  });
-  $('btn-lobby-cancel').addEventListener('click', function () {
-    lobbyCancelled = true;
     Audio2.play('ui', false);
     setState('menu');
     showScreen('menu-screen');
@@ -6955,6 +8312,7 @@ function setupMenu() {
     saveSettings();
   });
 
+  bindSeg('set-camera', 'camera', function () { thirdPerson = settings.camera === 1; });
   bindSeg('set-invert', 'invertY');
   bindSeg('set-assist', 'assist');
   bindSeg('set-gore', 'gore');
@@ -6993,6 +8351,7 @@ function boot() {
   buildTextures();
   initFXAssets();
   initWoundAssets();
+  initScreenBlood();
   buildRoom();
   applyQuality();
 
@@ -7004,6 +8363,7 @@ function boot() {
   setupInput();
   setupMenu();
   initInventory();
+  wireZaps();
 
   $('coin-val').textContent = coins.toLocaleString();
   $('menu-hint').textContent = isDesktop
@@ -7015,7 +8375,8 @@ function boot() {
   fighters.forEach(function (f, i) {
     var sp = SPAWNS[i];
     f.pos.set(sp.x * 0.45, 0, sp.z * 0.45);
-    f.yaw = Math.atan2(-f.pos.x, -f.pos.z);
+    // face outwards so the menu camera sees the roster rather than their backs
+    f.yaw = Math.atan2(f.pos.x, f.pos.z);
     f.relaxed = true;
     f.setWeapon(i === 0 ? 'fists' : pick(MELEE_PICKUPS), true);
   });
@@ -7086,18 +8447,40 @@ return {
       return true;
     }
     if (cmd === 'sit') { sitInChair(); return playerSitting; }
+    if (cmd === 'portrait') {
+      // Park the camera on the fighter's own forward vector, looking back at
+      // the head. If the rig is oriented correctly this frames the face.
+      // val is an index, or { i, ang (degrees round the head), dist }.
+      var opt = (val && typeof val === 'object') ? val : { i: val || 0 };
+      var t = fighters[opt.i || 0];
+      if (!t) return false;
+      var fw = t.forward(new THREE.Vector3());
+      var side = new THREE.Vector3(-fw.z, 0, fw.x);
+      var ang = (opt.ang || 0) * Math.PI / 180;
+      var dist = opt.dist || 0.42;
+      var dx = fw.x * Math.cos(ang) + side.x * Math.sin(ang);
+      var dz = fw.z * Math.cos(ang) + side.z * Math.sin(ang);
+      var hp = new THREE.Vector3();
+      if (t.model && t.model.head) t.model.head.getWorldPosition(hp);
+      else hp.set(t.pos.x, t.pos.y + 1.62, t.pos.z);
+      camera.position.set(hp.x + dx * dist, hp.y + dist * 0.10, hp.z + dz * dist);
+      camera.lookAt(hp.x, hp.y, hp.z);
+      portraitLock = true;
+      return true;
+    }
+    if (cmd === 'freeze') { devFreeze = !!val; return devFreeze; }
+    if (cmd === 'unportrait') { portraitLock = false; return true; }
     if (cmd === 'hurt') { player.takeDamage(val, null, new THREE.Vector3(0,0,1), player.pos.clone().setY(1.2), HITBOXES[2], 'flesh'); return true; }
     return false;
   },
   // Introspection hook for automated smoke tests.
   debug: function () {
     return {
-      state: state, matchTime: matchTime, lobbyTimer: lobbyTimer,
+      state: state, matchTime: matchTime,
       level: levelNum, zPhase: zPhase, feedTimer: Math.round(feedTimer),
       zombies: livingZombies(), risers: pendingRisers(),
       chair: !!beachChair, sitting: playerSitting, loadout: settings.loadout,
       wounds: fighters.reduce(function (a, f) { return a + (f.wounds ? f.wounds.length : 0); }, 0),
-      lobbyCancelled: lobbyCancelled, lobbyStep: lobbyStep,
       cutT: cut.t, endTimer: endTimer, fps: Math.round(fpsAvg),
       decals: FX.decals.length, drops: FX.drops.length, gibs: FX.gibs.length,
       pickups: pickups.length,
