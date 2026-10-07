@@ -313,6 +313,7 @@ button:active{transform:translateY(1px)}
 #storyCard b{font:900 italic clamp(64px,13vw,132px) 'Barlow Condensed','Arial Narrow',sans-serif;line-height:.9}
 #storyCard span{font:700 clamp(20px,3.4vw,30px) 'Barlow Condensed','Arial Narrow',sans-serif;color:#e3ecff}
 #storyCard em{font:500 14px 'Barlow',sans-serif;font-style:normal;color:#9cb6e6;margin-top:6px}
+#scBtns{display:flex;gap:12px;margin-top:22px}#scBtns.hidden{display:none}
 #dayTag{position:absolute;top:calc(var(--st) + 8px);left:50%;transform:translateX(-50%);text-align:center;pointer-events:none;text-shadow:0 2px 12px rgba(0,0,0,.55);white-space:nowrap}
 #dayTag b{display:block;font:900 italic 36px 'Barlow Condensed','Arial Narrow',sans-serif;line-height:.95;letter-spacing:.01em}
 #dayTag span{display:block;font:700 15px 'Barlow Condensed','Arial Narrow',sans-serif;color:#e3ecff}
@@ -478,12 +479,12 @@ button:active{transform:translateY(1px)}
 <div id="storyPick" class="hidden">
   <div class="spwrap">
     <div class="sphead"><button id="spBack" aria-label="Back to the menu">‹ Back</button><div><small>Story Mode</small><h2>Pick your build</h2>
-      <p>8th grade, summer, August. Coach Blue runs practice behind Tilden, Monday to Thursday from 3:00 to 5:30 PM. Your team: DeMarcus Shadow, Brandon Chalmers, Tayvon Henderson and Jaylen Brooks. Story races use middle school speeds.</p></div></div>
+      <p>8th grade, summer, August. Coach Blue runs practice behind Tilden, Monday to Thursday from 3:00 to 5:30 PM. Your team: DeMarcus Shadow, Brandon Chalmers, Tayvon Henderson, Jaylen Brooks, Jayla Loom and Taylar Jackson. Story races use middle school speeds. The demo is 14 practice days.</p></div></div>
     <div id="spCont"></div>
     <div id="spSlots" class="spslots"></div>
   </div>
 </div>
-<div id="storyCard" class="hidden"><small id="scTop">8th grade · Summer</small><b id="scDay">Day 1</b><span id="scDate"></span><em id="scSub"></em></div>
+<div id="storyCard" class="hidden"><small id="scTop">8th grade · Summer</small><b id="scDay">Day 1</b><span id="scDate"></span><em id="scSub"></em><div id="scBtns" class="hidden"><button id="scMenu">Main menu</button><button id="scAgain" class="cta">Start over</button></div></div>
 <div id="loading" class="hidden"><p id="ltext">Joining</p><div class="lbar"><i id="lfill"></i></div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -1351,7 +1352,7 @@ const G={
   eyeW:new THREE.SphereGeometry(0.0135,12,8),
   brow:new THREE.BoxGeometry(0.034,0.008,0.012),
   hairCap:new THREE.SphereGeometry(0.112,30,18,0,TAU,0,Math.PI*0.5),
-  hairTop:new THREE.CylinderGeometry(0.084,0.092,0.1,22),
+  hairTop:lathe([[0.083,-0.05],[0.088,-0.02],[0.093,0.02],[0.092,0.036],[0.084,0.047],[0.06,0.053],[0,0.055]],22),
   pony:new THREE.CylinderGeometry(0.03,0.008,0.24,14),
   tie:new THREE.TorusGeometry(0.024,0.007,8,16),
   row:new THREE.TorusGeometry(0.117,0.0065,6,40,Math.PI-0.25),
@@ -1363,7 +1364,7 @@ const G={
 const KITS=[[0x1f5fff,0x0b2a6b,'Royal and navy'],[0x0b2a6b,0x1f5fff,'Navy and royal'],[0xd9342b,0x0b2a6b,'Red'],[0x18a058,0x111111,'Green'],[0xf2c230,0x111111,'Gold'],[0xf4f4f4,0x0b2a6b,'White'],[0x1a1a1a,0x1a1a1a,'Blackout'],[0xff7a1a,0x0b2a6b,'Orange'],[0x7b3fe4,0x111111,'Purple'],[0x15b5b0,0x0b2a6b,'Teal'],[0xe0479e,0x111111,'Pink']];
 const SKINS=[0xf1c9a5,0xe0ac82,0xc68a5e,0x9a6440,0x6e4529,0x4a2e1c];
 const HAIR_COLS=[0x1a1110,0x2c1c12,0x5a3a20,0x8a6a3a,0xd8b46a,0x0d0d0d];
-const HAIR_STYLES=['Buzz','Short','High top','Ponytail','Bun','Braids','Bald','Dreads','Twists'];
+const HAIR_STYLES=['Buzz','Short','High top','Ponytail','Bun','Braids','Bald','Dreads','Twists','Box braids','Long straight'];
 const SHOES=[0xffffff,0x1f5fff,0xff3b30,0x111111,0x32d74b,0xffd60a,0xff9f0a];
 const FORMS={
   std:{name:'Standard',desc:'Balanced, compact mechanics. The best push out of the blocks.',acc:1.04,vmax:1,curve:1,stride:1,kick:1},
@@ -1487,15 +1488,305 @@ function clothMat(col,mode,hem,infl){
   m.onBeforeCompile=sh=>{Object.assign(sh.uniforms,m.userData.cu);
     sh.vertexShader='varying vec3 vCP;uniform float uInfl;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvCP=position;transformed+=objectNormal*uInfl;');
     sh.fragmentShader='varying vec3 vCP;uniform float uHem,uMode,uStripe,uTrim;uniform vec3 uAcc;\n'+sh.fragmentShader
-      .replace('void main() {','void main() {\nif(vCP.y<uHem)discard;\nif(uMode>0.5){float cax=abs(vCP.x);if(uMode<1.5){if(vCP.y>0.43&&cax>0.15)discard;if(vCP.y>(vCP.z>0.0?0.512:0.56)+7.0*cax*cax)discard;}else{if(vCP.y>0.445&&cax>0.118)discard;}}')
-      .replace('#include <map_fragment>','#include <map_fragment>\n{if(uHem>-0.9)diffuseColor.rgb=mix(diffuseColor.rgb,uAcc,(1.0-smoothstep(0.012,0.02,vCP.y-uHem))*0.92*uTrim);\nif(uStripe>0.5){float can=atan(vCP.x,vCP.z);float csp=abs(fract(can*7.0)-0.5);diffuseColor.rgb=mix(diffuseColor.rgb,uAcc,(1.0-smoothstep(0.06,0.12,csp))*0.6);}\nif(uMode>1.5&&vCP.z>0.0&&abs(vCP.x)<0.0042&&vCP.y>0.47)diffuseColor.rgb=vec3(0.13);}');};
+      .replace('void main() {','void main() {\nif(vCP.y<uHem)discard;\nif(uMode>0.5&&uMode<2.5){float cax=abs(vCP.x);if(uMode<1.5){if(vCP.y>0.43&&cax>0.15)discard;if(vCP.y>(vCP.z>0.0?0.512:0.56)+7.0*cax*cax)discard;}else{if(vCP.y>0.445&&cax>0.118)discard;}}\nif(uMode>2.5&&vCP.y>0.578&&length(vCP.xz)<0.082)discard;')
+      .replace('#include <map_fragment>','#include <map_fragment>\n{if(uHem>-0.9)diffuseColor.rgb=mix(diffuseColor.rgb,uAcc,(1.0-smoothstep(0.012,0.02,vCP.y-uHem))*0.92*uTrim);\nif(uStripe>0.5){float can=atan(vCP.x,vCP.z);float csp=abs(fract(can*7.0)-0.5);diffuseColor.rgb=mix(diffuseColor.rgb,uAcc,(1.0-smoothstep(0.06,0.12,csp))*0.6);}\nif(uMode>1.5&&uMode<2.5&&vCP.z>0.0&&abs(vCP.x)<0.0042&&vCP.y>0.47)diffuseColor.rgb=vec3(0.13);\nif(uMode>2.5&&vCP.y>0.57&&length(vCP.xz)<0.1)diffuseColor.rgb*=0.8;}');};
   return m;}
-function refreshCloth(a){const w=a.g==='W',su=!!a.suitOn;
-  a.abs.forEach(m=>m.visible=!w&&!su);a.legCloth.forEach(m=>m.visible=(m.userData.w===w)&&!su);a.torsoSkin.forEach(m=>m.material=su?a.mTop:a.mSkin);}
+function refreshCloth(a){const w=a.g==='W',su=!!a.suitOn,o=!!a.outfit;
+  a.abs.forEach(m=>m.visible=!w&&!su&&!o);a.legCloth.forEach(m=>m.visible=(m.userData.w===w)&&!su&&!o);a.torsoSkin.forEach(m=>m.material=su&&!o?a.mTop:a.mSkin);}
+// ================= HAIR: canvas textures, strands that drape over the head and swing on a spring =================
+const HTX=(function(){
+  const AN=Math.min(8,maxAniso);
+  function mk(w,h,draw,rep){const c=canvas(w,h),g=c.getContext('2d');draw(g,w,h);const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;if(rep)t.repeat.set(rep[0],rep[1]);t.anisotropy=AN;return t;}
+  function px(g,w,h,f){const im=g.createImageData(w,h),d=im.data;for(let y=0;y<h;y++)for(let x=0;x<w;x++){const v=clamp(f(x/w,y/h),0,255),i=(y*w+x)*4;d[i]=d[i+1]=d[i+2]=v;d[i+3]=255;}g.putImageData(im,0,0);}
+  function wr(w,h,x,y,r,fn){for(const ox of[-w,0,w])for(const oy of[-h,0,h]){const X=x+ox,Y=y+oy;if(X<-r||X>w+r||Y<-r||Y>h+r)continue;fn(X,Y);}}
+  const ink=(v,a)=>'rgba('+v+','+v+','+v+','+a.toFixed(2)+')';
+  function curls(g,w,h,n,r0,r1,dk){for(let i=0;i<n;i++){const x=Math.random()*w,y=Math.random()*h,r=rand(r0,r1),a0=Math.random()*TAU,l=rand(2.2,4.6),d=Math.random()<dk;
+    g.strokeStyle=d?ink(16,rand(0.35,0.75)):ink(238,rand(0.18,0.5));g.lineWidth=rand(0.7,1.5);wr(w,h,x,y,r+2,(X,Y)=>{g.beginPath();g.arc(X,Y,r,a0,a0+l);g.stroke();});}}
+  function strands(g,w,h,n,vert){for(let i=0;i<n;i++){const v=Math.floor(rand(30,245)),lw=rand(0.5,1.5),s0=rand(0,vert?h:w),c=Math.random()*(vert?w:h),len=rand(0.35,1.15)*(vert?h:w),dc=rand(-2.5,2.5);
+    g.strokeStyle=ink(v,rand(0.25,0.75));g.lineWidth=lw;
+    for(const o1 of[-1,0,1])for(const o2 of[-1,0,1]){g.beginPath();
+      if(vert){const X=c+o1*w,Y=s0+o2*h;g.moveTo(X,Y);g.quadraticCurveTo(X+dc,Y+len/2,X+dc*0.4,Y+len);}
+      else{const X=s0+o1*w,Y=c+o2*h;g.moveTo(X,Y);g.quadraticCurveTo(X+len/2,Y+dc,X+len,Y+dc*0.4);}g.stroke();}}}
+  const T={};
+  // short coily hair (caps for short cuts, high tops, buns of coils)
+  T.coil=mk(256,256,(g,w,h)=>{g.fillStyle='#9a9a9a';g.fillRect(0,0,w,h);curls(g,w,h,3600,1.3,3.3,0.62);},[12,4]);
+  // 360 waves: ripples circling out from the crown, over fine coils (Caesar cuts)
+  T.wave=mk(256,256,(g,w,h)=>{px(g,w,h,(u,v)=>{const s=0.5+0.5*Math.sin((v*5+0.07*Math.sin(u*TAU*2)+0.035*Math.sin(u*TAU*5+v*TAU*2))*TAU);return 105+110*Math.pow(s,1.5)+rand(-24,24);});curls(g,w,h,1600,0.9,2.1,0.6);},[8,3]);
+  // box braid parts on the scalp: square sections, each with a braid root
+  T.braidBase=mk(128,128,(g,w,h)=>{g.fillStyle='#585858';g.fillRect(0,0,w,h);
+    for(let i=0;i<2;i++)for(let j=0;j<2;j++){const cx=i*64+32,cy=j*64+32,rg=g.createRadialGradient(cx,cy,3,cx,cy,31);rg.addColorStop(0,'#d8d8d8');rg.addColorStop(0.55,'#9a9a9a');rg.addColorStop(1,'#444');g.fillStyle=rg;g.fillRect(cx-31,cy-31,62,62);
+      g.lineWidth=2.2;for(let k=0;k<7;k++){g.strokeStyle=ink(18,0.55);g.beginPath();g.arc(cx,cy,5+k*3.6,k*0.9,k*0.9+2.3);g.stroke();}}
+    g.fillStyle='rgba(10,10,10,.9)';for(let i=0;i<=2;i++){g.fillRect(i*64-1.5,0,3,h);g.fillRect(0,i*64-1.5,w,3);}},[14,5]);
+  // straight hair on the scalp with a middle part (u=0.25 is the front of the cap)
+  T.strandCap=mk(512,256,(g,w,h)=>{g.fillStyle='#8e8e8e';g.fillRect(0,0,w,h);strands(g,w,h,2400,true);
+    const x=w*0.25,gr=g.createLinearGradient(x-7,0,x+7,0);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(0.5,'rgba(0,0,0,.8)');gr.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=gr;g.fillRect(x-7,h*0.14,14,h*0.86);},[1,1]);
+  T.strandV=mk(256,256,(g,w,h)=>{g.fillStyle='#8e8e8e';g.fillRect(0,0,w,h);strands(g,w,h,1400,true);},[3,1]);
+  // strand textures run along u (length) and around v
+  T.strand=mk(256,64,(g,w,h)=>{g.fillStyle='#8e8e8e';g.fillRect(0,0,w,h);strands(g,w,h,520,false);},[1,1]);
+  T.loc=mk(128,64,(g,w,h)=>{px(g,w,h,(u,v)=>120+62*Math.sin((u*3+v*2)*TAU)+22*Math.sin((u*3+v*2)*TAU*2+1.3)+rand(-42,42));curls(g,w,h,800,0.9,2.4,0.55);},[1,1]);
+  T.twist=mk(128,64,(g,w,h)=>{px(g,w,h,(u,v)=>{const p=((u*4+v*2)%1+1)%1,b=Math.sin(p*Math.PI);return 38+200*Math.pow(b,0.7)+18*Math.sin((u*28+v*6)*TAU)*b+rand(-22,22);});},[1,1]);
+  T.braid=mk(128,64,(g,w,h)=>{px(g,w,h,(u,v)=>{const c=Math.abs(((v*2)%1)-0.5)*2,p=((u*6+c*0.9)%1+1)%1,b=Math.sin(p*Math.PI);return 42+196*Math.pow(b,0.6)+16*Math.sin((u*40+c*7)*TAU)*b+rand(-20,20);});},[1,1]);
+  return T;})();
+// head space: the skull/hair ellipsoid, and the neck, shoulders and back the hair has to fall around
+const HC=new THREE.Vector3(0,0.118,-0.004),HR=new THREE.Vector3(0.106,0.124,0.118);
+function headPush(p,m){const ax=HR.x+m,ay=HR.y+m,az=HR.z+m,dx=(p.x-HC.x)/ax,dy=(p.y-HC.y)/ay,dz=(p.z-HC.z)/az,d=Math.sqrt(dx*dx+dy*dy+dz*dz);
+  if(d<1){p.set(HC.x+dx/d*ax,HC.y+dy/d*ay,HC.z+dz/d*az);return true;}return d<1.05;}
+const BACKZ={M:[[0,-0.1],[-0.03,-0.125],[-0.06,-0.15],[-0.1,-0.178],[-0.14,-0.19]],W:[[0,-0.095],[-0.04,-0.11],[-0.08,-0.13],[-0.12,-0.148],[-0.18,-0.16],[-0.25,-0.165]]};
+function backZ(y,P){if(y>=P[0][0])return P[0][1];for(let i=1;i<P.length;i++)if(y>=P[i][0]){const a=P[i-1],b=P[i];return lerp(a[1],b[1],(y-a[0])/(b[0]-a[0]));}return P[P.length-1][1];}
+function bodyPush(p,m,P){let c=false;
+  if(p.y<0.04&&p.y>-0.22){const nz=p.z+0.012,nr=Math.hypot(p.x,nz),R=0.08+m;if(nr<R){const k=R/Math.max(nr,1e-4);p.x*=k;p.z=nz*k-0.012;c=true;}}
+  const ax=Math.abs(p.x),sy=-0.064-0.15*Math.max(0,ax-0.08)+m;
+  if(ax<0.27&&p.y<0){const zl=backZ(p.y,P)-m;
+    if(p.z>zl){if(ax<=0.075){p.z=zl;c=true;}else if(p.y<sy){if(p.y>sy-0.03){p.y=sy;p.z-=0.0045;}else p.z=zl;c=true;}}}
+  return c;}
+function hDir(th,E){const c=Math.cos(E);return new THREE.Vector3(Math.sin(th)*c,Math.sin(E),Math.cos(th)*c);}
+function onHead(v,lift){return new THREE.Vector3(HC.x+v.x*(HR.x+lift),HC.y+v.y*(HR.y+lift),HC.z+v.z*(HR.z+lift));}
+function hairline(th){const f=Math.cos(th);return f>=0?lerp(0.26,0.66,Math.pow(f,1.5)):lerp(0.26,-0.6,Math.pow(-f,1.1));}
+function hairRoots(step,eMin,eMax,dens){const R=[];for(let E=eMax;E>=eMin;E-=step){const n=Math.max(1,Math.round(dens*Math.cos(E)));
+  for(let k=0;k<n;k++){const th=((k+0.5+rand(-0.3,0.3))/n)*TAU+E*1.9-Math.PI,e=E+rand(-0.3,0.3)*step;if(e>=hairline(th)+0.03)R.push([th,e]);}}return R;}
+function arcOver(v0,v1,lift,ds){const ang=v0.angleTo(v1),n=Math.max(1,Math.ceil(ang*0.12/ds)),ax=new THREE.Vector3().crossVectors(v0,v1);if(ax.lengthSq()<1e-9)ax.set(1,0,0);ax.normalize();
+  const P=[];for(let i=0;i<=n;i++)P.push(onHead(v0.clone().applyAxisAngle(ax,ang*i/n),lift));return P;}
+// let a strand fall: gravity pulls it down, it slides over the scalp and shoulders and hangs behind the back
+function drape(p0,dir,free,o){const pts=[p0.clone()],p=p0.clone(),d=dir.clone().normalize(),q=new THREE.Vector3(),ds=o.ds,maxN=Math.ceil((free+0.5)/ds);let dep=0,contact=true,sDep=0,s=0;
+  for(let i=0;i<maxN;i++){q.copy(p);d.x+=o.pull[0];d.y+=o.pull[1]-o.grav;d.z+=o.pull[2];d.normalize();p.addScaledVector(d,ds);
+    let c=headPush(p,o.m);if(o.zb!=null&&bodyPush(p,o.m,o.zb))c=true;
+    s+=p.distanceTo(q);pts.push(p.clone());
+    if(contact){if(c){dep=pts.length-1;sDep=s;}else contact=false;}
+    d.subVectors(p,q);if(d.lengthSq()<1e-12)d.set(0,-1,0);d.normalize();
+    if(!contact&&s-sDep>=free)break;}
+  return{pts,dep};}
+// hair that grows from the front gets combed back over the top first
+function combed(th,E,lift,free,o){const v=hDir(th,E);let pre=[],start=onHead(v,lift),dir;
+  if(Math.cos(th)>0.12){pre=arcOver(v,hDir(Math.PI-th*0.55,Math.min(E,0.9)),lift,o.ds);start=pre.pop();dir=new THREE.Vector3().subVectors(start,pre.length?pre[pre.length-1]:onHead(v,lift)).normalize();}
+  else dir=new THREE.Vector3(Math.sin(th)*0.4,-1,Math.min(0,Math.cos(th))*0.4-0.15);
+  const D=drape(start,dir,free,o);return{pts:pre.concat(D.pts),dep:pre.length+D.dep};}
+function strandsLocs(zb,box){const L=[];
+  (box?hairRoots(0.17,-0.58,1.47,15):hairRoots(0.18,-0.6,1.45,14)).forEach(([th,E])=>{const fr=Math.cos(th),free=box?(fr>-0.35?0.36:0.44)*rand(0.9,1.12):(fr>-0.35?0.17:0.24)*rand(0.85,1.18);
+    const C=combed(th,E,0.005,free,{pull:[0,0,-0.012],grav:0.2,m:box?0.0095:0.0105,zb,ds:box?0.02:0.017});
+    L.push(box?{pts:C.pts,dep:C.dep,r0:0.0062,r1:0.0054,rad:6,tile:0.03,ph:Math.random()*TAU,lump:0.05,lumpF:90}:{pts:C.pts,dep:C.dep,r0:0.0078,r1:0.007,rad:6,tile:0.045,ph:Math.random()*TAU,lump:0.12,lumpF:70});});
+  return L;}
+function strandsTwists(){const L=[];
+  hairRoots(0.12,0.42,1.52,24).forEach(([th,E])=>{const v=hDir(th,E),p0=onHead(v,0.002),fr=Math.cos(th);
+    const dir=v.clone().multiplyScalar(0.55).add(new THREE.Vector3(0,-0.55,fr>0.45?0.45:0)).normalize();
+    const D=drape(p0,dir,(E>1.0?0.075:0.06)*rand(0.85,1.18),{pull:[0,0,0],grav:0.11,m:0.008,zb:null,ds:0.01});
+    L.push({pts:D.pts,dep:0,r0:0.0078,r1:0.0058,rad:6,tile:0.026,ph:Math.random()*TAU,lump:0.1,lumpF:120});});
+  return L;}
+function strandsCornrows(zb){const L=[];
+  for(let i=0;i<6;i++){const xs=(-0.5+i*0.2)*0.95,c=Math.sqrt(1-xs*xs),ps0=Math.acos(Math.min(0.99,0.6/c)),ps1=-Math.acos(Math.max(-0.99,-0.5/c)),P=[];
+    const n=Math.ceil((ps0-ps1)*0.12/0.014);for(let k=0;k<=n;k++){const ps=lerp(ps0,ps1,k/n);P.push(onHead(new THREE.Vector3(xs,c*Math.cos(ps),c*Math.sin(ps)),0.004));}
+    const start=P.pop(),dir=new THREE.Vector3().subVectors(start,P[P.length-1]).normalize();
+    const D=drape(start,dir,rand(0.12,0.16),{pull:[0,0,-0.01],grav:0.2,m:0.008,zb,ds:0.015});
+    L.push({pts:P.concat(D.pts),dep:P.length+D.dep,r0:0.0082,r1:0.0058,rad:7,tile:0.03,ph:Math.random()*TAU,flat:1.25});}
+  return L;}
+function strandsStraight(zb){const L=[],add=(th,E,dir,free)=>{const D=drape(onHead(hDir(th,E),0.006),dir,free,{pull:[0,0,-0.01],grav:0.16,m:0.011,zb,ds:0.02});
+    L.push({pts:D.pts,dep:D.dep,r0:0.0046,r1:0.0038,flat:5.2,rad:6,tile:0.11,ph:Math.random()*TAU});};
+  for(let E=0.68;E<=1.5;E+=0.04)for(const s of[-1,1])add(s*0.05,E,new THREE.Vector3(s,-0.15,-0.25),rand(0.27,0.33));
+  hairRoots(0.17,-0.52,1.25,13).forEach(([th,E])=>{if(Math.cos(th)<-0.25)add(th,E,new THREE.Vector3(Math.sin(th)*0.3,-1,-0.3),rand(0.25,0.31));});
+  for(const s of[-1,1])for(let k=0;k<9;k++)add(s*(1.15+k*0.14),0.35+rand(-0.05,0.25),new THREE.Vector3(s*0.3,-1,-0.25),rand(0.24,0.3));
+  return L;}
+// strands -> one mesh: tubes (or flat clumps) with uv along the length and bend weights for the sway shader
+function strandGeo(list){const P=[],N=[],U=[],HA=[],HT=[],I=[];let base=0;
+  const t=new THREE.Vector3(),o=new THREE.Vector3(),sd=new THREE.Vector3(),nn=new THREE.Vector3(),lt=new THREE.Vector3();
+  for(const S of list){const pts=S.pts,n=pts.length;if(n<2)continue;const R=S.rad||6,fl=S.flat||1;
+    const sl=[0];for(let i=1;i<n;i++)sl.push(sl[i-1]+pts[i].distanceTo(pts[i-1]));
+    const dep=Math.min(S.dep||0,n-2),sDep=sl[dep],Lf=Math.max(1e-4,sl[n-1]-sDep),A=pts[dep];
+    for(let i=0;i<n;i++){
+      if(i===0)t.subVectors(pts[1],pts[0]);else if(i===n-1)t.subVectors(pts[n-1],pts[n-2]);else t.subVectors(pts[i+1],pts[i-1]);t.normalize();if(i===n-1)lt.copy(t);
+      const p=pts[i],k=clamp(p.y/0.05,0,1);o.set(p.x-HC.x,(p.y-HC.y)*k,p.z-HC.z);
+      sd.crossVectors(t,o);if(sd.lengthSq()<1e-10)sd.set(1,0,0);sd.normalize();nn.crossVectors(sd,t).normalize();
+      const u=i/(n-1),r=S.r0+(S.r1-S.r0)*u,w=r*fl,ht=i<=dep?0:(sl[i]-sDep)/Lf;
+      for(let j=0;j<=R;j++){const a=j/R*TAU,ca=Math.cos(a),sa=Math.sin(a),lp=S.lump?1+S.lump*Math.sin(a*3+sl[i]*(S.lumpF||60)):1;
+        P.push(p.x+(sd.x*ca*w+nn.x*sa*r)*lp,p.y+(sd.y*ca*w+nn.y*sa*r)*lp,p.z+(sd.z*ca*w+nn.z*sa*r)*lp);
+        const ex=ca/w,ey=sa/r,el=Math.hypot(ex,ey);N.push((sd.x*ex+nn.x*ey)/el,(sd.y*ex+nn.y*ey)/el,(sd.z*ex+nn.z*ey)/el);
+        U.push(sl[i]/S.tile,j/R);HA.push(A.x,A.y,A.z,S.ph);HT.push(ht);}}
+    for(let i=0;i<n-1;i++)for(let j=0;j<R;j++){const a0=base+i*(R+1)+j,b0=a0+R+1;I.push(a0,b0,a0+1,b0,b0+1,a0+1);}
+    const e=pts[n-1],cI=base+n*(R+1),rt=S.r1*0.7,lr=base+(n-1)*(R+1);
+    P.push(e.x+lt.x*rt,e.y+lt.y*rt,e.z+lt.z*rt);N.push(lt.x,lt.y,lt.z);U.push((sl[n-1]+rt)/S.tile,0.5);HA.push(A.x,A.y,A.z,S.ph);HT.push(1);
+    for(let j=0;j<R;j++)I.push(cI,lr+j+1,lr+j);
+    base+=n*(R+1)+1;}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(U,2));
+  g.setAttribute('hA',new THREE.Float32BufferAttribute(HA,4));g.setAttribute('hT',new THREE.Float32BufferAttribute(HT,1));g.setIndex(I);g.computeBoundingSphere();g.boundingSphere.radius+=0.12;return g;}
+const HAIR_GEO={};
+function hairGeo(st,g){const k=st+g;if(HAIR_GEO[k])return HAIR_GEO[k];const zb=BACKZ[g==='W'?'W':'M'];let L=null;
+  if(st===5)L=strandsCornrows(zb);else if(st===7)L=strandsLocs(zb,false);else if(st===8)L=strandsTwists();else if(st===9)L=strandsLocs(zb,true);else if(st===10)L=strandsStraight(zb);
+  return L?(HAIR_GEO[k]=strandGeo(L)):null;}
+// per-style look and motion: amp = how far the strands swing, lag = how much the tips trail, tw = loc twist, jig = bounce per step
+const HAIR_SW={5:{tex:'braid',amp:0.8,lag:1.1,tw:0,jig:0.22,idle:0.6,back:true,rough:0.62},7:{tex:'loc',amp:1.3,lag:1.5,tw:0.45,jig:0.45,idle:1,back:true,rough:0.8},
+  8:{tex:'twist',amp:0.42,lag:0.8,tw:0.18,jig:0.3,idle:0.5,back:false,rough:0.7},9:{tex:'braid',amp:1.0,lag:1.3,tw:0.12,jig:0.32,idle:0.8,back:true,rough:0.58},10:{tex:'strand',amp:0.95,lag:1.4,tw:0,jig:0.22,idle:0.9,back:true,rough:0.42}};
+const CAP_TEX={0:'wave',3:'strandCap',4:'strandCap',9:'braidBase',10:'strandCap'};
+const _hc=new THREE.Color();
+function hairStdMat(a,tex,rough){const m=new THREE.MeshStandardMaterial({color:0x222222,roughness:rough,metalness:0,map:tex,bumpMap:tex,bumpScale:0.0016});m.envMapIntensity=0.8;(a.hairMats||(a.hairMats=[])).push(m);return m;}
+function setHairCol(a,hex){a.hairCol=hex;a.mHair.color.setHex(hex);_hc.setHex(hex);(a.hairMats||[]).forEach(m=>m.color.setRGB(_hc.r*1.55+0.012,_hc.g*1.55+0.01,_hc.b*1.55+0.008));}
+function strandMat(a){if(a.mStrand)return a.mStrand;const m=hairStdMat(a,HTX.loc,0.7);m.bumpScale=0.0022;
+  m.userData.hu={uSw:{value:new THREE.Vector4()},uHM:{value:new THREE.Vector4()},uHP:{value:0}};
+  m.onBeforeCompile=sh=>{Object.assign(sh.uniforms,m.userData.hu);
+    sh.vertexShader='attribute vec4 hA;attribute float hT;uniform vec4 uSw;uniform vec4 uHM;uniform float uHP;\n'+sh.vertexShader
+      .replace('void main() {','void main() {\nfloat hW=hT,hW2=hW*hW,hPh=hA.w;\nfloat hBx=uSw.x*hW+uSw.z*hW2+uHM.z*hW2*(0.55*sin(uHP+hPh*0.35)+0.25)+uHM.w*hW2*0.06*sin(uHM.x*1.7+hPh*3.0);\nfloat hBz=uSw.y*hW+uSw.w*hW2+uHM.z*hW2*0.3*sin(uHP*0.5+hPh)+uHM.w*hW2*0.05*sin(uHM.x*1.3+hPh*2.0);\nfloat hCx=cos(hBx),hSx=sin(hBx),hCz=cos(hBz),hSz=sin(hBz);\nmat3 hRot=mat3(hCz,hSz,0.0,-hSz,hCz,0.0,0.0,0.0,1.0)*mat3(1.0,0.0,0.0,0.0,hCx,hSx,0.0,-hSx,hCx);\nfloat hTw=uHM.y*hW*sin(uHM.x*2.6+hPh);')
+      .replace('#include <uv_vertex>','#include <uv_vertex>\n#ifdef USE_UV\nvUv.y+=hTw;\n#endif')
+      .replace('#include <beginnormal_vertex>','#include <beginnormal_vertex>\nobjectNormal=hRot*objectNormal;')
+      .replace('#include <begin_vertex>','#include <begin_vertex>\ntransformed=hA.xyz+hRot*(transformed-hA.xyz);');};
+  a.mStrand=m;if(a.hairCol!=null)setHairCol(a,a.hairCol);return m;}
+function setHair(a,i){if(!HAIR_STYLES[i])i=1;a.hairStyle=i;
+  a.hairCap.visible=i!==6;const sc=i===0?[0.93,1.075,1.04]:i===10?[0.965,1.1,1.065]:i===9?[0.955,1.095,1.055]:[0.946,1.09,1.048];a.hairCap.scale.set(sc[0],sc[1],sc[2]);
+  const ct=HTX[CAP_TEX[i]||'coil'];if(a.mHairCap.map!==ct){a.mHairCap.map=ct;a.mHairCap.bumpMap=ct;}a.mHairCap.roughness=(i===10||i===3||i===4)?0.5:0.8;
+  a.hairTop.visible=i===2;a.ponyPivot.visible=i===3;a.hairBun.visible=i===4;
+  const S=HAIR_SW[i];
+  if(S){const m=strandMat(a),tx=HTX[S.tex];if(m.map!==tx){m.map=tx;m.bumpMap=tx;}m.roughness=S.rough;const geo=hairGeo(i,a.g);
+    if(!a.hairMesh){a.hairMesh=new THREE.Mesh(geo,m);a.head.add(a.hairMesh);}else a.hairMesh.geometry=geo;a.hairMesh.visible=true;}
+  else if(a.hairMesh)a.hairMesh.visible=false;}
+// one spring per athlete drives every strand: hangs with gravity, streams back with speed, bounces each step, swings with turns
+function hairUpdate(a,dt){
+  if(a.ponyPivot.visible){const sp=Math.min(1,a.speed/8);a.ponyPivot.rotation.x=0.45+0.55*sp+0.16*Math.sin(2*a.ph)*Math.min(1,a.speed/3);a.ponyPivot.rotation.z=0.12*Math.sin(a.ph)*Math.min(1,a.speed/4);}
+  const S=HAIR_SW[a.hairStyle];if(!S||!a.hairMesh||!a.hairMesh.visible||!a.mStrand)return;
+  const D=a.hP||(a.hP={b:0,s:0,vb:0,vs:0,b2:0,s2:0,yaw:a.root.rotation.y}),J=a.J,mv=a.anim==='move'||a.anim==='drill';
+  const sp=mv?Math.min(1,(a.speed||0)/9):0,stepK=mv?Math.min(1,Math.max(a.speed||0,a.anim==='drill'?2:0)/2.2):0;
+  let yr=a.root.rotation.y-D.yaw;yr=((yr+Math.PI)%TAU+TAU)%TAU-Math.PI;D.yaw=a.root.rotation.y;const yawV=clamp(yr/Math.max(dt,1e-3),-6,6);
+  const tb=-((J.tX||0)+(J.hX||0))+0.62*sp+0.24*stepK*Math.sin(2*a.ph+0.6)+(a.anim==='drill'?0.25*Math.abs(Math.sin(2*(a.dph||0))):0);
+  const ts=-0.6*(J.tZ||0)+0.26*Math.sin(a.ph)*stepK-0.045*yawV;
+  const k=30,c=3.8,h=Math.min(dt,0.033);
+  D.vb+=((tb-D.b)*k-D.vb*c)*h;D.b+=D.vb*h;D.vs+=((ts-D.s)*k-D.vs*c)*h;D.s+=D.vs*h;
+  D.b2+=(D.b-D.b2)*Math.min(1,h*4.2);D.s2+=(D.s-D.s2)*Math.min(1,h*4.2);
+  const U=a.mStrand.userData.hu;let bx=D.b*S.amp,bz=D.s*S.amp,lx=(D.b2-D.b)*S.lag,lz=(D.s2-D.s)*S.lag;
+  if(S.back){const mn=-(J.hX||0)+0.02;if(bx<mn)bx=mn;if(bx+lx<mn)lx=mn-bx;}
+  U.uSw.value.set(bx,bz,lx,lz);U.uHM.value.set(time+a.seed,S.tw*(0.35+0.65*sp),S.jig*stepK,S.idle*(1-sp));U.uHP.value=2*a.ph;}
+
+// ================= SHOES: shaped upper with collar, tongue, laces and heel tab; midsole and outsole; swoosh decals =================
+const SHOE=(function(){
+  const M=(x,y,z,sx,sy,sz,rx,ry,rz)=>new THREE.Matrix4().compose(new THREE.Vector3(x,y,z),new THREE.Quaternion().setFromEuler(new THREE.Euler(rx||0,ry||0,rz||0)),new THREE.Vector3(sx,sy,sz));
+  function mergeC(list){const pos=[],nor=[],col=[];
+    list.forEach(([g,m,c])=>{const gg=g.index?g.toNonIndexed():g.clone();gg.applyMatrix4(m);const pa=gg.attributes.position.array,na=gg.attributes.normal.array;for(let i=0;i<pa.length;i+=3){pos.push(pa[i],pa[i+1],pa[i+2]);nor.push(na[i],na[i+1],na[i+2]);col.push(c,c,c);}});
+    const o=new THREE.BufferGeometry();o.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));o.setAttribute('normal',new THREE.Float32BufferAttribute(nor,3));o.setAttribute('color',new THREE.Float32BufferAttribute(col,3));o.computeBoundingSphere();return o;}
+  const up=new THREE.SphereGeometry(1,18,12),p=up.attributes.position;
+  for(let i=0;i<p.count;i++){let x=p.getX(i),y=p.getY(i),z=p.getZ(i);
+    if(y<-0.38)y=-0.38+(y+0.38)*0.2;
+    const toe=Math.max(0,z-0.3)/0.7;if(y>0)y*=1-0.58*toe*toe;
+    x*=(1-0.2*Math.pow(Math.max(0,z-0.55)/0.45,2))*(z<0?1-0.13*(-z):1);
+    y-=Math.exp(-Math.pow((z+0.28)/0.34,2))*Math.max(0,y-0.15)*0.9;
+    p.setXYZ(i,x*0.047,y*0.046-0.026,z*0.128+0.05);}
+  up.computeVertexNormals();
+  const upY=z=>{const zn=(z-0.05)/0.128,t=Math.max(0,zn-0.3)/0.7;return Math.sqrt(Math.max(0,1-zn*zn))*(1-0.58*t*t)*0.046-0.026;};
+  const U=[[up,new THREE.Matrix4(),1]],bx=new THREE.BoxGeometry(1,1,1);
+  U.push([new THREE.TorusGeometry(1,0.22,6,18),M(0,-0.004,0.008,0.039,0.044,0.039,Math.PI/2),0.82]);
+  U.push([bx,M(0,0.016,0.05,0.03,0.005,0.036,0.42),0.9]);
+  for(let i=0;i<4;i++){const z=0.056+i*0.019,y=upY(z)+0.0015,sl=(upY(z+0.004)-upY(z-0.004))/0.008;U.push([bx,M(0,y,z,0.03,0.0034,0.0055,-Math.atan(sl)),1]);}
+  for(const s of[-1,1]){const z=0.088,sl=(upY(z+0.004)-upY(z-0.004))/0.008;U.push([bx,M(s*0.0175,upY(z)-0.001,z,0.0045,0.003,0.078,-Math.atan(sl)),0.78]);}
+  U.push([bx,M(0,-0.008,-0.076,0.015,0.013,0.006,0.22),0.7]);
+  const upper=mergeC(U);
+  const sh=new THREE.Shape();sh.moveTo(0,-0.083);
+  sh.bezierCurveTo(0.031,-0.083,0.037,-0.062,0.037,-0.032);sh.bezierCurveTo(0.037,0.008,0.031,0.038,0.035,0.068);
+  sh.bezierCurveTo(0.043,0.098,0.046,0.128,0.038,0.156);sh.bezierCurveTo(0.03,0.178,0.012,0.184,0,0.184);
+  sh.bezierCurveTo(-0.012,0.184,-0.03,0.178,-0.038,0.156);sh.bezierCurveTo(-0.046,0.128,-0.043,0.098,-0.035,0.068);
+  sh.bezierCurveTo(-0.031,0.038,-0.037,0.008,-0.037,-0.032);sh.bezierCurveTo(-0.037,-0.062,-0.031,-0.083,0,-0.083);
+  const prep=(g,y0)=>{g.rotateX(Math.PI/2);g.translate(0,y0,0);const q=g.attributes.position;for(let i=0;i<q.count;i++){const z=q.getZ(i);let y=q.getY(i);if(z>0.105)y+=2.3*(z-0.105)*(z-0.105);if(z<-0.045)y+=1.4*(z+0.045)*(z+0.045);q.setY(i,y);}g.computeVertexNormals();return g;};
+  const mid=prep(new THREE.ExtrudeGeometry(sh,{depth:0.017,bevelEnabled:true,bevelThickness:0.004,bevelSize:0.0032,bevelSegments:1,curveSegments:5}),-0.0345);
+  const out=prep(new THREE.ExtrudeGeometry(sh,{depth:0.004,bevelEnabled:false,curveSegments:5}),-0.0565);
+  const sole=mergeC([[mid,new THREE.Matrix4(),0.95],[out,new THREE.Matrix4(),0.4]]);
+  // swoosh patches hug both sides of the upper
+  const um=new THREE.Mesh(up,new THREE.MeshBasicMaterial({side:THREE.DoubleSide})),rc=new THREE.Raycaster(),P2=[],U2=[],I2=[],o=new THREE.Vector3(),dv=new THREE.Vector3();
+  for(const s of[1,-1]){const b=P2.length/3,NU=14,NV=5;
+    for(let j=0;j<=NV;j++)for(let i=0;i<=NU;i++){const u=i/NU,v=j/NV,z=lerp(0.112,-0.045,u),y=lerp(-0.036,-0.003,v);rc.set(o.set(s*0.1,y,z),dv.set(-s,0,0));const h=rc.intersectObject(um)[0];P2.push(h?h.point.x+s*0.0011:s*0.03,y,z);U2.push(u,v);}
+    for(let j=0;j<NV;j++)for(let i=0;i<NU;i++){const a0=b+j*(NU+1)+i,a1=a0+1,b0=a0+NU+1,b1=b0+1;I2.push(a0,b0,a1,a1,b0,b1);}}
+  const sw=new THREE.BufferGeometry();sw.setAttribute('position',new THREE.Float32BufferAttribute(P2,3));sw.setAttribute('uv',new THREE.Float32BufferAttribute(U2,2));sw.setIndex(I2);sw.computeVertexNormals();
+  return{upper,sole,swoosh:sw};})();
+const SOLE_M=new THREE.MeshStandardMaterial({color:0x2c2e33,roughness:0.82,metalness:0,vertexColors:true});
+
+// ================= PRACTICE CLOTHES (story): loose tee, compression shirts, athletic shorts, jogger shorts, logos =================
+const FAB=(function(){const AN=Math.min(8,maxAniso),T={};
+  function mk(w,h,draw,rep){const c=canvas(w,h),g=c.getContext('2d');draw(g,w,h);const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;if(rep)t.repeat.set(rep[0],rep[1]);t.anisotropy=AN;return t;}
+  // soft folds for the bump map
+  T.wrinkle=mk(256,256,(g,w,h)=>{g.fillStyle='#808080';g.fillRect(0,0,w,h);g.lineCap='round';
+    for(let i=0;i<46;i++){const x=Math.random()*w,y=Math.random()*h,l=rand(40,140),a=rand(-0.45,0.45),lt=Math.random()<0.55?255:0,dx=Math.cos(a)*l/2,dy=Math.sin(a)*l/2,bend=rand(-14,14);
+      for(const ox of[-w,0,w])for(const oy of[-h,0,h])for(const s of[[16,0.05],[11,0.06],[7,0.07],[4,0.08],[2,0.09]]){g.strokeStyle='rgba('+lt+','+lt+','+lt+','+s[1]+')';g.lineWidth=s[0];g.beginPath();g.moveTo(x+ox-dx,y+oy-dy);g.quadraticCurveTo(x+ox,y+oy+bend,x+ox+dx,y+oy+dy);g.stroke();}}},[2,2]);
+  // heather fleece with a ribbed band at the top of the texture (the cuffs and the waistband sit at v>0.75)
+  T.fleece=mk(256,256,(g,w,h)=>{g.fillStyle='#c6c6c6';g.fillRect(0,0,w,h);
+    for(let i=0;i<9000;i++){const v=Math.floor(rand(90,255));g.fillStyle='rgba('+v+','+v+','+v+','+rand(0.25,0.6).toFixed(2)+')';g.fillRect(Math.random()*w,h*0.25+Math.random()*h*0.75,rand(1,3),rand(0.6,1.6));}
+    g.fillStyle='#b6b6b6';g.fillRect(0,0,w,h*0.25);for(let x=0;x<w;x+=8){g.fillStyle='rgba(0,0,0,.22)';g.fillRect(x,0,2.5,h*0.25);g.fillStyle='rgba(255,255,255,.22)';g.fillRect(x+4,0,2,h*0.25);}
+    g.fillStyle='rgba(0,0,0,.3)';g.fillRect(0,h*0.25-1.5,w,3);},[6,1]);
+  // athletic shorts: poly weave in the shorts color, optional side piping (u=0.25 and 0.75 are the sides), hem/waist edge
+  const poly=(base,pipe)=>mk(512,256,(g,w,h)=>{g.fillStyle=hexCss(base);g.fillRect(0,0,w,h);g.globalAlpha=0.08;g.strokeStyle='#000';g.lineWidth=1;for(let i=-h;i<w;i+=3){g.beginPath();g.moveTo(i,0);g.lineTo(i+h,h);g.stroke();}g.globalAlpha=1;
+    if(pipe!=null){g.fillStyle=hexCss(pipe);for(const x of[w*0.25,w*0.75])g.fillRect(x-2.5,0,5,h);}
+    g.fillStyle='rgba(0,0,0,.25)';g.fillRect(0,0,w,5);},[1,1]);
+  T.polyA=poly(0x1f56d8,0xf4f6fa);T.polyB=poly(0x172340,null);
+  return T;})();
+const LOGO=(function(){const AN=Math.min(8,maxAniso);
+  function mk(w,h,draw){const c=canvas(w,h),g=c.getContext('2d');draw(g,w,h);const t=new THREE.CanvasTexture(c);t.anisotropy=AN;return t;}
+  const swoosh=(g,w,h,col)=>{g.fillStyle=col;g.beginPath();g.moveTo(w*0.05,h*0.55);g.bezierCurveTo(-w*0.04,h*0.95,w*0.18,h*1.0,w*0.38,h*0.8);g.lineTo(w*0.97,h*0.18);g.bezierCurveTo(w*0.6,h*0.5,w*0.33,h*0.7,w*0.2,h*0.72);g.bezierCurveTo(w*0.1,h*0.74,w*0.06,h*0.66,w*0.05,h*0.55);g.closePath();g.fill();};
+  const ua=(g,w,h,col)=>{g.strokeStyle=col;g.lineWidth=w*0.12;g.lineCap='butt';
+    g.beginPath();g.moveTo(w*0.14,h*0.06);g.quadraticCurveTo(w*0.24,h*0.2,w*0.24,h*0.4);g.quadraticCurveTo(w*0.26,h*0.7,w*0.5,h*0.7);g.quadraticCurveTo(w*0.74,h*0.7,w*0.76,h*0.4);g.quadraticCurveTo(w*0.76,h*0.2,w*0.86,h*0.06);g.stroke();
+    g.beginPath();g.moveTo(w*0.14,h*0.94);g.quadraticCurveTo(w*0.24,h*0.8,w*0.24,h*0.6);g.quadraticCurveTo(w*0.26,h*0.3,w*0.5,h*0.3);g.quadraticCurveTo(w*0.74,h*0.3,w*0.76,h*0.6);g.quadraticCurveTo(w*0.76,h*0.8,w*0.86,h*0.94);g.stroke();};
+  return{swW:mk(256,128,(g,w,h)=>swoosh(g,w,h,'#ffffff')),uaK:mk(128,128,(g,w,h)=>ua(g,w,h,'#141414')),uaW:mk(128,128,(g,w,h)=>ua(g,w,h,'#f4f4f4'))};})();
+const GM=(function(){const S=o=>{const m=new THREE.MeshStandardMaterial(Object.assign({metalness:0,side:THREE.DoubleSide},o));m.envMapIntensity=0.6;return m;};
+  const dec=t=>new THREE.MeshStandardMaterial({map:t,transparent:true,alphaTest:0.35,roughness:0.6,metalness:0,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2,side:THREE.DoubleSide});
+  const M={tee:S({color:0x141416,roughness:0.9,bumpMap:FAB.wrinkle,bumpScale:0.004}),shA:S({map:FAB.polyA,bumpMap:FAB.wrinkle,bumpScale:0.0028,roughness:0.5}),shB:S({map:FAB.polyB,bumpMap:FAB.wrinkle,bumpScale:0.0028,roughness:0.55}),
+    jog:S({color:0x9a9da3,map:FAB.fleece,bumpMap:FAB.wrinkle,bumpScale:0.0035,roughness:0.95}),cord:new THREE.MeshStandardMaterial({color:0xf2f2f2,roughness:0.6}),
+    compTW:clothMat(0xf0f1f3,3,0.03,0.0058),compTB:clothMat(0x131315,3,0.03,0.0058),compSW:clothMat(0xf0f1f3,0,-0.13,0.0045),
+    compXW:new THREE.MeshStandardMaterial({color:0xf0f1f3,roughness:0.62}),compXB:new THREE.MeshStandardMaterial({color:0x131315,roughness:0.62}),
+    logoUA:dec(LOGO.uaK),logoUAw:dec(LOGO.uaW),logoSw:dec(LOGO.swW),swoosh:dec(LOGO.swW)};
+  [M.compTW,M.compTB,M.compSW,M.compXW,M.compXB].forEach(m=>{if(m.userData.cu)m.userData.cu.uTrim.value=0;m.roughness=0.62;m.envMapIntensity=0.5;});
+  return M;})();
+const GARM=(function(){const LT=(pts,seg)=>new THREE.LatheGeometry(pts.map(p=>new THREE.Vector2(p[0],p[1])),seg||32);
+  const cyl=new THREE.CylinderGeometry(0.0022,0.0022,1,6),tip=new THREE.CylinderGeometry(0.0032,0.0032,0.014,6),L=[],M=(x,y,z,sy,rz,rx)=>new THREE.Matrix4().compose(new THREE.Vector3(x,y,z),new THREE.Quaternion().setFromEuler(new THREE.Euler(rx||0,0,rz||0)),new THREE.Vector3(1,sy,1));
+  for(const s of[-1,1]){L.push([cyl,M(s*0.016,0.1,0.004,0.07,s*0.18,0.12)]);L.push([tip,M(s*0.022,0.062,0,1,s*0.18,0.12)]);}
+  return{teeM:LT([[0.198,-0.07],[0.2,-0.055],[0.196,0.02],[0.188,0.12],[0.19,0.22],[0.205,0.32],[0.226,0.42],[0.232,0.48],[0.214,0.54],[0.178,0.58],[0.13,0.605],[0.1,0.615],[0.097,0.6]],36),
+    teeW:LT([[0.206,-0.07],[0.208,-0.055],[0.205,0.02],[0.196,0.08],[0.178,0.14],[0.16,0.22],[0.168,0.32],[0.18,0.4],[0.18,0.47],[0.162,0.53],[0.13,0.57],[0.1,0.595],[0.088,0.605],[0.085,0.592]],36),
+    sleeve:LT([[0.002,0.095],[0.05,0.088],[0.082,0.062],[0.098,0.025],[0.1,-0.02],[0.096,-0.08],[0.092,-0.135],[0.094,-0.15],[0.089,-0.147]],22),
+    shellM:LT([[0.06,-0.14],[0.115,-0.127],[0.158,-0.092],[0.176,-0.03],[0.18,0.04],[0.168,0.1],[0.152,0.122],[0.148,0.14],[0.145,0.155]],32),
+    shellW:LT([[0.06,-0.14],[0.12,-0.127],[0.172,-0.087],[0.192,-0.02],[0.19,0.05],[0.166,0.1],[0.14,0.122],[0.126,0.14],[0.12,0.155]],32),
+    legS:LT([[0.112,0.1],[0.118,0.06],[0.124,0.03],[0.128,0],[0.131,-0.05],[0.134,-0.1],[0.136,-0.15],[0.139,-0.19],[0.141,-0.205],[0.136,-0.2]],26),
+    legJ:LT([[0.116,0.1],[0.122,0.06],[0.13,0.03],[0.136,0],[0.142,-0.08],[0.142,-0.17],[0.134,-0.25],[0.116,-0.3],[0.11,-0.33],[0.106,-0.35]],26),
+    cord:mergeGeos(L),decal:new THREE.PlaneGeometry(1,1)};})();
+const OUTFITS=[{id:'tee',top:'tee',sh:'A',name:'black tee and blue shorts'},{id:'ua',top:'compS',sh:'B',name:'white Under Armour compression shirt and navy shorts'},{id:'nike',top:'compL',sh:'J',name:'black Nike compression shirt and grey jogger shorts'}];
+function ensureGarm(a){if(a.garm)return a.garm;const R={},mk=(geo,mat,par,sh,cl)=>{const m=new THREE.Mesh(geo,mat);m.visible=false;if(sh)m.castShadow=true;par.add(m);if(cl){m.userData.base=m.scale.clone();a.cloth.push(m);}return m;};
+  R.tee=mk(GARM.teeM,GM.tee,a.torso,false);
+  R.sleeves=[a.armL,a.armR].map((arm,i)=>{const m=mk(GARM.sleeve,GM.tee,arm,false,true);m.position.x=(i?-1:1)*0.004;return m;});
+  R.compT=mk(G.mTorso,GM.compTB,a.torso,false);
+  R.compS=[a.armL,a.armR].map(arm=>mk(G.uArm,GM.compSW,arm,false,true));
+  R.shell=mk(GARM.shellM,GM.shA,a.hips,false);
+  R.legs=[a.legL,a.legR].map(leg=>mk(GARM.legS,GM.shA,leg,false,true));
+  R.cord=mk(GARM.cord,GM.cord,a.hips,false);
+  R.chest=mk(GARM.decal,GM.logoUA,a.torso,false);
+  R.shLogo=mk(GARM.decal,GM.logoUAw,R.legs[0],false);R.shLogo.position.set(0.094,-0.155,0.1);R.shLogo.rotation.y=0.76;R.shLogo.scale.set(0.034,0.034,1);
+  const k=a.g==='W'?0.88:1;[...R.sleeves,...R.compS,...R.legs].forEach(m=>{const b=m.userData.base;m.scale.set(b.x*k,b.y,b.z*k);});
+  a.garm=R;return R;}
+// k: index into OUTFITS, or null to go back to the race kit
+function setOutfit(a,k){const O=k==null?null:OUTFITS[k];a.outfit=O||null;
+  if(!O&&!a.garm){applyKitVis(a);setNike(a,false);return;}
+  const R=ensureGarm(a),w=a.g==='W',top=O&&O.top,sh=O&&O.sh,comp=top==='compS'||top==='compL',white=top==='compS';
+  R.tee.visible=top==='tee';R.tee.geometry=w?GARM.teeW:GARM.teeM;R.tee.scale.set(w?1.08:1.12,1,w?0.78:0.74);
+  R.sleeves.forEach(m=>m.visible=top==='tee');
+  R.compT.visible=comp;R.compT.geometry=w?G.wTorso:G.mTorso;R.compT.scale.set(w?1.08:1.12,1,w?0.68:0.66);R.compT.material=white?GM.compTW:GM.compTB;
+  R.compS.forEach(m=>m.visible=top==='compS');
+  a.limbs.forEach(m=>{const gg=m.geometry,arm=gg===G.delt||gg===G.uArm||gg===G.fArm;let mat=a.suitOn?(arm?a.mTop:a.mShorts):a.mSkin;
+    if(top==='compL'&&arm)mat=GM.compXB;else if(top==='compS'&&gg===G.delt)mat=GM.compXW;m.material=mat;});
+  if(a.trapsM)a.trapsM.material=comp?(white?GM.compXW:GM.compXB):a.mSkin;
+  (a.chestW||[]).forEach(m=>{m.scale.z=comp?0.03:0.042;});
+  R.shell.visible=!!sh;R.shell.geometry=w?GARM.shellW:GARM.shellM;R.shell.scale.set(w?1.08:1.12,1,w?0.76:0.72);R.shell.material=sh==='J'?GM.jog:sh==='B'?GM.shB:GM.shA;
+  R.legs.forEach(m=>{m.visible=!!sh;m.geometry=sh==='J'?GARM.legJ:GARM.legS;m.material=R.shell.material;});
+  (a.glutesM||[]).forEach(m=>m.material=sh?R.shell.material:a.mShorts);(a.glutesW||[]).forEach(m=>m.material=sh?R.shell.material:a.mTop);
+  R.cord.visible=sh==='J';R.cord.position.set(0,0,w?0.098:0.108);
+  R.chest.visible=comp;R.chest.material=white?GM.logoUA:GM.logoSw;
+  if(w){R.chest.position.set(0.058,0.478,0.106);R.chest.rotation.set(-0.28,0.24,0);}else{R.chest.position.set(0.075,0.468,0.145);R.chest.rotation.set(-0.1,0.19,0);}
+  if(white)R.chest.scale.set(w?0.036:0.042,w?0.036:0.042,1);else R.chest.scale.set(w?0.05:0.058,w?0.025:0.029,1);
+  R.shLogo.visible=sh==='B';
+  if(O){a.mTop.color.setHex(top==='tee'?0x141416:white?0xf0f1f3:0x131315);a.mShorts.color.setHex(sh==='J'?0x9a9da3:sh==='B'?0x172340:0x1f56d8);a.bib.visible=false;}
+  applyKitVis(a);setNike(a,!!O);}
+// race-kit layers hide under practice clothes
+function applyKitVis(a){const w=a.g==='W',o=!!a.outfit;(a.kitM||[]).forEach(m=>m.visible=!w&&!o);(a.kitW||[]).forEach(m=>m.visible=w&&!o);refreshCloth(a);}
+// black Nike running shoes with a white swoosh on both sides
+function setNike(a,on){a.nike=on;(a.swooshes||[]).forEach(m=>m.visible=on);if(on){a.mShoe.color.setHex(0x171719);a.mShoe.roughness=0.55;}else a.mShoe.roughness=0.42;}
+// walking or standing when worn out: hands on the hips or on the head, slumped, heavy breathing
+function tiredPose(a,T,t){const w=clamp(((a.fatigue||0)-0.34)/0.26,0,1);if(w<0.01)return;
+  const mv=a.anim==='move'&&a.speed>0.15;if(mv&&a.speed>2.8)return;
+  const st=a.tiredStyle||0,br=Math.sin(t*5.4);a.exert=Math.max(a.exert||0,0.8*w);
+  if(!mv&&st===2&&a.fatigue>0.55){const K={tX:1.0+0.03*br,hipY:0.93,hipZ:-0.08,kL:0.35,kR:0.35,lLx:-0.28,lRx:-0.28,aLx:-0.9,aRx:-0.9,eL:-0.15,eR:-0.15,aLz:0.18,aRz:-0.18,hX:-0.75};for(const kk in K)T[kk]=lerp(T[kk],K[kk],w);return;}
+  if(st===1){T.aLx=lerp(T.aLx,-2.55,w);T.aRx=lerp(T.aRx,-2.55,w);T.aLz=lerp(T.aLz,0.52,w);T.aRz=lerp(T.aRz,-0.52,w);T.eL=lerp(T.eL,-2.25,w);T.eR=lerp(T.eR,-2.25,w);T.hX-=0.12*w;T.tX-=0.04*w;}
+  else{T.aLx=lerp(T.aLx,0.3,w);T.aRx=lerp(T.aRx,0.3,w);T.aLz=lerp(T.aLz,0.64,w);T.aRz=lerp(T.aRz,-0.64,w);T.eL=lerp(T.eL,-1.55,w);T.eR=lerp(T.eR,-1.55,w);T.tX+=0.12*w;T.hX+=0.16*w;}
+  T.tX+=0.03*w*br;T.hipY-=0.01*w;T.aLz+=0.02*w*br;T.aRz-=0.02*w*br;}
+
 function makeAthlete(){
   const a={g:'M',hs:1,form:'std',hairStyle:1,hIn:70};
   const SM=(c,r)=>{const m=new THREE.MeshStandardMaterial({color:c,roughness:r,metalness:0});m.envMapIntensity=0.75;return m;};
-  a.mTop=SM(0x1f5fff,.55);a.mShorts=SM(0x0b2a6b,.6);a.mSkin=SM(0xc68a5e,.5);a.mHair=SM(0x1a1110,.9);a.mShoe=SM(0xffffff,.42);
+  a.mTop=SM(0x1f5fff,.55);a.mShorts=SM(0x0b2a6b,.6);a.mSkin=SM(0xc68a5e,.5);a.mHair=SM(0x1a1110,.9);a.mShoe=SM(0xffffff,.42);a.mShoe.vertexColors=true;a.kitM=[];a.kitW=[];a.swooshes=[];
   a.mCrop=clothMat(0x1f5fff,1,0.335);a.mTight=clothMat(0x0b2a6b,0,-0.265,0.004);a.mSuitT=clothMat(0x1f5fff,2,-1);a.mSuitL=clothMat(0x1f5fff,0,-0.105,0.004);a.mTight.userData.cu.uTrim.value=0;
   a.mNail=new THREE.MeshStandardMaterial({color:0xe7cdc2,roughness:0.35});a.abs=[];a.legCloth=[];a.torsoSkin=[];a.cloth=[];a.nails=[];
   const mSole=lam(0x1e2128),mEye=lam(0x101010);
@@ -1503,21 +1794,19 @@ function makeAthlete(){
   const root=new THREE.Group();a.root=root;const body=new THREE.Group();root.add(body);a.body=body;
   const hips=new THREE.Group();hips.position.y=0.99;body.add(hips);a.hips=hips;
   a.mSet=[];a.wSet=[];a.limbs=[];
-  a.mSet.push(add(G.mPelvis,a.mShorts,hips,0,0,0,1.05,1,0.74,true));
-  a.wSet.push(add(G.wPelvis,a.mSuitT,hips,0,0,0,1.06,1,0.76,true));
+  {const pm=add(G.mPelvis,a.mShorts,hips,0,0,0,1.05,1,0.74,true),pw=add(G.wPelvis,a.mSuitT,hips,0,0,0,1.06,1,0.76,true);a.mSet.push(pm);a.kitM.push(pm);a.wSet.push(pw);a.kitW.push(pw);}
   const torso=new THREE.Group();hips.add(torso);a.torso=torso;
   {const mt=add(G.mTorso,a.mSkin,torso,0,0,0,1.12,1,0.66,true);a.mSet.push(mt);a.torsoSkin.push(mt);
-   a.mSet.push(add(G.mTorso,a.mCrop,torso,0,0,0,1.12,1,0.66));
+   {const c=add(G.mTorso,a.mCrop,torso,0,0,0,1.12,1,0.66);a.mSet.push(c);a.kitM.push(c);}
    const wt=add(G.wTorso,a.mSkin,torso,0,0,0,1.08,1,0.68,true);a.wSet.push(wt);a.torsoSkin.push(wt);
-   a.wSet.push(add(G.wTorso,a.mSuitT,torso,0,0,0,1.08,1,0.68));
+   {const c=add(G.wTorso,a.mSuitT,torso,0,0,0,1.08,1,0.68);a.wSet.push(c);a.kitW.push(c);}
    for(const sx of[-1,1])for(let r=0;r<3;r++){const ab=add(G.muscle,a.mSkin,torso,sx*0.03,0.152+r*0.054,[0.088,0.093,0.099][r],0.03,0.026,0.007);a.mSet.push(ab);a.abs.push(ab);}}
-  for(const s of[-1,1])a.wSet.push(add(G.ball,a.mTop,torso,s*0.054,0.405,0.07,0.058,0.05,0.042));
-  a.mSet.push(add(G.muscle,a.mSkin,torso,0,0.578,-0.025,0.165,0.05,0.095,true));
+  a.chestW=[];for(const s of[-1,1]){const c=add(G.ball,a.mTop,torso,s*0.054,0.405,0.07,0.058,0.05,0.042);a.wSet.push(c);a.chestW.push(c);}
+  a.trapsM=add(G.muscle,a.mSkin,torso,0,0.578,-0.025,0.165,0.05,0.095,true);a.mSet.push(a.trapsM);
   for(const s of[-1,1]){
     a.mSet.push(add(G.muscle,a.mTop,torso,s*0.078,0.445,0.1,0.088,0.064,0.042));
     a.mSet.push(add(G.muscle,a.mTop,torso,s*0.135,0.43,-0.05,0.075,0.105,0.07,true));
-    a.mSet.push(add(G.muscle,a.mShorts,hips,s*0.066,-0.04,-0.078,0.084,0.088,0.056));
-    a.wSet.push(add(G.muscle,a.mTop,hips,s*0.066,-0.04,-0.08,0.084,0.088,0.058));
+    {const gm=add(G.muscle,a.mShorts,hips,s*0.066,-0.04,-0.078,0.084,0.088,0.056),gw=add(G.muscle,a.mTop,hips,s*0.066,-0.04,-0.08,0.084,0.088,0.058);a.mSet.push(gm);a.wSet.push(gw);(a.glutesM||(a.glutesM=[])).push(gm);(a.glutesW||(a.glutesW=[])).push(gw);}
   }
   add(G.neck,a.mSkin,torso,0,0.6,0);
   const head=new THREE.Group();head.position.y=0.64;head.scale.setScalar(0.93);torso.add(head);a.head=head;
@@ -1526,11 +1815,11 @@ function makeAthlete(){
   a.mLip=SM(0x8a4b3c,.42);
   a.faceSkin=add(FACE.M.skin,a.mSkin,head,0,0,0);a.faceDark=add(FACE.M.dark,FACE_DARK,head,0,0,0);a.faceWhite=add(FACE.M.white,FACE_WHITE,head,0,0,0);a.faceIris=add(FACE.M.iris,FACE_IRIS,head,0,0,0);a.faceLip=add(FACE.M.lip,a.mLip,head,0,0,0);
   a.brows=[];for(const s of[-1,1]){add(s===1?G.earL:G.earR,a.mSkin,head,0,0,0);const b=add(G.brow,a.mHair,head,s*0.036,0.148,0.103);b.rotation.z=-s*0.1;a.brows.push(b);}
-  a.hairCap=add(G.hairCap,a.mHair,head,0,0.115,0,0.946,1.09,1.048);a.hairCap.rotation.x=-0.72;
-  a.hairTop=add(G.hairTop,a.mHair,head,0,0.215,-0.012);
-  a.ponyPivot=new THREE.Group();a.ponyPivot.position.set(0,0.175,-0.108);head.add(a.ponyPivot);add(G.pony,a.mHair,a.ponyPivot,0,-0.125,0);add(G.ball,a.mHair,a.ponyPivot,0,0,0,0.033,0.033,0.033);{const t=add(G.tie,lam(0x1f5fff),a.ponyPivot,0,-0.012,0);t.rotation.x=Math.PI/2;}
-  a.hairBun=add(G.ball,a.mHair,head,0,0.205,-0.085,0.058,0.058,0.058);
-  a.braids=new THREE.Group();head.add(a.braids);for(let i=0;i<5;i++){const xo=-0.056+i*0.028,rr=Math.sqrt(Math.max(0.0001,0.117*0.117-xo*xo))/0.117;const r=add(G.row,a.mHair,a.braids,xo,0.115,0,rr*1.045,rr*1.09,1);r.rotation.set(0,Math.PI/2,-0.45);const t=add(G.braid,a.mHair,a.braids,xo*1.1,-0.015,-0.098);t.rotation.x=0.3;t.rotation.z=xo*1.6;}
+  a.mHairCap=hairStdMat(a,HTX.coil,0.8);a.mHairP=hairStdMat(a,HTX.strandV,0.5);
+  a.hairCap=add(G.hairCap,a.mHairCap,head,0,0.115,0,0.946,1.09,1.048);a.hairCap.rotation.x=-0.72;
+  a.hairTop=add(G.hairTop,a.mHairCap,head,0,0.215,-0.012);
+  a.ponyPivot=new THREE.Group();a.ponyPivot.position.set(0,0.175,-0.108);head.add(a.ponyPivot);add(G.pony,a.mHairP,a.ponyPivot,0,-0.125,0);add(G.ball,a.mHairP,a.ponyPivot,0,0,0,0.033,0.033,0.033);{const t=add(G.tie,lam(0x1f5fff),a.ponyPivot,0,-0.012,0);t.rotation.x=Math.PI/2;}
+  a.hairBun=add(G.ball,a.mHairP,head,0,0.205,-0.085,0.058,0.058,0.058);
   {const cs=new THREE.Mesh(G.cshadow,CSHADOW);cs.rotation.x=-Math.PI/2;cs.position.y=0.03;cs.renderOrder=1;root.add(cs);a.cshadow=cs;}
   a.bib=new THREE.Mesh(G.bib,new THREE.MeshBasicMaterial({color:0xffffff,toneMapped:false}));a.bib.position.set(0,0.3,0.114);a.bib.visible=false;torso.add(a.bib);a.bibOn=false;
   a.medal=add(G.medal,std(0xf3c847,.3),torso,0,0.33,0.15);a.medal.rotation.x=Math.PI/2;a.medal.visible=false;
@@ -1552,8 +1841,8 @@ function makeAthlete(){
     a.limbs.push(add(G.shin,a.mSkin,kn,0,0,0,1,1,1,true));
     a.limbs.push(add(G.ball,a.mSkin,kn,0,-0.135,-0.024,0.054,0.12,0.052));
     const an=new THREE.Group();an.position.y=-0.43;kn.add(an);
-    add(G.ball,a.mShoe,an,0,-0.028,0.05,0.05,0.038,0.13);
-    add(G.sole,mSole,an,0,-0.055,0.05);
+    add(SHOE.upper,a.mShoe,an,0,0,0,null,null,null,true);add(SHOE.sole,SOLE_M,an,0,0,0);
+    {const sw=add(SHOE.swoosh,GM.swoosh,an,0,0,0);sw.visible=false;a.swooshes.push(sw);}
     if(s===1){a.armL=arm;a.elbowL=el;a.handL=hand;a.legL=leg;a.kneeL=kn;a.ankleL=an;}else{a.armR=arm;a.elbowR=el;a.handR=hand;a.legR=leg;a.kneeR=kn;a.ankleR=an;}
   }
   a.limbs.forEach(m=>{m.userData.base=m.scale.clone();});a.cloth.forEach(m=>{m.userData.base=m.scale.clone();});
@@ -1568,49 +1857,13 @@ function setGender(a,g){
   a.nails.forEach(n=>{n.geometry=w?(n.userData.s===1?G.nailLW:G.nailRW):(n.userData.s===1?G.nailL:G.nailR);});if(w&&a.nailCol==null)a.nailCol=pick(NAIL_COLS);a.mNail.color.setHex(w?a.nailCol:0xe7cdc2);
   a.bib.position.set(0,w?0.25:0.395,w?0.093:0.143);a.bib.rotation.x=w?0.13:0.2;
   a.armL.position.x=w?0.192:0.215;a.armR.position.x=-a.armL.position.x;
-  a.bib.visible=a.bibOn;refreshCloth(a);
+  a.bib.visible=a.bibOn&&!a.outfit;if(a.outfit)setOutfit(a,OUTFITS.indexOf(a.outfit));else applyKitVis(a);
+  if(a.hairMesh&&a.hairMesh.visible&&HAIR_SW[a.hairStyle])a.hairMesh.geometry=hairGeo(a.hairStyle,a.g);
   if(a.faceSkin){const f=FACE[w?'W':'M'];a.faceSkin.geometry=f.skin;a.faceDark.geometry=f.dark;a.faceWhite.geometry=f.white;a.faceIris.geometry=f.iris;a.faceLip.geometry=f.lip;
     a.brows.forEach(b=>b.scale.set(w?0.9:1,w?0.6:1,1));if(a.jaw)a.jaw.scale.set(w?0.9:1,w?0.78:0.82,1.02);}
 }
 function setHeight(a,inches){a.hIn=inches;a.hs=inches*0.0254/1.8;a.body.scale.setScalar(a.hs);if(a.tag)a.tag.position.y=2.12*a.hs+0.05;}
-const LOC1=new THREE.CylinderGeometry(0.0118,0.0106,0.17,7),LOC2=new THREE.CylinderGeometry(0.0106,0.0088,0.16,7),LOCTIP=new THREE.SphereGeometry(0.009,7,5);
-function buildDreads(a){
-  const g=new THREE.Group();a.head.add(g);a.dreads=g;a.locs=[];a.dD={b:0,s:0,vb:0,vs:0,b2:0,s2:0};
-  const rows=[[0.62,70,290,20,0.85],[0.28,80,280,20,1],[-0.05,95,265,24,1.05]];
-  rows.forEach(([E,t0,t1,st,len])=>{for(let t=t0;t<=t1+0.1;t+=st){
-    const th=t*Math.PI/180,side=Math.abs(Math.sin(th));const L=len*(side>0.85&&Math.cos(th)>-0.3?0.82:1);
-    const p=new THREE.Group();p.rotation.order='YXZ';p.position.set(Math.sin(th)*Math.cos(E)*0.104,0.115+Math.sin(E)*0.122,Math.cos(th)*Math.cos(E)*0.11);p.rotation.y=th;p.rotation.x=-0.22;g.add(p);
-    const m1=new THREE.Mesh(LOC1,a.mHair);m1.position.y=-0.085*L;m1.scale.y=L;m1.castShadow=true;p.add(m1);
-    const j=new THREE.Group();j.position.y=-0.17*L;p.add(j);
-    const m2=new THREE.Mesh(LOC2,a.mHair);m2.position.y=-0.08*L;m2.scale.y=L;j.add(m2);
-    const tip=new THREE.Mesh(LOCTIP,a.mHair);tip.position.y=-0.16*L;j.add(tip);
-    a.locs.push({p,j,th,rx0:-0.22-0.08*Math.random(),ph:Math.random()*TAU});
-  }});
-}
-function updateDreads(a,dt){
-  const D=a.dD,sp=Math.min(1,(a.speed||0)/9),pitch=(a.J.tX||0)+(a.J.hX||0);
-  const tb=0.95*sp+Math.sin(pitch)*0.9+0.14*sp*Math.sin(2*a.ph),ts=0.16*Math.sin(a.ph)*sp+0.04*Math.sin(time*1.3+a.seed)*(1-sp);
-  const k=38,c=6.5,h=Math.min(dt,0.033);
-  D.vb+=((tb-D.b)*k-D.vb*c)*h;D.b+=D.vb*h;D.vs+=((ts-D.s)*k-D.vs*c)*h;D.s+=D.vs*h;
-  D.b2+=(D.b-D.b2)*Math.min(1,h*5);D.s2+=(D.s-D.s2)*Math.min(1,h*5);
-  for(const L of a.locs){const so=Math.sin(L.th),co=Math.cos(L.th);
-    const out=D.s*so-D.b*co,tan=D.s*co+D.b*so,out2=(D.s2-D.s)*so-(D.b2-D.b)*co,tan2=(D.s2-D.s)*co+(D.b2-D.b)*so;
-    L.p.rotation.x=Math.min(0.15,L.rx0-0.85*out);L.p.rotation.z=0.85*tan;
-    L.j.rotation.x=clamp(-1.1*out2+0.05*Math.sin(time*2+L.ph)*(1-sp),-0.9,0.9);L.j.rotation.z=clamp(1.1*tan2,-0.9,0.9);}
-}
 function setSuit(a,on){a.suitOn=on;a.limbs.forEach(m=>{const arm=m.geometry===G.delt||m.geometry===G.uArm||m.geometry===G.fArm;m.material=on?(arm?a.mTop:a.mShorts):a.mSkin;});refreshCloth(a);}
-const TWG=new THREE.CylinderGeometry(0.0095,0.006,1,6);
-function buildTwists(a){const g=new THREE.Group();a.head.add(g);a.twists=g;const L=[];
-  for(let row=0;row<6;row++){const E=1.25-row*0.2,n=8+row*3;for(let k=0;k<n;k++){const th=(k/n)*Math.PI*2+row*0.3;
-    const front=Math.cos(th);if(front>0.55&&E<0.5)continue;
-    const nx=Math.sin(th)*Math.cos(E),ny=Math.sin(E),nz=Math.cos(th)*Math.cos(E);
-    const len=(front>0.3?0.085:0.11)+rand(-0.01,0.015),bx=nx*0.108,by=0.115+ny*0.118,bz=nz*0.112;
-    const dir=new THREE.Vector3(nx*0.55,ny*0.25-0.85,nz*0.55+(front>0.3?0.25:0)).normalize();
-    const q=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,-1,0),dir);
-    L.push([TWG,new THREE.Matrix4().compose(new THREE.Vector3(bx+dir.x*len/2,by+dir.y*len/2,bz+dir.z*len/2),q,new THREE.Vector3(1,len,1))]);}}
-  for(let k=0;k<11;k++){const x=-0.06+k*0.012,len=0.07+rand(0,0.02),dir=new THREE.Vector3(x*0.6,-0.85,0.5).normalize();const q=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,-1,0),dir);
-    L.push([TWG,new THREE.Matrix4().compose(new THREE.Vector3(x+dir.x*len/2,0.205+dir.y*len/2,0.085+dir.z*len/2),q,new THREE.Vector3(1,len,1))]);}
-  const m=new THREE.Mesh(mergeGeos(L),a.mHair);m.castShadow=true;g.add(m);}
 const GLASSES_G=(function(){const L=[],M=(x,y,z,sx,sy,sz,e)=>new THREE.Matrix4().compose(new THREE.Vector3(x,y,z),new THREE.Quaternion().setFromEuler(e||new THREE.Euler()),new THREE.Vector3(sx,sy,sz)),bx=new THREE.BoxGeometry(1,1,1);
   for(const s2 of[-1,1]){const cx=s2*0.036,cy=0.125,cz=0.111;
     L.push([bx,M(cx,cy+0.016,cz,0.044,0.006,0.006)]);L.push([bx,M(cx,cy-0.015,cz,0.044,0.005,0.006)]);L.push([bx,M(cx-0.021,cy,cz,0.005,0.034,0.006)]);L.push([bx,M(cx+0.021,cy,cz,0.005,0.034,0.006)]);
@@ -1618,13 +1871,12 @@ const GLASSES_G=(function(){const L=[],M=(x,y,z,sx,sy,sz,e)=>new THREE.Matrix4()
   L.push([bx,M(0,0.135,0.113,0.03,0.005,0.006)]);return mergeGeos(L);})();
 const GLASSES_M=new THREE.MeshStandardMaterial({color:0x0c0c0d,roughness:0.3,metalness:0.2}),LENS_M=new THREE.MeshStandardMaterial({color:0xcfe0ea,transparent:true,opacity:0.18,roughness:0.05,metalness:0.5});
 function wearGlasses(a,on){if(!a.glasses){const g=new THREE.Group();g.add(new THREE.Mesh(GLASSES_G,GLASSES_M));for(const s2 of[-1,1]){const l=new THREE.Mesh(new THREE.PlaneGeometry(0.038,0.026),LENS_M);l.position.set(s2*0.036,0.125,0.112);g.add(l);}a.head.add(g);a.glasses=g;}a.glasses.visible=on;}
-function setHair(a,i){a.hairStyle=i;a.hairCap.visible=i!==6;a.hairCap.scale.set(i===0?0.912:0.946,i===0?1.05:1.09,i===0?1.012:1.048);a.hairTop.visible=i===2;a.ponyPivot.visible=i===3;a.hairBun.visible=i===4;a.braids.visible=i===5;if(i===7&&!a.dreads)buildDreads(a);if(a.dreads)a.dreads.visible=i===7;if(i===8&&!a.twists)buildTwists(a);if(a.twists)a.twists.visible=i===8;}
 function dress(a,o){a.mTop.color.setHex(o.top);a.mShorts.color.setHex(o.shorts);
   {const acc=o.shorts===o.top?(o.top===0xf4f4f4?0x0b2a6b:0x4a4a4a):o.shorts;a.mCrop.color.setHex(o.top);a.mTight.color.setHex(o.shorts);a.mSuitT.color.setHex(o.top);a.mSuitL.color.setHex(o.top);
    for(const m of[a.mCrop,a.mTight,a.mSuitT,a.mSuitL])m.userData.cu.uAcc.value.setHex(acc);a.mSuitT.userData.cu.uStripe.value=a.mSuitL.userData.cu.uStripe.value=o.stripe===false?0:1;
    if(o.nail!=null)a.nailCol=o.nail;if(a.g==='W'&&a.nailCol!=null)a.mNail.color.setHex(a.nailCol);}
-  a.mSkin.color.setHex(o.skin);if(a.mLip)a.mLip.color.setHex(o.skin).lerp(LIPTINT,0.32).multiplyScalar(0.86);a.mHair.color.setHex(o.hairCol);a.mShoe.color.setHex(o.shoe);setHair(a,o.hair);}
-function randLook(g){const k=randi(0,KITS.length-1);return{kit:k,top:KITS[k][0],shorts:KITS[k][1],skin:pick(SKINS),hairCol:pick(HAIR_COLS),hair:g==='W'?pick([3,3,4,5,1,4]):pick([6,6,6,0,0,1,2,5]),shoe:pick(SHOES)};}
+  a.mSkin.color.setHex(o.skin);if(a.mLip)a.mLip.color.setHex(o.skin).lerp(LIPTINT,0.32).multiplyScalar(0.86);setHairCol(a,o.hairCol);a.mShoe.color.setHex(o.shoe);setHair(a,o.hair);}
+function randLook(g){const k=randi(0,KITS.length-1);return{kit:k,top:KITS[k][0],shorts:KITS[k][1],skin:pick(SKINS),hairCol:pick(HAIR_COLS),hair:g==='W'?pick([3,3,4,5,1,4,9,10]):pick([6,6,6,0,0,1,2,5]),shoe:pick(SHOES)};}
 function setBib(a,n){const c=canvas(64,48),g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,64,48);g.fillStyle='#0b2a6b';g.font='800 34px "Barlow Condensed", Arial';g.textAlign='center';g.textBaseline='middle';g.fillText(String(n),32,26);if(a.bib.material.map)a.bib.material.map.dispose();a.bib.material.map=new THREE.CanvasTexture(c);a.bib.material.needsUpdate=true;a.bibOn=true;a.bib.visible=true;}
 function rr(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.lineTo(x+w-r,y);g.quadraticCurveTo(x+w,y,x+w,y+r);g.lineTo(x+w,y+h-r);g.quadraticCurveTo(x+w,y+h,x+w-r,y+h);g.lineTo(x+r,y+h);g.quadraticCurveTo(x,y+h,x,y+h-r);g.lineTo(x,y+r);g.quadraticCurveTo(x,y,x+r,y);g.closePath();}
 function setTag(a,name,isMe,bg,fg){
@@ -1812,6 +2064,7 @@ function animAth(a,dt){
     case'drill':poseDrill(a,T);break;
     default:poseIdle(a,T,t,dt);
   }
+  if(a.fatigue>0.34&&(a.anim==='move'||a.anim==='idle'))tiredPose(a,T,t);
   {const tk=a.talk?1:Math.min(1,(a.talkT||0)*2);if(a.talkT>0)a.talkT-=dt;if(tk>0.01){T.aRx=lerp(T.aRx,-0.5-0.22*Math.sin(t*3.3),tk*0.85);T.eR=lerp(T.eR,-1.2-0.3*Math.sin(t*2.1),tk*0.85);T.aRz=lerp(T.aRz,-0.18,tk);T.hX+=0.05*tk*Math.sin(t*4.1);T.hY+=0.1*tk*Math.sin(t*1.6);}}
   if(a.eatT>0){a.eatT-=dt;const w=Math.min(1,a.eatT*2.5,(2.4-a.eatT)*3);T.aRx=lerp(T.aRx,-1.95,w);T.eR=lerp(T.eR,-2.35,w);T.aRz=lerp(T.aRz,0.18,w);if(a.eatKind==='drink')T.hX=lerp(T.hX,-0.35,w*Math.max(0,Math.sin((2.4-a.eatT)*1.6)));}
   if(a.wave>0){a.wave-=dt;const w=Math.min(1,a.wave*3);T.aRx=lerp(T.aRx,-2.65,w);T.aRz=lerp(T.aRz,-0.4-0.28*Math.sin(t*9),w);T.eR=lerp(T.eR,-0.35,w);T.hX=lerp(T.hX,-0.1,w);}
@@ -1822,9 +2075,8 @@ function animAth(a,dt){
   const f=1-Math.exp(-k*dt),J=a.J;
   for(let i=0;i<JK.length;i++){const key=JK[i];J[key]+=(T[key]-J[key])*f;}
   applyJ(a);
-  if(a.dreads&&a.dreads.visible)updateDreads(a,dt);
+  hairUpdate(a,dt);
   if(a.faceLip){const pk=(a.form==='oos'&&a.anim==='move'&&a.speed>2.2)?1:0;a.pucker=damp(a.pucker||0,pk,6,dt);if(a.pucker>0.001||a.faceLip.scale.x!==1){const k=a.pucker*(0.85+0.15*Math.sin(time*9));a.faceLip.scale.set(1-0.14*k,1+0.12*k,1+0.07*k);}}
-  if(a.ponyPivot.visible){const sp=Math.min(1,a.speed/8);a.ponyPivot.rotation.x=0.45+0.55*sp+0.16*Math.sin(2*a.ph)*Math.min(1,a.speed/3);}
 }
 
 // ================= PLAYERS =================
@@ -1871,7 +2123,7 @@ function randStats(){for(;;){const p=randi(4,17)*5,s=randi(4,17)*5,e=150-p-s;if(
 function botIdentity(p,forceG){
   const g0=forceG||(Math.random()<.5?'M':'W'),pro=!!(curServer&&curServer.lvl==='col'),NL=pro?(g0==='M'?PRO_M:PRO_W):BOT_NAMES;
   const used=usedNames();let n;let tries=0;do{n=pick(NL);tries++;}while(used.has(n)&&tries<60);
-  p.name=n;p.gender=g0;p.star=false;p.topOverride=null;p.pbs=null;p.suit=false;p.accBoost=null;p.fade=null;if(p.ath&&p.ath.glasses)p.ath.glasses.visible=false;if(p.ath&&p.ath.suitOn)setSuit(p.ath,false);
+  p.name=n;p.gender=g0;p.star=false;p.topOverride=null;p.pbs=null;p.suit=false;p.accBoost=null;p.fade=null;p.surge=null;p.reactR=null;p.endurBy=null;if(p.ath&&p.ath.glasses)p.ath.glasses.visible=false;if(p.ath&&p.ath.suitOn)setSuit(p.ath,false);
   p.hIn=p.gender==='M'?randi(66,78):randi(61,73);p.form=pick(['bolt','gout','lyles']);
   p.stats=randStats();
   p.rating=clamp(Math.pow(Math.random(),0.85),0,1);p.endur=clamp(p.stats.sta/100*0.6+rand(0,0.4),0,1);p.react=rand(.12,.23);
@@ -1982,7 +2234,7 @@ function startEvent(idx){
   churn();
   const ev=EVENTS[idx];
   players.forEach(p=>{p.reached=-1;if(!p.isMe)p.afk=false;});
-  const bots=shuffle(players.filter(p=>!p.isMe));const nAfk=Math.random()<.5?0:randi(1,2);
+  const bots=shuffle(players.filter(p=>!p.isMe&&!p.star));const nAfk=Math.random()<.5?0:randi(1,2);
   for(let i=0;i<nAfk&&i<bots.length;i++)bots[i].afk=true;
   meet.div={};
   ['W','M'].forEach(d=>{const ents=players.filter(p=>!p.afk&&p.gender===d).map(p=>newEntry(p,ev));if(ents.length)meet.div[d]={stage:0,ents};});
@@ -1992,7 +2244,7 @@ function startEvent(idx){
 function makeBrandon(p){
   p.name='Brandon Chalmers';p.star=true;p.rating=1;p.topOverride=24.1/2.237;p.endur=0.4;p.react=0.105;p.form='std';p.hIn=66;p.afk=false;p.accBoost=1.27;
   p.fade={'60':[26,0.0033,0.86],'100':[48,0.0011,0.88],'200':[50,0.0002,0.9],'300':[55,0.0002,0.9],'400':[90,0.00005,0.95],def:[50,0.001,0.88]};p.endurBy={'400':0.5,'300':0.5};
-  p.look={top:0x111214,shorts:0x111214,skin:0xc08a5f,hairCol:0x0b0b0b,hair:8,shoe:0xf2f2f2};p.pbs={'60':6.39,'100':10.03,'200':20.11,'400':47.12};
+  p.look={top:0x111214,shorts:0x111214,skin:0xcc9665,hairCol:0x0b0b0b,hair:8,shoe:0xf2f2f2};p.pbs={'60':6.39,'100':10.03,'200':20.11,'400':47.12};
   const a=p.ath;setGender(a,'M');setHeight(a,66);a.form='std';dress(a,p.look);wearGlasses(a,true);setTag(a,p.name,false);
   const b=chatBots().filter(x=>x!==p);if(b.length){queueChat(rand(4,6),pick(b),'Brandon Chalmers in here, watch his start 😳');queueChat(rand(7,9),pick(b),'6.39 in the 60 is crazy');queueChat(rand(10,12),pick(b),'he fades late tho, catch him at the end');}
 }
@@ -2002,6 +2254,20 @@ function makeDeMarcus(p){
   const a=p.ath;setGender(a,'M');setHeight(a,73);a.form='std';dress(a,p.look);setTag(a,p.name,false);
   const b=chatBots().filter(x=>x!==p);if(b.length){queueChat(rand(3,5),pick(b),'yo DeMarcus Shadow is in here 😳');queueChat(rand(6,8),pick(b),'bro ran 9.94 as a sophomore');queueChat(rand(9,11),pick(b),'and 19.82 in the 200 💀 we cooked');}
 }
+// Tayvon: 100/200 guy. Quick reaction (0.05-0.11), normal drive phase, then a huge top end that reels everyone in by 20m; fades over 300/400
+function makeTayvon(p){const L=LEVELS[curLvl()]||LEVELS.col;
+  p.name='Tayvon Henderson';p.star=true;p.rating=1;p.topOverride=(L.min+1.03*(L.max-L.min))/2.237;p.endur=0.3;p.react=0.08;p.reactR=[0.05,0.11];p.accBoost=1.04;p.form='std';p.hIn=68;p.afk=false;
+  p.fade={'300':[160,0.0012,0.86],'400':[200,0.0014,0.82],def:[400,0,1]};p.surge=null;p.endurBy={'400':0.2,'300':0.25};
+  p.look={top:0xd9342b,shorts:0x111111,skin:SKINS[2],hairCol:0x0d0d0d,hair:0,shoe:0xff3b30};p.pbs={};
+  const a=p.ath;setGender(a,'M');setHeight(a,68);a.form='std';dress(a,p.look);setTag(a,p.name,false);
+  const b=chatBots().filter(x=>x!==p);if(b.length){queueChat(rand(5,7),pick(b),"Tayvon Henderson in here, his top speed is crazy 😳");queueChat(rand(8,10),pick(b),'he catches everybody by 20 meters fr');}}
+// Jaylen: 300/400 guy whose best is the 200. Slow out of the blocks, never fades, runs people down at the end
+function makeJaylen(p){const L=LEVELS[curLvl()]||LEVELS.col;
+  p.name='Jaylen Brooks';p.star=true;p.rating=0.85;p.topOverride=(L.min+0.8*(L.max-L.min))/2.237;p.endur=0.97;p.react=0.18;p.reactR=[0.16,0.21];p.accBoost=0.82;p.form='std';p.hIn=72;p.afk=false;
+  p.fade=null;p.surge={'100':[60,100,1.02],'200':[90,170,1.13],'300':[140,260,1.14],'400':[200,370,1.16]};p.endurBy={'400':1.15,'300':1.1};
+  p.look={top:0x18a058,shorts:0x111111,skin:SKINS[3],hairCol:0x0d0d0d,hair:2,shoe:0x32d74b};p.pbs={};
+  const a=p.ath;setGender(a,'M');setHeight(a,72);a.form='std';dress(a,p.look);setTag(a,p.name,false);
+  const b=chatBots().filter(x=>x!==p);if(b.length){queueChat(rand(11,13),pick(b),'Jaylen Brooks too?? watch him in the 300 and 400');queueChat(rand(14,16),pick(b),'slow start but he never dies 💀');}}
 function churn(){
   if(!me||Math.random()>.35)return;
   const cand=players.filter(p=>!p.isMe&&!p.star&&p.mode==='roam');if(!cand.length)return;
@@ -2058,7 +2324,7 @@ function endRound(){
 const race={active:false};
 const PL={tt:[],cad:0,power:0,stam:100,lastTap:-9,vmax:11.1,started:false,acc:1.15,drain:2,ideal:0.45,P:0.5,E:0.5,F:FORMS.std};
 const _v2=new THREE.Vector3(),_v=new THREE.Vector3(),_d=new THREE.Vector3(),_d2=new THREE.Vector3(),_r=new THREE.Vector3();
-function mkRunner(ath,e,lane,b,rating,isMe,P){return{accMul:(P&&P.accBoost)?P.accBoost:(P&&P.stats)?(0.93+0.3*P.stats.pow/100-0.15*P.stats.sta/100):1,ath,e,lane,b,b0:b,v:0,state:'wait',rating,endur:P?P.endur:rand(.3,.8),react:P?P.react:rand(.13,.22),form:rand(.975,1.025),gm:e.p.gender==='W'?0.905:1,fm:FORMS[ath.form]||FORMS.std,curv:0,isMe,P,drive:0,leg:0,lean:0,dips:isMe||Math.random()<0.6,easeAt:rand(.4,.68),easeLv:rand(.78,.9),top:(P&&P.topOverride)?P.topOverride*rand(.992,1.006):(()=>{const L=LEVELS[curLvl()];return clamp((L.min+rating*(L.max-L.min))/2.237*rand(.985,1.015)*((FORMS[ath.form]||FORMS.std).vmax||1),L.min/2.237,L.max/2.237);})()};}
+function mkRunner(ath,e,lane,b,rating,isMe,P){return{accMul:(P&&P.accBoost)?P.accBoost:(P&&P.stats)?(0.93+0.3*P.stats.pow/100-0.15*P.stats.sta/100):1,ath,e,lane,b,b0:b,v:0,state:'wait',rating,endur:P?P.endur:rand(.3,.8),react:P?(P.reactR?rand(P.reactR[0],P.reactR[1]):P.react):rand(.13,.22),form:rand(.975,1.025),gm:e.p.gender==='W'?0.905:1,fm:FORMS[ath.form]||FORMS.std,curv:0,isMe,P,drive:0,leg:0,lean:0,dips:isMe||Math.random()<0.6,easeAt:rand(.4,.68),easeLv:rand(.78,.9),top:(P&&P.topOverride)?P.topOverride*rand(.992,1.006)*(1-0.035*((ath.fatigue)||0)):(()=>{const L=LEVELS[curLvl()];return clamp((L.min+rating*(L.max-L.min))/2.237*rand(.985,1.015)*((FORMS[ath.form]||FORMS.std).vmax||1),L.min/2.237,L.max/2.237);})()};}
 function resetFx(a){a.cad=null;a.phCorr=0;a.finStyle=null;a.overW=0;a.dip=0;a.look=0;a.tired=0;a.reachW=0;a.root.rotation.z=0;}
 const _bA=new THREE.Vector3(),_bB=new THREE.Vector3(),_qA=new THREE.Quaternion(),_qB=new THREE.Quaternion(),_qOff=new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI/2,0,0));
 function moveBaton(b,from,to,u){
@@ -2122,8 +2388,9 @@ function botTarget(r){
   else if(fid==='300')v*=0.94*(1-Math.max(0,cov-110)*0.00115*(1.22-r.endur*0.55));
   else if(fid==='200')v*=0.985*(1-Math.max(0,cov-90)*0.00095*(1.2-r.endur*0.5));
   if(r.P&&r.P.fade){const f=r.P.fade,fc=f[legId(ev)]||f.def;v*=Math.max(fc[2],1-Math.max(0,cov-fc[0])*fc[1]);}
+  let sgm=1;if(r.P&&r.P.surge){const sg=r.P.surge[fid];if(sg){const u=clamp((cov-sg[0])/(sg[1]-sg[0]),0,1);sgm=1+(sg[2]-1)*u*u*(3-2*u);v*=sgm;}}
   if(easing(r))v*=r.easeLv;
-  return Math.min(Math.min(v,top)*windF(r),Math.max(top,LEVELS[curLvl()].max/2.237));
+  return Math.min(Math.min(v,top*sgm)*windF(r),Math.max(top*sgm,LEVELS[curLvl()].max/2.237));
 }
 function easing(r){if(meet.round!==0||r.isMe||r.rating<0.3)return false;return(r.b0-r.b)/(race.ev.relay?race.ev.leg:race.ev.dist)>r.easeAt;}
 const CHK=1.15;
@@ -2517,7 +2784,7 @@ function playerControl(dt){
   if(mag>0.08){
     const fx=-Math.sin(camYaw),fz=-Math.cos(camYaw),rx=Math.cos(camYaw),rz=-Math.sin(camYaw);
     let mx=fx*(-jy)+rx*jx,mz=fz*(-jy)+rz*jx;const ml=Math.hypot(mx,mz)||1;mx/=ml;mz/=ml;
-    const sp=mag<0.7?1.6*mag/0.7:1.6+(mag-0.7)/0.3*4.4;
+    const sp=(mag<0.7?1.6*mag/0.7:1.6+(mag-0.7)/0.3*4.4)*(story.active?1-0.32*clamp(((a.fatigue||0)-0.34)/0.26,0,1):1);
     const tx=pos.x+mx*sp*dt,tz=pos.z+mz*sp*dt;
     if(canWalk(tx,tz)){pos.x=tx;pos.z=tz;}else if(canWalk(tx,pos.z))pos.x=tx;else if(canWalk(pos.x,tz))pos.z=tz;
     schoolDoors();
@@ -2710,7 +2977,7 @@ let sFilter=-1;
 function renderFilter(){return;$('#sfilter').innerHTML=['All',...EVENTS.map(e=>e.short)].map((t,i)=>'<button data-f="'+(i-1)+'" class="'+(sFilter===i-1?'on':'')+'" aria-pressed="'+(sFilter===i-1)+'">'+t+'</button>').join('');}
 $('#sfilter').addEventListener('click',e=>{const b=e.target.closest('button[data-f]');if(!b)return;sFilter=+b.dataset.f;renderFilter();renderServers();});
 function curServers(){const B=activeBuild(),g=B.g,lv=LEVELS[B.lvl]?B.lvl:'col',evi=sFilter>=0?sFilter:EVENTS.findIndex(e=>e.id==='100'),dm=g==='M'&&lv==='jr';
-  return[{name:'Johnson Meet',big:true,div:g,lvl:lv,region:'Brooklyn',cap:24,count:srvState.jc,ping:randi(18,48),ev:-1,now:'',stars:[dm&&srvState.starJ?'DeMarcus Shadow':null,dm&&srvState.bJ?'Brandon Chalmers':null].filter(Boolean)},
+  return[{name:'Johnson Meet',big:true,div:g,lvl:lv,region:'Brooklyn',cap:24,count:srvState.jc,ping:randi(18,48),ev:-1,now:'',stars:[dm&&srvState.starJ?'DeMarcus Shadow':null,dm&&srvState.bJ?'Brandon Chalmers':null,g==='M'?'Tayvon Henderson':null,g==='M'?'Jaylen Brooks':null].filter(Boolean)},
     {name:'Tilden High School',big:false,school:true,div:g,lvl:lv,region:'Brooklyn',cap:20,count:srvState.tc,ping:randi(12,36),ev:evi,now:'',stars:[dm&&srvState.starT?'DeMarcus Shadow':null,dm&&srvState.bT?'Brandon Chalmers':null].filter(Boolean)}];}
 function renderServers(){
   servers=curServers();const g=activeBuild().g,lv=LEVELS[activeBuild().lvl]?activeBuild().lvl:'col';
@@ -2746,7 +3013,7 @@ function join(s){
     botPlayers.forEach((p,i)=>{if(i<nb){players.push(p);p.mode='roam';p.ath.root.visible=true;}else p.ath.root.visible=false;});
     players.filter(p=>!p.isMe).forEach((p,i)=>{p.name='';});
     players.filter(p=>!p.isMe).forEach(p=>botIdentity(p,s.div));
-    {const sb=players.filter(x=>!x.isMe);let si=0;(s.stars||[]).forEach(nm=>{const dp=sb[si++];if(!dp)return;if(nm==='DeMarcus Shadow')makeDeMarcus(dp);else if(nm==='Brandon Chalmers')makeBrandon(dp);});}
+    {const sb=players.filter(x=>!x.isMe);let si=0;(s.stars||[]).forEach(nm=>{const dp=sb[si++];if(!dp)return;if(nm==='DeMarcus Shadow')makeDeMarcus(dp);else if(nm==='Brandon Chalmers')makeBrandon(dp);else if(nm==='Tayvon Henderson')makeTayvon(dp);else if(nm==='Jaylen Brooks')makeJaylen(dp);});}
     PL.stam=100;watching=false;bcManual=0;$('#btnCam').textContent='Cam: auto';syncWatchBtn();me.afk=false;syncAfk();
     clog.innerHTML='';chatQ.length=0;
     addChat(null,'You joined '+s.name+' ('+s.region+'). '+(s.big?'Full meet, every event in order. ':DIVN[s.div]+' '+EVENTS[s.ev].name+' only. ')+players.length+'/'+s.cap+' players.',true);
@@ -2922,10 +3189,10 @@ function customUpdate(dt){
 }
 
 // ================= STORY MODE =================
-// 8th grade summer at Tilden with Coach Blue: practice Monday to Thursday, 3:00 to 5:30 PM.
-const STORY_KEY='tfo_story_v1';
+// 8th grade summer at Tilden with Coach Blue: practice Monday to Thursday, 3:00 to 5:30 PM. The demo is 14 practice days.
+const STORY_KEY='tfo_story_v1',DEMO_DAYS=14;
 let storySave=null;
-try{const raw=localStorage.getItem(STORY_KEY);if(raw){const o=JSON.parse(raw);if(o&&o.day>=1)storySave={slot:clamp(o.slot|0,0,2),day:o.day|0,off:Math.max(0,o.off|0),pb:(o.pb&&typeof o.pb==='object')?o.pb:{}};}}catch(e){}
+try{const raw=localStorage.getItem(STORY_KEY);if(raw){const o=JSON.parse(raw);if(o&&o.day>=1)storySave={slot:clamp(o.slot|0,0,2),day:Math.min(DEMO_DAYS,o.day|0),off:Math.max(0,o.off|0),pb:(o.pb&&typeof o.pb==='object')?o.pb:{},done:!!o.done};}}catch(e){}
 function saveStory(){try{if(storySave)localStorage.setItem(STORY_KEY,JSON.stringify(storySave));}catch(e){}}
 const STORY_START=new Date(2026,7,3,12);
 const DAY_NAMES=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -2936,15 +3203,22 @@ function clockTxt(m){m=Math.floor(m);let h=Math.floor(m/60)%24;const mm=m%60,ap=
 
 // the team: stats are percentages (power, stamina, endurance); mph is each runner's 8th grade top speed
 const TEAM_DEF=[
-  {id:'dm',name:'DeMarcus Shadow',short:'DeMarcus',h:73,skin:SKINS[4],hair:7,hairCol:0x0b0b0b,top:0x5b2a9e,shorts:0x111111,shoe:0x111111,suit:true,pow:75,sta:60,end:90,mph:20.1,endur:0.8,react:0.13},
-  {id:'bc',name:'Brandon Chalmers',short:'Brandon',h:66,skin:0xc08a5f,hair:8,hairCol:0x0b0b0b,top:0x111214,shorts:0x111214,shoe:0xf2f2f2,glasses:true,pow:95,sta:30,end:60,mph:19.7,endur:0.35,react:0.105,accBoost:1.27},
-  {id:'th',name:'Tayvon Henderson',short:'Tayvon',h:68,skin:SKINS[2],hair:0,hairCol:0x0d0d0d,top:0xd9342b,shorts:0x111111,shoe:0xff3b30,pow:50,sta:25,end:70,mph:19.5,endur:0.3,react:0.15},
-  {id:'jb',name:'Jaylen Brooks',short:'Jaylen',h:72,skin:SKINS[3],hair:2,hairCol:0x0d0d0d,top:0x18a058,shorts:0x111111,shoe:0x32d74b,pow:5,sta:85,end:10,mph:18.4,endur:0.97,react:0.2},
+  {id:'dm',name:'DeMarcus Shadow',short:'DeMarcus',g:'M',h:73,skin:SKINS[4],hair:7,hairCol:0x0b0b0b,top:0x5b2a9e,shorts:0x111111,shoe:0x111111,pow:75,sta:60,end:90,mph:20.1,endur:0.8,react:0.13},
+  {id:'bc',name:'Brandon Chalmers',short:'Brandon',g:'M',h:66,skin:0xcc9665,hair:8,hairCol:0x0b0b0b,top:0x111214,shorts:0x111214,shoe:0xf2f2f2,glasses:true,pow:95,sta:30,end:60,mph:19.7,endur:0.35,react:0.105,accBoost:1.27,
+    fade:{'60':[26,0.0033,0.86],'100':[48,0.0011,0.88],'200':[50,0.0002,0.9],'300':[55,0.0002,0.9],'400':[90,0.00005,0.95],def:[50,0.001,0.88]}},
+  // Tayvon: best in the 100 and 200 only. Reacts in 0.05-0.11, normal drive phase, then a crazy top end that catches everybody by 20m; fades over 300/400
+  {id:'th',name:'Tayvon Henderson',short:'Tayvon',g:'M',h:68,skin:SKINS[2],hair:0,hairCol:0x0d0d0d,top:0xd9342b,shorts:0x111111,shoe:0xff3b30,pow:50,sta:25,end:70,mph:20.4,endur:0.3,react:0.08,reactR:[0.05,0.11],accBoost:1.04,
+    fade:{'300':[160,0.0012,0.86],'400':[200,0.0014,0.82],def:[400,0,1]}},
+  // Jaylen (6'0): a 300/400 runner whose best race is the 200. Slow start, never fades, runs people down at the end
+  {id:'jb',name:'Jaylen Brooks',short:'Jaylen',g:'M',h:72,skin:SKINS[3],hair:2,hairCol:0x0d0d0d,top:0x18a058,shorts:0x111111,shoe:0x32d74b,pow:5,sta:85,end:10,mph:19.1,endur:0.97,react:0.18,reactR:[0.16,0.21],accBoost:0.82,
+    surge:{'100':[60,100,1.02],'200':[90,170,1.13],'300':[140,260,1.14],'400':[200,370,1.16]}},
+  {id:'jl',name:'Jayla Loom',short:'Jayla',g:'W',h:64,skin:0xc68e5b,hair:10,hairCol:0x4a2c1a,top:0x111111,shorts:0x111111,shoe:0x111111,pow:55,sta:60,end:55,mph:17.6,endur:0.6,react:0.14},
+  {id:'tj',name:'Taylar Jackson',short:'Taylar',g:'W',h:63,skin:0x8d5a3a,hair:9,hairCol:0x0e0b0a,top:0x111111,shorts:0x111111,shoe:0x111111,pow:65,sta:45,end:60,mph:17.3,endur:0.5,react:0.13,taylar:true},
 ];
 // where things happen: water and phones go on the infield grass by the finish, Coach Blue stands at the finish line
-const DROP=[[25.6,32.7],[27.0,32.6],[28.4,32.75],[29.8,32.6],[31.2,32.7]],DROP_OF={me:1,dm:0,bc:2,th:3,jb:4};
-const COACH_SPOT=[37.8,30.4],GATHER=[[35.5,29.0],[35.1,30.6],[35.5,32.0],[34.2,29.9]],REST=[[33.4,28.6],[32.2,29.7],[33.1,31.7],[31.9,30.9]];
-const story={active:false,phase:'',cine:false,clock:900,day:1,off:0,dow:1,team:[],dlg:null,obj:'',cut:null,jog:null,drill:null,plan:null,steps:[],si:0,restT:0,restMax:1,ready:false,laps:2,chatT:6,chatUsed:new Set(),busy:false,todT:0,rep:null,coachA:null,meA:null};
+const DROP=[[24.6,32.7],[25.85,32.6],[27.1,32.75],[28.35,32.6],[29.6,32.7],[30.85,32.6],[32.1,32.75]],DROP_OF={me:2,dm:1,bc:3,th:4,jb:5,jl:0,tj:6};
+const COACH_SPOT=[37.8,30.4],GATHER=[[35.5,29.0],[35.1,30.6],[35.5,32.0],[34.2,29.9],[34.3,31.4],[36.4,27.9]],REST=[[33.4,28.6],[32.2,29.7],[33.1,31.7],[31.9,30.9],[32.5,27.4],[30.9,28.5]];
+const story={active:false,phase:'',cine:false,clock:900,runStart:903,runLen:55,day:1,off:0,dow:1,team:[],dlg:null,obj:'',cut:null,jog:null,drill:null,plan:null,steps:[],si:0,restT:0,restMax:1,ready:false,laps:2,chatT:6,chatUsed:new Set(),busy:false,todT:0,rep:null,coachA:null,meA:null};
 
 const coach=(function(){const a=makeAthlete();a.root.visible=false;
   dress(a,{top:0x0b2a6b,shorts:0x0b2a6b,skin:SKINS[3],hairCol:0x0d0d0d,hair:0,shoe:0x111111});setGender(a,'M');setHeight(a,73);setSuit(a,true);
@@ -2959,7 +3233,7 @@ const coach=(function(){const a=makeAthlete();a.root.visible=false;
 // water bottles and phones the team leaves on the grass
 const STORY_PROPS=(function(){const L=[],capM=new THREE.MeshStandardMaterial({color:0xeeeeee,roughness:0.4}),phM=new THREE.MeshStandardMaterial({color:0x121316,roughness:0.35,metalness:0.4}),scM=new THREE.MeshStandardMaterial({color:0x1b2740,roughness:0.12,metalness:0.3,emissive:0x0b1630});
   const bG=new THREE.CylinderGeometry(0.037,0.037,0.21,14),cG=new THREE.CylinderGeometry(0.027,0.031,0.046,12),pG=new THREE.BoxGeometry(0.075,0.009,0.155),sG=new THREE.PlaneGeometry(0.067,0.143);
-  [0x1f5fff,0xd9342b,0x18a058,0x8a8f99,0xf2c230].forEach(col=>{const g=new THREE.Group();
+  [0x1f5fff,0xd9342b,0x18a058,0x8a8f99,0xf2c230,0xe0479e,0x7b3fe4].forEach(col=>{const g=new THREE.Group();
     const b=new THREE.Mesh(bG,new THREE.MeshStandardMaterial({color:col,roughness:0.32,metalness:0.35}));b.position.y=0.105;b.castShadow=true;g.add(b);
     const c=new THREE.Mesh(cG,capM);c.position.y=0.233;g.add(c);
     const ph=new THREE.Mesh(pG,phM);ph.position.set(0.17,0.0046,0.02);ph.rotation.y=rand(-0.6,0.6);ph.castShadow=true;g.add(ph);
@@ -2977,6 +3251,25 @@ function whistleSfx(){if(!AC||!soundOn)return;const t=AC.currentTime,o=AC.create
   o.connect(g);g.connect(master);o.start(t);lfo.start(t);o.stop(t+0.6);lfo.stop(t+0.6);}
 function coachLine(txt,dur){toast('Coach Blue: '+txt,dur||3);say(txt,0.78,0.95);coach.talkT=2.4;}
 function setObj(t){story.obj=t||'';}
+// Taylar: nose ring and gold chains; the black cap and headphones are for the walk out and the walk home
+function taylarGear(a){if(a.tjGear)return a.tjGear;const gold=new THREE.MeshStandardMaterial({color:0xe2b75c,roughness:0.22,metalness:0.95}),blk=new THREE.MeshStandardMaterial({color:0x121214,roughness:0.62}),R={};
+  R.nose=new THREE.Mesh(new THREE.TorusGeometry(0.0046,0.0009,6,16),gold);R.nose.position.set(0.0158,0.0868,0.1115);R.nose.rotation.y=Math.PI/2-0.35;a.head.add(R.nose);
+  R.chain=new THREE.Group();[[0.094,0.592],[0.104,0.582]].forEach(([r,y])=>{const t=new THREE.Mesh(new THREE.TorusGeometry(r,0.0015,6,48),gold);t.scale.set(1,0.92,1);t.rotation.x=Math.PI/2+0.3;t.position.set(0,y,0.006);R.chain.add(t);});
+  {const pd=new THREE.Mesh(new THREE.SphereGeometry(0.0075,10,8),gold);pd.position.set(0,0.548,0.1);R.chain.add(pd);}a.torso.add(R.chain);
+  R.cap=new THREE.Group();{const cr=new THREE.Mesh(new THREE.SphereGeometry(0.128,24,12,0,TAU,0,Math.PI*0.5),blk);cr.scale.set(1.0,0.86,1.06);R.cap.add(cr);
+    const br=new THREE.Mesh(new THREE.CylinderGeometry(0.105,0.105,0.006,24,1,false,-Math.PI/2,Math.PI),blk);br.scale.set(0.92,1,0.85);br.position.set(0,0.004,0.1);br.rotation.x=0.18;R.cap.add(br);}
+  R.cap.position.set(0,0.152,-0.004);R.cap.rotation.x=-0.12;a.head.add(R.cap);
+  R.phones=new THREE.Group();{const band=new THREE.Mesh(new THREE.TorusGeometry(0.14,0.009,8,24,Math.PI),blk);band.position.set(0,0.11,-0.01);R.phones.add(band);
+    for(const s of[-1,1]){const cup=new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,0.026,20),blk);cup.rotation.z=Math.PI/2;cup.position.set(s*0.128,0.105,-0.01);R.phones.add(cup);}}
+  a.head.add(R.phones);a.tjGear=R;return R;}
+function casual(p,on){const R=p&&p.ath&&p.ath.tjGear;if(R){R.cap.visible=on;R.phones.visible=on;}}
+function gearOff(a){const R=a.tjGear;if(R){R.nose.visible=R.chain.visible=R.cap.visible=R.phones.visible=false;}if(a.handBottle)a.handBottle.visible=false;}
+// a sip of water during the rest: the bottle comes off the grass into their hand
+function sipWater(p){const a=p.ath,g=STORY_PROPS[DROP_OF[p.def.id]];
+  if(!a.handBottle){const b=new THREE.Group(),bt=new THREE.Mesh(new THREE.CylinderGeometry(0.034,0.034,0.2,12),g.children[0].material),cp=new THREE.Mesh(new THREE.CylinderGeometry(0.025,0.029,0.044,10),g.children[1].material);cp.position.y=0.12;b.add(bt);b.add(cp);
+    b.position.set(0,-0.075,0.03);b.rotation.x=-0.25;b.scale.setScalar(1/(a.hs||1));a.handR.add(b);a.handBottle=b;}
+  a.handBottle.visible=true;g.children[0].visible=g.children[1].visible=false;a.eatT=2.4;a.eatKind='drink';
+  setTimeout(()=>{if(a.handBottle)a.handBottle.visible=false;g.children[0].visible=g.children[1].visible=true;},2500);}
 
 // ---------- actors (teammates, Coach Blue, and you during scenes)
 function newAct(a){return{ath:a,path:null,speed:1.4,cb:null,face:null,kneel:0,kneelDur:1,kneelCb:null,kneelMid:null,delay:0,jog:null,drill:null,tiredT:0};}
@@ -3000,12 +3293,12 @@ function teamIndex(p){return story.team.indexOf(p);}
 function spotOf(p){return DROP[p.isMe?DROP_OF.me:DROP_OF[p.def.id]];}
 function gatherTeam(delay){story.team.forEach((p,i)=>{const A=p.act;if(!A||p.mode!=='story')return;A.jog=null;A.drill=null;A.delay=delay?rand(0.4,delay):0;actGo(A,[GATHER[i]],1.3,()=>actFace(A,COACH_SPOT[0],COACH_SPOT[1]));});}
 function storyIdentity(p,d){
-  p.name=d.name;p.gender='M';p.star=true;p.def=d;p.topOverride=d.mph/2.237;p.endur=d.endur;p.react=d.react;p.accBoost=d.accBoost||null;p.stats={pow:d.pow,sta:d.sta,end:d.end};
-  p.fade=null;p.endurBy=null;p.pbs={};p.rating=clamp((d.mph-18)/2.1,0,1);p.form='std';p.hIn=d.h;p.afk=false;p.medals=[0,0,0];p.reached=-1;p.ping=randi(12,40);p.sitSpot=null;
-  p.look={top:d.top,shorts:d.shorts,skin:d.skin,hairCol:d.hairCol,hair:d.hair,shoe:d.shoe,stripe:false};p.suit=!!d.suit;
-  const a=p.ath;setGender(a,'M');setHeight(a,d.h);a.form='std';dress(a,p.look);wearGlasses(a,!!d.glasses);if(a.suitOn&&!p.suit)setSuit(a,false);
-  setTag(a,d.short,false);a.tag.scale.set(0.9,0.225,1);setBib(a,randi(10,99));a.medal.visible=false;a.root.visible=true;resetFx(a);p.mode='story';p.act=newAct(a);}
-
+  p.name=d.name;p.gender=d.g||'M';p.star=true;p.def=d;p.topOverride=d.mph/2.237;p.endur=d.endur;p.react=d.react;p.reactR=d.reactR||null;p.accBoost=d.accBoost||null;p.stats={pow:d.pow,sta:d.sta,end:d.end};
+  p.fade=d.fade||null;p.surge=d.surge||null;p.endurBy=null;p.pbs={};p.rating=clamp((d.mph-(p.gender==='W'?16:18))/2.1,0,1);p.form='std';p.hIn=d.h;p.afk=false;p.medals=[0,0,0];p.reached=-1;p.ping=randi(12,40);p.sitSpot=null;
+  p.look={top:d.top,shorts:d.shorts,skin:d.skin,hairCol:d.hairCol,hair:d.hair,shoe:d.shoe,stripe:false};p.suit=false;
+  const a=p.ath;setGender(a,p.gender);setHeight(a,d.h);a.form='std';dress(a,p.look);wearGlasses(a,!!d.glasses);if(a.suitOn)setSuit(a,false);
+  if(d.taylar){const R=taylarGear(a);R.nose.visible=R.chain.visible=true;}
+  setTag(a,d.short,false);a.tag.scale.set(0.9,0.225,1);a.bibOn=false;a.bib.visible=false;a.medal.visible=false;a.root.visible=true;resetFx(a);a.fatigue=0;p.mode='story';p.act=newAct(a);}
 // ---------- the day's plan (Mon/Tue: reps, sometimes in groups; Wed/Thu: 45 s run, 3x100, drills, or chase)
 function nmOf(p){return p.isMe?'you':p.def.short;}
 function listNames(g){const n=g.map(nmOf);return n.length<2?n[0]:n.slice(0,-1).join(', ')+' and '+n[n.length-1];}
@@ -3013,41 +3306,42 @@ function evM(id){return id+'m';}
 function planDay(){
   const T=story.team,all=[me,...T],dow=story.dow,first=story.day===1,DN=DAY_NAMES[dow];
   const laps=randi(2,3);story.laps=laps;
-  const P={warm:[],lines:[],steps:[],end:[]};
-  if(first)P.warm.push({txt:"Alright, bring it in. Welcome to summer practice."},{txt:"I'm Coach Blue. I'm your coach for middle school, and I'll have y'all in high school too, so get used to me."},{txt:"Practice is Monday through Thursday, three o'clock to five thirty. You show up, you work."});
+  const P={warm:[],drill:[],lines:[],steps:[],end:[]};
+  if(first)P.warm.push({txt:"Alright, bring it in. Welcome to summer practice."},{txt:"I'm Coach Blue. I'm your coach for middle school, and I'll have y'all in high school too, so get used to me."},{txt:"Practice is Monday through Thursday, three o'clock to five thirty. You show up, you work."},
+    {who:'Taylar',txt:"Coach, we running with the boys?"},{txt:"Everybody runs together on this team. Jayla, Taylar, push them."});
   else P.warm.push({txt:pick(["Bring it in. Good to see everybody back.","Let's go, let's go. Bring it in.","Alright, y'all know the deal. Bring it in."])});
   P.warm.push({txt:"Before I tell you what we're running, warm up. "+(laps===2?'Two':'Three')+" laps around the track, nice and easy."});
   P.warm.push({who:T[0].def.short,txt:pick(["Yes sir.","Bet, coach.","Let's work."])},{txt:"Stay together. Go."});
-  const restFor=(ev,split)=>split?15:{'400':35,'300':30,'200':25,'100':18,'60':15}[ev];
+  P.drill.push({txt:pick(["Good. Drills before we run. Take a lane on the straight.","Alright, drills first. Everybody grab a lane on the straight.","Good job. Now drills, line up on the straight."])},{txt:"A skips, B skips, C skips, high knees, butt kicks, carioca, and straight-leg bounds. Down and back."});
+  if(first)P.drill.splice(1,0,{who:'Jayla',txt:"Every day, coach?"},{txt:"Every day. Drills are what make you fast."});
+  const restW=ev=>({'400':1.6,'300':1.4,'200':1.1,'100':0.8,'60':0.7}[ev]||1);
   const repSteps=(list,split,gA,gB)=>{list.forEach((ev,i)=>{const lab='Rep '+(i+1)+' of '+list.length+' · '+evM(ev);
     if(split)P.steps.push({type:'rep',ev,group:gA,label:lab+' · Group 1'},{type:'pause',dur:7,txt:'Group 2, on the line.'},{type:'rep',ev,group:gB,label:lab+' · Group 2'});
     else P.steps.push({type:'rep',ev,group:all,label:lab});
-    if(i<list.length-1)P.steps.push({type:'rest',dur:restFor(ev,split)});});};
-  const splitUp=()=>{const sh=shuffle(T.slice()),meFirst=Math.random()<0.55;return meFirst?[[me,sh[0],sh[1]],[sh[2],sh[3]]]:[[sh[0],sh[1]],[me,sh[2],sh[3]]];};
+    if(i<list.length-1)P.steps.push({type:'rest',ev,w:restW(ev),dur:120});});};
+  const splitUp=()=>{const sh=shuffle(T.slice()),h=Math.floor(sh.length/2),A=sh.slice(0,h),B=sh.slice(h);return Math.random()<0.55?[[me,...A.slice(0,h-1)],[...B,A[h-1]]]:[A,[me,...B]];};
   if(dow===1||dow===2){
     const o=pick([{n:'two 400s',r:['400','400']},{n:'four 200s',r:['200','200','200','200']},{n:'one 400 and three 100s',r:['400','100','100','100']},{n:'two 400s and three 60s',r:['400','400','60','60','60']}]);
-    const split=Math.random()<0.45;P.lines.push({txt:"Good. "+DN+", so today we're running "+o.n+"."});
+    const split=Math.random()<0.45;P.lines.push({txt:"Good drills. "+DN+", so today we're running "+o.n+"."});
     if(split){const [gA,gB]=splitUp();P.lines.push({txt:"I'm splitting y'all into two groups."},{txt:"Group 1: "+listNames(gA)+". Group 2: "+listNames(gB)+"."},{txt:"Group 1 runs first. Group 2, you rest while they go, then you're up."});repSteps(o.r,true,gA,gB);}
     else{P.lines.push({txt:"Everybody runs together. Full effort on every rep."});repSteps(o.r,false);}
-    P.lines.push({txt:"Walk your rest. Nobody sits down. Let's work."});
+    P.lines.push({txt:"Take your full rest, walk it, get some water. Nobody sits down. Let's work."});
   }else{
-    const kind=pick(['run45','h100','drills','chase']);
-    if(kind==='run45'){P.lines.push({txt:"Good. "+DN+" we're doing a 45-second run."},{txt:"When you hear the whistle, go. When it blows again, stop right where you are."},{txt:"Let's see how far you get. Don't go out too fast."});
+    const kind=pick(['run45','h100','chase']);
+    if(kind==='run45'){P.lines.push({txt:"Good drills. "+DN+" we're doing a 45-second run."},{txt:"When you hear the whistle, go. When it blows again, stop right where you are."},{txt:"Let's see how far you get. Don't go out too fast."});
       P.steps.push({type:'rep',ev:'400',group:all,cap:45,label:'45-second run'});}
-    else if(kind==='h100'){const split=Math.random()<0.4;P.lines.push({txt:"Good. Three 100s today. Fast, but stay relaxed."});
+    else if(kind==='h100'){const split=Math.random()<0.4;P.lines.push({txt:"Good drills. Three 100s today. Fast, but stay relaxed."});
       if(split){const [gA,gB]=splitUp();P.lines.push({txt:"Two groups. Group 1: "+listNames(gA)+". Group 2: "+listNames(gB)+"."});repSteps(['100','100','100'],true,gA,gB);}else repSteps(['100','100','100'],false);}
-    else if(kind==='drills'){P.lines.push({txt:"Good. "+DN+" is drill day."},{txt:"A skips, B skips, C skips, high knees, butt kicks, carioca, and straight-leg bounds."},{txt:"Down the straight and back. Stay tall and keep your rhythm."});P.steps.push({type:'drills'});}
     else{const sh=shuffle(all.slice()),d1=pick(['200','300']),d2=d1==='200'?'300':'200',r1=[sh[0],sh[1]],r2=[sh[2],sh[3]];
       const head=(r,ev)=>new Map(r.map(p=>[p,ev==='200'?10:15]));
-      P.lines.push({txt:"Good. Chase day. Two people get a head start, everybody else runs 'em down."},{txt:"First one's a "+d1+". "+listNames(r1)+", you get the head start. "+(d1==='200'?'Ten':'Fifteen')+" meters."},{txt:"If you catch somebody, you earned it."});
-      P.steps.push({type:'rep',ev:d1,group:all,head:head(r1,d1),label:'Chase 1 of 2 · '+evM(d1)},{type:'rest',dur:30},
+      P.lines.push({txt:"Good drills. Chase day. Two people get a head start, everybody else runs 'em down."},{txt:"First one's a "+d1+". "+listNames(r1)+", you get the head start. "+(d1==='200'?'Ten':'Fifteen')+" meters."},{txt:"If you catch somebody, you earned it."});
+      P.steps.push({type:'rep',ev:d1,group:all,head:head(r1,d1),label:'Chase 1 of 2 · '+evM(d1)},{type:'rest',ev:'300',w:1.4,dur:120},
         {type:'pause',dur:6,txt:'Next one is a '+d2+'. '+listNames(r2).replace(/^you/,'You')+', you get the head start.'},{type:'rep',ev:d2,group:all,head:head(r2,d2),label:'Chase 2 of 2 · '+evM(d2)});}
   }
   P.end.push({txt:pick(["That's practice. Good work today.","Alright, that's it for today. Good work.","That's a wrap. I liked what I saw today."])});
   P.end.push({txt:dow===4?"No practice Friday through Sunday. Rest up, hydrate, and I'll see y'all Monday.":"Same time tomorrow. Three o'clock, don't be late."});
   P.end.push({txt:"Grab your stuff and get home safe."});
   return P;}
-
 // ---------- dialog (Coach Blue talks, tap to continue)
 function dialog(lines,cb){story.dlg={lines,i:0,cb,shown:0,full:''};story.dlgSnap=true;dlgShow();}
 function dlgShow(){const D=story.dlg,L=D.lines[D.i],who=L.who||'Coach Blue',isC=who==='Coach Blue';D.full=L.txt;D.shown=0;
@@ -3066,7 +3360,7 @@ function d2coach(){const a=meAth.root.position,b=coach.root.position;return Math
 
 // ---------- day flow
 function beginDay(weekend){story.phase='card';story.cine=true;story.busy=true;
-  const card=$('#storyCard'),main=()=>{$('#scTop').textContent=sGrade(storySave.off);$('#scDay').textContent='Day '+storySave.day;$('#scDate').textContent=sDateText(storySave.off);$('#scSub').textContent='Practice 3:00 to 5:30 PM with Coach Blue';};
+  const card=$('#storyCard'),main=()=>{$('#scTop').textContent=sGrade(storySave.off);$('#scDay').textContent='Day '+storySave.day;$('#scDate').textContent=sDateText(storySave.off);$('#scSub').textContent='Practice 3:00 to 5:30 PM with Coach Blue · Demo day '+storySave.day+' of '+DEMO_DAYS;};$('#scBtns').classList.add('hidden');
   if(weekend){$('#scTop').textContent='Weekend';$('#scDay').textContent='No practice';$('#scDate').textContent='Friday to Sunday. Rest up.';$('#scSub').textContent='';}else main();
   card.classList.remove('hidden');void card.offsetWidth;card.classList.add('show');
   setTimeout(()=>{if(!story.active)return;resetDayWorld();if(weekend)main();
@@ -3080,41 +3374,42 @@ function resetDayWorld(){
   if(me.sitSpot)standUp(me);me.indoor=false;me.mode='story';
   [story.coachA,story.meA,...story.team.map(p=>p.act)].forEach(A=>{A.path=null;A.jog=null;A.drill=null;A.kneel=0;A.delay=0;A.cb=null;A.face=null;A.tiredT=0;
     const a=A.ath;resetFx(a);a.root.visible=true;a.root.position.set(0,0,-100.5);a.yaw=0;a.root.rotation.set(0,0,0);a.anim='idle';a.speed=0;});
-  story.team.forEach(p=>{p.mode='story';if(p.suit&&!p.ath.suitOn)setSuit(p.ath,true);});coach.root.visible=true;}
+  story.team.forEach(p=>{p.mode='story';setOutfit(p.ath,randi(0,OUTFITS.length-1));p.ath.fatigue=0;p.ath.tiredStyle=randi(0,1);casual(p,true);});
+  setOutfit(meAth,randi(0,OUTFITS.length-1));meAth.fatigue=0;story.runStart=story.clock+3;story.runLen=rand(45,70);coach.root.visible=true;}
 // cutscene: out the back of Tilden, across the field, water and phones down on the grass
-function castActs(){return[story.coachA,story.team[0].act,story.team[2].act,story.meA,story.team[1].act,story.team[3].act];}
+function castActs(){const T=story.team;return[story.coachA,T[0].act,T[2].act,story.meA,T[1].act,T[3].act,T[4].act,T[5].act];}
 const CUT_SHOTS=[
-  {dur:6.6,start(){castActs().forEach((A,i)=>{const x=[-0.1,-0.7,0.6,0.05,-0.55,0.55][i],a=A.ath;a.root.position.set(x,0,-99.5-(i>2?0.7:0));a.yaw=0;a.root.rotation.y=0;A.delay=0.25+i*0.5;
+  {dur:6.6,start(){castActs().forEach((A,i)=>{const x=[-0.1,-0.7,0.6,0.05,-0.6,0.6,-0.35,0.95][i],a=A.ath;a.root.position.set(x,0,-99.5-[0,0,0,0.7,0.75,0.7,1.45,1.4][i]);a.yaw=0;a.root.rotation.y=0;A.delay=0.25+i*0.45;
       actGo(A,[[x*1.2,-96.6],[x*2.6+(i%2?0.7:-0.7),-84]],1.45);});},
    cam(t){camWantPos.set(5.4,1.6,-85.4-t*0.2);camWantLook.set(0.2,1.35,-96.4+t*0.9);return 46;}},
-  {dur:6.2,start(){castActs().forEach((A,i)=>{const ox=[0,-1.3,1.2,-0.3,0.7,-2.1][i],oz=[0,-1.5,-1.4,-2.9,-3.2,-2.5][i],a=A.ath;a.root.position.set(15+ox,0,-14+oz);a.yaw=Math.atan2(12,36);a.root.rotation.y=a.yaw;A.delay=0;
+  {dur:6.2,start(){castActs().forEach((A,i)=>{const ox=[0,-1.3,1.2,-0.3,0.7,-2.1,0.3,-1.2][i],oz=[0,-1.5,-1.4,-2.9,-3.2,-2.5,-4.3,-4.4][i],a=A.ath;a.root.position.set(15+ox,0,-14+oz);a.yaw=Math.atan2(12,36);a.root.rotation.y=a.yaw;A.delay=0;
       actGo(A,[[27+ox,22+oz]],1.5);});},
    cam(t){const c=story.coachA.ath.root.position;camWantPos.set(26.5,1.25,3.6);camWantLook.set(c.x-0.5,1.2,c.z-1.8);return 38;}},
   {dur:8.4,start(){const C=story.coachA;coach.root.position.set(33.4,0,26.4);coach.yaw=0.6;C.delay=0.3;actGo(C,[[36.4,29.2],COACH_SPOT],1.35,()=>actFace(C,29,32.4));
-      [story.meA,...story.team.map(p=>p.act)].forEach((A,i)=>{const sp=i===0?DROP[DROP_OF.me]:DROP[DROP_OF[story.team[i-1].def.id]],si=DROP.indexOf(sp),a=A.ath;
+      [story.meA,...story.team.map(p=>p.act)].forEach((A,i)=>{const pp=i===0?me:story.team[i-1],sp=i===0?DROP[DROP_OF.me]:DROP[DROP_OF[pp.def.id]],si=DROP.indexOf(sp),a=A.ath;
         a.root.position.set(sp[0]-0.6+rand(-0.25,0.25),0,sp[1]-4.4-i*0.2);a.yaw=0;a.root.rotation.y=0;A.delay=i*0.2;
-        actGo(A,[[sp[0],sp[1]-0.5]],1.5,()=>{A.ath.yaw=0;actKneel(A,1.8,()=>actFace(A,COACH_SPOT[0],COACH_SPOT[1]),()=>placeProps(si));});});},
-   cam(t){camWantPos.set(28.4+t*0.14,0.6+t*0.05,35.7);camWantLook.set(28.4,0.42+t*0.05,31.4);return 46;}},
+        actGo(A,[[sp[0],sp[1]-0.5]],1.5,()=>{A.ath.yaw=0;actKneel(A,1.8,()=>actFace(A,COACH_SPOT[0],COACH_SPOT[1]),()=>{placeProps(si);casual(pp,false);});});});},
+   cam(t){camWantPos.set(28.35+t*0.14,0.62+t*0.05,36.5);camWantLook.set(28.35,0.42+t*0.05,31.6);return 50;}},
 ];
 function startCutscene(){story.phase='cut';story.cine=true;story.cut={i:0,st:0,snap:true};me.mode='story';CUT_SHOTS[0].start();}
 function cutUpdate(dt){const C=story.cut;C.st+=dt;if(C.st>=CUT_SHOTS[C.i].dur){C.i++;C.st=0;if(C.i>=CUT_SHOTS.length){endCutscene();return;}CUT_SHOTS[C.i].start();C.snap=true;}}
 function cutCam(dt){const C=story.cut,sh=CUT_SHOTS[Math.min(C.i,CUT_SHOTS.length-1)],fov=sh.cam(C.st);setCam(camWantPos,camWantLook,fov,dt,3,4,C.snap);C.snap=false;}
 function endCutscene(){if(story.phase!=='cut')return;story.phase='cutend';
   fadeTo(()=>{if(!story.active)return;story.cine=false;story.cut=null;
-    DROP.forEach((d,i)=>placeProps(i));
+    DROP.forEach((d,i)=>placeProps(i));story.team.forEach(p=>casual(p,false));
     const C=story.coachA;C.path=null;C.delay=0;C.kneel=0;coach.root.position.set(COACH_SPOT[0],0,COACH_SPOT[1]);coach.anim='idle';actFace(C,29,32.4);
     story.team.forEach(p=>{const A=p.act,sp=spotOf(p);A.path=null;A.delay=0;A.kneel=0;p.ath.root.position.set(sp[0]+rand(-0.3,0.3),0,sp[1]-0.9);p.ath.anim='idle';actFace(A,COACH_SPOT[0],COACH_SPOT[1]);p.ath.yaw=Math.atan2(COACH_SPOT[0]-sp[0],COACH_SPOT[1]-sp[1]);p.ath.root.rotation.y=p.ath.yaw;});
     const M=story.meA,sp=spotOf(me),a=meAth;M.path=null;M.delay=0;M.kneel=0;a.root.position.set(sp[0],0,sp[1]-0.9);a.anim='idle';a.speed=0;resetFx(a);
     const dx=COACH_SPOT[0]-sp[0],dz=COACH_SPOT[1]-(sp[1]-0.9);a.yaw=Math.atan2(dx,dz);a.root.rotation.y=a.yaw;camYaw=Math.atan2(-dx,-dz);camPitch=0.28;camSnap=true;
     me.mode='roam';story.phase='meet';setObj('Walk to Coach Blue');
     story.team.forEach((p,i)=>{const A=p.act;A.delay=rand(1.5,4.5);actGo(A,[GATHER[i]],1.3,()=>actFace(A,COACH_SPOT[0],COACH_SPOT[1]));});
-    toast('Walk over to Coach Blue.',2.6);});}
+    toast('Walk over to Coach Blue. Today you\'re in the '+(meAth.outfit?meAth.outfit.name:'practice gear')+'.',4);});}
 function startWarmup(){
   fadeTo(()=>{if(!story.active)return;const lane=2,b0=10,L=2*S+2*Math.PI*laneR(lane);
-    story.phase='warmup';setObj('Warm-up · '+story.laps+' laps');
+    story.phase='warmup';setObj('Warm-up · '+story.laps+' laps');story.runStart=story.clock;
     story.jog={lane,b:b0,b0,dist:0,v:0,L,target:story.laps*L,tt:[],last:-9,side:null,cad:0,done:false};
     me.mode='jog';const a=meAth;resetFx(a);loopPos(laneR(lane),b0,a.root.position);a.root.position.y=0;loopPos(laneR(lane),b0-0.3,_tp);a.yaw=Math.atan2(_tp.x-a.root.position.x,_tp.z-a.root.position.z);a.root.rotation.y=a.yaw;a.anim='idle';
-    const lanes=[1,3,1,3],offs=[3.2,-2.4,-5.8,6.2];
+    const lanes=[1,3,1,3,3,1],offs=[3.2,-2.4,-5.8,6.2,1.0,-8.6];
     story.team.forEach((p,i)=>{const A=p.act;A.path=null;A.kneel=0;A.delay=0;A.face=null;A.jog={lane:lanes[i],dist:offs[i],v:0,pace:rand(4.0,4.6)};
       const at=p.ath,b=((b0-offs[i])%L+L)%L;loopPos(laneR(lanes[i]),b,at.root.position);at.root.position.y=0;loopPos(laneR(lanes[i]),b-0.3,_tp);at.yaw=Math.atan2(_tp.x-at.root.position.x,_tp.z-at.root.position.z);at.root.rotation.y=at.yaw;at.anim='idle';});
     const C=story.coachA;actFace(C,CX,laneR(2));camSnap=true;
@@ -3146,7 +3441,13 @@ function warmupDone(){story.jog=null;me.mode='roam';meAth.cad=null;story.phase='
   story.team.forEach(p=>{const A=p.act;if(A&&A.jog){A.jog=null;A.ath.cad=null;actGo(A,[GATHER[teamIndex(p)]],1.3,()=>actFace(A,COACH_SPOT[0],COACH_SPOT[1]));}});
   actFace(story.coachA,meAth.root.position.x,meAth.root.position.z);}
 function startWarmupTalk(){story.phase='talk1';gatherTeam(1.2);beginTalk(story.plan.warm,startWarmup);}
-function startWorkoutTalk(){story.phase='talk2';gatherTeam(1.2);beginTalk(story.plan.lines,()=>{story.phase='workout';story.si=0;nextStep();});}
+function startDrillTalk(){story.phase='talk2';gatherTeam(1.2);beginTalk(story.plan.drill,startDrills);}
+// the clock is real time (60 seconds is one minute). Rests fill the running block so warm-up to the last rep lasts 45 to 70 minutes; I'm ready skips ahead
+function repMin(st){const ev=EVENTS.find(e=>e.id===st.ev);return(3.6+2.6+1.8+(st.cap||ev.dist/(ev.dist>=300?6.4:7.4))+6.5)/60;}
+function sizeRests(){const L=story.steps;let busy=0,ws=0;L.forEach(s=>{if(s.type==='rep')busy+=repMin(s);else if(s.type==='pause')busy+=s.dur/60;else if(s.type==='rest')ws+=s.w;});
+  const budget=story.runStart+story.runLen-story.clock-busy-6;
+  L.forEach(s=>{if(s.type!=='rest')return;const cap={'400':12,'300':10,'200':8,'100':6,'60':5}[s.ev]||8;s.dur=Math.round(clamp(ws>0?budget*s.w/ws:2,1.5,cap)*60);});}
+function startWorkout(){story.phase='workout';story.si=0;sizeRests();nextStep();}
 // ---------- workout steps
 function nextStep(){const st=story.steps[story.si++];if(!st){practiceOver();return;}
   if(st.type==='rep')storyRep(st);else if(st.type==='rest')storyRest(st);else if(st.type==='pause'){story.phase='pause';story.restT=st.dur;story.restMax=st.dur;story.pauseTxt=st.txt;coachLine(st.txt,3.4);setObj(st.txt);}else if(st.type==='drills')startDrills();}
@@ -3173,7 +3474,7 @@ function storyFinish(e,place){const id=race.ev.id,P=storySave.pb,prev=P[id];
   finBand(race.ev.short,e.time,prev);
   if(prev==null||e.time<prev){P[id]=+e.time.toFixed(2);saveStory();e.pb=true;callout(ord(place)+'  '+fmt(e.time)+'  PB',2.6);tone(880,.12,.2);setTimeout(()=>tone(1320,.18,.2),130);}
   else callout(ord(place)+'  '+fmt(e.time),2.2);}
-function storyResults(){const R=race,st=R.story;R.phase='results';R.resT=st.cap?5.5:4.8;
+function storyResults(){const R=race,st=R.story;R.phase='results';R.resT=st.cap?5.5:4.8;if(R.myEntry&&R.myEntry.status!=='DNS'&&R.myEntry.status!=='DQ')addFatigue(me);
   const ents=R.entries.filter(e=>e.runners&&e.runners.length),nm=p=>p.isMe?p.name:p.def.short;
   const rows=st.cap?ents.slice().sort((a,b)=>(b.dist||0)-(a.dist||0)):ents.filter(e=>e.time!=null).sort((a,b)=>a.time-b.time).concat(ents.filter(e=>e.time==null));
   let h='<h3>'+esc(st.label)+'</h3><div class="rsub">'+(st.cap?'How far everybody got in 45 seconds.':st.head?'Head starts: '+esc(ents.filter(e=>e.rabbit).map(e=>nm(e.p)+' +'+e.head+'m').join(', '))+'.':'Coach Blue has the stopwatch.')+'</div>';
@@ -3187,8 +3488,19 @@ function storyResults(){const R=race,st=R.story;R.phase='results';R.resT=st.cap?
   if(mine){const pl=rows.indexOf(mine)+1;line=mine.status==='DQ'?"False start. Wait for the whistle.":mine.status==='DNF'?"You can't stop in the middle of a rep.":pl===1?pick(["That's what I like to see.","Way to finish!","Good rep. Walk it off."]):pick(["Drive your arms on the next one.","Stay relaxed. Shoulders down.","Good effort. Walk it off.","Get those knees up at the end."]);}
   else line=pick(["Good rep, group two.","Nice. Walk it off."]);
   setTimeout(()=>{if(story.active)coachLine(line);},900);}
-function storyAfterRace(p){if(p.isMe){p.mode='roam';return;}p.mode='story';const A=p.act;if(!A)return;const i=teamIndex(p);
-  A.delay=rand(0.3,1.4);A.tiredT=(race.ev&&legId(race.ev)==='400')?rand(2,4):0;actGo(A,[REST[i]],1.2,()=>actFace(A,COACH_SPOT[0],COACH_SPOT[1]));}
+const FAT={'60':0.16,'100':0.2,'200':0.3,'300':0.36,'400':0.44};
+function addFatigue(p){const st=race.story,base=st&&st.cap?0.42:(FAT[legId(race.ev)]||0.25),sta=p.isMe?(activeBuild().sta||50)/100:(p.def?p.def.sta/100:0.5),a=p.ath;
+  a.fatigue=Math.min(1,(a.fatigue||0)+base*(1.15-0.5*sta));const r=Math.random();a.tiredStyle=r<0.55?0:r<0.8?1:2;}
+function storyAfterRace(p){if(p.isMe){p.mode='roam';return;}addFatigue(p);p.mode='story';const A=p.act;if(!A)return;const i=teamIndex(p);
+  A.delay=rand(0.3,1.4);A.tiredT=(race.ev&&legId(race.ev)==='400')?rand(2,4):0;A.wT=rand(5,10);actGo(A,[REST[i]],p.ath.fatigue>0.4?0.92:1.2,()=>actFace(A,COACH_SPOT[0],COACH_SPOT[1]));}
+// during long rests the team walks around, gets water and talks instead of standing still
+function restWander(dt){const ph=story.phase;if(ph!=='rest'&&ph!=='pause'&&ph!=='rep')return;
+  story.team.forEach((p,i)=>{if(p.mode!=='story')return;const A=p.act;if(!A||A.path||A.kneel>0||A.jog||A.drill||A.delay>0||A.tiredT>0)return;
+    A.wT=(A.wT==null?rand(3,8):A.wT)-dt;if(A.wT>0)return;
+    const r=Math.random(),a=p.ath,sp=(a.fatigue||0)>0.4?rand(0.8,0.98):rand(1.05,1.3);
+    if(ph==='rest'&&r<0.22){const d=DROP[DROP_OF[p.def.id]];A.wT=99;actGo(A,[[d[0]+rand(-0.3,0.3),d[1]-0.6]],sp,()=>{a.yaw=0;actKneel(A,1.3,()=>{sipWater(p);A.wT=rand(7,13);actFace(A,CX,laneR(4));});});}
+    else if(r<0.64){const c=REST[i];A.wT=rand(7,15);actGo(A,[[c[0]+rand(-2.4,2.4),c[1]+rand(-2,2)]],sp,()=>actFace(A,COACH_SPOT[0]+rand(-6,2),COACH_SPOT[1]+rand(-4,4)));}
+    else{A.wT=rand(5,12);const o=pick(story.team.filter(x=>x!==p&&x.mode==='story'));if(o)actFace(A,o.ath.root.position.x,o.ath.root.position.z);}});}
 function storyRaceDone(){meet.phase='idle';meet.heats=[];story.phase='workout';nextStep();}
 function storyRest(st){story.phase='rest';story.restT=st.dur;story.restMax=st.dur;story.ready=false;const nx=nextRep();
   setObj(nx?(nx.group.includes(me)?'Rest. Up next: '+nx.label:'Rest. '+nx.label.split(' · ').pop()+' runs next.'):'Rest');}
@@ -3196,7 +3508,7 @@ function storyRest(st){story.phase='rest';story.restT=st.dur;story.restMax=st.du
 const DRILLS=[{id:'a',name:'A skips',v:1.45,step:0.48},{id:'b',name:'B skips',v:1.55,step:0.55},{id:'c',name:'C skips',v:1.55,step:0.55},{id:'hk',name:'High knees',v:1.25,step:0.3},{id:'bk',name:'Butt kicks',v:1.5,step:0.38},{id:'car',name:'Carioca',v:1.8,step:0.55},{id:'slb',name:'Straight-leg bounds',v:2.3,step:0.85}];
 const DRILL_X0=-13,DRILL_LEN=20;
 function startDrills(){fadeTo(()=>{if(!story.active)return;story.phase='drills';const D=story.drill={i:0,dir:1,state:'call',t:0,ppl:[]};
-  [story.team[0],story.team[2],me,story.team[1],story.team[3]].forEach((p,k)=>{const A=p.isMe?story.meA:p.act;A.path=null;A.jog=null;A.kneel=0;A.delay=0;A.drill=true;D.ppl.push({p,A,lane:2+k,prog:0,tgt:0,ph:0,v:rand(0.93,1.07),done:false});});
+  [story.team[4],story.team[0],story.team[2],me,story.team[1],story.team[3],story.team[5]].forEach((p,k)=>{const A=p.isMe?story.meA:p.act;A.path=null;A.jog=null;A.kneel=0;A.delay=0;A.drill=true;D.ppl.push({p,A,lane:2+k,prog:0,tgt:0,ph:0,v:rand(0.93,1.07),done:false});});
   me.mode='drill';resetFx(meAth);coach.root.position.set(DRILL_X0+DRILL_LEN+3.2,0,RI-2.6);actFace(story.coachA,DRILL_X0+DRILL_LEN*0.5,laneR(4));drillCall();camSnap=true;});}
 function drillPos(q){const D=story.drill,a=q.A.ath,x=D.dir>0?DRILL_X0+q.prog:DRILL_X0+DRILL_LEN-q.prog;a.root.position.set(x,0,laneR(q.lane));}
 function drillCall(){const D=story.drill,dr=DRILLS[D.i];D.state='call';D.t=0;
@@ -3216,24 +3528,36 @@ function drillUpdate(dt){const D=story.drill,dr=DRILLS[D.i];D.t+=dt;
     if(all){D.state='end';D.t=0;}}
   else if(D.state==='end'&&D.t>1.3){D.i++;if(D.i>=DRILLS.length){drillsDone();return;}D.dir*=-1;drillCall();}
   D.ppl.forEach(q=>{const a=q.A.ath;a.root.rotation.y=angDamp(a.root.rotation.y,a.yaw,7,dt);a.root.position.y=0;});}
-function drillsDone(){const D=story.drill;D.ppl.forEach(q=>{q.A.drill=null;q.A.ath.anim='idle';});story.drill=null;me.mode='roam';coachLine("Good. That's all the drills.",2.6);
-  story.team.forEach((p,i)=>{actGo(p.act,[REST[i]],1.25,()=>actFace(p.act,COACH_SPOT[0],COACH_SPOT[1]));});
-  const C=story.coachA;actGo(C,[COACH_SPOT],1.4,()=>actFace(C,30,31));story.phase='workout';setTimeout(()=>{if(story.active&&story.phase==='workout')nextStep();},2600);}
+function drillsDone(){const D=story.drill;D.ppl.forEach(q=>{q.A.drill=null;q.A.ath.anim='idle';});story.drill=null;me.mode='roam';setObj('');coachLine("Good. That's all the drills. Bring it in.",2.6);story.phase='talk3';
+  setTimeout(()=>{if(!story.active||story.phase!=='talk3')return;fadeTo(()=>{if(!story.active)return;const C=story.coachA;C.path=null;C.delay=0;coach.root.position.set(COACH_SPOT[0],0,COACH_SPOT[1]);
+    story.team.forEach((p,i)=>{const A=p.act;A.path=null;A.delay=0;A.kneel=0;const g=GATHER[i];p.ath.root.position.set(g[0],0,g[1]);p.ath.anim='idle';p.ath.yaw=Math.atan2(COACH_SPOT[0]-g[0],COACH_SPOT[1]-g[1]);p.ath.root.rotation.y=p.ath.yaw;actFace(A,COACH_SPOT[0],COACH_SPOT[1]);});
+    const a=meAth;resetFx(a);a.root.position.set(35.7,0,31.3);a.anim='idle';a.speed=0;camSnap=true;beginTalk(story.plan.lines,startWorkout);});},1800);}
 // ---------- end of practice, free roam, next day
-function practiceOver(){story.phase='wrap';setObj('');story.clock=Math.max(story.clock,17*60+30);applyTOD(story.clock/60);
-  fadeTo(()=>{if(!story.active)return;$('#results').classList.add('hidden');const a=meAth;resetFx(a);a.root.position.set(35.0,0,30.7);me.mode='talk';
-    story.team.forEach((p,i)=>{p.mode='story';const A=p.act;A.path=null;A.jog=null;A.drill=null;A.kneel=0;A.delay=0;A.tiredT=0;p.ath.root.position.set(GATHER[i][0],0,GATHER[i][1]);p.ath.anim='idle';actFace(A,COACH_SPOT[0],COACH_SPOT[1]);});
-    const C=story.coachA;C.path=null;coach.root.position.set(COACH_SPOT[0],0,COACH_SPOT[1]);
-    beginTalk(story.plan.end,()=>{store.cash=(store.cash||0)+5;saveStore();toast('Practice done. +$5, you have $'+store.cash+'.',3.4);
-      story.phase='free';setObj('Practice is over. Walk to the deli on Ralph Ave, or tap Next day.');teamLeave();});});}
+function practiceOver(){story.phase='cool';story.busy=true;setObj('');coachLine(pick(["That's the workout. Cool down: easy lap, then stretch.","Good work. Jog a cool-down lap and stretch it out."]),3);
+  setTimeout(()=>{if(!story.active||story.phase!=='cool')return;const card=$('#storyCard'),runEnd=Math.max(story.clock,story.runStart+story.runLen);story.clock=runEnd;applyTOD(story.clock/60);$('#results').classList.add('hidden');
+    $('#scBtns').classList.add('hidden');$('#scTop').textContent='Cool-down';$('#scDay').textContent=clockTxt(runEnd);$('#scDate').textContent='Easy laps and stretching';$('#scSub').textContent='Running today: '+Math.round(runEnd-story.runStart)+' minutes';
+    card.classList.remove('hidden');void card.offsetWidth;card.classList.add('show');
+    setTimeout(()=>{if(!story.active)return;story.clock=Math.max(story.clock,17*60+rand(20,25));applyTOD(story.clock/60);
+      $('#scTop').textContent='Later at practice';$('#scDay').textContent=clockTxt(story.clock);$('#scDate').textContent='Core, stretching and handoffs';$('#scSub').textContent='';
+      setTimeout(()=>{if(!story.active)return;wrapUp();card.classList.remove('show');setTimeout(()=>{if(!card.classList.contains('show'))card.classList.add('hidden');},800);},2600);},2600);},2600);}
+function wrapUp(){story.phase='wrap';story.busy=false;const a=meAth;resetFx(a);a.fatigue=Math.min(a.fatigue||0,0.25);a.root.position.set(35.0,0,30.7);me.mode='talk';
+  story.team.forEach((p,i)=>{p.mode='story';const A=p.act;A.path=null;A.jog=null;A.drill=null;A.kneel=0;A.delay=0;A.tiredT=0;p.ath.fatigue=Math.min(p.ath.fatigue||0,0.25);p.ath.root.position.set(GATHER[i][0],0,GATHER[i][1]);p.ath.anim='idle';actFace(A,COACH_SPOT[0],COACH_SPOT[1]);});
+  const C=story.coachA;C.path=null;coach.root.position.set(COACH_SPOT[0],0,COACH_SPOT[1]);camSnap=true;
+  beginTalk(story.plan.end,()=>{store.cash=(store.cash||0)+5;saveStore();toast('Practice done. +$5, you have $'+store.cash+'.',3.4);
+    story.phase='free';setObj('Practice is over. Walk to the deli on Ralph Ave, or tap Next day.');teamLeave();});}
 function teamLeave(){story.team.forEach((p,i)=>{const A=p.act,si=DROP_OF[p.def.id],sp=DROP[si];A.delay=rand(0.3,2.6);
-    actGo(A,[[sp[0],sp[1]-0.5]],1.35,()=>{A.ath.yaw=0;actKneel(A,1.4,()=>actGo(A,[[52,50],[57.8,58],[58,67]],1.45,()=>{A.ath.root.visible=false;}),()=>{STORY_PROPS[si].visible=false;});});});
+    actGo(A,[[sp[0],sp[1]-0.5]],1.35,()=>{A.ath.yaw=0;actKneel(A,1.4,()=>actGo(A,[[52,50],[57.8,58],[58,67]],1.45,()=>{A.ath.root.visible=false;}),()=>{STORY_PROPS[si].visible=false;casual(p,true);});});});
   const C=story.coachA;C.delay=1.6;actGo(C,[[48,44],[57.8,58],[58,67]],1.4,()=>{coach.root.visible=false;});}
 function freeUpdate(dt){const g=STORY_PROPS[DROP_OF.me];if(!g.visible||me.mode!=='roam')return;const p=meAth.root.position;
   if(Math.hypot(p.x-g.position.x,p.z-g.position.z)<1.1){me.mode='story';const A=story.meA;A.path=null;meAth.yaw=Math.atan2(g.position.x-p.x,g.position.z-p.z);
     actKneel(A,1.3,()=>{me.mode='roam';toast('Grabbed your water and phone.',2.2);},()=>{g.visible=false;});}}
-function nextDay(){if(story.busy||!storySave)return;let off=storySave.off+1,wk=false;while([0,5,6].includes(sDate(off).getDay())){off++;wk=true;}
+function nextDay(){if(story.busy||!storySave)return;if(storySave.day>=DEMO_DAYS){demoEnd();return;}
+  let off=storySave.off+1,wk=false;while([0,5,6].includes(sDate(off).getDay())){off++;wk=true;}
   storySave.off=off;storySave.day++;saveStory();beginDay(wk);}
+// the demo ends after day 14
+function demoEnd(){storySave.done=true;saveStory();story.busy=true;story.phase='card';story.cine=true;const card=$('#storyCard');
+  $('#scTop').textContent='Demo complete';$('#scDay').textContent=DEMO_DAYS+' days';$('#scDate').textContent='Summer practice with Coach Blue is done for now.';$('#scSub').textContent='Thanks for playing! More of the story is coming.';
+  $('#scBtns').classList.remove('hidden');card.classList.remove('hidden');void card.offsetWidth;card.classList.add('show');}
 // ---------- cameras
 function storyCam(dt){
   if(story.phase==='cut'&&story.cut){cutCam(dt);return true;}
@@ -3251,7 +3575,7 @@ function drillCam(dt){const D=story.drill,q=D.ppl.find(x=>x.p.isMe),mx=q?q.A.ath
   camWantPos.set(mx-D.dir*2.2,1.65,laneR(4)-7.8);camWantLook.set(mx+D.dir*1.6,0.95,laneR(4));setCam(camWantPos,camWantLook,50,dt,3,4,camSnap);camSnap=false;}
 // ---------- input, HUD, chat
 function storyPointer(e){const lr=e.clientX<innerWidth/2?'L':'R';
-  if(story.phase==='card'||story.phase==='cutend')return true;
+  if(story.phase==='card'||story.phase==='cutend'||story.phase==='cool')return true;
   if(story.dlg){dlgTap();return true;}
   if(story.phase==='cut')return true;
   if(story.phase==='warmup'&&story.jog&&me.mode==='jog'){jogTap(lr);return true;}
@@ -3259,17 +3583,20 @@ function storyPointer(e){const lr=e.clientX<innerWidth/2?'L':'R';
   return false;}
 function storyKey(e){const c=e.code,L=c==='ArrowLeft'||c==='KeyA',R=c==='ArrowRight'||c==='KeyD',go=c==='Space'||c==='Enter';
   if(story.dlg&&go){e.preventDefault();dlgTap();return true;}
-  if(story.phase==='card'||story.phase==='cut'||story.phase==='cutend')return go||L||R;
+  if(story.phase==='card'||story.phase==='cut'||story.phase==='cutend'||story.phase==='cool')return go||L||R;
   if(story.phase==='warmup'&&story.jog&&me.mode==='jog'&&(L||R||go)){e.preventDefault();jogTap(L?'L':R?'R':null);return true;}
   if(story.phase==='drills'&&story.drill&&(L||R||go)){e.preventDefault();drillTap(L?'L':R?'R':null);return true;}
   return false;}
-const TCHAT={warmup:[['dm',"coach really got us running laps in this heat 😭"],['th',"bro it's mad hot out here"],['bc',"are we jogging or walking 😂"],['jb',"easy pace y'all"],['dm',"{me} keep up lol"],['th',"my legs still sore from yesterday"],['bc',"who's racing at the end"],['jb',"I could do laps all day ngl"],['dm',"Jaylen built like a marathon runner fr"],['th',"Brandon slow down 😭"],['bc',"I'm not even going fast"],['dm',"summer track hits different"]],
-  rest:[['th',"that one hurt 💀"],['dm',"good rep {me}"],['jb',"I'm good, next one"],['bc',"my start was crazy tho"],['dm',"lock in, we almost done"],['th',"bro I need water"],['bc',"coach said walk it off"],['jb',"breathe in through the nose"],['dm',"we cooking today"],['th',"{me} you fast fr"],['bc',"next one I'm going out harder"]],
-  drills:[['bc',"A skips look so goofy 😂"],['th',"carioca always messes me up"],['dm',"knees up {me}"],['jb',"straight-leg bounds are my favorite"],['dm',"coach watching, lock in"],['bc',"my calves 😭"]]};
+const TCHAT={warmup:[['dm',"coach really got us running laps in this heat 😭"],['th',"bro it's mad hot out here"],['bc',"are we jogging or walking 😂"],['jb',"easy pace y'all"],['dm',"{me} keep up lol"],['th',"my legs still sore from yesterday"],['bc',"who's racing at the end"],['jb',"I could do laps all day ngl"],['dm',"Jaylen built like a marathon runner fr"],['th',"Brandon slow down 😭"],['bc',"I'm not even going fast"],['dm',"summer track hits different"],
+    ['jl',"it's so hot today 😭"],['tj',"y'all slow fr 😂"],['tj',"my braids so heavy in this heat"],['jl',"Taylar wait up"],['tj',"{me} you good back there?"],['jl',"at least it's not raining"]],
+  rest:[['th',"that one hurt 💀"],['dm',"good rep {me}"],['jb',"I'm good, next one"],['bc',"my start was crazy tho"],['dm',"lock in, we almost done"],['th',"bro I need water"],['bc',"coach said walk it off"],['jb',"breathe in through the nose"],['dm',"we cooking today"],['th',"{me} you fast fr"],['bc',"next one I'm going out harder"],
+    ['tj',"my legs are jelly"],['jl',"that rep was tough"],['tj',"{me} you dying too? 😂"],['jl',"water break pls"],['tj',"Tayvon top speed is not normal"],['jl',"Jaylen never gets tired, it's weird"],['th',"I'm cooked after 200 tho"],['jb',"the 400 is where I eat"],['dm',"shake your legs out"],
+    ['bc',"anybody got gum"],['tj',"coach timing everything 😭"],['jl',"I PR'd last rep I think"],['th',"Brandon start is crazy I can't lie"],['bc',"Tayvon caught me at like 20 meters 😤"],['dm',"stay loose y'all"],['jb',"hands on your head, opens your lungs"],['tj',"my headphones in my bag calling me"],['jl',"how much rest we got left"],['dm',"{me} what you running next rep"]],
+  drills:[['bc',"A skips look so goofy 😂"],['th',"carioca always messes me up"],['dm',"knees up {me}"],['jb',"straight-leg bounds are my favorite"],['dm',"coach watching, lock in"],['bc',"my calves 😭"],['tj',"carioca is my thing 💅"],['jl',"B skips are so hard"]]};
 function storyChat(dt){chatTick();const ph=story.phase,on=!story.cineNow&&['warmup','rest','rep','pause','drills','workout'].includes(ph);if(!on)return;
-  story.chatT-=dt;if(story.chatT>0)return;story.chatT=rand(7,12);
-  const key=ph==='warmup'?'warmup':ph==='drills'?'drills':'rest',pool=TCHAT[key],avail=pool.map((l,i)=>i).filter(i=>!story.chatUsed.has(key+i));if(!avail.length)return;
-  const i=pick(avail);story.chatUsed.add(key+i);const ln=pool[i],p=story.team.find(t=>t.def.id===ln[0]);if(p)queueChat(0.1,p,fill(ln[1]));}
+  story.chatT-=dt;if(story.chatT>0)return;story.chatT=rand(9,18);
+  const key=ph==='warmup'?'warmup':ph==='drills'?'drills':'rest',pool=TCHAT[key],avail=pool.map((l,i)=>i).filter(i=>!story.chatUsed.has(key+i));
+  if(!avail.length){pool.forEach((l,j)=>story.chatUsed.delete(key+j));return;}const i=pick(avail);story.chatUsed.add(key+i);const ln=pool[i],p=story.team.find(t=>t.def.id===ln[0]);if(p)queueChat(0.1,p,fill(ln[1]));}
 function storyHUD(dt){const ph=story.phase,cine=story.cineNow,racing=inRace();
   hud.classList.toggle('cine',cine);$('#lbox').classList.toggle('on',ph==='cut');
   $('#btnSkip').classList.toggle('hidden',ph!=='cut');
@@ -3292,22 +3619,24 @@ function storyHUD(dt){const ph=story.phase,cine=story.cineNow,racing=inRace();
   tk.classList.toggle('hidden',!show||cine||racing);tk.classList.toggle('pe',ready);$('#btnReady').classList.toggle('hidden',!ready);}
 // ---------- per-frame
 function storyUpdate(dt){
-  const ph=story.phase,rate=ph==='card'||ph==='cut'||ph==='cutend'?0:ph==='free'?0.5:0.3;
-  story.cineNow=story.cine||!!story.dlg||ph==='cutend'||ph==='card';
-  story.clock+=dt*rate;if(ph!=='free'&&ph!=='wrap'&&story.clock>17*60+25)story.clock=17*60+25;
+  const ph=story.phase;
+  story.cineNow=story.cine||!!story.dlg||ph==='cutend'||ph==='card'||ph==='cool';
+  if(ph!=='card')story.clock+=dt/60;
+  meAth.fatigue=Math.max(0,(meAth.fatigue||0)-dt/1500);story.team.forEach(p=>{const a=p.ath;if(a.fatigue>0)a.fatigue=Math.max(0,a.fatigue-dt/1500);});
+  if(!(race.active&&race.mine&&race.mine.state==='run'))PL.stam=Math.min(PL.stam,100-28*(meAth.fatigue||0));
   story.todT-=dt;if(story.todT<=0){story.todT=0.25;applyTOD(story.clock/60);}
   actUpdate(story.coachA,dt);if(me.mode==='story')actUpdate(story.meA,dt);
   if(me.mode==='talk'){const a=meAth;a.anim='idle';a.speed=0;a.root.rotation.y=angDamp(a.root.rotation.y,a.yaw,8,dt);}
   switch(ph){
     case'cut':cutUpdate(dt);break;
     case'meet':if(!story.dlg&&me.mode==='roam'&&d2coach()<2.6)startWarmupTalk();break;
-    case'meet2':if(!story.dlg&&me.mode==='roam'&&d2coach()<2.6)startWorkoutTalk();break;
+    case'meet2':if(!story.dlg&&me.mode==='roam'&&d2coach()<2.6)startDrillTalk();break;
     case'warmup':if(story.jog)jogUpdate(dt);teamJogUpdate(dt);break;
-    case'rest':story.restT-=dt;if(story.restT<=0||story.ready){story.ready=false;story.phase='workout';nextStep();}break;
+    case'rest':story.restT-=dt;if(story.restT<=0||story.ready){if(story.ready&&story.restT>0)story.clock+=story.restT/60;story.ready=false;story.phase='workout';nextStep();}break;
     case'pause':story.restT-=dt;if(story.restT<=0){story.phase='workout';nextStep();}break;
     case'drills':if(story.drill)drillUpdate(dt);break;
     case'free':freeUpdate(dt);break;}
-  dlgUpdate(dt);
+  restWander(dt);dlgUpdate(dt);
   coachMark.visible=(ph==='meet'||ph==='meet2')&&!story.dlg&&coach.root.visible;
   if(coachMark.visible)coachMark.position.set(coach.root.position.x,2.62*(coach.hs||1)+0.1*Math.sin(time*4),coach.root.position.z);
   deliMark.visible=ph==='free';if(deliMark.visible)deliMark.position.y=5.4+0.3*Math.sin(time*3);
@@ -3319,15 +3648,16 @@ function hideStoryPick(){const el=$('#storyPick');el.classList.remove('show');el
 function openStoryPick(){initAudio();const m=$('#menu');m.classList.add('fading');setTimeout(()=>{m.classList.add('hidden');m.classList.remove('fading');showStoryPick();},450);}
 function closeStoryPick(){hideStoryPick();$('#menu').classList.remove('hidden');renderBuildCard();}
 function renderStoryPick(){const S0=storySave;
-  $('#spCont').innerHTML=S0?'<div class="spcont"><div><small>Continue your story</small><b>Day '+S0.day+' · '+esc(sDateText(S0.off))+'</b><span>'+esc((store.slots[S0.slot]||{}).name||'Runner')+', slot '+(S0.slot+1)+'. '+esc(sGrade(S0.off))+'.</span></div><button class="cta" data-cont="1">Continue</button></div>':'';
+  $('#spCont').innerHTML=S0?(S0.done?'<div class="spcont"><div><small>Demo complete</small><b>All '+DEMO_DAYS+' days done</b><span>'+esc((store.slots[S0.slot]||{}).name||'Runner')+', slot '+(S0.slot+1)+'. Start a new story to play the demo again.</span></div></div>':
+    '<div class="spcont"><div><small>Continue your story</small><b>Day '+S0.day+' of '+DEMO_DAYS+' · '+esc(sDateText(S0.off))+'</b><span>'+esc((store.slots[S0.slot]||{}).name||'Runner')+', slot '+(S0.slot+1)+'. '+esc(sGrade(S0.off))+'.</span></div><button class="cta" data-cont="1">Continue</button></div>'):'';
   $('#spSlots').innerHTML=store.slots.map((b,i)=>'<div class="spcard'+(S0&&S0.slot===i?' cur':'')+'"><small>Slot '+(i+1)+'</small><b>'+esc(b.name||'Runner')+'</b><span>'+(b.g==='M'?'Boy':'Girl')+' · '+fmtH(b.h)+' · '+esc(FORMS[b.form].name)+'</span>'+
     '<div class="minibars"><span>Power</span>'+mbar(b.pow)+'<span>'+b.pow+'</span><span>Stamina</span>'+mbar(b.sta)+'<span>'+b.sta+'</span><span>Endurance</span>'+mbar(b.end)+'<span>'+b.end+'</span></div>'+
-    '<div class="spb"><button data-edit="'+i+'">Edit</button><button class="cta sm" data-start="'+i+'">'+(S0?'New story':'Start story')+'</button></div></div>').join('');}
+    '<div class="spb"><button data-edit="'+i+'">Edit</button><button class="cta sm" data-start="'+i+'">'+(S0&&!S0.done?'New story':'Start story')+'</button></div></div>').join('');}
 function startStory(slot,fresh){
   store.active=slot;saveStore();if(fresh||!storySave)storySave={slot,day:1,off:0,pb:{}};else storySave.slot=slot;saveStory();
   initAudio();const B=activeBuild(),nm=(B.name||'').trim().slice(0,14)||'Runner';
   hideStoryPick();
-  curServer={practice:true,story:true,name:'Tilden track',region:'Brooklyn',div:B.g,lvl:'ms',cap:5,count:5,ev:2};
+  curServer={practice:true,story:true,name:'Tilden track',region:'Brooklyn',div:B.g,lvl:'ms',cap:7,count:7,ev:2};
   players=[];SIT_SPOTS.forEach(sp=>sp.used=null);
   me={isMe:true,name:nm,gender:B.g,hIn:B.h,form:B.form,ath:meAth,mode:'story',rating:0.7,endur:0.6,react:0.15,afk:false,ping:randi(20,40),medals:[0,0,0],reached:-1,look:lookFromBuild(B),roam:{}};
   applyBuild(meAth,B);setTag(meAth,nm,true);meAth.tag.scale.set(0.9,0.225,1);meAth.tag.visible=true;setBib(meAth,randi(1,99));meAth.root.visible=true;meAth.root.rotation.set(0,0,0);meAth.medal.visible=false;
@@ -3344,14 +3674,17 @@ function endStory(){story.active=false;story.phase='';story.cine=false;story.dlg
   $('#chat').classList.remove('hidden');$('#stamWrap').classList.remove('hidden');['#btnAfk','#btnWatch','#btnCheat'].forEach(s=>$(s).classList.remove('hidden'));
   const card=$('#storyCard');card.classList.remove('show');card.classList.add('hidden');
   coach.root.visible=false;coach.talk=false;STORY_PROPS.forEach(g=>g.visible=false);coachMark.visible=deliMark.visible=false;
-  story.team.forEach(p=>{p.act=null;p.ath.talk=false;if(p.ath.tag)p.ath.tag.scale.set(1.5,0.375,1);wearGlasses(p.ath,false);if(p.ath.suitOn)setSuit(p.ath,false);botIdentity(p);});story.team=[];if(meAth.tag)meAth.tag.scale.set(1.5,0.375,1);
+  story.team.forEach(p=>{p.act=null;p.ath.talk=false;if(p.ath.tag)p.ath.tag.scale.set(1.5,0.375,1);wearGlasses(p.ath,false);if(p.ath.suitOn)setSuit(p.ath,false);gearOff(p.ath);setOutfit(p.ath,null);p.ath.fatigue=0;p.ath.eatT=0;botIdentity(p);});story.team=[];if(meAth.tag)meAth.tag.scale.set(1.5,0.375,1);
+  setOutfit(meAth,null);meAth.fatigue=0;applyBuild(meAth,activeBuild());STORY_PROPS.forEach(g=>{g.children[0].visible=g.children[1].visible=true;});
   meAth.cad=null;applyTOD(null);if('speechSynthesis'in window)try{speechSynthesis.cancel();}catch(e){}}
 $('#btnStory').addEventListener('click',openStoryPick);
 $('#spBack').addEventListener('click',closeStoryPick);
 $('#storyPick').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
   if(b.dataset.cont){startStory(storySave.slot,false);return;}
   if(b.dataset.edit!=null){store.active=+b.dataset.edit;saveStore();customFromStory=true;hideStoryPick();openCustom();return;}
-  if(b.dataset.start!=null){if(storySave&&!b.dataset.armed){b.dataset.armed='1';b.textContent='Tap again to start over';return;}startStory(+b.dataset.start,true);}});
+  if(b.dataset.start!=null){if(storySave&&!storySave.done&&!b.dataset.armed){b.dataset.armed='1';b.textContent='Tap again to start over';return;}startStory(+b.dataset.start,true);}});
+$('#scMenu').addEventListener('click',()=>{if(story.active)leave();});
+$('#scAgain').addEventListener('click',()=>{if(!story.active||!storySave)return;const sl=storySave.slot;$('#scBtns').classList.add('hidden');const card=$('#storyCard');card.classList.remove('show');card.classList.add('hidden');endStory();startStory(sl,true);});
 $('#btnSkip').addEventListener('click',()=>{if(story.phase==='cut')endCutscene();});
 $('#btnReady').addEventListener('click',()=>{if(story.phase==='rest')story.ready=true;});
 $('#btnNextDay').addEventListener('click',()=>{if(story.phase==='free')nextDay();});
