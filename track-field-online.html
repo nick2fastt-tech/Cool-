@@ -1985,25 +1985,25 @@ function baseStand(T){T.pY=0;T.hipX=0;T.hipY=0.99;T.hipZ=0;T.tX=0.02;T.tY=0;T.tZ
 function gait(a,T,dt,s){
   const F=FORMS[a.form]||FORMS.std;
   if(a.cad!=null){a.ph+=dt*Math.PI*a.cad;if(a.phCorr){const c=a.phCorr*Math.min(1,dt*12);a.ph+=c;a.phCorr-=c;}}
-  else a.ph+=dt*Math.PI*s/((0.55+0.15*s)*(a.hs||1)*F.stride);
+  else{const d0=a.drive||0;a.ph+=dt*Math.PI*s/((0.55+0.15*s)*(a.hs||1)*F.stride*(1-0.3*d0*d0));}
   const Q=Object.assign({},FP0,F.p||{});
-  const g=clamp((s-1.8)/7.4,0,1),ph=a.ph,dr=(a.drive||0)*Q.drive,ti=a.tired||0;
+  const g=clamp((s-1.8)/7.4,0,1),ph=a.ph,dr=(a.drive||0)*Q.drive,ti=a.tired||0,gd=Math.max(g,0.75*dr); // gd: limb action, already big while driving out of the blocks
   const kneeMul=Q.knee,armMul=Q.arm,offAdd=-Q.front,upright=-Q.lean,bounceMul=Q.bounce,twistMul=Q.twist,elbowOpen=Q.elbow,stanceK=Q.stance,plant=Q.plant,hipLift=Q.hip;
-  const A=lerp(0.36,1.06,g)*(1-0.12*ti)*(1-0.14*dr)*kneeMul,off=lerp(-0.04,-0.3,g)+0.36*dr*g+offAdd*g;
-  const ka=lerp(0.72,2.3,g)*(1-0.15*ti)*(1-0.4*dr)*Q.heel,kb=lerp(0.07,0.16,g)+0.12*dr;
-  const aa=lerp(0.32,1.22,g)*(1-0.3*ti)*(1+0.24*dr)*armMul,ao=lerp(0.03,-0.14,g)+0.1*dr;
+  const A=lerp(0.36,1.06,gd)*(1-0.12*ti)*(1-0.14*dr)*kneeMul,off=lerp(-0.04,-0.3,gd)+0.36*dr*gd+offAdd*g;
+  const ka=lerp(0.72,2.3,gd)*(1-0.15*ti)*(1-0.4*dr)*Q.heel,kb=lerp(0.07,0.16,gd)+0.12*dr;
+  const aa=lerp(0.32,1.22,gd)*(1-0.3*ti)*(1+0.24*dr)*armMul,ao=lerp(0.03,-0.14,gd)+0.1*dr;
   for(let side=0;side<2;side++){
     const p=ph+side*Math.PI,sk=p+0.28*g*Math.sin(p),sn=Math.sin(sk),kc=Math.cos(p+0.35);
-    const thigh=off-A*sn+Q.back*g*Math.max(0,-sn);
-    const knee=kb+ka*Math.pow(Math.max(0,kc),1.3)+lerp(0.08,0.2,g)*stanceK*Math.pow(Math.max(0,Math.sin(p-1.6)),2)+0.48*dr*Math.pow(Math.max(0,Math.sin(p-1.4)),1.5);
-    const ank=-0.35*g*Q.dorsi*Math.max(0,kc)+0.55*g*plant*Math.pow(Math.max(0,-Math.sin(p+0.4)),2)-0.04;
-    const arm=ao+aa*sn+Q.armBack*g*Math.max(0,sn);
-    const elb=lerp(-0.25,-1.5,g)+elbowOpen*g-0.38*g*Math.max(0,-sn)+(0.32*g+0.35*dr)*Math.max(0,sn);
+    const thigh=off-A*sn+Q.back*gd*Math.max(0,-sn);
+    const knee=kb+ka*Math.pow(Math.max(0,kc),1.3)+lerp(0.08,0.2,gd)*stanceK*Math.pow(Math.max(0,Math.sin(p-1.6)),2)+0.48*dr*Math.pow(Math.max(0,Math.sin(p-1.4)),1.5);
+    const ank=-0.35*gd*Q.dorsi*Math.max(0,kc)+0.55*gd*plant*Math.pow(Math.max(0,-Math.sin(p+0.4)),2)-0.04;
+    const arm=ao+aa*sn+Q.armBack*gd*Math.max(0,sn);
+    const elb=lerp(-0.25,-1.5,gd)+elbowOpen*gd-0.38*gd*Math.max(0,-sn)+(0.32*gd+0.35*dr)*Math.max(0,sn);
     if(side===0){T.lLx=thigh;T.kL=knee;T.fL=ank;T.aLx=arm;T.eL=elb;T.lLz=0.03*(1-g);}
     else{T.lRx=thigh;T.kR=knee;T.fR=ank;T.aRx=arm;T.eR=elb;T.lRz=-0.03*(1-g);}
   }
   T.aLz=0.07+0.04*g;T.aRz=-T.aLz;
-  T.tX=lerp(0.04,0.23,g)+dr*0.92-0.14*ti*g-upright*g;
+  T.tX=lerp(0.04,0.23,g)+dr*0.86-0.14*ti*g-upright*g;
   T.tX-=Q.arch*g*Math.max(0,-Math.sin(2*ph));
   T.tY=0.14*g*twistMul*Math.sin(ph);T.tZ=(0.025+Q.sway)*g*Math.sin(ph)+Q.tilt*g;
   T.hipY=lerp(0.985,0.95,g)-dr*0.13+lerp(0.018,-0.042,g)*bounceMul*Math.cos(2*ph)+hipLift*g;
@@ -2012,7 +2012,7 @@ function gait(a,T,dt,s){
   T.hY=-T.tY*0.8+(a.look||0);
   T.pY=-0.11*g*Q.pelvis*Math.sin(ph);
   T.aLz=0.07+0.04*g-0.07*Q.cross*g*Math.max(0,-Math.sin(ph))+Q.flare*g;T.aRz=-(0.07+0.04*g)+0.07*Q.cross*g*Math.max(0,Math.sin(ph))-Q.flare*g;
-  const wb=1-clamp((s-2.0)/2.6,0,1);if(wb>0)walkBlend(T,ph,wb*wb*(3-2*wb));
+  const wb=(1-clamp((s-2.0)/2.6,0,1))*(1-clamp(dr*2,0,1));if(wb>0)walkBlend(T,ph,wb*wb*(3-2*wb));
   const dip=a.dip||0;if(dip>0){T.tX+=0.62*dip;T.aLx+=0.75*dip;T.aRx+=0.75*dip;T.hX-=0.25*dip;}
   if(a.overW>0)overlayArms(a.finStyle,T,a.overW);
   if(a.reachW>0){const w=a.reachW,bx=a.reachDir==='back'?0.95:-1.15,be=a.reachDir==='back'?-0.08:-0.12;
@@ -2105,9 +2105,40 @@ function poseIdle(a,T,t,dt){
   }
 }
 function poseMarks(T){T.hipY=0.5;T.hipZ=-0.5;T.tX=1.15;T.hX=-0.2;T.aLx=T.aRx=-1.15;T.aLz=0.12;T.aRz=-0.12;T.eL=T.eR=0;T.lLx=-1.35;T.kL=2.0;T.fL=0.2;T.lRx=-0.35;T.kR=2.2;T.fR=0.4;T.lLz=0.02;T.lRz=-0.02;}
-const PUSH={hipY:0.76,hipZ:-0.3,tX:0.87,hX:-0.55,aLx:-1.35,eL:-1.35,aRx:1.05,eR:-0.6,aLz:0.12,aRz:-0.16,lLx:0.42,kL:0.12,fL:0.55,lRx:-1.2,kR:1.5,fR:-0.25,tY:-0.12};
-function blockExit(a){a.exitT=0;a.ph=-Math.PI/2-0.25;a.moveW=0.7;}
-function poseSet(T){T.hipY=0.74;T.hipZ=-0.43;T.tX=1.75;T.hX=-0.75;T.aLx=T.aRx=-1.75;T.aLz=0.1;T.aRz=-0.1;T.eL=T.eR=0;T.lLx=-0.85;T.kL=1.6;T.fL=0.3;T.lRx=0.15;T.kR=0.85;T.fR=0.3;T.lLz=0.02;T.lRz=-0.02;}
+// ---------- the start: clearing the blocks ----------
+// Keyed to the time since the runner reacted to the gun (a.exitT). The hands snap off the track, the arm opposite the front
+// leg punches forward while the other drives back, the rear leg pulls through low and fast, the front leg pushes to full
+// extension (ankle, knee, hip and shoulder in one line at about 45 degrees), then the first step lands under the hips and
+// the running gait, still in its drive phase, takes over. While each foot pushes it stays on its pedal (blockPin).
+const BX_T=[0,0.07,0.16,0.26,0.36],BX={
+  hipY:[0.74,0.755,0.775,0.81,0.84],hipZ:[-0.43,-0.37,-0.29,-0.18,-0.1],tX:[1.75,1.56,1.28,0.95,0.9],hX:[-0.5,-0.42,-0.3,-0.16,-0.12],tY:[0,-0.08,-0.14,-0.12,0.1],
+  aLx:[-1.75,-2.15,-2.45,-2.42,-0.3],eL:[0,-0.9,-1.4,-1.5,-0.8],aRx:[-1.75,-1.25,-0.4,0.3,-2.05],eR:[0,-0.5,-0.7,-0.6,-1.4],
+  lLx:[-0.85,-0.65,-0.15,0.7,0.4],kL:[1.6,1.3,0.65,0.1,1.45],fL:[0.3,0.35,0.45,0.75,0.15],lRx:[0.15,-0.3,-1.0,-1.35,-0.45],kR:[0.85,1.5,2.0,1.7,0.42],fR:[0.3,0,-0.25,-0.3,0.2]};
+const sm01=x=>{x=clamp(x,0,1);return x*x*(3-2*x);};
+// Catmull-Rom through the keys, so the motion flows instead of stopping at each one
+function bxCurve(K,i,u){const p0=K[Math.max(0,i-1)],p1=K[i],p2=K[i+1],p3=K[Math.min(K.length-1,i+2)];return 0.5*(2*p1+(p2-p0)*u+(2*p0-5*p1+4*p2-p3)*u*u+(3*p1-p0-3*p2+p3)*u*u*u);}
+function blockExit(a){a.exitT=0;a.ph=-1.3;a.moveW=1;a.pin=null;
+  // where each ankle sits on its pedal and how the foot is angled, so the feet stay planted while they push
+  if(a.root.visible){const J=a.J;a.pin=[a.ankleL.getWorldPosition(new THREE.Vector3()),a.ankleR.getWorldPosition(new THREE.Vector3()),J.lLx+J.kL+J.fL,J.lRx+J.kR+J.fR];}}
+function blockClear(a,T,dt){a.exitT+=dt;const t=a.exitT;if(t<0.32)a.ph=-1.3; // the gait waits on the leg that lands first
+  let i=0;while(i<BX_T.length-2&&t>BX_T[i+1])i++;
+  const u=clamp((t-BX_T[i])/(BX_T[i+1]-BX_T[i]),0,1),w=1-sm01((t-0.32)/0.2);
+  for(const k in BX)T[k]=lerp(T[k],bxCurve(BX[k],i,u),w);
+  T.aLz=lerp(T.aLz,0.1,w);T.aRz=lerp(T.aRz,-0.1,w);T.lLz=lerp(T.lLz,0.02,w);T.lRz=lerp(T.lRz,-0.02,w);
+  if(t>0.54)a.exitT=null;}
+// two-bone IK on the thigh and knee (in the leg's swing plane) that holds an ankle where it was in the set position; the
+// front foot pushes for about 0.22 s, the rear one for about 0.07 s, then each lets go
+const _pinV=new THREE.Vector3(),_pinM=new THREE.Matrix4();
+function blockPin(a){const P=a.pin,t=a.exitT;if(!P||t==null||t>0.28){a.pin=null;return;}
+  a.hips.updateWorldMatrix(true,false);_pinM.copy(a.hips.matrixWorld).invert();
+  const J=a.J,L1=-a.kneeL.position.y,L2=-a.ankleL.position.y,Dm=(L1+L2)*0.998;
+  for(let s=0;s<2;s++){const w=s===0?1-sm01((t-0.2)/0.07):1-sm01((t-0.05)/0.06);if(w<=0.001)continue;
+    _pinV.copy(P[s]).applyMatrix4(_pinM);const lg=s===0?a.legL:a.legR;let dz=_pinV.z-lg.position.z,dy=_pinV.y-lg.position.y,D=Math.hypot(dz,dy);
+    if(D>Dm){dz*=Dm/D;dy*=Dm/D;D=Dm;}
+    const k2=Math.PI-Math.acos(clamp((L1*L1+L2*L2-D*D)/(2*L1*L2),-1,1)),t1=Math.atan2(-dz,-dy)-Math.acos(clamp((L1*L1+D*D-L2*L2)/(2*L1*D),-1,1)),fa=P[2+s]-t1-k2;
+    if(s===0){J.lLx=lerp(J.lLx,t1,w);J.kL=lerp(J.kL,k2,w);J.fL=lerp(J.fL,fa,w);}else{J.lRx=lerp(J.lRx,t1,w);J.kR=lerp(J.kR,k2,w);J.fR=lerp(J.fR,fa,w);}}
+  applyJ(a);}
+function poseSet(T){T.hipY=0.74;T.hipZ=-0.43;T.tX=1.75;T.hX=-0.5;T.aLx=T.aRx=-1.75;T.aLz=0.1;T.aRz=-0.1;T.eL=T.eR=0;T.lLx=-0.85;T.kL=1.6;T.fL=0.3;T.lRx=0.15;T.kR=0.85;T.fR=0.3;T.lLz=0.02;T.lRz=-0.02;}
 function poseCeleb(T,t){const j=Math.abs(Math.sin(t*5.5));T.hipY=0.99+0.08*j;T.aLx=-2.85+0.15*Math.sin(t*9);T.aRx=-2.85+0.15*Math.sin(t*9+1);T.aLz=0.4;T.aRz=-0.4;T.eL=T.eR=-0.25;T.kL=T.kR=0.15+0.3*(1-j);T.lLx=T.lRx=-0.1*(1-j);T.hX=-0.25;T.tX=-0.08;}
 function posePre(a,T,t,dt){
   switch(a.preStyle){
@@ -2175,13 +2206,13 @@ function animAth(a,dt){
   if(a.eatT>0){a.eatT-=dt;const w=Math.min(1,a.eatT*2.5,(2.4-a.eatT)*3);if(a.eatKind==='whistle'){const P=WH_POSE;T.aRx=lerp(T.aRx,P[0],w);T.aRy=lerp(T.aRy,P[1],w);T.aRz=lerp(T.aRz,P[2],w);T.eR=lerp(T.eR,P[3],w);T.hX=lerp(T.hX,0,w);T.hY=lerp(T.hY,0,w);}
     else{T.aRx=lerp(T.aRx,-1.95,w);T.eR=lerp(T.eR,-2.35,w);T.aRz=lerp(T.aRz,0.18,w);if(a.eatKind==='drink')T.hX=lerp(T.hX,-0.35,w*Math.max(0,Math.sin((2.4-a.eatT)*1.6)));}}
   if(a.wave>0){a.wave-=dt;const w=Math.min(1,a.wave*3);T.aRx=lerp(T.aRx,-2.65,w);T.aRz=lerp(T.aRz,-0.4-0.28*Math.sin(t*9),w);T.eR=lerp(T.eR,-0.35,w);T.hX=lerp(T.hX,-0.1,w);}
-  if(a.anim==='move'&&a.exitT!=null){a.exitT+=dt;const u=clamp(a.exitT/0.38,0,1),w=1-u*u*(3-2*u);for(const kk in PUSH)T[kk]=lerp(T[kk],PUSH[kk],w);if(a.exitT>0.4)a.exitT=null;}
-  else if(a.anim!=='move')a.exitT=null;
+  if(a.anim==='move'&&a.exitT!=null)blockClear(a,T,dt);
+  else if(a.anim!=='move'){a.exitT=null;a.pin=null;}
   a.moveW=a.anim==='move'?Math.min(1,a.moveW+dt*3):0;
   const k=(a.anim==='move'&&a.moveW>=1)?45:a.anim==='drill'?36:(a.anim==='marks'||a.anim==='set'?7:a.anim==='finish'?6:a.anim==='prerace'?(a.preStyle===2?45:22):(a.idleStyle===5||a.idleStyle===2||a.idleStyle===4)?30:10);
   const f=1-Math.exp(-(a.eatT>0&&a.eatKind==='whistle'?Math.max(k,20):k)*dt),J=a.J;
   for(let i=0;i<JK.length;i++){const key=JK[i];J[key]+=(T[key]-J[key])*f;}
-  applyJ(a);
+  applyJ(a);if(a.pin)blockPin(a);
   hairUpdate(a,dt);
   if(a.faceLip){const pk=((a.form==='oos'&&a.anim==='move'&&a.speed>2.2)||(a.eatKind==='whistle'&&a.eatT>0.3))?1:0;a.pucker=damp(a.pucker||0,pk,6,dt);if(a.pucker>0.001||a.faceLip.scale.x!==1){const k=a.pucker*(0.85+0.15*Math.sin(time*9));a.faceLip.scale.set(1-0.14*k,1+0.12*k,1+0.07*k);}}
 }
@@ -2251,19 +2282,119 @@ function pickSpot(region,near){
 function validRegion(v,region){const inside=Math.abs(v.z)<34&&Math.abs(v.x)<38;return region==='in'?inside:(Math.abs(v.z)>49);}
 
 // ================= AUDIO =================
+// Everything is synthesized. Each sound goes into the mix, then a compressor (so stacked sounds don't clip), then out,
+// with a send into a generated outdoor reverb: a slap off the school wall and the bleachers, then a short open-air tail.
+// Ambient beds (air, distant traffic, crowd) run all the time; audioUpdate() sets their levels from the game every frame
+// and plays footsteps, breathing and birds.
 let AC=null,master=null,noiseBuf=null,soundOn=true;
+const AU={rv:null,pink:null,beds:null,bedT:0,birdT:5,breathT:0,huff:0,finSeen:null,nA:[null,null,null],nD:[0,0,0]};
+function nearAth(a,cam){if(a===meAth||!a.root.visible||a.speed<1)return;const d=a.root.position.distanceToSquared(cam);if(d>26*26)return;const A=AU.nA,D=AU.nD;
+  for(let i=0;i<3;i++)if(!A[i]||d<D[i]){for(let j=2;j>i;j--){A[j]=A[j-1];D[j]=D[j-1];}A[i]=a;D[i]=d;return;}}
+function mkNoise(kind,sec){const n=Math.floor(AC.sampleRate*sec),b=AC.createBuffer(1,n,AC.sampleRate),d=b.getChannelData(0);
+  if(kind==='pink'){let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;for(let i=0;i<n;i++){const w=Math.random()*2-1;b0=0.99886*b0+w*0.0555179;b1=0.99332*b1+w*0.0750759;b2=0.969*b2+w*0.153852;b3=0.8665*b3+w*0.3104856;b4=0.55*b4+w*0.5329522;b5=-0.7616*b5-w*0.016898;d[i]=(b0+b1+b2+b3+b4+b5+b6+w*0.5362)*0.11;b6=w*0.115926;}}
+  else if(kind==='brown'){let l=0;for(let i=0;i<n;i++){l=(l+0.02*(Math.random()*2-1))/1.02;d[i]=l*3.5;}}
+  else for(let i=0;i<n;i++)d[i]=Math.random()*2-1;
+  return b;}
+function mkImpulse(){const sr=AC.sampleRate,L=1.7,n=Math.floor(sr*L),b=AC.createBuffer(2,n,sr);
+  for(let c=0;c<2;c++){const d=b.getChannelData(c);for(let i=0;i<n;i++){const t=i/sr;d[i]=(Math.random()*2-1)*Math.pow(1-t/L,2)*Math.exp(-t*3.4)*0.5;}
+    for(const [dt,a] of [[0.011+c*0.004,0.45],[0.094+c*0.008,0.4],[0.158-c*0.006,0.28],[0.27+c*0.012,0.15]]){const i0=Math.floor(dt*sr);for(let k=0;k<200&&i0+k<n;k++)d[i0+k]+=(Math.random()*2-1)*a*Math.exp(-k/45);}}
+  return b;}
 function initAudio(){
   if(AC){if(AC.state==='suspended')AC.resume();return;}
   try{AC=new(window.AudioContext||window.webkitAudioContext)();}catch(e){return;}
-  master=AC.createGain();master.gain.value=0.7;master.connect(AC.destination);
-  noiseBuf=AC.createBuffer(1,AC.sampleRate*2,AC.sampleRate);const d=noiseBuf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
-  const n=AC.createBufferSource();n.buffer=noiseBuf;n.loop=true;const f=AC.createBiquadFilter();f.type='lowpass';f.frequency.value=350;const g=AC.createGain();g.gain.value=0.035;n.connect(f);f.connect(g);g.connect(master);n.start();
+  const comp=AC.createDynamicsCompressor();comp.threshold.value=-10;comp.knee.value=6;comp.ratio.value=8;comp.attack.value=0.001;comp.release.value=0.2;comp.connect(AC.destination);
+  master=AC.createGain();master.gain.value=soundOn?0.8:0;master.connect(comp);
+  noiseBuf=mkNoise('white',2);AU.pink=mkNoise('pink',6);const brown=mkNoise('brown',6);
+  const rv=AC.createConvolver();rv.buffer=mkImpulse();const rg=AC.createGain();rg.gain.value=0.55;rv.connect(rg);rg.connect(master);AU.rv=rv;
+  const bed=(buf,type,f,q)=>{const s=AC.createBufferSource();s.buffer=buf;s.loop=true;s.playbackRate.value=0.96+Math.random()*0.08;const fl=AC.createBiquadFilter();fl.type=type;fl.frequency.value=f;fl.Q.value=q;
+    const g=AC.createGain();g.gain.value=0;s.connect(fl);fl.connect(g);g.connect(master);s.start(AC.currentTime+Math.random()*0.5);return{f:fl,g,v:0};};
+  AU.beds={air:bed(AU.pink,'bandpass',650,0.55),city:bed(brown,'lowpass',160,0.7),crowd:bed(AU.pink,'bandpass',560,0.9),chat:bed(AU.pink,'bandpass',1250,1.3)};
+  // chatter: a syllable-rate flutter on the upper crowd band, so it sounds like voices rather than hiss
+  {const l=AC.createOscillator(),lg=AC.createGain();l.frequency.value=4.3;lg.gain.value=0.45;const tg=AC.createGain();tg.gain.value=0.55;l.connect(lg);lg.connect(tg.gain);
+   AU.beds.chat.g.disconnect();AU.beds.chat.g.connect(tg);tg.connect(master);l.start();}
 }
-function sfxNoise(dur,vol,type,freq,q,attack){if(!AC||!soundOn)return;const t=AC.currentTime,n=AC.createBufferSource();n.buffer=noiseBuf;const f=AC.createBiquadFilter();f.type=type;f.frequency.value=freq;f.Q.value=q||1;const g=AC.createGain();g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(vol,t+(attack||0.005));g.gain.exponentialRampToValueAtTime(0.0001,t+dur);n.connect(f);f.connect(g);g.connect(master);n.start(t);n.stop(t+dur+0.05);}
-function tone(freq,dur,vol,type){if(!AC||!soundOn)return;const t=AC.currentTime,o=AC.createOscillator(),g=AC.createGain();o.type=type||'sine';o.frequency.value=freq;g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);o.connect(g);g.connect(master);o.start(t);o.stop(t+dur+0.02);}
-function gunSfx(){sfxNoise(0.45,1.0,'highpass',500,0.7);if(AC&&soundOn){const t=AC.currentTime,o=AC.createOscillator(),g=AC.createGain();o.frequency.setValueAtTime(140,t);o.frequency.exponentialRampToValueAtTime(40,t+0.25);g.gain.setValueAtTime(0.7,t);g.gain.exponentialRampToValueAtTime(0.0001,t+0.3);o.connect(g);g.connect(master);o.start(t);o.stop(t+0.32);}}
-function cheerSfx(){sfxNoise(2.6,0.22,'bandpass',1100,0.6,0.5);sfxNoise(2.2,0.12,'bandpass',2400,0.8,0.4);}
-function say(txt,pitch,rate){if(!soundOn||!('speechSynthesis'in window))return;try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(txt);u.rate=rate||0.95;u.pitch=pitch||0.9;u.volume=0.9;speechSynthesis.speak(u);}catch(e){}}
+// a send into the reverb
+function wet(node,amt){if(!AU.rv||amt<=0)return;const s=AC.createGain();s.gain.value=amt;node.connect(s);s.connect(AU.rv);}
+function panTo(node,pan){if(pan&&AC.createStereoPanner){const p=AC.createStereoPanner();p.pan.value=clamp(pan,-1,1);node.connect(p);return p;}return node;}
+// a burst of filtered noise with a fast attack and an exponential tail
+function burst(t,dur,vol,type,freq,q,att,send,pan,buf,rate){const n=AC.createBufferSource();n.buffer=buf||noiseBuf;if(rate)n.playbackRate.value=rate;const f=AC.createBiquadFilter();f.type=type;f.frequency.value=freq;f.Q.value=q||0.7;
+  const g=AC.createGain();g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(vol,t+(att||0.002));g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  n.connect(f);f.connect(g);panTo(g,pan).connect(master);wet(g,send||0);n.start(t,Math.random()*Math.max(0,n.buffer.duration-dur-0.1));n.stop(t+dur+0.05);return f;}
+// tone() keeps its old signature but each wave type got its own voice: 'sine' is a small bell (chimes for PBs, qualifying,
+// warm-up done), 'triangle' a woodblock tick (taps, purchases), 'sawtooth' the false-start buzzer
+function tone(freq,dur,vol,type){if(!AC||!soundOn)return;const t=AC.currentTime;type=type||'sine';
+  if(type==='sawtooth'){const g=AC.createGain(),f=AC.createBiquadFilter();f.type='bandpass';f.frequency.value=950;f.Q.value=0.6;g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(vol*1.2,t+0.01);g.gain.setValueAtTime(vol*1.2,t+dur*1.4);g.gain.exponentialRampToValueAtTime(0.0001,t+dur*1.4+0.06);
+    for(const [m,w] of [[1,'sawtooth'],[1.012,'sawtooth'],[0.5,'square']]){const o=AC.createOscillator();o.type=w;o.frequency.value=freq*m;o.connect(f);o.start(t);o.stop(t+dur*1.4+0.1);}f.connect(g);g.connect(master);wet(g,0.2);return;}
+  if(type==='triangle'){const o=AC.createOscillator(),g=AC.createGain(),f=AC.createBiquadFilter();o.type='triangle';o.frequency.setValueAtTime(freq*1.6,t);o.frequency.exponentialRampToValueAtTime(freq,t+0.012);f.type='lowpass';f.frequency.value=4200;
+    g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(vol,t+0.002);g.gain.exponentialRampToValueAtTime(0.0001,t+Math.max(0.04,dur));o.connect(f);f.connect(g);g.connect(master);o.start(t);o.stop(t+dur+0.05);return;}
+  const g=AC.createGain(),L=Math.max(0.5,dur*3);g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(vol,t+0.004);g.gain.exponentialRampToValueAtTime(0.0001,t+L);g.connect(master);wet(g,0.25);
+  for(const [m,a,d] of [[1,1,1],[2.76,0.22,0.45],[5.4,0.07,0.25]]){const o=AC.createOscillator(),og=AC.createGain();o.type='sine';o.frequency.value=freq*m;og.gain.setValueAtTime(a,t);og.gain.exponentialRampToValueAtTime(0.0001,t+L*d);o.connect(og);og.connect(g);o.start(t);o.stop(t+L+0.05);}}
+// the starter's pistol: a hard crack, the blast, a low punch, then the echo off the school building a third of a second later
+function gunSfx(){if(!AC||!soundOn)return;const t=AC.currentTime;
+  burst(t,0.05,0.75,'highpass',1500,0.7,0.0006,0.6);burst(t,0.34,0.6,'bandpass',850,0.55,0.001,0.9);burst(t+0.002,0.22,0.3,'lowpass',380,0.8,0.002,0.3);
+  {const o=AC.createOscillator(),g=AC.createGain();o.frequency.setValueAtTime(120,t);o.frequency.exponentialRampToValueAtTime(42,t+0.2);g.gain.setValueAtTime(0.5,t);g.gain.exponentialRampToValueAtTime(0.0001,t+0.24);o.connect(g);g.connect(master);o.start(t);o.stop(t+0.26);}
+  burst(t+0.34,0.3,0.16,'lowpass',1500,0.7,0.003,0.7,-0.3);burst(t+0.52,0.3,0.07,'lowpass',1100,0.7,0.004,0.8,0.35);}
+// the crowd erupting as the winner crosses: three bands of voices with a vocal flutter, claps all over the stands, a few whistles
+function cheerSfx(){if(!AC||!soundOn)return;const t=AC.currentTime,sm=story.active||!!(curServer&&curServer.practice),k=sm?0.28:1;
+  for(const [f,q,v0] of [[520,1.1,0.24],[950,1.3,0.18],[1750,1.6,0.1]]){const v=v0*k;const s=AC.createBufferSource();s.buffer=AU.pink;s.playbackRate.value=0.9+Math.random()*0.2;const fl=AC.createBiquadFilter();fl.type='bandpass';fl.frequency.value=f;fl.Q.value=q;
+    const l=AC.createOscillator(),lg=AC.createGain();l.frequency.value=5+Math.random()*2.5;lg.gain.value=f*0.07;l.connect(lg);lg.connect(fl.frequency);
+    const g=AC.createGain();g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(v,t+0.35);g.gain.setValueAtTime(v,t+1.1);g.gain.exponentialRampToValueAtTime(0.0001,t+3.6);
+    s.connect(fl);fl.connect(g);g.connect(master);wet(g,0.35);s.start(t,Math.random()*3);s.stop(t+3.7);l.start(t);l.stop(t+3.7);}
+  for(let i=0;i<(sm?9:38);i++){const ct=t+0.12+Math.pow(Math.random(),1.4)*(sm?1.6:2.8);burst(ct,0.035,0.035+Math.random()*0.05,'bandpass',1100+Math.random()*900,0.9,0.001,0.25,Math.random()*1.6-0.8);}
+  for(let i=0;i<(sm?0:3);i++){const wt=t+0.3+Math.random()*1.8,o=AC.createOscillator(),g=AC.createGain(),f0=1900+Math.random()*700;o.frequency.setValueAtTime(f0,wt);o.frequency.linearRampToValueAtTime(f0*1.25,wt+0.18);o.frequency.linearRampToValueAtTime(f0*0.9,wt+0.5);
+    g.gain.setValueAtTime(0.0001,wt);g.gain.linearRampToValueAtTime(0.025,wt+0.04);g.gain.exponentialRampToValueAtTime(0.0001,wt+0.55);o.connect(g);panTo(g,Math.random()*1.4-0.7).connect(master);wet(g,0.3);o.start(wt);o.stop(wt+0.6);}}
+// replay rewind: a filtered whoosh that sweeps up
+function whooshSfx(){if(!AC||!soundOn)return;const t=AC.currentTime,f=burst(t,0.7,0.12,'bandpass',450,1.2,0.25,0.2);f.frequency.setValueAtTime(450,t);f.frequency.exponentialRampToValueAtTime(2600,t+0.6);}
+// a soft click for buttons
+function uiClick(){if(!AC||!soundOn||AC.state!=='running')return;const t=AC.currentTime,o=AC.createOscillator(),g=AC.createGain();o.frequency.setValueAtTime(1700,t);o.frequency.exponentialRampToValueAtTime(1100,t+0.02);
+  g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(0.045,t+0.002);g.gain.exponentialRampToValueAtTime(0.0001,t+0.035);o.connect(g);g.connect(master);o.start(t);o.stop(t+0.05);}
+// footsteps: spikes on the rubber track (a short thud, the scuff and a bright spike click) or a soft scuff on grass and turf
+function stepSfx(vol,pan,surf,spd){const t=AC.currentTime,r=0.88+Math.random()*0.24,v=vol*(0.85+Math.random()*0.25);
+  if(surf!=='in'){const o=AC.createOscillator(),g=AC.createGain();o.frequency.setValueAtTime(125*r,t);o.frequency.exponentialRampToValueAtTime(52,t+0.05);g.gain.setValueAtTime(v*0.55,t);g.gain.exponentialRampToValueAtTime(0.0001,t+0.07);o.connect(g);panTo(g,pan).connect(master);o.start(t);o.stop(t+0.08);}
+  if(surf==='track'){burst(t,0.045,v*0.5,'bandpass',1700*r,0.9,0.001,0.05,pan);if(spd>3.5)burst(t+0.004,0.012,v*0.32*Math.min(1,spd/8),'highpass',3800,0.7,0.0005,0.03,pan);}
+  else if(surf==='in')burst(t,0.035,v*0.45,'bandpass',2600*r,1.2,0.001,0.02,pan);
+  else burst(t,0.06,v*0.42,'bandpass',650*r,0.7,0.003,0.02,pan,AU.pink);}
+function breathSfx(v,out){const t=AC.currentTime;burst(t,out?0.32:0.24,v,'bandpass',out?950:1350,1.3,out?0.03:0.06,0.02,0,AU.pink);}
+// a bird somewhere in the trees: two to four quick chirps
+function birdSfx(){const t=AC.currentTime,n=2+Math.floor(Math.random()*3),f0=2800+Math.random()*1800,pan=Math.random()*1.6-0.8;
+  for(let i=0;i<n;i++){const ct=t+i*(0.09+Math.random()*0.05),o=AC.createOscillator(),g=AC.createGain(),up=Math.random()<0.6;
+    o.frequency.setValueAtTime(f0*(up?0.8:1.2),ct);o.frequency.exponentialRampToValueAtTime(f0*(up?1.25:0.85),ct+0.06);g.gain.setValueAtTime(0.0001,ct);g.gain.linearRampToValueAtTime(0.018,ct+0.008);g.gain.exponentialRampToValueAtTime(0.0001,ct+0.07);
+    o.connect(g);panTo(g,pan).connect(master);wet(g,0.4);o.start(ct);o.stop(ct+0.08);}}
+function onTrack(x,z){const ax=Math.abs(x),az=Math.abs(z),r=ax<=CX?az:Math.hypot(ax-CX,z);return(r>RI-0.5&&r<RO+1.12)||(z>RI-0.5&&z<RO+1.12&&x>-CX-26.3&&x<CX+24.3);}
+const _au=new THREE.Vector3();
+function audioUpdate(dt){if(!AC||!AU.beds||AC.state!=='running')return;
+  const t=AC.currentTime,inG=state==='game',indoor=!!(inG&&me&&me.indoor),R=race;
+  AU.bedT-=dt;if(AU.bedT<=0){AU.bedT=0.25;
+    const W=Math.abs((R.active&&R.wind!=null)?R.wind:ambWind),stad=inG&&curServer&&!curServer.practice&&!story.active;
+    let crowd=0;if(!inG)crowd=0.025;else if(stad){crowd=0.045;if(R.active){const ph=R.phase;crowd=ph==='call'?0.05:ph==='marks'?0.018:ph==='set'?0.006:ph==='run'?0.07+0.09*clamp(R.clock/Math.max(4,(R.ev.dist||100)/9.5),0,1):0.055;}}
+    if(indoor)crowd*=0.25;
+    const lv={air:(indoor?0.006:0.03)*(1+0.35*W)*(0.75+0.25*Math.sin(time*0.21)+0.15*Math.sin(time*0.57)),city:indoor?0.02:0.07,crowd:crowd,chat:crowd*0.7};
+    for(const k in lv){const B=AU.beds[k];if(Math.abs(B.v-lv[k])>0.0015){B.v=lv[k];B.g.gain.setTargetAtTime(lv[k],t,0.35);}}
+    AU.beds.air.f.frequency.setTargetAtTime(indoor?300:520+260*(0.5+0.5*Math.sin(time*0.13))+80*W,t,0.5);}
+  if(!soundOn)return;
+  // footsteps for me and the three runners nearest the camera
+  const cam=camera.position,NA=AU.nA,ND=AU.nD;NA[0]=NA[1]=NA[2]=null;
+  if(R.active){for(const r of R.runners)nearAth(r.ath,cam);}else if(story.active){for(const p of story.team)nearAth(p.ath,cam);}else for(const p of players)if(!p.isMe)nearAth(p.ath,cam);
+  for(let i=-1;i<3;i++){const a=i<0?(inG&&me&&meAth.root.visible?meAth:null):NA[i];if(!a)continue;const moving=(a.anim==='move'||a.anim==='drill')&&a.speed>0.6&&a.exitT==null;const si=Math.floor((a.ph-2.0)/Math.PI);
+    if(moving&&a._st!=null&&si!==a._st){const isMe=a===meAth,p=a.root.position,d=p.distanceTo(cam);_au.copy(p).applyMatrix4(camera.matrixWorldInverse);
+      const pan=isMe?0:clamp(_au.x/Math.max(1,d)*1.4,-0.9,0.9),sp=Math.min(1,a.speed/9),v=(isMe?0.2:0.13/(1+d/5))*(0.45+0.55*sp);
+      stepSfx(v,pan,indoor&&isMe?'in':onTrack(p.x,p.z)?'track':'grass',a.speed);}
+    a._st=si;}
+  // breathing: hard when you're running on empty, and for a few seconds after you finish
+  if(inG&&me){const run=R.active&&R.mine&&R.mine.state==='run';const fin=R.active&&R.myEntry&&R.myEntry.finished;
+    if(fin&&AU.finSeen!==R.myEntry){AU.finSeen=R.myEntry;AU.huff=1;}
+    AU.huff=Math.max(AU.huff-dt*0.16,run?clamp((40-PL.stam)/40,0,1)*0.8:0);
+    if(AU.huff>0.05){AU.breathT-=dt;if(AU.breathT<=0){AU.breathOut=!AU.breathOut;AU.breathT=AU.breathOut?0.42:0.36;breathSfx(0.05*AU.huff,AU.breathOut);}}}
+  // birds around the school field in the daytime
+  if(inG&&!indoor&&(story.active||(curServer&&curServer.practice))&&!(R.active&&R.phase==='set')&&(TOD.h==null||TOD.h<19.3)){AU.birdT-=dt;if(AU.birdT<=0){AU.birdT=3+Math.random()*7;birdSfx();}}}
+// the announcer and the coach: pick the nicest English voice the device has
+let VOICE=null;
+function pickVoice(){try{const vs=speechSynthesis.getVoices().filter(v=>/^en/i.test(v.lang));if(!vs.length)return;
+  for(const n of['Google US English','Samantha','Alex','Daniel','Microsoft Guy','Microsoft Aria','Aaron','Microsoft David','Karen']){const v=vs.find(v=>v.name.indexOf(n)>=0);if(v){VOICE=v;return;}}
+  VOICE=vs.find(v=>/en[-_]US/i.test(v.lang))||vs[0];}catch(e){}}
+if('speechSynthesis'in window){pickVoice();try{speechSynthesis.addEventListener('voiceschanged',pickVoice);}catch(e){}}
+function say(txt,pitch,rate){if(!soundOn||!('speechSynthesis'in window))return;try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(txt);if(VOICE)u.voice=VOICE;u.lang=VOICE?VOICE.lang:'en-US';u.rate=rate||0.95;u.pitch=pitch||0.9;u.volume=0.95;speechSynthesis.speak(u);}catch(e){}}
+document.addEventListener('pointerdown',e=>{if(e.target&&e.target.closest&&e.target.closest('button'))uiClick();},true);
 
 // ================= UI HELPERS =================
 const hud=$('#hud'),clog=$('#clog'),bTop=$('#bTop'),bSub=$('#bSub'),toastEl=$('#toast'),fbEl=$('#fb'),callEl=$('#callout'),flashEl=$('#flash');
@@ -2537,7 +2668,7 @@ function stepRunner(r,dt){
   if(r.state==='run'&&r.isMe&&cheatActive()){if(r.ct0==null){r.ct0=race.clock;r.cvm=cheatVm(r);}const t=race.clock-r.ct0;r.v=r.cvm*(1-Math.exp(-CHK*t));r.b=r.b0-r.cvm*(t-(1-Math.exp(-CHK*t))/CHK);}
   else{r.v+=(vt-r.v)*Math.min(1,k*dt);r.b-=r.v*dt;}
   if(r.state==='run'&&r.v>(r.maxV||0))r.maxV=r.v;
-  const cov=r.b0-r.b;r.drive=r.state==='run'?Math.pow(Math.max(0,1-cov/30),1.35):0;
+  const cov=r.b0-r.b,lid=legId(ev);r.drive=r.state==='run'?Math.pow(Math.max(0,1-cov/(lid==='300'||lid==='400'?15:30)),1.35):0;
   if(r.state==='coast'&&r.v<0.45){r.state='done';r.v=0;}
   const a=r.ath;
   if(ev.id==='4x4'&&!r.brk&&r.leg===1&&r.state==='run')x4Break(r);
@@ -2568,7 +2699,7 @@ function startReplay(){
   R.rep0=Math.max(R.recT[0],R.leaderFinT-1.5);R.rep1=Math.min(R.recT[R.recT.length-1],R.leaderFinT+0.7);R.repT=R.rep0;R.repI=0;
   R.live=R.recA.map(a=>({p:a.root.position.clone(),ry:a.root.rotation.y,rz:a.root.rotation.z,J:Object.assign({},a.J),vis:a.root.visible}));
   R.recA.forEach(a=>{a.replay=true;a.root.visible=true;});
-  $('#replayTag').classList.remove('hidden');bcSnap=true;sfxNoise(0.6,0.12,'bandpass',600,0.8,0.25);
+  $('#replayTag').classList.remove('hidden');bcSnap=true;whooshSfx();
 }
 function updateReplay(dt){
   const R=race,L=RL();R.repT+=dt*0.38;
@@ -3200,7 +3331,7 @@ function syncAfk(){const b=$('#btnAfk');b.textContent=me&&me.afk?'AFK on':'AFK o
 $('#btnAfk').addEventListener('click',()=>{if(!me)return;me.afk=!me.afk;syncAfk();toast(me.afk?'AFK on. You will skip your next race.':'AFK off. You will run your next race.',2.4);});
 $('#btnWatch').addEventListener('click',()=>{if(inRace())return;watching=!watching;bcSnap=true;camSnap=true;syncWatchBtn();});
 $('#btnCam').addEventListener('click',()=>{bcManual=(bcManual+1)%CAM_LIST.length;$('#btnCam').textContent='Cam: '+CAM_LIST[bcManual];bcSnap=true;});
-$('#btnSound').addEventListener('click',()=>{soundOn=!soundOn;$('#btnSound').textContent=soundOn?'Sound on':'Sound off';if(master)master.gain.value=soundOn?0.7:0;if(!soundOn&&'speechSynthesis'in window)speechSynthesis.cancel();});
+$('#btnSound').addEventListener('click',()=>{soundOn=!soundOn;$('#btnSound').textContent=soundOn?'Sound on':'Sound off';if(master)master.gain.value=soundOn?0.8:0;if(!soundOn&&'speechSynthesis'in window)speechSynthesis.cancel();});
 $('#pToggle').addEventListener('click',()=>{const pl=$('#plist');pl.classList.toggle('min');$('#pToggle').textContent=pl.classList.contains('min')?'+':'–';});
 $('#cform').addEventListener('submit',e=>{e.preventDefault();const v=$('#cin').value.trim();if(!v||!me)return;addChat(me,v);$('#cin').value='';botReply(v);clog.scrollTop=clog.scrollHeight;});
 ['#plist','#chat','#results'].forEach(s=>{$(s).addEventListener('pointerdown',e=>e.stopPropagation());});
@@ -3406,10 +3537,14 @@ function storyMarker(col,sz){const c=canvas(64,64),g=c.getContext('2d');g.fillSt
   g.beginPath();g.moveTo(32,58);g.lineTo(9,27);g.lineTo(22,27);g.lineTo(22,6);g.lineTo(42,6);g.lineTo(42,27);g.lineTo(55,27);g.closePath();g.stroke();g.fill();
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),depthTest:false,depthWrite:false,transparent:true,toneMapped:false,fog:false}));sp.scale.set(sz,sz,1);sp.renderOrder=6;sp.visible=false;scene.add(sp);return sp;}
 const coachMark=storyMarker('#f3c847',0.42),deliMark=storyMarker('#74aaff',3.4);deliMark.position.set(156.4,5.4,-110);
-function whistleSfx(){if(story.active)coachBlow();if(!AC||!soundOn)return;const t=AC.currentTime,o=AC.createOscillator(),lfo=AC.createOscillator(),lg=AC.createGain(),g=AC.createGain();
-  o.frequency.value=2900;lfo.frequency.value=32;lg.gain.value=110;lfo.connect(lg);lg.connect(o.frequency);
-  g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(0.2,t+0.02);g.gain.setValueAtTime(0.2,t+0.4);g.gain.exponentialRampToValueAtTime(0.0001,t+0.55);
-  o.connect(g);g.connect(master);o.start(t);lfo.start(t);o.stop(t+0.6);lfo.stop(t+0.6);}
+// a pea whistle: two slightly detuned tones near 2.9 kHz, warbled about 40 times a second by the pea (pitch and level),
+// a faint octave, and breath noise, with the trill echoing off the school
+function whistleSfx(){if(story.active)coachBlow();if(!AC||!soundOn)return;const t=AC.currentTime+0.02,L=0.5;
+  const g=AC.createGain();g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(0.15,t+0.025);g.gain.setValueAtTime(0.15,t+L-0.08);g.gain.exponentialRampToValueAtTime(0.0001,t+L);
+  const trem=AC.createGain();trem.gain.value=0.72;trem.connect(g);g.connect(master);wet(g,0.3);
+  const lfo=AC.createOscillator();lfo.frequency.setValueAtTime(36,t);lfo.frequency.linearRampToValueAtTime(44,t+L);const fd=AC.createGain();fd.gain.value=150;const ad=AC.createGain();ad.gain.value=0.28;lfo.connect(fd);lfo.connect(ad);ad.connect(trem.gain);
+  for(const [f,a] of [[2780,0.55],[2797,0.45],[5590,0.06]]){const o=AC.createOscillator(),og=AC.createGain();o.frequency.setValueAtTime(f*0.95,t);o.frequency.linearRampToValueAtTime(f,t+0.04);og.gain.value=a;fd.connect(o.frequency);o.connect(og);og.connect(trem);o.start(t);o.stop(t+L+0.05);}
+  lfo.start(t);lfo.stop(t+L+0.05);burst(t,L,0.035,'bandpass',3200,1.4,0.03,0.1);}
 function coachLine(txt,dur){toast('Coach Blue: '+txt,dur||3);say(txt,0.78,0.95);coach.talkT=2.4;}
 function setObj(t){story.obj=t||'';}
 // Taylar: nose ring and gold chains; the black cap and headphones are for the walk out and the walk home
@@ -3924,6 +4059,7 @@ function frame(now){
   GRASS.update(camLook.x,camLook.z,camera.position.y<24&&camera.position.y>-5&&camera.position.distanceTo(camLook)<40&&!(me&&me.indoor));
   sun.position.copy(f).addScaledVector(SUN_DIR,80);sun.target.position.set(f.x,0,f.z);
   sunGlow.position.copy(camera.position).addScaledVector(SUN_DIR,584);
+  audioUpdate(dt);
   renderer.render(scene,camera);
 }
 genServers();renderBuildCard();batchStatic();
