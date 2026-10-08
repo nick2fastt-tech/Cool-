@@ -1361,7 +1361,7 @@ const G={
   medal:new THREE.CylinderGeometry(0.045,0.045,0.012,14),
   baton:new THREE.CylinderGeometry(0.018,0.018,0.29,10),
 };
-const KITS=[[0x1f5fff,0x0b2a6b,'Royal and navy'],[0x0b2a6b,0x1f5fff,'Navy and royal'],[0xd9342b,0x0b2a6b,'Red'],[0x18a058,0x111111,'Green'],[0xf2c230,0x111111,'Gold'],[0xf4f4f4,0x0b2a6b,'White'],[0x1a1a1a,0x1a1a1a,'Blackout'],[0xff7a1a,0x0b2a6b,'Orange'],[0x7b3fe4,0x111111,'Purple'],[0x15b5b0,0x0b2a6b,'Teal'],[0xe0479e,0x111111,'Pink']];
+const KITS=[[0x1f5fff,0x0b2a6b,'Royal and navy'],[0x0b2a6b,0x1f5fff,'Navy and royal'],[0xd9342b,0x0b2a6b,'Red'],[0x18a058,0x111111,'Green'],[0xf2c230,0x111111,'Gold'],[0xf4f4f4,0x0b2a6b,'White'],[0x1a1a1a,0x1a1a1a,'Blackout'],[0xff7a1a,0x0b2a6b,'Orange'],[0x7b3fe4,0x111111,'Purple'],[0x15b5b0,0x0b2a6b,'Teal'],[0xe0479e,0x111111,'Pink'],[0xd8283a,0x1e3fc8,'USA'],[0x1f6fff,0x0b2a6b,'Blue Sharks','bs']];
 const SKINS=[0xf1c9a5,0xe0ac82,0xc68a5e,0x9a6440,0x6e4529,0x4a2e1c];
 const HAIR_COLS=[0x1a1110,0x2c1c12,0x5a3a20,0x8a6a3a,0xd8b46a,0x0d0d0d];
 const HAIR_STYLES=['Buzz','Short','High top','Ponytail','Bun','Braids','Bald','Dreads','Twists','Box braids','Long straight'];
@@ -1484,15 +1484,15 @@ const CSHADOW=(function(){const c=canvas(128,128),g=c.getContext('2d'),rg=g.crea
 // race kits: a thin layer over the body, cut by hems, armholes and a neckline, with a trim band, pinstripes and a zipper
 function clothMat(col,mode,hem,infl){
   const m=new THREE.MeshStandardMaterial({color:col,roughness:0.5,metalness:0});m.envMapIntensity=0.75;
-  m.userData.cu={uHem:{value:hem},uMode:{value:mode},uInfl:{value:infl==null?0.0045:infl},uAcc:{value:new THREE.Color(0x111111)},uStripe:{value:0},uTrim:{value:1}};
+  m.userData.cu={uHem:{value:hem},uMode:{value:mode},uInfl:{value:infl==null?0.0045:infl},uAcc:{value:new THREE.Color(0x111111)},uStripe:{value:0},uTrim:{value:1},uCol2:{value:new THREE.Color(0x0b2a6b)},uGrad:{value:0},uSeam:{value:0}};
   m.onBeforeCompile=sh=>{Object.assign(sh.uniforms,m.userData.cu);
     sh.vertexShader='varying vec3 vCP;uniform float uInfl;\n'+sh.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvCP=position;transformed+=objectNormal*uInfl;');
-    sh.fragmentShader='varying vec3 vCP;uniform float uHem,uMode,uStripe,uTrim;uniform vec3 uAcc;\n'+sh.fragmentShader
-      .replace('void main() {','void main() {\nif(vCP.y<uHem)discard;\nif(uMode>0.5&&uMode<2.5){float cax=abs(vCP.x);if(uMode<1.5){if(vCP.y>0.43&&cax>0.15)discard;if(vCP.y>(vCP.z>0.0?0.512:0.56)+7.0*cax*cax)discard;}else{if(vCP.y>0.445&&cax>0.118)discard;}}\nif(uMode>2.5&&vCP.y>0.578&&length(vCP.xz)<0.082)discard;')
-      .replace('#include <map_fragment>','#include <map_fragment>\n{if(uHem>-0.9)diffuseColor.rgb=mix(diffuseColor.rgb,uAcc,(1.0-smoothstep(0.012,0.02,vCP.y-uHem))*0.92*uTrim);\nif(uStripe>0.5){float can=atan(vCP.x,vCP.z);float csp=abs(fract(can*7.0)-0.5);diffuseColor.rgb=mix(diffuseColor.rgb,uAcc,(1.0-smoothstep(0.06,0.12,csp))*0.6);}\nif(uMode>1.5&&uMode<2.5&&vCP.z>0.0&&abs(vCP.x)<0.0042&&vCP.y>0.47)diffuseColor.rgb=vec3(0.13);\nif(uMode>2.5&&vCP.y>0.57&&length(vCP.xz)<0.1)diffuseColor.rgb*=0.8;}');};
+    sh.fragmentShader='varying vec3 vCP;uniform float uHem,uMode,uStripe,uTrim,uGrad,uSeam;uniform vec3 uAcc,uCol2;\n'+sh.fragmentShader
+      .replace('void main() {','void main() {\nif(vCP.y<uHem)discard;\nif(uMode>0.5&&uMode<2.5){float cax=abs(vCP.x);if(uMode<1.5){if(vCP.y>0.43&&cax>0.15)discard;if(vCP.y>(vCP.z>0.0?0.512:0.56)+7.0*cax*cax)discard;}else{if(vCP.y>0.445&&cax>0.118)discard;}}\nif(uMode>2.5&&uMode<3.5&&vCP.y>0.578&&length(vCP.xz)<0.082)discard;\nif(uMode>3.5){float bcx=abs(vCP.x);if(vCP.y<-0.128+(vCP.z>0.0?1.25:0.7)*max(0.0,bcx-0.045))discard;}')
+      .replace('#include <map_fragment>','#include <map_fragment>\n{if(uHem>-0.9)diffuseColor.rgb=mix(diffuseColor.rgb,uAcc,(1.0-smoothstep(0.012,0.02,vCP.y-uHem))*0.92*uTrim);\nif(uStripe>0.5){float can=atan(vCP.x,vCP.z);float csp=abs(fract(can*7.0)-0.5);diffuseColor.rgb=mix(diffuseColor.rgb,uAcc,(1.0-smoothstep(0.06,0.12,csp))*0.6);}\nif(uGrad>0.5){float gt=smoothstep(0.47,0.1,vCP.y);vec3 gc=floor(vCP*165.0);float gr=fract(sin(dot(gc,vec3(12.9898,78.233,37.719)))*43758.5453);diffuseColor.rgb=mix(diffuseColor.rgb,uCol2,step(gr,gt*1.18-0.09));float gr2=fract(gr*13.37+0.17);diffuseColor.rgb=mix(diffuseColor.rgb,vec3(1.0),step(0.95,gr2)*(1.0-abs(gt-0.5)*2.0)*0.28);}\nif(uSeam>0.5&&abs(vCP.y-0.205)<0.0055)diffuseColor.rgb=uAcc;\nif(uMode>1.5&&uMode<2.5&&vCP.z>0.0&&abs(vCP.x)<0.0042&&vCP.y>0.47)diffuseColor.rgb=vec3(0.13);\nif(uMode>2.5&&uMode<3.5&&vCP.y>0.57&&length(vCP.xz)<0.1)diffuseColor.rgb*=0.8;}');};
   return m;}
 function refreshCloth(a){const w=a.g==='W',su=!!a.suitOn,o=!!a.outfit;
-  a.abs.forEach(m=>m.visible=!w&&!su&&!o);a.legCloth.forEach(m=>m.visible=(m.userData.w===w)&&!su&&!o);a.torsoSkin.forEach(m=>m.material=su&&!o?a.mTop:a.mSkin);}
+  a.abs.forEach(m=>m.visible=false);a.legCloth.forEach(m=>m.visible=!w&&m.userData.w===false&&!su&&!o);a.torsoSkin.forEach(m=>m.material=su&&!o?a.mTop:a.mSkin);}
 // ================= HAIR: canvas textures, strands that drape over the head and swing on a spring =================
 const HTX=(function(){
   const AN=Math.min(8,maxAniso);
@@ -1706,7 +1706,7 @@ const FAB=(function(){const AN=Math.min(8,maxAniso),T={};
   const poly=(base,pipe)=>mk(512,256,(g,w,h)=>{g.fillStyle=hexCss(base);g.fillRect(0,0,w,h);g.globalAlpha=0.08;g.strokeStyle='#000';g.lineWidth=1;for(let i=-h;i<w;i+=3){g.beginPath();g.moveTo(i,0);g.lineTo(i+h,h);g.stroke();}g.globalAlpha=1;
     if(pipe!=null){g.fillStyle=hexCss(pipe);for(const x of[w*0.25,w*0.75])g.fillRect(x-2.5,0,5,h);}
     g.fillStyle='rgba(0,0,0,.25)';g.fillRect(0,0,w,5);},[1,1]);
-  T.polyA=poly(0x1f56d8,0xf4f6fa);T.polyB=poly(0x172340,null);
+  T.polyA=poly(0x1f56d8,0xf4f6fa);T.polyB=poly(0x172340,null);T.pants=poly(0x17181b,0xf4f4f4);T.polyN=poly(0x1b2a4a,null);
   return T;})();
 const LOGO=(function(){const AN=Math.min(8,maxAniso);
   function mk(w,h,draw){const c=canvas(w,h),g=c.getContext('2d');draw(g,w,h);const t=new THREE.CanvasTexture(c);t.anisotropy=AN;return t;}
@@ -1721,21 +1721,88 @@ const GM=(function(){const S=o=>{const m=new THREE.MeshStandardMaterial(Object.a
     jog:S({color:0x9a9da3,map:FAB.fleece,bumpMap:FAB.wrinkle,bumpScale:0.0035,roughness:0.95}),cord:new THREE.MeshStandardMaterial({color:0xf2f2f2,roughness:0.6}),
     compTW:clothMat(0xf0f1f3,3,0.03,0.0058),compTB:clothMat(0x131315,3,0.03,0.0058),compSW:clothMat(0xf0f1f3,0,-0.13,0.0045),
     compXW:new THREE.MeshStandardMaterial({color:0xf0f1f3,roughness:0.62}),compXB:new THREE.MeshStandardMaterial({color:0x131315,roughness:0.62}),
-    logoUA:dec(LOGO.uaK),logoUAw:dec(LOGO.uaW),logoSw:dec(LOGO.swW),swoosh:dec(LOGO.swW)};
+    logoUA:dec(LOGO.uaK),logoUAw:dec(LOGO.uaW),logoSw:dec(LOGO.swW),swoosh:dec(LOGO.swW),
+    polo:S({color:0x1f5fff,roughness:0.78,bumpMap:FAB.wrinkle,bumpScale:0.003}),ctee:S({color:0xf2f3f5,roughness:0.85,bumpMap:FAB.wrinkle,bumpScale:0.003}),pants:S({map:FAB.pants,bumpMap:FAB.wrinkle,bumpScale:0.003,roughness:0.62}),shN:S({map:FAB.polyN,bumpMap:FAB.wrinkle,bumpScale:0.0028,roughness:0.55})};
   [M.compTW,M.compTB,M.compSW,M.compXW,M.compXB].forEach(m=>{if(m.userData.cu)m.userData.cu.uTrim.value=0;m.roughness=0.62;m.envMapIntensity=0.5;});
   return M;})();
 const GARM=(function(){const LT=(pts,seg)=>new THREE.LatheGeometry(pts.map(p=>new THREE.Vector2(p[0],p[1])),seg||32);
   const cyl=new THREE.CylinderGeometry(0.0022,0.0022,1,6),tip=new THREE.CylinderGeometry(0.0032,0.0032,0.014,6),L=[],M=(x,y,z,sy,rz,rx)=>new THREE.Matrix4().compose(new THREE.Vector3(x,y,z),new THREE.Quaternion().setFromEuler(new THREE.Euler(rx||0,0,rz||0)),new THREE.Vector3(1,sy,1));
   for(const s of[-1,1]){L.push([cyl,M(s*0.016,0.1,0.004,0.07,s*0.18,0.12)]);L.push([tip,M(s*0.022,0.062,0,1,s*0.18,0.12)]);}
-  return{teeM:LT([[0.198,-0.07],[0.2,-0.055],[0.196,0.02],[0.188,0.12],[0.19,0.22],[0.205,0.32],[0.226,0.42],[0.232,0.48],[0.214,0.54],[0.178,0.58],[0.13,0.605],[0.1,0.615],[0.097,0.6]],36),
+  return{teeM:LT([[0.206,-0.07],[0.208,-0.055],[0.203,0.02],[0.188,0.12],[0.19,0.22],[0.205,0.32],[0.226,0.42],[0.232,0.48],[0.214,0.54],[0.178,0.58],[0.13,0.605],[0.1,0.615],[0.097,0.6]],36),
     teeW:LT([[0.206,-0.07],[0.208,-0.055],[0.205,0.02],[0.196,0.08],[0.178,0.14],[0.16,0.22],[0.168,0.32],[0.18,0.4],[0.18,0.47],[0.162,0.53],[0.13,0.57],[0.1,0.595],[0.088,0.605],[0.085,0.592]],36),
     sleeve:LT([[0.002,0.095],[0.05,0.088],[0.082,0.062],[0.098,0.025],[0.1,-0.02],[0.096,-0.08],[0.092,-0.135],[0.094,-0.15],[0.089,-0.147]],22),
     shellM:LT([[0.06,-0.14],[0.115,-0.127],[0.158,-0.092],[0.176,-0.03],[0.18,0.04],[0.168,0.1],[0.152,0.122],[0.148,0.14],[0.145,0.155]],32),
     shellW:LT([[0.06,-0.14],[0.12,-0.127],[0.172,-0.087],[0.192,-0.02],[0.19,0.05],[0.166,0.1],[0.14,0.122],[0.126,0.14],[0.12,0.155]],32),
-    legS:LT([[0.112,0.1],[0.118,0.06],[0.124,0.03],[0.128,0],[0.131,-0.05],[0.134,-0.1],[0.136,-0.15],[0.139,-0.19],[0.141,-0.205],[0.136,-0.2]],26),
+    legS:LT([[0.106,0.1],[0.112,0.06],[0.118,0.03],[0.123,0],[0.129,-0.05],[0.134,-0.1],[0.136,-0.15],[0.139,-0.19],[0.141,-0.205],[0.136,-0.2]],26),
     legJ:LT([[0.116,0.1],[0.122,0.06],[0.13,0.03],[0.136,0],[0.142,-0.08],[0.142,-0.17],[0.134,-0.25],[0.116,-0.3],[0.11,-0.33],[0.106,-0.35]],26),
-    cord:mergeGeos(L),decal:new THREE.PlaneGeometry(1,1)};})();
-const OUTFITS=[{id:'tee',top:'tee',sh:'A',name:'black tee and blue shorts'},{id:'ua',top:'compS',sh:'B',name:'white Under Armour compression shirt and navy shorts'},{id:'nike',top:'compL',sh:'J',name:'black Nike compression shirt and grey jogger shorts'}];
+    cord:mergeGeos(L),decal:new THREE.PlaneGeometry(1,1),
+    collar:mergeGeos([[LT([[0.096,0.596],[0.104,0.606],[0.112,0.618],[0.11,0.632],[0.098,0.638]],36),new THREE.Matrix4()],[new THREE.BoxGeometry(0.026,0.07,0.008),new THREE.Matrix4().makeTranslation(0,0.566,0.196)]]),
+    pantU:LT([[0.104,0.1],[0.112,0.05],[0.118,0],[0.12,-0.1],[0.118,-0.2],[0.108,-0.3],[0.1,-0.38],[0.095,-0.44],[0.093,-0.47]],24),
+    pantL:LT([[0.096,0.04],[0.097,0],[0.095,-0.1],[0.088,-0.2],[0.078,-0.3],[0.072,-0.38],[0.069,-0.41]],22)};})();
+const OUTFITS=[{id:'tee',top:'tee',sh:'A',name:'black tee and blue shorts'},{id:'ua',top:'compS',sh:'B',name:'white Under Armour compression shirt and navy shorts'},{id:'nike',top:'compL',sh:'J',name:'black Nike compression shirt and grey jogger shorts'},
+  {id:'cpolo',top:'polo',sh:'P',name:'Blue Sharks polo and track pants'},{id:'ctee',top:'ctee',sh:'N',name:'Blue Sharks coach tee and shorts'}];
+// ================= UNIFORM PRINTS: USA / BLUE SHARKS text, swoosh, flag, jock tag, shark logo; wrapped onto the chest =================
+const DECAL=(function(){
+  const W=1024,H=512,R={usa:[0,0,512,176],bs:[0,176,512,410],sw:[512,0,768,128],flag:[768,4,1004,126],tag:[512,140,700,250],shark:[712,140,1012,250],coach:[512,270,1024,400]};
+  function swoosh(g,x,y,w,h,col){g.fillStyle=col;g.beginPath();g.moveTo(x+w*0.05,y+h*0.55);g.bezierCurveTo(x-w*0.04,y+h*0.95,x+w*0.18,y+h*1.0,x+w*0.38,y+h*0.8);g.lineTo(x+w*0.97,y+h*0.18);g.bezierCurveTo(x+w*0.6,y+h*0.5,x+w*0.33,y+h*0.7,x+w*0.2,y+h*0.72);g.bezierCurveTo(x+w*0.1,y+h*0.74,x+w*0.06,y+h*0.66,x+w*0.05,y+h*0.55);g.closePath();g.fill();}
+  function draw(g,dark){g.clearRect(0,0,W,H);const ink=dark?'#0d1f4d':'#ffffff',F='"Barlow Condensed","Arial Narrow",Arial,sans-serif';
+    g.textAlign='center';g.textBaseline='middle';g.fillStyle=ink;
+    g.font='italic 900 168px '+F;g.fillText('USA',256,92,500);
+    g.font='italic 900 118px '+F;g.fillText('BLUE',256,236,470);g.fillText('SHARKS',256,350,500);
+    swoosh(g,522,8,236,112,dark?'#111111':'#ffffff');
+    // US flag: 13 stripes, the canton and rows of stars
+    {const[x0,y0,x1,y1]=R.flag,fw=x1-x0,fh=y1-y0;for(let i=0;i<13;i++){g.fillStyle=i%2?'#ffffff':'#b22234';g.fillRect(x0,y0+i*fh/13,fw,fh/13+0.5);}
+     g.fillStyle='#3c3b6e';g.fillRect(x0,y0,fw*0.4,fh*7/13);g.fillStyle='#ffffff';
+     for(let r=0;r<9;r++){const n=r%2?5:6;for(let c=0;c<n;c++){g.beginPath();g.arc(x0+fw*0.4*((c+(r%2?1:0.5))/6),y0+fh*7/13*((r+0.5)/9),2.2,0,TAU);g.fill();}}}
+    // the jock tag: woven label that says USA
+    {const[x0,y0,x1,y1]=R.tag;g.fillStyle='#f6f5f0';rr(g,x0+4,y0+4,x1-x0-8,y1-y0-8,12);g.fill();g.lineWidth=5;g.strokeStyle='#0d1f4d';g.stroke();
+     g.fillStyle='#b22234';g.fillRect(x0+14,y1-26,x1-x0-28,8);g.fillStyle='#0d1f4d';g.font='italic 900 66px '+F;g.fillText('USA',(x0+x1)/2,(y0+y1)/2-8,x1-x0-30);}
+    // shark logo
+    {const[x0,y0,x1,y1]=R.shark,w=x1-x0,h=y1-y0;g.fillStyle=ink;g.beginPath();g.moveTo(x0+w*0.03,y0+h*0.18);g.lineTo(x0+w*0.16,y0+h*0.52);g.lineTo(x0+w*0.04,y0+h*0.88);g.lineTo(x0+w*0.22,y0+h*0.6);
+     g.quadraticCurveTo(x0+w*0.5,y0+h*0.86,x0+w*0.8,y0+h*0.66);g.lineTo(x0+w*0.97,y0+h*0.5);g.quadraticCurveTo(x0+w*0.86,y0+h*0.36,x0+w*0.62,y0+h*0.33);
+     g.lineTo(x0+w*0.5,y0+h*0.04);g.lineTo(x0+w*0.43,y0+h*0.32);g.quadraticCurveTo(x0+w*0.3,y0+h*0.34,x0+w*0.21,y0+h*0.46);g.closePath();g.fill();
+     g.beginPath();g.moveTo(x0+w*0.5,y0+h*0.68);g.lineTo(x0+w*0.42,y0+h*0.97);g.lineTo(x0+w*0.6,y0+h*0.7);g.closePath();g.fill();}
+    g.font='italic 900 124px '+F;g.fillStyle=ink;g.fillText('COACH',768,336,500);}
+  function atlas(dark){const c=canvas(W,H),t=new THREE.CanvasTexture(c);draw(c.getContext('2d'),dark);t.anisotropy=Math.min(8,maxAniso);t.userData={c,dark};return t;}
+  const texW=atlas(false),texN=atlas(true),redraw=()=>[texW,texN].forEach(t=>{draw(t.userData.c.getContext('2d'),t.userData.dark);t.needsUpdate=true;});
+  if(document.fonts&&document.fonts.load)document.fonts.load('italic 900 100px "Barlow Condensed"').then(redraw).catch(()=>{});
+  const mat=t=>new THREE.MeshStandardMaterial({map:t,transparent:true,alphaTest:0.3,roughness:0.55,metalness:0,polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-3,side:THREE.DoubleSide});
+  const matW=mat(texW),matN=mat(texN);
+  // surfaces the prints wrap onto (torso space)
+  const tgt=list=>{const grp=new THREE.Group(),bm=new THREE.MeshBasicMaterial({side:THREE.DoubleSide});list.forEach(([geo,p,s])=>{const m=new THREE.Mesh(geo,bm);m.position.set(p[0],p[1],p[2]);m.scale.set(s[0],s[1],s[2]);grp.add(m);});grp.updateMatrixWorld(true);return grp;};
+  const T={kitM:()=>tgt([[G.mTorso,[0,0,0],[1.12,1,0.66]]]),
+    kitW:()=>tgt([[G.wTorso,[0,0,0],[1.08,1,0.68]]]),
+    compW:()=>tgt([[G.wTorso,[0,0,0],[1.08,1,0.68]],[G.ball,[0.054,0.405,0.07],[0.058,0.05,0.03]],[G.ball,[-0.054,0.405,0.07],[0.058,0.05,0.03]]]),
+    teeM:()=>tgt([[GARM.teeM,[0,0,0],[1.12,1,0.74]]]),teeW:()=>tgt([[GARM.teeW,[0,0,0],[1.08,1,0.78]]])};
+  // kind: [surface, lift off it, items [print, center x, center y, width, on the back]]. +x is the wearer's left
+  const KIND={kitM:['kitM',0.0062,[['usa',0,0.402,0.17],['sw',-0.085,0.488,0.058],['flag',0.085,0.488,0.042]]],
+    kitW:['kitW',0.0052,[['usa',0,0.418,0.15],['sw',-0.068,0.482,0.05],['flag',0.068,0.482,0.036]]],
+    bsM:['kitM',0.0062,[['bs',0,0.385,0.15],['sw',-0.085,0.488,0.058],['flag',0.085,0.488,0.042],['tag',0.1,0.175,0.036]]],
+    bsW:['kitW',0.0052,[['bs',0,0.404,0.13],['sw',-0.068,0.482,0.05],['flag',0.068,0.482,0.036],['tag',0.075,0.17,0.032]]],
+    teeM:['teeM',0.003,[['bs',0,0.385,0.17],['tag',0.13,0.0,0.038]]],teeW:['teeW',0.003,[['bs',0,0.4,0.15],['tag',0.12,0.0,0.034]]],
+    compM:['kitM',0.0068,[['bs',0,0.345,0.14],['tag',0.1,0.19,0.036]]],compW:['compW',0.0062,[['bs',0,0.3,0.12],['tag',0.075,0.19,0.032]]],
+    poloM:['teeM',0.003,[['shark',0.088,0.485,0.07],['bs',0.088,0.432,0.052]]],poloW:['teeW',0.003,[['shark',0.075,0.48,0.06],['bs',0.075,0.43,0.046]]],
+    cteeM:['teeM',0.003,[['bs',0,0.385,0.17],['tag',0.13,0.0,0.038],['coach',0,0.43,0.2,1]]],cteeW:['teeW',0.003,[['bs',0,0.4,0.15],['tag',0.12,0.0,0.034],['coach',0,0.43,0.17,1]]]};
+  const cache={};
+  function build(kind){const K=KIND[kind],grp=T[K[0]](),lift=K[1],P=[],U=[],I=[],rc=new THREE.Raycaster(),o=new THREE.Vector3(),d=new THREE.Vector3();
+    K[2].forEach(([rg,cx,cy,w,back])=>{const r=R[rg],hh=w*(r[3]-r[1])/(r[2]-r[0]),NU=12,NV=5,b=P.length/3,sz=back?-1:1;let lastZ=null;
+      for(let j=0;j<=NV;j++)for(let i=0;i<=NU;i++){const u=i/NU,v=j/NV,x=cx+(u-0.5)*w*sz,y=cy+(v-0.5)*hh;
+        rc.set(o.set(x,y,sz),d.set(0,0,-sz));const h=rc.intersectObject(grp,true)[0],z=h?h.point.z+sz*lift:(lastZ!=null?lastZ:sz*0.12);lastZ=z;
+        P.push(x,y,z);U.push((r[0]+u*(r[2]-r[0]))/W,1-(r[3]-v*(r[3]-r[1]))/H);}
+      for(let j=0;j<NV;j++)for(let i=0;i<NU;i++){const a0=b+j*(NU+1)+i,a1=a0+1,b0=a0+NU+1,b1=b0+1;I.push(a0,a1,b0,a1,b1,b0);}});
+    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(U,2));g.setIndex(I);g.computeVertexNormals();g.computeBoundingSphere();return g;}
+  return{geo:k=>cache[k]||(cache[k]=build(k)),matW,matN};})();
+const _dl=new THREE.Color();
+// which prints this athlete wears right now (race kit, Blue Sharks kit, practice top, coach gear)
+function updDecal(a){if(!a.torso)return;
+  let kind=null,dark=false;const O=a.outfit;
+  if(a.suitOn)kind=null;
+  else if(O){kind=O.top==='compS'||O.top==='compL'?'comp':O.top;dark=O.top==='compS'||O.top==='ctee';}
+  else{kind=a.teamKit==='bs'?'bs':'kit';_dl.copy(a.mTop.color);dark=0.2126*_dl.r+0.7152*_dl.g+0.0722*_dl.b>0.55;}
+  if(!kind){if(a.decal)a.decal.visible=false;return;}
+  const geo=DECAL.geo(kind+(a.g==='W'?'W':'M'));
+  if(!a.decal){a.decal=new THREE.Mesh(geo,DECAL.matW);a.torso.add(a.decal);}
+  a.decal.geometry=geo;a.decal.material=dark?DECAL.matN:DECAL.matW;a.decal.visible=true;}
 function ensureGarm(a){if(a.garm)return a.garm;const R={},mk=(geo,mat,par,sh,cl)=>{const m=new THREE.Mesh(geo,mat);m.visible=false;if(sh)m.castShadow=true;par.add(m);if(cl){m.userData.base=m.scale.clone();a.cloth.push(m);}return m;};
   R.tee=mk(GARM.teeM,GM.tee,a.torso,false);
   R.sleeves=[a.armL,a.armR].map((arm,i)=>{const m=mk(GARM.sleeve,GM.tee,arm,false,true);m.position.x=(i?-1:1)*0.004;return m;});
@@ -1743,35 +1810,37 @@ function ensureGarm(a){if(a.garm)return a.garm;const R={},mk=(geo,mat,par,sh,cl)
   R.compS=[a.armL,a.armR].map(arm=>mk(G.uArm,GM.compSW,arm,false,true));
   R.shell=mk(GARM.shellM,GM.shA,a.hips,false);
   R.legs=[a.legL,a.legR].map(leg=>mk(GARM.legS,GM.shA,leg,false,true));
-  R.cord=mk(GARM.cord,GM.cord,a.hips,false);
+  R.cord=mk(GARM.cord,GM.cord,a.hips,false);R.collar=mk(GARM.collar,GM.polo,a.torso,false);
+  R.lower=[a.kneeL,a.kneeR].map(kn=>mk(GARM.pantL,GM.pants,kn,false,true));
   R.chest=mk(GARM.decal,GM.logoUA,a.torso,false);
   R.shLogo=mk(GARM.decal,GM.logoUAw,R.legs[0],false);R.shLogo.position.set(0.094,-0.155,0.1);R.shLogo.rotation.y=0.76;R.shLogo.scale.set(0.034,0.034,1);
-  const k=a.g==='W'?0.88:1;[...R.sleeves,...R.compS,...R.legs].forEach(m=>{const b=m.userData.base;m.scale.set(b.x*k,b.y,b.z*k);});
+  const k=a.g==='W'?0.88:1;[...R.sleeves,...R.compS,...R.legs,...R.lower].forEach(m=>{const b=m.userData.base;m.scale.set(b.x*k,b.y,b.z*k);});
   a.garm=R;return R;}
 // k: index into OUTFITS, or null to go back to the race kit
 function setOutfit(a,k){const O=k==null?null:OUTFITS[k];a.outfit=O||null;
   if(!O&&!a.garm){applyKitVis(a);setNike(a,false);return;}
   const R=ensureGarm(a),w=a.g==='W',top=O&&O.top,sh=O&&O.sh,comp=top==='compS'||top==='compL',white=top==='compS';
-  R.tee.visible=top==='tee';R.tee.geometry=w?GARM.teeW:GARM.teeM;R.tee.scale.set(w?1.08:1.12,1,w?0.78:0.74);
-  R.sleeves.forEach(m=>m.visible=top==='tee');
+  const loose=top==='tee'||top==='polo'||top==='ctee',tm=top==='polo'?GM.polo:top==='ctee'?GM.ctee:GM.tee;
+  R.tee.visible=loose;R.tee.material=tm;R.tee.geometry=w?GARM.teeW:GARM.teeM;R.tee.scale.set(w?1.08:1.12,1,w?0.78:0.74);
+  R.sleeves.forEach(m=>{m.visible=loose;m.material=tm;});R.collar.visible=top==='polo';R.collar.scale.copy(R.tee.scale);
   R.compT.visible=comp;R.compT.geometry=w?G.wTorso:G.mTorso;R.compT.scale.set(w?1.08:1.12,1,w?0.68:0.66);R.compT.material=white?GM.compTW:GM.compTB;
   R.compS.forEach(m=>m.visible=top==='compS');
   a.limbs.forEach(m=>{const gg=m.geometry,arm=gg===G.delt||gg===G.uArm||gg===G.fArm;let mat=a.suitOn?(arm?a.mTop:a.mShorts):a.mSkin;
     if(top==='compL'&&arm)mat=GM.compXB;else if(top==='compS'&&gg===G.delt)mat=GM.compXW;m.material=mat;});
   if(a.trapsM)a.trapsM.material=comp?(white?GM.compXW:GM.compXB):a.mSkin;
-  (a.chestW||[]).forEach(m=>{m.scale.z=comp?0.03:0.042;});
-  R.shell.visible=!!sh;R.shell.geometry=w?GARM.shellW:GARM.shellM;R.shell.scale.set(w?1.08:1.12,1,w?0.76:0.72);R.shell.material=sh==='J'?GM.jog:sh==='B'?GM.shB:GM.shA;
-  R.legs.forEach(m=>{m.visible=!!sh;m.geometry=sh==='J'?GARM.legJ:GARM.legS;m.material=R.shell.material;});
+  (a.chestW||[]).forEach(m=>{m.scale.z=comp?0.03:0.033;});
+  R.shell.visible=!!sh;R.shell.geometry=w?GARM.shellW:GARM.shellM;R.shell.scale.set(w?1.08:1.12,1,w?0.76:0.72);R.shell.material=sh==='J'?GM.jog:sh==='B'?GM.shB:sh==='P'?GM.pants:sh==='N'?GM.shN:GM.shA;
+  R.legs.forEach(m=>{m.visible=!!sh;m.geometry=sh==='J'?GARM.legJ:sh==='P'?GARM.pantU:GARM.legS;m.material=R.shell.material;});R.lower.forEach(m=>m.visible=sh==='P');
   (a.glutesM||[]).forEach(m=>m.material=sh?R.shell.material:a.mShorts);(a.glutesW||[]).forEach(m=>m.material=sh?R.shell.material:a.mTop);
   R.cord.visible=sh==='J';R.cord.position.set(0,0,w?0.098:0.108);
   R.chest.visible=comp;R.chest.material=white?GM.logoUA:GM.logoSw;
   if(w){R.chest.position.set(0.058,0.478,0.106);R.chest.rotation.set(-0.28,0.24,0);}else{R.chest.position.set(0.075,0.468,0.145);R.chest.rotation.set(-0.1,0.19,0);}
   if(white)R.chest.scale.set(w?0.036:0.042,w?0.036:0.042,1);else R.chest.scale.set(w?0.05:0.058,w?0.025:0.029,1);
   R.shLogo.visible=sh==='B';
-  if(O){a.mTop.color.setHex(top==='tee'?0x141416:white?0xf0f1f3:0x131315);a.mShorts.color.setHex(sh==='J'?0x9a9da3:sh==='B'?0x172340:0x1f56d8);a.bib.visible=false;}
-  applyKitVis(a);setNike(a,!!O);}
+  if(O){a.mTop.color.setHex(top==='tee'?0x141416:top==='polo'?0x1f5fff:top==='ctee'?0xf2f3f5:white?0xf0f1f3:0x131315);a.mShorts.color.setHex(sh==='J'?0x9a9da3:sh==='B'?0x172340:sh==='P'?0x17181b:sh==='N'?0x1b2a4a:0x1f56d8);a.bib.visible=false;}
+  applyKitVis(a);setNike(a,!!O);updDecal(a);}
 // race-kit layers hide under practice clothes
-function applyKitVis(a){const w=a.g==='W',o=!!a.outfit;(a.kitM||[]).forEach(m=>m.visible=!w&&!o);(a.kitW||[]).forEach(m=>m.visible=w&&!o);refreshCloth(a);}
+function applyKitVis(a){const w=a.g==='W',o=!!a.outfit;(a.kitM||[]).forEach(m=>m.visible=!w&&!o);(a.kitW||[]).forEach(m=>m.visible=w&&!o);(a.chestW||[]).forEach(m=>m.visible=w&&o);refreshCloth(a);}
 // black Nike running shoes with a white swoosh on both sides
 function setNike(a,on){a.nike=on;(a.swooshes||[]).forEach(m=>m.visible=on);if(on){a.mShoe.color.setHex(0x171719);a.mShoe.roughness=0.55;}else a.mShoe.roughness=0.42;}
 // walking or standing when worn out: hands on the hips or on the head, slumped, heavy breathing
@@ -1787,24 +1856,24 @@ function makeAthlete(){
   const a={g:'M',hs:1,form:'std',hairStyle:1,hIn:70};
   const SM=(c,r)=>{const m=new THREE.MeshStandardMaterial({color:c,roughness:r,metalness:0});m.envMapIntensity=0.75;return m;};
   a.mTop=SM(0x1f5fff,.55);a.mShorts=SM(0x0b2a6b,.6);a.mSkin=SM(0xc68a5e,.5);a.mHair=SM(0x1a1110,.9);a.mShoe=SM(0xffffff,.42);a.mShoe.vertexColors=true;a.kitM=[];a.kitW=[];a.swooshes=[];
-  a.mCrop=clothMat(0x1f5fff,1,0.335);a.mTight=clothMat(0x0b2a6b,0,-0.265,0.004);a.mSuitT=clothMat(0x1f5fff,2,-1);a.mSuitL=clothMat(0x1f5fff,0,-0.105,0.004);a.mTight.userData.cu.uTrim.value=0;
+  a.mCrop=clothMat(0x1f5fff,1,-1);a.mSingP=clothMat(0x1f5fff,0,-0.02,0.009);a.mSuitP=clothMat(0x1f5fff,4,-1,0.004);[a.mCrop,a.mSingP].forEach(m=>{m.userData.cu.uGrad.value=1;m.userData.cu.uTrim.value=0;});a.mTight=clothMat(0x0b2a6b,0,-0.265,0.004);a.mSuitT=clothMat(0x1f5fff,2,-1);a.mSuitL=clothMat(0x1f5fff,0,-0.105,0.004);a.mTight.userData.cu.uTrim.value=0;
   a.mNail=new THREE.MeshStandardMaterial({color:0xe7cdc2,roughness:0.35});a.abs=[];a.legCloth=[];a.torsoSkin=[];a.cloth=[];a.nails=[];
   const mSole=lam(0x1e2128),mEye=lam(0x101010);
   const add=(geo,mat,par,x,y,z,sx,sy,sz,sh)=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);if(sx!=null)m.scale.set(sx,sy,sz);if(sh)m.castShadow=true;par.add(m);return m;};
   const root=new THREE.Group();a.root=root;const body=new THREE.Group();root.add(body);a.body=body;
   const hips=new THREE.Group();hips.position.y=0.99;body.add(hips);a.hips=hips;
   a.mSet=[];a.wSet=[];a.limbs=[];
-  {const pm=add(G.mPelvis,a.mShorts,hips,0,0,0,1.05,1,0.74,true),pw=add(G.wPelvis,a.mSuitT,hips,0,0,0,1.06,1,0.76,true);a.mSet.push(pm);a.kitM.push(pm);a.wSet.push(pw);a.kitW.push(pw);}
+  {const pm=add(G.mPelvis,a.mShorts,hips,0,0,0,1.05,1,0.74,true),ps=add(G.wPelvis,a.mSkin,hips,0,0,0,1.04,0.99,0.75,true),pw=add(G.wPelvis,a.mSuitP,hips,0,0,0,1.06,1,0.76);a.mSet.push(pm);a.kitM.push(pm);a.wSet.push(ps);a.wSet.push(pw);a.kitW.push(pw);
+   const sp=add(G.mPelvis,a.mSingP,hips,0,0,0,1.05,1,0.74);a.mSet.push(sp);a.kitM.push(sp);}
   const torso=new THREE.Group();hips.add(torso);a.torso=torso;
   {const mt=add(G.mTorso,a.mSkin,torso,0,0,0,1.12,1,0.66,true);a.mSet.push(mt);a.torsoSkin.push(mt);
    {const c=add(G.mTorso,a.mCrop,torso,0,0,0,1.12,1,0.66);a.mSet.push(c);a.kitM.push(c);}
    const wt=add(G.wTorso,a.mSkin,torso,0,0,0,1.08,1,0.68,true);a.wSet.push(wt);a.torsoSkin.push(wt);
    {const c=add(G.wTorso,a.mSuitT,torso,0,0,0,1.08,1,0.68);a.wSet.push(c);a.kitW.push(c);}
    for(const sx of[-1,1])for(let r=0;r<3;r++){const ab=add(G.muscle,a.mSkin,torso,sx*0.03,0.152+r*0.054,[0.088,0.093,0.099][r],0.03,0.026,0.007);a.mSet.push(ab);a.abs.push(ab);}}
-  a.chestW=[];for(const s of[-1,1]){const c=add(G.ball,a.mTop,torso,s*0.054,0.405,0.07,0.058,0.05,0.042);a.wSet.push(c);a.chestW.push(c);}
+  a.chestW=[];for(const s of[-1,1]){const c=add(G.ball,a.mTop,torso,s*0.054,0.405,0.07,0.058,0.05,0.033);a.wSet.push(c);a.chestW.push(c);}
   a.trapsM=add(G.muscle,a.mSkin,torso,0,0.578,-0.025,0.165,0.05,0.095,true);a.mSet.push(a.trapsM);
   for(const s of[-1,1]){
-    a.mSet.push(add(G.muscle,a.mTop,torso,s*0.078,0.445,0.1,0.088,0.064,0.042));
     a.mSet.push(add(G.muscle,a.mTop,torso,s*0.135,0.43,-0.05,0.075,0.105,0.07,true));
     {const gm=add(G.muscle,a.mShorts,hips,s*0.066,-0.04,-0.078,0.084,0.088,0.056),gw=add(G.muscle,a.mTop,hips,s*0.066,-0.04,-0.08,0.084,0.088,0.058);a.mSet.push(gm);a.wSet.push(gw);(a.glutesM||(a.glutesM=[])).push(gm);(a.glutesW||(a.glutesW=[])).push(gw);}
   }
@@ -1855,15 +1924,15 @@ function setGender(a,g){
   a.g=g;const w=g==='W';a.mSet.forEach(m=>m.visible=!w);a.wSet.forEach(m=>m.visible=w);
   const k=w?0.88:1;a.limbs.forEach(m=>{const b=m.userData.base;m.scale.set(b.x*k,b.y,b.z*k);});a.cloth.forEach(m=>{const b=m.userData.base;m.scale.set(b.x*k,b.y,b.z*k);});
   a.nails.forEach(n=>{n.geometry=w?(n.userData.s===1?G.nailLW:G.nailRW):(n.userData.s===1?G.nailL:G.nailR);});if(w&&a.nailCol==null)a.nailCol=pick(NAIL_COLS);a.mNail.color.setHex(w?a.nailCol:0xe7cdc2);
-  a.bib.position.set(0,w?0.25:0.395,w?0.093:0.143);a.bib.rotation.x=w?0.13:0.2;
+  a.bib.position.set(0,w?0.25:0.29,w?0.093:0.124);a.bib.rotation.x=w?0.13:0.06;
   a.armL.position.x=w?0.192:0.215;a.armR.position.x=-a.armL.position.x;
   a.bib.visible=a.bibOn&&!a.outfit;if(a.outfit)setOutfit(a,OUTFITS.indexOf(a.outfit));else applyKitVis(a);
-  if(a.hairMesh&&a.hairMesh.visible&&HAIR_SW[a.hairStyle])a.hairMesh.geometry=hairGeo(a.hairStyle,a.g);
+  if(a.hairMesh&&a.hairMesh.visible&&HAIR_SW[a.hairStyle])a.hairMesh.geometry=hairGeo(a.hairStyle,a.g);updDecal(a);
   if(a.faceSkin){const f=FACE[w?'W':'M'];a.faceSkin.geometry=f.skin;a.faceDark.geometry=f.dark;a.faceWhite.geometry=f.white;a.faceIris.geometry=f.iris;a.faceLip.geometry=f.lip;
     a.brows.forEach(b=>b.scale.set(w?0.9:1,w?0.6:1,1));if(a.jaw)a.jaw.scale.set(w?0.9:1,w?0.78:0.82,1.02);}
 }
 function setHeight(a,inches){a.hIn=inches;a.hs=inches*0.0254/1.8;a.body.scale.setScalar(a.hs);if(a.tag)a.tag.position.y=2.12*a.hs+0.05;}
-function setSuit(a,on){a.suitOn=on;a.limbs.forEach(m=>{const arm=m.geometry===G.delt||m.geometry===G.uArm||m.geometry===G.fArm;m.material=on?(arm?a.mTop:a.mShorts):a.mSkin;});refreshCloth(a);}
+function setSuit(a,on){a.suitOn=on;a.limbs.forEach(m=>{const arm=m.geometry===G.delt||m.geometry===G.uArm||m.geometry===G.fArm;m.material=on?(arm?a.mTop:a.mShorts):a.mSkin;});refreshCloth(a);updDecal(a);}
 const GLASSES_G=(function(){const L=[],M=(x,y,z,sx,sy,sz,e)=>new THREE.Matrix4().compose(new THREE.Vector3(x,y,z),new THREE.Quaternion().setFromEuler(e||new THREE.Euler()),new THREE.Vector3(sx,sy,sz)),bx=new THREE.BoxGeometry(1,1,1);
   for(const s2 of[-1,1]){const cx=s2*0.036,cy=0.125,cz=0.111;
     L.push([bx,M(cx,cy+0.016,cz,0.044,0.006,0.006)]);L.push([bx,M(cx,cy-0.015,cz,0.044,0.005,0.006)]);L.push([bx,M(cx-0.021,cy,cz,0.005,0.034,0.006)]);L.push([bx,M(cx+0.021,cy,cz,0.005,0.034,0.006)]);
@@ -1872,11 +1941,12 @@ const GLASSES_G=(function(){const L=[],M=(x,y,z,sx,sy,sz,e)=>new THREE.Matrix4()
 const GLASSES_M=new THREE.MeshStandardMaterial({color:0x0c0c0d,roughness:0.3,metalness:0.2}),LENS_M=new THREE.MeshStandardMaterial({color:0xcfe0ea,transparent:true,opacity:0.18,roughness:0.05,metalness:0.5});
 function wearGlasses(a,on){if(!a.glasses){const g=new THREE.Group();g.add(new THREE.Mesh(GLASSES_G,GLASSES_M));for(const s2 of[-1,1]){const l=new THREE.Mesh(new THREE.PlaneGeometry(0.038,0.026),LENS_M);l.position.set(s2*0.036,0.125,0.112);g.add(l);}a.head.add(g);a.glasses=g;}a.glasses.visible=on;}
 function dress(a,o){a.mTop.color.setHex(o.top);a.mShorts.color.setHex(o.shorts);
-  {const acc=o.shorts===o.top?(o.top===0xf4f4f4?0x0b2a6b:0x4a4a4a):o.shorts;a.mCrop.color.setHex(o.top);a.mTight.color.setHex(o.shorts);a.mSuitT.color.setHex(o.top);a.mSuitL.color.setHex(o.top);
-   for(const m of[a.mCrop,a.mTight,a.mSuitT,a.mSuitL])m.userData.cu.uAcc.value.setHex(acc);a.mSuitT.userData.cu.uStripe.value=a.mSuitL.userData.cu.uStripe.value=o.stripe===false?0:1;
+  {const acc=o.shorts===o.top?(o.top===0xf4f4f4?0x0b2a6b:0x4a4a4a):o.shorts;a.mCrop.color.setHex(o.top);a.mSingP.color.setHex(o.top);a.mTight.color.setHex(o.shorts);a.mSuitT.color.setHex(o.top);a.mSuitL.color.setHex(o.top);a.mSuitP.color.setHex(o.top);
+   for(const m of[a.mCrop,a.mSingP,a.mTight,a.mSuitT,a.mSuitL,a.mSuitP])m.userData.cu.uAcc.value.setHex(acc);a.mCrop.userData.cu.uCol2.value.setHex(o.shorts);a.mSingP.userData.cu.uCol2.value.setHex(o.shorts);a.mCrop.userData.cu.uGrad.value=a.mSingP.userData.cu.uGrad.value=o.top===o.shorts?0:1;
+   a.mSuitT.userData.cu.uStripe.value=a.mSuitL.userData.cu.uStripe.value=a.mSuitP.userData.cu.uStripe.value=a.mSuitT.userData.cu.uSeam.value=o.stripe===false?0:1;a.teamKit=o.team||null;
    if(o.nail!=null)a.nailCol=o.nail;if(a.g==='W'&&a.nailCol!=null)a.mNail.color.setHex(a.nailCol);}
-  a.mSkin.color.setHex(o.skin);if(a.mLip)a.mLip.color.setHex(o.skin).lerp(LIPTINT,0.32).multiplyScalar(0.86);setHairCol(a,o.hairCol);a.mShoe.color.setHex(o.shoe);setHair(a,o.hair);}
-function randLook(g){const k=randi(0,KITS.length-1);return{kit:k,top:KITS[k][0],shorts:KITS[k][1],skin:pick(SKINS),hairCol:pick(HAIR_COLS),hair:g==='W'?pick([3,3,4,5,1,4,9,10]):pick([6,6,6,0,0,1,2,5]),shoe:pick(SHOES)};}
+  a.mSkin.color.setHex(o.skin);if(a.mLip)a.mLip.color.setHex(o.skin).lerp(LIPTINT,0.32).multiplyScalar(0.86);setHairCol(a,o.hairCol);a.mShoe.color.setHex(o.shoe);setHair(a,o.hair);updDecal(a);}
+function randLook(g){let k;do{k=randi(0,KITS.length-1);}while(KITS[k][3]==='bs');return{kit:k,top:KITS[k][0],shorts:KITS[k][1],skin:pick(SKINS),hairCol:pick(HAIR_COLS),hair:g==='W'?pick([3,3,4,5,1,4,9,10]):pick([6,6,6,0,0,1,2,5]),shoe:pick(SHOES)};}
 function setBib(a,n){const c=canvas(64,48),g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,64,48);g.fillStyle='#0b2a6b';g.font='800 34px "Barlow Condensed", Arial';g.textAlign='center';g.textBaseline='middle';g.fillText(String(n),32,26);if(a.bib.material.map)a.bib.material.map.dispose();a.bib.material.map=new THREE.CanvasTexture(c);a.bib.material.needsUpdate=true;a.bibOn=true;a.bib.visible=true;}
 function rr(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.lineTo(x+w-r,y);g.quadraticCurveTo(x+w,y,x+w,y+r);g.lineTo(x+w,y+h-r);g.quadraticCurveTo(x+w,y+h,x+w-r,y+h);g.lineTo(x+r,y+h);g.quadraticCurveTo(x,y+h,x,y+h-r);g.lineTo(x,y+r);g.quadraticCurveTo(x,y,x+r,y);g.closePath();}
 function setTag(a,name,isMe,bg,fg){
@@ -1887,8 +1957,9 @@ function setTag(a,name,isMe,bg,fg){
   g.fillStyle=bg||(isMe?'rgba(31,95,255,.9)':'rgba(4,16,44,.72)');rr(g,128-w/2,8,w,46,12);g.fill();
   g.fillStyle=fg||'#fff';g.textAlign='center';g.textBaseline='middle';g.fillText(name,128,32);a.tagTex.needsUpdate=true;
 }
-const JK=['pY','hipX','hipY','hipZ','tX','tY','tZ','hX','hY','aLx','aLz','eL','aRx','aRz','eR','lLx','lLz','kL','fL','lRx','lRz','kR','fR'];
-function baseStand(T){T.pY=0;T.hipX=0;T.hipY=0.99;T.hipZ=0;T.tX=0.02;T.tY=0;T.tZ=0;T.hX=0;T.hY=0;T.aLx=0.04;T.aLz=0.09;T.eL=-0.14;T.aRx=0.04;T.aRz=-0.09;T.eR=-0.14;T.lLx=0;T.lLz=0.03;T.kL=0.04;T.fL=0;T.lRx=0;T.lRz=-0.03;T.kR=0.04;T.fR=0;}
+const JK=['pY','hipX','hipY','hipZ','tX','tY','tZ','hX','hY','aLx','aLz','eL','aRx','aRy','aRz','eR','lLx','lLz','kL','fL','lRx','lRz','kR','fR'];
+const WH_POSE=[-1.3,0.68,0.14,-2.18];
+function baseStand(T){T.pY=0;T.hipX=0;T.hipY=0.99;T.hipZ=0;T.tX=0.02;T.tY=0;T.tZ=0;T.hX=0;T.hY=0;T.aLx=0.04;T.aLz=0.09;T.eL=-0.14;T.aRx=0.04;T.aRy=0;T.aRz=-0.09;T.eR=-0.14;T.lLx=0;T.lLz=0.03;T.kL=0.04;T.fL=0;T.lRx=0;T.lRz=-0.03;T.kR=0.04;T.fR=0;}
 function gait(a,T,dt,s){
   const F=FORMS[a.form]||FORMS.std;
   if(a.cad!=null){a.ph+=dt*Math.PI*a.cad;if(a.phCorr){const c=a.phCorr*Math.min(1,dt*12);a.ph+=c;a.phCorr-=c;}}
@@ -2044,7 +2115,7 @@ function applyJ(a){const J=a.J;
   a.hips.position.set(J.hipX,J.hipY,J.hipZ);a.hips.rotation.y=J.pY;
   a.torso.rotation.set(J.tX,J.tY-J.pY,J.tZ);a.head.rotation.set(J.hX,J.hY,0);
   a.armL.rotation.set(J.aLx,0,J.aLz);a.elbowL.rotation.x=J.eL;
-  a.armR.rotation.set(J.aRx,0,J.aRz);a.elbowR.rotation.x=J.eR;
+  a.armR.rotation.set(J.aRx,J.aRy,J.aRz);a.elbowR.rotation.x=J.eR;
   a.legL.rotation.set(J.lLx,0,J.lLz);a.kneeL.rotation.x=J.kL;a.ankleL.rotation.x=J.fL;
   a.legR.rotation.set(J.lRx,0,J.lRz);a.kneeR.rotation.x=J.kR;a.ankleR.rotation.x=J.fR;
 }
@@ -2066,17 +2137,18 @@ function animAth(a,dt){
   }
   if(a.fatigue>0.34&&(a.anim==='move'||a.anim==='idle'))tiredPose(a,T,t);
   {const tk=a.talk?1:Math.min(1,(a.talkT||0)*2);if(a.talkT>0)a.talkT-=dt;if(tk>0.01){T.aRx=lerp(T.aRx,-0.5-0.22*Math.sin(t*3.3),tk*0.85);T.eR=lerp(T.eR,-1.2-0.3*Math.sin(t*2.1),tk*0.85);T.aRz=lerp(T.aRz,-0.18,tk);T.hX+=0.05*tk*Math.sin(t*4.1);T.hY+=0.1*tk*Math.sin(t*1.6);}}
-  if(a.eatT>0){a.eatT-=dt;const w=Math.min(1,a.eatT*2.5,(2.4-a.eatT)*3);T.aRx=lerp(T.aRx,-1.95,w);T.eR=lerp(T.eR,-2.35,w);T.aRz=lerp(T.aRz,0.18,w);if(a.eatKind==='drink')T.hX=lerp(T.hX,-0.35,w*Math.max(0,Math.sin((2.4-a.eatT)*1.6)));}
+  if(a.eatT>0){a.eatT-=dt;const w=Math.min(1,a.eatT*2.5,(2.4-a.eatT)*3);if(a.eatKind==='whistle'){const P=WH_POSE;T.aRx=lerp(T.aRx,P[0],w);T.aRy=lerp(T.aRy,P[1],w);T.aRz=lerp(T.aRz,P[2],w);T.eR=lerp(T.eR,P[3],w);T.hX=lerp(T.hX,0,w);T.hY=lerp(T.hY,0,w);}
+    else{T.aRx=lerp(T.aRx,-1.95,w);T.eR=lerp(T.eR,-2.35,w);T.aRz=lerp(T.aRz,0.18,w);if(a.eatKind==='drink')T.hX=lerp(T.hX,-0.35,w*Math.max(0,Math.sin((2.4-a.eatT)*1.6)));}}
   if(a.wave>0){a.wave-=dt;const w=Math.min(1,a.wave*3);T.aRx=lerp(T.aRx,-2.65,w);T.aRz=lerp(T.aRz,-0.4-0.28*Math.sin(t*9),w);T.eR=lerp(T.eR,-0.35,w);T.hX=lerp(T.hX,-0.1,w);}
   if(a.anim==='move'&&a.exitT!=null){a.exitT+=dt;const u=clamp(a.exitT/0.38,0,1),w=1-u*u*(3-2*u);for(const kk in PUSH)T[kk]=lerp(T[kk],PUSH[kk],w);if(a.exitT>0.4)a.exitT=null;}
   else if(a.anim!=='move')a.exitT=null;
   a.moveW=a.anim==='move'?Math.min(1,a.moveW+dt*3):0;
   const k=(a.anim==='move'&&a.moveW>=1)?45:a.anim==='drill'?36:(a.anim==='marks'||a.anim==='set'?7:a.anim==='finish'?6:a.anim==='prerace'?(a.preStyle===2?45:22):(a.idleStyle===5||a.idleStyle===2||a.idleStyle===4)?30:10);
-  const f=1-Math.exp(-k*dt),J=a.J;
+  const f=1-Math.exp(-(a.eatT>0&&a.eatKind==='whistle'?Math.max(k,20):k)*dt),J=a.J;
   for(let i=0;i<JK.length;i++){const key=JK[i];J[key]+=(T[key]-J[key])*f;}
   applyJ(a);
   hairUpdate(a,dt);
-  if(a.faceLip){const pk=(a.form==='oos'&&a.anim==='move'&&a.speed>2.2)?1:0;a.pucker=damp(a.pucker||0,pk,6,dt);if(a.pucker>0.001||a.faceLip.scale.x!==1){const k=a.pucker*(0.85+0.15*Math.sin(time*9));a.faceLip.scale.set(1-0.14*k,1+0.12*k,1+0.07*k);}}
+  if(a.faceLip){const pk=((a.form==='oos'&&a.anim==='move'&&a.speed>2.2)||(a.eatKind==='whistle'&&a.eatT>0.3))?1:0;a.pucker=damp(a.pucker||0,pk,6,dt);if(a.pucker>0.001||a.faceLip.scale.x!==1){const k=a.pucker*(0.85+0.15*Math.sin(time*9));a.faceLip.scale.set(1-0.14*k,1+0.12*k,1+0.07*k);}}
 }
 
 // ================= PLAYERS =================
@@ -2107,7 +2179,7 @@ function buildPerf(b){
   const LV=(LEVELS[b.lvl]||LEVELS.col),raw=clamp((10.25+1.2*E+0.25*P)*F.vmax,VMIN,VMAX),nv=(raw-VMIN)/(VMAX-VMIN);
   return{nv,P,S,E,pE,sE,F,vmax:(LV.min+nv*(LV.max-LV.min))/2.237,acc:(0.85+0.6*P-0.25*S)*F.acc,drain:2*(1.5-S)*(F.drainMul||1),ideal:0.45*Math.sqrt(b.h/70)*Math.sqrt(F.stride)};
 }
-function lookFromBuild(b){const k=KITS[b.kit]||KITS[0];return{kit:b.kit,top:k[0],shorts:k[1],skin:SKINS[b.skin]||SKINS[2],hairCol:HAIR_COLS[b.hairCol]||HAIR_COLS[0],hair:b.hair,shoe:0xffffff};}
+function lookFromBuild(b){const k=KITS[b.kit]||KITS[0];return{kit:b.kit,top:k[0],shorts:k[1],team:k[3]||null,skin:SKINS[b.skin]||SKINS[2],hairCol:HAIR_COLS[b.hairCol]||HAIR_COLS[0],hair:b.hair,shoe:0xffffff};}
 function applyBuild(a,b){setGender(a,b.g);setHeight(a,b.h);a.form=b.form;dress(a,lookFromBuild(b));}
 // ---- avatars ----
 const botAvatars=[];const pool=[];let players=[];let me=null;
@@ -2244,7 +2316,7 @@ function startEvent(idx){
 function makeBrandon(p){
   p.name='Brandon Chalmers';p.star=true;p.rating=1;p.topOverride=24.1/2.237;p.endur=0.4;p.react=0.105;p.form='std';p.hIn=66;p.afk=false;p.accBoost=1.27;
   p.fade={'60':[26,0.0033,0.86],'100':[48,0.0011,0.88],'200':[50,0.0002,0.9],'300':[55,0.0002,0.9],'400':[90,0.00005,0.95],def:[50,0.001,0.88]};p.endurBy={'400':0.5,'300':0.5};
-  p.look={top:0x111214,shorts:0x111214,skin:0xcc9665,hairCol:0x0b0b0b,hair:8,shoe:0xf2f2f2};p.pbs={'60':6.39,'100':10.03,'200':20.11,'400':47.12};
+  p.look={top:0x111214,shorts:0x111214,skin:0xa86f42,hairCol:0x0b0b0b,hair:8,shoe:0xf2f2f2};p.pbs={'60':6.39,'100':10.03,'200':20.11,'400':47.12};
   const a=p.ath;setGender(a,'M');setHeight(a,66);a.form='std';dress(a,p.look);wearGlasses(a,true);setTag(a,p.name,false);
   const b=chatBots().filter(x=>x!==p);if(b.length){queueChat(rand(4,6),pick(b),'Brandon Chalmers in here, watch his start 😳');queueChat(rand(7,9),pick(b),'6.39 in the 60 is crazy');queueChat(rand(10,12),pick(b),'he fades late tho, catch him at the end');}
 }
@@ -2376,7 +2448,7 @@ function beginRace(heat){
   race.runners.forEach(r=>{if(r.state==='blocks'){const bm=blockMeshes[bi++];if(bm){pathPos(ev.path,r.lane,r.b+0.05,bm.position);bm.rotation.y=r.ath.yaw;bm.visible=true;}_r.add(r.ath.root.position);pathDir(ev.path,r.lane,r.b,_d);sd.add(_d);n++;}});
   race.startC=_r.clone().multiplyScalar(1/Math.max(1,n));race.startDir=sd.normalize();
   recInit();
-  if(race.mine){PL.power=0;PL.started=false;PL.taps=0;PL.lastTap=-9;PL.lastSide=null;PL.rt=rand(0.04,0.08);camSnap=true;watching=false;syncWatchBtn();}
+  if(race.mine){PL.fpP=null;PL.power=0;PL.started=false;PL.taps=0;PL.lastTap=-9;PL.lastSide=null;PL.rt=rand(0.04,0.08);camSnap=true;watching=false;syncWatchBtn();}
   if(race.myEntry&&race.myEntry.status==='DNS')race.myEntry=null;
   bcSnap=true;
 }
@@ -2419,7 +2491,7 @@ function stepRunner(r,dt){
   const ev=race.ev;
   if(r.state==='blocks'){
     if(race.phase!=='run')return;
-    if(r.isMe){if(race.clock<PL.rt)return;r.state='run';r.drive=1;blockExit(r.ath);PL.started=true;PL.power=0.45+0.25*PL.P;PL.lastTap=performance.now()/1000;PL.taps=0;PL.lastSide=null;PL.tt=[PL.lastTap];PL.cad=2.2;race.myRT=PL.rt;}
+    if(r.isMe){if(race.clock<PL.rt)return;r.state='run';r.fb=true;r.drive=1;blockExit(r.ath);PL.started=true;PL.power=0.45+0.25*PL.P;PL.lastTap=performance.now()/1000;PL.taps=0;PL.lastSide=null;PL.tt=[PL.lastTap];PL.cad=2.2;race.myRT=PL.rt;}
     else if(race.clock>=r.react){r.state='run';r.drive=1;blockExit(r.ath);}
     else return;
   }
@@ -2847,7 +2919,7 @@ function broadcastCam(dt){
   if(mode!==lastBc){lastBc=mode;$('#camTag').textContent=CAM_NAMES[mode]||'';}
 }
 function chaseCam(dt){
-  if(camView==='first'&&race.mine){const r0=race.mine;if(r0.state!=='wait'){runnerPos(r0,_v2,_d);fpCam(dt,r0.ath,Math.atan2(-_d.x,-_d.z),-0.1);return;}}
+  if(camView==='first'&&race.mine){const r0=race.mine;if(r0.state!=='wait'){runnerPos(r0,_v2,_d);fpCam(dt,r0.ath,Math.atan2(-_d.x,-_d.z),fpRacePitch(r0,dt));return;}}
   const R=race;let r=R.mine;const e=R.myEntry;
   if(e&&R.ev.relay&&!e.finished&&e.runners[e.leg])r=e.runners[e.leg];
   const pos=r.ath.root.position;runnerPos(r,_v2,_d);const rx=-_d.z,rz=_d.x;
@@ -2857,6 +2929,10 @@ function chaseCam(dt){
   setCam(camWantPos,camWantLook,54+r.v*0.6,dt,10,12,camSnap);camSnap=false;
 }
 let camView='third';const _fpE=new THREE.Vector3();
+function fpRacePitch(r,dt){const R=race;let tg=-0.1;
+  if(r.state==='blocks'){if(R.phase==='marks'||R.phase==='set'||R.phase==='run')tg=-1.12;}
+  else if(r.fb){const fid=legId(R.ev),D=(fid==='300'||fid==='400')?12:30,u=clamp((r.b0-r.b)/D,0,1);tg=lerp(-1.0,-0.1,u*u*(3-2*u));}
+  PL.fpP=PL.fpP==null?tg:damp(PL.fpP,tg,r.state==='blocks'?5:14,dt);return PL.fpP;}
 function fpCam(dt,a,yaw,pitch){a.head.updateWorldMatrix(true,false);a.head.localToWorld(_fpE.set(0,0.125,0.09));
   camWantPos.copy(_fpE);camWantLook.set(_fpE.x-Math.sin(yaw)*Math.cos(pitch)*10,_fpE.y+Math.sin(pitch)*10,_fpE.z-Math.cos(yaw)*Math.cos(pitch)*10);
   setCam(camWantPos,camWantLook,72,dt,40,40,true);}
@@ -3204,7 +3280,7 @@ function clockTxt(m){m=Math.floor(m);let h=Math.floor(m/60)%24;const mm=m%60,ap=
 // the team: stats are percentages (power, stamina, endurance); mph is each runner's 8th grade top speed
 const TEAM_DEF=[
   {id:'dm',name:'DeMarcus Shadow',short:'DeMarcus',g:'M',h:73,skin:SKINS[4],hair:7,hairCol:0x0b0b0b,top:0x5b2a9e,shorts:0x111111,shoe:0x111111,pow:75,sta:60,end:90,mph:20.1,endur:0.8,react:0.13},
-  {id:'bc',name:'Brandon Chalmers',short:'Brandon',g:'M',h:66,skin:0xcc9665,hair:8,hairCol:0x0b0b0b,top:0x111214,shorts:0x111214,shoe:0xf2f2f2,glasses:true,pow:95,sta:30,end:60,mph:19.7,endur:0.35,react:0.105,accBoost:1.27,
+  {id:'bc',name:'Brandon Chalmers',short:'Brandon',g:'M',h:66,skin:0xa86f42,hair:8,hairCol:0x0b0b0b,top:0x111214,shorts:0x111214,shoe:0xf2f2f2,glasses:true,pow:95,sta:30,end:60,mph:19.7,endur:0.35,react:0.105,accBoost:1.27,
     fade:{'60':[26,0.0033,0.86],'100':[48,0.0011,0.88],'200':[50,0.0002,0.9],'300':[55,0.0002,0.9],'400':[90,0.00005,0.95],def:[50,0.001,0.88]}},
   // Tayvon: best in the 100 and 200 only. Reacts in 0.05-0.11, normal drive phase, then a crazy top end that catches everybody by 20m; fades over 300/400
   {id:'th',name:'Tayvon Henderson',short:'Tayvon',g:'M',h:68,skin:SKINS[2],hair:0,hairCol:0x0d0d0d,top:0xd9342b,shorts:0x111111,shoe:0xff3b30,pow:50,sta:25,end:70,mph:20.4,endur:0.3,react:0.08,reactR:[0.05,0.11],accBoost:1.04,
@@ -3220,11 +3296,61 @@ const DROP=[[24.6,32.7],[25.85,32.6],[27.1,32.75],[28.35,32.6],[29.6,32.7],[30.8
 const COACH_SPOT=[37.8,30.4],GATHER=[[35.5,29.0],[35.1,30.6],[35.5,32.0],[34.2,29.9],[34.3,31.4],[36.4,27.9]],REST=[[33.4,28.6],[32.2,29.7],[33.1,31.7],[31.9,30.9],[32.5,27.4],[30.9,28.5]];
 const story={active:false,phase:'',cine:false,clock:900,runStart:903,runLen:55,day:1,off:0,dow:1,team:[],dlg:null,obj:'',cut:null,jog:null,drill:null,plan:null,steps:[],si:0,restT:0,restMax:1,ready:false,laps:2,chatT:6,chatUsed:new Set(),busy:false,todT:0,rep:null,coachA:null,meA:null};
 
+// Coach Blue's gear: a chrome whistle on a lanyard (it goes to his mouth when he blows it), a cap, and three outfits he rotates through
+function makeWhistle(){const g=new THREE.Group(),chrome=new THREE.MeshStandardMaterial({color:0xe2e6ea,metalness:1,roughness:0.16}),dark=new THREE.MeshStandardMaterial({color:0x101010,roughness:0.6});chrome.envMapIntensity=1.2;
+  const M=(x,y,z,sx,sy,sz,rx,ry,rz)=>new THREE.Matrix4().compose(new THREE.Vector3(x,y,z),new THREE.Quaternion().setFromEuler(new THREE.Euler(rx||0,ry||0,rz||0)),new THREE.Vector3(sx,sy,sz));
+  const L=[[new THREE.CylinderGeometry(0.0105,0.0105,0.026,20),M(0,-0.017,0,1,1,1,0,0,Math.PI/2)],
+    [new THREE.SphereGeometry(0.0105,16,10),M(-0.013,-0.017,0,0.22,1,1)],[new THREE.SphereGeometry(0.0105,16,10),M(0.013,-0.017,0,0.22,1,1)],
+    [new THREE.TorusGeometry(0.0106,0.0011,6,24),M(-0.0125,-0.017,0,1,1,1,0,Math.PI/2,0)],[new THREE.TorusGeometry(0.0106,0.0011,6,24),M(0.0125,-0.017,0,1,1,1,0,Math.PI/2,0)],
+    [new THREE.BoxGeometry(0.016,0.026,0.0075),M(0,-0.035,0.0072,1,1,1,0.28,0,0)],[new THREE.BoxGeometry(0.018,0.0045,0.0095),M(0,-0.048,0.0108,1,1,1,0.28,0,0)],
+    [new THREE.TorusGeometry(0.0048,0.0012,6,14),M(0,-0.002,-0.003,1,1,1,0,Math.PI/2,0)],[new THREE.CylinderGeometry(0.0021,0.0021,0.007,8),M(0,-0.0062,-0.0042)]];
+  g.add(new THREE.Mesh(mergeGeos(L),chrome));
+  const win=new THREE.Mesh(new THREE.BoxGeometry(0.011,0.0034,0.003),dark);win.position.set(0,-0.0105,0.0095);win.rotation.x=-0.55;g.add(win);
+  const pea=new THREE.Mesh(new THREE.SphereGeometry(0.0028,8,6),new THREE.MeshStandardMaterial({color:0xc9a26a,roughness:0.8}));pea.position.set(0.003,-0.0115,0.0098);g.add(pea);
+  return g;}
+// lanyard: around the back of the neck, over the collar, down to the whistle ring (tight over the tracksuit, looser over a tee or polo)
+function lanyardGeo(loose){const z=loose?[-0.064,0,0.112,0.176,0.186]:[-0.064,0,0.084,0.146,0.156];
+  const P=[[0,0.632,z[0]],[0.07,0.626,z[1]],[0.056,0.598,z[2]],[0.03,0.5,z[3]],[0,0.418,z[4]],[-0.03,0.5,z[3]],[-0.056,0.598,z[2]],[-0.07,0.626,z[1]]].map(p=>new THREE.Vector3(p[0],p[1],p[2]));
+  return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(P,true),56,0.0033,6,true);}
+const WH_TIGHT=new THREE.Vector3(0,0.414,0.159),WH_LOOSE=new THREE.Vector3(0,0.414,0.189),LANYARD_M=new THREE.MeshStandardMaterial({color:0x1f5fff,roughness:0.7});
+function coachCap(a){if(a.cCap)return a.cCap;const m=new THREE.MeshStandardMaterial({color:0x13265a,roughness:0.72}),g=new THREE.Group();
+  const cr=new THREE.Mesh(new THREE.SphereGeometry(0.124,24,12,0,TAU,0,Math.PI*0.5),m);cr.scale.set(0.98,0.8,1.05);g.add(cr);
+  const br=new THREE.Mesh(new THREE.CylinderGeometry(0.105,0.105,0.006,24,1,false,-Math.PI/2,Math.PI),m);br.scale.set(0.92,1,0.9);br.position.set(0,0.004,0.1);br.rotation.x=0.16;g.add(br);
+  const bt=new THREE.Mesh(new THREE.SphereGeometry(0.009,8,6),m);bt.position.set(0,0.099,0);g.add(bt);
+  const lg=new THREE.Mesh(new THREE.PlaneGeometry(0.07,0.026),DECAL.matW);lg.position.set(0,0.052,0.122);lg.rotation.x=-0.42;
+  {const uv=lg.geometry.attributes.uv,r=[712,140,1012,250];for(let i=0;i<uv.count;i++){uv.setXY(i,(r[0]+uv.getX(i)*(r[2]-r[0]))/1024,1-(r[3]-uv.getY(i)*(r[3]-r[1]))/512);}}g.add(lg);
+  g.position.set(0,0.148,-0.004);g.rotation.x=-0.1;g.visible=false;a.head.add(g);a.cCap=g;return g;}
+const COACH_LOOK={top:0x0b2a6b,shorts:0x0b2a6b,skin:SKINS[3],hairCol:0x0d0d0d,hair:0,shoe:0x111111,stripe:false};
+// 0: navy tracksuit, 1: Blue Sharks polo and track pants, 2: Blue Sharks coach tee, shorts and cap
+function setCoachOutfit(k){const a=coach;story.coachOut=k;
+  if(k===0){setOutfit(a,null);dress(a,COACH_LOOK);setSuit(a,true);}else{if(a.suitOn)setSuit(a,false);setOutfit(a,k===1?3:4);}
+  const loose=k!==0;a.whLoose=loose;a.lan.geometry=loose?a.lanyard.loose:a.lanyard.tight;if(a.whistle.parent===a.torso)a.whistle.position.copy(loose?WH_LOOSE:WH_TIGHT);
+  coachCap(a).visible=k===2;}
+// he grabs the whistle and brings it up to his lips. Where it sits in his hand is worked out from the arm at WH_POSE,
+// so at the top of the motion the mouthpiece is between his lips (barrel across the mouth, sound hole up, tipped a little down)
+function whistleGrip(a){const ar=a.armR.rotation.clone(),er=a.elbowR.rotation.x,hr=a.head.rotation.clone();
+  a.armR.rotation.set(WH_POSE[0],WH_POSE[1],WH_POSE[2]);a.elbowR.rotation.x=WH_POSE[3];a.head.rotation.set(0,0,0);a.root.updateMatrixWorld(true);
+  const lg=a.faceLip.geometry;if(!lg.boundingBox)lg.computeBoundingBox();const bb=lg.boundingBox;
+  const R=new THREE.Matrix4().makeRotationX(0.2).multiply(new THREE.Matrix4().makeBasis(new THREE.Vector3(-1,0,0),new THREE.Vector3(0,0,1),new THREE.Vector3(0,1,0)));
+  const tip=new THREE.Vector3(0,-0.05,0.011).applyMatrix4(R);R.setPosition(new THREE.Vector3((bb.min.x+bb.max.x)/2,(bb.min.y+bb.max.y)/2,bb.max.z-0.004).sub(tip));
+  const L=new THREE.Matrix4().copy(a.handR.matrixWorld).invert().multiply(a.head.matrixWorld).multiply(R);
+  a.armR.rotation.copy(ar);a.elbowR.rotation.x=er;a.head.rotation.copy(hr);a.root.updateMatrixWorld(true);return L;}
+function coachBlow(){const a=coach,w=a.whistle;if(!w||!a.root.visible)return;
+  const L=whistleGrip(a);a.eatT=1.3;a.eatKind='whistle';a.handR.add(w);L.decompose(w.position,w.quaternion,w.scale);}
+// while it's up the lanyard runs from his neck to the whistle's ring; it goes back on his chest when he's done
+const _ring=new THREE.Vector3();
+function whistleBack(){const a=coach,w=a.whistle;if(!w||w.parent===a.torso)return;
+  if(!(a.eatT>0.15)){a.torso.add(w);w.position.copy(a.whLoose?WH_LOOSE:WH_TIGHT);w.rotation.set(0,0,0);w.scale.set(1,1,1);a.lan.geometry=a.whLoose?a.lanyard.loose:a.lanyard.tight;return;}
+  w.updateMatrixWorld(true);a.torso.worldToLocal(w.localToWorld(_ring.set(0,0.003,-0.003)));
+  const z=a.whLoose?0.112:0.084,P=[[0,0.632,-0.064],[0.07,0.626,0],[0.056,0.598,z],[0.022,0.6,z+0.05],[_ring.x,_ring.y,_ring.z],[-0.022,0.6,z+0.05],[-0.056,0.598,z],[-0.07,0.626,0]].map(p=>new THREE.Vector3(p[0],p[1],p[2]));
+  const g=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(P,true),56,0.0033,6,true),D=a.lanDyn;
+  if(!D)a.lanDyn=g;else{for(const k of['position','normal']){D.attributes[k].array.set(g.attributes[k].array);D.attributes[k].needsUpdate=true;}D.computeBoundingSphere();}
+  a.lan.geometry=a.lanDyn;}
 const coach=(function(){const a=makeAthlete();a.root.visible=false;
-  dress(a,{top:0x0b2a6b,shorts:0x0b2a6b,skin:SKINS[3],hairCol:0x0d0d0d,hair:0,shoe:0x111111});setGender(a,'M');setHeight(a,73);setSuit(a,true);
+  dress(a,COACH_LOOK);setGender(a,'M');setHeight(a,73);setSuit(a,true);
   setTag(a,'Coach Blue',false,'rgba(243,200,71,.95)','#0b2a6b');a.tag.scale.set(1.0,0.25,1);
-  const lan=new THREE.Mesh(new THREE.TorusGeometry(0.1,0.0045,5,28),new THREE.MeshStandardMaterial({color:0x1f5fff,roughness:0.6}));lan.position.set(0,0.5,0.05);lan.rotation.x=1.15;lan.scale.set(1.05,1.55,1);a.torso.add(lan);
-  const wh=new THREE.Mesh(new THREE.CylinderGeometry(0.012,0.012,0.05,10),new THREE.MeshStandardMaterial({color:0xd9dde2,metalness:0.9,roughness:0.25}));wh.rotation.z=Math.PI/2;wh.position.set(0,0.385,0.148);a.torso.add(wh);
+  a.lanyard={tight:lanyardGeo(false),loose:lanyardGeo(true)};a.lan=new THREE.Mesh(a.lanyard.tight,LANYARD_M);a.torso.add(a.lan);
+  a.whistle=makeWhistle();a.whistle.position.copy(WH_TIGHT);a.torso.add(a.whistle);
   const cb=new THREE.Group();cb.add(new THREE.Mesh(new THREE.BoxGeometry(0.23,0.31,0.008),new THREE.MeshStandardMaterial({color:0x8a6a44,roughness:0.7})));
   {const pp=new THREE.Mesh(new THREE.PlaneGeometry(0.2,0.25),new THREE.MeshStandardMaterial({color:0xf4f4ef,roughness:0.9}));pp.position.set(0,-0.018,0.0046);cb.add(pp);
    const cl=new THREE.Mesh(new THREE.BoxGeometry(0.085,0.028,0.016),new THREE.MeshStandardMaterial({color:0xc9ced6,metalness:0.8,roughness:0.3}));cl.position.set(0,0.142,0.007);cb.add(cl);}
@@ -3245,7 +3371,7 @@ function storyMarker(col,sz){const c=canvas(64,64),g=c.getContext('2d');g.fillSt
   g.beginPath();g.moveTo(32,58);g.lineTo(9,27);g.lineTo(22,27);g.lineTo(22,6);g.lineTo(42,6);g.lineTo(42,27);g.lineTo(55,27);g.closePath();g.stroke();g.fill();
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),depthTest:false,depthWrite:false,transparent:true,toneMapped:false,fog:false}));sp.scale.set(sz,sz,1);sp.renderOrder=6;sp.visible=false;scene.add(sp);return sp;}
 const coachMark=storyMarker('#f3c847',0.42),deliMark=storyMarker('#74aaff',3.4);deliMark.position.set(156.4,5.4,-110);
-function whistleSfx(){if(!AC||!soundOn)return;const t=AC.currentTime,o=AC.createOscillator(),lfo=AC.createOscillator(),lg=AC.createGain(),g=AC.createGain();
+function whistleSfx(){if(story.active)coachBlow();if(!AC||!soundOn)return;const t=AC.currentTime,o=AC.createOscillator(),lfo=AC.createOscillator(),lg=AC.createGain(),g=AC.createGain();
   o.frequency.value=2900;lfo.frequency.value=32;lg.gain.value=110;lfo.connect(lg);lg.connect(o.frequency);
   g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(0.2,t+0.02);g.gain.setValueAtTime(0.2,t+0.4);g.gain.exponentialRampToValueAtTime(0.0001,t+0.55);
   o.connect(g);g.connect(master);o.start(t);lfo.start(t);o.stop(t+0.6);lfo.stop(t+0.6);}
@@ -3295,7 +3421,7 @@ function gatherTeam(delay){story.team.forEach((p,i)=>{const A=p.act;if(!A||p.mod
 function storyIdentity(p,d){
   p.name=d.name;p.gender=d.g||'M';p.star=true;p.def=d;p.topOverride=d.mph/2.237;p.endur=d.endur;p.react=d.react;p.reactR=d.reactR||null;p.accBoost=d.accBoost||null;p.stats={pow:d.pow,sta:d.sta,end:d.end};
   p.fade=d.fade||null;p.surge=d.surge||null;p.endurBy=null;p.pbs={};p.rating=clamp((d.mph-(p.gender==='W'?16:18))/2.1,0,1);p.form='std';p.hIn=d.h;p.afk=false;p.medals=[0,0,0];p.reached=-1;p.ping=randi(12,40);p.sitSpot=null;
-  p.look={top:d.top,shorts:d.shorts,skin:d.skin,hairCol:d.hairCol,hair:d.hair,shoe:d.shoe,stripe:false};p.suit=false;
+  p.look={top:0x1f6fff,shorts:0x0b2a6b,team:'bs',skin:d.skin,hairCol:d.hairCol,hair:d.hair,shoe:d.shoe};p.suit=false;
   const a=p.ath;setGender(a,p.gender);setHeight(a,d.h);a.form='std';dress(a,p.look);wearGlasses(a,!!d.glasses);if(a.suitOn)setSuit(a,false);
   if(d.taylar){const R=taylarGear(a);R.nose.visible=R.chain.visible=true;}
   setTag(a,d.short,false);a.tag.scale.set(0.9,0.225,1);a.bibOn=false;a.bib.visible=false;a.medal.visible=false;a.root.visible=true;resetFx(a);a.fatigue=0;p.mode='story';p.act=newAct(a);}
@@ -3374,8 +3500,9 @@ function resetDayWorld(){
   if(me.sitSpot)standUp(me);me.indoor=false;me.mode='story';
   [story.coachA,story.meA,...story.team.map(p=>p.act)].forEach(A=>{A.path=null;A.jog=null;A.drill=null;A.kneel=0;A.delay=0;A.cb=null;A.face=null;A.tiredT=0;
     const a=A.ath;resetFx(a);a.root.visible=true;a.root.position.set(0,0,-100.5);a.yaw=0;a.root.rotation.set(0,0,0);a.anim='idle';a.speed=0;});
-  story.team.forEach(p=>{p.mode='story';setOutfit(p.ath,randi(0,OUTFITS.length-1));p.ath.fatigue=0;p.ath.tiredStyle=randi(0,1);casual(p,true);});
-  setOutfit(meAth,randi(0,OUTFITS.length-1));meAth.fatigue=0;story.runStart=story.clock+3;story.runLen=rand(45,70);coach.root.visible=true;}
+  setCoachOutfit(randi(0,2));
+  story.team.forEach(p=>{p.mode='story';setOutfit(p.ath,randi(0,2));p.ath.fatigue=0;p.ath.tiredStyle=randi(0,1);casual(p,true);});
+  setOutfit(meAth,randi(0,2));meAth.fatigue=0;story.runStart=story.clock+3;story.runLen=rand(45,70);coach.root.visible=true;}
 // cutscene: out the back of Tilden, across the field, water and phones down on the grass
 function castActs(){const T=story.team;return[story.coachA,T[0].act,T[2].act,story.meA,T[1].act,T[3].act,T[4].act,T[5].act];}
 const CUT_SHOTS=[
@@ -3636,7 +3763,7 @@ function storyUpdate(dt){
     case'pause':story.restT-=dt;if(story.restT<=0){story.phase='workout';nextStep();}break;
     case'drills':if(story.drill)drillUpdate(dt);break;
     case'free':freeUpdate(dt);break;}
-  restWander(dt);dlgUpdate(dt);
+  restWander(dt);dlgUpdate(dt);whistleBack();
   coachMark.visible=(ph==='meet'||ph==='meet2')&&!story.dlg&&coach.root.visible;
   if(coachMark.visible)coachMark.position.set(coach.root.position.x,2.62*(coach.hs||1)+0.1*Math.sin(time*4),coach.root.position.z);
   deliMark.visible=ph==='free';if(deliMark.visible)deliMark.position.y=5.4+0.3*Math.sin(time*3);
