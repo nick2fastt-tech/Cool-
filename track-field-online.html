@@ -590,7 +590,10 @@ const EVENTS=[
 const GOMARK={100:17,200:12,400:6},WAITOFF={100:8,200:6,400:2};
 function legId(ev){return ev.relay?String(ev.leg):(ev.base||ev.id);}
 const ROUNDS=['Qualifying','Semifinal','Final'];
-const LANE_ORDER=[4,5,3,6,2,7,1,8];
+const LANE_ORDER=[4,5,3,6,2,7,1,8],LANE_ORDER6=[3,4,2,5,1,6];
+// how many lanes an event has: the Armory oval has 6, everything else 8
+function laneCap(ev){return ev&&ev.path==='in'?6:8;}
+function laneOrd(ev){return laneCap(ev)===6?LANE_ORDER6:LANE_ORDER;}
 
 // ================= RENDERER / SCENE =================
 // ================= PERFORMANCE =================
@@ -2588,7 +2591,7 @@ const hud=$('#hud'),clog=$('#clog'),bTop=$('#bTop'),bSub=$('#bSub'),toastEl=$('#
 let toastT=0;
 function toast(msg,dur){toastEl.textContent=msg;toastEl.classList.add('show');toastT=dur||2.6;}
 function feedback(txt,col){fbEl.textContent=txt;fbEl.style.color=col||'#fff';fbEl.classList.remove('pop');void fbEl.offsetWidth;fbEl.classList.add('pop');}
-let calloutT=0;function callout(txt,dur){callEl.textContent=txt;callEl.style.opacity=1;calloutT=dur||1.2;}
+let calloutT=0;function callout(txt,dur){callEl.textContent=txt;css(callEl,'opacity',1);calloutT=dur||1.2;}
 let flashA=0;
 function addChat(p,text,sys){
   const d=document.createElement('div');d.className='cm'+(sys?' sys':'');
@@ -2727,12 +2730,12 @@ function churn(){
   if(Math.random()<.6)queueChat(rand(2,4),p,pick(["yo","sup everyone","hii","what event is this","let's run"]));
 }
 function makeHeats(ents,r){
-  let heats=[];
-  if(r===0){shuffle(ents);const nh=Math.max(1,Math.ceil(ents.length/8));for(let i=0;i<nh;i++)heats.push([]);ents.forEach((e,i)=>heats[i%nh].push(e));
-    heats.forEach(h=>{const lanes=shuffle(LANE_ORDER.slice(0,h.length));h.forEach((e,i)=>e.lane=lanes[i]);});}
+  let heats=[];const ev=EVENTS[meet.ev],C=laneCap(ev),LO=laneOrd(ev);
+  if(r===0){shuffle(ents);const nh=Math.max(1,Math.ceil(ents.length/C));for(let i=0;i<nh;i++)heats.push([]);ents.forEach((e,i)=>heats[i%nh].push(e));
+    heats.forEach(h=>{const lanes=shuffle(LO.slice(0,h.length));h.forEach((e,i)=>e.lane=lanes[i]);});}
   else if(r===1){ents.sort((a,b)=>a.seed-b.seed);heats=[[],[]];ents.forEach((e,i)=>{const m=i%4;heats[(m===0||m===3)?0:1].push(e);});
-    heats.forEach(h=>h.forEach((e,i)=>e.lane=LANE_ORDER[i]));}
-  else{ents.sort((a,b)=>a.seed-b.seed);heats=[ents.slice(0,8)];heats[0].forEach((e,i)=>e.lane=LANE_ORDER[i]);}
+    heats.forEach(h=>h.forEach((e,i)=>e.lane=LO[i]));}
+  else{ents.sort((a,b)=>a.seed-b.seed);heats=[ents.slice(0,C)];heats[0].forEach((e,i)=>e.lane=LO[i]);}
   heats=heats.filter(h=>h.length);heats.forEach(h=>h.sort((a,b)=>a.lane-b.lane));
   return heats;
 }
@@ -2759,7 +2762,7 @@ function endRound(){
   ['W','M'].forEach(d=>{const D=meet.div[d];if(!D||D.stage!==r)return;
     const all=meet.heats.filter(h=>h.div===d).flat();const fin=all.filter(e=>e.time!=null).sort((a,b)=>a.time-b.time);
     if(!fin.length){delete meet.div[d];return;}
-    let ns,count;if(r===0&&fin.length>8){ns=1;count=Math.min(16,fin.length);}else{ns=2;count=Math.min(8,fin.length);}
+    const C=laneCap(ev);let ns,count;if(r===0&&fin.length>C){ns=1;count=Math.min(2*C,fin.length);}else{ns=2;count=Math.min(C,fin.length);}
     const adv=fin.slice(0,count);
     addChat(null,DIVN[d]+' '+(ns===1?'semifinal':'final')+' set: fastest '+count+' move on. Cutoff '+fmt(adv[adv.length-1].time)+'.',true);
     const wasIn=all.some(e=>e.p.isMe&&e.status!=='DNS'),made=adv.some(e=>e.p.isMe);
@@ -2850,7 +2853,9 @@ const CHK=1.15;
 // top level (endurance and each runner's event strength decide how much)
 const PRO_E={'200':[0.975,100,0.00062],'300':[0.975,140,0.0004],'400':[0.975,200,0.00045]};
 function proEndure(r,cov){const fid=legId(race.ev),P=PRO_E[fid];if(!P)return 1;const e=(r.P&&r.P.endurBy&&r.P.endurBy[fid]!=null)?r.P.endurBy[fid]:r.endur;return P[0]-Math.max(0,cov-P[1])*P[2]*(1.3-0.6*Math.min(1.1,e));}
-function cheatVm(r){const ev=race.ev,D=r.b0-legEnd(r),T=Math.max(0.3,chTime(ev.id)-r.ct0);return D/Math.max(0.05,T-(1-Math.exp(-CHK*T))/CHK);}
+// the top speed that covers the rest of the race (or your relay leg, from where you took the baton at your current speed) in
+// exactly the cheat time: v(t)=vm+(v0-vm)e^-kt
+function cheatVm(r){const ev=race.ev,D=r.cb0-legEnd(r),T=Math.max(0.3,ev.relay?chTime(ev.id):chTime(ev.id)-r.ct0),q=(1-Math.exp(-CHK*T))/CHK;return(D-r.cv0*q)/Math.max(0.05,T-q);}
 function x4extra(lane){return Math.PI*(laneR(lane)-laneR(1));}
 function bExOf(ev,lane,k){return ev.dist-ev.leg*(k+1)+((ev.id==='4x4'&&k===0)?x4extra(lane):0);}
 function legEnd(r){const ev=race.ev;return ev.relay?bExOf(ev,r.lane,r.leg):0;}
@@ -2885,7 +2890,7 @@ function stepRunner(r,dt){
     k=(r.isMe?PL.acc*(time<(PL.buffAcc||0)?1.1:1):(0.85+r.rating*0.3)*r.fm.acc*r.accMul)*(ev.path==='grass'?0.85:1);if(curLvl()==='col'&&!race.story)k=Math.min(k*0.72,0.875); // pros pick up speed like real sprinters: about 6.4 for the 60 and 9.9 for the 100 at 26.1 mph, and nobody out-accelerates Jordan Anthony
     if(vt<r.v)k=1.6;if(r.isMe)PL.stam=Math.max(0,PL.stam-PL.drain*(legId(race.ev)==='400'?1.4:legId(race.ev)==='300'?1.2:1)*(time<(PL.buffDrain||0)?0.8:1)*dt);}
   else{vt=0;k=1.15;}
-  if(r.state==='run'&&r.isMe&&cheatActive()){if(r.ct0==null){r.ct0=race.clock;r.cvm=cheatVm(r);}const t=race.clock-r.ct0;r.v=r.cvm*(1-Math.exp(-CHK*t));r.b=r.b0-r.cvm*(t-(1-Math.exp(-CHK*t))/CHK);}
+  if(r.state==='run'&&r.isMe&&cheatActive()&&(!ev.relay||r.e.runners[r.e.leg]===r)){if(r.ct0==null){r.ct0=race.clock;r.cb0=ev.relay?r.b:r.b0;r.cv0=ev.relay?r.v:0;r.cvm=cheatVm(r);}const t=race.clock-r.ct0,ek=Math.exp(-CHK*t);r.v=r.cvm+(r.cv0-r.cvm)*ek;r.b=r.cb0-(r.cvm*t+(r.cv0-r.cvm)*(1-ek)/CHK);}
   else{r.v+=(vt-r.v)*Math.min(1,k*dt);r.b-=r.v*dt;}
   if(r.state==='run'&&r.v>(r.maxV||0))r.maxV=r.v;
   const cov=r.b0-r.b,lid=legId(ev);r.drive=r.state==='run'?Math.pow(Math.max(0,1-cov/(lid==='300'||lid==='400'?15:30)),1.35):0;
@@ -3599,10 +3604,10 @@ const CH_DEF={'40y':4.20,'60':6.30,'100':9.50,'200':19.00,'300':30.50,'400':42.5
 function CH(){if(!store.cheats)store.cheats={on:false,t:{}};return store.cheats;}
 function chTime(id){const c=CH(),b=(EVENTS.find(e=>e.id===id)||{}).base||id;return c.t[id]!=null?c.t[id]:c.t[b]!=null?c.t[b]:CH_DEF[b];}
 function cheatOn(){return !!CH().on;}
-function cheatActive(){return cheatOn()&&race.ev&&!race.ev.relay&&!story.active;}
+function cheatActive(){return cheatOn()&&race.ev&&(!race.ev.relay||race.ev.leg<=200)&&!story.active;}
 function renderCheats(){
   const c=CH(),b=$('#chOn');b.textContent=c.on?'On':'Off';b.classList.toggle('on',c.on);b.setAttribute('aria-pressed',c.on);
-  $('#chList').innerHTML=EVENTS.filter(e=>!e.relay).map(e=>'<div class="chrow"><span>'+e.short+(e.relay?'<small>your leg split</small>':'')+'</span><button data-ch="'+e.id+'" data-d="-0.1" aria-label="Faster">−</button><input type="number" inputmode="decimal" step="0.01" min="0.5" data-chi="'+e.id+'" value="'+chTime(e.id).toFixed(2)+'" aria-label="'+e.short+' time"><button data-ch="'+e.id+'" data-d="0.1" aria-label="Slower">+</button></div>').join('');
+  $('#chList').innerHTML=EVENTS.filter(e=>!e.relay||e.leg<=200).map(e=>'<div class="chrow"><span>'+e.short+(e.relay?'<small>your leg split</small>':'')+'</span><button data-ch="'+e.id+'" data-d="-0.1" aria-label="Faster">−</button><input type="number" inputmode="decimal" step="0.01" min="0.5" data-chi="'+e.id+'" value="'+chTime(e.id).toFixed(2)+'" aria-label="'+e.short+' time"><button data-ch="'+e.id+'" data-d="0.1" aria-label="Slower">+</button></div>').join('');
 }
 const ROWS=[
   {k:'g',label:'Division',val:b=>b.g==='M'?'Men':'Women',step:b=>{b.g=b.g==='M'?'W':'M';}},
