@@ -277,7 +277,7 @@ button:active{transform:translateY(1px)}
 .chrow input{width:100%;font:700 18px 'Barlow Condensed','Arial Narrow',sans-serif;color:#fff;background:rgba(3,13,36,.7);border:1px solid var(--line);border-radius:6px;padding:5px 6px;text-align:center;user-select:text;-webkit-user-select:text}
 .chrow button{padding:4px 10px}
 #chOn.on{background:var(--blue);border-color:transparent}
-.pbt.cht{background:#5a6b8f}
+.pbt.cht{background:#5a6b8f}.pbt.nrt{background:#d8283a}.pbt.wlt{background:#7b3fe4}.pbt.mrt{background:#15b5b0;color:#062a2a}.pbt.sbt{background:#3e5f86}
 #toast{position:absolute;left:50%;top:calc(var(--st) + 82px);transform:translateX(-50%);padding:9px 16px;font:700 18px 'Barlow Condensed','Arial Narrow',sans-serif;background:var(--blue);border-radius:9px;opacity:0;transition:opacity .3s;white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
 #toast.show{opacity:1}
 
@@ -562,7 +562,7 @@ const LANE_ORDER=[4,5,3,6,2,7,1,8];
 // Phones start at a lighter pixel ratio; perfTick then trades resolution for a steady 60 fps
 const MOBILE=(window.matchMedia&&matchMedia('(pointer:coarse)').matches)||/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 const PERF={max:Math.min(window.devicePixelRatio||1,2),min:0.6,pr:1,acc:0,n:0,slow:0,good:0,hold:4,ceil:9,floor:0,upAt:-1e9,chk:0,prev:0};
-PERF.pr=MOBILE?Math.min(PERF.max,1.5):PERF.max;
+PERF.pr=MOBILE?Math.min(PERF.max,1.75):PERF.max;
 // hidden things (parked runners, other outfits, props that aren't out) skip their transform update until they're shown again
 {const umw=THREE.Object3D.prototype.updateMatrixWorld;THREE.Object3D.prototype.updateMatrixWorld=function(force){if(!this.visible&&this.parent){this.matrixWorldNeedsUpdate=true;return;}umw.call(this,force);};}
 function setPR(p){PERF.pr=p;renderer.setPixelRatio(p);}
@@ -575,13 +575,14 @@ function perfTick(ms){if(document.hidden||!(ms>0)||ms>300)return;
   if(PERF.chk){PERF.chk=0;if(avg>PERF.prev*0.92){PERF.floor=Math.min(PERF.max,PERF.pr/0.85);setPR(PERF.floor);PERF.hold=2;return;}}
   if(slow>0.5){if(now-PERF.upAt<5000)PERF.ceil=PERF.pr*0.98;const np=Math.max(PERF.min,PERF.floor,PERF.pr*0.85);
     if(np<PERF.pr-0.01){PERF.prev=avg;setPR(np);PERF.chk=1;PERF.hold=1;}PERF.good=0;}
-  else if(slow<0.1){if(++PERF.good>=8){PERF.good=0;const np=Math.min(PERF.max,PERF.ceil,PERF.pr/0.85);if(np>PERF.pr+0.01){setPR(np);PERF.upAt=now;PERF.hold=1;}}}
+  else if(slow<0.1){if(++PERF.good>=8){PERF.good=0;const np=Math.min(PERF.max,PERF.ceil,PERF.pr/0.85);if(np>PERF.pr+0.01){setPR(np);PERF.upAt=now;PERF.hold=1;}
+    else if(sun.shadow.mapSize.x<2048&&!PERF.shUp){PERF.shUp=1;sun.shadow.mapSize.set(2048,2048);if(sun.shadow.map){sun.shadow.map.dispose();sun.shadow.map=null;}PERF.upAt=now;PERF.hold=1;}}}
   else PERF.good=0;}
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
 renderer.setPixelRatio(PERF.pr);
 renderer.setSize(innerWidth,innerHeight);
 renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.18;
-renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFShadowMap;
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=MOBILE?THREE.PCFShadowMap:THREE.PCFSoftShadowMap;
 renderer.domElement.id='c';document.body.prepend(renderer.domElement);
 const scene=new THREE.Scene();
 scene.fog=new THREE.Fog(0xcfe0f2,280,1250);
@@ -1394,19 +1395,22 @@ const FORMS={
   gout:{name:'Gout Gout form',desc:'Lanky and springy: huge splits between the legs with the back leg fully extended behind and the front leg reaching out, about 2.7m steps with peaks near 2.86m, a stiff elastic ankle, a big arm swing with the back arm nearly straight, and an upright torso. Holds top speed late.',acc:0.97,vmax:1.015,curve:1,stride:1.1,kick:1.03},
   lyles:{name:'Lyles form',desc:'From the side view: a very upright torso with the chest up, knees driven up to about hip height, toes pulled up on every swing and a forefoot landing under the hips. Compact arms locked near 90 degrees, front hand up to the chin. About 252 steps a minute in the 200m. Strong on the curve and over the last 30m.',acc:0.98,vmax:1.005,curve:1.03,stride:1.02,kick:1.02},
   oos:{name:'Out Of Shape Form',desc:'Built from your goofy clip: hunched over with the chin poking out and lips puffed, arms flailing up to the face and crossing the body with the elbows flared, the back arm flung way up behind, knees hauled up high but heavy, flat-footed slapping steps, a big bouncing bob and the whole body rocking side to side. Slow and tires fast.',acc:0.9,vmax:0.93,curve:0.96,stride:0.86,kick:0.9,drainMul:1.35},
+  ja:{name:'Jordan Anthony form',desc:'Built from his training clip (2026 world indoor 60m champion, 6.41): a tall, quiet torso with a slight forward lean and the head level, knees driven up to hip height in front, the heel snapping up tight under the glutes on every recovery, a full push-off behind and a forefoot landing right under the hips. Compact arms locked near 90 degrees, front hand to the chin and back hand to the hip, quick turnover and a stiff, springy stance. The most explosive start in the game.',acc:1.07,vmax:1.012,curve:1,stride:0.97,kick:1},
   nick:{name:"Nick's form",desc:"Built from your video: upright torso and head, a big heel kick behind you on every stride, a wide arm swing with the elbows flaring out and the front hand coming up to face height, a bouncy stride and a fairly straight stance leg.",acc:1.0,vmax:1.01,curve:1,stride:1.0,kick:1.02},
 };
-const FORM_KEYS=['bolt','gout','lyles','nick','oos'];
+const FORM_KEYS=['bolt','gout','lyles','ja','nick','oos'];
 // animation shape of each form (1 = standard). knee: thigh lift, heel: heel recovery, back: rear push extension,
 // front: thighs biased forward, arm: arm swing, elbow: elbow opening on the back swing, twist/pelvis: rotation,
 // lean: forward lean, bounce: vertical bounce, sway: side roll, stance: knee bend on contact, plant: toe push,
-// dorsi: toes pulled up on the swing, hip: hip height, head: head tilt, cross: arms crossing the body, drive: block lean
-const FP0={armBack:0,flare:0,knee:1,heel:1,back:0,front:0,arm:1,elbow:0,twist:1,pelvis:1,lean:0,bounce:1,sway:0,stance:1,plant:1,dorsi:1,hip:0,head:0,cross:1,drive:1,arch:0,tilt:0};
+// dorsi: toes pulled up on the swing, hip: hip height, head: head tilt, cross: arms crossing the body, drive: block lean,
+// hold: front-side knee hold (the shin stays folded under a high knee and the foot comes down under the hips instead of reaching)
+const FP0={hold:0,armBack:0,flare:0,knee:1,heel:1,back:0,front:0,arm:1,elbow:0,twist:1,pelvis:1,lean:0,bounce:1,sway:0,stance:1,plant:1,dorsi:1,hip:0,head:0,cross:1,drive:1,arch:0,tilt:0};
 FORMS.std.p={};
 FORMS.bolt.p={knee:1.0,heel:0.88,back:0.17,arm:1.12,elbow:0.3,flare:0.04,twist:1.5,pelvis:1.35,lean:-0.04,bounce:1.38,sway:0.024,stance:0.55,plant:1.35,dorsi:0.85,hip:0.012,head:-0.05,cross:1.25,drive:0.85,arch:0.04,tilt:0.02};
 FORMS.gout.p={knee:1.06,heel:0.98,back:0.15,arm:1.12,elbow:0.22,twist:1.2,pelvis:1.15,lean:-0.07,bounce:1.3,sway:0.006,stance:0.6,plant:1.45,dorsi:1.1,hip:0.018,head:-0.03,cross:1.0,drive:0.95};
 FORMS.lyles.p={knee:1.16,heel:1.0,back:0.02,front:0.06,arm:1.06,elbow:-0.14,twist:0.85,pelvis:0.85,lean:-0.14,bounce:1.0,stance:1.2,plant:0.95,dorsi:1.45,hip:0.016,head:-0.04,cross:0.8};
 FORMS.oos.p={knee:1.12,heel:0.55,back:-0.12,front:0.1,arm:1.38,armBack:0.38,elbow:-0.28,flare:0.2,twist:1.65,pelvis:1.4,lean:0.15,bounce:1.95,sway:0.07,stance:1.65,plant:0.45,dorsi:0.3,hip:-0.02,head:-0.16,cross:2.4,drive:0.6};
+FORMS.ja.p={hold:1.1,knee:1.15,heel:1.18,back:0.1,front:0.05,arm:1.0,elbow:-0.1,twist:0.9,pelvis:0.9,lean:-0.05,bounce:0.9,sway:0.004,stance:0.8,plant:1.25,dorsi:1.35,hip:0.012,head:-0.02,cross:0.85,drive:1.05};
 FORMS.nick.p={knee:0.98,heel:1.12,back:0.1,arm:1.16,elbow:0.04,flare:0.16,twist:1.2,pelvis:1.0,lean:-0.07,bounce:1.25,sway:0.012,stance:0.8,plant:1.1,dorsi:0.9,head:-0.07,cross:1.2,drive:1.0};
 
 function mergeGeos(list){
@@ -1435,8 +1439,8 @@ function mirrorGeoX(g){const o=g.clone(),pa=o.attributes.position.array,na=o.att
   for(let i=0;i<pa.length;i+=3){pa[i]=-pa[i];na[i]=-na[i];}
   for(let i=0;i<pa.length;i+=9){for(let k=0;k<3;k++){const t=pa[i+3+k];pa[i+3+k]=pa[i+6+k];pa[i+6+k]=t;const u=na[i+3+k];na[i+3+k]=na[i+6+k];na[i+6+k]=u;}}
   o.attributes.position.needsUpdate=true;o.attributes.normal.needsUpdate=true;return o;}
-function makeHand2(s,long,lo){
-  const S=[],N=[],up=new THREE.Vector3(0,1,0),ball=new THREE.SphereGeometry(1,lo?5:9,lo?4:7),seg=new THREE.CylinderGeometry(1,0.9,1,lo?4:7,1,true);
+function makeHand2(s,long,lo){const q=lo===true?0:lo==='hi'?2:1;
+  const S=[],N=[],up=new THREE.Vector3(0,1,0),ball=new THREE.SphereGeometry(1,[5,9,14][q],[4,7,10][q]),seg=new THREE.CylinderGeometry(1,0.9,1,[4,7,10][q],1,true);
   const M=(x,y,z,q,sx,sy,sz)=>new THREE.Matrix4().compose(new THREE.Vector3(x,y,z),q||new THREE.Quaternion(),new THREE.Vector3(sx,sy,sz));
   S.push([ball,M(-s*0.003,-0.05,0,null,0.019,0.054,0.04)]);
   S.push([ball,M(-s*0.011,-0.036,0.024,null,0.013,0.027,0.017)]);
@@ -1457,7 +1461,7 @@ function makeHand2(s,long,lo){
     x+=td.x*len;y+=td.y*len;z+=td.z*len;S.push([ball,M(x,y,z,null,0.0096,0.0096,0.0096)]);td.applyAxisAngle(new THREE.Vector3(0,0,1),s*0.3);}
   return{skin:mergeGeos(S),nail:mergeGeos(N)};
 }
-{const hl=makeHand2(1),hr=makeHand2(-1);G.handL=hl.skin;G.handR=hr.skin;G.nailL=hl.nail;G.nailR=hr.nail;G.nailLW=makeHand2(1,true).nail;G.nailRW=makeHand2(-1,true).nail;G.handLoL=makeHand2(1,false,true).skin;G.handLoR=makeHand2(-1,false,true).skin;}
+{const hl=makeHand2(1),hr=makeHand2(-1);G.handL=hl.skin;G.handR=hr.skin;G.nailL=hl.nail;G.nailR=hr.nail;G.nailLW=makeHand2(1,true).nail;G.nailRW=makeHand2(-1,true).nail;G.handLoL=makeHand2(1,false,true).skin;G.handLoR=makeHand2(-1,false,true).skin;G.handHiL=makeHand2(1,false,'hi').skin;G.handHiR=makeHand2(-1,false,'hi').skin;}
 G.brace=new THREE.TorusGeometry(0.034,0.0052,6,22);
 const BRACE_MAT=new THREE.MeshStandardMaterial({color:0xe2c46a,roughness:0.25,metalness:0.9});
 const NAIL_COLS=[0x3d6fd9,0xe0447a,0xc0262d,0xf2efe9,0xd9b25a,0x161616,0xe7b8a8,0x7b3fe4];
@@ -1658,6 +1662,7 @@ function setHair(a,i){if(!HAIR_STYLES[i])i=1;a.hairStyle=i;
   else if(a.hairMesh)a.hairMesh.visible=false;}
 // one spring per athlete drives every strand: hangs with gravity, streams back with speed, bounces each step, swings with turns
 function hairUpdate(a,dt){
+  if(a.duragTails&&a.durag.visible){const sp=Math.min(1,(a.speed||0)/9),fl=Math.min(1,(a.speed||0)/4);for(let i=0;i<2;i++)a.duragTails[i].rotation.x=0.25+1.05*sp+0.14*fl*Math.sin(time*(10+2*i)+i*1.7);}
   if(a.ponyPivot.visible){const sp=Math.min(1,a.speed/8);a.ponyPivot.rotation.x=0.45+0.55*sp+0.16*Math.sin(2*a.ph)*Math.min(1,a.speed/3);a.ponyPivot.rotation.z=0.12*Math.sin(a.ph)*Math.min(1,a.speed/4);}
   const S=HAIR_SW[a.hairStyle];if(!S||!a.hairMesh||!a.hairMesh.visible||!a.mStrand)return;
   const D=a.hP||(a.hP={b:0,s:0,vb:0,vs:0,b2:0,s2:0,yaw:a.root.rotation.y}),J=a.J,mv=a.anim==='move'||a.anim==='drill';
@@ -1995,7 +2000,8 @@ function gait(a,T,dt,s){
   for(let side=0;side<2;side++){
     const p=ph+side*Math.PI,sk=p+0.28*g*Math.sin(p),sn=Math.sin(sk),kc=Math.cos(p+0.35);
     const thigh=off-A*sn+Q.back*gd*Math.max(0,-sn);
-    const knee=kb+ka*Math.pow(Math.max(0,kc),1.3)+lerp(0.08,0.2,gd)*stanceK*Math.pow(Math.max(0,Math.sin(p-1.6)),2)+0.48*dr*Math.pow(Math.max(0,Math.sin(p-1.4)),1.5);
+    const pw=((p%TAU)+TAU)%TAU,hu=(pw-0.5)/2.3,hk=hu>0&&hu<1?Math.pow(Math.sin(hu*Math.PI),1.2):0; // hold: from the knee lift until the thigh comes down
+    const knee=Q.hold*gd*hk+kb+ka*Math.pow(Math.max(0,kc),1.3)+lerp(0.08,0.2,gd)*stanceK*Math.pow(Math.max(0,Math.sin(p-1.6)),2)+0.48*dr*Math.pow(Math.max(0,Math.sin(p-1.4)),1.5);
     const ank=-0.35*gd*Q.dorsi*Math.max(0,kc)+0.55*gd*plant*Math.pow(Math.max(0,-Math.sin(p+0.4)),2)-0.04;
     const arm=ao+aa*sn+Q.armBack*gd*Math.max(0,sn);
     const elb=lerp(-0.25,-1.5,gd)+elbowOpen*gd-0.38*gd*Math.max(0,-sn)+(0.32*gd+0.35*dr)*Math.max(0,sn);
@@ -2173,18 +2179,21 @@ function applyJ(a){const J=a.J;
   a.legR.rotation.set(J.lRx,0,J.lRz);a.kneeR.rotation.x=J.kR;a.ankleR.rotation.x=J.fR;
 }
 // ================= LOD: far-away athletes skip details nobody can see =================
-// past ~22 m: eyes, brows, ears, nails, lips, swooshes and chest prints (a few pixels) move to layer 1, which the camera
-// doesn't draw, and the hands switch to a low-poly pair. Past ~48 m the small muscle and joint shapes, neck, soles, wrist
+// past ~26 m: eyes, brows, ears, nails, lips, swooshes and chest prints (a few pixels) move to layer 1, which the camera
+// doesn't draw, and the hands switch to a low-poly pair. Past ~55 m the small muscle and joint shapes, neck, soles, wrist
 // brace and contact shadow go too. Everything comes back a few meters closer than it left, so nothing flickers at the edge
-const LOD1_OUT=22*22,LOD1_IN=18*18,LOD2_OUT=48*48,LOD2_IN=42*42;
+const LOD1_OUT=26*26,LOD1_IN=22*22,LOD2_OUT=55*55,LOD2_IN=48*48;
 function lodInit(a){a.lodList=[];a.lodList2=[];a.lodHands=[];const det=new Set([G.nailL,G.nailR,G.nailLW,G.nailRW,G.earL,G.earR,G.brow,SHOE.swoosh]),det2=new Set([G.ball,G.delt,G.muscle,G.neck,SHOE.sole,G.brace,G.cshadow]);
   for(const F of[FACE.M,FACE.W])for(const k of['dark','white','iris','lip'])det.add(F[k]);
-  a.root.traverse(o=>{if(!o.isMesh)return;const g=o.geometry;if(det.has(g))a.lodList.push(o);else if(det2.has(g))a.lodList2.push(o);else if(g===G.handL)a.lodHands.push([o,G.handL,G.handLoL]);else if(g===G.handR)a.lodHands.push([o,G.handR,G.handLoR]);});}
-function athLod(a){const d2=camera.position.distanceToSquared(a.root.position);let L=a.lod|0;
+  a.root.traverse(o=>{if(!o.isMesh)return;const g=o.geometry;if(det.has(g))a.lodList.push(o);else if(det2.has(g))a.lodList2.push(o);else if(g===G.handL)a.lodHands.push([o,G.handL,G.handLoL,G.handHiL]);else if(g===G.handR)a.lodHands.push([o,G.handR,G.handLoR,G.handHiR]);});}
+function athLod(a){const d2=camera.position.distanceToSquared(a.root.position);if(!a.lodList)lodInit(a);let L=a.lod|0;
   if(L===0&&d2>LOD1_OUT)L=1;else if(L>0&&d2<LOD1_IN)L=0;
   if(L===1&&d2>LOD2_OUT)L=2;else if(L===2&&d2<LOD2_IN)L=1;
-  if(L===a.lod)return;a.lod=L;a.lodFar=L>0;if(!a.lodList)lodInit(a);
-  const m1=L>0?2:1,m2=L>1?2:1;for(const m of a.lodList)m.layers.mask=m1;for(const m of a.lodList2)m.layers.mask=m2;if(a.decal)a.decal.layers.mask=m1;for(const h of a.lodHands)h[0].geometry=L>0?h[2]:h[1];}
+  // hands: full detail up close, standard at mid range, low-poly far away
+  const ht=L>0?0:(a.handTier===2?d2<8*8:d2<6*6)?2:1;
+  if(ht!==a.handTier){a.handTier=ht;for(const h of a.lodHands)h[0].geometry=ht===0?h[2]:ht===2?h[3]:h[1];}
+  if(L===a.lod)return;a.lod=L;a.lodFar=L>0;
+  const m1=L>0?2:1,m2=L>1?2:1;for(const m of a.lodList)m.layers.mask=m1;for(const m of a.lodList2)m.layers.mask=m2;if(a.decal)a.decal.layers.mask=m1;}
 function animAth(a,dt){
   if(!a.root.visible)return;athLod(a);if(a.replay)return;
   const T=a.T;baseStand(T);const t=time+a.seed;
@@ -2231,12 +2240,42 @@ function LEVELS_OK(k){return['ms','fr','so','jr','col'].includes(k);}
 function saveStore(){try{localStorage.setItem(STORE_KEY,JSON.stringify(store));}catch(e){}}
 function activeBuild(){return store.slots[store.active];}
 const VMIN=21.8/2.237,VMAX=25.1/2.237;
-const LEVELS={ms:{name:'Middle school',short:'MS',min:18.0,max:20.1},fr:{name:'High school',short:'HS',min:19.0,max:21.0},so:{name:'Sophomore',short:'Soph',min:19.0,max:21.5},jr:{name:'Junior',short:'Jr',min:21.0,max:22.9},col:{name:'College seniors',short:'College',min:20.5,max:26.5}};
+const LEVELS={ms:{name:'Middle school',short:'MS',min:18.0,max:20.1},fr:{name:'Freshman',short:'Fr',min:19.0,max:21.0},so:{name:'Sophomore',short:'Soph',min:19.0,max:21.5},jr:{name:'Junior',short:'Jr',min:21.0,max:22.9},col:{name:'Pro Runners',short:'Pro',min:21.5,max:26.1}};
 const LVL_KEYS=['ms','fr','so','jr','col'];
 const WR={M:{'40y':[4.21,'Xavier Worthy','2024','NFL Combine record'],'60':[6.34,'Christian Coleman','2018'],'100':[9.58,'Usain Bolt','2009'],'200':[19.19,'Usain Bolt','2009'],'300':[30.69,'Letsile Tebogo','2024','World best'],'400':[43.03,'Wayde van Niekerk','2016'],'4x1':[36.84,'Jamaica','2012'],'4x2':[78.63,'Jamaica','2014'],'4x4':[174.29,'United States','1993']},
  W:{'60':[6.92,'Irina Privalova','1993'],'100':[10.49,'Florence Griffith-Joyner','1988'],'200':[21.34,'Florence Griffith-Joyner','1988'],'300':[34.14,'Marita Koch','1985','World best'],'400':[47.60,'Marita Koch','1985'],'4x1':[40.82,'United States','2012'],'4x2':[87.46,'United States','2000'],'4x4':[195.17,'Soviet Union','1988']}};
 function wrFor(div,ev){if(!ev||curLvl()!=='col')return null;const o=store.wr&&store.wr[div]&&store.wr[div][ev.id];return o||(WR[div]||{})[ev.id]||null;}
 function setWR(div,ev,t,name){if(!store.wr)store.wr={};if(!store.wr[div])store.wr[div]={};store.wr[div][ev.id]=[+t.toFixed(2),name,String(new Date().getFullYear()),'World record'];saveStore();}
+// ================= RECORDS AND MARKS =================
+// A time carries the same marks as a real results board: WR world record, NR U.S. national record, WL world lead (the
+// fastest this season), MR meet record, PB personal best, SB season best. WR, NR and WL are pro marks; meet records are kept
+// per meet, level and division. A tailwind over +2.0 m/s means none of them count. Times run with cheats count like any other.
+const SEASON=new Date().getFullYear();
+const NR0={M:{'60':[6.34,'Christian Coleman','2018'],'100':[9.69,'Tyson Gay','2009'],'200':[19.31,'Noah Lyles','2022'],'300':[30.85,'Michael Johnson','2000'],'400':[43.18,'Michael Johnson','1999'],'4x1':[37.10,'United States','2019'],'4x2':[78.68,'Santa Monica Track Club','1994'],'4x4':[174.29,'United States','1993']},
+  W:{'60':[6.94,'Aleia Hobbs','2023'],'100':[10.49,'Florence Griffith-Joyner','1988'],'200':[21.34,'Florence Griffith-Joyner','1988'],'400':[47.78,'Sydney McLaughlin-Levrone','2025'],'4x1':[40.82,'United States','2012'],'4x2':[87.46,'United States','2000'],'4x4':[195.27,'United States','2024']}};
+// 2026 world leads (the 60m from the world indoors in Toruń)
+const WL0=SEASON===2026?{M:{'60':[6.41,'Jordan Anthony'],'100':[9.79,'Noah Lyles'],'200':[19.52,'Kenny Bednarek'],'400':[43.38,'Samuel Ogazi']},W:{'100':[10.62,'Melissa Jefferson-Wooden'],'200':[21.47,'Melissa Jefferson-Wooden'],'400':[48.48,'Marileidy Paulino']}}:{M:{},W:{}};
+function recGet(k,div,id){if(k==='wl'&&store.wlY!==SEASON){store.wl={};store.wlY=SEASON;}const s=store[k]&&store[k][div]&&store[k][div][id];return s||(k==='nr'?(NR0[div]||{})[id]:(WL0[div]||{})[id])||null;}
+function recSet(k,div,id,t,name){if(!store[k])store[k]={};if(!store[k][div])store[k][div]={};store[k][div][id]=[+t.toFixed(2),name,String(SEASON)];saveStore();}
+function mrKey(){return(curServer&&curServer.name||'Meet')+'|'+curLvl();}
+function mrGet(div,id){const m=store.mr&&store.mr[mrKey()];return(m&&m[div]&&m[div][id])||null;}
+function mrSet(div,id,t,name){if(!store.mr)store.mr={};const k=mrKey();if(!store.mr[k])store.mr[k]={};if(!store.mr[k][div])store.mr[k][div]={};store.mr[k][div][id]=[+t.toFixed(2),name,String(SEASON)];saveStore();}
+const MARK_CLS={WR:'wrt',NR:'nrt',WL:'wlt',MR:'mrt',PB:'',SB:'sbt'};
+function markTags(m){return(m||[]).map(k=>'<span class="pbt '+MARK_CLS[k]+'">'+k+'</span>').join('');}
+// your marks the moment you cross the line (the records themselves move when the results go up)
+function myMarks(e){const R=race,div=R.heat.div,id=R.ev.id,M=[];if(R.wind!=null&&R.wind>2.0)return M;
+  if(curLvl()==='col'){const wr=wrFor(div,R.ev);if(wr&&e.time<wr[0])M.push('WR');else{const nr=recGet('nr',div,id),wl=recGet('wl',div,id);if(nr&&e.time<nr[0])M.push('NR');if(wl&&e.time<wl[0])M.push('WL');}}
+  if(!M.length){const mr=mrGet(div,id);if(mr&&e.time<mr[0])M.push('MR');}
+  if(e.pb)M.push('PB');else if(e.sb)M.push('SB');return M;}
+// after a race each record goes to the fastest runner who beats it, and the record moves to them; PB and SB are personal
+function awardMarks(R,fin){const div=R.heat.div,id=R.ev.id,pro=curLvl()==='col';fin.forEach(e=>{e.marks=[];});
+  if(!fin.length||(R.wind!=null&&R.wind>2.0))return;
+  const w=fin[0];
+  if(pro){const wr=wrFor(div,R.ev);if(wr&&w.time<wr[0])w.marks.push('WR');
+    const us=fin.find(e=>e.p.isMe||e.p.nat==='USA'),nr=recGet('nr',div,id);if(us&&nr&&us.time<nr[0]){if(!us.marks.includes('WR'))us.marks.push('NR');recSet('nr',div,id,us.time,us.name);}
+    const wl=recGet('wl',div,id);if(!wl||w.time<wl[0]){if(wl&&!w.marks.includes('WR'))w.marks.push('WL');recSet('wl',div,id,w.time,w.name);}}
+  const mr=mrGet(div,id);if(!mr||w.time<mr[0]){if(mr&&!w.marks.includes('WR'))w.marks.push('MR');mrSet(div,id,w.time,w.name);}
+  fin.forEach(e=>{if(e.pb)e.marks.push('PB');else if(e.sb)e.marks.push('SB');});}
 function wrText(w){return(w[3]||'World record')+' '+fmt(w[0])+', '+w[1]+' ('+w[2]+')';}
 function curLvl(){const k=(state==='game'&&curServer&&curServer.lvl)?curServer.lvl:activeBuild().lvl;return LEVELS[k]?k:'col';}
 function buildPerf(b){
@@ -2259,10 +2298,10 @@ const PRO_W=['Amara Osei','Leah Whitfield','Sofia Marquez','Naomi Achebe','Jada 
 function usedNames(){return new Set(players.map(p=>p.name));}
 function randStats(){for(;;){const p=randi(4,17)*5,s=randi(4,17)*5,e=150-p-s;if(e>=10&&e<=100)return{pow:p,sta:s,end:e};}}
 function botIdentity(p,forceG){
-  const g0=forceG||(Math.random()<.5?'M':'W'),pro=!!(curServer&&curServer.lvl==='col'),NL=pro?(g0==='M'?PRO_M:PRO_W):BOT_NAMES;
+  const g0=forceG||(Math.random()<.5?'M':'W'),pro=!!(curServer&&curServer.lvl==='col'&&!curServer.practice),NL=pro?(g0==='M'?PRO_M:PRO_W):BOT_NAMES;
   const used=usedNames();let n;let tries=0;do{n=pick(NL);tries++;}while(used.has(n)&&tries<60);
-  p.name=n;p.gender=g0;p.star=false;p.topOverride=null;p.pbs=null;p.suit=false;p.accBoost=null;p.fade=null;p.surge=null;p.reactR=null;p.endurBy=null;if(p.ath&&p.ath.glasses)p.ath.glasses.visible=false;if(p.ath&&p.ath.suitOn)setSuit(p.ath,false);
-  p.hIn=p.gender==='M'?randi(66,78):randi(61,73);p.form=pick(['bolt','gout','lyles']);
+  p.name=n;p.gender=g0;p.star=false;p.topOverride=null;p.pbs=null;p.suit=false;p.accBoost=null;p.fade=null;p.surge=null;p.reactR=null;p.endurBy=null;if(p.ath&&p.ath.glasses)p.ath.glasses.visible=false;p.nat=null;p.lvl=null;if(p.ath){wearDurag(p.ath,false);wearWatch(p.ath,false);}if(p.ath&&p.ath.suitOn)setSuit(p.ath,false);
+  p.hIn=p.gender==='M'?randi(66,78):randi(61,73);p.form=pick(pro?['bolt','gout','lyles','ja']:['bolt','gout','lyles']);
   p.stats=randStats();
   p.rating=clamp(Math.pow(Math.random(),0.85),0,1);p.endur=clamp(p.stats.sta/100*0.6+rand(0,0.4),0,1);p.react=rand(.12,.23);
   p.look=randLook(p.gender);p.ping=randi(18,140);p.medals=[0,0,0];p.reached=-1;p.afk=false;
@@ -2486,6 +2525,32 @@ function makeBrandon(p){
   const a=p.ath;setGender(a,'M');setHeight(a,66);a.form='std';dress(a,p.look);wearGlasses(a,true);setTag(a,p.name,false);
   const b=chatBots().filter(x=>x!==p);if(b.length){queueChat(rand(4,6),pick(b),'Brandon Chalmers in here, watch his start 😳');queueChat(rand(7,9),pick(b),'6.39 in the 60 is crazy');queueChat(rand(10,12),pick(b),'he fades late tho, catch him at the end');}
 }
+// Jordan Anthony's look from his training clip: a black satin durag tied at the back with the tails hanging down, and a
+// black watch on his left wrist. The tails stream back as he speeds up (see hairUpdate)
+const DURAG_M=new THREE.MeshStandardMaterial({color:0x0c0c0e,roughness:0.3,metalness:0.08}),WATCH_M=new THREE.MeshStandardMaterial({color:0x111113,roughness:0.45});
+function wearDurag(a,on){
+  if(!a.durag&&on){const g=new THREE.Group();
+    const cap=new THREE.Mesh(G.hairCap,DURAG_M);cap.position.set(0,0.115,0);cap.scale.set(0.978,1.118,1.078);cap.rotation.x=-0.72;cap.castShadow=true;g.add(cap);
+    const knot=new THREE.Mesh(new THREE.SphereGeometry(0.021,10,8),DURAG_M);knot.position.set(0,0.118,-0.114);knot.scale.set(1.25,0.8,0.7);g.add(knot);
+    a.duragTails=[];for(const s of[-1,1]){const piv=new THREE.Group();piv.position.set(s*0.011,0.112,-0.118);const t=new THREE.Mesh(new THREE.BoxGeometry(0.032,0.17,0.004),DURAG_M);t.position.y=-0.085;piv.add(t);piv.rotation.set(0.25,0,s*0.1);g.add(piv);a.duragTails.push(piv);}
+    a.head.add(g);a.durag=g;}
+  if(a.durag)a.durag.visible=on;}
+function wearWatch(a,on){
+  if(!a.watch&&on){const g=new THREE.Group();g.position.set(0,-0.243,0);
+    const band=new THREE.Mesh(new THREE.TorusGeometry(0.031,0.0068,6,18),WATCH_M);band.rotation.x=Math.PI/2;g.add(band);
+    const face=new THREE.Mesh(new THREE.BoxGeometry(0.012,0.03,0.034),WATCH_M);face.position.set(0.033,0,0);g.add(face);
+    a.handL.parent.add(g);a.watch=g;}
+  if(a.watch)a.watch.visible=on;}
+// Jordan Anthony: 2026 world indoor 60m champion in 6.41 (fourth fastest ever), 2025 NCAA 60m and 100m champion for
+// Arkansas and Bowerman winner, 9.91 in the 100m and 19.93 in the 200m, 5'10". The former wide receiver has the most
+// explosive start in the field and holds his top speed well
+function makeJordan(p){
+  p.name='Jordan Anthony';p.star=true;p.nat='USA';p.rating=1;p.topOverride=25.95/2.237;p.endur=0.62;p.react=0.12;p.reactR=[0.105,0.14];p.form='ja';p.hIn=70;p.afk=false;p.accBoost=1.0;
+  p.fade={'60':[48,0.0008,0.97],'100':[62,0.0009,0.94],'200':[110,0.0005,0.93],'300':[130,0.0005,0.9],'400':[160,0.0004,0.86],def:[60,0.0008,0.94]};p.endurBy={'300':0.55,'400':0.45};
+  p.look={top:0xd8283a,shorts:0x1e3fc8,skin:SKINS[4],hairCol:0x0b0b0b,hair:0,shoe:0xf4f4f4};p.pbs={'60':6.41,'100':9.91,'200':19.93};
+  const a=p.ath;setGender(a,'M');setHeight(a,70);a.form='ja';dress(a,p.look);wearDurag(a,true);wearWatch(a,true);setTag(a,p.name,false);
+  const b=chatBots().filter(x=>x!==p);if(b.length){queueChat(rand(3,5),pick(b),'JORDAN ANTHONY is in here 😳');queueChat(rand(6,8),pick(b),'6.41 world indoor champ, bro is different');queueChat(rand(9,11),pick(b),'ex Arkansas WR, watch his start 💀');queueChat(rand(12,14),pick(b),'9.91 and 19.93 too we cooked');}
+}
 function makeDeMarcus(p){
   p.name='DeMarcus Shadow';p.star=true;p.rating=1;p.topOverride=24.7/2.237;p.endur=0.85;p.react=0.13;p.form='std';p.hIn=73;p.afk=false;
   p.look={top:0x5b2a9e,shorts:0x5b2a9e,skin:SKINS[Math.min(4,SKINS.length-1)],hairCol:0x0b0b0b,hair:7,shoe:0x111111};p.suit=true;p.pbs={'100':9.94,'200':19.82};
@@ -2494,7 +2559,7 @@ function makeDeMarcus(p){
 }
 // Tayvon: 100/200 guy. Quick reaction (0.05-0.11), normal drive phase, then a huge top end that reels everyone in by 20m; fades over 300/400
 function makeTayvon(p){const L=LEVELS[curLvl()]||LEVELS.col;
-  p.name='Tayvon Henderson';p.star=true;p.rating=1;p.topOverride=(L.min+1.03*(L.max-L.min))/2.237;p.endur=0.3;p.react=0.08;p.reactR=[0.05,0.11];p.accBoost=1.04;p.form='std';p.hIn=68;p.afk=false;
+  p.name='Tayvon Henderson';p.star=true;p.rating=1;p.topOverride=Math.min(L.min+1.03*(L.max-L.min),curLvl()==='col'?25.7:99)/2.237;p.endur=0.3;p.react=0.08;p.reactR=[0.05,0.11];p.accBoost=1.04;p.form='std';p.hIn=68;p.afk=false;
   p.fade={'300':[160,0.0012,0.86],'400':[200,0.0014,0.82],def:[400,0,1]};p.surge=null;p.endurBy={'400':0.2,'300':0.25};
   p.look={top:0xd9342b,shorts:0x111111,skin:SKINS[2],hairCol:0x0d0d0d,hair:0,shoe:0xff3b30};p.pbs={};
   const a=p.ath;setGender(a,'M');setHeight(a,68);a.form='std';dress(a,p.look);setTag(a,p.name,false);
@@ -2607,7 +2672,7 @@ function beginRace(heat){
   race.runners.forEach(r=>{if(r.state==='blocks'){r.ath.anim='prerace';r.ath.preStyle=randi(0,5);pathPos(ev.path,r.lane,r.b+1.5,r.ath.root.position);}else if(r.state==='wait'){r.ath.anim='prerace';r.ath.preStyle=pick([0,1,5]);}});
   race.intro=race.isFinal;race.introI=-1;race.introSnap=false;race.myRT=null;
   race.introList=heat.filter(e=>e.runners.length).sort((a,b)=>a.lane-b.lane).map(e=>({e,lane:e.lane,name:e.name,ath:e.runners[0].ath,b:e.runners[0].b}));
-  race.callDur=race.intro?1.4+race.introList.length*1.3+1.2:3.6;
+  {let tt=1.4;race.introList.forEach(it=>{it.t0=tt;it.dur=it.e.p.isMe&&it.e.seed?2.6:1.3;tt+=it.dur;});race.callDur=race.intro?tt+1.2:3.6;}
   if(ev.relay){let bi2=0;heat.forEach(e=>{if(e.runners.length){e.baton=batons[bi2++];holdBaton(e.baton,e.runners[0].ath,'R');}});}
   blockMeshes.forEach(b=>b.visible=false);
   let bi=0;_r.set(0,0,0);let n=0;const sd=new THREE.Vector3();
@@ -2626,12 +2691,16 @@ function botTarget(r){
   else if(fid==='300')v*=0.94*(1-Math.max(0,cov-110)*0.00115*(1.22-r.endur*0.55));
   else if(fid==='200')v*=0.985*(1-Math.max(0,cov-90)*0.00095*(1.2-r.endur*0.5));
   if(r.P&&r.P.fade){const f=r.P.fade,fc=f[legId(ev)]||f.def;v*=Math.max(fc[2],1-Math.max(0,cov-fc[0])*fc[1]);}
-  let sgm=1;if(r.P&&r.P.surge){const sg=r.P.surge[fid];if(sg){const u=clamp((cov-sg[0])/(sg[1]-sg[0]),0,1);sgm=1+(sg[2]-1)*u*u*(3-2*u);v*=sgm;}}
+  let sgm=1;if(r.P&&r.P.surge){const sg=r.P.surge[fid];if(sg){const u=clamp((cov-sg[0])/(sg[1]-sg[0]),0,1);sgm=1+(sg[2]-1)*(curLvl()==='col'?0.35:1)*u*u*(3-2*u);v*=sgm;}}
   if(easing(r))v*=r.easeLv;
   return Math.min(Math.min(v,top*sgm)*windF(r),Math.max(top*sgm,LEVELS[curLvl()].max/2.237));
 }
 function easing(r){if(meet.round!==0||r.isMe||r.rating<0.3)return false;return(r.b0-r.b)/(race.ev.relay?race.ev.leg:race.ev.dist)>r.easeAt;}
 const CHK=1.15;
+// pro races carry real speed endurance: a little slower round the bend, then the 200, 300 and 400 tie up the way they do at the
+// top level (endurance and each runner's event strength decide how much)
+const PRO_E={'200':[0.975,100,0.00062],'300':[0.975,140,0.0004],'400':[0.975,200,0.00045]};
+function proEndure(r,cov){const fid=legId(race.ev),P=PRO_E[fid];if(!P)return 1;const e=(r.P&&r.P.endurBy&&r.P.endurBy[fid]!=null)?r.P.endurBy[fid]:r.endur;return P[0]-Math.max(0,cov-P[1])*P[2]*(1.3-0.6*Math.min(1.1,e));}
 function cheatVm(r){const ev=race.ev,D=r.b0-legEnd(r),T=Math.max(0.3,chTime(ev.id)-r.ct0);return D/Math.max(0.05,T-(1-Math.exp(-CHK*T))/CHK);}
 function x4extra(lane){return Math.PI*(laneR(lane)-laneR(1));}
 function bExOf(ev,lane,k){return ev.dist-ev.leg*(k+1)+((ev.id==='4x4'&&k===0)?x4extra(lane):0);}
@@ -2658,12 +2727,14 @@ function stepRunner(r,dt){
   if(r.state==='blocks'){
     if(race.phase!=='run')return;
     if(r.isMe){if(race.clock<PL.rt)return;r.state='run';r.fb=true;r.drive=1;blockExit(r.ath);PL.started=true;PL.power=0.45+0.25*PL.P;PL.lastTap=performance.now()/1000;PL.taps=0;PL.lastSide=null;PL.tt=[PL.lastTap];PL.cad=2.2;race.myRT=PL.rt;}
-    else if(race.clock>=r.react){r.state='run';r.drive=1;blockExit(r.ath);}
+    else if(race.clock>=(curLvl()==='col'?Math.max(0.1,r.react):r.react)){r.state='run';r.drive=1;blockExit(r.ath);}
     else return;
   }
   if(r.state==='wait'||r.state==='done')return;
   let vt,k;
-  if(r.state==='run'){vt=r.isMe?playerTarget(r):botTarget(r);if(r.capV!=null)vt=Math.min(vt,r.capV);k=(r.isMe?PL.acc*(time<(PL.buffAcc||0)?1.1:1):(0.85+r.rating*0.3)*r.fm.acc*r.accMul)*(ev.path==='grass'?0.85:1);if(vt<r.v)k=1.6;if(r.isMe)PL.stam=Math.max(0,PL.stam-PL.drain*(legId(race.ev)==='400'?1.4:legId(race.ev)==='300'?1.2:1)*(time<(PL.buffDrain||0)?0.8:1)*dt);}
+  if(r.state==='run'){vt=r.isMe?playerTarget(r):botTarget(r);if(r.capV!=null)vt=Math.min(vt,r.capV);if(!race.story&&!(r.isMe&&cheatActive()))vt=Math.min(vt*(curLvl()==='col'&&!race.story?proEndure(r,r.b0-r.b):1),LEVELS[curLvl()].max/2.237); // nobody tops the level's speed limit (26.1 mph for pros) without cheats
+    k=(r.isMe?PL.acc*(time<(PL.buffAcc||0)?1.1:1):(0.85+r.rating*0.3)*r.fm.acc*r.accMul)*(ev.path==='grass'?0.85:1);if(curLvl()==='col'&&!race.story)k=Math.min(k*0.72,0.875); // pros pick up speed like real sprinters: about 6.4 for the 60 and 9.9 for the 100 at 26.1 mph, and nobody out-accelerates Jordan Anthony
+    if(vt<r.v)k=1.6;if(r.isMe)PL.stam=Math.max(0,PL.stam-PL.drain*(legId(race.ev)==='400'?1.4:legId(race.ev)==='300'?1.2:1)*(time<(PL.buffDrain||0)?0.8:1)*dt);}
   else{vt=0;k=1.15;}
   if(r.state==='run'&&r.isMe&&cheatActive()){if(r.ct0==null){r.ct0=race.clock;r.cvm=cheatVm(r);}const t=race.clock-r.ct0;r.v=r.cvm*(1-Math.exp(-CHK*t));r.b=r.b0-r.cvm*(t-(1-Math.exp(-CHK*t))/CHK);}
   else{r.v+=(vt-r.v)*Math.min(1,k*dt);r.b-=r.v*dt;}
@@ -2736,19 +2807,20 @@ function finishEntry(e,r){
   if(e.p.pbs&&!race.ev.relay&&!(race.wind>2.0)){const pv=e.p.pbs[race.ev.id];if(pv==null||e.time<pv){e.p.pbs[race.ev.id]=+e.time.toFixed(2);e.pb=true;}}
   if(e.p.isMe&&race.story)storyFinish(e,place);
   else if(e.p.isMe){const B=activeBuild();B.pb=B.pb||{};const prev=B.pb[race.ev.id];finBand(race.ev.short,e.time,prev);
-    if(cheatActive()){e.cheat=true;callout(ord(place)+'  '+fmt(e.time),2.2);}
-    else if(race.wind!=null&&race.wind>2.0){callout(ord(place)+'  '+fmt(e.time)+'  w',2.2);}
-    else if(prev==null||e.time<prev){B.pb[race.ev.id]=+e.time.toFixed(2);saveStore();e.pb=true;callout(ord(place)+'  '+fmt(e.time)+'  PB',2.8);tone(880,.12,.2);setTimeout(()=>tone(1320,.18,.2),130);
-      const b=chatBots();if(prev!=null&&b.length)queueChat(rand(2,4),pick(b),fill(pick(["new pb?? W {me}","{me} just pr'd 🔥","pb szn"])));}
-    else callout(ord(place)+'  '+fmt(e.time),2.2);}
+    if(race.wind!=null&&race.wind>2.0){callout(ord(place)+'  '+fmt(e.time)+'  w',2.2);}
+    else{if(prev==null||e.time<prev){B.pb[race.ev.id]=+e.time.toFixed(2);e.pb=true;}
+      if(!B.sb||B.sb.y!==SEASON)B.sb={y:SEASON,t:{}};const sb=B.sb.t[race.ev.id];if(sb==null||e.time<sb){B.sb.t[race.ev.id]=+e.time.toFixed(2);if(!e.pb)e.sb=true;}saveStore();
+      const M=myMarks(e);callout(ord(place)+'  '+fmt(e.time)+(M.length?'  '+M.join(' '):''),M.length?2.8:2.2);if(M.length){tone(880,.12,.2);setTimeout(()=>tone(1320,.18,.2),130);}
+      const b=chatBots();if(e.pb&&prev!=null&&b.length)queueChat(rand(2,4),pick(b),fill(pick(["new pb?? W {me}","{me} just pr'd 🔥","pb szn"])));
+      if(M.includes('WL')||M.includes('NR')||M.includes('WR'))queueChat(rand(1.5,3),pick(b)||me,fill(pick(["{me} just ran a "+M[0]+" 😳","WHAT. "+fmt(e.time)+" from {me}","{me} is him fr"])));}}
 }
 function updateRace(dt){
   if(!race.active)return;
   race.t+=dt;const R=race;
   if(R.phase==='replay'){updateReplay(dt);return;}
   if(R.phase==='call'){
-    if(R.intro&&R.introI!==-2){const i=Math.floor((R.t-1.4)/1.3);
-      if(i>=0&&i<R.introList.length&&i!==R.introI){R.introI=i;const it=R.introList[i];it.ath.wave=1.3;showIntro(it);say('Lane '+it.lane+'. '+spoken(it.name));R.introSnap=true;}
+    if(R.intro&&R.introI!==-2){let i=-1;for(let k=0;k<R.introList.length;k++)if(R.t>=R.introList[k].t0)i=k;const lz=R.introList[R.introList.length-1];if(lz&&R.t>=lz.t0+lz.dur)i=R.introList.length;
+      if(i>=0&&i<R.introList.length&&i!==R.introI){R.introI=i;const it=R.introList[i];it.ath.wave=1.3;showIntro(it);say('Lane '+it.lane+'. '+spoken(it.name)+(it.e.p.isMe&&it.e.seed?'. Qualified in '+fmt(it.e.seed)+'.':''));R.introSnap=true;}
       else if(i>=R.introList.length){R.introI=-2;$('#intro').classList.add('hidden');camSnap=true;bcSnap=true;}}
     const k=clamp((R.t-(R.callDur-1.15))/1.0,0,1);
     R.runners.forEach(r=>{if(r.state!=='blocks')return;pathPos(R.ev.path,r.lane,r.b+1.5*(1-k),r.ath.root.position);if(k>0&&k<1){r.ath.anim='move';r.ath.speed=1.5;r.ath.drive=0;}else if(k>=1){r.ath.anim='idle';r.ath.idleStyle=0;}});
@@ -2806,7 +2878,7 @@ function spoken(n){const s=String(n).replace(/[_.]+/g,' ').replace(/\d+/g,' ').r
 function showIntro(it){
   const el=$('#intro');$('#iLane').textContent=it.lane;$('#iName').textContent=it.name;
   let sub=DIVN[race.heat.div]+' final';
-  if(it.e.p.isMe){const B=activeBuild(),pb=B.pb&&B.pb[race.ev.id];sub=pb?'Your PB '+fmt(pb):'Chasing a first PB';}
+  if(it.e.p.isMe){const B=activeBuild(),pb=B.pb&&B.pb[race.ev.id];sub=it.e.seed?'Qualified in '+fmt(it.e.seed)+(pb?' · PB '+fmt(pb):''):pb?'Your PB '+fmt(pb):'Chasing a first PB';}
   else if(it.e.p.pbs&&it.e.p.pbs[race.ev.id])sub='PB '+fmt(it.e.p.pbs[race.ev.id]);
   else if(it.e.seed)sub='Qualified in '+fmt(it.e.seed);
   $('#iSub').textContent=sub;el.classList.remove('hidden','anim');void el.offsetWidth;el.classList.add('anim');
@@ -2882,13 +2954,16 @@ function showResults(){
   let html='<h3>'+DIVN[R.heat.div]+' '+esc(R.ev.name)+' '+(R.isFinal?'final':ROUNDS[meet.round].toLowerCase())+'</h3><div class="rsub">'+(R.isFinal?'Medals awarded on the podium':R.heat.of>1?'Heat '+R.heat.num+' of '+R.heat.of+'. Fastest times overall move on.':'Fastest times move on.')+'</div>';
   if(R.wind!=null)html+='<div class="rsub">Wind +'+R.wind.toFixed(1)+' m/s'+(R.wind>2.0?', wind-aided so times don\'t count for records':'')+'</div>';
   const WRd=(R.wind!=null&&R.wind>2.0)?null:wrFor(R.heat.div,R.ev);if(WRd)html+='<div class="rsub">'+esc(wrText(WRd))+'</div>';
+  if(curLvl()==='col'&&!(R.wind!=null&&R.wind>2.0)){const nr=recGet('nr',R.heat.div,R.ev.id),wl=recGet('wl',R.heat.div,R.ev.id),t2=[wl?'World lead '+fmt(wl[0])+', '+wl[1]:'',nr?'U.S. record '+fmt(nr[0])+', '+nr[1]+' ('+nr[2]+')':''].filter(Boolean);if(t2.length)html+='<div class="rsub">'+esc(t2.join(' · '))+'</div>';}
+  {const mr=mrGet(R.heat.div,R.ev.id);if(mr&&!(R.wind!=null&&R.wind>2.0))html+='<div class="rsub">Meet record '+fmt(mr[0])+', '+esc(mr[1])+'</div>';}
+  awardMarks(R,fin);
   rows.forEach((e,i)=>{const pl=e.time!=null?i+1:'';const cls='rrow'+(e.p.isMe?' me':'')+(R.isFinal&&pl&&pl<=3?' m'+pl:'');
-    html+='<div class="'+cls+'"><span class="pl">'+pl+'</span><span class="la">L'+e.lane+'</span><span>'+esc(e.name)+(e.runners&&e.runners.length&&e.time!=null?'<span class="tsp">'+(Math.max(...e.runners.map(x=>x.maxV||0))*2.237).toFixed(1)+' mph</span>':'')+'</span><span class="tm">'+(e.time!=null?fmt(e.time):e.status||'DNF')+(e.pb?'<span class="pbt">PB</span>':'')+(e.cheat?'<span class="pbt cht">cheat</span>':'')+(WRd&&e.time!=null&&e.time<WRd[0]?'<span class="pbt wrt">WR</span>':'')+'</span></div>';});
+    html+='<div class="'+cls+'"><span class="pl">'+pl+'</span><span class="la">L'+e.lane+'</span><span>'+esc(e.name)+(e.runners&&e.runners.length&&e.time!=null?'<span class="tsp">'+(Math.max(...e.runners.map(x=>x.maxV||0))*2.237).toFixed(1)+' mph</span>':'')+'</span><span class="tm">'+(e.time!=null?fmt(e.time):e.status||'DNF')+markTags(e.marks)+'</span></div>';});
   if(R.myRT!=null)html+='<div class="rsub" style="margin-top:8px">Your reaction time: '+R.myRT.toFixed(3)+'s</div>';
   const el=$('#results');el.innerHTML=html;el.classList.remove('hidden');
   if(fin.length){
     if(R.wind!=null)ambWind=R.wind;if(fin.length)drawClock(fmt(fin[0].time),(R.wind!=null?'WIND +'+R.wind.toFixed(1)+' M/S':R.ev.short.toUpperCase()));
-    const w=fin[0];if(WRd&&w.time<WRd[0]&&!w.cheat){addChat(null,'🌍 New world record! '+w.name+' ran '+fmt(w.time)+', breaking '+fmt(WRd[0])+' by '+WRd[1]+'.',true);setWR(R.heat.div,R.ev,w.time,w.name);if(w.p.isMe)toast('World record! It\'s yours: '+fmt(w.time),4);}
+    const w=fin[0];if(WRd&&w.time<WRd[0]){addChat(null,'🌍 New world record! '+w.name+' ran '+fmt(w.time)+', breaking '+fmt(WRd[0])+' by '+WRd[1]+'.',true);setWR(R.heat.div,R.ev,w.time,w.name);if(w.p.isMe)toast('World record! It\'s yours: '+fmt(w.time),4);}
     addChat(null,(R.isFinal?'🏁 '+R.ev.name+' champion: ':'🏁 Heat winner: ')+w.name+' in '+fmt(w.time),true);
     if(!w.p.isMe&&Math.random()<.8)queueChat(rand(1,2.5),w.p,pick(["ez","lets goo","gg","W","🔥🔥","too smooth"]));
     const others=chatBots().filter(b=>b!==w.p);const n=randi(1,2);
@@ -2927,6 +3002,8 @@ function standUp(p){const sp=p.sitSpot,a=p.ath;if(sp)sp.used=null;p.sitSpot=null
 const _tp=new THREE.Vector3(),_tp2=new THREE.Vector3();
 function pracInit(p,delay){p.mode='prac';p.pr={st:'inside',t:delay};p.ath.root.visible=false;}
 function walkTo(p,tx,tz,sp,dt){const a=p.ath,pos=a.root.position,dx=tx-pos.x,dz=tz-pos.z,d=Math.hypot(dx,dz);if(d<0.35)return true;const v=Math.min(sp,d*3+0.3);pos.x+=dx/d*v*dt;pos.z+=dz/d*v*dt;a.yaw=Math.atan2(dx,dz);a.anim='move';a.speed=v;a.drive=0;a.root.rotation.y=angDamp(a.root.rotation.y,a.yaw,10,dt);return false;}
+// a stride on the practice straight: 72-86% of the runner's top speed for their grade, now and then a full-out sprint
+function practiceSv(p){const L=LEVELS[p.lvl]||LEVELS.so,v=(L.min+(p.rating==null?0.5:p.rating)*(L.max-L.min))/2.237*(p.gender==='W'?0.905:1);return v*(Math.random()<0.2?rand(0.93,0.98):rand(0.72,0.86));}
 function pracNext(p){const R=p.pr,a=p.ath,r=Math.random();
   if(r<0.62){R.st='toTrack';R.lane=randi(4,8);const rr=laneR(R.lane);R.b=S+Math.PI*rr+clamp(a.root.position.x+CX,3,S-3);loopPos(rr,R.b,_tp);R.tx=_tp.x;R.tz=_tp.z;R.dist=rand(400,1600);R.run=0;R.v=rand(2.6,4.4);R.stride=false;}
   else if(r<0.84){R.st='toSit';R.spot=null;}
@@ -2937,7 +3014,7 @@ function pracUpdate(p,dt){const R=p.pr,a=p.ath,pos=a.root.position;
     case'out':if(walkTo(p,R.wp[0][0],R.wp[0][1],1.5,dt)){R.wp.shift();if(!R.wp.length)pracNext(p);}break;
     case'toTrack':if(walkTo(p,R.tx,R.tz,1.7,dt))R.st='jog';break;
     case'jog':{const rr=laneR(R.lane),L=2*S+2*Math.PI*rr;const v=(R.stride&&R.b<S)?R.sv:R.v;R.b-=v*dt;R.run+=v*dt;
-      if(R.b<0){R.b+=L;R.stride=Math.random()<0.35;R.sv=rand(6.5,8.6);}
+      if(R.b<0){R.b+=L;R.stride=Math.random()<0.35;R.sv=practiceSv(p);}
       loopPos(rr,R.b,pos);loopPos(rr,R.b-0.3,_tp2);a.yaw=Math.atan2(_tp2.x-pos.x,_tp2.z-pos.z);a.root.rotation.y=a.yaw;a.anim='move';a.speed=v;a.drive=0;
       if(R.run>R.dist&&R.b>S+5&&R.b<S+Math.PI*rr-5)R.st=Math.random()<0.55?'toSit':'back';break;}
     case'toSit':{if(!R.spot){R.spot=freeSpot(pos);if(!R.spot){R.st='back';break;}R.spot.used=p;}
@@ -3191,7 +3268,7 @@ function renderPlayers(){
   let h='';
   list.forEach(p=>{
     let badge='';
-    if(p.afk)badge='AFK';else if(p.mode==='race')badge='Racing';else if(p.reached===2)badge='Final';else if(p.reached===1)badge='Semi';
+    if(p.afk)badge='AFK';else if(p.mode==='race')badge='Racing';else if(!p.isMe&&p.lvl&&curServer&&curServer.practice)badge=LEVELS[p.lvl].short;else if(p.reached===2)badge='Final';else if(p.reached===1)badge='Semi';
     const m=p.medals[0]?' 🥇'+(p.medals[0]>1?p.medals[0]:''):'';
     if(Math.random()<.05)p.ping=clamp(p.ping+randi(-6,6),12,190);
     h+='<div class="pr'+(p.isMe?' me':'')+'"><i style="background:'+hexCss(p.look.top)+'"></i><span class="pg">'+(p.gender==='W'?'W':'M')+'</span><span class="pn">'+esc(p.name)+m+'</span><span class="pb">'+badge+'</span><span class="pp">'+p.ping+'ms</span></div>';
@@ -3204,7 +3281,7 @@ const SERVER_NAMES=['Sprint Central','Lane 7 Club','Navy Track Co.','Finish Line
 const REGIONS=['US East','US West','US Central','Europe','UK','Brazil','Asia'];
 let srvState={jc:21,tc:18,starJ:false,starT:false,bJ:false,bT:false};
 function genServers(){
-  srvState={jc:randi(19,23),tc:randi(16,19),starJ:Math.random()<0.5,starT:Math.random()<0.5,bJ:Math.random()<0.55,bT:Math.random()<0.55};renderServers();
+  srvState={jc:randi(19,23),tc:randi(16,19),starJ:Math.random()<0.5,starT:Math.random()<0.5,bJ:Math.random()<0.55,bT:Math.random()<0.55,jaT:Math.random()<0.55};renderServers();
 }
 function genServersOld(){
   servers=[];
@@ -3218,9 +3295,9 @@ function genServersOld(){
 let sFilter=-1;
 function renderFilter(){return;$('#sfilter').innerHTML=['All',...EVENTS.map(e=>e.short)].map((t,i)=>'<button data-f="'+(i-1)+'" class="'+(sFilter===i-1?'on':'')+'" aria-pressed="'+(sFilter===i-1)+'">'+t+'</button>').join('');}
 $('#sfilter').addEventListener('click',e=>{const b=e.target.closest('button[data-f]');if(!b)return;sFilter=+b.dataset.f;renderFilter();renderServers();});
-function curServers(){const B=activeBuild(),g=B.g,lv=LEVELS[B.lvl]?B.lvl:'col',evi=sFilter>=0?sFilter:EVENTS.findIndex(e=>e.id==='100'),dm=g==='M'&&lv==='jr';
-  return[{name:'Johnson Meet',big:true,div:g,lvl:lv,region:'Brooklyn',cap:24,count:srvState.jc,ping:randi(18,48),ev:-1,now:'',stars:[dm&&srvState.starJ?'DeMarcus Shadow':null,dm&&srvState.bJ?'Brandon Chalmers':null,g==='M'?'Tayvon Henderson':null,g==='M'?'Jaylen Brooks':null].filter(Boolean)},
-    {name:'Tilden High School',big:false,school:true,div:g,lvl:lv,region:'Brooklyn',cap:20,count:srvState.tc,ping:randi(12,36),ev:evi,now:'',stars:[dm&&srvState.starT?'DeMarcus Shadow':null,dm&&srvState.bT?'Brandon Chalmers':null].filter(Boolean)}];}
+function curServers(){const B=activeBuild(),g=B.g,lv=LEVELS[B.lvl]?B.lvl:'col',evi=sFilter>=0?sFilter:EVENTS.findIndex(e=>e.id==='100'),dm=g==='M'&&lv==='jr',pm=g==='M'&&lv==='col';
+  return[{name:'Johnson Meet',big:true,div:g,lvl:lv,region:'Brooklyn',cap:24,count:srvState.jc,ping:randi(18,48),ev:-1,now:'',stars:[pm?'Jordan Anthony':null,dm&&srvState.starJ?'DeMarcus Shadow':null,dm&&srvState.bJ?'Brandon Chalmers':null,g==='M'?'Tayvon Henderson':null,g==='M'?'Jaylen Brooks':null].filter(Boolean)},
+    {name:'Tilden High School',big:false,school:true,div:g,lvl:lv,region:'Brooklyn',cap:20,count:srvState.tc,ping:randi(12,36),ev:evi,now:'',stars:[pm&&srvState.jaT?'Jordan Anthony':null,dm&&srvState.starT?'DeMarcus Shadow':null,dm&&srvState.bT?'Brandon Chalmers':null].filter(Boolean)}];}
 function renderServers(){
   servers=curServers();const g=activeBuild().g,lv=LEVELS[activeBuild().lvl]?activeBuild().lvl:'col';
   $('#shTitle').textContent='Servers';
@@ -3255,7 +3332,7 @@ function join(s){
     botPlayers.forEach((p,i)=>{if(i<nb){players.push(p);p.mode='roam';p.ath.root.visible=true;}else p.ath.root.visible=false;});
     players.filter(p=>!p.isMe).forEach((p,i)=>{p.name='';});
     players.filter(p=>!p.isMe).forEach(p=>botIdentity(p,s.div));
-    {const sb=players.filter(x=>!x.isMe);let si=0;(s.stars||[]).forEach(nm=>{const dp=sb[si++];if(!dp)return;if(nm==='DeMarcus Shadow')makeDeMarcus(dp);else if(nm==='Brandon Chalmers')makeBrandon(dp);else if(nm==='Tayvon Henderson')makeTayvon(dp);else if(nm==='Jaylen Brooks')makeJaylen(dp);});}
+    {const sb=players.filter(x=>!x.isMe);let si=0;(s.stars||[]).forEach(nm=>{const dp=sb[si++];if(!dp)return;if(nm==='DeMarcus Shadow')makeDeMarcus(dp);else if(nm==='Brandon Chalmers')makeBrandon(dp);else if(nm==='Tayvon Henderson')makeTayvon(dp);else if(nm==='Jaylen Brooks')makeJaylen(dp);else if(nm==='Jordan Anthony')makeJordan(dp);});}
     PL.stam=100;watching=false;bcManual=0;$('#btnCam').textContent='Cam: auto';syncWatchBtn();me.afk=false;syncAfk();
     clog.innerHTML='';chatQ.length=0;
     addChat(null,'You joined '+s.name+' ('+s.region+'). '+(s.big?'Full meet, every event in order. ':DIVN[s.div]+' '+EVENTS[s.ev].name+' only. ')+players.length+'/'+s.cap+' players.',true);
@@ -3285,7 +3362,7 @@ function startPractice(){
     me={isMe:true,name:nm,gender:B.g,hIn:B.h,form:B.form,ath:meAth,mode:'roam',rating:0.7,endur:0.6,react:0.15,afk:false,ping:randi(20,60),medals:[0,0,0],reached:-1,look:lookFromBuild(B),roam:{}};
     applyBuild(meAth,B);setTag(meAth,nm,true);meAth.tag.visible=true;setBib(meAth,randi(1,99));meAth.root.visible=true;meAth.root.position.set(rand(-4,4),0,46);meAth.root.rotation.set(0,Math.PI,0);meAth.yaw=Math.PI;meAth.medal.visible=false;
     Object.assign(PL,buildPerf(B));players.push(me);
-    botPlayers.forEach((p,i)=>{if(i<12){players.push(p);botIdentity(p,B.g);pracInit(p,i<4?rand(0,3):rand(3,40));}else{p.ath.root.visible=false;p.mode='off';}});
+    botPlayers.forEach((p,i)=>{if(i<12){players.push(p);botIdentity(p);p.lvl=pick(['fr','so','jr']);pracInit(p,i<4?rand(0,3):rand(3,40));}else{p.ath.root.visible=false;p.mode='off';}});
     PL.stam=100;watching=false;syncWatchBtn();me.afk=false;syncAfk();clog.innerHTML='';chatQ.length=0;
     addChat(null,'You arrived at the practice field on Beverley Rd. Sit on the benches or bleachers, jog the track, or tap Sprint for a timed run.',true);
     meet.phase='idle';meet.heats=[];race.active=false;
@@ -3592,7 +3669,7 @@ function storyIdentity(p,d){
   p.name=d.name;p.gender=d.g||'M';p.star=true;p.def=d;p.topOverride=d.mph/2.237;p.endur=d.endur;p.react=d.react;p.reactR=d.reactR||null;p.accBoost=d.accBoost||null;p.stats={pow:d.pow,sta:d.sta,end:d.end};
   p.fade=d.fade||null;p.surge=d.surge||null;p.endurBy=null;p.pbs={};p.rating=clamp((d.mph-(p.gender==='W'?16:18))/2.1,0,1);p.form='std';p.hIn=d.h;p.afk=false;p.medals=[0,0,0];p.reached=-1;p.ping=randi(12,40);p.sitSpot=null;
   p.look={top:0x1f6fff,shorts:0x0b2a6b,team:'bs',skin:d.skin,hairCol:d.hairCol,hair:d.hair,shoe:d.shoe};p.suit=false;
-  const a=p.ath;setGender(a,p.gender);setHeight(a,d.h);a.form='std';dress(a,p.look);wearGlasses(a,!!d.glasses);if(a.suitOn)setSuit(a,false);
+  const a=p.ath;setGender(a,p.gender);setHeight(a,d.h);a.form='std';dress(a,p.look);wearGlasses(a,!!d.glasses);wearDurag(a,false);wearWatch(a,false);if(a.suitOn)setSuit(a,false);
   if(d.taylar){const R=taylarGear(a);R.nose.visible=R.chain.visible=true;}
   setTag(a,d.short,false);a.tag.scale.set(0.9,0.225,1);a.bibOn=false;a.bib.visible=false;a.medal.visible=false;a.root.visible=true;resetFx(a);a.fatigue=0;p.mode='story';p.act=newAct(a);}
 // ---------- the day's plan (Mon/Tue: reps, sometimes in groups; Wed/Thu: 45 s run, 3x100, drills, or chase)
