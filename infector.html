@@ -2086,7 +2086,9 @@ function buildPrims(){
   P.torus=primTorus(12,6,.17);
   P.plane=primPlane();
   P.wedge=primWedge();
-  for(const k in P)fixWinding(P[k]);
+  P.rock0=primRock(1);P.rock1=primRock(2);P.rock2=primRock(3);
+  P.blade=primBlade();
+  for(const k in P)if(k.indexOf('rock')!==0&&k!=='blade')fixWinding(P[k]);
 }
 
 /* --- shared scratch matrices --- */
@@ -2215,248 +2217,852 @@ function wallSeg(b,x1,z1,x2,z2,h,col,cols){
   if(cols)cols.push({x:(x1+x2)/2,z:(z1+z2)/2,hx:.16,hz:len/2,rot:ang,top:h,solid:true});
 }
 
-/* ---------------------------------------------------------------- PLAYGROUND */
+/* ============================================================================
+   MAP KIT (V1.25) — the pieces every map is dressed from: noise, terrain
+   sheets with per-vertex colour, path ribbons, trees of several species,
+   rocks, grass, flowers, lamps, benches and backdrops.
+   ========================================================================== */
+function hash2(x,z,s){
+  let h=(Math.imul(x|0,374761393)+Math.imul(z|0,668265263)+Math.imul((s|0)+1,982451653))|0;
+  h=Math.imul(h^(h>>>13),1274126177);
+  return ((h^(h>>>16))>>>0)/4294967296;
+}
+function vnoise2(x,z,s){
+  const ix=Math.floor(x),iz=Math.floor(z),fx=x-ix,fz=z-iz;
+  const ux=fx*fx*(3-2*fx),uz=fz*fz*(3-2*fz);
+  const a=hash2(ix,iz,s),b=hash2(ix+1,iz,s),c=hash2(ix,iz+1,s),d=hash2(ix+1,iz+1,s);
+  return a+(b-a)*ux+(c-a)*uz+(a-b-c+d)*ux*uz;
+}
+function fbm2(x,z,s){
+  return vnoise2(x,z,s)*.55+vnoise2(x*2.1+5.3,z*2.1-1.7,s)*.3+vnoise2(x*4.3-2.2,z*4.3+7.1,s)*.15;
+}
+/* A flat sheet of ground at height y with a colour per vertex, cut into
+   tiles so the renderer can drop the parts behind the camera. */
+function groundSheet(b,x0,z0,x1,z1,step,y,colAt,tile){
+  tile=tile||24;
+  for(let tx=x0;tx<x1-1e-6;tx+=tile)for(let tz=z0;tz<z1-1e-6;tz+=tile){
+    const ex=Math.min(x1,tx+tile),ez=Math.min(z1,tz+tile);
+    const nx=Math.max(1,Math.round((ex-tx)/step)),nz=Math.max(1,Math.round((ez-tz)/step));
+    const P=[],N=[],Cl=[],X=[];
+    for(let i=0;i<=nx;i++)for(let k=0;k<=nz;k++){
+      const x=tx+(ex-tx)*i/nx,z=tz+(ez-tz)*k/nz;
+      P.push(x,y,z);N.push(0,1,0);
+      const c=colAt(x,z);Cl.push(c[0],c[1],c[2]);
+    }
+    for(let i=0;i<nx;i++)for(let k=0;k<nz;k++){
+      const a=i*(nz+1)+k,a2=a+nz+1;
+      X.push(a,a+1,a2,a2,a+1,a2+1);
+    }
+    b.mesh(P,N,Cl,X,0,(tx+ex)/2,(tz+ez)/2);
+  }
+}
+/* A flat strip following a polyline of [x,z] points at height y. Long
+   strips are cut into short meshes so they cull with the rest. */
+function ribbon(b,pts,w,y,colAt,closed){
+  const n=pts.length;
+  const side=[];
+  for(let i=0;i<n;i++){
+    const p=pts[i];
+    const q=pts[closed?(i+1)%n:Math.min(n-1,i+1)],o=pts[closed?(i-1+n)%n:Math.max(0,i-1)];
+    let dx=q[0]-o[0],dz=q[1]-o[1];const l=Math.hypot(dx,dz)||1;dx/=l;dz/=l;
+    const ww=(typeof w==='function'?w(i,p):w)*.5;
+    side.push([p[0]+dz*ww,p[1]-dx*ww,p[0]-dz*ww,p[1]+dx*ww]);
+  }
+  const segs=closed?n:n-1, CH=16;
+  for(let s0=0;s0<segs;s0+=CH){
+    const P=[],N=[],Cl=[],X=[];
+    const s1=Math.min(segs,s0+CH);
+    for(let i=s0;i<=s1;i++){
+      const sd=side[i%n];
+      for(let k=0;k<2;k++){
+        const x=sd[k*2],z=sd[k*2+1];
+        P.push(x,y,z);N.push(0,1,0);const c=colAt(x,z,i);Cl.push(c[0],c[1],c[2]);
+      }
+    }
+    for(let i=0;i<s1-s0;i++){const a=i*2,a2=a+2;X.push(a,a2,a+1,a+1,a2,a2+1);}
+    fixMeshWinding(P,X);
+    const mid=pts[Math.min(n-1,(s0+s1)>>1)];
+    b.mesh(P,N,Cl,X,0,mid[0],mid[1]);
+  }
+}
+/* make every triangle of a raw mesh face +y (flat sheets only) */
+function fixMeshWinding(P,X){
+  for(let k=0;k<X.length;k+=3){
+    const a=X[k]*3,b=X[k+1]*3,c=X[k+2]*3;
+    const e1x=P[b]-P[a],e1z=P[b+2]-P[a+2],e2x=P[c]-P[a],e2z=P[c+2]-P[a+2];
+    if(e1z*e2x-e1x*e2z<0){const t=X[k+1];X[k+1]=X[k+2];X[k+2]=t;}
+  }
+}
+/* a filled disc (fountain water, plaza, rubber matting) */
+function disc(b,x,z,r,y,col,seg,em){
+  seg=seg||24;
+  const P=[x,y,z],N=[0,1,0],Cl=[col[0],col[1],col[2]],X=[];
+  for(let i=0;i<=seg;i++){
+    const a=i/seg*TAU;P.push(x+Math.cos(a)*r,y,z+Math.sin(a)*r);N.push(0,1,0);
+    Cl.push(col[0],col[1],col[2]);
+  }
+  for(let i=0;i<seg;i++)X.push(0,i+2,i+1);
+  fixMeshWinding(P,X);
+  b.mesh(P,N,Cl,X,em||0,x,z);
+}
+/* ring of a given width (plaza borders, kerbs around discs) */
+function ringFlat(b,x,z,r0,r1,y,col,seg){
+  seg=seg||32;
+  const P=[],N=[],Cl=[],X=[];
+  for(let i=0;i<=seg;i++){
+    const a=i/seg*TAU,c=Math.cos(a),s=Math.sin(a);
+    P.push(x+c*r0,y,z+s*r0,x+c*r1,y,z+s*r1);N.push(0,1,0,0,1,0);
+    const t=.94+hash2(i,7,3)*.1;
+    Cl.push(col[0]*t,col[1]*t,col[2]*t,col[0]*t,col[1]*t,col[2]*t);
+  }
+  for(let i=0;i<seg;i++){const a=i*2;X.push(a,a+1,a+2,a+2,a+1,a+3);}
+  fixMeshWinding(P,X);
+  b.mesh(P,N,Cl,X,0,x,z);
+}
+/* ---- extra primitives ---- */
+/* a faceted boulder: a coarse sphere with its vertices pushed about, flat
+   shaded so every face catches the light differently */
+function primRock(seed){
+  const s0=primSphere(6,4),p=[],n=[],idx=[];
+  const v=s0.v,I=s0.i,j=[];
+  for(let k=0;k<v.length;k+=3){
+    const h=hash2(Math.round(v[k]*40),Math.round(v[k+1]*40)+Math.round(v[k+2]*40)*7,seed);
+    j.push(.78+h*.44);
+  }
+  for(let t=0;t<I.length;t+=3){
+    const q=[I[t],I[t+1],I[t+2]].map(i=>[v[i*3]*j[i],v[i*3+1]*j[i]*(v[i*3+1]<0?.55:1),v[i*3+2]*j[i]]);
+    const e1=[q[1][0]-q[0][0],q[1][1]-q[0][1],q[1][2]-q[0][2]],e2=[q[2][0]-q[0][0],q[2][1]-q[0][1],q[2][2]-q[0][2]];
+    let nx=e1[1]*e2[2]-e1[2]*e2[1],ny=e1[2]*e2[0]-e1[0]*e2[2],nz=e1[0]*e2[1]-e1[1]*e2[0];
+    const l=Math.hypot(nx,ny,nz);if(l<1e-9)continue;
+    nx/=l;ny/=l;nz/=l;
+    // outward: compare with the centroid direction
+    const cx=q[0][0]+q[1][0]+q[2][0],cy=q[0][1]+q[1][1]+q[2][1],cz=q[0][2]+q[1][2]+q[2][2];
+    if(nx*cx+ny*cy+nz*cz<0){nx=-nx;ny=-ny;nz=-nz;}
+    const base=p.length/3;
+    for(const pt of q){p.push(pt[0],pt[1],pt[2]);n.push(nx,ny,nz);}
+    idx.push(base,base+1,base+2);
+  }
+  return mkPrim(p,n,idx);
+}
+/* a grass blade: a thin three-sided spike */
+function primBlade(){
+  const p=[],n=[],idx=[];
+  const tip=[0,.5,0],base=[[.5,-.5,0],[-.25,-.5,.43],[-.25,-.5,-.43]];
+  for(let i=0;i<3;i++){
+    const a=base[i],b=base[(i+1)%3];
+    const e1=[b[0]-a[0],b[1]-a[1],b[2]-a[2]],e2=[tip[0]-a[0],tip[1]-a[1],tip[2]-a[2]];
+    let nx=e1[1]*e2[2]-e1[2]*e2[1],ny=e1[2]*e2[0]-e1[0]*e2[2],nz=e1[0]*e2[1]-e1[1]*e2[0];
+    const l=Math.hypot(nx,ny,nz);nx/=l;ny/=l;nz/=l;
+    const o=p.length/3;
+    p.push(a[0],a[1],a[2],b[0],b[1],b[2],tip[0],tip[1],tip[2]);
+    for(let k=0;k<3;k++)n.push(nx,ny+.35,nz);
+    idx.push(o,o+1,o+2);
+  }
+  return mkPrim(p,n,idx);
+}
+/* ---- set dressing ---- */
+const TREE_GREENS=[hex(0x4f9c3a),hex(0x5fae45),hex(0x3f7f2f),hex(0x6aa848),hex(0x4a8a3c)];
+/* trees in four species; returns nothing, pushes a trunk collider */
+function treeKind(b,x,z,kind,s,rng,cols,y){
+  y=y||0;s=s||1;
+  const bark=shade(C.trunk,.85+rng()*.3);
+  if(kind==='pine'){
+    const h=(3.4+rng()*1.6)*s;
+    b.put(P.taper,x,y+h*.42,z,.3*s,h*.84,.3*s,0,shade(hex(0x6b4a2f),.9+rng()*.2));
+    const g=shade(hex(0x2f6b3a),.85+rng()*.3);
+    for(let i=0;i<4;i++){
+      const r=(1.55-i*.3)*s,yy=y+h*(.3+i*.2);
+      b.put(P.cone,x,yy+r*.5,z,r*2,r*1.25,r*2,rng()*TAU,shade(g,1+i*.06));
+    }
+    if(cols)cols.push({x,z,r:.32*s,circle:true,top:y+.2,solid:true});
+    return;
+  }
+  if(kind==='birch'){
+    const h=(3.0+rng()*1.2)*s, n=rng()<.4?2:1;
+    for(let t=0;t<n;t++){
+      const ox=n>1?(t?.32:-.28)*s:0,lean=n>1?(t?.12:-.1):0;
+      b.prim(P.cyl,_stack.reset().translate(x+ox,y+h*.5,z).rotZ(lean).scale(.2*s,h,.2*s).top,[.92,.91,.86]);
+      for(let k=0;k<5;k++)
+        b.prim(P.box,_stack.reset().translate(x+ox,y+.5+k*h*.17,z).rotZ(lean).rotY(rng()*TAU)
+          .translate(0,0,.095*s).scale(.09*s,.035,.03).top,[.18,.17,.16]);
+    }
+    const g=TREE_GREENS[(rng()*TREE_GREENS.length)|0];
+    for(let i=0;i<5;i++){
+      const a=rng()*TAU,r=rng()*.7*s;
+      b.put(P.sphLo,x+Math.cos(a)*r,y+h*.92+rng()*.8*s,z+Math.sin(a)*r,
+        (1.0+rng()*.6)*s,(1.2+rng()*.5)*s,(1.0+rng()*.6)*s,0,shade(mixc(g,hex(0x9ccf5a),.35),.9+rng()*.25));
+    }
+    if(cols)cols.push({x,z,r:.3*s,circle:true,top:y+.2,solid:true});
+    return;
+  }
+  if(kind==='poplar'){
+    const h=(2.0+rng()*.6)*s;
+    b.put(P.taper,x,y+h*.5,z,.32*s,h,.32*s,0,bark);
+    const g=TREE_GREENS[(rng()*TREE_GREENS.length)|0];
+    b.put(P.sph,x,y+h+1.6*s,z,1.7*s,4.0*s,1.7*s,0,shade(g,.9+rng()*.15));
+    b.put(P.sphLo,x+.25*s,y+h+2.3*s,z-.2*s,1.2*s,2.4*s,1.2*s,0,shade(g,1.05));
+    if(cols)cols.push({x,z,r:.34*s,circle:true,top:y+.2,solid:true});
+    return;
+  }
+  // oak: flared trunk, a couple of limbs, a lumpy crown darker underneath
+  const th=(2.1+rng()*.6)*s;
+  b.put(P.taper,x,y+th*.5,z,.42*s,th,.42*s,0,bark);
+  b.put(P.cone,x,y+.18*s,z,.95*s,.36*s,.95*s,rng()*TAU,shade(bark,.92));      // root flare
+  for(let i=0;i<2;i++){
+    const a=rng()*TAU;
+    b.prim(P.cylLo,_stack.reset().translate(x,y+th*.88,z).rotY(a).rotZ(.75+rng()*.3)
+      .translate(0,.55*s,0).scale(.16*s,1.1*s,.16*s).top,bark);
+  }
+  const g=TREE_GREENS[(rng()*TREE_GREENS.length)|0];
+  const n=5+((rng()*3)|0);
+  for(let i=0;i<n;i++){
+    const a=rng()*TAU,r=(i?.6+rng()*.6:0)*s,hh=th+(.5+rng()*1.1)*s;
+    const lo=hh<th+.9*s;
+    b.put(lo?P.sphLo:P.sph,x+Math.cos(a)*r,y+hh,z+Math.sin(a)*r,
+      (1.5+rng()*.9)*s,(1.25+rng()*.6)*s,(1.5+rng()*.9)*s,0,shade(g,(lo?.78:.92)+rng()*.22));
+  }
+  if(cols)cols.push({x,z,r:.5*s,circle:true,top:y+.2,solid:true});
+}
+/* a little clump of grass blades */
+function tuft(b,x,z,s,rng,col,y){
+  const n=3+((rng()*3)|0),c=col||C.leaf2;
+  for(let i=0;i<n;i++){
+    const a=rng()*TAU,r=rng()*.12*s,h=(.22+rng()*.2)*s;
+    b.prim(P.blade,_stack.reset().translate(x+Math.cos(a)*r,(y||0)+h*.5,z+Math.sin(a)*r)
+      .rotY(rng()*TAU).rotZ((rng()-.5)*.5).rotX((rng()-.5)*.5).scale(.07*s,h,.07*s).top,
+      shade(c,.8+rng()*.4));
+  }
+}
+const FLOWER_COLS=[hex(0xf2d14a),hex(0xe8574a),hex(0xf3f0ea),hex(0xd46fd8),hex(0xf29e3d),hex(0x6f9cf2)];
+function flower(b,x,z,rng,col,y){
+  const h=.22+rng()*.18;
+  b.put(P.box,x,(y||0)+h*.5,z,.025,h,.025,0,hex(0x3f8a34));
+  b.put(P.sphLo,x,(y||0)+h,z,.1,.07,.1,0,col||FLOWER_COLS[(rng()*FLOWER_COLS.length)|0],.06);
+}
+/* a bed of flowers with a low timber or stone edge */
+function flowerBed(b,cols,x,z,w,d,ry,rng,edge){
+  const st=b.st;
+  b.prim(P.box,st.reset().translate(x,.06,z).rotY(ry).scale(w,.12,d).top,hex(0x5a3d26));
+  const ec=edge||hex(0xb8b0a2);
+  for(let s=-1;s<=1;s+=2){
+    b.prim(P.box,st.reset().translate(x,.11,z).rotY(ry).translate(0,0,s*d*.5).scale(w+.16,.22,.12).top,ec);
+    b.prim(P.box,st.reset().translate(x,.11,z).rotY(ry).translate(s*w*.5,0,0).scale(.12,.22,d).top,ec);
+  }
+  const pal=[FLOWER_COLS[(rng()*FLOWER_COLS.length)|0],FLOWER_COLS[(rng()*FLOWER_COLS.length)|0]];
+  const c=Math.cos(ry),s2=Math.sin(ry);
+  const n=Math.round(w*d*7);
+  for(let i=0;i<n;i++){
+    const lx=(rng()-.5)*(w-.3),lz=(rng()-.5)*(d-.3);
+    const fx=x+lx*c+lz*s2,fz=z-lx*s2+lz*c;
+    if(rng()<.3)tuft(b,fx,fz,.7,rng,C.leaf,.12);
+    else flower(b,fx,fz,rng,pal[i%2],.12);
+  }
+  if(cols)cols.push({x,z,hx:w/2+.08,hz:d/2+.08,rot:ry,top:.22,solid:true});
+}
+function rock(b,cols,x,z,s,rng,col,y){
+  const k=(rng()*3)|0;
+  b.prim(P['rock'+k],_stack.reset().translate(x,(y||0)+s*.22,z).rotY(rng()*TAU)
+    .scale(s*(1+rng()*.4),s*(.7+rng()*.4),s*(1+rng()*.3)).top,shade(col||hex(0x8d8a84),.85+rng()*.3));
+  if(cols&&s>.6)cols.push({x,z,r:s*.55,circle:true,top:(y||0)+s*.45,solid:true});
+}
+/* a cast-iron park lamp; returns its light position for the renderer */
+function parkLamp(b,cols,x,z,col){
+  b.put(P.cyl,x,.12,z,.36,.24,.36,0,hex(0x2c3136));
+  b.put(P.cyl,x,1.75,z,.12,3.3,.12,0,hex(0x2c3136));
+  b.put(P.cyl,x,3.45,z,.22,.1,.22,0,hex(0x2c3136));
+  b.put(P.sphLo,x,3.68,z,.42,.5,.42,0,col||[1,.93,.74],.75);
+  b.put(P.cone,x,4.02,z,.48,.22,.48,0,hex(0x2c3136));
+  if(cols)cols.push({x,z,r:.2,circle:true,top:.3,solid:true});
+}
+/* a slatted park bench with cast ends */
+function parkBench(b,cols,x,z,ry,col){
+  const st=b.st,wood=col||hex(0xa8743f),iron=hex(0x30353b);
+  for(let i=0;i<3;i++)
+    b.prim(P.box,st.reset().translate(x,.47,z).rotY(ry).translate(0,0,-.2+i*.18).scale(1.9,.05,.14).top,shade(wood,.95+i*.04));
+  for(let i=0;i<2;i++)
+    b.prim(P.box,st.reset().translate(x,.72+i*.17,z).rotY(ry).translate(0,0,-.32).rotX(-.18).scale(1.9,.11,.04).top,wood);
+  for(let s=-1;s<=1;s+=2){
+    b.prim(P.box,st.reset().translate(x,.24,z).rotY(ry).translate(s*.82,0,0).scale(.07,.48,.6).top,iron);
+    b.prim(P.box,st.reset().translate(x,.64,z).rotY(ry).translate(s*.82,0,-.12).scale(.07,.06,.55).top,iron);
+    b.prim(P.box,st.reset().translate(x,.72,z).rotY(ry).translate(s*.82,0,-.34).rotX(-.18).scale(.07,.5,.06).top,iron);
+  }
+  if(cols)cols.push({x,z,hx:.98,hz:.36,rot:ry,top:.52,solid:true});
+}
+function litterBin(b,cols,x,z,col){
+  b.put(P.cyl,x,.45,z,.56,.9,.56,0,col||hex(0x2f5f3a));
+  b.put(P.cyl,x,.92,z,.62,.06,.62,0,hex(0x2a2e33));
+  b.put(P.cyl,x,.86,z,.5,.03,.5,0,hex(0x1a1c1f));
+  if(cols)cols.push({x,z,r:.32,circle:true,top:.92,solid:true});
+}
+/* a rounded hedge run between two points */
+function hedge(b,cols,x1,z1,x2,z2,h,rng,col){
+  const dx=x2-x1,dz=z2-z1,len=Math.hypot(dx,dz),ang=Math.atan2(dx,dz);
+  const n=Math.max(1,Math.round(len/1.1));
+  const g=col||hex(0x3f7a33);
+  b.prim(P.box,_stack.reset().translate((x1+x2)/2,h*.42,(z1+z2)/2).rotY(ang).scale(.9,h*.84,len).top,shade(g,.9));
+  for(let i=0;i<=n;i++){
+    const t=i/n;
+    b.put(P.sphLo,x1+dx*t,h*.62+rng()*.1,z1+dz*t,1.15+rng()*.25,h*.75,1.15+rng()*.25,0,shade(g,.9+rng()*.25));
+  }
+  if(cols)cols.push({x:(x1+x2)/2,z:(z1+z2)/2,hx:.5,hz:len/2,rot:ang,top:h,solid:true});
+}
+/* a distant ring of hills and trees beyond the play area — never reached,
+   it only gives the horizon something to be */
+function backdrop(b,r0,r1,rng,opts){
+  opts=opts||{};
+  const hillC=opts.hill||hex(0x5d8f45),n=opts.hills||26;
+  for(let i=0;i<n;i++){
+    const a=i/n*TAU+rng()*.2,r=r1+rng()*24;
+    b.put(P.sphLo,Math.cos(a)*r,-2,Math.sin(a)*r,40+rng()*30,10+rng()*14,40+rng()*30,a,shade(hillC,.8+rng()*.25));
+  }
+  const tn=opts.trees||70;
+  for(let i=0;i<tn;i++){
+    const a=rng()*TAU,r=r0+rng()*(r1-r0);
+    const x=Math.cos(a)*r,z=Math.sin(a)*r;
+    if(rng()<.4)treeKind(b,x,z,'pine',1.4+rng(),rng,null);
+    else{
+      const s=1.4+rng()*.9;
+      b.put(P.cylLo,x,1.6*s,z,.5*s,3.2*s,.5*s,0,shade(C.trunk,.8));
+      b.put(P.sphLo,x,4.4*s,z,3.4*s,3*s,3.4*s,0,shade(TREE_GREENS[(rng()*5)|0],.8+rng()*.2));
+    }
+  }
+}
+/* ---- collision acceleration ----
+   Colliders are bucketed once per map into a coarse grid. Every collider is
+   filed in each cell its footprint (plus a metre of slack) touches, and a
+   query reads the one cell under it in the original order — same answers,
+   a fraction of the work. */
+function buildColGrid(w){
+  const S=6,cols=w.cols;
+  let x0=1e9,z0=1e9,x1=-1e9,z1=-1e9;
+  const ext=cols.map(c=>{
+    const r=c.circle?c.r:Math.hypot(c.hx,c.hz);
+    x0=Math.min(x0,c.x-r);x1=Math.max(x1,c.x+r);z0=Math.min(z0,c.z-r);z1=Math.max(z1,c.z+r);
+    return r;
+  });
+  x0-=2;z0-=2;x1+=2;z1+=2;
+  const nx=Math.max(1,Math.ceil((x1-x0)/S)),nz=Math.max(1,Math.ceil((z1-z0)/S));
+  const cells=new Array(nx*nz);
+  for(let i=0;i<cells.length;i++)cells[i]=[];
+  cols.forEach((c,i)=>{
+    const r=ext[i]+1.2;
+    const ax=Math.max(0,Math.floor((c.x-r-x0)/S)),bx=Math.min(nx-1,Math.floor((c.x+r-x0)/S));
+    const az=Math.max(0,Math.floor((c.z-r-z0)/S)),bz=Math.min(nz-1,Math.floor((c.z+r-z0)/S));
+    for(let gx=ax;gx<=bx;gx++)for(let gz=az;gz<=bz;gz++)cells[gx*nz+gz].push(c);
+  });
+  w.colGrid={S,x0,z0,nx,nz,cells,empty:[]};
+}
+function colsNear(x,z){
+  const g=World.colGrid;
+  if(!g)return World.cols;
+  const gx=Math.floor((x-g.x0)/g.S),gz=Math.floor((z-g.z0)/g.S);
+  if(gx<0||gz<0||gx>=g.nx||gz>=g.nz)return g.empty;
+  return g.cells[gx*g.nz+gz];
+}
+
+/* ---------------------------------------------------------------- PLAYGROUND
+   V1.25: Sunnyside Park. A fountain plaza at the centre, curving paths to
+   three gates, a play area on rubber safety matting, sports courts, a duck
+   pond, a picnic grove and a street running round the railings. */
 function buildPlayground(){
   const rng=makeRng(20250808);
   const b=new Builder(),cols=[],spawns=[],nav=[],dyn=[];
+  MAPLIGHTS=[];
   const R_=44;
-  // ground: tiled grass with subtle colour variation
-  const T=92,step=T/26;
-  for(let ix=0;ix<26;ix++)for(let iz=0;iz<26;iz++){
-    const x=-T/2+step*(ix+.5),z=-T/2+step*(iz+.5);
-    const v=.86+rng()*.3;
-    b.put(P.box,x,-.25,z,step+.02,.5,step+.02,0,shade(rng()<.12?C.grass3:C.grass,v));
-  }
-  // winding path
-  for(let i=0;i<72;i++){
-    const t=i/71,ang=t*TAU;
-    const r=21+Math.sin(ang*2)*5.5;
-    b.put(P.box,Math.cos(ang)*r,.012,Math.sin(ang)*r,3.4,.06,3.4,ang,shade(C.path,.94+rng()*.12));
-  }
-  // ---- sandbox
-  b.put(P.box,-13,.02,11,9,.1,9,0,C.sand);
-  for(let i=0;i<4;i++){
-    const a=i*PI/2, ex=Math.cos(a)*4.6, ez=Math.sin(a)*4.6;
-    const alongZ=(i%2)===0;                       // rails on the ±X edges run along Z
-    b.put(P.box,-13+ex,.19,11+ez,alongZ?.42:9.6,.38,alongZ?9.6:.42,0,C.wood);
-    cols.push({x:-13+ex,z:11+ez,hx:alongZ?.21:4.8,hz:alongZ?4.8:.21,rot:0,top:.38,solid:true});
-  }
-  // sand mounds + a few toys
-  for(let i=0;i<7;i++)
-    b.put(P.sph,-13+rng()*7-3.5,.12,11+rng()*7-3.5,.5+rng()*.5,.3,.5+rng()*.5,0,shade(C.sand,1.06));
-  const toyC=[C.red,C.blue,C.yellow,C.green];
-  for(let i=0;i<4;i++){
-    const tx2=-13+rng()*6-3,tz2=11+rng()*6-3;
-    b.put(P.taper,tx2,.22,tz2,.44,.42,.44,0,toyC[i]);
-    b.prim(P.torus,_stack.reset().translate(tx2,.46,tz2).rotZ(PI/2).scale(.42,.42,.42).top,shade(toyC[i],.85));
-  }
-  b.prim(P.box,_stack.reset().translate(-10.4,.24,13.5).rotY(.4).rotZ(-.5).scale(.09,.62,.09).top,C.plank);
-  b.prim(P.box,_stack.reset().translate(-10.6,.5,13.6).rotY(.4).rotZ(-.5).scale(.2,.22,.05).top,C.red);
-  // ---- swing set (frame static, seats animated)
-  const sx=12,sz=-12;
-  for(let s=-1;s<=1;s+=2){
-    for(let f=-1;f<=1;f+=2){
-      b.prim(P.cyl,_stack.reset().translate(sx+s*3.6+f*.55,1.5,sz+f*.9).rotZ(-s*.16).rotX(-f*.13).scale(.19,3.1,.19).top,C.metalD);
-    }
-  }
-  b.put(P.cyl,sx,3.02,sz,.2,7.6,.2,0,C.metal); // top bar (rotated below)
-  b.prim(P.cyl,_stack.reset().translate(sx,3.02,sz).rotZ(PI/2).scale(.2,7.6,.2).top,C.metal);
-  cols.push({x:sx+3.6,z:sz,hx:.4,hz:1.2,rot:0,top:.2,solid:true});
-  cols.push({x:sx-3.6,z:sz,hx:.4,hz:1.2,rot:0,top:.2,solid:true});
-  for(let i=0;i<3;i++){
-    dyn.push({type:'swing',x:sx-2.3+i*2.3,y:3.02,z:sz,ph:rng()*TAU,
-      col:[C.red,C.blue,C.yellow][i],amp:.30+rng()*.2,spd:.9+rng()*.25});
-  }
-  // ---- slide + tower
-  const tx=-4,tz=-14;
-  b.put(P.box,tx,1.85,tz,3.4,.28,3.4,0,C.plank);
-  cols.push({x:tx,z:tz,hx:1.7,hz:1.7,rot:0,top:2.0,solid:true});
-  for(let i=0;i<4;i++){
-    const a=i*PI/2+PI/4;
-    b.put(P.cyl,tx+Math.cos(a)*1.5,.95,tz+Math.sin(a)*1.5,.22,1.9,.22,0,C.metalD);
-  }
-  // railings (open sides so players can hop out)
-  for(let i=0;i<3;i++){
-    const a=i*PI/2;
-    b.put(P.box,tx+Math.cos(a)*1.62,2.42,tz+Math.sin(a)*1.62,i%2?.12:3.3,.7,i%2?3.3:.12,0,
-      [C.red,C.blue,C.yellow][i%3]);
-    b.put(P.cyl,tx+Math.cos(a)*1.62,2.82,tz+Math.sin(a)*1.62,.08,3.3,.08,a+PI/2,C.metal);
-  }
-  // canopy roof on four posts
-  for(let i=0;i<4;i++){
-    const a=i*PI/2+PI/4;
-    b.put(P.cyl,tx+Math.cos(a)*1.5,3.0,tz+Math.sin(a)*1.5,.13,2.0,.13,0,C.metalD);
-  }
-  b.prim(P.box,_stack.reset().translate(tx,4.06,tz).scale(4.0,.2,4.0).top,C.red);
-  b.prim(P.box,_stack.reset().translate(tx,4.2,tz).scale(2.4,.16,2.4).top,shade(C.red,1.12));
-  // slide: tilted along its own length, meeting the platform edge and the ground
-  const slAng=Math.atan2(1.9,2.9), slLen=Math.hypot(2.9,1.9);
-  b.prim(P.box,_stack.reset().translate(tx+3.15,1.0,tz).rotZ(-slAng).scale(slLen,.14,1.4).top,C.yellow);
-  for(let s=-1;s<=1;s+=2)
-    b.prim(P.box,_stack.reset().translate(tx+3.15,1.18,tz+s*.72).rotZ(-slAng).scale(slLen,.42,.12).top,
-      shade(C.yellow,.86));
-  b.put(P.box,tx+4.85,.09,tz,1.1,.18,1.4,0,shade(C.yellow,.9));
-  // ladder
-  for(let i=0;i<6;i++)b.put(P.cyl,tx-1.8,.3+i*.31,tz,.09,1.5,.09,PI/2,C.metal);
-  for(let s=-1;s<=1;s+=2)b.prim(P.cyl,_stack.reset().translate(tx-1.8,1.0,tz+s*.72).rotZ(.12).scale(.1,2.1,.1).top,C.metalD);
-  // ---- monkey bars
-  const mx=6,mz=9;
-  for(let s=-1;s<=1;s+=2)for(let f=-1;f<=1;f+=2)
-    b.put(P.cyl,mx+f*3.2,1.15,mz+s*.85,.16,2.3,.16,0,C.metalD);
-  for(let s=-1;s<=1;s+=2)
-    b.prim(P.cyl,_stack.reset().translate(mx,2.28,mz+s*.85).rotZ(PI/2).scale(.13,6.6,.13).top,C.metal);
-  for(let i=0;i<9;i++)
-    b.prim(P.cyl,_stack.reset().translate(mx-3+i*.75,2.28,mz).rotX(PI/2).scale(.09,1.8,.09).top,C.metal);
-  cols.push({x:mx+3.2,z:mz,hx:.3,hz:1.2,rot:0,top:.2,solid:true});
-  cols.push({x:mx-3.2,z:mz,hx:.3,hz:1.2,rot:0,top:.2,solid:true});
-  // ---- see-saw & merry-go-round (animated)
-  dyn.push({type:'seesaw',x:-16,y:.75,z:-6,ph:0,spd:.8});
-  b.put(P.cyl,-16,.4,-6,.5,.8,.5,0,C.metalD);
-  dyn.push({type:'carousel',x:16,y:.5,z:8,ph:0,spd:.55});
-  b.put(P.cyl,16,.25,8,1.1,.5,1.1,0,C.metalD);
-  cols.push({x:16,z:8,r:2.4,circle:true,top:.62,solid:true});
-  // ---- second swing set
-  const sx2=-22,sz2=-18;
-  for(let s2=-1;s2<=1;s2+=2)for(let f=-1;f<=1;f+=2)
-    b.prim(P.cyl,_stack.reset().translate(sx2+s2*3.6+f*.55,1.5,sz2+f*.9)
-      .rotZ(-s2*.16).rotX(-f*.13).scale(.19,3.1,.19).top,C.metalD);
-  b.prim(P.cyl,_stack.reset().translate(sx2,3.02,sz2).rotZ(PI/2).scale(.2,7.6,.2).top,C.metal);
-  cols.push({x:sx2+3.6,z:sz2,hx:.4,hz:1.2,rot:0,top:.2,solid:true});
-  cols.push({x:sx2-3.6,z:sz2,hx:.4,hz:1.2,rot:0,top:.2,solid:true});
-  for(let i=0;i<3;i++)
-    dyn.push({type:'swing',x:sx2-2.3+i*2.3,y:3.02,z:sz2,ph:rng()*TAU,
-      col:[C.green,C.purple,C.cyan][i],amp:.28+rng()*.2,spd:.85+rng()*.3});
-  // ---- climbing tower: net frame, platforms and a tunnel
-  const kx=-24,kz=6;
-  for(let i=0;i<4;i++){
-    const a=i*PI/2+PI/4;
-    b.put(P.cyl,kx+Math.cos(a)*2.3,1.7,kz+Math.sin(a)*2.3,.22,3.4,.22,0,C.metalD);
-    cols.push({x:kx+Math.cos(a)*2.3,z:kz+Math.sin(a)*2.3,r:.24,circle:true,top:.3,solid:true});
-  }
-  b.put(P.box,kx,1.55,kz,4.6,.26,4.6,0,C.plank);
-  cols.push({x:kx,z:kz,hx:2.3,hz:2.3,rot:0,top:1.7,solid:true});
-  b.put(P.box,kx,3.05,kz,3.2,.24,3.2,0,C.plank);
-  cols.push({x:kx,z:kz,hx:1.6,hz:1.6,rot:0,top:3.2,solid:true});
-  // climbing net on one face
-  for(let i=0;i<7;i++){
-    b.prim(P.cyl,_stack.reset().translate(kx-2.3+i*.72,1.6,kz+2.3).scale(.05,3.2,.05).top,hex(0x8a6a3a));
-    b.prim(P.cyl,_stack.reset().translate(kx,.35+i*.46,kz+2.3).rotZ(PI/2).scale(.05,4.6,.05).top,hex(0x8a6a3a));
-  }
-  // tunnel
-  for(let i=0;i<6;i++)
-    b.prim(P.torus,_stack.reset().translate(kx+4.4+i*.62,.72,kz).rotY(PI/2).rotX(PI/2)
-      .scale(1.6,1.6,1.6).top,[C.yellow,C.red][i%2]);
-  // big slide off the top deck
-  const bsA=Math.atan2(2.4,4.2),bsL=Math.hypot(4.2,2.4);
-  b.prim(P.box,_stack.reset().translate(kx-4.1,1.9,kz).rotZ(bsA).scale(bsL,.16,1.6).top,C.blue);
-  for(let s2=-1;s2<=1;s2+=2)
-    b.prim(P.box,_stack.reset().translate(kx-4.1,2.14,kz+s2*.82).rotZ(bsA).scale(bsL,.5,.13).top,
-      shade(C.blue,.86));
-  // ---- soccer pitch
-  const fx2=-8,fz2=26;
-  b.put(P.box,fx2,.02,fz2,26,.08,17,0,shade(C.grass2,1.06));
-  b.put(P.box,fx2,.05,fz2,25,.1,16,0,shade(C.grass,1.12));
-  for(let i=0;i<8;i++)
-    b.put(P.box,fx2-12.5+i*3.2,.07,fz2,1.6,.03,16,0,shade(C.grass2,1.14));
-  b.put(P.box,fx2,.08,fz2,.2,.04,16,0,C.white);
-  b.put(P.torus,fx2,.08,fz2,5.4,.04,5.4,0,C.white);
-  for(let s2=-1;s2<=1;s2+=2){
-    b.put(P.box,fx2+s2*12.5,.08,fz2,.2,.04,16,0,C.white);
-    // goal
-    b.prim(P.cyl,_stack.reset().translate(fx2+s2*12.2,1.15,fz2-3.2).scale(.16,2.3,.16).top,C.white);
-    b.prim(P.cyl,_stack.reset().translate(fx2+s2*12.2,1.15,fz2+3.2).scale(.16,2.3,.16).top,C.white);
-    b.prim(P.cyl,_stack.reset().translate(fx2+s2*12.2,2.28,fz2).rotX(PI/2).scale(.16,6.4,.16).top,C.white);
-    for(let i=0;i<9;i++)
-      b.prim(P.cyl,_stack.reset().translate(fx2+s2*12.4,1.15,fz2-3.2+i*.8).scale(.03,2.3,.03).top,
-        [.9,.9,.92]);
-    cols.push({x:fx2+s2*12.2,z:fz2-3.2,r:.2,circle:true,top:.2,solid:true});
-    cols.push({x:fx2+s2*12.2,z:fz2+3.2,r:.2,circle:true,top:.2,solid:true});
-  }
-  b.put(P.sph,fx2+2,.3,fz2+1,.55,.55,.55,0,C.white);
-  // ---- picnic tables
-  [[20,-24,.3],[-30,-2,1.1],[6,30,2.2],[28,16,.7]].forEach(([px,pz,pr])=>{
-    b.prim(P.box,_stack.reset().translate(px,.78,pz).rotY(pr).scale(1.7,.14,.95).top,C.plank);
-    for(let s2=-1;s2<=1;s2+=2){
-      b.prim(P.box,_stack.reset().translate(px,.44,pz).rotY(pr).translate(0,0,s2*.86)
-        .scale(1.7,.12,.42).top,C.wood);
-      b.prim(P.box,_stack.reset().translate(px,.36,pz).rotY(pr).translate(s2*.72,0,0)
-        .scale(.16,.72,1.9).top,C.wood2);
-    }
-    cols.push({x:px,z:pz,hx:1.1,hz:1.3,rot:pr,top:.85,solid:true});
-  });
-  // ---- basketball court
-  const cxx=12,czz=17;
-  b.put(P.box,cxx,.03,czz,14,.1,9.6,0,hex(0xc98a52));
-  b.put(P.box,cxx,.05,czz,13.3,.12,8.9,0,hex(0xd79a5f));
-  for(let s=-1;s<=1;s+=2){
-    b.put(P.box,cxx+s*6.3,.07,czz,.16,.14,8.8,0,C.white);
-    b.put(P.torus,cxx+s*3.6,.07,czz,6.2,.14,6.2,0,C.white);
-    // hoop
-    b.put(P.cyl,cxx+s*7.2,1.7,czz,.2,3.4,.2,0,C.metalD);
-    b.prim(P.box,_stack.reset().translate(cxx+s*6.55,3.25,czz).scale(.14,1.25,1.8).top,C.white);
-    b.prim(P.torus,_stack.reset().translate(cxx+s*5.95,2.95,czz).rotX(PI/2).scale(.95,.95,.95).top,C.orange);
-    cols.push({x:cxx+s*7.2,z:czz,r:.35,circle:true,top:.2,solid:true});
-  }
-  b.put(P.box,cxx,.06,czz,.16,.13,8.8,0,C.white);
-  b.put(P.sph,cxx+3,.32,czz+2,.62,.62,.62,0,C.orange);
-  // ---- benches, picnic tables, bins
-  const benches=[[-8,4,0],[9,-3,1.2],[-2,17,2.4],[20,-8,.6],[-19,-16,3.6],[3,-2,.9],
-    [30,-10,1.5],[-33,14,.4],[14,32,2.9],[-14,-30,1.8],[34,6,2.2],[-4,-26,.2]];
-  benches.forEach(([x,z,r])=>{
-    b.prim(P.box,_stack.reset().translate(x,.52,z).rotY(r).scale(.62,.13,2.1).top,C.plank);
-    b.prim(P.box,_stack.reset().translate(x,.82,z).rotY(r).rotX(-.22).scale(.13,.62,2.1).top,C.plank);
-    for(let s=-1;s<=1;s+=2)
-      b.prim(P.box,_stack.reset().translate(x+Math.cos(r)*0,.26,z).rotY(r).translate(0,0,s*.85).scale(.55,.52,.14).top,C.metalD);
-    cols.push({x,z,hx:.62,hz:2.1,rot:r,top:.6,solid:true});
-  });
-  for(let i=0,guard=0;i<5&&guard<80;guard++){
-    const a=rng()*TAU,r=10+rng()*16;
-    const x=Math.cos(a)*r,z=Math.sin(a)*r;
-    if(Math.abs(x-cxx)<8.6&&Math.abs(z-czz)<6.6)continue;
-    i++;
-    b.put(P.cyl,x,.42,z,.72,.85,.72,0,C.green);
-    b.put(P.cyl,x,.88,z,.78,.1,.78,0,shade(C.green,.7));
-    cols.push({x,z,r:.42,circle:true,top:.88,solid:true});
-  }
-  // ---- trees & bushes, kept clear of every play structure
-  const keepOut=[[cxx,czz,8.6,6.6],[-13,11,6.4,6.4],[sx,sz,5.4,3.2],[tx,tz,5.6,4.2],
-                 [mx,mz,4.6,2.6],[16,8,3.6,3.6],[-16,-6,3.4,3.4],
-                 [-22,-18,5.4,3.2],[-24,6,7.6,4.4],[-8,26,14,9.5],
-                 [20,-24,2,2],[-30,-2,2,2],[6,30,2,2],[28,16,2,2],[0,-34,7,3]];
-  const blocked=(x,z,pad)=>{
-    for(const k of keepOut)
-      if(Math.abs(x-k[0])<k[2]+(pad||0)&&Math.abs(z-k[1])<k[3]+(pad||0))return true;
-    return false;
+  // features the scatter (trees, rocks, flowers) must keep away from: [x,z,radius]
+  const keep=[];
+  const clear=(x,z,pad)=>{
+    for(const k of keep)if(dist2(x,z,k[0],k[1])<(k[2]+(pad||0))*(k[2]+(pad||0)))return false;
+    return true;
   };
-  for(let i=0,guard=0;i<52&&guard<700;guard++){
-    const a=rng()*TAU,r=15+rng()*26;
+  // ---------------------------------------------------------- the ground
+  // worn, sunlit patches and darker shade are painted straight into the grass
+  const worn=[];                      // [x,z,r] bare earth under swings and on corners
+  const grassAt=(x,z)=>{
+    const n=fbm2(x*.09,z*.09,3),m=vnoise2(x*.5,z*.5,9);
+    let c=mixc(hex(0x5e9e3c),hex(0x7cb64a),n);
+    c=mixc(c,hex(0x8fb257),clamp((vnoise2(x*.045+3,z*.045,4)-.62)*2.4,0,1)*.6);   // drier patches
+    c=shade(c,.93+m*.12);
+    for(const w of worn){
+      const d=Math.hypot(x-w[0],z-w[1]);
+      if(d<w[2])c=mixc(c,hex(0xa48660),smooth(1-d/w[2])*.85);
+    }
+    const r=Math.hypot(x,z);
+    if(r>R_+1.5)c=mixc(c,hex(0x6d9a45),.4);            // verge outside the railings
+    return c;
+  };
+  // ---------------------------------------------------------- layout
+  const PL={x:0,z:0,r:6.6};                            // fountain plaza
+  const PLAY={x:19,z:19};                              // play area
+  const COURT={x:20,z:-21};                            // basketball
+  const PITCH={x:-26,z:0,w:18,l:30};                   // soccer, long axis along z
+  const POND={x:-14,z:-25};                            // duck pond
+  const PICNIC={x:-17,z:24};
+  keep.push([PL.x,PL.z,PL.r+1.5]);
+  const STAGE={x:0,z:-13};
+  keep.push([STAGE.x,STAGE.z,8.5]);          // the menu camera circles here
+  // ---------------------------------------------------------- paths
+  const pathC=(x,z,i)=>shade(mixc(hex(0xd9c8a4),hex(0xc9b48a),vnoise2(x*.6,z*.6,11)),.94+vnoise2(x*2,z*2,5)*.1);
+  // the ring path wanders a little
+  const ring=[];
+  for(let i=0;i<96;i++){
+    const a=i/96*TAU,r=21+Math.sin(a*3+.6)*2.2+Math.sin(a*5)*.8;
+    ring.push([Math.cos(a)*r,Math.sin(a)*r]);
+  }
+  ribbon(b,ring,3.0,.025,pathC,true);
+  // three gates and the paths that lead in from them
+  const gates=[[0,-1],[1,0],[0,1]];                    // north, east, south
+  for(const g of gates){
+    const pts=[];
+    for(let i=0;i<=30;i++){
+      const r=PL.r-.5+(R_+3-PL.r+.5)*i/30,wob=Math.sin(r*.22)*.9;
+      pts.push([g[0]*r-g[1]*wob,g[1]*r+g[0]*wob]);
+    }
+    ribbon(b,pts,2.8,.03,pathC,false);
+    for(const p of pts)if(Math.hypot(p[0],p[1])>PL.r+2)keep.push([p[0],p[1],2.2]);
+  }
+  for(const p of ring)keep.push([p[0],p[1],2.3]);
+  // ---------------------------------------------------------- fountain plaza
+  disc(b,PL.x,PL.z,PL.r,.04,hex(0xcfc3ae),40);
+  ringFlat(b,PL.x,PL.z,PL.r-.45,PL.r,.045,hex(0xa89a83),40);
+  ringFlat(b,PL.x,PL.z,3.4,3.8,.045,hex(0xb5a68d),36);
+  for(let i=0;i<8;i++){                                  // radiating paving lines
+    const a=i/8*TAU+PI/8;
+    b.prim(P.box,_stack.reset().translate(Math.cos(a)*5,.05,Math.sin(a)*5).rotY(-a).scale(2.4,.012,.12).top,hex(0xb0a28a));
+  }
+  // basin, rim, two tiers and the water
+  const stone=hex(0xd8d2c6),stoneD=hex(0xa9a397);
+  b.put(P.cyl,0,.28,0,5.4,.56,5.4,0,stoneD);
+  b.put(P.cyl,0,.58,0,5.6,.1,5.6,0,stone);
+  disc(b,0,0,2.55,.5,hex(0x3f86b5),32,.12);
+  b.put(P.cyl,0,1.0,0,.7,1.0,.7,0,stone);
+  b.put(P.cyl,0,1.55,0,2.3,.16,2.3,0,stone);
+  b.put(P.cyl,0,1.45,0,2.1,.14,2.1,0,stoneD);
+  disc(b,0,0,1.0,1.63,hex(0x4a97c4),20,.18);
+  b.put(P.cyl,0,2.0,0,.34,.8,.34,0,stone);
+  b.put(P.sphLo,0,2.45,0,.55,.3,.55,0,stone);
+  // spouts of water as glowing columns
+  b.put(P.cylLo,0,2.95,0,.12,.8,.12,0,[.75,.9,1],.55);
+  for(let i=0;i<6;i++){
+    const a=i/6*TAU;
+    b.prim(P.cylLo,_stack.reset().translate(Math.cos(a)*1.05,1.35,Math.sin(a)*1.05).rotY(-a).rotZ(.5).scale(.06,.5,.06).top,[.75,.9,1],.5);
+  }
+  cols.push({x:0,z:0,r:2.75,circle:true,top:1.2,wall:true});
+  // four flower beds and benches round the plaza
+  for(let i=0;i<4;i++){
+    const a=i/4*TAU+PI/4,bx=Math.cos(a)*9.4,bz=Math.sin(a)*9.4;
+    const inward=t=>Math.atan2(-Math.cos(t),-Math.sin(t));
+    flowerBed(b,cols,bx,bz,3.4,1.5,inward(a),rng);
+    keep.push([bx,bz,2.6]);
+    parkBench(b,cols,Math.cos(a+.33)*7.6,Math.sin(a+.33)*7.6,inward(a+.33),null);
+    parkBench(b,cols,Math.cos(a-.33)*7.6,Math.sin(a-.33)*7.6,inward(a-.33),null);
+  }
+  // lamps: round the plaza and along the paths
+  for(let i=0;i<4;i++){const a=i/4*TAU;parkLamp(b,cols,Math.cos(a)*6.1,Math.sin(a)*6.1);}
+  for(const g of gates)for(const r of [21.5,31,40])
+    parkLamp(b,cols,g[0]*r+g[1]*2.6,g[1]*r-g[0]*2.6);
+  for(let i=0;i<10;i++){
+    const p=ring[(i*96/10+5)|0],l=Math.hypot(p[0],p[1]);
+    parkLamp(b,cols,p[0]*(1+1.9/l),p[1]*(1+1.9/l));
+  }
+  // ---------------------------------------------------------- play area
+  // each piece stands on its own rubber safety pad
+  const pad=(x,z,w,d,ry,col)=>{
+    b.prim(P.box,_stack.reset().translate(x,.035,z).rotY(ry).scale(w,.07,d).top,col);
+    b.prim(P.box,_stack.reset().translate(x,.02,z).rotY(ry).scale(w+.3,.04,d+.3).top,shade(col,.75));
+  };
+  const rubR=hex(0xb5523f),rubB=hex(0x3f72b5),rubG=hex(0x4f9a4c),rubY=hex(0xd9a53f);
+  // -- the big tower with two slides
+  {
+    const tx=PLAY.x+2,tz=PLAY.z-6;
+    pad(tx+1.2,tz,11,7.5,0,rubR);keep.push([tx+1,tz,6]);
+    b.put(P.box,tx,1.85,tz,3.4,.28,3.4,0,C.plank);
+    cols.push({x:tx,z:tz,hx:1.7,hz:1.7,rot:0,top:2.0,solid:true});
+    for(let i=0;i<4;i++){
+      const a=i*PI/2+PI/4;
+      b.put(P.cyl,tx+Math.cos(a)*1.5,1.5,tz+Math.sin(a)*1.5,.22,3.0,.22,0,C.metalD);
+    }
+    for(let i=0;i<3;i++){
+      const a=i*PI/2;
+      b.put(P.box,tx+Math.cos(a)*1.62,2.42,tz+Math.sin(a)*1.62,i%2?.12:3.3,.7,i%2?3.3:.12,0,[C.red,C.blue,C.yellow][i%3]);
+      b.put(P.cyl,tx+Math.cos(a)*1.62,2.82,tz+Math.sin(a)*1.62,.08,3.3,.08,a+PI/2,C.metal);
+    }
+    for(let i=0;i<4;i++){const a=i*PI/2+PI/4;b.put(P.cyl,tx+Math.cos(a)*1.5,3.4,tz+Math.sin(a)*1.5,.13,1.2,.13,0,C.metalD);}
+    b.prim(P.wedge,_stack.reset().translate(tx,4.35,tz-1.05).scale(4.0,.9,2.1).top,C.red);
+    b.prim(P.wedge,_stack.reset().translate(tx,4.35,tz+1.05).rotY(PI).scale(4.0,.9,2.1).top,shade(C.red,.9));
+    const slA=Math.atan2(1.9,2.9),slL=Math.hypot(2.9,1.9);
+    b.prim(P.box,_stack.reset().translate(tx+3.15,1.0,tz).rotZ(-slA).scale(slL,.14,1.4).top,C.yellow);
+    for(let s=-1;s<=1;s+=2)
+      b.prim(P.box,_stack.reset().translate(tx+3.15,1.18,tz+s*.72).rotZ(-slA).scale(slL,.42,.12).top,shade(C.yellow,.86));
+    b.put(P.box,tx+4.85,.09,tz,1.1,.18,1.4,0,shade(C.yellow,.9));
+    // a spiral slide off the back, as a ring of tilted panels
+    for(let i=0;i<9;i++){
+      const a=i/9*PI*1.5,yy=1.75-i*.19;
+      b.prim(P.box,_stack.reset().translate(tx-1.6+Math.cos(a)*1.0,yy,tz+.0+Math.sin(a)*1.0).rotY(-a).rotX(.25)
+        .scale(.9,.1,.7).top,C.blue);
+    }
+    cols.push({x:tx-1.7,z:tz+.5,r:1.4,circle:true,top:.4,solid:true});
+    for(let i=0;i<6;i++)b.put(P.cyl,tx,.3+i*.31,tz-1.8,.09,1.5,.09,PI/2,C.metal);
+    for(let s=-1;s<=1;s+=2)b.prim(P.cyl,_stack.reset().translate(tx+s*.72,1.0,tz-1.8).rotX(-.12).scale(.1,2.1,.1).top,C.metalD);
+    // a rope bridge to a second, lower deck
+    const dx2=tx+7.2;
+    b.put(P.box,dx2,1.25,tz,2.4,.24,2.4,0,C.plank);
+    cols.push({x:dx2,z:tz,hx:1.2,hz:1.2,rot:0,top:1.37,solid:true});
+    for(let i=0;i<4;i++){const a=i*PI/2+PI/4;b.put(P.cyl,dx2+Math.cos(a)*1.05,.62,tz+Math.sin(a)*1.05,.2,1.25,.2,0,C.metalD);}
+    for(let i=0;i<8;i++){
+      const u=(i+.5)/8,x=lerp(tx+1.7,dx2-1.2,u),y=lerp(1.95,1.37,u)-Math.sin(u*PI)*.18;
+      b.put(P.box,x,y,tz,.42,.07,1.1,0,shade(C.plank,.9+(i%2)*.1));
+    }
+    for(let s=-1;s<=1;s+=2)
+      b.prim(P.cylLo,_stack.reset().translate((tx+1.7+dx2-1.2)/2,2.4,tz+s*.6).rotZ(PI/2+.1).scale(.04,dx2-tx-2.9,.04).top,hex(0xc9a46a));
+    cols.push({x:(tx+1.7+dx2-1.2)/2,z:tz,hx:(dx2-tx-2.9)/2,hz:.55,rot:0,top:1.75,solid:true});
+  }
+  // -- swings
+  const swingSet=(sx,sz,ry,cA)=>{
+    const st=_stack;
+    for(let s=-1;s<=1;s+=2)for(let f=-1;f<=1;f+=2)
+      b.prim(P.cyl,st.reset().translate(sx,0,sz).rotY(ry).translate(s*3.6+f*.55,1.5,f*.9).rotZ(-s*.16).rotX(-f*.13).scale(.19,3.1,.19).top,C.metalD);
+    b.prim(P.cyl,st.reset().translate(sx,3.02,sz).rotY(ry).rotZ(PI/2).scale(.2,7.6,.2).top,C.metal);
+    const c=Math.cos(ry),s2=Math.sin(ry);
+    for(let s=-1;s<=1;s+=2)cols.push({x:sx+s*3.6*c,z:sz-s*3.6*s2,hx:.4,hz:1.2,rot:ry,top:.2,solid:true});
+    for(let i=0;i<3;i++){
+      const ox=-2.3+i*2.3;
+      dyn.push({type:'swing',x:sx+ox*c,y:3.02,z:sz-ox*s2,ry,ph:rng()*TAU,col:cA[i],amp:.3+rng()*.2,spd:.85+rng()*.3});
+      worn.push([sx+ox*c,sz-ox*s2,1.3]);
+    }
+    pad(sx,sz,8.6,4.6,ry,rubB);keep.push([sx,sz,5.4]);
+  };
+  swingSet(PLAY.x-6,PLAY.z+9,.15,[C.red,C.blue,C.yellow]);
+  swingSet(PLAY.x+9,PLAY.z+5,PI/2+.3,[C.green,C.purple,C.cyan]);
+  // -- monkey bars
+  {
+    const mx=PLAY.x-8,mz=PLAY.z-2;
+    pad(mx,mz,8,3.4,0,rubG);keep.push([mx,mz,4.8]);
+    for(let s=-1;s<=1;s+=2)for(let f=-1;f<=1;f+=2)b.put(P.cyl,mx+f*3.2,1.15,mz+s*.85,.16,2.3,.16,0,C.metalD);
+    for(let s=-1;s<=1;s+=2)b.prim(P.cyl,_stack.reset().translate(mx,2.28,mz+s*.85).rotZ(PI/2).scale(.13,6.6,.13).top,C.metal);
+    for(let i=0;i<9;i++)b.prim(P.cyl,_stack.reset().translate(mx-3+i*.75,2.28,mz).rotX(PI/2).scale(.09,1.8,.09).top,[C.red,C.yellow,C.blue][i%3]);
+    cols.push({x:mx+3.2,z:mz,hx:.3,hz:1.2,rot:0,top:.2,solid:true});
+    cols.push({x:mx-3.2,z:mz,hx:.3,hz:1.2,rot:0,top:.2,solid:true});
+  }
+  // -- see-saw and roundabout (animated)
+  {
+    const ssx=PLAY.x-1,ssz=PLAY.z+3;
+    pad(ssx,ssz,2.4,5.6,0,rubY);keep.push([ssx,ssz,3.4]);
+    dyn.push({type:'seesaw',x:ssx,y:.75,z:ssz,ph:0,spd:.8});
+    b.put(P.cyl,ssx,.4,ssz,.5,.8,.5,0,C.metalD);
+    const cx=PLAY.x+6,cz=PLAY.z+14;
+    disc(b,cx,cz,3.4,.03,rubR,24);ringFlat(b,cx,cz,3.4,3.7,.035,shade(rubR,.75),24);
+    keep.push([cx,cz,4]);
+    dyn.push({type:'carousel',x:cx,y:.5,z:cz,ph:0,spd:.55});
+    b.put(P.cyl,cx,.25,cz,1.1,.5,1.1,0,C.metalD);
+    cols.push({x:cx,z:cz,r:2.4,circle:true,top:.62,solid:true});
+  }
+  // -- sandbox with toys
+  {
+    const sx=PLAY.x-10,sz=PLAY.z+9.5;
+    b.put(P.box,sx,.05,sz,7,.1,7,0,C.sand);
+    for(let i=0;i<4;i++){
+      const a=i*PI/2,ex=Math.cos(a)*3.6,ez=Math.sin(a)*3.6,alongZ=(i%2)===0;
+      b.put(P.box,sx+ex,.19,sz+ez,alongZ?.42:7.6,.38,alongZ?7.6:.42,0,C.wood);
+      cols.push({x:sx+ex,z:sz+ez,hx:alongZ?.21:3.8,hz:alongZ?3.8:.21,rot:0,top:.38,solid:true});
+    }
+    for(let i=0;i<6;i++)b.put(P.sph,sx+rng()*5-2.5,.12,sz+rng()*5-2.5,.5+rng()*.5,.3,.5+rng()*.5,0,shade(C.sand,1.06));
+    const toyC=[C.red,C.blue,C.yellow,C.green];
+    for(let i=0;i<4;i++){
+      const tx2=sx+rng()*4-2,tz2=sz+rng()*4-2;
+      b.put(P.taper,tx2,.22,tz2,.44,.42,.44,0,toyC[i]);
+      b.prim(P.torus,_stack.reset().translate(tx2,.46,tz2).rotZ(PI/2).scale(.42,.42,.42).top,shade(toyC[i],.85));
+    }
+    keep.push([sx,sz,5]);
+  }
+  // -- climbing frame with net and tunnel, west of the tower
+  {
+    const kx=PLAY.x-12,kz=PLAY.z-8.5;
+    pad(kx+1.5,kz,9,6,0,rubB);keep.push([kx+1.5,kz,5.6]);
+    for(let i=0;i<4;i++){
+      const a=i*PI/2+PI/4;
+      b.put(P.cyl,kx+Math.cos(a)*2.3,1.7,kz+Math.sin(a)*2.3,.22,3.4,.22,0,C.metalD);
+      cols.push({x:kx+Math.cos(a)*2.3,z:kz+Math.sin(a)*2.3,r:.24,circle:true,top:.3,solid:true});
+    }
+    b.put(P.box,kx,1.55,kz,4.6,.26,4.6,0,C.plank);
+    cols.push({x:kx,z:kz,hx:2.3,hz:2.3,rot:0,top:1.7,solid:true});
+    b.put(P.box,kx,3.05,kz,3.2,.24,3.2,0,C.plank);
+    cols.push({x:kx,z:kz,hx:1.6,hz:1.6,rot:0,top:3.2,solid:true});
+    for(let i=0;i<7;i++){
+      b.prim(P.cyl,_stack.reset().translate(kx-2.3+i*.72,1.6,kz+2.3).scale(.05,3.2,.05).top,hex(0x8a6a3a));
+      b.prim(P.cyl,_stack.reset().translate(kx,.35+i*.46,kz+2.3).rotZ(PI/2).scale(.05,4.6,.05).top,hex(0x8a6a3a));
+    }
+    for(let i=0;i<6;i++)
+      b.prim(P.torus,_stack.reset().translate(kx+2.9+i*.62,.72,kz).rotY(PI/2).rotX(PI/2).scale(1.6,1.6,1.6).top,[C.yellow,C.red][i%2]);
+  }
+  // ---------------------------------------------------------- basketball court
+  {
+    const cxx=COURT.x,czz=COURT.z;
+    b.put(P.box,cxx,.03,czz,15,.06,10.6,0,hex(0x6d7a86));
+    b.put(P.box,cxx,.05,czz,14,.06,9.6,0,hex(0x3f6f9a));
+    b.put(P.box,cxx,.06,czz,13.3,.06,8.9,0,hex(0xc98a52));
+    for(let s=-1;s<=1;s+=2){
+      b.put(P.box,cxx+s*6.3,.095,czz,.12,.03,8.8,0,C.white);
+      ringFlat(b,cxx+s*3.6,czz,3.02,3.14,.1,C.white,28);
+      b.put(P.box,cxx+s*5.1,.093,czz,2.4,.02,3.6,0,hex(0xb06f3e));
+      b.put(P.cyl,cxx+s*7.2,1.7,czz,.2,3.4,.2,0,C.metalD);
+      b.prim(P.box,_stack.reset().translate(cxx+s*6.55,3.25,czz).scale(.14,1.25,1.8).top,C.white);
+      b.prim(P.box,_stack.reset().translate(cxx+s*6.47,3.12,czz).scale(.04,.5,.62).top,hex(0xd94f45));
+      b.prim(P.torus,_stack.reset().translate(cxx+s*5.95,2.95,czz).rotX(PI/2).scale(.95,.95,.95).top,C.orange);
+      cols.push({x:cxx+s*7.2,z:czz,r:.35,circle:true,top:.2,solid:true});
+    }
+    b.put(P.box,cxx,.095,czz,.12,.03,8.8,0,C.white);
+    ringFlat(b,cxx,czz,1.72,1.84,.1,C.white,24);
+    b.put(P.sph,cxx+3,.32,czz+2,.62,.62,.62,0,C.orange);
+    // chain-link fence round three sides
+    const fz0=czz-5.6,fz1=czz+5.6,fx0=cxx-7.8,fx1=cxx+7.8;
+    const chain=(x1,z1,x2,z2)=>{
+      const dx=x2-x1,dz=z2-z1,len=Math.hypot(dx,dz),ang=Math.atan2(dx,dz),n=Math.round(len/2.6);
+      for(let i=0;i<=n;i++)b.put(P.cyl,x1+dx*i/n,1.4,z1+dz*i/n,.1,2.8,.1,0,hex(0x8d969e));
+      b.prim(P.box,_stack.reset().translate((x1+x2)/2,1.4,(z1+z2)/2).rotY(ang).scale(.03,2.6,len).top,hex(0x9aa5ad),.04);
+      b.prim(P.cylLo,_stack.reset().translate((x1+x2)/2,2.8,(z1+z2)/2).rotY(ang).rotX(PI/2).scale(.07,len,.07).top,hex(0x8d969e));
+      cols.push({x:(x1+x2)/2,z:(z1+z2)/2,hx:.12,hz:len/2,rot:ang,top:2.8,solid:true});
+    };
+    chain(fx0,fz0,fx1,fz0);chain(fx1,fz0,fx1,fz1-3);chain(fx0,fz0,fx0,fz1-3);
+    keep.push([cxx,czz,9.6]);
+    parkBench(b,cols,cxx-3,czz+7,PI,null);parkBench(b,cols,cxx+3,czz+7,PI,null);
+  }
+  // ---------------------------------------------------------- soccer pitch
+  {
+    const fx2=PITCH.x,fz2=PITCH.z,W=PITCH.w,L=PITCH.l;
+    // mown stripes across the pitch
+    for(let i=0;i<10;i++)
+      b.put(P.box,fx2,.02,fz2-L/2+(i+.5)*L/10,W,.03,L/10,0,i%2?hex(0x6aae45):hex(0x5d9e3d));
+    const line=(x,z,w,d)=>b.put(P.box,x,.04,z,w,.02,d,0,[.93,.94,.92]);
+    line(fx2-W/2,fz2,.14,L);line(fx2+W/2,fz2,.14,L);
+    line(fx2,fz2-L/2,W,.14);line(fx2,fz2+L/2,W,.14);line(fx2,fz2,W,.12);
+    ringFlat(b,fx2,fz2,2.5,2.64,.05,[.93,.94,.92],32);
+    for(let s=-1;s<=1;s+=2){
+      line(fx2,fz2+s*(L/2-3.2),8,.12);line(fx2-4,fz2+s*(L/2-1.6),.12,3.2);line(fx2+4,fz2+s*(L/2-1.6),.12,3.2);
+      const gz=fz2+s*(L/2-.2);
+      for(let k=-1;k<=1;k+=2){
+        b.put(P.cyl,fx2+k*3.2,1.15,gz,.16,2.3,.16,0,C.white);
+        cols.push({x:fx2+k*3.2,z:gz,r:.2,circle:true,top:.2,solid:true});
+      }
+      b.prim(P.cyl,_stack.reset().translate(fx2,2.28,gz).rotZ(PI/2).scale(.16,6.4,.16).top,C.white);
+      // net, sloping back from the crossbar
+      b.prim(P.box,_stack.reset().translate(fx2,1.2,gz+s*.75).rotX(-s*.5).scale(6.3,2.5,.04).top,[.86,.88,.9],.05);
+      for(let k=-1;k<=1;k+=2)b.prim(P.box,_stack.reset().translate(fx2+k*3.15,1.1,gz+s*.6).scale(.04,2.2,1.2).top,[.86,.88,.9],.05);
+      cols.push({x:fx2,z:gz+s*.7,hx:3.3,hz:.6,rot:0,top:2.3,solid:true});
+      for(let k=-1;k<=1;k+=2)
+        b.prim(P.cone,_stack.reset().translate(fx2+k*W/2,.25,fz2+s*L/2).scale(.3,.5,.3).top,C.orange);
+    }
+    b.put(P.sph,fx2+2,.3,fz2+3,.55,.55,.55,0,C.white);
+    // a pair of team benches on the touchline
+    for(let s=-1;s<=1;s+=2){
+      const bz=fz2+s*5.5,bx=fx2+W/2+1.6;
+      b.put(P.box,bx,.45,bz,.6,.1,4,0,C.plank);
+      b.put(P.box,bx+.25,1.0,bz,.08,1.6,4.4,0,hex(0x3f72b5),.05);
+      b.prim(P.box,_stack.reset().translate(bx,1.85,bz).rotZ(-.25).scale(1.3,.08,4.4).top,hex(0x3f72b5));
+      cols.push({x:bx,z:bz,hx:.4,hz:2.2,rot:0,top:.5,solid:true});
+    }
+    keep.push([fx2,fz2-L/4,W*.62],[fx2,fz2+L/4,W*.62],[fx2,fz2,W*.62]);
+  }
+  // ---------------------------------------------------------- duck pond
+  {
+    const lobes=[[POND.x-3.2,POND.z+.4,4.1],[POND.x+2.6,POND.z-.6,3.6],[POND.x+.2,POND.z+2.4,3.0]];
+    const waterAt=(x,z)=>{for(const l of lobes)if(Math.hypot(x-l[0],z-l[1])<l[2])return true;return false;};
+    // muddy bank, then water, painted per vertex so the outline is soft
+    groundSheet(b,POND.x-9.5,POND.z-7.5,POND.x+8.5,POND.z+8.5,.5,.03,(x,z)=>{
+      let m=1e9;for(const l of lobes)m=Math.min(m,Math.hypot(x-l[0],z-l[1])-l[2]);
+      if(m<-1.2)return mixc(hex(0x2f6f93),hex(0x3f8bb0),vnoise2(x*.7,z*.7,6));
+      if(m<0)return mixc(hex(0x4f7f6a),hex(0x2f6f93),smooth(-m/1.2));
+      if(m<1)return mixc(hex(0x7a6a4a),grassAt(x,z),smooth(m));
+      return grassAt(x,z);
+    },9);
+    for(const l of lobes)cols.push({x:l[0],z:l[1],r:l[2]-.35,circle:true,top:.6,wall:true});
+    keep.push([POND.x,POND.z,8.6]);
+    // rocks round the rim, reeds, lily pads and a family of ducks
+    for(let i=0;i<34;i++){
+      const l=lobes[i%3],a=rng()*TAU,r=l[2]+.1+rng()*.5;
+      const x=l[0]+Math.cos(a)*r,z=l[1]+Math.sin(a)*r;
+      if(waterAt(x-Math.cos(a)*.6,z-Math.sin(a)*.6)&&!waterAt(x+Math.cos(a)*.7,z+Math.sin(a)*.7))
+        rock(b,null,x,z,.35+rng()*.35,rng,hex(0x8f8b83),.0);
+    }
+    for(let i=0;i<14;i++){
+      const l=lobes[(rng()*3)|0],a=rng()*TAU,r=l[2]-.3+rng()*.5;
+      const x=l[0]+Math.cos(a)*r,z=l[1]+Math.sin(a)*r;
+      for(let k=0;k<5;k++)
+        b.prim(P.blade,_stack.reset().translate(x+rng()*.3,.4,z+rng()*.3).rotZ((rng()-.5)*.3).scale(.06,.85+rng()*.4,.06).top,shade(hex(0x6f8f3f),.8+rng()*.4));
+    }
+    for(let i=0;i<10;i++){
+      const l=lobes[(rng()*3)|0],a=rng()*TAU,r=rng()*(l[2]-1.4);
+      b.put(P.cylLo,l[0]+Math.cos(a)*r,.05,l[1]+Math.sin(a)*r,.55,.02,.55,0,hex(0x4f9a3f));
+    }
+    for(let i=0;i<4;i++){
+      const dx=POND.x-1+i*.9,dz=POND.z+.2+(i%2)*.6,big=i===0;
+      const s=big?1:.7;
+      b.put(P.sphLo,dx,.12,dz,.32*s,.2*s,.48*s,0,big?hex(0x6f5a3f):hex(0xd9c27a));
+      b.put(P.sphLo,dx,.3*s,dz-.2*s,.16*s,.16*s,.16*s,0,big?hex(0x2f7a4f):hex(0xd9c27a));
+      b.put(P.cone,dx,.28*s,dz-.32*s,.08*s,.1*s,.12*s,0,C.orange);
+    }
+    // a willow leaning over the water
+    {
+      const wx=POND.x+7.2,wz=POND.z-4.5;
+      b.prim(P.taper,_stack.reset().translate(wx,1.3,wz).rotZ(.18).scale(.55,2.6,.55).top,shade(C.trunk,.85));
+      for(let i=0;i<9;i++){
+        const a=i/9*TAU,r=1.6;
+        b.prim(P.sphLo,_stack.reset().translate(wx-.5+Math.cos(a)*r,2.6,wz+Math.sin(a)*r).scale(1.4,2.6,1.4).top,shade(hex(0x7da84a),.85+rng()*.25));
+      }
+      b.put(P.sph,wx-.5,3.6,wz,3.2,1.8,3.2,0,hex(0x86b552));
+      cols.push({x:wx,z:wz,r:.4,circle:true,top:.2,solid:true});
+      keep.push([wx,wz,3]);
+    }
+    parkBench(b,cols,POND.x-2,POND.z+7.4,PI,null);
+    parkBench(b,cols,POND.x+6.6,POND.z+3.2,PI/2+.4,null);
+  }
+  // ---------------------------------------------------------- picnic grove
+  {
+    const tables=[[PICNIC.x-4,PICNIC.z-3,.3],[PICNIC.x+3,PICNIC.z-4.5,1.1],[PICNIC.x+1,PICNIC.z+3,2.2],[PICNIC.x-6,PICNIC.z+4,.7]];
+    for(const [px,pz,pr] of tables){
+      b.prim(P.box,_stack.reset().translate(px,.78,pz).rotY(pr).scale(1.9,.1,.95).top,C.plank);
+      for(let s2=-1;s2<=1;s2+=2){
+        b.prim(P.box,_stack.reset().translate(px,.44,pz).rotY(pr).translate(0,0,s2*.86).scale(1.9,.08,.36).top,C.wood);
+        b.prim(P.box,_stack.reset().translate(px,.38,pz).rotY(pr).translate(s2*.72,0,0).rotX(.05).scale(.12,.76,1.9).top,C.wood2);
+      }
+      cols.push({x:px,z:pz,hx:1.1,hz:1.3,rot:pr,top:.85,solid:true});
+      worn.push([px,pz,2.0]);
+      keep.push([px,pz,2.6]);
+    }
+    // charcoal grill and a drinking fountain
+    const gx=PICNIC.x-1,gz=PICNIC.z-.5;
+    b.put(P.cyl,gx,.5,gz,.12,1,.12,0,hex(0x2a2d31));
+    b.put(P.box,gx,1.02,gz,.9,.18,.6,0,hex(0x2a2d31));
+    b.put(P.box,gx,1.12,gz,.82,.02,.52,0,hex(0xb5523f),.35);
+    cols.push({x:gx,z:gz,r:.5,circle:true,top:1.1,solid:true});
+    b.put(P.cyl,gx+3,.5,gz+1,.4,1,.4,0,hex(0x9aa4ae));
+    b.put(P.cyl,gx+3,1.02,gz+1,.5,.08,.5,0,hex(0xb9c4cc));
+    cols.push({x:gx+3,z:gz+1,r:.3,circle:true,top:1.05,solid:true});
+    keep.push([gx,gz,2],[gx+3,gz+1,1.2]);
+    litterBin(b,cols,PICNIC.x+5.5,PICNIC.z+1);
+  }
+  // ---------------------------------------------------------- toilets block
+  {
+    const tx=-29,tz=27,ry=-.75;
+    const st=_stack;
+    b.prim(P.box,st.reset().translate(tx,1.45,tz).rotY(ry).scale(5.6,2.9,3.6).top,hex(0xb5654a));
+    b.prim(P.box,st.reset().translate(tx,3.0,tz).rotY(ry).scale(6.2,.22,4.2).top,hex(0x5a6470));
+    for(let s=-1;s<=1;s+=2){
+      b.prim(P.box,st.reset().translate(tx,1.05,tz).rotY(ry).translate(s*1.4,0,1.82).scale(1.0,2.1,.08).top,s<0?hex(0x3f72b5):hex(0xb5523f));
+      b.prim(P.box,st.reset().translate(tx,2.35,tz).rotY(ry).translate(s*1.4,0,1.85).scale(.5,.36,.04).top,C.white,.2);
+    }
+    b.prim(P.box,st.reset().translate(tx,2.2,tz).rotY(ry).translate(0,0,1.84).scale(.8,.5,.06).top,C.glass,.15);
+    cols.push({x:tx,z:tz,hx:2.8,hz:1.8,rot:ry,top:2.9,solid:true});
+    keep.push([tx,tz,4.6]);
+  }
+  // ---------------------------------------------------------- ice-cream cart by the plaza
+  {
+    const kx=8.6,kz=-9.6,st=_stack;
+    b.prim(P.box,st.reset().translate(kx,.82,kz).rotY(.6).scale(1.9,1.0,1.0).top,hex(0xf2f0ea));
+    b.prim(P.box,st.reset().translate(kx,.82,kz).rotY(.6).translate(0,0,.51).scale(1.7,.4,.02).top,hex(0xf07ba6));
+    for(let s=-1;s<=1;s+=2)b.prim(P.cyl,st.reset().translate(kx,.25,kz).rotY(.6).translate(s*.7,0,.55).rotZ(PI/2).scale(.5,.1,.5).top,C.rubber);
+    b.prim(P.cyl,st.reset().translate(kx,1.9,kz).rotY(.6).scale(.06,2.2,.06).top,C.metalD);
+    b.prim(P.cone,st.reset().translate(kx,3.05,kz).scale(2.4,.7,2.4).top,hex(0xf2d14a));
+    b.prim(P.cone,st.reset().translate(kx,3.06,kz).rotY(PI/8).scale(2.38,.69,2.38).top,hex(0xf2f0ea));
+    cols.push({x:kx,z:kz,hx:1.0,hz:.6,rot:.6,top:1.32,solid:true});
+    keep.push([kx,kz,2.2]);
+  }
+  // ---------------------------------------------------------- the railings, gates and the street outside
+  {
+    const seg=60,gateW=.105;
+    for(let i=0;i<seg;i++){
+      const a1=i/seg*TAU,a2=(i+1)/seg*TAU,am=(a1+a2)/2;
+      // leave the three gateways open
+      let gate=false;
+      for(const g of gates)if(Math.abs(angDiff(am,Math.atan2(g[1],g[0])))<gateW)gate=true;
+      if(gate)continue;
+      picket(b,Math.cos(a1)*R_,Math.sin(a1)*R_,Math.cos(a2)*R_,Math.sin(a2)*R_,hex(0x2f3a33),1.35);
+    }
+    for(const g of gates){
+      const ga=Math.atan2(g[1],g[0]);
+      for(let s=-1;s<=1;s+=2){
+        const a=ga+s*TAU/seg,x=Math.cos(a)*R_,z=Math.sin(a)*R_;
+        b.put(P.box,x,1.25,z,.75,2.5,.75,-a,hex(0xa5583f));
+        b.put(P.box,x,2.6,z,.95,.2,.95,-a,hex(0xd8d2c6));
+        b.put(P.sphLo,x,2.9,z,.4,.4,.4,0,hex(0xd8d2c6));
+        cols.push({x,z,r:.5,circle:true,top:2.5,solid:true});
+      }
+      // the arch and its sign
+      const gx=Math.cos(ga)*R_,gz=Math.sin(ga)*R_;
+      b.prim(P.box,_stack.reset().translate(gx,3.45,gz).rotY(-ga).scale(.3,.32,9.4).top,hex(0x2f3a33));
+      b.prim(P.box,_stack.reset().translate(gx,3.95,gz).rotY(-ga).scale(.22,.7,4.6).top,hex(0x2f6f4a));
+      b.prim(P.box,_stack.reset().translate(gx,3.95,gz).rotY(-ga).scale(.26,.5,4.2).top,hex(0xf2e6c4),.12);
+    }
+    // street ring: kerb, asphalt, dashed centre line, far pavement
+    ringFlat(b,0,0,R_+.8,R_+2.6,.05,hex(0xc4c0b8),72);
+    ringFlat(b,0,0,R_+2.6,R_+9,.03,hex(0x4f545c),72);
+    for(let i=0;i<48;i++){
+      const a=i/48*TAU;
+      b.prim(P.box,_stack.reset().translate(Math.cos(a)*(R_+5.8),.045,Math.sin(a)*(R_+5.8)).rotY(-a).scale(.16,.02,1.6).top,hex(0xe8dca0));
+    }
+    ringFlat(b,0,0,R_+9,R_+11,.05,hex(0xc4c0b8),72);
+    // houses across the street — walls you will never reach, but they make it a place
+    const hcol=[hex(0xf0e2c8),hex(0xd8e8f2),hex(0xf2d9d2),hex(0xe6f0d8),hex(0xdfd8ee)];
+    for(let i=0;i<22;i++){
+      const a=i/22*TAU+.09;
+      let skip=false;for(const g of gates)if(Math.abs(angDiff(a,Math.atan2(g[1],g[0])))<.2)skip=true;
+      if(skip)continue;
+      const r=R_+17+rng()*3,x=Math.cos(a)*r,z=Math.sin(a)*r,w=7+rng()*2,d=6;
+      const ry=-a-PI/2;           // doors face the park
+      b.prim(P.box,_stack.reset().translate(x,1.6,z).rotY(ry).scale(w,3.2,d).top,hcol[i%5]);
+      const rise=1.5,run=d/2+.5,slab=Math.hypot(run,rise),slope=Math.atan2(rise,run);
+      for(let s=-1;s<=1;s+=2)
+        b.prim(P.box,_stack.reset().translate(x,3.2+rise,z).rotY(ry).rotX(s*slope).translate(0,-.06,s*slab*.5).scale(w+.8,.18,slab).top,[C.roofA,C.roofB,C.roofC,C.roofD][i%4]);
+      for(let k=-1;k<=1;k+=2)
+        b.prim(P.box,_stack.reset().translate(x,1.7,z).rotY(ry).translate(k*w*.27,0,d/2+.03).scale(1.1,1.1,.06).top,C.glass,.15);
+      b.prim(P.box,_stack.reset().translate(x,1.05,z).rotY(ry).translate(0,0,d/2+.03).scale(.95,2.1,.06).top,C.wood2);
+      if(rng()<.7)treeKind(b,x+Math.cos(a+1.6)*6,z+Math.sin(a+1.6)*6,rng()<.3?'pine':'oak',1+rng()*.3,rng,null);
+    }
+    backdrop(b,R_+30,R_+60,rng,{trees:40,hills:22});
+  }
+  // ---------------------------------------------------------- planting
+  // a belt of mixed trees inside the railings, groves elsewhere
+  const species=['oak','oak','oak','birch','pine','poplar'];
+  let placed=0;
+  for(let g=0;g<1400&&placed<74;g++){
+    const a=rng()*TAU,r=(g<700?32:12)+rng()*(g<700?10.5:22);
     const x=Math.cos(a)*r,z=Math.sin(a)*r;
-    if(blocked(x,z,1.2))continue;
-    tree(b,x,z,.85+rng()*.5,rng,cols);i++;
+    if(!clear(x,z,1.6))continue;
+    treeKind(b,x,z,species[(rng()*species.length)|0],.85+rng()*.45,rng,cols);
+    keep.push([x,z,2.4]);placed++;
   }
-  for(let i=0,guard=0;i<34&&guard<500;guard++){
-    const a=rng()*TAU,r=8+rng()*32;
+  for(let g=0;g<900;g++){
+    const a=rng()*TAU,r=8+rng()*34;
     const x=Math.cos(a)*r,z=Math.sin(a)*r;
-    if(blocked(x,z,.6))continue;
-    bush(b,x,z,.7+rng()*.6,rng);i++;
+    if(!clear(x,z,.6))continue;
+    const k=rng();
+    if(k<.12){bush(b,x,z,.6+rng()*.6,rng);keep.push([x,z,1.2]);}
+    else if(k<.2)rock(b,null,x,z,.25+rng()*.35,rng);
+    else if(k<.3)flower(b,x,z,rng);
+    else tuft(b,x,z,1,rng);
   }
-  // ---- perimeter fence
-  const seg=52;
-  for(let i=0;i<seg;i++){
-    const a1=i/seg*TAU,a2=(i+1)/seg*TAU;
-    picket(b,Math.cos(a1)*R_,Math.sin(a1)*R_,Math.cos(a2)*R_,Math.sin(a2)*R_,C.white,1.25);
+  // litter bins along the paths
+  for(let i=0;i<8;i++){
+    const p=ring[(i*12+3)%96],l=Math.hypot(p[0],p[1]);
+    litterBin(b,cols,p[0]*(1-2.1/l),p[1]*(1-2.1/l));
   }
-  // spawns & nav
-  for(let i=0;i<16;i++){
-    const a=i/16*TAU,r=12+rng()*18;
+  // ---------------------------------------------------------- ground last, now every worn patch is known
+  groundSheet(b,-R_-12,-R_-12,R_+12,R_+12,1.5,0,grassAt);
+  // and a coarse sheet beyond, under the street and the houses
+  groundSheet(b,-130,-130,130,130,10,-.03,(x,z)=>shade(hex(0x6d9a45),.9+vnoise2(x*.05,z*.05,2)*.15),40);
+  // ---------------------------------------------------------- spawns & navigation
+  for(let i=0;i<18;i++){
+    const a=i/18*TAU+.1,r=10+(i%3)*8+rng()*3;
     spawns.push({x:Math.cos(a)*r,z:Math.sin(a)*r});
   }
-  for(let i=0;i<44;i++){
-    const a=rng()*TAU,r=5+rng()*33;
+  for(const p of ring)if(rng()<.35)nav.push({x:p[0],z:p[1]});
+  for(let i=0;i<40;i++){
+    const a=rng()*TAU,r=5+rng()*35;
     nav.push({x:Math.cos(a)*r,z:Math.sin(a)*r});
   }
-  return {name:'Playground',meshes:b.finish(),cols,spawns,nav,dyn,radius:R_-1.2,
-    lineup:{x:0,z:-34,yaw:0},
+  return {name:'Playground',meshes:b.finish(),cols,spawns,nav,dyn,radius:R_-1.2,lights:MAPLIGHTS,
+    lineup:{x:PITCH.x,z:PITCH.z,yaw:PI/2},
+    stage:{x:STAGE.x,z:STAGE.z,yaw:0},
     sun:[0.36,0.84,0.40],fog:[0.77,0.88,1.0],sky:[0.26,0.57,0.96],ambient:'playground'};
 }
 
@@ -3333,6 +3939,7 @@ function loadMap(key){
       World.cols.push(Lift.col);
     }else Lift.col=null;
   }
+  buildColGrid(World);
   R.sun.set(World.sun);
   const l=Math.hypot(R.sun[0],R.sun[1],R.sun[2]);
   R.sun[0]/=l;R.sun[1]/=l;R.sun[2]/=l;
@@ -3363,10 +3970,30 @@ function loadMap(key){
 const STEP_UP=.38;
 function resolveCollision(px,pz,py,radius,out){
   let x=px,z=pz,ground=World.floorY===undefined?0:World.floorY;
-  const cols=World.cols;
+  const cols=colsNear(px,pz);
   for(let i=0;i<cols.length;i++){
     const c=cols[i];
     if(c.off)continue;                     // a door standing open blocks nothing
+    // V1.25: water and sheer walls block at any height below their top and
+    // are never stood on — so nobody climbs onto a pond
+    if(c.wall){
+      if(py>c.top+.12||(c.base!==undefined&&py+1.75<c.base))continue;
+      if(c.circle){
+        const dx=x-c.x,dz=z-c.z,dd=Math.hypot(dx,dz),rr=c.r+radius;
+        if(dd<rr){const k=dd>1e-4?(rr-dd)/dd:rr;x+=dx*k;z+=dz*k;}
+      }else{
+        const s=Math.sin(c.rot||0),co=Math.cos(c.rot||0);
+        const dx=x-c.x,dz=z-c.z;
+        let lx=dx*co-dz*s,lz=dx*s+dz*co;
+        const ex=c.hx+radius,ez=c.hz+radius;
+        if(lx>-ex&&lx<ex&&lz>-ez&&lz<ez){
+          const ox=ex-Math.abs(lx),oz=ez-Math.abs(lz);
+          if(ox<oz)lx+=lx>0?ox:-ox;else lz+=lz>0?oz:-oz;
+          x=c.x+lx*co+lz*s;z=c.z-lx*s+lz*co;
+        }
+      }
+      continue;
+    }
     // out of vertical range for this body? it may as well not exist
     if(c.base!==undefined){
       if(py+1.75<c.base)continue;          // the whole piece is above your head
@@ -3963,7 +4590,6 @@ const CLIP={
    o[J.lean]=.42*k;o[J.spine]=.3*k;o[J.headP]=-.2*k;
    o[J.crouch]=.3*k;o[J.shrug]=.9*k;o[J.eye]=1.05;
  },
- /* wind-up: knees bend and the arms drop back before the launch */
  /* wind-up: the hips drop back over planted feet and the arms swing behind */
  jumpPrep(o,t,c){
    const k=smooth(clamp(1-c.jumpPrep/.075,0,1));
@@ -3974,11 +4600,6 @@ const CLIP={
    plantFeet(o,.03,-.03,0,0);
    o[J.eye]=1;o[J.mouth]=.1;
  },
- /* jump: push off, tuck, then reach for the ground */
- /* Take-off and rise. The arms swing up and OUT to the sides rather than
-    converging in front of the face, and the legs split — the lead knee tucks
-    while the trailing leg keeps the push-off extension before folding under.
-    A running jump leans into the arc; a standing one stays upright. */
  /* Take-off and rise. A standing jump throws both arms overhead and tucks the
     knees; a running jump becomes a split leap with the arms in opposition. */
  jump(o,t,c){
@@ -3999,8 +4620,6 @@ const CLIP={
    o[J.spine]=-.05*st+.14*fast;o[J.headP]=-.12;o[J.twist]=.12*fast;
    o[J.handGrip]=.15;o[J.shrug]=.5;o[J.eye]=1.1;o[J.mouth]=.2;
  },
- /* Coming down: the legs reach for the ground and the arms drop and open for
-    balance instead of staying pinned overhead. */
  /* Coming down: the legs reach for the ground, the arms open for balance. */
  fall(o,t,c){
    const w=Math.sin(t*7.5)*.08;
@@ -4015,8 +4634,6 @@ const CLIP={
    o[J.spine]=.1;o[J.headP]=.12;o[J.shrug]=.4;
    o[J.eye]=1.2;o[J.mouth]=.3;o[J.brow]=.25;
  },
- /* A zombie in the air has none of the athleticism: the arms stay reaching
-    forward, the legs trail stiffly and only fold a little. */
  /* A zombie in the air has none of the athleticism: the arms stay reaching
     forward, the legs trail stiffly and only fold a little. */
  zjump(o,t,c){
@@ -4043,7 +4660,6 @@ const CLIP={
    o[J.spine]=.3;o[J.headP]=-.15;
    o[J.eye]=1.2;o[J.mouth]=.7;
  },
- /* Zombies land heavily — deeper absorb, no arm control, torso pitches. */
  /* Zombies land heavily — deeper absorb, no arm control, torso pitches. */
  zland(o,t,c){
    const k=clamp(c.landT/(c.landDur||.2),0,1),e=Math.sin(k*PI*.5);
@@ -4144,8 +4760,6 @@ const CLIP={
  },
  /* ================= V1.10 zombie classes ================= */
  /* Walker: heavy, loose, slightly lopsided */
- /* ================= V1.10 zombie classes ================= */
- /* Walker: heavy, loose, slightly lopsided */
  wIdle(o,t,c){
    const sd=c.seed||0;
    const br=Math.sin(t*.62+sd);                 // slow, deep breathing
@@ -4166,7 +4780,6 @@ const CLIP={
    o[J.eye]=.86;o[J.mouth]=.22+Math.max(0,br)*.24;
  },
  wWalk(o,t,c){gaitPose(o,t,c,GAIT.zwalk);},
- /* Sprinter: wired, twitchy, explosive */
  /* Sprinter: wired, twitchy, explosive */
  sIdle(o,t,c){
    const sd=c.seed||0;
@@ -4347,7 +4960,6 @@ const CLIP={
    o[J.mouth]=.45+Math.max(0,bite)*.85;o[J.eye]=1.15;o[J.brow]=-.8;
  },
  /* ================= the victim ================= */
- /* legs taken away: pitches backward and lands flat */
  /* legs taken away: pitches backward and lands flat on the back */
  tripFall(o,t,c){
    const a=clamp(c.actT/(ACT_DUR.tripFall||1.1),0,1);
@@ -4362,7 +4974,6 @@ const CLIP={
    o[J.headR]=flail*.4;
    o[J.eye]=1.5;o[J.mouth]=.9;o[J.brow]=.6;
  },
- /* flat on your back while it works: fighting, then failing, then still */
  /* flat on your back while it works: fighting, then failing, then still */
  pinned(o,t,c){
    const p=clamp((c.downT||0)/DOWN.dur,0,1);
@@ -4387,10 +4998,6 @@ const CLIP={
    o[J.eye]=Math.max(0,1.5*fight+.5*life);
    o[J.mouth]=.35+Math.abs(th)*.6;o[J.brow]=.55*life;
  },
- /* rolling over and standing up as one of them */
- /* Rising as one of them: still, a twitch, it sits up, gets its feet under
-    it, stands hunched and roars. Built from key poses so every stage meets
-    the next, and the feet are planted from the squat onwards. */
  /* Rising as one of them: still, a twitch, it sits up — turning about the
     hips, not the feet — draws its feet in, stands hunched and roars. */
  turnUp(o,t,c){
@@ -4414,7 +5021,6 @@ const CLIP={
    o[J.eye]=Math.min(1.1,.1+a*1.2);
    o[J.brow]=-.6*a;
  },
- /* Sprinter mistimes a corner and wears the obstacle */
  /* Sprinter mistimes a corner and wears the obstacle: the impact snaps it
     back, it doubles over and staggers two steps, shakes its head, recovers. */
  crash(o,t,c){
@@ -4439,7 +5045,6 @@ const CLIP={
    o[J.mouth]=.55;o[J.eye]=1.2;
  },
  /* ---- infected survivor, stages one to three ---- */
- /* ---- infected survivor, stages one to three ---- */
  sickIdle(o,t,c){
    const k=clamp((c.infT||0)/INF.dur,0,1);
    const st=infStage(c);
@@ -4461,7 +5066,6 @@ const CLIP={
  },
  sickWalk(o,t,c){gaitPose(o,t,c,GAIT.sick);},
  sickRun(o,t,c){gaitPose(o,t,c,GAIT.sickrun);},
- /* the first moment: a jolt, then both hands to the wound */
  /* the first moment: a jolt, a step back, both hands to the wound */
  react(o,t,c){
    const T=c.actT,k=Math.sin(Math.min(PI,T*3.6));
@@ -4473,7 +5077,6 @@ const CLIP={
    o[J.eye]=1.5;o[J.mouth]=.75;o[J.brow]=.55;
  },
  /* legs go: they lower themselves down rather than fall */
- /* legs go: they lower themselves down rather than fall */
  sitDown(o,t,c){
    const a=clamp(c.actT/(ACT_DUR.sitDown||1.7),0,1);
    if(a<.45)keyPose(o,'stand','buckle',smooth(a/.45));
@@ -4482,7 +5085,6 @@ const CLIP={
    o[J.side]=wob;o[J.headR]=wob*2;
    o[J.eye]=.9-a*.28;o[J.mouth]=.4;
  },
- /* sat on the ground, breathing shallow, eyes closing */
  /* sat on the ground, breathing shallow, eyes closing */
  seated(o,t,c){
    const k=clamp(((c.infT||0)-INF.sit)/Math.max(1,INF.dur-INF.sit),0,1);
@@ -4514,7 +5116,6 @@ const CLIP={
    o[J.mouth]=.25+wake*.4;o[J.brow]=-.5*wake;
  },
  /* pushing up off the ground into a zombie stance */
- /* pushing up off the ground into a zombie stance */
  pushUp(o,t,c){
    const a=clamp(c.actT/(ACT_DUR.pushUp||1.5),0,1);
    if(a<.4)keyPose(o,'seated','squat',smooth(a/.4));
@@ -4532,7 +5133,6 @@ const CLIP={
    plantFoot(o,1,-.06-.06*k,.45*k);
    o[J.eye]=1.1;o[J.mouth]=.4;
  },
- /* bitten but not taken: knocked back, hand to the shoulder */
  /* bitten but not taken: knocked back a step, hand to the shoulder */
  recoil(o,t,c){
    const T=c.actT,k=Math.sin(Math.min(PI,T*4.2));
@@ -4621,9 +5221,6 @@ const CLIP={
    o[J.lShR]=.4;o[J.rShR]=.36;o[J.shrug]=.9;
    o[J.mouth]=.35+Math.abs(bobb)*.55;o[J.eye]=.8;
  },
- /* ---- V1.01 infection sequence ----------------------------------------
-    stab lands → 1s freeze → clutch the wound → the change spreads while the
-    body shakes → bend forward → rise as a zombie.                        */
  /* ---- V1.01 infection sequence ----------------------------------------
     stab lands → 1s freeze → clutch the wound → the change spreads while the
     body shakes → bend forward over planted feet → rise as a zombie.      */
@@ -8669,7 +9266,7 @@ function drawMapProps(d,t){
     }
     if(p.type==='swing'){
       const a=Math.sin(t*p.spd+p.ph)*p.amp;
-      st.reset().translate(p.x,p.y,p.z).rotX(a);
+      st.reset().translate(p.x,p.y,p.z).rotY(p.ry||0).rotX(a);
       for(let s=-1;s<=1;s+=2){
         st.push();st.translate(s*.26,-.72,0);st.scale(.045,1.45,.045);
         d.push(P.cylLo,st.top,C.metalD,0);st.pop();
