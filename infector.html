@@ -1393,6 +1393,9 @@ const FS_MAIN=[
    the hotel pitch black. uShadowFloor lifts the darkest a shadow can get and
    uAmbBoost stands in for the ceiling lights. */
 'uniform float uShadowFloor;uniform float uAmbBoost;',
+/* V1.25: storey height for contact darkening (0 outdoors), and the nearest
+   ceiling lights as real light pools instead of a flat ambient boost */
+'uniform float uFH;uniform vec4 uLP[8];uniform vec3 uLC[8];uniform int uNL;',
 'uniform sampler2D uShadowMap;',
 'varying vec3 vN;varying vec3 vW;varying vec4 vC;varying vec4 vL;',
 'float unpack(vec4 c){return dot(c,vec4(1.0,0.00392157,0.0000153787,0.0000000603));}',
@@ -1430,8 +1433,22 @@ const FS_MAIN=[
 '  float spec=pow(max(dot(N,H),0.0),24.0)*0.16*sh*lit;',
 '  float bounce=max(-ndl,0.0)*0.11;',
 '  sh=mix(sh,1.0,uShadowFloor);',
-'  vec3 col=base*(amb*(0.62+uAmbBoost)+bounce)+base*uSunCol*lit*sh*1.05+uSunCol*spec;',
+/* contact darkening: anything upright gets darker toward the floor it stands
+   on, which is what plants walls, props and feet instead of floating them */
+'  float h=uFH>0.0?vW.y-floor((vW.y+0.06)/uFH)*uFH:vW.y;',
+'  float ao=mix(1.0,mix(0.58,1.0,smoothstep(0.0,0.85,h)),(1.0-abs(N.y))*0.9);',
+'  vec3 col=base*(amb*(0.62+uAmbBoost)*ao+bounce)+base*uSunCol*lit*sh*1.05+uSunCol*spec;',
+'  for(int i=0;i<8;i++){',
+'    if(i>=uNL)break;',
+'    vec3 L=uLP[i].xyz-vW;float dl=length(L);',
+'    float a=clamp(1.0-dl/uLP[i].w,0.0,1.0);',
+'    col+=base*uLC[i]*(a*a)*(max(dot(N,L/dl),0.0)*0.85+0.15);',
+'  }',
 '  col+=base*vC.a*1.35;',
+/* filmic shoulder: untouched below 0.8, highlights roll off instead of
+   clipping, so sunlit concrete keeps its edges */
+'  vec3 over=max(col-0.8,0.0);',
+'  col=min(col,vec3(0.8))+over/(1.0+over*5.0);',
 '  float d=length(uCam-vW);',
 '  float f=clamp((d-uFogRange.x)/(uFogRange.y-uFogRange.x),0.0,1.0);',
 '  f*=f*0.86;',
@@ -1507,7 +1524,8 @@ const R={
   skyAmb:new Float32Array([0.52,0.64,0.83]),
   fogCol:new Float32Array([0.74,0.86,0.98]),
   fogRange:new Float32Array([48,190]),
-  shadowFloor:0,ambBoost:0,
+  shadowFloor:0,ambBoost:0,fh:0,
+  lightP:new Float32Array(32),lightC:new Float32Array(24),nLights:0,
   vp:M4.create(),view:M4.create(),proj:M4.create(),invVP:M4.create(),lightVP:M4.create(),
   camPos:new Float32Array(3),
   init(canvas){
@@ -1529,7 +1547,7 @@ const R={
     gl.enable(gl.DEPTH_TEST);gl.enable(gl.CULL_FACE);gl.cullFace(gl.BACK);
     gl.clearColor(0.74,0.86,0.98,1);
     this.makeShadowFBO(this.shadowSize);
-    this.dyn=new DynBatch(48000,170000);
+    this.dyn=new DynBatch(60000,204000);
     this.fx=new FlatBatch(30000);
     this.makeSprite();
     return true;
@@ -1625,6 +1643,47 @@ const R={
     o[14]=(a31*b01-a30*b03-a32*b00)*det;o[15]=(a20*b03-a21*b01+a22*b00)*det;
     return o;
   },
+  /* Gribb–Hartmann planes of a view-projection matrix, normalised */
+  planesOf(m,out){
+    for(let p=0;p<6;p++){
+      const r=p>>1,s=(p&1)?-1:1;
+      let a=m[3]+s*m[r],b=m[7]+s*m[4+r],c=m[11]+s*m[8+r],d=m[15]+s*m[12+r];
+      const l=Math.hypot(a,b,c)||1;
+      out[p*4]=a/l;out[p*4+1]=b/l;out[p*4+2]=c/l;out[p*4+3]=d/l;
+    }
+    return out;
+  },
+  camPlanes:new Float32Array(24),lightPlanes:new Float32Array(24),
+  sphereIn(P,x,y,z,r){
+    for(let p=0;p<24;p+=4)if(P[p]*x+P[p+1]*y+P[p+2]*z+P[p+3]<-r)return false;
+    return true;
+  },
+  boxIn(P,b){
+    const mn=b.min,mx=b.max;
+    for(let p=0;p<24;p+=4){
+      const a=P[p],c=P[p+1],e=P[p+2];
+      if(a*(a>0?mx[0]:mn[0])+c*(c>0?mx[1]:mn[1])+e*(e>0?mx[2]:mn[2])+P[p+3]<0)return false;
+    }
+    return true;
+  },
+  /* the eight map lights nearest a point, written into the shader arrays */
+  pickLights(x,y,z){
+    const L=World&&World.lights;
+    if(!L||!L.length){this.nLights=0;return;}
+    const best=this._lb||(this._lb=[]);best.length=0;
+    for(let i=0;i<L.length;i++){
+      const l=L[i],dy=(l.y-y)*2.2;           // lights on another storey count as far away
+      const d=(l.x-x)*(l.x-x)+dy*dy+(l.z-z)*(l.z-z);
+      if(best.length<8){best.push([d,l]);best.sort((a,b)=>a[0]-b[0]);}
+      else if(d<best[7][0]){best[7]=[d,l];best.sort((a,b)=>a[0]-b[0]);}
+    }
+    this.nLights=best.length;
+    for(let i=0;i<best.length;i++){
+      const l=best[i][1];
+      this.lightP[i*4]=l.x;this.lightP[i*4+1]=l.y;this.lightP[i*4+2]=l.z;this.lightP[i*4+3]=l.r;
+      this.lightC[i*3]=l.c[0];this.lightC[i*3+1]=l.c[1];this.lightC[i*3+2]=l.c[2];
+    }
+  },
   /* light camera follows the player so the shadow map stays dense */
   setLight(cx,cz,radius){
     const s=this.sun,d=radius*2.1;
@@ -1671,6 +1730,12 @@ const R={
     gl.uniform1f(p.u.uShadowOn,this.shadowOn?1:0);
     gl.uniform1f(p.u.uShadowFloor,this.shadowFloor);
     gl.uniform1f(p.u.uAmbBoost,this.ambBoost);
+    gl.uniform1f(p.u.uFH,this.fh);
+    gl.uniform1i(p.u.uNL,this.nLights);
+    if(this.nLights){
+      gl.uniform4fv(p.u['uLP[0]'],this.lightP);
+      gl.uniform3fv(p.u['uLC[0]'],this.lightC);
+    }
     gl.uniform1f(p.u.uTexel,1/this.shadowSize);
     gl.uniform1f(p.u.uBias,this.shadowBias);
     gl.activeTexture(gl.TEXTURE0);
@@ -1736,27 +1801,42 @@ class StaticMesh{
   free(){const gl=R.gl;gl.deleteBuffer(this.vbo);gl.deleteBuffer(this.ibo);}
 }
 
-/* Dynamic batch: every character in the level lands in ONE draw call. */
+/* Dynamic batch: every character in the level is written into a handful of
+   draw calls. It used to be one fixed buffer, and a crowd overflowed it — the
+   ninth or tenth close-up character silently lost limbs. Now it grows in
+   16-bit-indexable chunks as a crowd needs them. */
 class DynBatch{
   constructor(maxVerts,maxIdx){
-    const gl=R.gl;
-    this.maxV=maxVerts;this.maxI=maxIdx;
-    this.v=new Float32Array(maxVerts*10);
-    this.i=new Uint16Array(maxIdx);
-    this.nv=0;this.ni=0;
-    this.vbo=gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER,this.vbo);
-    gl.bufferData(gl.ARRAY_BUFFER,this.v.byteLength,gl.DYNAMIC_DRAW);
-    this.ibo=gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.ibo);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,this.i.byteLength,gl.DYNAMIC_DRAW);
+    this.cv=maxVerts;this.ci=maxIdx;
+    this.chunks=[];this.k=0;
+    this.addChunk();
   }
-  reset(){this.nv=0;this.ni=0;}
+  addChunk(){
+    const gl=R.gl;
+    const c={v:new Float32Array(this.cv*10),i:new Uint16Array(this.ci),nv:0,ni:0,
+      vbo:gl.createBuffer(),ibo:gl.createBuffer()};
+    gl.bindBuffer(gl.ARRAY_BUFFER,c.vbo);
+    gl.bufferData(gl.ARRAY_BUFFER,c.v.byteLength,gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,c.ibo);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,c.i.byteLength,gl.DYNAMIC_DRAW);
+    this.chunks.push(c);
+    return c;
+  }
+  get v(){return this.chunks[this.k].v;}
+  get nv(){return this.chunks[this.k].nv;}
+  reset(){for(const c of this.chunks){c.nv=0;c.ni=0;}this.k=0;}
+  next(){
+    if(this.k+1>=this.chunks.length){if(this.chunks.length>=10)return false;this.addChunk();}
+    this.k++;return true;
+  }
+  /* make sure the next nv vertices / ni indices land in one chunk */
+  reserve(nv,ni){const c=this.chunks[this.k];if(c.nv+nv>this.cv||c.ni+ni>this.ci)this.next();}
   /* push a primitive transformed by matrix m, tinted col, emissive e */
   push(prim,m,col,e){
     const pv=prim.v,pi=prim.i,pn=prim.n,vc=pv.length/3;
-    if(this.nv+vc>this.maxV||this.ni+pi.length>this.maxI)return;
-    const V=this.v;let o=this.nv*10;
+    let c=this.chunks[this.k];
+    if(c.nv+vc>this.cv||c.ni+pi.length>this.ci){if(!this.next())return;c=this.chunks[this.k];}
+    const V=c.v;let o=c.nv*10;
     const m0=m[0],m1=m[1],m2=m[2],m4=m[4],m5=m[5],m6=m[6],
           m8=m[8],m9=m[9],m10=m[10],m12=m[12],m13=m[13],m14=m[14];
     const r=col[0],g=col[1],b=col[2],em=e||0;
@@ -1772,25 +1852,29 @@ class DynBatch{
       V[o+6]=r;V[o+7]=g;V[o+8]=b;V[o+9]=em;
       o+=10;
     }
-    const I=this.i,base=this.nv;let io=this.ni;
+    const I=c.i,base=c.nv;let io=c.ni;
     for(let k=0;k<pi.length;k++)I[io++]=base+pi[k];
-    this.nv+=vc;this.ni=io;
+    c.nv+=vc;c.ni=io;
   }
   upload(){
-    if(!this.ni)return;
     const gl=R.gl;
-    gl.bindBuffer(gl.ARRAY_BUFFER,this.vbo);
-    gl.bufferSubData(gl.ARRAY_BUFFER,0,this.v.subarray(0,this.nv*10));
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.ibo);
-    gl.bufferSubData(gl.ELEMENT_ARRAY_BUFFER,0,this.i.subarray(0,this.ni));
+    for(let k=0;k<=this.k;k++){
+      const c=this.chunks[k];if(!c.ni)continue;
+      gl.bindBuffer(gl.ARRAY_BUFFER,c.vbo);
+      gl.bufferSubData(gl.ARRAY_BUFFER,0,c.v.subarray(0,c.nv*10));
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,c.ibo);
+      gl.bufferSubData(gl.ELEMENT_ARRAY_BUFFER,0,c.i.subarray(0,c.ni));
+    }
   }
   draw(prog){
-    if(!this.ni)return;
     const gl=R.gl;
-    gl.bindBuffer(gl.ARRAY_BUFFER,this.vbo);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.ibo);
-    bindLit(prog);
-    gl.drawElements(gl.TRIANGLES,this.ni,gl.UNSIGNED_SHORT,0);
+    for(let k=0;k<=this.k;k++){
+      const c=this.chunks[k];if(!c.ni)continue;
+      gl.bindBuffer(gl.ARRAY_BUFFER,c.vbo);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,c.ibo);
+      bindLit(prog);
+      gl.drawElements(gl.TRIANGLES,c.ni,gl.UNSIGNED_SHORT,0);
+    }
   }
 }
 
@@ -2009,14 +2093,26 @@ function buildPrims(){
 const _m=M4.create(), _stack=new MStack(20);
 function xf(x,y,z,sx,sy,sz,ry){return M4.trs(_m,x,y,z,ry||0,sx,sy===undefined?sx:sy,sz===undefined?sx:sz);}
 
-/* Builder accumulates static world geometry, splitting into <64k-vertex meshes. */
+/* Builder accumulates static world geometry into spatial cells, each flushed
+   as its own <64k-vertex mesh, so a whole map is never drawn when only a
+   corner of it is on screen. Anything bigger than a cell goes in a shared
+   bucket. */
 class Builder{
-  constructor(){this.meshes=[];this.v=[];this.i=[];this.nv=0;
-    this.min=[1e9,1e9,1e9];this.max=[-1e9,-1e9,-1e9];this.st=new MStack(20);}
+  constructor(cell){
+    this.meshes=[];this.cell=cell||24;this.cells=new Map();this.st=new MStack(20);
+  }
+  bucket(x,z,big){
+    const key=big?'big':(Math.floor(x/this.cell)+'_'+Math.floor(z/this.cell));
+    let c=this.cells.get(key);
+    if(!c){c={v:[],i:[],nv:0,min:[1e9,1e9,1e9],max:[-1e9,-1e9,-1e9]};this.cells.set(key,c);}
+    return c;
+  }
   prim(prim,m,col,em){
     const pv=prim.v,pn=prim.n,pi=prim.i,vc=pv.length/3;
-    if(this.nv+vc>63000)this.flush();
-    const V=this.v,I=this.i,e=em||0;
+    const ext=Math.max(Math.abs(m[0])+Math.abs(m[4])+Math.abs(m[8]),Math.abs(m[2])+Math.abs(m[6])+Math.abs(m[10]));
+    const c=this.bucket(m[12],m[14],ext>this.cell*.75);
+    if(c.nv+vc>63000)this.flushCell(c);
+    const V=c.v,I=c.i,e=em||0,mn=c.min,mx=c.max;
     const m0=m[0],m1=m[1],m2=m[2],m4=m[4],m5=m[5],m6=m[6],
           m8=m[8],m9=m[9],m10=m[10],m12=m[12],m13=m[13],m14=m[14];
     for(let k=0,p=0;k<vc;k++,p+=3){
@@ -2027,23 +2123,41 @@ class Builder{
           az=m2*pn[p]+m6*pn[p+1]+m10*pn[p+2];
       const l=1/(Math.sqrt(ax*ax+ay*ay+az*az)||1);
       V.push(wx,wy,wz,ax*l,ay*l,az*l,col[0],col[1],col[2],e);
-      if(wx<this.min[0])this.min[0]=wx; if(wx>this.max[0])this.max[0]=wx;
-      if(wy<this.min[1])this.min[1]=wy; if(wy>this.max[1])this.max[1]=wy;
-      if(wz<this.min[2])this.min[2]=wz; if(wz>this.max[2])this.max[2]=wz;
+      if(wx<mn[0])mn[0]=wx; if(wx>mx[0])mx[0]=wx;
+      if(wy<mn[1])mn[1]=wy; if(wy>mx[1])mx[1]=wy;
+      if(wz<mn[2])mn[2]=wz; if(wz>mx[2])mx[2]=wz;
     }
-    const base=this.nv;
+    const base=c.nv;
     for(let k=0;k<pi.length;k++)I.push(base+pi[k]);
-    this.nv+=vc;
+    c.nv+=vc;
+  }
+  /* raw triangles already in world space, one colour per vertex:
+     P = [x,y,z,...], N = [nx,ny,nz,...], Cl = [r,g,b,...], X = indices */
+  mesh(P,N,Cl,X,em,cx,cz){
+    const vc=P.length/3;
+    const c=this.bucket(cx===undefined?P[0]:cx,cz===undefined?P[2]:cz,false);
+    if(c.nv+vc>63000)this.flushCell(c);
+    const V=c.v,mn=c.min,mx=c.max,e=em||0;
+    for(let k=0;k<vc;k++){
+      const x=P[k*3],y=P[k*3+1],z=P[k*3+2];
+      V.push(x,y,z,N[k*3],N[k*3+1],N[k*3+2],Cl[k*3],Cl[k*3+1],Cl[k*3+2],e);
+      if(x<mn[0])mn[0]=x; if(x>mx[0])mx[0]=x;
+      if(y<mn[1])mn[1]=y; if(y>mx[1])mx[1]=y;
+      if(z<mn[2])mn[2]=z; if(z>mx[2])mx[2]=z;
+    }
+    const base=c.nv;
+    for(let k=0;k<X.length;k++)c.i.push(base+X[k]);
+    c.nv+=vc;
   }
   put(prim,x,y,z,sx,sy,sz,ry,col,em){this.prim(prim,xf(x,y,z,sx,sy,sz,ry),col,em);}
-  flush(){
-    if(!this.nv)return;
-    this.meshes.push(new StaticMesh(new Float32Array(this.v),new Uint16Array(this.i),
-      {min:this.min.slice(),max:this.max.slice()}));
-    this.v.length=0;this.i.length=0;this.nv=0;
-    this.min=[1e9,1e9,1e9];this.max=[-1e9,-1e9,-1e9];
+  flushCell(c){
+    if(!c.nv)return;
+    this.meshes.push(new StaticMesh(new Float32Array(c.v),new Uint16Array(c.i),
+      {min:c.min.slice(),max:c.max.slice()}));
+    c.v=[];c.i=[];c.nv=0;
+    c.min=[1e9,1e9,1e9];c.max=[-1e9,-1e9,-1e9];
   }
-  finish(){this.flush();return this.meshes;}
+  finish(){for(const c of this.cells.values())this.flushCell(c);return this.meshes;}
 }
 
 /* ============================================================================
@@ -2629,7 +2743,7 @@ function hWall(b,cols,x,z,w,d,fy,col,h,noCol){
 /* A storey floor. `holes` are stairwell openings ({x0,x1,z0,z1} in world
    space) — the slab is sliced into x-columns around them so a flight arrives
    through a gap instead of into the underside of the floor above. */
-function hSlab(b,cols,x,z,w,d,fy,col,holes){
+function hSlab(b,cols,x,z,w,d,fy,col,holes,ceil){
   if(holes&&holes.length){
     const X0=x-w/2,X1=x+w/2,Z0=z-d/2,Z1=z+d/2;
     // cut points along x, in order
@@ -2642,16 +2756,18 @@ function hSlab(b,cols,x,z,w,d,fy,col,holes){
       if(b2-a<.02)continue;
       const mid=(a+b2)*.5;
       const hole=holes.find(h=>mid>h.x0&&mid<h.x1);
-      if(!hole){hSlab(b,cols,mid,z,b2-a,d,fy,col);continue;}
+      if(!hole){hSlab(b,cols,mid,z,b2-a,d,fy,col,null,ceil);continue;}
       // this column straddles an opening: lay the slab either side of it in z
       if(hole.z0-Z0>.02)
-        hSlab(b,cols,mid,(Z0+hole.z0)*.5,b2-a,hole.z0-Z0,fy,col);
+        hSlab(b,cols,mid,(Z0+hole.z0)*.5,b2-a,hole.z0-Z0,fy,col,null,ceil);
       if(Z1-hole.z1>.02)
-        hSlab(b,cols,mid,(hole.z1+Z1)*.5,b2-a,Z1-hole.z1,fy,col);
+        hSlab(b,cols,mid,(hole.z1+Z1)*.5,b2-a,Z1-hole.z1,fy,col,null,ceil);
     }
     return;
   }
   b.prim(P.box,b.st.reset().translate(x,fy+.06,z).scale(w,.24,d).top,col);
+  // the underside is somebody's ceiling: paint it like one
+  if(ceil)b.prim(P.box,b.st.reset().translate(x,fy-.075,z).scale(w,.03,d).top,ceil);
   cols.push({x,z,hx:w/2,hz:d/2,rot:0,top:fy+.18,base:fy-.3,plat:true});
 }
 function hDoorway(b,x,z,w,fy,col,vert){
@@ -2684,11 +2800,14 @@ function hBed(b,cols,hides,x,z,fy,ry,col){
 }
 /* ---- hotel dressing helpers: things you look at rather than walk into ---- */
 /* a recessed ceiling panel — these are what the indoor lighting model implies */
-function hCeilLight(b,x,z,fy,w,d){
-  b.prim(P.box,b.st.reset().translate(x,fy+HOTEL.fh-.22,z).scale(w+.14,.07,(d||w)+.14).top,
-    hex(0x8f959c));
-  b.prim(P.box,b.st.reset().translate(x,fy+HOTEL.fh-.27,z).scale(w,.05,d||w).top,
+/* lights registered while a map is built; the renderer lights from them */
+let MAPLIGHTS=[];
+function hCeilLight(b,x,z,fy,w,d,col,r){
+  b.prim(P.box,b.st.reset().translate(x,fy+HOTEL.fh-.2,z).scale(w+.14,.05,(d||w)+.14).top,
+    hex(0xb9bec4));
+  b.prim(P.box,b.st.reset().translate(x,fy+HOTEL.fh-.235,z).scale(w,.04,d||w).top,
     [1,.97,.88],1.0);
+  MAPLIGHTS.push({x,y:fy+HOTEL.fh-.5,z,r:r||6.8,c:col||[.62,.55,.44]});
 }
 /* wall sconce: a small shade throwing light up a corridor wall */
 function hSconce(b,x,z,fy,ry){
@@ -2782,6 +2901,7 @@ function stairHoles(level){
 }
 function buildHotel(){
   const rng=makeRng(51720933);
+  MAPLIGHTS=[];
   const b=new Builder(),cols=[],spawns=[],nav=[],dyn=[],hides=[],stairs=[];
   const W=HOTEL.W,D=HOTEL.D,fh=HOTEL.fh,T=HOTEL.wallT;
   const wallC=hex(0xdcd3c2), wallC2=hex(0xcfc6b4), carpet=hex(0x7a3f47),
@@ -2796,7 +2916,7 @@ function buildHotel(){
   // ---- storeys
   for(let f=0;f<HOTEL.floors;f++){
     const fy=hotelFloorY(f);
-    hSlab(b,cols,0,0,W,D,fy,f===0?lobbyF:(f%2?carpet:carpet2),stairHoles(f));
+    hSlab(b,cols,0,0,W,D,fy,f===0?lobbyF:(f%2?carpet:carpet2),stairHoles(f),f>0?hex(0xe9e4da):null);
     // outer shell
     hWall(b,cols,0,-D/2,W,T,fy,wallC);
     hWall(b,cols,0, D/2,W,T,fy,wallC);
@@ -3090,7 +3210,7 @@ function buildHotel(){
   b.prim(P.box,b.st.reset().translate(-2,4.6,D/2+.38).scale(9.6,.9,.16).top,hex(0xff6a4a),.95);
   // ---- roof
   const ry=hotelFloorY(HOTEL.floors);
-  hSlab(b,cols,0,0,W,D,ry,hex(0x6b7078),stairHoles(HOTEL.floors));
+  hSlab(b,cols,0,0,W,D,ry,hex(0x6b7078),stairHoles(HOTEL.floors),hex(0xe9e4da));
   for(let s=-1;s<=1;s+=2){
     hWall(b,cols,0,s*(D/2-.4),W,.4,ry,hex(0x8a9098),1.1);
     hWall(b,cols,s*(W/2-.4),0,.4,D,ry,hex(0x8a9098),1.1);
@@ -3127,7 +3247,7 @@ function buildHotel(){
     for(let i=0;i<10;i++)
       nav.push({x:-W/2+3+rng()*(W-6),z:-D/2+3+rng()*(D-6),y:fy});
   }
-  return {name:'Hotel',meshes:b.finish(),cols,spawns,nav,dyn,hides,stairs,indoor:true,
+  return {name:'Hotel',meshes:b.finish(),cols,spawns,nav,dyn,hides,stairs,indoor:true,lights:MAPLIGHTS,
     radius:Math.max(W,D),bounds:{x0:-W/2+.4,x1:W/2-.4,z0:-D/2+.4,z1:D/2-.4},
     floorY:0,floors:HOTEL.floors,fh:HOTEL.fh,
     lineup:{x:-2,z:9.5,yaw:0},
@@ -3220,12 +3340,14 @@ function loadMap(key){
   R.fogCol.set(World.fog);R.skyCol.set(World.sky);
   // indoor maps swap the sunlit palette for a warm, mostly-ambient interior
   if(World.indoor){
-    R.shadowFloor=.62;R.ambBoost=.72;
-    R.gndAmb.set([.34,.31,.28]);R.skyAmb.set([.72,.66,.58]);
-    R.sunCol.set([.86,.80,.70]);
+    // a dim, warm fill; the ceiling lights do the real work
+    R.shadowFloor=.8;R.ambBoost=.05;
+    R.gndAmb.set([.30,.27,.25]);R.skyAmb.set([.52,.5,.47]);
+    R.sunCol.set([.34,.32,.3]);
     R.fogRange[0]=26;R.fogRange[1]=110;
+    R.fh=World.fh||0;
   }else{
-    R.shadowFloor=0;R.ambBoost=0;
+    R.shadowFloor=0;R.ambBoost=0;R.fh=0;
     R.gndAmb.set([.30,.31,.26]);R.skyAmb.set([.52,.64,.83]);
     R.sunCol.set([1.04,.975,.86]);
     R.fogRange[0]=48;R.fogRange[1]=190;
@@ -4883,7 +5005,15 @@ function drawHand(d,st,s,skin,grip,lod,armR){
   // palm: broader across the knuckles than at the wrist, and flattened
   _pr(d,st,P.sphLo,0,-PALM*.50,0,0,0,0,armR*2.18,PALM*1.44,armR*1.30,skin,0);
   if(lod>=2)return;                        // distant characters keep the blob
-  const seg=lod?P.cylLo:P.cyl;
+  if(lod===1){
+    // past a dozen metres the fingers are a few pixels: one curled block and a thumb
+    st.push();st.translate(0,-PALM*1.02,armR*.1);st.rotX(.3+grip*1.1);
+    _pr(d,st,P.sphLo,0,-armR*.42,0,0,0,0,armR*2.0,armR*1.3,armR*1.0,skin,0);st.pop();
+    st.push();st.translate(-s*armR*1.2,-PALM*.42,armR*.3);st.rotZ(s*1.0).rotY(-s*.42);
+    _pr(d,st,P.sphLo,0,-armR*.5,0,0,0,0,armR*.8,armR*1.4,armR*.8,skin,0);st.pop();
+    return;
+  }
+  const seg=P.cyl;
   const knuckleY=-PALM*1.02;
   for(let f=0;f<4;f++){
     const L1=LEN*FINGER_LEN[f], L2=L1*.74;
@@ -5128,6 +5258,7 @@ function drawChar(d,ch,camDist){
   const st=_stack.reset();
   const sc=ch.scale||1;
   const fem=L.female;
+  d.reserve(lod?4600:6200,lod?14500:19500);   // a character never straddles two chunks
   const _nv0=d.nv;
   // ease toward the correction the last frame measured
   ch.footFix=(ch.footFix||0)+((ch.footErr||0)-(ch.footFix||0))*.34;
@@ -5648,8 +5779,9 @@ class Simulation{
   lineUp(){
     const n=this.ents.length;
     const c=World.lineup||{x:0,z:0,yaw:0};
+    // the line runs along dir; everyone faces out of it, toward the camera
     const dirX=Math.cos(c.yaw), dirZ=-Math.sin(c.yaw);
-    const faceYaw=c.yaw+PI/2;
+    const faceYaw=c.yaw;
     this.ents.forEach((e,i)=>{
       const off=(i-(n-1)/2)*Math.min(1.35,Math.max(.8,26/Math.max(1,n)));
       const px=c.x+dirX*off, pz=c.z+dirZ*off;
@@ -5659,7 +5791,8 @@ class Simulation{
       e.yaw=faceYaw;e.vx=e.vy=e.vz=0;e.speed=0;
       e.act=null;e.actT=0;e.climb=null;
     });
-    this.lineCenter={x:c.x,z:c.z,yaw:c.yaw,span:Math.max(2,n*1.35)};
+    const sp=Math.min(1.35,Math.max(.8,26/Math.max(1,n)));
+    this.lineCenter={x:c.x,z:c.z,y:c.y||World.floorY||0,yaw:c.yaw,span:Math.max(2,(n-1)*sp)};
   }
   pickPatientZero(){
     const list=this.ents;
@@ -6715,21 +6848,23 @@ const Cam={
     const L=sim.lineCenter;
     if(!L)return false;
     const total=sim.warmup, t=clamp(1-sim.phaseT/total,0,1);
-    const dirX=Math.cos(L.yaw), dirZ=-Math.sin(L.yaw);
-    const nx=Math.sin(L.yaw+PI/2), nz=Math.cos(L.yaw+PI/2);
-    const pan=clamp(t/.62,0,1);
+    const dirX=Math.cos(L.yaw), dirZ=-Math.sin(L.yaw);   // along the line
+    const nx=Math.sin(L.yaw), nz=Math.cos(L.yaw);         // the way the line faces
+    const ly=L.y||0;
+    const pan=smooth(clamp(t/.62,0,1));
     const focus=clamp((t-.66)/.34,0,1);
     const zero=sim.ents.find(x=>x.id===sim.patientZeroId);
-    // pan: travel the length of the line, a few metres in front of it
-    const u=(pan*2-1)*(L.span*.42);
-    let tx=L.x+dirX*u, tz=L.z+dirZ*u, ty=1.28;
-    let cx=tx+nx*4.6, cz=tz+nz*4.6, cy=2.15;
+    // dolly the length of the line a few metres in front of it, in a slight arc
+    const u=(pan*2-1)*(L.span*.5);
+    const arc=1-Math.pow(pan*2-1,2);
+    let tx=L.x+dirX*u, tz=L.z+dirZ*u, ty=ly+1.3;
+    let cx=tx+nx*(4.4+arc*.8)-dirX*.9, cz=tz+nz*(4.4+arc*.8)-dirZ*.9, cy=ly+1.9;
     if(focus>0&&zero){
       const k=smooth(focus);
-      tx=lerp(tx,zero.x,k);tz=lerp(tz,zero.z,k);ty=lerp(ty,zero.y+1.35,k);
-      cx=lerp(cx,zero.x+nx*(3.4-k*1.5),k);
-      cz=lerp(cz,zero.z+nz*(3.4-k*1.5),k);
-      cy=lerp(cy,zero.y+1.75,k);
+      tx=lerp(tx,zero.x,k);tz=lerp(tz,zero.z,k);ty=lerp(ty,zero.y+1.42,k);
+      cx=lerp(cx,zero.x+nx*(2.9-k*.9)+dirX*.35,k);
+      cz=lerp(cz,zero.z+nz*(2.9-k*.9)+dirZ*.35,k);
+      cy=lerp(cy,zero.y+1.62,k);
     }
     this.tx=damp(this.tx,tx,7,dt);this.ty=damp(this.ty,ty,7,dt);this.tz=damp(this.tz,tz,7,dt);
     this.x=damp(this.x,cx,6,dt);this.y=damp(this.y,cy,6,dt);this.z=damp(this.z,cz,6,dt);
@@ -6749,9 +6884,17 @@ const Cam={
       this.tx=damp(this.tx,e.x+sx,6,dt);
       this.ty=damp(this.ty,e.y+1.0+yOff,6,dt);
       this.tz=damp(this.tz,e.z+sz,6,dt);
-      this.x=e.x+Math.sin(a)*d+sx;
+      // pull the orbit in if a post, a tree or a wall would come between
+      let dd=d;
+      for(let s=1;s<=8;s++){
+        const k=dd*s/8,px=e.x+sx+Math.sin(a)*k,pz=e.z+sz+Math.cos(a)*k;
+        const r=resolveCollision(px,pz,e.y,.45,_col2);
+        if(Math.abs(r.x-px)>.02||Math.abs(r.z-pz)>.02||r.ground>e.y+1.2){dd=Math.max(2.2,k-.5);break;}
+      }
+      this.menuD=damp(this.menuD||dd,dd,dd<(this.menuD||dd)?12:2,dt);
+      this.x=e.x+Math.sin(a)*this.menuD+sx;
       this.y=e.y+1.5+yOff;
-      this.z=e.z+Math.cos(a)*d+sz;
+      this.z=e.z+Math.cos(a)*this.menuD+sz;
       this.fov=damp(this.fov,46,4,dt);
       this.applyBasis();
       return;
@@ -6765,7 +6908,17 @@ const Cam={
     this.tx=damp(this.tx,e.x,17,dt);
     this.ty=damp(this.ty,headY,13,dt);
     this.tz=damp(this.tz,e.z,17,dt);
-    const cp=Math.cos(this.pitch),sp=Math.sin(this.pitch);
+    // under a ceiling the camera flattens out rather than climbing through it
+    let pitch=this.pitch;
+    if(World.indoor&&World.fh){
+      const f=Math.floor((e.y+.4)/World.fh);
+      if(f<World.floors){
+        const room=(f*World.fh+World.fh-.34)-headY-.42;
+        pitch=Math.min(pitch,Math.asin(clamp(room/Math.max(1.5,this.wantDist),-1,1)));
+      }
+    }
+    this.pitchEff=damp(this.pitchEff===undefined?pitch:this.pitchEff,pitch,10,dt);
+    const cp=Math.cos(this.pitchEff),sp=Math.sin(this.pitchEff);
     const dirx=Math.sin(this.yaw)*cp,diry=sp,dirz=Math.cos(this.yaw)*cp;
     // shorten the boom if it would clip scenery
     let d=lerp(this.wantDist,1.85,this.hideK||0);
@@ -6780,6 +6933,15 @@ const Cam={
       // boom used to slide straight inside them
       if(Math.abs(r.x-px)>.02||Math.abs(r.z-pz)>.02||r.ground>py-.25){
         d=Math.max(climbing?2.05:1.5,k-.42);break;
+      }
+    }
+    // indoors, stop the boom under the ceiling of the storey you are on
+    if(World.indoor&&World.fh&&diry>.02){
+      const f=Math.floor((e.y+.4)/World.fh);
+      if(f<World.floors){
+        const ceil=f*World.fh+World.fh-.32;
+        const lim=(ceil-this.ty-.42*(1-(this.hideK||0)))/diry;
+        if(lim<d)d=Math.max(1.25,lim);
       }
     }
     this.dist=damp(this.dist,d,d<this.dist?26:7,dt);
@@ -7531,7 +7693,7 @@ const Preview={
     e.avatar=Save.avatar;
     e.look=resolveLook(Save.avatar,false);
     e.x=0;e.z=0;e.y=0;e.yaw=PI;
-    if(World&&World.key==='playground'){e.x=0;e.z=6;e.y=0;}
+    if(World&&World.stage){e.x=World.stage.x;e.z=World.stage.z;e.y=World.stage.y||0;e.yaw=World.stage.yaw;}
     e.anim='idle';e.animN=[null,null,null,null,null];e.act_=new Float32Array(5);
   },
   refresh(){this.ent.avatar=Save.avatar;this.ent.look=resolveLook(Save.avatar,false);},
@@ -8541,6 +8703,9 @@ function drawMapProps(d,t){
 function renderScene(t,dt){
   const gl=R.gl;
   R.resize();
+  // the camera is placed first so off-screen characters are never built
+  Cam.apply();
+  R.planesOf(R.vp,R.camPlanes);
   const dyn=R.dyn;
   dyn.reset();
   let focusX=0,focusZ=0;
@@ -8551,6 +8716,8 @@ function renderScene(t,dt){
       const e=ents[i];
       const d=Math.hypot(e.x-Cam.x,e.y-Cam.y,e.z-Cam.z);
       if(d>82)continue;
+      // a little slack so a shadow from just off screen still lands
+      if(e!==Game.me&&!R.sphereIn(R.camPlanes,e.x,e.y+.9,e.z,2.6))continue;
       drawChar(dyn,e,d);
     }
   }else{
@@ -8563,18 +8730,20 @@ function renderScene(t,dt){
   // ---- shadow pass
   if(R.shadowOn){
     R.setLight(focusX,focusZ,Game.state==='playing'?31:9);
+    R.planesOf(R.lightVP,R.lightPlanes);
     R.beginShadow();
     const dp=R.progDepth;
-    for(const m of World.meshes)m.draw(dp);
+    for(const m of World.meshes)if(R.boxIn(R.lightPlanes,m.b))m.draw(dp);
     dyn.draw(dp);
     R.endShadow();
   }else{
     R.setLight(focusX,focusZ,26);
   }
   // ---- main pass
-  Cam.apply();
+  if(Game.state==='playing'&&Game.me)R.pickLights(Game.me.x,Game.me.y+1.2,Game.me.z);
+  else R.pickLights(Cam.tx,Cam.ty,Cam.tz);
   R.beginMain();
-  for(const m of World.meshes)m.draw(R.progMain);
+  for(const m of World.meshes)if(R.boxIn(R.camPlanes,m.b))m.draw(R.progMain);
   dyn.draw(R.progMain);
   R.drawSky(t);
   // ---- ground blood, then particles
