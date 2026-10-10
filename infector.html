@@ -3531,148 +3531,273 @@ const J={bob:0,lean:1,side:2,twist:3,spine:4,spineSide:5,
   lHipP:17,lHipR:18,lKnee:19,lAnk:20,
   rHipP:21,rHipR:22,rKnee:23,rAnk:24,
   crouch:25,yawOff:26,mouth:27,brow:28,eye:29,armR:30,shrug:31,handGrip:32,
-  rootZ:33,rootY:34,lWri:35,rWri:36,hairP:37,hairR:38};
-const NJ=39;
+  rootZ:33,rootY:34,lWri:35,rWri:36,hairP:37,hairR:38,
+  lShT:39,rShT:40};              // V1.25: upper-arm twist about its own axis
+const NJ=41;
 const _poseB=new Float32Array(NJ);
 
-/* When a leg swings `a` radians off vertical its sole rises by
-   legLength*(1-cos a). Real walking answers that by dropping the pelvis, so
-   the hips sit highest at mid-stance and lowest at double support. Feeding the
-   exact geometric figure back through J.bob is what keeps the planted foot on
-   the floor instead of floating above it — the single biggest thing that made
-   the old cycles read as a shuffle. */
-function hipDrop(a){return (BD.uLeg+BD.lLeg)*(1-Math.cos(a));}
-/* How far below the hip the foot's contact point ends up for a given thigh
-   angle, knee flexion and ankle angle — the same two-link chain the leg mesh
-   is built from (thigh rotated by `th`, shin a further `kn`).
-   The shoe then pivots about its heel or its toe as the ankle rotates, which
-   lowers the contact point further — a flat-foot solve alone buries the toe
-   during push-off. */
-const SHOE={toe:.24,heel:.15};
-function legReach(th,kn,an){
-  const ankle=BD.uLeg*Math.cos(th)+BD.lLeg*Math.cos(th+kn);
-  const w=th+kn+(an||0);                       // shoe pitch in world terms
-  const lever=w<0?SHOE.toe:SHOE.heel;          // toe ahead of / heel behind ankle
-  return ankle+BD.soleDrop*(Math.cos(w)-1)+lever*Math.abs(Math.sin(w));
+/* ---------------------------------------------------------------------------
+   V1.25 — locomotion rebuilt on foot placement.
+   The old gaits swung the hips, knees and ankles on sine waves and worked the
+   pelvis height out afterwards. The legs swung as far behind the body as in
+   front of it, so every run read as the splits, and nothing promised a foot
+   was actually on the floor. Now the feet are placed first — planted and
+   travelling back at ground speed through stance, lifted along a swing path
+   the rest of the cycle — and a two-bone solve finds the hip and knee that
+   reach them. The pelvis height is whatever the stance leg can support.
+   ------------------------------------------------------------------------- */
+/* the shoe's sole, measured from the ankle joint */
+const SOLE={drop:.1325,toe:.1525,heel:.0825};
+/* ankle height when the foot is pitched by p (+ = toe down) and its lowest
+   sole edge rests on the floor */
+function ankleH(p){
+  const c=Math.cos(p),s=Math.sin(p);
+  return p>=0?SOLE.drop*c+SOLE.toe*s:SOLE.drop*c-SOLE.heel*s;
 }
-/* Pelvis offset that puts the *lower* of the two feet exactly on the floor.
-   Always <= 0, and exactly 0 when a leg is straight and vertical. */
-function hipBob(thL,knL,anL,thR,knR,anR){
-  return Math.max(legReach(thL,knL,anL),legReach(thR,knR,anR))-(BD.uLeg+BD.lLeg);
+function hipH(){return BD.hipY-BD.legDrop;}          // hip joint above the root
+function legReachK(k){const a=BD.uLeg,b=BD.lLeg;return Math.sqrt(a*a+b*b+2*a*b*Math.cos(k));}
+/* Two-bone solve: absolute thigh angle (+ = back) and knee flex that put the
+   ankle at (dz forward, dy up) from the hip. Knees always bend forward. */
+const _ik={th:0,kn:0};
+function legIK(dz,dy){
+  const a=BD.uLeg,b=BD.lLeg;
+  let d=Math.hypot(dz,dy);
+  const dmax=a+b-1e-4,dmin=Math.abs(a-b)+.04;
+  if(d>dmax)d=dmax;else if(d<dmin)d=dmin;
+  _ik.kn=PI-Math.acos(clamp((a*a+b*b-d*d)/(2*a*b),-1,1));
+  _ik.th=Math.atan2(-dz,-dy)-Math.acos(clamp((a*a+d*d-b*b)/(2*a*d),-1,1));
+  return _ik;
 }
-/* Step length the geometry can actually deliver at swing amplitude `a`:
-   the two feet end up 2*L*sin(a) apart. Stride constants are derived from this
-   so the cycle rate always matches ground speed. */
-function stepLen(a){return 2*(BD.uLeg+BD.lLeg)*Math.sin(a);}
-const SW={walk:.62,run:.92,sprint:1.12,zWalk:.5,zRun:.88};
+/* Put one ankle at (z forward, y above the floor) in the character's own
+   frame with the foot at absolute pitch p. Reads the root channels already on
+   the pose, so bob, crouch, rootZ and lean are all respected. A free foot keeps
+   its ankle inside a natural range instead of holding a world angle. */
+function reachLeg(o,side,z,y,p,free){
+  const lean=o[J.lean],H=hipH(),off=o[J.bob]-o[J.crouch]*.42+o[J.rootY];
+  const r=legIK(z-(o[J.rootZ]+H*Math.sin(lean)),y-(off+H*Math.cos(lean)));
+  let an=p-r.th-r.kn;
+  if(free)an=clamp(an,-.4,.8);
+  if(side<0){o[J.lHipP]=r.th-lean;o[J.lKnee]=r.kn;o[J.lAnk]=an;}
+  else{o[J.rHipP]=r.th-lean;o[J.rKnee]=r.kn;o[J.rAnk]=an;}
+}
+function plantFoot(o,side,z,p){p=p||0;reachLeg(o,side,z,ankleH(p),p,false);}
+function plantFeet(o,zL,zR,pL,pR){plantFoot(o,-1,zL,pL);plantFoot(o,1,zR,pR);}
+/* a foot stepping from z0 to z1 as k runs 0..1, lifting on the way */
+function stepFoot(o,side,z0,z1,k,h){
+  const e=smooth(clamp(k,0,1)),lift=Math.sin(PI*clamp(k,0,1))*(h||.1);
+  reachLeg(o,side,lerp(z0,z1,e),ankleH(0)+lift,-.1*lift,lift>.01);
+}
+/* polynomial smooth minimum: no kinks where two limits hand over */
+function smin(a,b,k){const h=clamp(.5+.5*(b-a)/k,0,1);return b+(a-b)*h-k*h*(1-h);}
+
+/* Gait styles. Walks keep a foot down and let the stance leg set the pelvis;
+   runs have a flight phase and a designed bounce, lowest at mid-stance. */
+const GAIT={
+  walk:{duty:.58,zMax:.36,zOff:.03,lift:.065,pHS:-.24,pTO:.58,pSw:-.06,flat:.2,heelOff:.55,
+    knee:.14,cap:.034,off:.5,step:v=>clamp(.32+.17*v,.42,.7),
+    spine:.05,twist:.12,sway:.02,headP:-.02,shrug:.1,grip:.2,
+    armA:.32,armO:.06,elb:.22,elbF:.3,shR:.1,shY:.05},
+  run:{run:1,Ls:.6,zOff:-.01,kickB:.18,driveF:.24,kick:v=>.2+.05*v,driveH:.6,
+    pHS:-.05,pTO:.7,pSw:.22,flat:.16,heelOff:.36,knee:.28,yMS:.048,yAmp:.06,off:.5,
+    step:v=>.48+.18*v,
+    spine:.14,twist:.2,sway:.014,headP:-.1,shrug:.3,grip:.55,
+    armA:.7,armO:.12,elb:1.35,elbF:.25,shR:.12,shY:.12},
+  sprint:{run:1,Ls:.64,zOff:0,kickB:.2,driveF:.3,kick:v=>.22+.05*v,driveH:.7,
+    pHS:0,pTO:.8,pSw:.3,flat:.12,heelOff:.3,knee:.32,yMS:.07,yAmp:.05,off:.5,
+    step:v=>.5+.185*v,
+    spine:.26,twist:.24,sway:.01,headP:-.16,shrug:.45,grip:.85,
+    armA:1.0,armO:.16,elb:1.45,elbF:.25,shR:.15,shY:.18},
+  /* Walker: heavy, lopsided — the left foot drags and the rhythm is uneven */
+  zwalk:{duty:.64,zMax:.33,zOff:.05,lift:.06,pHS:-.1,pTO:.42,pSw:.05,flat:.25,heelOff:.6,
+    knee:.32,cap:.06,off:.45,dragL:.25,step:v=>clamp(.26+.15*v,.36,.58),
+    spine:.36,twist:.1,sway:.07,headP:.16,shrug:.55,grip:.45,
+    armA:.2,armO:-.66,elb:.6,elbF:.12,shR:.24,shY:-.05,
+    upper(o,t,c,aL,aR){
+      o[J.headR]=Math.sin(t*1.1+(c.seed||0))*.18-o[J.side]*1.2;
+      o[J.lShP]-=.08;o[J.rElb]+=.2;o[J.eye]=.86;o[J.mouth]=.24;
+    }},
+  /* the Walker's lurching run: arms out ahead, head up, short heavy steps */
+  zrun:{run:1,Ls:.56,zOff:.02,kickB:.12,driveF:.18,kick:v=>.16+.035*v,driveH:.45,
+    pHS:-.05,pTO:.55,pSw:.1,flat:.2,heelOff:.4,knee:.36,yMS:.08,yAmp:.05,off:.5,
+    step:v=>.44+.16*v,
+    spine:.4,twist:.16,sway:.05,headP:-.32,shrug:1.0,grip:.7,
+    armA:.3,armO:-1.18,elb:.48,elbF:.1,shR:.3,shY:-.08,
+    upper(o,t,c,aL,aR){
+      o[J.lShP]+=Math.sin(t*5.3)*.08;o[J.rShP]+=Math.sin(t*4.7+1)*.08;
+      o[J.headR]=Math.sin(t*7)*.08;o[J.eye]=1.1;o[J.mouth]=.55;
+    }},
+  /* Sprinter: twitchy, hunched, quick little steps until it commits */
+  swalk:{duty:.58,zMax:.35,zOff:.03,lift:.08,pHS:-.15,pTO:.55,pSw:0,flat:.2,heelOff:.5,
+    knee:.24,cap:.045,off:.5,step:v=>clamp(.3+.15*v,.4,.62),
+    spine:.3,twist:.14,sway:.03,headP:.04,shrug:.8,grip:.7,
+    armA:.22,armO:-.5,elb:1.05,elbF:.15,shR:.26,shY:.06,
+    upper(o,t,c){
+      o[J.lElb]+=Math.sin(t*4.7+(c.seed||0))*.1;o[J.rElb]+=Math.sin(t*5.3)*.12;
+      o[J.headY]+=Math.sin(t*1.25+(c.seed||0))*.4;o[J.eye]=1.05;o[J.mouth]=.32;
+    }},
+  /* Sprinter at full tilt: pitched forward, long strides, arms pumping wide */
+  srun:{run:1,Ls:.66,zOff:.02,kickB:.22,driveF:.32,kick:v=>.24+.05*v,driveH:.7,
+    pHS:0,pTO:.82,pSw:.32,flat:.12,heelOff:.3,knee:.34,yMS:.09,yAmp:.05,off:.5,
+    step:v=>.5+.19*v,
+    spine:.5,twist:.24,sway:.02,headP:-.42,shrug:1.15,grip:.9,
+    armA:1.05,armO:.22,elb:1.25,elbF:.3,shR:.34,shY:.2,
+    upper(o,t,c){
+      o[J.side]-=clamp((c.turnRate||0)*.05,-.18,.18);
+      o[J.headR]=Math.sin(t*8)*.07;o[J.eye]=1.15;o[J.mouth]=.6;
+    }},
+  /* infected survivor: shorter steps, hunched over the wound, unsteady */
+  sick:{duty:.62,zMax:.33,zOff:.03,lift:.05,pHS:-.18,pTO:.48,pSw:-.02,flat:.2,heelOff:.55,
+    knee:.2,cap:.045,off:.5,step:v=>clamp(.3+.14*v,.4,.58),
+    spine:.12,twist:.08,sway:.04,headP:.1,shrug:.35,grip:.6,
+    armA:.22,armO:.04,elb:.35,elbF:.2,shR:.12,shY:0,
+    upper(o,t,c){sickUpper(o,t,c);}},
+  sickrun:{run:1,Ls:.56,zOff:0,kickB:.14,driveF:.2,kick:v=>.17+.04*v,driveH:.5,
+    pHS:-.05,pTO:.6,pSw:.15,flat:.18,heelOff:.38,knee:.36,yMS:.08,yAmp:.05,off:.5,
+    step:v=>.46+.16*v,
+    spine:.2,twist:.12,sway:.04,headP:0,shrug:.45,grip:.6,
+    armA:.5,armO:.1,elb:1.2,elbF:.2,shR:.12,shY:.08,
+    upper(o,t,c){sickUpper(o,t,c);}}
+};
+/* the hand pressed to the wound, the body folding around it as the minute runs */
+function sickUpper(o,t,c){
+  const k=clamp((c.infT||0)/INF.dur,0,1);
+  o[J.rShP]=-.62-k*.75;o[J.rElb]=1.15+k*.85;o[J.rShY]=-.3-k*.15;o[J.rShR]=.12;
+  o[J.spine]+=k*.32;o[J.headP]+=k*.34;
+  o[J.side]+=Math.sin(t*.9)*(.02+k*.05);
+  o[J.eye]=1-k*.45;o[J.mouth]=.18+k*.35;o[J.brow]=.2+k*.25;
+}
+/* which locomotion clip an entity is in at its current speed */
+function locoClip(e){
+  const v=e.speed;
+  if(e.team===TEAM.ZOMBIE){
+    const V=variantOf(e);
+    if(V.crawl)return v>4.2?'cChase':'cMove';
+    if(V.burst)return v>3.1?'sRun':'sWalk';
+    return v>2.7?'zrun':'wWalk';
+  }
+  if(e.infected)return v>3.2?'sickRun':'sickWalk';
+  return v>6.15?'sprint':(v>2.75?'run':'walk');
+}
+const GAIT_OF={walk:GAIT.walk,run:GAIT.run,sprint:GAIT.sprint,wWalk:GAIT.zwalk,zwalk:GAIT.zwalk,
+  zrun:GAIT.zrun,sWalk:GAIT.swalk,sRun:GAIT.srun,sickWalk:GAIT.sick,sickRun:GAIT.sickrun};
+/* step length the cycle is advanced by — the same figure the clip plants its
+   feet with, so a planted foot travels back at exactly the ground speed */
+function locoStep(e){
+  const c=locoClip(e),G=GAIT_OF[c];
+  if(G)return G.step(Math.max(.05,e.speed));
+  return c==='cChase'?.85:.62;
+}
+/* where one foot is at leg phase u (0 = touchdown) */
+function gaitFoot(G,u,duty,zH,lift,drag,out){
+  if(u<duty){
+    const k=u/duty;
+    out.st=1;out.k=k;out.s=0;
+    out.z=G.zOff+zH*(1-2*k);
+    let p=0;
+    if(k<G.flat)p=G.pHS*(1-smooth(k/G.flat));
+    else if(k>G.heelOff)p=G.pTO*smooth((k-G.heelOff)/(1-G.heelOff));
+    out.p=p;out.y=ankleH(p);
+    return out;
+  }
+  const s=(u-duty)/(1-duty);
+  out.st=0;out.k=1;out.s=s;
+  const z0=G.zOff-zH,z1=G.zOff+zH,y0=ankleH(G.pTO),y1=ankleH(G.pHS);
+  if(G.run){
+    // heel kicks up behind, the knee drives through, the foot reaches down
+    const it=1-s,b0=it*it*it,b1=3*it*it*s,b2=3*it*s*s,b3=s*s*s;
+    out.z=b0*z0+b1*(z0-G.kickB)+b2*(z1+G.driveF)+b3*z1;
+    out.y=b0*y0+b1*(y0+lift)+b2*(y1+lift*G.driveH)+b3*y1;
+  }else{
+    const e=s*s*(3-2*s);
+    out.z=z0+(z1-z0)*e;
+    out.y=y0+(y1-y0)*s+lift*(1-drag)*Math.pow(Math.sin(PI*s),1.4)*(1.15-.3*s);
+  }
+  const pSw=drag?lerp(G.pSw,.5,drag*2):G.pSw;      // a dragging foot trails its toe
+  out.p=s<.45?lerp(G.pTO,pSw,smooth(s/.45)):lerp(pSw,G.pHS,smooth((s-.45)/.55));
+  return out;
+}
+/* lower the pelvis until a stance foot (or one about to land) can reach */
+function pelvisFor(Y,f,R){
+  if(f.st)return smin(Y,f.y+Math.sqrt(Math.max(0,R*R-f.z*f.z)),.02);
+  if(f.s>.45){
+    const w=smooth((f.s-.45)/.55);
+    return smin(Y,f.y+Math.sqrt(Math.max(0,R*R-f.z*f.z))+(1-w)*.3,.02);
+  }
+  return Y;
+}
+const _fL={z:0,y:0,p:0,st:0,k:0,s:0},_fR={z:0,y:0,p:0,st:0,k:0,s:0};
+/* forward-ness of a leg: +1 at touchdown, -1 at toe-off */
+function legFwd(f){return f.st?1-2*smooth(f.k):-1+2*smooth(f.s);}
+function gaitPose(o,t,c,G){
+  const v=Math.max(.05,c.speed||0),step=G.step(v);
+  let duty,zH;
+  if(G.run){zH=G.Ls*.5;duty=clamp(G.Ls/(2*step),.16,.44);}
+  else{duty=G.duty;zH=Math.min(duty*step,G.zMax);}
+  const ph=(((c.phase||0)/TAU)%1+1)%1;
+  const lift=G.run?G.kick(v):G.lift;
+  gaitFoot(G,ph,duty,zH,lift,G.dragL||0,_fL);
+  gaitFoot(G,(ph+G.off)%1,duty,zH,lift,0,_fR);
+  // pelvis: as high as the stance leg allows, or the designed running bounce
+  let Y;
+  if(G.run){
+    const psi=((((ph-duty*.5)*2)%1)+1)%1;          // 0 at mid-stance, .5 mid-flight
+    Y=hipH()-G.yMS+G.yAmp*(1-Math.cos(TAU*psi))*.5;
+  }else Y=hipH()-G.cap;
+  const R=legReachK(G.knee);
+  Y=pelvisFor(pelvisFor(Y,_fL,R),_fR,R);
+  o[J.bob]=Y-hipH();
+  reachLeg(o,-1,_fL.z,_fL.y,_fL.p,!_fL.st);
+  reachLeg(o, 1,_fR.z,_fR.y,_fR.p,!_fR.st);
+  // upper body: each arm swings with the opposite leg; shoulders counter the hips
+  const aL=legFwd(_fR),aR=legFwd(_fL);
+  o[J.lShP]=G.armO-G.armA*aL;o[J.rShP]=G.armO-G.armA*aR;
+  o[J.lElb]=G.elb+G.elbF*Math.max(0,aL);o[J.rElb]=G.elb+G.elbF*Math.max(0,aR);
+  o[J.lShR]=G.shR;o[J.rShR]=G.shR;
+  o[J.lShY]=G.shY*Math.max(0,aL);o[J.rShY]=-G.shY*Math.max(0,aR);
+  o[J.lWri]=-.1-.1*aL;o[J.rWri]=-.1-.1*aR;
+  const tw=G.twist*(aL-aR)*.5;
+  o[J.twist]=tw;o[J.headY]=-tw*.7;
+  const wL=_fL.st?Math.sin(PI*_fL.k):0,wR=_fR.st?Math.sin(PI*_fR.k):0;
+  o[J.side]=G.sway*(wL-wR);
+  // the torso dips a touch on each landing
+  const land=G.run?Math.max(0,hipH()-G.yMS+G.yAmp-Y)*1.6:0;
+  o[J.spine]=G.spine+land;
+  o[J.headP]=G.headP-land*.6;
+  o[J.shrug]=G.shrug;o[J.handGrip]=G.grip;o[J.eye]=1;
+  if(G.upper)G.upper(o,t,c,aL,aR);
+}
 
 /* Each clip writes absolute channel values; the blender mixes them by weight. */
 const CLIP={
  idle(o,t,c){
    const sd=c.seed||0;
    const br=Math.sin(t*1.55+sd), br2=Math.sin(t*1.55+sd+.7);
-   o[J.bob]=br*.015;
-   o[J.spine]=.04+br*.028;
-   o[J.shrug]=br2*.55;                       // shoulders lift with each breath
-   o[J.headP]=-.03+Math.sin(t*1.55+sd+.5)*.035;
-   o[J.headY]=Math.sin(t*.29+sd)*.42+Math.sin(t*.11+sd*2)*.24;
-   o[J.headR]=Math.sin(t*.23+sd)*.06;
-   o[J.lShP]=.05+br*.065;o[J.rShP]=.05-br*.055;
-   o[J.lShR]=.14+br2*.025;o[J.rShR]=.14+br2*.025;
-   o[J.lElb]=.19+br*.04;o[J.rElb]=.17-br*.04;
-   o[J.lWri]=-.12+br*.05;o[J.rWri]=-.10-br*.05;
-   o[J.handGrip]=.18;                        // relaxed, not a flat paddle
-   // weight shifts onto one leg and back: hips tip, the loaded knee locks
-   const w=Math.sin(t*.37+sd);
-   o[J.side]=w*.03;
-   o[J.twist]=Math.sin(t*.31+sd)*.035;
-   o[J.lHipR]=w*.05;o[J.rHipR]=w*.05;
-   const thL=.02-w*.03, thR=-.02+w*.03;
-   const knL=.07+Math.max(0,w)*.12, knR=.07+Math.max(0,-w)*.12;
-   o[J.lHipP]=thL;o[J.rHipP]=thR;
-   o[J.lKnee]=knL;o[J.rKnee]=knR;
-   // stand on the loaded leg rather than hovering above it
-   o[J.bob]+=hipBob(thL,knL,0,thR,knR,0)+.006;
+   const w=Math.sin(t*.37+sd);                 // weight drifting between the feet
+   o[J.spine]=.035+br*.022;
+   o[J.shrug]=br2*.45;                         // shoulders lift with each breath
+   o[J.headP]=-.03+Math.sin(t*1.55+sd+.5)*.03;
+   o[J.headY]=Math.sin(t*.29+sd)*.38+Math.sin(t*.11+sd*2)*.22;
+   o[J.headR]=Math.sin(t*.23+sd)*.05;
+   o[J.lShP]=.04+br*.05;o[J.rShP]=.04-br*.045;
+   o[J.lShR]=.11+br2*.02;o[J.rShR]=.11+br2*.02;
+   o[J.lShT]=-.1;o[J.rShT]=-.1;
+   o[J.lElb]=.2+br*.035;o[J.rElb]=.18-br*.035;
+   o[J.lWri]=-.1+br*.04;o[J.rWri]=-.08-br*.04;
+   o[J.handGrip]=.2;
+   o[J.side]=w*.022;o[J.twist]=Math.sin(t*.31+sd)*.03;
+   // the hips settle onto whichever leg is loaded; both feet stay planted
+   o[J.bob]=-.008-Math.abs(w)*.01+br*.003;
+   plantFeet(o,.035-w*.025,-.035-w*.025,0,0);
    o[J.eye]=1;
  },
  /* Walking. Both feet are on the floor at the extremes of the stride, so the
     pelvis follows the exact geometric drop and nothing floats or skates. The
     stance knee stays nearly straight; the swing knee folds to clear the toe. */
- walk(o,t,c){
-   const p=c.phase,s=Math.sin(p),cs=Math.cos(p);
-   const A=SW.walk;
-   const thL=s*A, thR=-s*A;
-   o[J.lHipP]=thL;o[J.rHipP]=thR;
-   // swing leg (travelling forward, cs>0 for the left) folds; stance stays long
-   const swL=Math.max(0,cs),swR=Math.max(0,-cs);
-   const knL=.06+swL*.86+Math.max(0,-s)*.22;
-   const knR=.06+swR*.86+Math.max(0,s)*.22;
-   o[J.lKnee]=knL;o[J.rKnee]=knR;
-   // heel strike at the front of the stride, toe-off at the back
-   const anL=Math.max(0,s)*.30-Math.max(0,-s)*.46+swL*.24;
-   const anR=Math.max(0,-s)*.30-Math.max(0,s)*.46+swR*.24;
-   o[J.lAnk]=anL;o[J.rAnk]=anR;
-   o[J.lShP]=-s*.52;o[J.rShP]=s*.52;
-   o[J.lElb]=.28+Math.max(0,s)*.38;o[J.rElb]=.26+Math.max(0,-s)*.38;
-   o[J.lWri]=-.14-cs*.16;o[J.rWri]=-.14+cs*.16;   // wrist trails the swing
-   o[J.handGrip]=.22;
-   o[J.lShR]=.12;o[J.rShR]=.12;
-   // pelvis: geometric drop, with a small rise over the stance ankle
-   o[J.bob]=hipBob(thL,knL,anL,thR,knR,anR);
-   o[J.side]=-cs*.045;o[J.twist]=cs*.16;o[J.spine]=.075;
-   o[J.lHipR]=cs*.035;o[J.rHipR]=cs*.035;      // pelvis lists over the stance leg
-   o[J.shrug]=Math.abs(s)*.2;
-   o[J.headY]=-cs*.05;o[J.headP]=-.02;o[J.eye]=1;
- },
+ walk(o,t,c){gaitPose(o,t,c,GAIT.walk);},
  /* Running. There is a flight phase, so the pelvis takes only part of the
     geometric drop and rises as the stance leg extends and pushes off. */
- run(o,t,c){
-   const p=c.phase,s=Math.sin(p),cs=Math.cos(p);
-   const A=SW.run;
-   const thL=s*A, thR=-s*A;
-   o[J.lHipP]=thL;o[J.rHipP]=thR;
-   const swL=Math.max(0,cs),swR=Math.max(0,-cs);
-   const knL=.16+swL*1.45+Math.max(0,-s)*.35;
-   const knR=.16+swR*1.45+Math.max(0,s)*.35;
-   o[J.lKnee]=knL;o[J.rKnee]=knR;
-   const anL=Math.max(0,s)*.2-Math.max(0,-s)*.5+swL*.34;
-   const anR=Math.max(0,-s)*.2-Math.max(0,s)*.5+swR*.34;
-   o[J.lAnk]=anL;o[J.rAnk]=anR;
-   // arms drive across the body and open on the back swing
-   o[J.lShP]=-s*.98;o[J.rShP]=s*.98;
-   o[J.lShY]=-.16-Math.max(0,-s)*.3;o[J.rShY]=.16+Math.max(0,s)*.3;
-   o[J.lElb]=1.0+Math.max(0,s)*.62;o[J.rElb]=1.0+Math.max(0,-s)*.62;
-   o[J.lWri]=-.2-cs*.2;o[J.rWri]=-.2+cs*.2;
-   o[J.lShR]=.15;o[J.rShR]=.15;
-   /* Planted foot rides the floor; the body lifts off as the legs cross.
-      The constant is the measured residual of the analytic solve against the
-      rendered mesh when the trailing leg is deeply folded. */
-   o[J.bob]=hipBob(thL,knL,anL,thR,knR,anR)+Math.max(0,Math.abs(cs)-.5)*.12+.040;
-   o[J.lean]=.2;o[J.side]=-cs*.05;o[J.twist]=cs*.22;o[J.spine]=.05;
-   o[J.shrug]=.3+Math.abs(s)*.3;o[J.handGrip]=.65;
-   o[J.headP]=-.13;o[J.headY]=-cs*.05;o[J.eye]=1;
- },
- sprint(o,t,c){
-   const p=c.phase,s=Math.sin(p),cs=Math.cos(p);
-   const A=SW.sprint;
-   const thL=s*A, thR=-s*A;
-   o[J.lHipP]=thL;o[J.rHipP]=thR;
-   const swL=Math.max(0,cs),swR=Math.max(0,-cs);
-   const knL=.2+swL*1.85+Math.max(0,-s)*.42;
-   const knR=.2+swR*1.85+Math.max(0,s)*.42;
-   o[J.lKnee]=knL;o[J.rKnee]=knR;
-   const anL=Math.max(0,s)*.16-Math.max(0,-s)*.56+swL*.4;
-   const anR=Math.max(0,-s)*.16-Math.max(0,s)*.56+swR*.4;
-   o[J.lAnk]=anL;o[J.rAnk]=anR;
-   o[J.lShP]=-s*1.3;o[J.rShP]=s*1.3;
-   o[J.lShY]=-.24-Math.max(0,-s)*.34;o[J.rShY]=.24+Math.max(0,s)*.34;
-   o[J.lElb]=1.4+Math.max(0,s)*.6;o[J.rElb]=1.4+Math.max(0,-s)*.6;
-   o[J.lWri]=-.24-cs*.24;o[J.rWri]=-.24+cs*.24;
-   o[J.lShR]=.19;o[J.rShR]=.19;
-   o[J.bob]=hipBob(thL,knL,anL,thR,knR,anR)+Math.max(0,Math.abs(cs)-.42)*.17+.093;
-   o[J.lean]=.35;o[J.side]=-cs*.06;o[J.twist]=cs*.28;
-   o[J.shrug]=.5;o[J.handGrip]=.85;o[J.headP]=-.22;o[J.mouth]=.2;o[J.eye]=1;
- },
+ run(o,t,c){gaitPose(o,t,c,GAIT.run);},
+ sprint(o,t,c){gaitPose(o,t,c,GAIT.sprint);},
  /* mantle: reach the lip, pull up, plant a foot, stand */
  mantle(o,t,c){
    const p=clamp(c.climbP===undefined?1:c.climbP,0,1);
@@ -3717,113 +3842,115 @@ const CLIP={
    o[J.crouch]=.3*k;o[J.shrug]=.9*k;o[J.eye]=1.05;
  },
  /* wind-up: knees bend and the arms drop back before the launch */
+ /* wind-up: the hips drop back over planted feet and the arms swing behind */
  jumpPrep(o,t,c){
-   const k=clamp(1-c.jumpPrep/.075,0,1);
-   const th=.5*k, kn=1.1*k, an=-.3*k;
-   // knees this deep shorten the leg a long way — the hips have to follow them
-   // down or the character squats in mid-air
-   o[J.bob]=hipBob(th,kn,an,th,kn,an);
-   o[J.crouch]=.12*k;o[J.lKnee]=kn;o[J.rKnee]=kn;
-   o[J.lHipP]=th;o[J.rHipP]=th;o[J.lAnk]=an;o[J.rAnk]=an;
-   o[J.lShP]=.95*k;o[J.rShP]=.95*k;o[J.lShR]=.28*k;o[J.rShR]=.28*k;
-   o[J.lElb]=.35*k;o[J.rElb]=.35*k;
-   o[J.spine]=.34*k;o[J.headP]=.12*k;o[J.shrug]=-.4*k;o[J.eye]=1;
+   const k=smooth(clamp(1-c.jumpPrep/.075,0,1));
+   o[J.bob]=-.19*k;o[J.rootZ]=-.04*k;
+   o[J.spine]=.42*k;o[J.headP]=-.22*k;
+   o[J.lShP]=.85*k;o[J.rShP]=.85*k;o[J.lShR]=.14*k;o[J.rShR]=.14*k;
+   o[J.lElb]=.3*k;o[J.rElb]=.3*k;o[J.handGrip]=.4;o[J.shrug]=-.25*k;
+   plantFeet(o,.03,-.03,0,0);
+   o[J.eye]=1;o[J.mouth]=.1;
  },
  /* jump: push off, tuck, then reach for the ground */
  /* Take-off and rise. The arms swing up and OUT to the sides rather than
     converging in front of the face, and the legs split — the lead knee tucks
     while the trailing leg keeps the push-off extension before folding under.
     A running jump leans into the arc; a standing one stays upright. */
+ /* Take-off and rise. A standing jump throws both arms overhead and tucks the
+    knees; a running jump becomes a split leap with the arms in opposition. */
  jump(o,t,c){
-   const push=1-clamp(c.airT/.16,0,1);        // legs still extending
-   const tuck=Math.min(1,c.airT/.24);
-   const fast=clamp((c.speed||0)/6.5,0,1);
-   o[J.lHipP]=-1.02*tuck+.42*push;            // lead knee drives up
-   o[J.rHipP]=(.24+.5*fast)*tuck+.40*push;    // trailing leg stays back
-   o[J.lKnee]=1.42*tuck+.12;
-   o[J.rKnee]=(.55+.75*fast)*tuck+.12;
-   o[J.lAnk]=-.42*push-.12*tuck;o[J.rAnk]=-.5*push+.2*tuck;
-   o[J.lHipR]=.07*tuck;o[J.rHipR]=-.06*tuck;
-   // arms: up and open, elbows soft, wrists trailing
-   o[J.lShP]=-1.62+push*.55;o[J.rShP]=-1.5+push*.5;
-   o[J.lShR]=.52+tuck*.24;o[J.rShR]=.5+tuck*.22;
-   o[J.lShY]=-.22;o[J.rShY]=.22;
-   o[J.lElb]=.62+tuck*.22;o[J.rElb]=.58+tuck*.2;
-   o[J.lWri]=-.28;o[J.rWri]=-.26;o[J.handGrip]=.2;
-   o[J.lean]=-.1+push*.14+.42*fast*tuck;
-   o[J.twist]=.1*fast*tuck;o[J.side]=-.04*tuck;
-   o[J.spine]=-.05;o[J.headP]=-.2+.12*fast;
-   o[J.shrug]=.7;o[J.eye]=1.12;o[J.mouth]=.22;
+   const push=1-clamp(c.airT/.14,0,1);         // legs still extending off the floor
+   const tuck=smooth(clamp(c.airT/.26,0,1));
+   const up=smooth(clamp(c.airT/.18,0,1));
+   const fast=clamp(((c.speed||0)-2)/4.5,0,1),st=1-fast;
+   o[J.lHipP]=(-.85*st-1.15*fast)*tuck+.12*push;
+   o[J.rHipP]=(-.72*st+.45*fast)*tuck+.22*push;
+   o[J.lKnee]=.12+(1.3*st+1.05*fast)*tuck;
+   o[J.rKnee]=.12+(1.15*st+.9*fast)*tuck;
+   o[J.lAnk]=.25+.5*push;o[J.rAnk]=.3+.55*push;      // toes pointed off the push
+   o[J.lShP]=lerp(.45,-2.55,up)*st+lerp(.25,.55,up)*fast;
+   o[J.rShP]=lerp(.45,-2.45,up)*st+lerp(.2,-1.75,up)*fast;
+   o[J.lShR]=.2+.36*up*st+.4*fast;o[J.rShR]=.2+.36*up*st+.3*fast;
+   o[J.lShT]=.3*up;o[J.rShT]=.3*up;
+   o[J.lElb]=.32+.3*fast;o[J.rElb]=.32;
+   o[J.spine]=-.05*st+.14*fast;o[J.headP]=-.12;o[J.twist]=.12*fast;
+   o[J.handGrip]=.15;o[J.shrug]=.5;o[J.eye]=1.1;o[J.mouth]=.2;
  },
  /* Coming down: the legs reach for the ground and the arms drop and open for
     balance instead of staying pinned overhead. */
+ /* Coming down: the legs reach for the ground, the arms open for balance. */
  fall(o,t,c){
-   const w=Math.sin(t*9)*.1;
-   const reach=clamp((c.airT||0)/.5,0,1);
-   o[J.lHipP]=-.46+.3*reach+w;o[J.rHipP]=-.3+.24*reach-w;
-   o[J.lKnee]=.72-.42*reach;o[J.rKnee]=.5-.3*reach;
-   o[J.lAnk]=.1+.28*reach;o[J.rAnk]=.08+.26*reach;
-   o[J.lShP]=-1.05-w*.4;o[J.rShP]=-1.0+w*.4;
-   o[J.lShR]=.88+w;o[J.rShR]=.84-w;
-   o[J.lShY]=-.3;o[J.rShY]=.3;
-   o[J.lElb]=.7;o[J.rElb]=.68;o[J.lWri]=-.3;o[J.rWri]=-.28;
-   o[J.handGrip]=.15;
-   o[J.lean]=.05;o[J.eye]=1.25;o[J.mouth]=.35;o[J.brow]=.28;
+   const w=Math.sin(t*7.5)*.08;
+   const reach=smooth(clamp((c.airT||0)/.45,0,1));
+   o[J.lHipP]=-.42+.24*reach+w;o[J.rHipP]=-.3+.2*reach-w;
+   o[J.lKnee]=.75-.4*reach;o[J.rKnee]=.62-.32*reach;
+   o[J.lAnk]=.25-.18*reach;o[J.rAnk]=.22-.16*reach;
+   o[J.lShP]=-.5+w*.6;o[J.rShP]=-.45-w*.6;
+   o[J.lShR]=1.05+w;o[J.rShR]=1.0-w;
+   o[J.lShT]=.45;o[J.rShT]=.45;
+   o[J.lElb]=.45;o[J.rElb]=.4;o[J.lWri]=-.25;o[J.rWri]=-.25;o[J.handGrip]=.1;
+   o[J.spine]=.1;o[J.headP]=.12;o[J.shrug]=.4;
+   o[J.eye]=1.2;o[J.mouth]=.3;o[J.brow]=.25;
  },
  /* A zombie in the air has none of the athleticism: the arms stay reaching
     forward, the legs trail stiffly and only fold a little. */
+ /* A zombie in the air has none of the athleticism: the arms stay reaching
+    forward, the legs trail stiffly and only fold a little. */
  zjump(o,t,c){
-   const push=1-clamp(c.airT/.18,0,1);
-   const tuck=Math.min(1,c.airT/.3);
-   o[J.lHipP]=-.62*tuck+.36*push;o[J.rHipP]=.34*tuck+.34*push;
-   o[J.lKnee]=.78*tuck+.2;o[J.rKnee]=.42*tuck+.2;
-   o[J.lAnk]=-.3*push;o[J.rAnk]=-.34*push;
-   o[J.lShP]=-1.32-tuck*.2;o[J.rShP]=-1.26-tuck*.18;   // still reaching
-   o[J.lShR]=.4;o[J.rShR]=.38;o[J.lElb]=.72;o[J.rElb]=.8;
-   o[J.lShY]=.16;o[J.rShY]=-.16;o[J.handGrip]=.62;
-   o[J.lean]=.24;o[J.spine]=.2;o[J.headP]=-.26;
+   const push=1-clamp(c.airT/.16,0,1);
+   const tuck=smooth(clamp(c.airT/.3,0,1));
+   o[J.lHipP]=-.62*tuck+.15*push;o[J.rHipP]=.22*tuck+.2*push;
+   o[J.lKnee]=.9*tuck+.2;o[J.rKnee]=.55*tuck+.25;
+   o[J.lAnk]=.35*push+.15;o[J.rAnk]=.4*push+.2;
+   o[J.lShP]=-1.4-tuck*.2;o[J.rShP]=-1.3-tuck*.15;   // still reaching
+   o[J.lShR]=.32;o[J.rShR]=.3;o[J.lElb]=.55;o[J.rElb]=.65;
+   o[J.lShY]=.12;o[J.rShY]=-.12;o[J.handGrip]=.6;
+   o[J.spine]=.3;o[J.headP]=-.3;
    o[J.shrug]=1.0;o[J.eye]=1.15;o[J.mouth]=.6;
  },
  zfall(o,t,c){
-   const w=Math.sin(t*7)*.16;
-   const reach=clamp((c.airT||0)/.5,0,1);
-   o[J.lHipP]=-.28+.24*reach+w;o[J.rHipP]=-.16+.2*reach-w;
-   o[J.lKnee]=.5-.28*reach;o[J.rKnee]=.4-.22*reach;
-   o[J.lAnk]=.14+.2*reach;o[J.rAnk]=.12+.2*reach;
-   o[J.lShP]=-1.5-w*.5;o[J.rShP]=-1.45+w*.5;
-   o[J.lShR]=.52+w;o[J.rShR]=.5-w;
-   o[J.lElb]=.6;o[J.rElb]=.66;o[J.handGrip]=.7;
-   o[J.lean]=.3;o[J.spine]=.24;o[J.headP]=-.12;
+   const w=Math.sin(t*7)*.14;
+   const reach=smooth(clamp((c.airT||0)/.5,0,1));
+   o[J.lHipP]=-.3+.2*reach+w;o[J.rHipP]=-.18+.16*reach-w;
+   o[J.lKnee]=.55-.3*reach;o[J.rKnee]=.45-.25*reach;
+   o[J.lAnk]=.2;o[J.rAnk]=.18;
+   o[J.lShP]=-1.45-w*.5;o[J.rShP]=-1.35+w*.5;
+   o[J.lShR]=.45+w;o[J.rShR]=.42-w;
+   o[J.lElb]=.55;o[J.rElb]=.62;o[J.handGrip]=.7;
+   o[J.spine]=.3;o[J.headP]=-.15;
    o[J.eye]=1.2;o[J.mouth]=.7;
  },
  /* Zombies land heavily — deeper absorb, no arm control, torso pitches. */
+ /* Zombies land heavily — deeper absorb, no arm control, torso pitches. */
  zland(o,t,c){
-   const k=clamp(c.landT/(c.landDur||.2),0,1);
-   o[J.crouch]=(c.landHard?.72:.52)*k;
-   o[J.lKnee]=(c.landHard?1.5:1.15)*k+.14;o[J.rKnee]=(c.landHard?1.35:1.0)*k+.14;
-   o[J.lHipP]=.5*k;o[J.rHipP]=.44*k;o[J.lAnk]=-.34*k;o[J.rAnk]=-.3*k;
-   o[J.lShP]=-1.15*k;o[J.rShP]=-1.05*k;o[J.lElb]=.5*k;o[J.rElb]=.58*k;
-   o[J.lShR]=.46*k;o[J.rShR]=.42*k;o[J.handGrip]=.7;
-   o[J.spine]=.44*k;o[J.headP]=.24*k;o[J.shrug]=.9*k;
-   o[J.side]=Math.sin(t*13)*.05*k;
+   const k=clamp(c.landT/(c.landDur||.2),0,1),e=Math.sin(k*PI*.5);
+   o[J.bob]=-(c.landHard?.34:.22)*e;o[J.rootZ]=-.04*e;
+   o[J.spine]=.35+(c.landHard?.4:.25)*e;o[J.headP]=-.1*e;
+   o[J.lShP]=-1.0*e-.5;o[J.rShP]=-.9*e-.45;o[J.lShR]=.4*e+.15;o[J.rShR]=.36*e+.15;
+   o[J.lElb]=.5;o[J.rElb]=.58;o[J.handGrip]=.7;
+   o[J.shrug]=.9*e;o[J.side]=Math.sin(t*13)*.04*e;
+   plantFeet(o,.1,-.08,0,0);
    o[J.eye]=1.05;o[J.mouth]=.5;
  },
  land(o,t,c){
-   const k=clamp(c.landT/(c.landDur||.2),0,1);
-   o[J.crouch]=(c.landHard?.55:.4)*k;
-   o[J.lKnee]=(c.landHard?1.3:1.0)*k+.1;o[J.rKnee]=(c.landHard?1.3:1.0)*k+.1;
-   o[J.lHipP]=.45*k;o[J.rHipP]=.45*k;o[J.lAnk]=-.3*k;o[J.rAnk]=-.3*k;
-   o[J.lShP]=-.75*k;o[J.rShP]=-.75*k;o[J.lElb]=.95*k;o[J.rElb]=.95*k;
-   o[J.lShR]=.3*k;o[J.rShR]=.3*k;
-   o[J.spine]=.32*k;o[J.headP]=.16*k;o[J.shrug]=.6*k;o[J.eye]=.85;
+   const k=clamp(c.landT/(c.landDur||.2),0,1),e=Math.sin(k*PI*.5);
+   o[J.bob]=-(c.landHard?.3:.17)*e;o[J.rootZ]=-.03*e;
+   o[J.spine]=(c.landHard?.5:.3)*e;o[J.headP]=-.15*e;
+   o[J.lShP]=-.55*e;o[J.rShP]=-.5*e;o[J.lShR]=.35*e;o[J.rShR]=.3*e;
+   o[J.lElb]=.5*e;o[J.rElb]=.45*e;
+   o[J.shrug]=.5*e;o[J.handGrip]=.3;
+   plantFeet(o,.06,-.06,0,0);
+   o[J.eye]=.9;
  },
  scared(o,t,c){
-   const tr=Math.sin(t*23)*.03;
-   o[J.crouch]=.2;o[J.spine]=.26;o[J.lean]=-.05;
-   o[J.lShP]=-1.25;o[J.rShP]=-1.3;o[J.lShR]=.42;o[J.rShR]=.42;
-   o[J.lElb]=2.15;o[J.rElb]=2.2;o[J.lShY]=.55;o[J.rShY]=-.55;
-   o[J.lKnee]=.52;o[J.rKnee]=.52;o[J.lHipP]=.22;o[J.rHipP]=.22;
-   o[J.side]=tr;o[J.headP]=.12;o[J.headR]=tr*2;o[J.shrug]=1;
+   const tr=Math.sin(t*23)*.025,br=Math.sin(t*4.1+(c.seed||0));
+   o[J.bob]=-.07;o[J.rootZ]=-.03;o[J.spine]=.24+br*.02;
+   o[J.lShP]=-1.2;o[J.rShP]=-1.25;o[J.lShR]=.38;o[J.rShR]=.38;
+   o[J.lElb]=2.05;o[J.rElb]=2.1;o[J.lShY]=.5;o[J.rShY]=-.5;
+   o[J.lWri]=.2;o[J.rWri]=.2;o[J.handGrip]=.55;
+   o[J.side]=tr;o[J.headP]=.1;o[J.headR]=tr*2;o[J.shrug]=1;
+   plantFeet(o,.08,-.1,0,0);
    o[J.eye]=1.1;o[J.mouth]=.2;
  },
  celebrate(o,t,c){
@@ -3835,9 +3962,11 @@ const CLIP={
    o[J.headP]=-.35;o[J.twist]=s*.18;o[J.shrug]=.9;o[J.eye]=1;
  },
  lose(o,t,c){
-   o[J.spine]=.52;o[J.headP]=.55;o[J.crouch]=.13;
-   o[J.lShP]=.32;o[J.rShP]=.32;o[J.lElb]=.28;o[J.rElb]=.28;o[J.lShR]=.06;o[J.rShR]=.06;
-   o[J.lKnee]=.2;o[J.rKnee]=.2;o[J.side]=Math.sin(t*1.1)*.03;
+   const br=Math.sin(t*1.1+(c.seed||0));
+   o[J.spine]=.5+br*.02;o[J.headP]=.55;o[J.side]=br*.03;
+   o[J.lShP]=.3;o[J.rShP]=.32;o[J.lElb]=.28;o[J.rElb]=.3;o[J.lShR]=.06;o[J.rShR]=.06;
+   o[J.bob]=-.05;o[J.rootZ]=-.04;
+   plantFeet(o,.05,-.05,0,0);
    o[J.shrug]=-.5;o[J.eye]=.85;
  },
  /* ---- zombie ---- */
@@ -3846,7 +3975,7 @@ const CLIP={
    const s=Math.sin(t*.92+sd),s2=Math.sin(t*.41+sd);
    const br=Math.sin(t*1.05+sd);
    const tw=c.twitch||0;                       // random shoulder / head jerks
-   o[J.side]=s*.11+tw*.06;
+   o[J.side]=s*.08+tw*.05;
    o[J.spine]=.34+s2*.05+br*.02;
    o[J.twist]=s2*.17;
    o[J.headR]=s*.27+tw*.34;o[J.headP]=.18+Math.sin(t*.7+sd)*.11-tw*.2;
@@ -3854,73 +3983,45 @@ const CLIP={
    o[J.lShP]=-.7+s*.1;o[J.rShP]=-.58-s*.1;
    o[J.lElb]=1.0+tw*.2;o[J.rElb]=1.2;o[J.lShR]=.26;o[J.rShR]=.22;
    o[J.shrug]=.5+br*.35+tw*.9;
-   o[J.lKnee]=.3;o[J.rKnee]=.22;o[J.lHipP]=.06;o[J.rHipP]=-.08;
-   o[J.bob]=br*.016;o[J.eye]=.92;o[J.mouth]=.2;
+   o[J.bob]=-.05+br*.01;
+   plantFeet(o,.08,-.06,0,.1);
+   o[J.eye]=.92;o[J.mouth]=.2;
  },
  /* Dragging, asymmetric shuffle — the bad leg barely leaves the floor — but
     the planted foot still has to sit on it, so the pelvis follows the same
     geometric solve as the living gaits. */
- zwalk(o,t,c){
-   const p=c.phase,s=Math.sin(p),cs=Math.cos(p);
-   const A=SW.zWalk;
-   const thL=s*A, thR=-s*A*.85;
-   o[J.lHipP]=thL;o[J.rHipP]=thR;
-   const knL=Math.max(0,-s)*.82+.32, knR=Math.max(0,s)*.56+.18;
-   o[J.lKnee]=knL;o[J.rKnee]=knR;
-   const anL=-s*.16, anR=s*.1;
-   o[J.lAnk]=anL;o[J.rAnk]=anR;
-   o[J.lShP]=-1.0-s*.16;o[J.rShP]=-.88+s*.16;
-   o[J.lElb]=.78;o[J.rElb]=.98;o[J.lShR]=.3;o[J.rShR]=.24;
-   o[J.bob]=hipBob(thL,knL,anL,thR,knR,anR)+.006;
-   o[J.side]=-cs*.12;o[J.spine]=.36;o[J.twist]=cs*.12;
-   o[J.headR]=Math.sin(t*1.3)*.22;o[J.headP]=.14;o[J.shrug]=.7;
-   o[J.eye]=.92;o[J.mouth]=.22;
- },
- zrun(o,t,c){
-   const p=c.phase,s=Math.sin(p),cs=Math.cos(p);
-   const A=SW.zRun;
-   const thL=s*A, thR=-s*A;
-   o[J.lHipP]=thL;o[J.rHipP]=thR;
-   const swL=Math.max(0,cs),swR=Math.max(0,-cs);
-   const knL=.2+swL*1.55+Math.max(0,-s)*.3, knR=.2+swR*1.55+Math.max(0,s)*.3;
-   o[J.lKnee]=knL;o[J.rKnee]=knR;
-   const anL=Math.max(0,s)*.18-Math.max(0,-s)*.46+swL*.3;
-   const anR=Math.max(0,-s)*.18-Math.max(0,s)*.46+swR*.3;
-   o[J.lAnk]=anL;o[J.rAnk]=anR;
-   // arms trail behind and swing with the stride instead of splaying overhead
-   o[J.lShP]=.86-s*.5;o[J.rShP]=.86+s*.5;
-   o[J.lElb]=.6+Math.max(0,-s)*.5;o[J.rElb]=.6+Math.max(0,s)*.5;
-   o[J.lShR]=.24;o[J.rShR]=.24;
-   o[J.lShY]=.14;o[J.rShY]=-.14;
-   o[J.bob]=hipBob(thL,knL,anL,thR,knR,anR)+Math.max(0,Math.abs(cs)-.5)*.11+.142;
-   o[J.lean]=.5;o[J.side]=-cs*.08;o[J.twist]=cs*.18;
-   o[J.headP]=-.34;o[J.headR]=Math.sin(t*7)*.1;o[J.shrug]=1.1;
-   o[J.eye]=1.1;o[J.mouth]=.55;
- },
+ zwalk(o,t,c){gaitPose(o,t,c,GAIT.zwalk);},
+ zrun(o,t,c){gaitPose(o,t,c,GAIT.zrun);},
  zstumble(o,t,c){
    const s=Math.sin(t*4.2);
-   o[J.side]=s*.3;o[J.lean]=.34+Math.sin(t*2.7)*.15;
-   o[J.lShP]=-1.45;o[J.rShP]=-1.2;o[J.lShR]=.82+s*.3;o[J.rShR]=.66-s*.3;
-   o[J.lElb]=.5;o[J.rElb]=.78;o[J.lKnee]=.68;o[J.rKnee]=.32;
-   o[J.lHipP]=.36;o[J.rHipP]=-.22;o[J.headR]=-s*.36;o[J.shrug]=.8;
+   o[J.side]=s*.12;o[J.spine]=.42+Math.sin(t*2.7)*.12;
+   o[J.lShP]=-1.35;o[J.rShP]=-1.1;o[J.lShR]=.7+s*.3;o[J.rShR]=.55-s*.3;
+   o[J.lElb]=.5;o[J.rElb]=.75;o[J.headR]=-s*.3;o[J.shrug]=.8;
+   o[J.bob]=-.08;
+   plantFeet(o,.22+s*.06,-.12,0,.25);
    o[J.eye]=.95;o[J.mouth]=.35;
  },
  zturn(o,t,c){
    const d=clamp(c.turnRate*2.2,-1,1);
-   o[J.side]=-d*.16;o[J.twist]=d*.42;o[J.headY]=d*.5;
+   o[J.side]=-d*.12;o[J.twist]=d*.42;o[J.headY]=d*.5;
    o[J.spine]=.32;o[J.lShP]=-.8;o[J.rShP]=-.7;
    o[J.lElb]=.9;o[J.rElb]=1.05;o[J.lShR]=.3;o[J.rShR]=.26;
-   o[J.lHipP]=d*.28;o[J.rHipP]=-d*.28;o[J.lKnee]=.3;o[J.rKnee]=.3;
+   o[J.bob]=-.05;
+   plantFeet(o,d*.14+.04,-d*.14-.04,0,0);
    o[J.shrug]=.6;o[J.eye]=.95;o[J.mouth]=.24;
  },
  zroar(o,t,c){
    const k=Math.sin(Math.min(PI,c.actT*4.0));
-   o[J.lean]=-.34*k;o[J.spine]=.3-.5*k;o[J.headP]=-.8*k;
-   o[J.lShP]=-1.1*k;o[J.rShP]=-1.1*k;o[J.lShR]=1.5*k;o[J.rShR]=1.5*k;
-   o[J.lElb]=1.2*k;o[J.rElb]=1.2*k;o[J.lShY]=.55*k;o[J.rShY]=-.55*k;
-   o[J.lKnee]=.35;o[J.rKnee]=.35;o[J.shrug]=1.3*k;
+   o[J.spine]=.25-.62*k;o[J.headP]=-.75*k;o[J.rootZ]=-.05*k;
+   o[J.lShP]=-1.0*k;o[J.rShP]=-1.0*k;o[J.lShR]=1.35*k;o[J.rShR]=1.35*k;
+   o[J.lElb]=1.1*k;o[J.rElb]=1.1*k;o[J.lShY]=.5*k;o[J.rShY]=-.5*k;
+   o[J.handGrip]=.95;o[J.shrug]=1.3*k;
+   o[J.bob]=-.06-.05*k;
+   plantFeet(o,.12,-.1,0,0);
    o[J.mouth]=.4+k*.9;o[J.eye]=1.15;
  },
+ /* ================= V1.10 zombie classes ================= */
+ /* Walker: heavy, loose, slightly lopsided */
  /* ================= V1.10 zombie classes ================= */
  /* Walker: heavy, loose, slightly lopsided */
  wIdle(o,t,c){
@@ -3928,8 +4029,7 @@ const CLIP={
    const br=Math.sin(t*.62+sd);                 // slow, deep breathing
    const sway=Math.sin(t*.44+sd);
    o[J.spine]=.34+br*.055;
-   o[J.bob]=br*.026;
-   o[J.side]=sway*.085;
+   o[J.side]=sway*.07;
    o[J.twist]=Math.sin(t*.3+sd)*.13;
    o[J.headP]=.2+br*.09;
    o[J.headR]=sway*.3+Math.sin(t*.21+sd)*.14;   // occasional head tilt
@@ -3939,41 +4039,20 @@ const CLIP={
    o[J.lElb]=.5+br*.06;o[J.rElb]=.62-br*.06;
    o[J.handGrip]=.3+Math.abs(Math.sin(t*.83+sd))*.4;   // fingers slowly flex
    o[J.lShR]=.2;o[J.rShR]=.17;
-   o[J.lKnee]=.24;o[J.rKnee]=.17;o[J.lHipP]=.05;o[J.rHipP]=-.06;
+   o[J.bob]=-.045+br*.012;
+   plantFeet(o,.07,-.05,.06,0);
    o[J.eye]=.86;o[J.mouth]=.22+Math.max(0,br)*.24;
  },
- wWalk(o,t,c){
-   const p=c.phase,s=Math.sin(p),cs=Math.cos(p);
-   // uneven gait: the left leg drags, giving a limp
-   const limp=Math.max(0,-s);
-   const thL=s*.44, thR=-s*.6;
-   o[J.lHipP]=thL;o[J.rHipP]=thR;
-   const knL=Math.max(0,-s)*.62+.34, knR=Math.max(0,s)*.9+.14;
-   o[J.lKnee]=knL;o[J.rKnee]=knR;
-   const anL=-s*.1+Math.max(0,s)*.2-Math.max(0,-s)*.24;
-   const anR=s*.22+Math.max(0,-s)*.2-Math.max(0,s)*.24;
-   o[J.lAnk]=anL;o[J.rAnk]=anR;
-   o[J.lShP]=-.72-s*.26;o[J.rShP]=-.6+s*.3;     // relaxed swing
-   o[J.lElb]=.62;o[J.rElb]=.82;o[J.lShR]=.24;o[J.rShR]=.2;
-   o[J.lHipR]=.05+cs*.04;o[J.rHipR]=-.05+cs*.04;
-   o[J.bob]=hipBob(thL,knL,anL,thR,knR,anR)+.01+limp*.015;
-   o[J.side]=-cs*.13-limp*.05;
-   o[J.spine]=.36+limp*.05;
-   o[J.twist]=cs*.1;
-   o[J.headR]=Math.sin(t*1.1)*.2-limp*.08;
-   o[J.headP]=.16;o[J.shrug]=.55;
-   o[J.eye]=.86;o[J.mouth]=.24;
- },
+ wWalk(o,t,c){gaitPose(o,t,c,GAIT.zwalk);},
+ /* Sprinter: wired, twitchy, explosive */
  /* Sprinter: wired, twitchy, explosive */
  sIdle(o,t,c){
    const sd=c.seed||0;
    const br=Math.sin(t*3.1+sd);                 // fast, shallow breathing
    const tw=c.twitch||0;
    const rock=Math.sin(t*1.6+sd);
-   o[J.spine]=.3+br*.035;
-   o[J.bob]=Math.abs(br)*.016;
-   o[J.side]=rock*.06+tw*.09;
-   o[J.lean]=.06+rock*.03;
+   o[J.spine]=.32+br*.035+rock*.03;
+   o[J.side]=rock*.05+tw*.08;
    o[J.headY]=Math.sin(t*1.25+sd)*.72+tw*.6;    // scanning left and right
    o[J.headR]=Math.sin(t*2.3+sd)*.13+tw*.42;
    o[J.headP]=.04+br*.05-tw*.22;
@@ -3984,34 +4063,12 @@ const CLIP={
    o[J.handGrip]=.5+Math.abs(Math.sin(t*6.1+sd))*.45;
    o[J.lShR]=.3+tw*.1;o[J.rShR]=.26;
    o[J.lShY]=Math.sin(t*3.7)*.09;o[J.rShY]=-Math.sin(t*4.1)*.09;
-   o[J.lKnee]=.3;o[J.rKnee]=.28;o[J.lHipP]=.06;o[J.rHipP]=-.04;
+   o[J.bob]=-.06+Math.abs(br)*.012;
+   plantFeet(o,.1,-.1,0,.15);
    o[J.eye]=1.05;o[J.mouth]=.32+Math.abs(br)*.2;
  },
- sWalk(o,t,c){CLIP.zwalk(o,t,c);o[J.lean]=.2;o[J.shrug]=.85;},
- sRun(o,t,c){
-   const p=c.phase,s=Math.sin(p),cs=Math.cos(p);
-   const A=1.16;
-   const thL=s*A, thR=-s*A;                     // long, powerful strides
-   o[J.lHipP]=thL;o[J.rHipP]=thR;
-   const swL=Math.max(0,cs),swR=Math.max(0,-cs);
-   const knL=.2+swL*1.8+Math.max(0,-s)*.4, knR=.2+swR*1.8+Math.max(0,s)*.4;
-   o[J.lKnee]=knL;o[J.rKnee]=knR;
-   const anL=Math.max(0,s)*.16-Math.max(0,-s)*.54+swL*.38;
-   const anR=Math.max(0,-s)*.16-Math.max(0,s)*.54+swR*.38;
-   o[J.lAnk]=anL;o[J.rAnk]=anR;
-   o[J.lShP]=-s*1.15+.35;o[J.rShP]=s*1.15+.35;  // arms pumping hard
-   o[J.lElb]=1.25+Math.max(0,s)*.5;o[J.rElb]=1.25+Math.max(0,-s)*.5;
-   o[J.lShR]=.34;o[J.rShR]=.34;
-   o[J.lShY]=-.22;o[J.rShY]=.22;
-   o[J.lWri]=-.22-cs*.22;o[J.rWri]=-.22+cs*.22;
-   o[J.bob]=hipBob(thL,knL,anL,thR,knR,anR)+Math.max(0,Math.abs(cs)-.45)*.18+.095;
-   o[J.lean]=.6;                                 // aggressive forward pitch
-   o[J.side]=-cs*.09-clamp((c.turnRate||0)*.05,-.18,.18);
-   o[J.twist]=cs*.22;
-   o[J.headP]=-.4+Math.abs(Math.sin(p))*.12;     // natural head bob
-   o[J.headR]=Math.sin(t*8)*.07;
-   o[J.shrug]=1.15;o[J.handGrip]=.9;o[J.eye]=1.15;o[J.mouth]=.6;
- },
+ sWalk(o,t,c){gaitPose(o,t,c,GAIT.swalk);},
+ sRun(o,t,c){gaitPose(o,t,c,GAIT.srun);},
  /* flat under a bed frame, chin on the floor */
  hideIdle(o,t,c){
    const br=Math.sin(t*2.6+(c.seed||0));
@@ -4046,7 +4103,7 @@ const CLIP={
    const sd=c.seed||0;
    const br=Math.sin(t*1.9+sd);
    const tw=c.twitch||0;
-   o[J.lean]=1.24;o[J.rootZ]=-.76;o[J.rootY]=-.093;
+   o[J.lean]=1.24;o[J.rootZ]=-.76;o[J.rootY]=-.126;
    o[J.spine]=-.42+br*.05;                 // head lifted to look ahead
    o[J.headP]=-.78-br*.06+tw*.2;
    o[J.headY]=Math.sin(t*.7+sd)*.55+tw*.5;
@@ -4056,8 +4113,8 @@ const CLIP={
    o[J.lShR]=.72;o[J.rShR]=.68;o[J.lShY]=.3;o[J.rShY]=-.3;
    o[J.lElb]=1.15;o[J.rElb]=1.2;o[J.handGrip]=.55;
    // legs trail behind, knees splayed
-   o[J.lHipP]=.18;o[J.rHipP]=.14;o[J.lHipR]=.42;o[J.rHipR]=-.38;
-   o[J.lKnee]=.95;o[J.rKnee]=1.05;o[J.lAnk]=-.5;o[J.rAnk]=-.45;
+   o[J.lHipP]=.12;o[J.rHipP]=.08;o[J.lHipR]=.3;o[J.rHipR]=.22;
+   o[J.lKnee]=.42;o[J.rKnee]=.5;o[J.lAnk]=.35;o[J.rAnk]=.4;
    o[J.side]=Math.sin(t*.9+sd)*.05+tw*.06;
    o[J.shrug]=.9+Math.abs(br)*.4;
    o[J.eye]=1.0;o[J.mouth]=.35+Math.abs(br)*.25;o[J.brow]=-.6;
@@ -4066,11 +4123,11 @@ const CLIP={
  cChase(o,t,c){
    const p=c.phase,s=Math.sin(p),cs=Math.cos(p);
    CLIP.cMove(o,t,c);
-   o[J.lean]=1.3;o[J.rootZ]=-.84;
+   o[J.lean]=1.3;o[J.rootZ]=-.84;o[J.rootY]=.0;
    o[J.lShP]=-1.0-s*.95;o[J.rShP]=-.95+s*.95;
    o[J.lElb]=.85+Math.max(0,-s)*.85;o[J.rElb]=.9+Math.max(0,s)*.85;
-   o[J.lHipP]=.24-s*.6;o[J.rHipP]=.2+s*.6;
-   o[J.lKnee]=.85+Math.max(0,s)*.9;o[J.rKnee]=.95+Math.max(0,-s)*.9;
+   o[J.lHipP]=.12-s*.26;o[J.rHipP]=.1+s*.26;
+   o[J.lKnee]=.45+Math.max(0,s)*.55;o[J.rKnee]=.5+Math.max(0,-s)*.55;
    o[J.twist]=cs*.26;o[J.side]=-cs*.13;
    o[J.headP]=-.82;o[J.headR]=cs*.08;
    o[J.bob]=Math.abs(s)*.045;
@@ -4094,7 +4151,7 @@ const CLIP={
  },
  cMove(o,t,c){
    const p=c.phase,s=Math.sin(p),cs=Math.cos(p);
-   o[J.lean]=1.26;o[J.rootZ]=-.80;o[J.rootY]=-.01;
+   o[J.lean]=1.26;o[J.rootZ]=-.80;o[J.rootY]=-.06;
    o[J.spine]=-.4+Math.abs(s)*.07;
    o[J.headP]=-.75-Math.abs(cs)*.07;
    o[J.headR]=cs*.18;o[J.headY]=-cs*.1;
@@ -4104,11 +4161,11 @@ const CLIP={
    o[J.lShY]=.28;o[J.rShY]=-.28;
    o[J.lElb]=1.0+Math.max(0,-s)*.6;o[J.rElb]=1.05+Math.max(0,s)*.6;
    o[J.handGrip]=.5+Math.abs(s)*.4;
-   // legs push and drag
-   o[J.lHipP]=.2-s*.34;o[J.rHipP]=.16+s*.34;
-   o[J.lHipR]=.44;o[J.rHipR]=-.4;
-   o[J.lKnee]=.9+Math.max(0,s)*.55;o[J.rKnee]=1.0+Math.max(0,-s)*.55;
-   o[J.lAnk]=-.45;o[J.rAnk]=-.4;
+   // legs drag behind and give a small alternating shove
+   o[J.lHipP]=.1-s*.16;o[J.rHipP]=.08+s*.16;
+   o[J.lHipR]=.3+Math.max(0,s)*.12;o[J.rHipR]=.24+Math.max(0,-s)*.12;
+   o[J.lKnee]=.4+Math.max(0,s)*.38;o[J.rKnee]=.45+Math.max(0,-s)*.38;
+   o[J.lAnk]=.35;o[J.rAnk]=.4;
    o[J.side]=-cs*.09;o[J.twist]=cs*.14;
    o[J.bob]=Math.abs(s)*.028;
    o[J.shrug]=1.0;o[J.eye]=1.05;o[J.mouth]=.45;o[J.brow]=-.62;
@@ -4123,9 +4180,9 @@ const CLIP={
    o[J.lean]=1.24+coil*.06;
    o[J.spine]=-.42-coil*.18+snap*.3;
    o[J.headP]=-.78-coil*.2+snap*.55;
-   o[J.lShP]=-1.05-coil*.35+snap*.9;o[J.rShP]=-1.0-coil*.35+snap*.9;
-   o[J.lShR]=.72+snap*.4;o[J.rShR]=.68+snap*.4;
-   o[J.lElb]=1.15-snap*.7;o[J.rElb]=1.2-snap*.7;
+   o[J.lShP]=-1.05-coil*.3+snap*.38;o[J.rShP]=-1.0-coil*.3+snap*.38;
+   o[J.lShR]=.72+snap*.3;o[J.rShR]=.68+snap*.3;
+   o[J.lElb]=1.15-snap*.3;o[J.rElb]=1.2-snap*.3;
    o[J.lHipP]=.18+coil*.5-snap*.3;o[J.rHipP]=.14+coil*.5-snap*.3;
    o[J.lKnee]=.95+coil*.7;o[J.rKnee]=1.05+coil*.7;
    o[J.mouth]=.4+snap*1.0;o[J.eye]=1.25;o[J.brow]=-.75;
@@ -4135,7 +4192,7 @@ const CLIP={
    const a=clamp(c.actT/(ACT_DUR.mount||.95),0,1);
    const k=smooth(a);
    o[J.lean]=lerp(1.26,.62,k);
-   o[J.rootZ]=lerp(-.80,-.68,k);o[J.rootY]=lerp(-.01,-.12,k);
+   o[J.rootZ]=lerp(-.80,-.68,k);o[J.rootY]=lerp(-.06,-.12,k);
    o[J.spine]=lerp(-.4,.1,k);
    o[J.headP]=lerp(-.75,-.1,k);
    o[J.lShP]=lerp(-1.05,-1.5,k);o[J.rShP]=lerp(-1.0,-1.45,k);
@@ -4169,22 +4226,21 @@ const CLIP={
  },
  /* ================= the victim ================= */
  /* legs taken away: pitches backward and lands flat */
+ /* legs taken away: pitches backward and lands flat on the back */
  tripFall(o,t,c){
    const a=clamp(c.actT/(ACT_DUR.tripFall||1.1),0,1);
-   const k=smooth(a);
-   const flail=Math.sin(a*PI*2.4)*(1-k)*.5;
-   o[J.rootY]=.40*k;o[J.rootZ]=.86*k;
-   o[J.lean]=-1.42*k;                       // onto the back
-   o[J.crouch]=.1*k;
-   o[J.spine]=-.2*k;
-   o[J.lHipP]=-.35*k+flail*.5;o[J.rHipP]=-.3*k-flail*.5;
-   o[J.lKnee]=.55*k+Math.abs(flail)*.5;o[J.rKnee]=.5*k;
-   o[J.lShP]=-1.35*k+flail;o[J.rShP]=-1.3*k-flail;
-   o[J.lShR]=1.1*k;o[J.rShR]=1.05*k;
-   o[J.lElb]=.7*k;o[J.rElb]=.75*k;
-   o[J.headP]=-.5*k;o[J.headR]=flail*.4;
+   const k=smooth(a),f=1-k;
+   const flail=Math.sin(a*PI*2.4)*f*.5;
+   supinePose(o,k);
+   o[J.lHipP]+=flail*.5;o[J.rHipP]-=flail*.5;
+   o[J.lKnee]+=Math.abs(flail)*.5;o[J.lHipP]-=Math.abs(flail)*.25;
+   o[J.lShP]=lerp(-.6,-1.35,k)+flail;o[J.rShP]=lerp(-.5,-1.3,k)-flail;
+   o[J.lShR]=lerp(.9,1.1,k);o[J.rShR]=lerp(.8,1.05,k);
+   o[J.lElb]=.7*k+.3;o[J.rElb]=.75*k+.3;
+   o[J.headR]=flail*.4;
    o[J.eye]=1.5;o[J.mouth]=.9;o[J.brow]=.6;
  },
+ /* flat on your back while it works: fighting, then failing, then still */
  /* flat on your back while it works: fighting, then failing, then still */
  pinned(o,t,c){
    const p=clamp((c.downT||0)/DOWN.dur,0,1);
@@ -4192,74 +4248,75 @@ const CLIP={
    const life=1-clamp((p-.25)/.5,0,1);
    const th=Math.sin(t*11)*fight+Math.sin(t*4.2)*life*.5;
    const br=Math.sin(t*2.4)*life;
-   /* Flat on the back. `lean` pivots at the ground and carries the legs with
-      it, so the limbs stay close to neutral and the root only has to sit at
-      about body thickness — the old +0.40 left the victim floating. */
-   o[J.rootY]=.15;o[J.rootZ]=.62;
-   o[J.lean]=-1.50;o[J.crouch]=.1;
-   o[J.spine]=-.16+th*.12+br*.04;
-   o[J.side]=th*.09;
-   o[J.lHipP]=-.22+th*.34;o[J.rHipP]=-.18-th*.3;
-   o[J.lKnee]=.34+Math.abs(th)*.7;o[J.rKnee]=.3+Math.abs(th)*.5;
-   o[J.lAnk]=.16;o[J.rAnk]=.14;
-   o[J.lHipR]=.2;o[J.rHipR]=-.18;
-   o[J.lShP]=-1.35+th*.7;o[J.rShP]=-1.3-th*.6;
-   o[J.lShR]=1.1+th*.3;o[J.rShR]=1.05-th*.25;
+   supinePose(o,1);
+   o[J.spine]+=th*.06+br*.04;
+   o[J.side]=th*.07;
+   // the legs kick up off the floor, never through it: the thigh lifts with the knee
+   const kL=Math.abs(th)*.6,kR=Math.abs(Math.sin(t*9.3+1))*fight*.5;
+   o[J.lKnee]+=kL;o[J.lHipP]-=kL*.55;
+   o[J.rKnee]+=kR;o[J.rHipP]-=kR*.55;
+   // hands up against whatever is on top, sinking as the fight goes out of them
+   const up=.3+.7*Math.max(fight,life*.6);
+   o[J.lShP]=-1.35*up+th*.6;o[J.rShP]=-1.3*up-th*.5;
+   o[J.lShR]=.45+.6*up+th*.12;o[J.rShR]=.42+.58*up-th*.1;
    o[J.lElb]=.7+Math.abs(th)*.6;o[J.rElb]=.75+Math.abs(th)*.5;
-   o[J.headP]=-.5+th*.25;o[J.headR]=th*.5;
+   o[J.headP]+=Math.max(0,th)*.25;o[J.headR]=th*.45;   // lifts, never tips back
    o[J.handGrip]=.4+fight*.6;
    o[J.eye]=Math.max(0,1.5*fight+.5*life);
    o[J.mouth]=.35+Math.abs(th)*.6;o[J.brow]=.55*life;
  },
  /* rolling over and standing up as one of them */
+ /* Rising as one of them: still, a twitch, it sits up, gets its feet under
+    it, stands hunched and roars. Built from key poses so every stage meets
+    the next, and the feet are planted from the squat onwards. */
+ /* Rising as one of them: still, a twitch, it sits up — turning about the
+    hips, not the feet — draws its feet in, stands hunched and roars. */
  turnUp(o,t,c){
    const a=clamp(c.actT/(ACT_DUR.turnUp||1.9),0,1);
-   const still=1-clamp(a/.2,0,1);
-   const roll=clamp((a-.18)/.3,0,1);
-   const rise=clamp((a-.44)/.4,0,1);
-   const roar=clamp((a-.8)/.2,0,1);
-   const lie=1-smooth(clamp((a-.18)/.66,0,1));
-   o[J.rootY]=.40*lie;o[J.rootZ]=.89*lie;
-   o[J.lean]=-1.42*lie+.9*roll*(1-rise)+.34*(1-lie)-.28*roar;
-   o[J.crouch]=.1*lie+1.1*roll*(1-rise);
-   o[J.twist]=roll*.8*(1-rise);
-   o[J.spine]=-.2*lie+.5*roll-.2*roar;
-   o[J.lHipP]=-.35*lie-1.4*roll*(1-rise);
-   o[J.rHipP]=-.3*lie-1.3*roll*(1-rise);
-   o[J.lKnee]=.55*lie+2.1*roll*(1-rise);o[J.rKnee]=.5*lie+2.0*roll*(1-rise);
-   o[J.lShP]=-1.35*lie-1.2*roll*(1-rise)-.75*(1-lie)-.45*roar;
-   o[J.rShP]=-1.3*lie-1.15*roll*(1-rise)-.7*(1-lie)-.45*roar;
-   o[J.lShR]=1.1*lie+.5*roll+.85*roar;o[J.rShR]=1.05*lie+.45*roll+.85*roar;
-   o[J.lElb]=.7*lie+1.4*roll;o[J.rElb]=.75*lie+1.45*roll;
-   o[J.headP]=-.5*lie+.5*roll-.55*roar;
-   o[J.headR]=Math.sin(t*22)*still*.1;
-   o[J.shrug]=.9;o[J.eye]=Math.min(1.1,still*.1+a*1.2);
-   o[J.mouth]=.3+roar*.9;o[J.brow]=-.6*a;
+   if(a<.42){
+     const w=smooth(clamp((a-.16)/.26,0,1));
+     _kA.fill(0);_kB.fill(0);
+     supinePose(_kA,1);
+     _kA[J.lShP]=-.4;_kA[J.rShP]=-.35;_kA[J.lShR]=.6;_kA[J.rShR]=.55;
+     keyPose(_kB,'sitUp');
+     mixPose(o,_kA,_kB,w);
+     // pelvis on the floor the whole way: from lying (lean -1.5) to sat up
+     const sz=SUP.rootZ+BD.hipY*Math.sin(SUP.lean), sy=SUP.rootY+BD.hipY*Math.cos(SUP.lean);
+     const uz=KEYS.sitUp.rootZ, uy=KEYS.sitUp.bob+BD.hipY;
+     pelvisAt(o,lerp(SUP.lean,0,w),lerp(sz,uz,w),lerp(sy,uy,w));
+     o[J.headR]=Math.sin(t*22)*(1-clamp(a/.2,0,1))*.1;
+   }
+   else if(a<.64)keyPose(o,'sitUp','squat',smooth((a-.42)/.22));
+   else if(a<.84)keyPose(o,'squat','zstand',smooth((a-.64)/.2));
+   else keyPose(o,'zstand','zroar',smooth((a-.84)/.16));
+   o[J.eye]=Math.min(1.1,.1+a*1.2);
+   o[J.brow]=-.6*a;
  },
  /* Sprinter mistimes a corner and wears the obstacle */
+ /* Sprinter mistimes a corner and wears the obstacle: the impact snaps it
+    back, it doubles over and staggers two steps, shakes its head, recovers. */
  crash(o,t,c){
    const T=c.actT;
-   const hit=clamp(T/.12,0,1);
-   const fold=clamp((T-.08)/.22,0,1)*(1-clamp((T-.5)/.3,0,1));
-   const step=clamp((T-.38)/.36,0,1)*(1-clamp((T-.8)/.2,0,1));
-   const shake=clamp((T-.66)/.24,0,1);
-   const wob=Math.sin(T*26)*fold*.1;
-   o[J.lean]=.62*hit-.28*fold+.12*step;
-   o[J.spine]=.3+.34*fold;
-   o[J.twist]=-.42*fold+wob;                     // shoulder takes the impact
-   o[J.side]=-.2*fold+wob;
-   o[J.headP]=-.5*hit+.5*fold;
-   o[J.headR]=Math.sin(T*34)*hit*.3+Math.sin(T*17)*shake*.55;
-   o[J.lShP]=-1.35*fold+.4*step;o[J.rShP]=-.5*fold;
-   o[J.lShR]=1.5*fold;o[J.rShR]=1.15*fold;       // arms fly out for balance
-   o[J.lShY]=.6*fold;o[J.rShY]=-.5*fold;
-   o[J.lElb]=.65*fold;o[J.rElb]=.85*fold;
-   const stride=Math.sin(step*PI*2.2);
-   o[J.lHipP]=.5*fold+stride*.6;o[J.rHipP]=.35*fold-stride*.6;
-   o[J.lKnee]=.85*fold+Math.max(0,-stride)*.8;o[J.rKnee]=.7*fold+Math.max(0,stride)*.8;
-   o[J.crouch]=.3*fold;o[J.shrug]=1.2*fold;
+   const hit=clamp(T/.08,0,1)*(1-clamp((T-.22)/.25,0,1));
+   const fold=clamp((T-.1)/.22,0,1)*(1-clamp((T-.62)/.26,0,1));
+   const shake=clamp((T-.58)/.16,0,1)*(1-clamp((T-.84)/.08,0,1));
+   const wob=Math.sin(T*26)*fold*.07;
+   o[J.rootZ]=-.1*hit-.06*fold;
+   o[J.spine]=-.42*hit+.55*fold+wob;
+   o[J.twist]=-.42*hit+.18*fold;o[J.side]=-.1*fold+wob;
+   o[J.headP]=-.6*hit+.35*fold;
+   o[J.headR]=Math.sin(T*34)*hit*.25+Math.sin(T*17)*shake*.5;
+   o[J.lShP]=-1.25*hit-.45*fold;o[J.rShP]=-.45*hit-.6*fold;
+   o[J.lShR]=1.3*hit+.6*fold;o[J.rShR]=1.1*hit+.5*fold;
+   o[J.lElb]=.5*hit+.7*fold;o[J.rElb]=.7*hit+.8*fold;
+   o[J.bob]=-.05*hit-.15*fold;
+   // two staggered steps backwards
+   stepFoot(o,-1,.06,-.22,clamp((T-.12)/.22,0,1),.08);
+   stepFoot(o,1,-.06,-.3,clamp((T-.3)/.22,0,1),.08);
+   o[J.shrug]=1.1*Math.max(hit,fold);
    o[J.mouth]=.55;o[J.eye]=1.2;
  },
+ /* ---- infected survivor, stages one to three ---- */
  /* ---- infected survivor, stages one to three ---- */
  sickIdle(o,t,c){
    const k=clamp((c.infT||0)/INF.dur,0,1);
@@ -4269,79 +4326,53 @@ const CLIP={
    const depth=st===1?.05:(st===2?.045:.018);
    const br=Math.sin(t*rate+(c.seed||0));
    o[J.spine]=.1+k*.34+br*depth;
-   o[J.side]=Math.sin(t*.8)*(.02+k*.08);
-   o[J.bob]=br*(.02-k*.01);
+   o[J.side]=Math.sin(t*.8)*(.02+k*.06);
    o[J.headP]=.08+k*.4+br*.05;
    o[J.headR]=Math.sin(t*.55)*(.05+k*.18);
    o[J.handGrip]=.5+k*.4;
    o[J.rShP]=-.6-k*.8;o[J.rElb]=1.05+k*.95;o[J.rShY]=-.3*k;   // hand on the wound
    o[J.lShP]=.1-k*.15;o[J.lElb]=.3+k*.4;o[J.lShR]=.14;
-   o[J.crouch]=k*.22;o[J.lKnee]=.12+k*.4;o[J.rKnee]=.12+k*.34;
    o[J.shrug]=.3+br*.5+k*.5;
+   o[J.bob]=-.01-k*.09+br*(.008-k*.004);
+   plantFeet(o,.06,-.07,0,.08*k);
    o[J.eye]=1-k*.45;o[J.mouth]=.16+k*.4;o[J.brow]=.2+k*.3;
  },
- sickWalk(o,t,c){
-   const k=clamp((c.infT||0)/INF.dur,0,1);
-   const p=c.phase,s=Math.sin(p),cs=Math.cos(p);
-   o[J.lHipP]=s*(.5-k*.14);o[J.rHipP]=-s*(.5-k*.14);
-   o[J.lKnee]=Math.max(0,-s)*.85+.12+k*.3;o[J.rKnee]=Math.max(0,s)*.85+.12+k*.3;
-   o[J.lAnk]=-s*.18;o[J.rAnk]=s*.18;
-   o[J.lShP]=-s*.34;o[J.rShP]=-.55-k*.75;
-   o[J.rElb]=.95+k*.85;o[J.lElb]=.35;
-   o[J.bob]=Math.abs(Math.sin(p))*.038;
-   o[J.side]=-cs*.05;o[J.spine]=.14+k*.34;
-   o[J.headP]=.1+k*.34;o[J.shrug]=.3+k*.55;
-   o[J.eye]=1-k*.45;o[J.mouth]=.18+k*.35;o[J.brow]=.2+k*.25;
- },
- sickRun(o,t,c){CLIP.sickWalk(o,t,c);o[J.lean]=.16;o[J.bob]*=1.5;},
+ sickWalk(o,t,c){gaitPose(o,t,c,GAIT.sick);},
+ sickRun(o,t,c){gaitPose(o,t,c,GAIT.sickrun);},
  /* the first moment: a jolt, then both hands to the wound */
+ /* the first moment: a jolt, a step back, both hands to the wound */
  react(o,t,c){
    const T=c.actT,k=Math.sin(Math.min(PI,T*3.6));
-   o[J.lean]=-.42*k;o[J.spine]=-.2*k;
+   o[J.spine]=-.3*k;o[J.headP]=-.4*k;o[J.headR]=Math.sin(T*16)*.14*k;
    o[J.rShP]=-1.9*k;o[J.rElb]=2.0*k;o[J.rShY]=-.55*k;
    o[J.lShP]=-1.0*k;o[J.lElb]=1.2*k;o[J.lShR]=.7*k;
-   o[J.headP]=-.45*k;o[J.headR]=Math.sin(T*16)*.16*k;
-   o[J.lHipP]=-.25*k;o[J.rHipP]=.3*k;o[J.lKnee]=.5*k;o[J.rKnee]=.4*k;
-   o[J.crouch]=.18*k;o[J.shrug]=1.1*k;
+   o[J.bob]=-.07*k;o[J.shrug]=1.1*k;
+   plantFeet(o,.06,-.06-.22*k,0,.35*k);
    o[J.eye]=1.5;o[J.mouth]=.75;o[J.brow]=.55;
  },
  /* legs go: they lower themselves down rather than fall */
+ /* legs go: they lower themselves down rather than fall */
  sitDown(o,t,c){
    const a=clamp(c.actT/(ACT_DUR.sitDown||1.7),0,1);
-   const k=smooth(a);
+   if(a<.45)keyPose(o,'stand','buckle',smooth(a/.45));
+   else keyPose(o,'buckle','seated',smooth((a-.45)/.55));
    const wob=Math.sin(c.actT*11)*(1-a)*.07;
-   // knees buckle first, then the hips reach the ground and the legs go out
-   const buckle=Math.sin(Math.min(PI,a*PI*1.5))*(1-k);
-   o[J.crouch]=1.45*k+.35*buckle;o[J.rootY]=-.06*k;
-   o[J.lHipP]=-1.54*k-.5*buckle;o[J.rHipP]=-1.50*k-.45*buckle;
-   o[J.lKnee]=.12*k+1.5*buckle;o[J.rKnee]=.15*k+1.45*buckle;
-   o[J.lHipR]=.16*k;o[J.rHipR]=-.14*k;
-   o[J.lAnk]=-.16*k;o[J.rAnk]=-.14*k;
-   o[J.spine]=.18+.16*k+.2*buckle;o[J.lean]=.05*k;
-   o[J.lShP]=.5*k+ -.6*buckle;o[J.rShP]=.46*k+ -.8*buckle;   // hands reach back
-   o[J.lShR]=.46*k+.5*buckle;o[J.rShR]=.42*k+.4*buckle;
-   o[J.lElb]=.28*k+.9*buckle;o[J.rElb]=.32*k+1.1*buckle;
-   o[J.headP]=.2*k+.25*buckle;o[J.side]=wob;o[J.headR]=wob*2;
-   o[J.shrug]=.45;o[J.eye]=.9-a*.28;o[J.mouth]=.4;o[J.handGrip]=.3;
+   o[J.side]=wob;o[J.headR]=wob*2;
+   o[J.eye]=.9-a*.28;o[J.mouth]=.4;
  },
+ /* sat on the ground, breathing shallow, eyes closing */
  /* sat on the ground, breathing shallow, eyes closing */
  seated(o,t,c){
    const k=clamp(((c.infT||0)-INF.sit)/Math.max(1,INF.dur-INF.sit),0,1);
    const br=Math.sin(t*4.6+(c.seed||0));     // shallow, quick breathing
-   o[J.crouch]=1.45;o[J.rootY]=-.06;   // buttocks on the floor
-   o[J.lHipP]=-1.54;o[J.rHipP]=-1.50;
-   o[J.lKnee]=.12+k*.22;o[J.rKnee]=.15+k*.2;
-   o[J.lHipR]=.16;o[J.rHipR]=-.14;
-   o[J.lAnk]=-.16;o[J.rAnk]=-.14;      // heels down, toes relaxed outward
-   o[J.spine]=.18+k*.34+br*.03;              // torso sags forward as it goes
-   o[J.lean]=.05+k*.12;
-   o[J.lShP]=.5-k*.1;o[J.rShP]=.46-k*.08;    // arms braced behind, slowly giving
-   o[J.lShR]=.46-k*.1;o[J.rShR]=.42-k*.08;
-   o[J.lElb]=.28+k*.3;o[J.rElb]=.32+k*.34;
+   keyPose(o,'seated');
+   o[J.spine]+=k*.34+br*.03;                 // the torso sags forward as it goes
+   o[J.lShP]-=k*.1;o[J.rShP]-=k*.08;         // arms braced behind, slowly giving
+   o[J.lElb]+=k*.3;o[J.rElb]+=k*.34;
    o[J.headP]=.2+k*.45+br*.04;
    o[J.headR]=Math.sin(t*.7)*.1+k*.18;
    o[J.side]=Math.sin(t*.5)*.035;
-   o[J.shrug]=.35+br*.3;o[J.handGrip]=.3;
+   o[J.shrug]=.35+br*.3;
    o[J.eye]=Math.max(0,.72-k*.74);           // eyes slowly close
    o[J.mouth]=.28+Math.abs(br)*.2;o[J.brow]=.15;
  },
@@ -4361,41 +4392,36 @@ const CLIP={
    o[J.mouth]=.25+wake*.4;o[J.brow]=-.5*wake;
  },
  /* pushing up off the ground into a zombie stance */
+ /* pushing up off the ground into a zombie stance */
  pushUp(o,t,c){
    const a=clamp(c.actT/(ACT_DUR.pushUp||1.5),0,1);
-   const k=1-smooth(a);
-   const roar=clamp((a-.75)/.25,0,1);
-   const tuck=Math.sin(Math.min(PI,a*PI))*.7;   // knees come under the body first
-   o[J.crouch]=1.45*k;
-   o[J.lHipP]=-1.5*k;o[J.rHipP]=-1.46*k;
-   o[J.lKnee]=.3*k+2.0*tuck;o[J.rKnee]=.34*k+1.9*tuck;
-   o[J.lHipR]=.16*k;o[J.rHipR]=-.14*k;
-   o[J.spine]=.5*k+.34*(1-k)-.3*roar;
-   o[J.lean]=.14*k-.2*roar;
-   o[J.lShP]=-.5*k-.75*(1-k)-.4*roar;o[J.rShP]=-.85*k-.6*(1-k)-.4*roar;
-   o[J.lShR]=.6*k+.28*(1-k)+.8*roar;o[J.rShR]=.3*k+.24*(1-k)+.8*roar;
-   o[J.lElb]=.6*k+1.05*(1-k);o[J.rElb]=1.35*k+1.2*(1-k);
-   o[J.headP]=.3*k-.45*roar;o[J.shrug]=.9;
-   o[J.eye]=1.05;o[J.mouth]=.3+roar*.85;o[J.brow]=-.55;
+   if(a<.4)keyPose(o,'seated','squat',smooth(a/.4));
+   else if(a<.78)keyPose(o,'squat','zstand',smooth((a-.4)/.38));
+   else keyPose(o,'zstand','zroar',smooth((a-.78)/.22));
+   o[J.eye]=1.05;o[J.brow]=-.55;
  },
  stumble(o,t,c){
    const T=c.actT,k=Math.sin(Math.min(PI,T*3.4));
-   o[J.lean]=.5*k;o[J.side]=Math.sin(T*7)*.22*k;
-   o[J.lShR]=1.1*k;o[J.rShR]=.9*k;o[J.lShP]=-.9*k;o[J.rShP]=-.7*k;
+   o[J.spine]=.45*k;o[J.side]=Math.sin(T*7)*.12*k;
+   o[J.lShR]=1.0*k;o[J.rShR]=.85*k;o[J.lShP]=-.9*k;o[J.rShP]=-.7*k;
    o[J.lElb]=.5*k;o[J.rElb]=.6*k;
-   o[J.lHipP]=.7*k;o[J.rHipP]=-.4*k;o[J.lKnee]=.9*k;o[J.rKnee]=.5*k;
-   o[J.crouch]=.24*k;o[J.headP]=.3*k;o[J.headR]=Math.sin(T*9)*.2*k;
+   o[J.bob]=-.12*k;o[J.headP]=.3*k;o[J.headR]=Math.sin(T*9)*.2*k;
+   stepFoot(o,-1,.04,.4,clamp(T*3.2,0,1),.09*k);
+   plantFoot(o,1,-.06-.06*k,.45*k);
    o[J.eye]=1.1;o[J.mouth]=.4;
  },
  /* bitten but not taken: knocked back, hand to the shoulder */
+ /* bitten but not taken: knocked back a step, hand to the shoulder */
  recoil(o,t,c){
    const T=c.actT,k=Math.sin(Math.min(PI,T*4.2));
-   o[J.lean]=-.5*k;o[J.spine]=-.24*k;
+   o[J.spine]=-.32*k;o[J.rootZ]=-.06*k;
    o[J.lShP]=-1.5*k;o[J.rShP]=-1.9*k;o[J.rElb]=1.9*k;o[J.rShY]=-.5*k;
    o[J.lShR]=.9*k;o[J.rShR]=.5*k;o[J.lElb]=.9*k;
    o[J.headP]=-.4*k;o[J.headR]=Math.sin(T*15)*.18*k;
-   o[J.lHipP]=-.3*k;o[J.rHipP]=.35*k;o[J.lKnee]=.5*k;o[J.rKnee]=.35*k;
-   o[J.crouch]=.16*k;o[J.eye]=1.45;o[J.mouth]=.7;o[J.brow]=.45;
+   o[J.bob]=-.08*k;
+   plantFoot(o,-1,.05,0);
+   stepFoot(o,1,-.05,-.34,clamp(T*4,0,1),.08);
+   o[J.eye]=1.45;o[J.mouth]=.7;o[J.brow]=.45;
  },
  /* the final turn: knees give out, body drops, then pushes back up */
  collapse(o,t,c){
@@ -4446,20 +4472,22 @@ const CLIP={
    o[J.lHipP]=.16;o[J.rHipP]=-.16;o[J.shrug]=1.1*raise;
    o[J.headP]=.1+thrust*.16;o[J.mouth]=.34+thrust*.45;o[J.eye]=1.1;
  },
+ /* Lunge and bite: the hips drive forward over a stepping foot, both hands
+    reach out to grab, the head drops in. */
  bite(o,t,c){
    const a=clamp(c.actT/.62,0,1);
    const lunge=Math.sin(Math.min(PI,a*PI*1.15));
-   o[J.lean]=.26+lunge*.52;
-   o[J.headP]=-.16-lunge*.36;
-   o[J.lShP]=.78+lunge*.72;o[J.rShP]=.78+lunge*.72;
-   o[J.lShR]=.78+lunge*.52;o[J.rShR]=.78+lunge*.52;
-   o[J.lShY]=-.3*lunge;o[J.rShY]=.3*lunge;
-   o[J.lElb]=.55-lunge*.32;o[J.rElb]=.55-lunge*.32;
-   o[J.handGrip]=clamp(lunge*1.6-.25,0,1);
-   o[J.lHipP]=.36*lunge;o[J.rHipP]=-.36*lunge;
-   o[J.lKnee]=.4+lunge*.22;o[J.rKnee]=.4+lunge*.22;
-   o[J.lAnk]=-.12*lunge;o[J.rAnk]=-.12*lunge;
-   o[J.shrug]=1.2*lunge;o[J.handGrip]=.8*lunge;
+   o[J.rootZ]=.26*lunge;o[J.bob]=-.03-.12*lunge;
+   o[J.spine]=.42+.3*lunge;
+   o[J.headP]=-.2-.22*lunge;
+   o[J.lShP]=-1.3-.3*lunge;o[J.rShP]=-1.25-.35*lunge;
+   o[J.lShR]=.3;o[J.rShR]=.3;
+   o[J.lShY]=.22*lunge;o[J.rShY]=-.22*lunge;
+   o[J.lElb]=.65-.4*lunge;o[J.rElb]=.6-.38*lunge;
+   o[J.handGrip]=clamp(lunge*1.4-.2,0,1);
+   plantFoot(o,-1,lerp(.08,.62,smooth(clamp(a*2,0,1))),0);
+   plantFoot(o,1,-.08-.08*lunge,.42*lunge);
+   o[J.shrug]=1.2*lunge;
    o[J.mouth]=.35+lunge*.9;o[J.eye]=1.2;
  },
  eat(o,t,c){
@@ -4474,49 +4502,54 @@ const CLIP={
  /* ---- V1.01 infection sequence ----------------------------------------
     stab lands → 1s freeze → clutch the wound → the change spreads while the
     body shakes → bend forward → rise as a zombie.                        */
+ /* ---- V1.01 infection sequence ----------------------------------------
+    stab lands → 1s freeze → clutch the wound → the change spreads while the
+    body shakes → bend forward over planted feet → rise as a zombie.      */
  infecting(o,t,c){
    const T=c.actT;
    const hit=clamp(T/.18,0,1);
    const freeze=clamp((T-.15)/.85,0,1);        // ~1s of rigid shock
    const grab=clamp((T-.55)/.45,0,1);
    const shake=clamp((T-1.0)/.4,0,1)*(1-clamp((T-2.15)/.35,0,1));
-   const bend=clamp((T-1.95)/.6,0,1);
+   const bend=smooth(clamp((T-1.95)/.6,0,1));
    const jitter=Math.sin(T*34)*shake*.075+Math.sin(T*57)*shake*.035;
-   // impact: back arches, head snaps up
-   o[J.lean]=-.42*hit*(1-freeze*.45)+bend*.55;
-   o[J.spine]=-.3*hit*(1-freeze*.5)+bend*.85;
+   // impact: back arches, head snaps up; then the whole body folds forward
+   o[J.spine]=-.38*hit*(1-freeze*.45)+bend*.95;
    o[J.headP]=-.6*hit*(1-freeze*.4)+bend*.42;
-   o[J.crouch]=.1*hit+bend*.28;
+   o[J.rootZ]=-.04*bend;o[J.bob]=-.04*hit-.18*bend;
    // arms: fling out on the hit, then the right hand reaches the wound
-   o[J.lShP]=-1.6*hit*(1-grab*.55)-grab*.5;
-   o[J.rShP]=-1.5*hit*(1-grab)+grab*-2.5;
-   o[J.rElb]=1.3*hit+grab*1.35;
-   o[J.rShY]=-grab*.75;
-   o[J.rShR]=1.0*hit*(1-grab)+grab*.55;
+   o[J.lShP]=-1.6*hit*(1-grab*.55)-grab*.5+bend*.5;
+   o[J.rShP]=-1.5*hit*(1-grab)-2.5*grab*(1-bend)-.4*bend;
+   o[J.rElb]=1.3*hit+grab*1.35*(1-bend)+.4*bend;
+   o[J.rShY]=-grab*.75*(1-bend);
+   o[J.rShR]=1.0*hit*(1-grab)+grab*.55*(1-bend)+.2*bend;
    o[J.lShR]=1.05*hit*(1-grab*.6)+grab*.35;
-   o[J.lElb]=1.2*hit+grab*.9;
-   o[J.lKnee]=.5*hit+bend*.65;o[J.rKnee]=.42*hit+bend*.55;
-   o[J.lHipP]=.2*hit+bend*.2;o[J.rHipP]=.16*hit+bend*.2;
+   o[J.lElb]=1.2*hit+grab*.9-bend*.7;
    o[J.shrug]=1.3*hit+shake*.6;
-   o[J.side]=jitter;o[J.headR]=jitter*2.6;o[J.twist]=jitter*1.4-grab*.28;
+   o[J.side]=jitter;o[J.headR]=jitter*2.6;o[J.twist]=jitter*1.4-grab*.28*(1-bend);
+   plantFeet(o,.06,-.08-.06*hit,0,.2*hit*(1-bend));
    o[J.mouth]=.35+hit*.55-bend*.2;o[J.eye]=1.3-bend*.5;
  },
  rise(o,t,c){
-   const a=clamp(c.actT/.85,0,1);
-   const k=1-smooth(a);
-   o[J.crouch]=.62*k;o[J.lHipP]=-.9*k;o[J.rHipP]=-.75*k;
-   o[J.lKnee]=1.5*k;o[J.rKnee]=1.3*k;o[J.spine]=.85*k+.3*(1-k);
-   o[J.headP]=.45*k-.3*(1-k);
-   o[J.lShP]=-.5*k-.6*(1-k);o[J.rShP]=-.42*k-.5*(1-k);
-   o[J.lShR]=.45*k+.26*(1-k);o[J.rShR]=.4*k+.22*(1-k);
-   o[J.lElb]=.9*k+1.0*(1-k);o[J.rElb]=.85*k+1.15*(1-k);
-   o[J.shrug]=.8;o[J.mouth]=.3+(1-k)*.45;o[J.eye]=.95;
+   const a=clamp(c.actT/.85,0,1),k=1-smooth(a);
+   o[J.bob]=-.22*k-.05*(1-k);o[J.rootZ]=-.04*k;
+   o[J.spine]=.95*k+.32*(1-k);
+   o[J.headP]=.42*k-.28*(1-k);
+   o[J.lShP]=-.1*k-.62*(1-k);o[J.rShP]=-.4*k-.52*(1-k);
+   o[J.lShR]=.35*k+.26*(1-k);o[J.rShR]=.2*k+.22*(1-k);
+   o[J.lElb]=.5*k+1.0*(1-k);o[J.rElb]=.8*k+1.15*(1-k);
+   o[J.shrug]=.8;
+   plantFeet(o,.06,-.14,0,0);
+   o[J.mouth]=.3+(1-k)*.45;o[J.eye]=.95;
  },
  /* ---- emotes ---- */
  emote_wave(o,t,c){
    CLIP.idle(o,t,c);
-   o[J.rShP]=-2.35;o[J.rShR]=.75;o[J.rElb]=.55+Math.sin(c.actT*11)*.65;
-   o[J.headR]=Math.sin(c.actT*11)*.07;o[J.shrug]=.8;o[J.mouth]=.1;
+   const w=Math.sin(c.actT*9),k=smooth(clamp(c.actT/.3,0,1));
+   o[J.rShR]=lerp(o[J.rShR],2.2+w*.1,k);o[J.rShP]=lerp(o[J.rShP],-.3,k);
+   o[J.rShT]=1.4*k;o[J.rShY]=.15*k;
+   o[J.rElb]=lerp(o[J.rElb],.8+w*.4,k);o[J.rWri]=w*.25*k;o[J.handGrip]=.05;
+   o[J.headR]=w*.05;o[J.headY]=.12;o[J.shrug]=.6;o[J.mouth]=.1;
  },
  emote_dance(o,t,c){
    const p=c.actT*8,s=Math.sin(p),cs=Math.cos(p*.5);
@@ -4537,11 +4570,16 @@ const CLIP={
    o[J.rShP]=-1.55;o[J.rElb]=.06;o[J.rShY]=-.2;o[J.rShR]=.12;
    o[J.headY]=-.25;o[J.shrug]=.4;
  },
+ /* sit down on the ground, knees up, forearms resting on them */
  emote_sit(o,t,c){
-   o[J.crouch]=.72;o[J.lHipP]=-1.55;o[J.rHipP]=-1.55;o[J.lKnee]=1.6;o[J.rKnee]=1.6;
-   o[J.lHipR]=.22;o[J.rHipR]=-.22;o[J.spine]=.12;
-   o[J.lShP]=-.35;o[J.rShP]=-.35;o[J.lElb]=.5;o[J.rElb]=.5;o[J.lShR]=.3;o[J.rShR]=.3;
-   o[J.headP]=Math.sin(t*1.5)*.05;o[J.eye]=1;
+   const k=smooth(clamp((c.actT||0)/.7,0,1));
+   o[J.bob]=-(hipH()-.13)*k;o[J.rootZ]=-.04*k;
+   o[J.spine]=.24*k;o[J.headP]=Math.sin(t*1.5)*.05-.06*k;
+   o[J.lShP]=-.55*k;o[J.rShP]=-.55*k;o[J.lShR]=.14;o[J.rShR]=.14;
+   o[J.lElb]=.9*k;o[J.rElb]=.9*k;o[J.lShY]=.2*k;o[J.rShY]=-.2*k;
+   o[J.lHipR]=.16*k;o[J.rHipR]=.16*k;o[J.handGrip]=.3;
+   plantFeet(o,.05+.38*k,-.05+.42*k,0,0);
+   o[J.eye]=1;
  },
  emote_facepalm(o,t,c){
    o[J.rShP]=-2.05;o[J.rElb]=2.3;o[J.rShY]=-.35;
@@ -4549,11 +4587,13 @@ const CLIP={
    o[J.headP]=.3;o[J.spine]=.2;o[J.shrug]=-.3;o[J.eye]=.3;
  },
  emote_flex(o,t,c){
-   const s=Math.sin(c.actT*6)*.1;
-   o[J.lShP]=-.35;o[J.rShP]=-.35;o[J.lShR]=1.45+s;o[J.rShR]=1.45+s;
-   o[J.lElb]=2.3;o[J.rElb]=2.3;o[J.lShY]=.3;o[J.rShY]=-.3;
-   o[J.spine]=-.06;o[J.headP]=-.12;o[J.shrug]=1.2;o[J.eye]=1;
-   o[J.lKnee]=.2;o[J.rKnee]=.2;
+   const s=Math.sin(c.actT*6)*.07,k=smooth(clamp((c.actT||0)/.25,0,1));
+   o[J.lShR]=1.45*k+s;o[J.rShR]=1.45*k+s;o[J.lShP]=-.08*k;o[J.rShP]=-.08*k;
+   o[J.lShT]=1.45*k;o[J.rShT]=1.45*k;
+   o[J.lElb]=(1.95+s)*k;o[J.rElb]=(1.95+s)*k;
+   o[J.handGrip]=1;o[J.spine]=-.08;o[J.headP]=-.1;o[J.shrug]=1.0;
+   o[J.bob]=-.02;plantFeet(o,.08,-.08,0,0);
+   o[J.eye]=1;o[J.mouth]=.3;
  },
  emote_taunt(o,t,c){
    const s=Math.sin(c.actT*7);
@@ -4563,7 +4603,7 @@ const CLIP={
    o[J.headY]=s*.25;o[J.shrug]=1;o[J.eye]=1;
  },
  /* ---- victory poses ---- */
- vic_flex(o,t,c){CLIP.emote_flex(o,t,c);o[J.bob]=Math.sin(t*3)*.02;},
+ vic_flex(o,t,c){CLIP.emote_flex(o,t,c);o[J.bob]+=Math.sin(t*3)*.015;plantFeet(o,.08,-.08,0,0);},
  vic_jump(o,t,c){CLIP.celebrate(o,t,c);},
  vic_spin(o,t,c){
    o[J.yawOff]=c.actT*6.5;
@@ -4578,15 +4618,68 @@ const CLIP={
    o[J.headR]=s*.14;o[J.shrug]=.5;o[J.eye]=1;
  },
  vic_bow(o,t,c){
-   const k=Math.min(1,c.actT*1.4);
-   o[J.spine]=.95*k;o[J.headP]=.35*k;
-   o[J.lShP]=.9*k;o[J.rShP]=.9*k;o[J.lShR]=.55*k;o[J.rShR]=.15;
-   o[J.lElb]=.3;o[J.rElb]=1.1*k;o[J.rShY]=-.5*k;
-   o[J.lKnee]=.15;o[J.rKnee]=.15;o[J.eye]=1;
+   const k=smooth(Math.min(1,c.actT*1.4));
+   o[J.spine]=1.0*k;o[J.headP]=.3*k;o[J.rootZ]=-.08*k;
+   o[J.rShP]=-.75*k;o[J.rElb]=1.6*k;o[J.rShY]=-.6*k;o[J.rShR]=.1;  // hand across the waist
+   o[J.lShP]=.55*k;o[J.lShR]=.65*k;o[J.lElb]=.2;                  // the other arm sweeps out
+   o[J.bob]=-.02*k;plantFeet(o,.06,-.1,0,0);
+   o[J.eye]=1;
  },
  vic_roar(o,t,c){CLIP.zroar(o,t,c);}
 };
 
+/* Flat on the back. `lean` pivots the whole body about the soles, so rootZ
+   carries it forward over its own collider and rootY lifts the back clear of
+   the floor. Shared by the trip, the struggle and the rise so none of them
+   pops when it hands over to the next. Blends in from standing with k. */
+const SUP={rootY:.098,rootZ:.62,lean:-1.5,spine:-.08,headP:.2,
+  lHipP:-.3,rHipP:-.22,lKnee:.44,rKnee:.34,lAnk:.22,rAnk:.18,lHipR:.16,rHipR:.13};
+function supinePose(o,k){for(const n in SUP)o[J[n]]=SUP[n]*k;}
+const _kA=new Float32Array(NJ),_kB=new Float32Array(NJ);
+/* Key poses for getting down onto the floor and back up again. Each is a set
+   of targets — pelvis drop, foot positions, torso and arm angles — and an
+   in-between is made by blending the targets and solving the legs again, so
+   the feet slide along the floor instead of swinging through it. */
+const KEY_CH=['bob','rootZ','spine','headP','lShP','rShP','lShR','rShR','lElb','rElb',
+  'lShY','rShY','lHipR','rHipR','handGrip','shrug','mouth','side'];
+const KEYS={
+  stand:{bob:-.01,spine:.06,lShP:.04,rShP:.04,lShR:.12,rShR:.12,lElb:.2,rElb:.2,
+    handGrip:.25,zL:.04,zR:-.04},
+  // knees go, hands reach back for the floor
+  buckle:{bob:-.44,rootZ:-.06,spine:.42,headP:.2,lShP:.55,rShP:.6,lShR:.45,rShR:.4,
+    lElb:.25,rElb:.3,handGrip:.3,shrug:.45,zL:.1,zR:.02},
+  // sat on the floor, legs out, resting on the heels, arms braced behind
+  seated:{bob:-(.8245-.105),rootZ:-.02,spine:.2,headP:.2,lShP:.42,rShP:.4,lShR:.4,rShR:.37,
+    lElb:.62,rElb:.66,lHipR:.12,rHipR:.1,handGrip:.3,shrug:.35,zL:.66,zR:.68,pL:-1.3,pR:-1.3},
+  // sat on the floor, knees drawn up, leaning over them
+  sitUp:{bob:-(.8245-.13),rootZ:-.05,spine:.5,headP:.2,lShP:-.9,rShP:-.8,lShR:.3,rShR:.28,
+    lElb:.6,rElb:.7,lHipR:.12,rHipR:.1,handGrip:.6,shrug:.8,mouth:.3,zL:.36,zR:.4},
+  // feet under it, hands near the floor
+  squat:{bob:-.42,rootZ:-.06,spine:.75,headP:-.1,lShP:-.5,rShP:-.4,lShR:.35,rShR:.32,
+    lElb:.5,rElb:.6,handGrip:.7,shrug:.9,mouth:.35,zL:.12,zR:-.08},
+  // hunched upright as one of them
+  zstand:{bob:-.06,spine:.34,headP:.1,lShP:-.75,rShP:-.65,lShR:.3,rShR:.26,lElb:1.0,rElb:1.15,
+    handGrip:.9,shrug:.9,mouth:.3,zL:.1,zR:-.1},
+  // and the roar that announces it
+  zroar:{bob:-.1,spine:-.26,headP:-.65,lShP:-1.05,rShP:-1.0,lShR:1.35,rShR:1.31,lElb:1.1,
+    rElb:1.15,lShY:.5,rShY:-.5,handGrip:.95,shrug:1.3,mouth:1.2,zL:.12,zR:-.1}
+};
+for(const k in KEYS){const K=KEYS[k];for(const c of KEY_CH)if(K[c]===undefined)K[c]=0;
+  K.zL=K.zL||0;K.zR=K.zR||0;K.pL=K.pL||0;K.pR=K.pR||0;}
+/* write the blend of key poses a→b at w, legs solved onto the floor */
+function keyPose(o,a,b,w){
+  const A=KEYS[a],B=KEYS[b||a];w=w||0;
+  for(let i=0;i<KEY_CH.length;i++){const c=KEY_CH[i];o[J[c]]=A[c]+(B[c]-A[c])*w;}
+  plantFeet(o,lerp(A.zL,B.zL,w),lerp(A.zR,B.zR,w),lerp(A.pL,B.pL,w),lerp(A.pR,B.pR,w));
+}
+/* write a straight blend of two whole poses into o */
+function mixPose(o,a,b,w){for(let i=0;i<a.length;i++)o[i]=a[i]+(b[i]-a[i])*w;}
+/* Put the pelvis at (pz, py) with the body pitched by `lean` — the body turns
+   about the hips, the way you sit up, instead of about the feet. */
+function pelvisAt(o,lean,pz,py){
+  o[J.lean]=lean;o[J.bob]=0;o[J.crouch]=0;
+  o[J.rootZ]=pz-BD.hipY*Math.sin(lean);o[J.rootY]=py-BD.hipY*Math.cos(lean);
+}
 /* Weighted blend of the active clips. Weights live in a small fixed array so the
    hot path never allocates or iterates object keys. */
 function updatePose(ch,t,dt){
@@ -4634,10 +4727,11 @@ function updatePose(ch,t,dt){
    8. CHARACTER RENDERING
    ========================================================================== */
 /* Leg lengths are chosen so the soles rest exactly on y = 0 while standing:
-   legRoot (hipY - legDrop) - (uLeg + lLeg) - soleDrop == 0.                */
-const BD={hipY:.90,spineL:.42,neckL:.105,headR:.146,shX:.19,hipX:.10,
+   legRoot (hipY - legDrop) - (uLeg + lLeg) - soleDrop == 0, where soleDrop is
+   the measured depth of the shoe's sole below the ankle.                   */
+const BD={hipY:.8845,spineL:.42,neckL:.105,headR:.146,shX:.19,hipX:.10,
   uArm:.305,lArm:.275,uLeg:.36,lLeg:.332,armR:.057,legR:.069,
-  legDrop:.06,soleDrop:.148};
+  legDrop:.06,soleDrop:.1325};
 
 function _seg(d,st,prim,len,r,col,em){
   st.push();st.translate(0,-len*.5,0);st.scale(r*2,len,r*2);d.push(prim,st.top,col,em);st.pop();
@@ -5186,6 +5280,8 @@ function drawChar(d,ch,camDist){
     // deltoid cap rather than a bare ball joint
     _pr(d,st,SPH,0,.008,0,0,0,-s*.2,armR*2.5,armR*2.9,armR*2.35,sleeve>0?top:skinArm,0);
     st.rotY(sy).rotZ(s*(sr+p[J.shrug]*.09)).rotX(sp);
+    const tw=i?p[J.rShT]:p[J.lShT];
+    if(tw)st.rotY(s*tw);                      // twist about the upper arm's own axis
     _seg(d,st,CYL,BD.uArm,armR,sleeve>=1?top:skinArm,0);
     if(sleeve>0&&sleeve<1)_pr(d,st,CYL,0,-BD.uArm*.24,0,0,0,0,armR*2.16,BD.uArm*.52,armR*2.16,top,0);
     else if(sleeve>=1)_pr(d,st,CYL,0,-BD.uArm*.5,0,0,0,0,armR*2.12,BD.uArm,armR*2.12,top,0);
@@ -5385,7 +5481,7 @@ const GORE={
    10. SIMULATION — authoritative round logic shared by host & bots
    ========================================================================== */
 const TEAM={HUMAN:0,ZOMBIE:1};
-const SPD={walk:3.5,run:5.7,sprint:7.1,zwalk:3.2,zrun:5.9,zsprint:6.9};
+const SPD={walk:2.6,run:5.7,sprint:7.1,zwalk:2.4,zrun:5.9,zsprint:6.9};
 /* V1.10: every zombie is one of two classes.
    Walkers never stop coming; Sprinters are faster in bursts but throw themselves
    into scenery when they misjudge a corner. */
@@ -5815,8 +5911,10 @@ class Simulation{
                           :lerp(.55,.22,clamp((e.infT-INF.s3)/(INF.sit-INF.s3),0,1)));
       }
       const base=(zombie?(sprint?SPD.zsprint:SPD.zrun):(sprint?SPD.sprint:SPD.run))*mul;
-      want=base*Math.min(1,mag);
-      if(mag<.55)want=(zombie?SPD.zwalk*mul:SPD.walk*mul)*Math.min(1,mag/.55);
+      // a light push walks, a full push runs, and nothing in between ever
+      // gets slower as you push harder
+      const walkV=(zombie?SPD.zwalk:SPD.walk)*mul;
+      want=mag<.55?walkV*mag/.55:lerp(walkV,base,clamp((mag-.55)/.4,0,1));
       if(sprint)e.stamina=Math.max(0,e.stamina-dt*(zombie?.34/Math.max(.2,V.sta):.28));
       else e.stamina=Math.min(1,e.stamina+dt*.16);
     }else{
@@ -5925,14 +6023,6 @@ class Simulation{
     }else{e.grounded=false;e.airT+=dt;}
     e.ground=gy;
     if(e.landT>0)e.landT=Math.max(0,e.landT-dt);
-    // footstep events
-    if(e.grounded&&e.speed>1.2){
-      e.stepPhase+=e.speed*dt*(zombie?1.5:1.9);
-      if(e.stepPhase>PI){
-        e.stepPhase-=PI;
-        this.emit('step',{id:e.id,x:e.x,y:e.y,z:e.z,run:e.speed>4.6,zombie,heavy:e.variant==='brute'});
-      }
-    }else e.stepPhase=PI*.5;
   }
   /* choose the animation state for an entity */
   chooseAnim(e){
@@ -5956,16 +6046,8 @@ class Simulation{
     const cw=z&&variantOf(e).crawl;
     if(e.downed)return 'pinned';
     const sp=z&&variantOf(e).burst;
-    if(cw){
-      if(e.speed>4.2)return 'cChase';
-      if(e.speed>0.35)return 'cMove';
-      return e.searching>0?'cSearch':'cIdle';
-    }
-    if(e.speed>0.35){
-      if(z)return e.speed>4.5?(sp?'sRun':'zrun'):(sp?'sWalk':'wWalk');
-      if(e.infected)return e.speed>4.2?'sickRun':'sickWalk';
-      return e.speed>6.1?'sprint':(e.speed>4.2?'run':'walk');
-    }
+    if(e.speed>0.35)return locoClip(e);
+    if(cw)return e.searching>0?'cSearch':'cIdle';
     if(z){
       if(e.zStumble>0)return 'zstumble';
       if(Math.abs(e.turnRate)>1.1)return 'zturn';
@@ -5981,16 +6063,12 @@ class Simulation{
     // Stride comes straight from the swing amplitude the clip actually uses,
     // so one half-cycle covers exactly the ground the feet cover. Running adds
     // a flight allowance because the body keeps travelling with both feet off.
-    let stride;
-    if(z){
-      const V=variantOf(e);
-      // each class swings a different amount, so each needs its own stride
-      if(e.speed>4.7)stride=stepLen(V.burst?1.16:SW.zRun)*1.3;
-      else stride=stepLen(V.burst?SW.zWalk:.44);
-    }
-    else stride=e.speed>6.1?stepLen(SW.sprint)*1.42
-              :(e.speed>4.2?stepLen(SW.run)*1.3:stepLen(SW.walk));
+    const stride=locoStep(e);
+    const prevStep=Math.floor(e.phase/PI);
     e.phase+=(e.speed*dt)*(PI/stride);
+    // a footfall is a foot reaching touchdown, so sounds and dust land with it
+    if(Math.floor(e.phase/PI)!==prevStep&&e.grounded&&e.speed>1.0&&!e.hiding)
+      this.emit('step',{id:e.id,x:e.x,y:e.y,z:e.z,run:e.speed>4.6,zombie:z,heavy:false});
     if(e.scaredT>0)e.scaredT-=dt;
     if(e.zStumble>0)e.zStumble-=dt;
     // ---- pinned on the ground by a crawler: thirty seconds, then you rise
@@ -6115,7 +6193,8 @@ class Simulation{
     if(target!==e.anim){
       e.anim=target;
       e.blendRate=(target==='stab'||target==='bite'||target==='infecting')?20:
-                  (target==='land'?16:11);
+                  target==='jumpPrep'?30:(target==='jump'||target==='zjump')?17:
+                  (target==='land'||target==='zland')?16:11;
     }
     // ---- facial expression
     let ex;
@@ -6152,7 +6231,7 @@ class Simulation{
   footIK(e,dt){
     const w=(e.grounded&&!e.act&&!e.climb&&!e.transforming)?clamp((1.3-e.speed)/.7,0,1):0;
     const L1=BD.uLeg,L2=BD.lLeg,Lmax=L1+L2;
-    const rootY=BD.hipY-BD.legDrop;
+    const rootY=hipH();
     const c=Math.cos(e.yaw),s=Math.sin(e.yaw);
     for(let i=0;i<2;i++){
       const side=i?1:-1;
@@ -6256,7 +6335,7 @@ class Simulation{
       }else{
         if((ai.think<=0&&!this.midTrip(e,ai))||!ai.wander){
           ai.think=rnd(1.5,3.5);ai.wander=this.pickNav(e);ai.trip=14;}
-        {const w=this.navStep(e,ai.wander);this.seek(e,ctrl,w.x,w.z,.7);}
+        {const w=this.navStep(e,ai.wander);this.seek(e,ctrl,w.x,w.z,.5);}
         if(V.crawl){                       // pause to sniff around low spaces
           e.searching-=dt;
           if(e.searching<-2.5){e.searching=rnd(1.4,3);ctrl.mx=ctrl.mz=0;}
@@ -6291,7 +6370,7 @@ class Simulation{
         ai.panic=Math.max(0,ai.panic-dt*.5);
         if((ai.think<=0&&!this.midTrip(e,ai))||!ai.wander){
           ai.think=rnd(2,4.5);ai.wander=this.pickNav(e);ai.trip=14;}
-        {const w=this.navStep(e,ai.wander);this.seek(e,ctrl,w.x,w.z,.62);}
+        {const w=this.navStep(e,ai.wander);this.seek(e,ctrl,w.x,w.z,.5);}
         if(Math.random()<dt*.05&&e.grounded)ctrl.jump=true;
       }
     }
