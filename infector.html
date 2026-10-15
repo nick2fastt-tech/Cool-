@@ -58,7 +58,8 @@ canvas#gl{display:block;position:absolute;inset:0;width:100%;height:100%;touch-a
   background:linear-gradient(180deg,#eaffd2 0%,#7ff07f 45%,#22a844 100%);
   -webkit-background-clip:text;background-clip:text;color:transparent;
   filter:drop-shadow(0 4px 0 rgba(9,60,25,.85)) drop-shadow(0 10px 24px rgba(60,255,140,.35))}
-.subtitle{font-size:clamp(10px,3vw,14px);letter-spacing:5px;color:#bfe9ff;opacity:.85;margin-top:6px;text-transform:uppercase}
+.subtitle{font-size:clamp(10px,3vw,14px);letter-spacing:5px;color:#e4f6ff;opacity:.95;margin-top:8px;text-transform:uppercase;
+  text-shadow:0 1px 2px rgba(0,0,0,.6),0 2px 10px rgba(0,30,60,.55)}
 .remaster{display:inline-block;margin-top:8px;padding:3px 12px 3px 15px;border-radius:7px;
   font-size:clamp(11px,3.1vw,15px);font-weight:900;letter-spacing:7px;color:#2a1a02;
   background:linear-gradient(180deg,#fff2b8 0%,#ffd45c 48%,#e99a1c 100%);
@@ -503,11 +504,40 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
       <p class="muted" style="margin:10px 0">Everything you see runs from a single HTML file: no engine, no images, no
       downloads. Geometry, characters, animation, particles, lighting and every sound are generated at runtime.</p>
       <div style="margin-top:12px">
-        <div class="opt"><div><div class="optL">Engine</div><div class="optD">Custom WebGL renderer, batched draw calls, packed-depth shadow maps, dynamic resolution</div></div></div>
-        <div class="opt"><div><div class="optL">Characters</div><div class="optD">Procedural stickman rig with 20-bone hierarchy and weighted animation blending</div></div></div>
+        <div class="opt"><div><div class="optL">Engine</div><div class="optD">Custom WebGL renderer, batched and frustum-culled draw calls, packed-depth shadow maps, ceiling light pools, dynamic resolution</div></div></div>
+        <div class="opt"><div><div class="optL">Characters</div><div class="optD">Procedural stickman rig with weighted animation blending and foot-planted two-bone IK locomotion</div></div></div>
         <div class="opt"><div><div class="optL">Audio</div><div class="optD">Fully synthesized via Web Audio: wind, birds, growls, footsteps, adaptive score</div></div></div>
         <div class="opt"><div><div class="optL">Netcode</div><div class="optD">Authoritative round simulation with snapshot interpolation &amp; client prediction</div></div></div>
-        <div class="opt"><div><div class="optL">Maps</div><div class="optD">Playground, Neighborhood &amp; the three-storey Hotel — procedurally assembled</div></div></div>
+        <div class="opt"><div><div class="optL">Maps</div><div class="optD">Sunnyside Park, Maple Grove &amp; the three-storey Hotel — procedurally assembled</div></div></div>
+      </div>
+      <h3 style="margin:18px 0 6px;font-size:15px;letter-spacing:2px;color:#ffd45c">REMASTERED</h3>
+      <div class="muted" style="line-height:1.75">
+        <b style="color:#cfe6ff">Feet that stay planted.</b> Every walk, run, sprint and shamble now places its
+        feet: the standing foot is pinned to the ground and slides back at exactly the speed you travel, the
+        swinging foot follows a lifted arc to its next footprint, and a two-bone solve bends the knee to fit. The
+        pelvis rides as high as both legs allow, so nothing floats and nothing sinks — measured at 0 cm for
+        idles and walks. Sitting, standing up and every pose in between hinge at the hips, and the arms gained a
+        proper twist at the shoulder.<br><br>
+        <b style="color:#cfe6ff">Sunnyside Park.</b> The Playground is rebuilt as a real park: a fountain plaza,
+        winding paths, a play area on rubber matting, ball courts, a duck pond you cannot walk into, a picnic
+        grove and a street of houses round the railings.<br><br>
+        <b style="color:#cfe6ff">Maple Grove.</b> The Neighborhood is rebuilt from the kerb up — slabbed
+        pavements, painted junctions, signals and stop signs, sixteen houses in four styles with porches,
+        gutters, shutters and fenced back gardens, two colonials with double garages, a corner mart with a gas
+        canopy, a pocket park with a gazebo, and quarantine barriers where the roads leave town. Hide under
+        trampolines and picnic tables.<br><br>
+        <b style="color:#cfe6ff">The Hotel, refitted and repaired.</b> The lift used to open onto a wall and cut
+        both guest corridors in half; it now opens onto the corridor and its doors keep you out of an empty
+        shaft. A dining table stood on the east stairs and two downstairs doorways were painted on solid walls —
+        fixed. The lobby has marble, columns, chandeliers and panelled walls; corridors have wainscot, striped
+        paper and a patterned runner; ceiling lights now throw real pools of light.<br><br>
+        <b style="color:#cfe6ff">Cameras and crowds.</b> The line-up cutscene frames the line instead of a
+        wall, the menu camera no longer orbits inside scenery, and indoors the camera stays under the ceiling.
+        Big crowds no longer lose limbs to a full draw buffer, and maps and characters behind you are skipped
+        instead of drawn.<br><br>
+        <b style="color:#cfe6ff">Smarter bots.</b> A bot wedged against a wall now finds the doorway that leads
+        where it is going, slides along obstacles toward its goal and walks round stair balustrades — in the
+        Hotel they reach every floor and the roof.
       </div>
       <h3 style="margin:18px 0 6px;font-size:15px;letter-spacing:2px;color:#8ef07a">V1.24 — MOTION &amp; MAPS</h3>
       <div class="muted" style="line-height:1.75">
@@ -3722,7 +3752,7 @@ function nbTrampoline(b,cols,hides,x,z,rng){
     b.prim(P.box,st.reset().translate(mx,2.58,mz).rotY(-(a+a2)/2).scale(.05,.05,1.4).top,[.15,.15,.16]);
   }
   cols.push({x,z,r:1.82,circle:true,top:.93,solid:true,over:true});
-  hides.push({x,z,y:0,ry:rng()*TAU,w:2.6,d:2.6,what:'the trampoline'});
+  hides.push({x,z,y:0,ry:rng()*TAU,w:3.8,d:3.8,what:'the trampoline'});
 }
 function nbSwingSet(b,cols,dyn,x,z,ry,rng){
   const st=b.st,c=Math.cos(ry),s=Math.sin(ry),fr=hex(0x4d7fbf);
@@ -3791,7 +3821,7 @@ function nbPicnic(b,cols,hides,x,z,ry,rng){
   }
   const c=Math.cos(ry),s=Math.sin(ry);
   cols.push({x,z,hx:.98,hz:.9,rot:ry,top:.79,solid:true,over:true});
-  hides.push({x,z,y:0,ry:ry+PI/2,w:1.8,d:.8,what:'the picnic table'});
+  hides.push({x,z,y:0,ry:ry+PI/2,w:1.8,d:1.96,what:'the picnic table'});
 }
 
 /* ---- the corner mart and its gas canopy, in the block x 6..29, z -29..-6 */
@@ -7519,8 +7549,12 @@ const PART={
   spawn(x,y,z,vx,vy,vz,life,size,col,type){
     if(!Save.settings.particles&&type!=='glow')return;
     if(this.list.length>=this.cap)this.list.shift();
-    this.list.push({x,y,z,vx,vy,vz,t:0,life,size,c:col,type:type||'dust'});
+    // settle on whatever is under the spawn point — a storey's floor, a
+    // porch, a car roof — not the ground floor three storeys down
+    const gy=World&&World.cols?resolveCollision(x,z,y+.25,.05,this._c).ground+.02:.02;
+    this.list.push({x,y,z,vx,vy,vz,t:0,life,size,c:col,type:type||'dust',gy});
   },
+  _c:{x:0,z:0,ground:0},
   dust(x,y,z,n,scale){
     for(let i=0;i<n;i++){
       const a=rnd(TAU),s=rnd(.3,1.3)*(scale||1);
@@ -7605,7 +7639,7 @@ const PART={
       p.vx*=k;p.vz*=k;
       if(p.type==='confetti')p.vx+=Math.sin(p.t*6+p.x)*dt*1.4;
       p.x+=p.vx*dt;p.y+=p.vy*dt;p.z+=p.vz*dt;
-      if(p.y<.02){p.y=.02;p.vy*=-.28;p.vx*=.55;p.vz*=.55;if(p.type==='blood')p.vy*=.2;}
+      if(p.y<p.gy){p.y=p.gy;p.vy*=-.28;p.vx*=.55;p.vz*=.55;if(p.type==='blood')p.vy*=.2;}
     }
   },
   render(fx,cam){
@@ -7913,7 +7947,18 @@ class Simulation{
   toggleHide(e){
     if(e.team!==TEAM.HUMAN||e.downed||e.transforming||e.sitting)return false;
     if(e.hiding){
+      const h=e.hiding;
       e.hiding=null;e.hideT=0;
+      // crawl out across the narrow side that is clear, rather than stand up
+      // through the mattress or the trampoline mat
+      const c=Math.cos(h.ry||0),s=Math.sin(h.ry||0),hw=(h.w||1.6)/2,hd=(h.d||1.6)/2;
+      const across=hw<=hd,ext=(across?hw:hd)+.5;
+      for(const sg of[1,-1]){
+        const lx=across?sg*ext:0,lz=across?0:sg*ext;
+        const px=h.x+lx*c+lz*s,pz=h.z-lx*s+lz*c;
+        const r=resolveCollision(px,pz,e.y,.33,_col);
+        if(Math.hypot(r.x-px,r.z-pz)<.05&&Math.abs(r.ground-e.y)<.3){e.x=px;e.z=pz;break;}
+      }
       this.emit('hide',{id:e.id,on:false,x:e.x,y:e.y,z:e.z});
       return true;
     }
@@ -7987,7 +8032,7 @@ class Simulation{
     const mag=Math.hypot(ctrl.mx,ctrl.mz);
     if(mag<.35)return false;                       // must be pushing into it
     const fx=ctrl.mx/mag, fz=ctrl.mz/mag;
-    const maxUp=e.variant==='brute'?2.25:2.05;
+    const maxUp=2.05;
     for(let i=0;i<4;i++){
       const reach=.62+i*.36;
       const px=e.x+fx*reach, pz=e.z+fz*reach;
@@ -9608,14 +9653,14 @@ const Game={
         case 'patient-zero':{
           const p=this.sim.ents.find(x=>x.id===e.id);
           const mine=e.id===Client.localId;
-          const V=VARIANTS[e.variant]||VARIANTS.regular;
+          const V=VARIANTS[e.variant]||VARIANTS.walker;
           const special=false;
           UI.big(mine?'YOU ARE PATIENT ZERO':'OUTBREAK!',
             mine?'The syringe is stuck in your back — go bite someone'
                 :e.name+' is the first infected — run!');
           UI.kill('☣ '+e.name+' is the first infected ('+V.name+')');
           if(mine)Save.stats.patientZero=(Save.stats.patientZero||0)+1;
-          Audio_.infect();Audio_.roar(e.variant==='brute');
+          Audio_.infect();Audio_.roar(e.variant==='walker');
           if(p)PART.infection(p.x,p.y+1,p.z,40);
           Cam.addShake(mine?.7:.35);
           UI.flash(.55);
@@ -9656,7 +9701,7 @@ const Game={
         case 'roar':{
           const d=Math.hypot(e.x-Cam.x,e.z-Cam.z);
           const src=this.sim.ents.find(x=>x.id===e.id);
-          const big=src&&src.variant==='brute';
+          const big=src&&src.variant==='walker';
           if(d<(big?48:34))Audio_.roar(big);
           if(big&&d<16)Cam.addShake(.45*(1-d/16));
           break;
@@ -9818,7 +9863,7 @@ const TUTORIAL=[
   {ico:'🕹️',t:'Moving around',
    x:'<b>PC:</b> <span class="kbd">W</span><span class="kbd">A</span><span class="kbd">S</span><span class="kbd">D</span> to move, hold <span class="kbd">Shift</span> to sprint.<br><b>Mobile:</b> drag anywhere on the left half to use the joystick, tap <b>RUN</b> to toggle sprinting.<br>Sprinting drains stamina — watch the bar at the bottom.'},
   {ico:'⤴',t:'Jumping & climbing',
-   x:'<span class="kbd">Space</span> or the <b>JUMP</b> button hops over benches, hedges and car bonnets. You can stand on most props — use them to break line of sight or gain a head start.'},
+   x:'<span class="kbd">Space</span> or the <b>JUMP</b> button hops over benches, hedges and car bonnets. Run into a fence, a porch step or a parked car and you <b>vault or climb</b> it automatically — low obstacles get a hand-plant vault, higher ledges a full mantle. Stand on bonnets, roofs, sheds and trampolines to break line of sight or gain a head start.'},
   {ico:'🎥',t:'Looking around',
    x:'<b>PC:</b> click once to lock the mouse, then move to look. Scroll to zoom the camera in and out.<br><b>Mobile:</b> drag on the right half of the screen.<br>Look behind you often — that is where the syringe comes from.'},
   {ico:'😬',t:'How infection works',
@@ -9837,16 +9882,14 @@ const TUTORIAL=[
    x:'Stay uninfected until the timer reaches zero. If even one survivor is alive at the end, the survivors win the round together.'},
   {ico:'🏆',t:'Win conditions',
    x:'<b>Survivors win</b> if at least one is alive when time expires.<br><b>Zombies win</b> if every survivor is infected before the clock ends.<br>You earn XP either way — more for winning, plus 5 per infection.'},
-  {ico:'🧗',t:'Climbing &amp; jumping',
-   x:'Run into a fence, a porch step or the bonnet of a parked car and your stickman <b>automatically vaults or mantles</b> over it — no extra button. Low obstacles get a quick hand-plant vault, higher ledges get a full climb. Jumping loads with a knee bend and lands with a knee absorb, so time your jumps and use the rooftops to escape.'},
-  {ico:'🧟',t:'Infected variants',
-   x:'The first infected of a round can be a <b>Runner</b> (faster, quicker strikes, longer sprint) or a <b>Brute</b> (bigger, slower, and its swing knocks everyone nearby off their feet). Anyone infected afterwards always becomes a <b>Regular</b>, so the outbreak never snowballs out of control.'},
+  {ico:'🏡',t:'Maple Grove',
+   x:'The <b>Neighborhood</b> is sealed off at the quarantine barriers. Back gardens sit behind <b>1.8 m fences</b> you can climb, every drive has a gate, and the corner mart, the gas canopy and the gazebo in the pocket park all make good places to break a chase.'},
   {ico:'🏨',t:'The Hotel',
    x:'Three storeys played from the inside. The <b>lobby</b> has a front desk, a dining room, laundry and storage; the two <b>guest floors</b> run rooms off a central corridor; above that is the <b>roof</b>. Stairwells sit at both ends, and the <b>elevator</b> really works — it shuts its doors, travels, and carries anyone standing in the car with it.'},
   {ico:'🛗',t:'Riding the elevator',
    x:'The lift is called, not caught. Stand by the doors and press <span class="kbd">E</span> (or tap the <b>CALL</b> button) to bring the car to your floor — the button lights amber while it is on its way and green when it arrives.<br>Step inside and press <span class="kbd">E</span> again to pick a floor from the panel. The doors take a moment to close and the ride runs <b>11–15 seconds</b> door to door, so listen for what gets in with you.'},
-  {ico:'🛏',t:'Hiding under beds',
-   x:'Stand near a hotel bed and press <span class="kbd">F</span> (or tap <b>HIDE</b>) to pull yourself underneath. The camera drops to mattress height, you can still shuffle at about a third of your speed, and most zombies will lose the thread and search another room.<br>A <b>Crawler</b> is the exception — it is already down at floor level, so if one has seen you it will come straight under after you.'},
+  {ico:'🛏',t:'Hiding spots',
+   x:'Stand near a hotel bed — or a back-garden <b>trampoline</b> or a park <b>picnic table</b> in the Neighborhood — and press <span class="kbd">F</span> (or tap <b>HIDE</b>) to pull yourself underneath. The camera drops to mattress height, you can still shuffle at about a third of your speed, and most zombies will lose the thread and search another room.<br>A <b>Crawler</b> is the exception — it is already down at floor level, so if one has seen you it will come straight under after you.'},
   {ico:'🚪',t:'Doors change every round',
    x:'Every guest room door is dealt <b>open or shut</b> when the round starts, so the same floor never plays twice. A shut door blocks line of sight and blocks you — until somebody shoves it open, which makes a noise the whole corridor can hear.'},
   {ico:'⚔',t:'Difficulty modes',
