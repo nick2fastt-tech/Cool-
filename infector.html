@@ -7989,6 +7989,33 @@ class Simulation{
       x:e.x,y:e.y,z:e.z});
     return true;
   }
+  /* Is there a wall, a shut door or a fence between two people? Bites and
+     scratches only land with nothing taller than a counter in the way —
+     the hotel's walls, doors and floors used to let them straight through. */
+  wallBetween(a,b){
+    const dx=b.x-a.x,dz=b.z-a.z,n=Math.max(1,Math.ceil(Math.hypot(dx,dz)/.12));
+    const y=Math.min(a.y,b.y);
+    for(let i=1;i<n;i++){
+      const px=a.x+dx*i/n,pz=a.z+dz*i/n;
+      const cols=colsNear(px,pz);
+      for(let k=0;k<cols.length;k++){
+        const c=cols[k];
+        if(c.off||c.plat||c.over||(!c.solid&&!c.wall))continue;
+        if(c.top-y<1.2)continue;                          // counters, beds, bonnets
+        if(c.base!==undefined&&c.base>y+1.4)continue;     // the storey above
+        if(c.circle){if(dist2(px,pz,c.x,c.z)<c.r*c.r)return true;continue;}
+        const s=Math.sin(c.rot||0),co=Math.cos(c.rot||0),qx=px-c.x,qz=pz-c.z;
+        if(Math.abs(qx*co-qz*s)<c.hx&&Math.abs(qx*s+qz*co)<c.hz)return true;
+      }
+    }
+    return false;
+  }
+  /* within striking reach: same storey, close enough, nothing in between */
+  canReach(z,s,r){
+    if(Math.abs(s.y-z.y)>1.0)return false;
+    if(dist2(z.x,z.z,s.x,s.z)>r*r)return false;
+    return !this.wallBetween(z,s);
+  }
   /* attempt an infection from `z` — returns true if the strike lands */
   tryAttack(z){
     if(z.team!==TEAM.ZOMBIE||z.act||this.phase!=='live')return false;
@@ -8000,7 +8027,7 @@ class Simulation{
       if(s.hiding&&!variantOf(z).crawl)continue;
       const dx=s.x-z.x,dz=s.z-z.z;
       const d=dx*dx+dz*dz;
-      if(d>3.2*3.2)continue;
+      if(d>3.2*3.2||!this.canReach(z,s,3.2))continue;
       const facing=Math.cos(angDiff(z.yaw,Math.atan2(dx,dz)));
       if(facing<-.15)continue;
       const score=d*(1.5-facing*.5);
@@ -8345,7 +8372,7 @@ class Simulation{
         e.actHit=true;
         const t=e.actTarget;
         if(t&&t.team===TEAM.HUMAN&&!t.transforming&&!t.infected&&
-           dist2(e.x,e.z,t.x,t.z)<3.1*3.1){
+           this.canReach(e,t,3.1)){
           if(e.act==='ankleBite'){this.takedown(t,e);}
           else{
           // bite or scratch — both start the same one-minute infection
@@ -8522,9 +8549,12 @@ class Simulation{
         if(s.transforming||s.downed||infStage(s)>=2)continue;
         const d=dist2(e.x,e.z,s.x,s.z);
         // hidden: only a Crawler noses under the bed, and only up close
-        if(s.hiding&&!(V.crawl&&d<7*7))continue;
-        if(d<bd){bd=d;best=s;}
+        if(s.hiding&&!(V.crawl&&d<7*7&&Math.abs(s.y-e.y)<1.2))continue;
+        // somebody on another storey is a long walk away, not just overhead
+        const c=d+(Math.abs(s.y-e.y)>1.4?30*30:0);
+        if(c<bd){bd=c;best=s;}
       }
+      if(best)bd=dist2(e.x,e.z,best.x,best.z);
       ai.target=best;
       // busy feeding
       if(e.act==='devour'||e.act==='mount')return ctrl;
@@ -8536,7 +8566,7 @@ class Simulation{
           const q=dist2(e.x,e.z,s.x,s.z);
           if(q<dd){dd=q;downed=s;}
         }
-        if(downed&&dd<28*28){
+        if(downed&&dd<28*28&&Math.abs(downed.y-e.y)<1.4){
           const dist=Math.sqrt(dd);
           if(dist>1.9)return this.seek(e,ctrl,downed.x,downed.z,.8);
           if(!e.act&&Math.random()<dt*.9){
@@ -8552,16 +8582,19 @@ class Simulation{
         const lead=Math.min(1.1,d*.25);
         const tx=best.x-Math.sin(best.yaw)*lead*.5+best.vx*.22;
         const tz=best.z-Math.cos(best.yaw)*lead*.5+best.vz*.22;
-        const vw=this.viaPoint(e,ai,dt,{x:tx,z:tz});
+        // on another storey: the stairs first, the survivor after
+        const other=Math.abs(best.y-e.y)>1.4;
+        const goal=other?this.navStep(e,{x:best.x,z:best.z,y:best.y}):{x:tx,z:tz};
+        const vw=this.viaPoint(e,ai,dt,goal);
         this.seek(e,ctrl,vw.x,vw.z,V.crawl?.8:1);
         ctrl.sprint=!V.crawl&&d>2.2&&e.stamina>.18;
-        if(V.crawl&&d<2.0&&!e.act&&Math.random()<dt*4.2*(this.M?this.M.aggr:1))this.tryAttack(e);
+        if(!other&&V.crawl&&d<2.0&&!e.act&&Math.random()<dt*4.2*(this.M?this.M.aggr:1))this.tryAttack(e);
         // Sprinters commit to explosive charges once they are in range
         if(V.burst&&e.burstT<=0&&e.burstCool<=0&&d<14&&d>2.6&&Math.random()<dt*1.4){
           e.burstT=BURST.dur;e.burstCool=BURST.cool+BURST.dur;
           this.emit('burst',{id:e.id,x:e.x,y:e.y,z:e.z});
         }
-        if(d<2.2&&!e.act&&Math.random()<dt*(3.4*ai.skill*(this.M?this.M.aggr:1)))this.tryAttack(e);
+        if(!other&&d<2.2&&!e.act&&Math.random()<dt*(3.4*ai.skill*(this.M?this.M.aggr:1)))this.tryAttack(e);
         if(d>7&&ai.roarT<=0){ai.roarT=rnd(6,16);e.act='zroar';e.actT=0;this.emit('roar',{id:e.id,x:e.x,y:e.y,z:e.z});}
         ai.roarT-=dt;
         if(Math.random()<dt*.06)e.zStumble=rnd(.6,1.4);
