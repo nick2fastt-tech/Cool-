@@ -8414,7 +8414,7 @@ const Human={
       this.m={lods:HUMAN_MESH.lods.map(up),hair:HUMAN_MESH.hair.map(up)};
       this.f=typeof HUMAN_MESH_F!=='undefined'?{lods:HUMAN_MESH_F.lods.map(up),hair:HUMAN_MESH_F.hair.map(up)}:null;
       this.ok=true;
-    }catch(e){console.warn('human mesh disabled',e);this.ok=false;}
+    }catch(e){console.warn('human mesh disabled',e);this.err='init: '+(e&&e.message||e);this.ok=false;}
   },
   bind(p,m){
     const gl=R.gl,a=p.a;
@@ -12261,7 +12261,10 @@ function boot(){
       const firstTouch=()=>{Audio_.init();Audio_.resume();
         if(!Audio_.music&&Game.state==='menu')Audio_.startMusic('menu');};
       window.addEventListener('pointerdown',firstTouch);window.addEventListener('keydown',firstTouch);
-      $('#verNote').textContent='Remastered · '+Servers.length+' servers · Easy → Insane';
+      // build tag and how people are drawn on this device, so a stale copy or a
+      // GPU that can't run the realistic bodies is obvious at a glance
+      const gpuNote=Human.ok?(Human.lite?'people: simple':'people: full'):'people: OLD ('+String(Human.err||'?').slice(0,60)+')';
+      $('#verNote').textContent='Remastered build 4 · '+gpuNote;
     },260);
   },140);
   addEventListener('resize',()=>{R.resize();});
