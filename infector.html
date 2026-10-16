@@ -101,6 +101,9 @@ h2.hd{font-size:clamp(19px,5.2vw,28px);letter-spacing:3px;font-weight:800;text-t
 #menuBtns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;
   width:min(430px,92vw);margin-bottom:8px}
 #menuBtns .btn{width:100%;padding:16px 8px}
+#menuBtns .wide2{grid-column:1/-1;padding:14px 8px}
+#menuCorner{display:flex;gap:8px;align-items:center}
+#menuCorner .btn{width:46px;height:46px;padding:0;font-size:20px;border-radius:14px}
 #menuBtns .wide{grid-column:1/-1;font-size:clamp(17px,4.6vw,23px);padding:19px 8px;animation:floaty 3.4s ease-in-out infinite}
 .footNote{font-size:10px;letter-spacing:2px;color:#6f89a8;margin-top:10px;text-align:center}
 
@@ -371,7 +374,11 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
       <div><div class="xpTrack"><div class="xpFill" id="lvlBarMenu"></div></div>
         <div class="xpTxt" id="xpMenu">0 / 60 XP</div></div>
     </div>
-    <div class="chip" style="pointer-events:none"><span id="onlineCount">—</span> playing now</div>
+    <div id="menuCorner">
+      <div class="chip" style="pointer-events:none"><span id="onlineCount">—</span> playing now</div>
+      <button class="btn sm ghost" data-nav="avatar" title="Avatar">🧍</button>
+      <button class="btn sm ghost" data-nav="settings" title="Settings">⚙</button>
+    </div>
   </div>
   <div id="menuTop">
     <div class="title">INFECTOR</div>
@@ -379,14 +386,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-ra
     <div class="subtitle">Run. Hide. Survive the outbreak.</div>
   </div>
   <div id="menuBtns">
-    <button class="btn green wide" data-nav="quickplay">▶ Play</button>
-    <button class="btn" data-nav="servers">🌐 Servers</button>
-    <button class="btn orange" data-nav="tutorial">🎓 Tutorial</button>
-    <button class="btn purple" data-nav="shop">🎁 Unlocks</button>
-    <button class="btn" data-nav="avatar">🧍 Avatar</button>
-    <button class="btn ghost" data-nav="profile">👤 Profile</button>
-    <button class="btn ghost" data-nav="settings">⚙ Settings</button>
-    <button class="btn ghost" data-nav="credits" style="grid-column:1/-1">★ Credits</button>
+    <button class="btn green wide" data-nav="servers">🌐 Servers</button>
+    <button class="btn ghost wide2" data-nav="credits">★ Credits</button>
   </div>
   <div class="footNote" id="verNote">Remastered · 4 difficulties · 15 servers</div>
 </div>
@@ -1166,6 +1167,7 @@ const Audio_={
     else if(kind==='buy'){this.tone({f0:700,f1:1050,dur:.13,gain:.2,type:'square'});this.tone({f0:1050,f1:1500,dur:.2,gain:.14,delay:.09,type:'sine'});}
     else if(kind==='deny')this.tone({f0:220,f1:150,dur:.18,gain:.2,type:'sawtooth'});
     else if(kind==='equip')this.tone({f0:880,f1:1320,dur:.12,gain:.16,type:'sine'});
+    else if(kind==='open'){this.burst({filter:'bandpass',fc:500,fc1:2400,dur:.22,gain:.12,q:.8});this.tone({f0:440,f1:660,dur:.16,gain:.1,type:'sine',delay:.06});}
   },
   step(run,zombie,heavy){
     if(heavy){
@@ -1235,6 +1237,39 @@ const Audio_={
   crunch(){
     this.burst({filter:'bandpass',fc:1800,fc1:500,dur:.14,gain:.24,q:2.2});
     this.tone({f0:260,f1:70,dur:.2,gain:.16,type:'square',filter:'lowpass',fc:700});
+  },
+  /* bones giving way during the turn: a dry snap over a low knock */
+  crack(){
+    this.burst({filter:'highpass',fc:2600,dur:.05,gain:.32,q:.7,rate:1.6});
+    this.burst({filter:'bandpass',fc:1400,fc1:600,dur:.09,gain:.22,q:3,delay:.012});
+    this.tone({f0:140,f1:60,dur:.12,gain:.18,type:'triangle'});
+  },
+  /* your own pulse while the infection takes you: lub-dub, faster as it goes */
+  heartbeat(k){
+    const g=.22+.18*(k||0);
+    this.tone({f0:62,f1:40,dur:.16,gain:g,type:'sine'});
+    this.tone({f0:55,f1:36,dur:.18,gain:g*.75,type:'sine',delay:.21});
+  },
+  /* a moan: a rough voice through a throat-like formant, sagging in pitch */
+  groan(pitch){
+    if(!this.ctx)return;
+    const c=this.ctx,t=c.currentTime,p=(pitch||1)*(.85+Math.random()*.3),dur=.9+Math.random()*.8;
+    const o=c.createOscillator();o.type='sawtooth';
+    o.frequency.setValueAtTime(118*p,t);o.frequency.linearRampToValueAtTime(92*p,t+dur*.6);o.frequency.linearRampToValueAtTime(70*p,t+dur);
+    const lfo=c.createOscillator(),lg=c.createGain();lfo.frequency.value=5+Math.random()*3;lg.gain.value=6*p;
+    lfo.connect(lg);lg.connect(o.frequency);
+    const f=c.createBiquadFilter();f.type='bandpass';f.frequency.setValueAtTime(520,t);f.frequency.linearRampToValueAtTime(380,t+dur);f.Q.value=3.5;
+    const g=c.createGain();g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.2,t+.15);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+    o.connect(f);f.connect(g);g.connect(this.sfxBus);
+    o.start(t);lfo.start(t);o.stop(t+dur+.05);lfo.stop(t+dur+.05);
+    this.burst({filter:'bandpass',fc:700,fc1:300,dur:dur*.8,gain:.05,q:2,rate:.6});   // breath through it
+  },
+  /* wet chewing while one of them feeds */
+  chew(){
+    for(let i=0;i<4;i++){
+      this.burst({filter:'bandpass',fc:500+Math.random()*500,fc1:160,dur:.12,gain:.14,q:2.2,delay:i*.17+Math.random()*.04,rate:.7});
+      if(Math.random()<.5)this.burst({filter:'highpass',fc:2200,dur:.04,gain:.08,delay:i*.17+.05});
+    }
   },
   gurgle(){
     this.burst({filter:'bandpass',fc:340,fc1:180,dur:.75,gain:.15,q:1.6,rate:.7});
@@ -5678,7 +5713,8 @@ const CLOTHC=[0xe0483c,0x3b7fd6,0xf3c033,0x4cbb52,0x9b5cd6,0xef8b34,0xf07ba6,0x4
 /* Remastered: everyone is the same realistic body, so hair is the two styles
    it was sculpted for — a buzz cut and long straight hair that swings. */
 const HAIR_STYLES=[
- {id:'hair_buzz',name:'Buzz Cut',cost:0},{id:'hair_long',name:'Long Straight',cost:0}
+ {id:'hair_buzz',name:'Buzz Cut',cost:0},{id:'hair_long',name:'Long Straight',cost:0},
+ {id:'hair_bob',name:'Bob',cost:0},{id:'hair_fade',name:'Fade',cost:0}
 ];
 /* one outfit for now: baggy jeans, a white crew-neck tee and white sneakers */
 const OUTFITS=[{id:'outfit_basic',name:'Baggy Jeans & White Tee',cost:0}];
@@ -5817,7 +5853,7 @@ const EXPR={
 function exprOf(name){return EXPR[name]||EXPR.neutral;}
 
 function defaultAvatar(){
-  return {gender:'male',skin:3,hair:'hair_buzz',hairColor:1,outfit:'outfit_basic',
+  return {gender:'male',skin:3,hair:'hair_buzz',hairColor:1,outfit:'outfit_basic',skinHex:'',hairHex:'',
     top:'top_tee',topColor:1,bottom:'bot_jeans',bottomColor:8,
     shoes:'shoe_sneak',shoesColor:8,hat:'hat_none',glasses:'gl_none',back:'bk_none',
     face:'face_default',body:'body_skin',emote:'emote_wave',victory:'vic_flex'};
@@ -5828,7 +5864,7 @@ function randomAvatar(free){
     return pick(ok.length?ok:list).id;
   };
   return {gender:Math.random()<.5?'male':'female',skin:rndi(0,SKIN.length-1),outfit:'outfit_basic',
-    hair:Math.random()<.45?'hair_long':'hair_buzz',hairColor:rndi(0,HAIRC_NATURAL-1),
+    hair:pick(['hair_buzz','hair_long','hair_bob','hair_fade']),hairColor:rndi(0,HAIRC_NATURAL-1),
     top:p(TOPS),topColor:rndi(0,CLOTHC.length-1),
     bottom:p(BOTTOMS),bottomColor:rndi(0,CLOTHC.length-1),
     shoes:p(SHOES),shoesColor:rndi(0,CLOTHC.length-1),
@@ -5839,12 +5875,14 @@ function sanitizeAvatar(a){
   const d=defaultAvatar();
   if(!a||typeof a!=='object')return d;
   for(const k in d)if(a[k]===undefined)a[k]=d[k];
-  if(a.hair!=='hair_buzz'&&a.hair!=='hair_long')a.hair=HAIR_MAP[a.hair]||'hair_buzz';
+  if(!HAIR_STYLES.some(h=>h.id===a.hair))a.hair=HAIR_MAP[a.hair]||'hair_buzz';
   if(a.gender!=='female')a.gender='male';a.outfit='outfit_basic';
   // fall back to a free item if something is equipped but not owned
   const chk=(k,list)=>{if(!unlocked(a[k]))a[k]=(list.find(i=>!i.req)||list[0]).id;};
   chk('hair',HAIR_STYLES);chk('body',BODYC);chk('emote',EMOTES);chk('victory',VICTORY);
   a.skin=clamp(a.skin|0,0,SKIN.length-1);
+  // any colour at all: a picked '#rrggbb' overrides the preset swatch
+  for(const k of ['skinHex','hairHex'])if(typeof a[k]!=='string'||!/^#[0-9a-f]{6}$/i.test(a[k]))a[k]='';
   a.hairColor=clamp(a.hairColor|0,0,HAIRC.length-1);
   a.topColor=clamp(a.topColor|0,0,CLOTHC.length-1);
   a.bottomColor=clamp(a.bottomColor|0,0,CLOTHC.length-1);
@@ -5854,10 +5892,10 @@ function sanitizeAvatar(a){
 /* resolve an avatar config into ready-to-render colours */
 function resolveLook(av,zombie){
   const bodyItem=ALL_ITEMS[av.body]||BODYC[0];
-  let skin=hex(SKIN[av.skin]);
-  if(bodyItem.tint)skin=hex(bodyItem.tint);
+  let skin=av.skinHex?hex(parseInt(av.skinHex.slice(1),16)):hex(SKIN[av.skin]);
+  if(bodyItem.tint&&!av.skinHex)skin=hex(bodyItem.tint);
   let top=hex(CLOTHC[av.topColor]),bot=hex(CLOTHC[av.bottomColor]),
-      shoe=hex(CLOTHC[av.shoesColor]),hair=hex(HAIRC[av.hairColor]);
+      shoe=hex(CLOTHC[av.shoesColor]),hair=av.hairHex?hex(parseInt(av.hairHex.slice(1),16)):hex(HAIRC[av.hairColor]);
   const acc=shade(top,.72);
   // V1.01: infection changes the body, never the wardrobe — clothing, hair,
   // hats and accessories survive the transformation exactly as equipped.
@@ -5946,38 +5984,71 @@ function smin(a,b,k){const h=clamp(.5+.5*(b-a)/k,0,1);return b+(a-b)*h-k*h*(1-h)
 /* Gait styles. Walks keep a foot down and let the stance leg set the pelvis;
    runs have a flight phase and a designed bounce, lowest at mid-stance. */
 const GAIT={
-  walk:{duty:.58,zMax:.36,zOff:.03,lift:.065,pHS:-.24,pTO:.58,pSw:-.06,flat:.2,heelOff:.55,
-    knee:.14,cap:.034,off:.5,step:v=>clamp(.32+.17*v,.42,.7),
-    spine:.05,twist:.12,sway:.02,headP:-.02,shrug:.1,grip:.2,
-    armA:.32,armO:.06,elb:.22,elbF:.3,shR:.1,shY:.05},
-  run:{run:1,Ls:.6,zOff:-.01,kickB:.18,driveF:.24,kick:v=>.2+.05*v,driveH:.6,
-    pHS:-.05,pTO:.7,pSw:.22,flat:.16,heelOff:.36,knee:.28,yMS:.048,yAmp:.06,off:.5,
-    step:v=>.48+.18*v,
-    spine:.14,twist:.2,sway:.014,headP:-.1,shrug:.3,grip:.55,
-    armA:.7,armO:.12,elb:1.35,elbF:.25,shR:.12,shY:.12},
-  sprint:{run:1,Ls:.64,zOff:0,kickB:.2,driveF:.3,kick:v=>.22+.05*v,driveH:.7,
-    pHS:0,pTO:.8,pSw:.3,flat:.12,heelOff:.3,knee:.32,yMS:.07,yAmp:.05,off:.5,
-    step:v=>.5+.185*v,
-    spine:.26,twist:.24,sway:.01,headP:-.16,shrug:.45,grip:.85,
-    armA:1.0,armO:.16,elb:1.45,elbF:.25,shR:.15,shY:.18},
-  /* Walker: heavy, lopsided — the left foot drags and the rhythm is uneven */
-  zwalk:{duty:.64,zMax:.33,zOff:.05,lift:.06,pHS:-.1,pTO:.42,pSw:.05,flat:.25,heelOff:.6,
-    knee:.32,cap:.06,off:.45,dragL:.25,step:v=>clamp(.26+.15*v,.36,.58),
-    spine:.36,twist:.1,sway:.07,headP:.16,shrug:.55,grip:.45,
-    armA:.2,armO:-.66,elb:.6,elbF:.12,shR:.24,shY:-.05,
+  /* Human walk: upright and relaxed. The pelvis turns with each stride and
+     the shoulders turn against it, the arms swing from the shoulder with the
+     elbow bending a little more on the way forward, the head holds its gaze
+     straight ahead and the hips dip over each standing leg. */
+  walk:{duty:.6,zMax:.38,zOff:.03,lift:.07,pHS:-.26,pTO:.6,pSw:-.06,flat:.2,heelOff:.55,
+    knee:.16,cap:.034,off:.5,step:v=>clamp(.34+.17*v,.44,.72),
+    spine:.02,twist:.19,sway:.036,headP:0,shrug:.05,grip:.15,
+    armA:.46,armO:.04,elb:.16,elbF:.5,shR:.09,shY:.07,
     upper(o,t,c,aL,aR){
-      o[J.headR]=Math.sin(t*1.1+(c.seed||0))*.18-o[J.side]*1.2;
-      o[J.lShP]-=.08;o[J.rElb]+=.2;o[J.eye]=.86;o[J.mouth]=.24;
+      o[J.headY]=-o[J.twist]*.95;                       // eyes stay on where it is going
+      o[J.headP]+=Math.abs(aL-aR)*.012;                 // a nod as each heel lands
+      o[J.lWri]=-.05-.22*Math.max(0,aL);o[J.rWri]=-.05-.22*Math.max(0,aR);   // loose wrists trail the swing
+      o[J.lShT]=-.12;o[J.rShT]=-.12;
+      o[J.shrug]+=Math.sin(t*1.4+(c.seed||0))*.08;      // breathing
     }},
-  /* the Walker's lurching run: arms out ahead, head up, short heavy steps */
-  zrun:{run:1,Ls:.56,zOff:.02,kickB:.12,driveF:.18,kick:v=>.16+.035*v,driveH:.45,
-    pHS:-.05,pTO:.55,pSw:.1,flat:.2,heelOff:.4,knee:.36,yMS:.08,yAmp:.05,off:.5,
-    step:v=>.44+.16*v,
-    spine:.4,twist:.16,sway:.05,headP:-.32,shrug:1.0,grip:.7,
-    armA:.3,armO:-1.18,elb:.48,elbF:.1,shR:.3,shY:-.08,
+  /* Human jog: a forward lean from the ankles, hands carried at the hips with
+     the elbows near a right angle, a real flight phase and a soft landing. */
+  run:{run:1,Ls:.62,zOff:-.01,kickB:.2,driveF:.26,kick:v=>.22+.05*v,driveH:.62,
+    pHS:-.05,pTO:.72,pSw:.24,flat:.16,heelOff:.36,knee:.3,yMS:.05,yAmp:.066,off:.5,
+    step:v=>.5+.18*v,
+    spine:.17,twist:.22,sway:.012,headP:-.06,shrug:.14,grip:.45,
+    armA:.86,armO:.2,elb:1.42,elbF:.32,shR:.14,shY:.17,
     upper(o,t,c,aL,aR){
-      o[J.lShP]+=Math.sin(t*5.3)*.08;o[J.rShP]+=Math.sin(t*4.7+1)*.08;
-      o[J.headR]=Math.sin(t*7)*.08;o[J.eye]=1.1;o[J.mouth]=.55;
+      o[J.headY]=-o[J.twist]*.9;
+      o[J.lWri]=-.15;o[J.rWri]=-.15;
+      o[J.lShT]=-.25;o[J.rShT]=-.25;                    // forearms swing across a little
+    }},
+  /* Flat-out sprint: deeper lean, big knee drive, arms pumping hard. */
+  sprint:{run:1,Ls:.66,zOff:0,kickB:.22,driveF:.32,kick:v=>.24+.05*v,driveH:.8,
+    pHS:0,pTO:.82,pSw:.32,flat:.12,heelOff:.3,knee:.34,yMS:.07,yAmp:.055,off:.5,
+    step:v=>.52+.185*v,
+    spine:.3,twist:.26,sway:.01,headP:-.12,shrug:.28,grip:.8,
+    armA:1.22,armO:.22,elb:1.5,elbF:.3,shR:.16,shY:.2,
+    upper(o,t,c,aL,aR){
+      o[J.headY]=-o[J.twist]*.9;o[J.lWri]=-.2;o[J.rWri]=-.2;
+      o[J.lShT]=-.3;o[J.rShT]=-.3;o[J.mouth]=.35;        // mouth open, breathing hard
+    }},
+  /* Walker zombie: a heavy, lopsided shamble — the left foot drags, the body
+     rolls over each step, the head lolls, and one arm hangs half-raised,
+     reaching, while the other swings dead from the shoulder. */
+  zwalk:{duty:.66,zMax:.32,zOff:.05,lift:.05,pHS:-.08,pTO:.4,pSw:.05,flat:.26,heelOff:.62,
+    knee:.34,cap:.065,off:.45,dragL:.34,step:v=>clamp(.25+.15*v,.34,.56),
+    spine:.4,twist:.14,sway:.11,headP:.2,shrug:.6,grip:.45,
+    armA:.18,armO:-.5,elb:.5,elbF:.1,shR:.24,shY:-.05,
+    upper(o,t,c,aL,aR){
+      const sd=c.seed||0,roll=o[J.side];
+      o[J.headR]=Math.sin(t*1.1+sd)*.22-roll*1.6;       // the head lolls against the roll
+      o[J.headY]=Math.sin(t*.7+sd)*.25;
+      o[J.lShP]=-1.05+Math.sin(t*2.1+sd)*.08;o[J.lElb]=.35;o[J.lShR]=.18;   // the reaching arm
+      o[J.rElb]+=.25;o[J.rWri]=.2;
+      o[J.twist]+=roll*.6;
+      o[J.eye]=.86;o[J.mouth]=.26+Math.max(0,Math.sin(t*2.3+sd))*.3;    // jaw working
+    }},
+  /* the Walker's lurching run: both arms out ahead, head thrust forward,
+     short heavy pounding steps and a body thrown about from side to side */
+  zrun:{run:1,Ls:.56,zOff:.02,kickB:.12,driveF:.18,kick:v=>.16+.035*v,driveH:.45,
+    pHS:-.05,pTO:.55,pSw:.1,flat:.2,heelOff:.4,knee:.38,yMS:.085,yAmp:.055,off:.5,
+    step:v=>.44+.16*v,
+    spine:.48,twist:.22,sway:.07,headP:-.36,shrug:1.0,grip:.75,
+    armA:.26,armO:-1.25,elb:.42,elbF:.1,shR:.32,shY:-.08,
+    upper(o,t,c,aL,aR){
+      o[J.lShP]+=Math.sin(t*5.3)*.1;o[J.rShP]+=Math.sin(t*4.7+1)*.1;
+      o[J.headR]=Math.sin(t*7)*.1-o[J.side]*.8;o[J.headY]=Math.sin(t*3.1)*.12;
+      o[J.handGrip]=.6+Math.abs(Math.sin(t*6))*.4;     // clawing at the air
+      o[J.eye]=1.15;o[J.mouth]=.65;
     }},
   /* Sprinter: twitchy, hunched, quick little steps until it commits */
   swalk:{duty:.58,zMax:.35,zOff:.03,lift:.08,pHS:-.15,pTO:.55,pSw:0,flat:.2,heelOff:.5,
@@ -6122,25 +6193,30 @@ function gaitPose(o,t,c,G){
 
 /* Each clip writes absolute channel values; the blender mixes them by weight. */
 const CLIP={
+ /* Standing: slow breathing that lifts the chest and shoulders, the weight
+    settling onto one leg and then the other every few seconds (the hip drops
+    over the loaded leg, the other knee softens), a glance around now and
+    then, and hands that never quite hold still. */
  idle(o,t,c){
    const sd=c.seed||0;
-   const br=Math.sin(t*1.55+sd), br2=Math.sin(t*1.55+sd+.7);
-   const w=Math.sin(t*.37+sd);                 // weight drifting between the feet
-   o[J.spine]=.035+br*.022;
-   o[J.shrug]=br2*.45;                         // shoulders lift with each breath
-   o[J.headP]=-.03+Math.sin(t*1.55+sd+.5)*.03;
-   o[J.headY]=Math.sin(t*.29+sd)*.38+Math.sin(t*.11+sd*2)*.22;
-   o[J.headR]=Math.sin(t*.23+sd)*.05;
-   o[J.lShP]=.04+br*.05;o[J.rShP]=.04-br*.045;
-   o[J.lShR]=.11+br2*.02;o[J.rShR]=.11+br2*.02;
-   o[J.lShT]=-.1;o[J.rShT]=-.1;
-   o[J.lElb]=.2+br*.035;o[J.rElb]=.18-br*.035;
+   const br=Math.sin(t*1.5+sd), br2=Math.sin(t*1.5+sd+.7);
+   const ws=Math.sin(t*.42+sd), w=Math.sign(ws)*Math.pow(Math.abs(ws),.5);   // weight shifts and holds
+   const look=Math.sin(t*.29+sd)*.42+Math.sin(t*.11+sd*2)*.25;
+   o[J.spine]=.03+br*.02;
+   o[J.shrug]=br2*.42;
+   o[J.headP]=-.03+Math.sin(t*1.5+sd+.5)*.025+Math.max(0,Math.sin(t*.17+sd))*.08;
+   o[J.headY]=look;o[J.headR]=Math.sin(t*.23+sd)*.05-w*.05;
+   o[J.twist]=look*.12+Math.sin(t*.31+sd)*.03;
+   o[J.side]=w*.05;
+   o[J.lShP]=.04+br*.04;o[J.rShP]=.04-br*.04;
+   o[J.lShR]=.1+br2*.02+Math.max(0,w)*.03;o[J.rShR]=.1+br2*.02+Math.max(0,-w)*.03;
+   o[J.lShT]=-.12;o[J.rShT]=-.12;
+   o[J.lElb]=.2+br*.03;o[J.rElb]=.2-br*.03+Math.max(0,Math.sin(t*.53+sd*3))*.12;
    o[J.lWri]=-.1+br*.04;o[J.rWri]=-.08-br*.04;
-   o[J.handGrip]=.2;
-   o[J.side]=w*.022;o[J.twist]=Math.sin(t*.31+sd)*.03;
-   // the hips settle onto whichever leg is loaded; both feet stay planted
-   o[J.bob]=-.008-Math.abs(w)*.01+br*.003;
-   plantFeet(o,.035-w*.025,-.035-w*.025,0,0);
+   o[J.handGrip]=.18+Math.max(0,Math.sin(t*.9+sd))*.25;   // fingers curl and relax
+   o[J.bob]=-.008-Math.abs(w)*.016+br*.003;
+   // the loaded foot sits under the body, the free one eases out a little
+   plantFeet(o,.035-w*.035,-.035-w*.035,Math.max(0,-w)*.04,Math.max(0,w)*.04);
    o[J.eye]=1;
  },
  /* Walking. Both feet are on the floor at the extremes of the stride, so the
@@ -6364,24 +6440,27 @@ const CLIP={
  },
  /* ================= V1.10 zombie classes ================= */
  /* Walker: heavy, loose, slightly lopsided */
+ /* Walker standing: swaying on its feet, slow wet breaths, the head lolling
+    and now and then snapping round at a sound, jaw working, one arm half up. */
  wIdle(o,t,c){
    const sd=c.seed||0;
-   const br=Math.sin(t*.62+sd);                 // slow, deep breathing
-   const sway=Math.sin(t*.44+sd);
-   o[J.spine]=.34+br*.055;
-   o[J.side]=sway*.07;
-   o[J.twist]=Math.sin(t*.3+sd)*.13;
-   o[J.headP]=.2+br*.09;
-   o[J.headR]=sway*.3+Math.sin(t*.21+sd)*.14;   // occasional head tilt
-   o[J.headY]=Math.sin(t*.26+sd*1.7)*.5;
-   o[J.shrug]=.35+br*.5;
-   o[J.lShP]=-.34+br*.05;o[J.rShP]=-.28-br*.05; // arms hang loose
-   o[J.lElb]=.5+br*.06;o[J.rElb]=.62-br*.06;
-   o[J.handGrip]=.3+Math.abs(Math.sin(t*.83+sd))*.4;   // fingers slowly flex
-   o[J.lShR]=.2;o[J.rShR]=.17;
-   o[J.bob]=-.045+br*.012;
-   plantFeet(o,.07,-.05,.06,0);
-   o[J.eye]=.86;o[J.mouth]=.22+Math.max(0,br)*.24;
+   const br=Math.sin(t*.62+sd);
+   const sway=Math.sin(t*.44+sd)+Math.sin(t*1.13+sd*2)*.35;
+   const tw=c.twitch||0;
+   o[J.spine]=.38+br*.06;
+   o[J.side]=sway*.08;
+   o[J.twist]=Math.sin(t*.3+sd)*.15+tw*.2;
+   o[J.headP]=.24+br*.1-tw*.3;
+   o[J.headR]=sway*.32+Math.sin(t*.21+sd)*.16+tw*.35;
+   o[J.headY]=Math.sin(t*.26+sd*1.7)*.5+tw*.7;           // snaps round on a twitch
+   o[J.shrug]=.4+br*.5+tw*.6;
+   o[J.lShP]=-.8+br*.06+Math.sin(t*.9+sd)*.08;o[J.rShP]=-.26-br*.05;
+   o[J.lElb]=.45+br*.06;o[J.rElb]=.66-br*.06;
+   o[J.handGrip]=.3+Math.abs(Math.sin(t*.83+sd))*.45;
+   o[J.lShR]=.22;o[J.rShR]=.17;
+   o[J.bob]=-.05+br*.012;
+   plantFeet(o,.08,-.05,.07,0);
+   o[J.eye]=.86;o[J.mouth]=.22+Math.max(0,br)*.26+Math.max(0,Math.sin(t*2.6+sd))*.15;
  },
  wWalk(o,t,c){gaitPose(o,t,c,GAIT.zwalk);},
  /* Sprinter: wired, twitchy, explosive */
@@ -6704,20 +6783,28 @@ const CLIP={
    o[J.eye]=Math.max(0,.72-k*.74);           // eyes slowly close
    o[J.mouth]=.28+Math.abs(br)*.2;o[J.brow]=.15;
  },
- /* motionless, then a twitch, then the eyes open changed */
+ /* The turn itself: still, then a full seizure — the back arches, the head
+    is thrown back, the limbs thrash — then the body drops limp, and the head
+    snaps up with the eyes open and no longer theirs. */
  twitch(o,t,c){
-   const T=c.actT,dur=ACT_DUR.twitch||1.8;
-   const still=clamp(T/.5,0,1);
-   const jolt=clamp((T-.5)/.5,0,1)*(1-clamp((T-1.25)/.3,0,1));
-   const wake=clamp((T-1.3)/(dur-1.3),0,1);
-   const jit=Math.sin(T*30)*jolt*.1+Math.sin(T*47)*jolt*.05;
+   const T=c.actT,dur=ACT_DUR.twitch||3.6;
+   const sz=clamp((T-.35)/.25,0,1)*(1-clamp((T-2.3)/.2,0,1));        // seizing
+   const limp=clamp((T-2.3)/.2,0,1)*(1-clamp((T-2.85)/.12,0,1));     // dropped
+   const wake=clamp((T-2.85)/(dur-2.85),0,1);
+   const snap=1-Math.pow(1-clamp((T-2.85)/.14,0,1),3);
+   const j1=Math.sin(T*38),j2=Math.sin(T*61+1.3),j3=Math.sin(T*29+2.1);
    CLIP.seated(o,t,c);
-   o[J.side]+=jit;o[J.headR]+=jit*2.6;
-   o[J.spine]+=jolt*.12-wake*.24;
-   o[J.headP]+=jolt*.1-wake*.5;
-   o[J.lShR]+=jolt*.2;o[J.rShR]+=jolt*.18;
-   o[J.eye]=wake*1.25;                      // they open, and they are not yours
-   o[J.mouth]=.25+wake*.4;o[J.brow]=-.5*wake;
+   o[J.spine]+=-.55*sz+(j1*.08+j2*.05)*sz+.55*limp-.35*wake;
+   o[J.side]+=(j2*.14+j3*.08)*sz;o[J.twist]=(j3*.18)*sz;
+   o[J.headP]+=-.85*sz+j1*.18*sz+.7*limp-(.9*snap-.2*wake);
+   o[J.headR]+=(j2*.5+j3*.25)*sz;
+   o[J.lShP]+=(j1*.9-.4)*sz;o[J.rShP]+=(j3*.9-.5)*sz;
+   o[J.lShR]+=(.5+j2*.4)*sz;o[J.rShR]+=(.45+j1*.4)*sz;
+   o[J.lElb]+=(.6+j3*.5)*sz;o[J.rElb]+=(.7+j2*.5)*sz;
+   o[J.handGrip]=.95*sz+.4*wake;o[J.shrug]=(1+j1*.6)*sz;
+   o[J.bob]=(o[J.bob]||0)+Math.abs(j1)*.03*sz;
+   o[J.eye]=sz>.1?.15+Math.abs(j2)*.25:wake*1.3;        // rolled back while it seizes
+   o[J.mouth]=.95*sz+.25*limp+.5*wake;o[J.brow]=.7*sz-.6*wake;
  },
  /* pushing up off the ground into a zombie stance */
  pushUp(o,t,c){
@@ -7923,7 +8010,7 @@ const VS_SKIN_D=[
 const SKIN_MAT=`
 uniform vec3 uSkin;uniform vec3 uZSkin;uniform vec3 uHairC;uniform vec3 uShirt;uniform vec3 uJeans;
 uniform vec3 uShoe;uniform vec3 uIris;uniform vec4 uZ;uniform vec4 uFace;uniform vec4 uBlood;uniform vec4 uWound[4];
-uniform float uDetail;uniform float uSex;uniform vec4 uInf;uniform float uShM;
+uniform float uDetail;uniform float uSex;uniform vec4 uInf;uniform float uShM;uniform float uHairS;
 varying vec3 vB;varying float vMat;
 const vec3 HEADB=vec3(0.0,1.653,0.0);
 float hs3(vec3 p){p=fract(p*0.3183099+vec3(0.11,0.17,0.13));p*=17.0;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}
@@ -7986,6 +8073,9 @@ vec3 skinCol(vec3 b,inout float em){
     float hy=a<0.5?0.097-0.03*(a/0.5)*(a/0.5):(a<1.1?mix(0.067,0.03,(a-0.5)/0.6):
       (a<1.3?mix(0.03,-0.008,(a-1.1)/0.2):(a<1.75?0.044:(a<2.2?mix(0.044,-0.03,(a-1.75)/0.45):mix(-0.03,-0.062,(a-2.2)/0.94)))));
     float sc=smoothstep(-0.003,0.003,h.y-hy+(uDetail>0.5?(vn(h*420.0)-0.5)*0.005:0.0));
+    // a fade: full on top, blending down to bare skin over the sides and back
+    if(uHairS>2.5){float side=smoothstep(0.35,0.9,abs(atan(h.x,h.z))/1.57);
+      sc*=mix(1.0,smoothstep(0.035,0.085,h.y+(uDetail>0.5?(vn(h*300.0)-0.5)*0.012:0.0)),side);}
     float stub=uDetail>0.5?vn(b*1400.0):0.5;
     float dens=uZ.z>0.5?1.0:0.6+0.32*stub;
     c=mix(c,uHairC*(0.82+0.18*stub),sc*dens*(1.0-0.35*smoothstep(0.6,1.0,zt)*step(0.55,vn(b*30.0))));   // dead hair comes away in patches
@@ -8000,7 +8090,7 @@ vec3 eyeCol(vec3 b,inout float em){
   vec3 h=b-HEADB;
   vec3 ec=h.x<0.0?vec3(-0.0325,0.026,0.074):vec3(0.0325,0.026,0.074);
   vec3 e=normalize(h-ec);
-  float zt=spread(b);
+  float zt=uZ.y;   // the eyes stay human right up until the body has fully turned
   vec2 q=vec2(e.x-uFace.y,e.y-uFace.z);
   float r=e.z>0.3?length(q):1.0;
   // whites go bloodshot, then the whole eye floods red as it dies
@@ -8092,6 +8182,7 @@ vec3 hairCol(vec3 b,vec3 N,inout float spK,inout float spA,inout vec3 Tg){
   vec3 h=b-HEADB;
   float st=vn(vec3(h.x*380.0,h.y*9.0,h.z*380.0)),st2=uDetail>0.5?vn(vec3(h.x*150.0,h.y*4.0,h.z*150.0)+5.0):0.5;
   float endY=-0.335-uSex*0.03+0.15*smoothstep(0.035,0.105,abs(h.x))+0.05*smoothstep(-0.05,0.03,h.z);
+  if(uHairS>1.5)endY=-0.15+0.025*smoothstep(-0.02,0.06,h.z);   // the bob: a blunt cut at the jaw, a touch shorter in front
   float tip=(h.y-endY)/0.075;
   // a dead body's hair hangs in rattier, uneven clumps
   float rag=uZ.w*0.6*vn(vec3(h.x*60.0,0.0,h.z*60.0));
@@ -8186,6 +8277,7 @@ const FS_SKIN=FS_MAIN
     'float shadowAt(vec2 uv,float d){return 1.0-smoothstep(0.03,0.32,(d-unpack(texture2D(uShadowMap,uv))-uBias)*uShM);}');
 /* realistic skin tones, lightest to deepest */
 const IRIS=[0x5a3a22,0x6b4426,0x3d2716,0x7a5a32,0x4f7aa8,0x5f8a6a,0x8a6a3a,0x2d1c10];
+const HAIR_STYLE_ID={hair_buzz:0,hair_long:1,hair_bob:2,hair_fade:3};
 const HUMAN_COL={shirt:[.93,.93,.915],jeans:[.2,.3,.47],shoe:[.92,.92,.9]};
 function _hb64(s){const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u;}
 const Human={
@@ -8248,7 +8340,7 @@ const Human={
       gl.uniform3fv(u.uIris,hm.iris);
       gl.uniform4fv(u.uZ,hm.z);gl.uniform4fv(u.uFace,hm.face);gl.uniform4fv(u.uBlood,hm.blood);
       gl.uniform4fv(u['uWound[0]'],hm.wounds);gl.uniform1f(u.uDetail,hm.lod===0?1:0);
-      gl.uniform1f(u.uSex,hm.female?1:0);gl.uniform4fv(u.uInf,hm.inf);gl.uniform1f(u.uShM,R.shadowRange||100);
+      gl.uniform1f(u.uSex,hm.female?1:0);gl.uniform4fv(u.uInf,hm.inf);gl.uniform1f(u.uShM,R.shadowRange||100);gl.uniform1f(u.uHairS,hm.style||0);
       const set=hm.female&&this.f?this.f:this.m;
       const m=set.lods[hm.lod];this.bind(p,m);gl.drawElements(gl.TRIANGLES,m.n,gl.UNSIGNED_SHORT,0);
       if(hm.long){
@@ -8277,7 +8369,8 @@ function prepHuman(e,camDist,dt){
   fx.jaw=Math.max(0,mOpen-.1)*.3;
   fx.browUp=ex[EX.browUp]*.007+Math.max(0,browIn)*.0025;
   fx.browTilt=-browIn*.22;
-  hm.long=av.hair==='hair_long';
+  hm.style=HAIR_STYLE_ID[av.hair]||0;
+  hm.long=hm.style===1||hm.style===2;
   hm.female=!!L.female&&!!Human.f;
   fx.scaleMul=hm.female?.94:1;           // she is sculpted on the shared skeleton, drawn at 1.69 m
   hm.scale=(e.scale||1)*fx.scaleMul;
@@ -8297,7 +8390,7 @@ function prepHuman(e,camDist,dt){
   hm.hair[0]=L.hair[0];hm.hair[1]=L.hair[1];hm.hair[2]=L.hair[2];
   if(e._irisSeed===undefined){let h=0;const n=String(e.name||e.id||'');for(let i=0;i<n.length;i++)h=(h*31+n.charCodeAt(i))|0;e._irisSeed=Math.abs(h);}
   const ic=hex(IRIS[e._irisSeed%IRIS.length]);hm.iris[0]=ic[0];hm.iris[1]=ic[1];hm.iris[2]=ic[2];
-  hm.z[0]=zA;hm.z[1]=clamp(zA*1.7-.55,0,1);hm.z[2]=hm.long?1:0;hm.z[3]=clamp((zA-.6)/.4,0,1);   // filth and tears only once they have turned
+  hm.z[0]=zA;hm.z[1]=(e.team===TEAM.ZOMBIE&&!e.transforming)?1:0;hm.z[2]=hm.long?1:0;hm.z[3]=clamp((zA-.6)/.4,0,1);   // filth and tears only once they have turned
   hm.face[0]=open;hm.face[1]=clamp(-p[J.headY]*.3,-.22,.22);hm.face[2]=0;hm.face[3]=0;
   // the infection creeps out from the wound it came in through; while the
   // body convulses through the turn its veins pulse with light
@@ -9281,6 +9374,10 @@ class Simulation{
         if(t&&t.team===TEAM.HUMAN&&!t.transforming&&!t.infected&&
            this.canReach(e,t,3.1)){
           if(e.act==='ankleBite'){this.takedown(t,e);}
+          // someone standing or only walking gets dragged down and eaten, the
+          // way the crawler feeds; only a survivor at a run takes a bite and
+          // keeps going
+          else if(Math.hypot(t.vx,t.vz)<4.4){this.takedown(t,e);}
           else{
           // bite or scratch — both start the same one-minute infection
           const kind=e.actBehind?'bite':'scratch';
@@ -9329,6 +9426,13 @@ class Simulation{
           e.eatQueue=false;
           if(e.bot&&Math.random()<.6){e.act='eat';e.actT=0;this.emit('eat',{id:e.id,x:e.x,y:e.y,z:e.z});}
         }
+      }
+      // the seizure: blood spat up in bursts, bones cracking
+      if(e.act==='twitch'&&e.actT>.4&&e.actT<2.3){
+        e.spitT=(e.spitT||0)-dt;
+        if(e.spitT<=0){e.spitT=rnd(.25,.5);
+          this.emit('vomit',{id:e.id,x:e.x,y:e.y,z:e.z,p:1});
+          this.emit('crack',{id:e.id,x:e.x,y:e.y,z:e.z});}
       }
       if(e.act==='infecting'){
         // the change spreads out from the wound between 1.0s and 2.2s
@@ -9721,7 +9825,7 @@ class Simulation{
   }
 }
 const ACT_DUR={stab:.62,bite:.72,infecting:2.55,rise:.9,eat:2.4,zroar:1.1,vic_roar:6.0,
-  crash:.92,stumble:.95,recoil:.85,react:.9,sitDown:1.7,twitch:1.8,pushUp:1.5,
+  crash:.92,stumble:.95,recoil:.85,react:.9,sitDown:1.7,twitch:3.6,pushUp:1.5,
   ankleBite:.78,tripFall:1.1,mount:.95,devour:7.5,turnUp:1.9,
   emote:3.0,victory:6.0,emote_wave:2.6,emote_dance:4.2,emote_clap:2.4,emote_point:2.2,
   emote_sit:4.5,emote_facepalm:2.4,emote_flex:2.6,emote_taunt:2.8};
@@ -10371,6 +10475,20 @@ const Game={
       if(e._dripT<=0){e._dripT=rnd(.22,.55)/GORE_LEVEL();if(dist2(e.x,e.z,Cam.x,Cam.z)<45*45)GORE.drip(e.x,e.z,e.y);}
     }
     BloodFX.update(dt,this.me);
+    // sound: zombies moan as they shamble about, and an infected player hears
+    // their own heart racing faster toward the turn
+    for(const e of this.sim.ents){
+      if(e.team!==TEAM.ZOMBIE||e.transforming)continue;
+      e._moanT=(e._moanT===undefined?rnd(2,9):e._moanT)-dt;
+      if(e._moanT<=0){e._moanT=rnd(4,11);
+        const d=Math.hypot(e.x-Cam.x,e.z-Cam.z);if(d<18)Audio_.groan(variantOf(e).crawl?1.25:(e.heavy?.75:1));}
+    }
+    {const m=this.me;
+     if(m&&m.team===TEAM.HUMAN&&(m.infected||m.downed)){
+       const k=m.downed?clamp((m.downT||0)/DOWN.dur,0,1):clamp((m.infT||0)/INF.dur,0,1);
+       this._hbT=(this._hbT||0)-dt;
+       if(this._hbT<=0){this._hbT=1.05-k*.6;Audio_.heartbeat(k);}
+     }}
     // XP ticks up while you stay clean
     if(this.sim.phase==='live'&&this.me.team===TEAM.HUMAN){
       this.survivedT+=dt;
@@ -10547,7 +10665,7 @@ const Game={
           GORE.spray(e.x,e.z,e.y,rnd(-1,1),rnd(-1,1),9,1.6);
           if(d<30){Audio_.crunch();Audio_.scream();}
           if(e.id===Client.localId)BloodFX.hit(1);
-          UI.kill('🕷 '+e.byName+' dragged down '+e.name);
+          UI.kill('🧟 '+e.byName+' dragged down '+e.name);
           if(e.id===Client.localId){
             UI.big('DRAGGED DOWN','It has you — 30 seconds');
             UI.flash(.9);Cam.addShake(1);haptic([90,60,120]);
@@ -10569,7 +10687,7 @@ const Game={
           if(e.heavy){const a=rnd(TAU);PART.spray(e.x,e.y+.4,e.z,Math.cos(a),Math.sin(a),10,.8);GORE.spray(e.x,e.z,e.y,Math.cos(a),Math.sin(a),3,1.2);}
           if(e.id===Client.localId&&e.heavy)BloodFX.hit(.7);
           if(d<22&&e.heavy){
-            Audio_.tear(Math.random()<.4);
+            if(Math.random()<.5)Audio_.chew();else Audio_.tear(Math.random()<.4);
             if(Math.random()<.3)Audio_.crunch();
           }
           if(e.id===Client.localId&&e.heavy){Cam.addShake(.22);haptic(18);}
@@ -10590,6 +10708,11 @@ const Game={
           if(d<26)Audio_.growl(0,.75);
           PART.infection(e.x,e.y+1,e.z,16);
           if(e.id===Client.localId)UI.flash(.55);
+          break;
+        }
+        case 'crack':{
+          const d=Math.hypot(e.x-Cam.x,e.z-Cam.z);
+          if(d<20&&Math.random()<.7)Audio_.crack();
           break;
         }
         case 'vomit':{
@@ -10861,8 +10984,9 @@ const UI={
   paused:false,tutStep:0,shopTab:'hair',avTab:'gender',srvFilter:'all',srvMode:'all',
   init(){
     $$('[data-nav]').forEach(b=>b.addEventListener('click',()=>{
-      Audio_.init();Audio_.resume();Audio_.ui('click');
+      Audio_.init();Audio_.resume();
       const n=b.dataset.nav;
+      Audio_.ui(n==='menu'?'back':'open');
       if(n==='quickplay')UI.quickJoin();
       else if(n==='menu'){UI.show('menu');Preview.place();}
       else if(n==='servers'){UI.buildServers();UI.show('serversScreen');}
@@ -11191,7 +11315,7 @@ const UI={
     return 'background:linear-gradient(160deg,rgba(255,255,255,.16),rgba(0,0,0,.25))';
   },
   swatchInner(cat,it){
-    const ico={hair:it.id==='hair_long'?'💇‍♂️':'💈',outfit:'👕',top:'👕',bottom:'👖',shoes:'👟',hat:'🎩',glasses:'🕶️',back:'🎒',
+    const ico={hair:(it.id==='hair_long'||it.id==='hair_bob')?'💇‍♂️':'💈',outfit:'👕',top:'👕',bottom:'👖',shoes:'👟',hat:'🎩',glasses:'🕶️',back:'🎒',
       face:'😀',body:'🎨',emote:it.ico||'😀',victory:it.ico||'🏆'};
     if(cat==='emote'||cat==='victory')return '<span class="faceEmoji">'+(it.ico||'😀')+'</span>';
     if(cat==='face')return '<span class="faceEmoji">'+
@@ -11251,11 +11375,24 @@ const UI={
           },!own,reqText(it));
       });
     };
-    const listColors=(arr,key)=>{
+    const listColors=(arr,key,hk)=>{
+      // first a free colour picker: any colour you like
+      if(hk){
+        const cur=a[hk]||('#'+arr[a[key]].toString(16).padStart(6,'0'));
+        const d=document.createElement('label');
+        d.className='item'+(a[hk]?' sel':'');
+        d.innerHTML='<div class="itemSw" style="background:conic-gradient(red,yellow,lime,cyan,blue,magenta,red);position:relative">'+
+          '<input type="color" value="'+cur+'" style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer"></div>'+
+          '<div class="itemName">Custom</div>';
+        const inp=d.querySelector('input');
+        inp.addEventListener('input',()=>{a[hk]=inp.value;Preview.refresh();d.classList.add('sel');});
+        inp.addEventListener('change',()=>{Audio_.ui('equip');a[hk]=inp.value;persist();Preview.refresh();this.buildAvatar();});
+        grid.appendChild(d);
+      }
       arr.forEach((c,i)=>{
         addItem('<div class="itemSw" style="background:'+css(hex(c))+'"></div>'+
-          '<div class="itemName">&nbsp;</div>',a[key]===i,()=>{
-            Audio_.ui('equip');a[key]=i;persist();Preview.refresh();this.buildAvatar();
+          '<div class="itemName">&nbsp;</div>',a[key]===i&&!(hk&&a[hk]),()=>{
+            Audio_.ui('equip');a[key]=i;if(hk)a[hk]='';persist();Preview.refresh();this.buildAvatar();
           },false,0);
       });
     };
@@ -11274,8 +11411,8 @@ const UI={
         {const n=document.createElement('div');n.className='muted';n.style.cssText='grid-column:1/-1;padding:6px 2px;line-height:1.6';
          n.textContent='Baggy jeans, a white crew-neck tee and white sneakers. More clothes are on the way.';grid.appendChild(n);}
         break;
-      case 'bodyColor':listColors(SKIN,'skin');break;
-      case 'hairColor':listColors(HAIRC,'hairColor');break;
+      case 'bodyColor':listColors(SKIN,'skin','skinHex');break;
+      case 'hairColor':listColors(HAIRC,'hairColor','hairHex');break;
       case 'topColor':listColors(CLOTHC,'topColor');break;
       case 'bottomColor':listColors(CLOTHC,'bottomColor');break;
       case 'shoesColor':listColors(CLOTHC,'shoesColor');break;
@@ -11998,8 +12135,8 @@ function boot(){
       UI.loadProgress(1,'Ready');
       _boot=true;
       Game.state='menu';
-      if(!Save.seenTutorial){UI.tutStep=0;UI.buildTutorial();UI.show('tutorialScreen');}
-      else UI.show('menu');
+      Save.seenTutorial=true;   // the tutorial is gone: straight to the menu
+      UI.show('menu');
       $('#verNote').textContent='Remastered · '+Servers.length+' servers · Easy → Insane';
     },260);
   },140);
