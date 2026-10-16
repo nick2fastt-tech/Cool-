@@ -105,7 +105,7 @@ h2.hd{font-size:clamp(19px,5.2vw,28px);letter-spacing:3px;font-weight:800;text-t
 #menuCorner{display:flex;gap:8px;align-items:center}
 #menuCorner .btn{width:46px;height:46px;padding:0;font-size:20px;border-radius:14px}
 #menuBtns .wide{grid-column:1/-1;font-size:clamp(17px,4.6vw,23px);padding:19px 8px;animation:floaty 3.4s ease-in-out infinite}
-.footNote{font-size:10px;letter-spacing:2px;color:#6f89a8;margin-top:10px;text-align:center}
+.footNote{font-size:10px;letter-spacing:2px;color:#6f89a8;margin-top:10px;text-align:center;max-width:94vw;overflow-wrap:anywhere}
 
 /* ---------- panels ---------- */
 .panel{width:min(880px,95vw);max-height:min(84vh,760px);display:flex;flex-direction:column;
@@ -1764,7 +1764,7 @@ const R={
     const fs=gl.createShader(gl.FRAGMENT_SHADER);gl.shaderSource(fs,fsrc);gl.compileShader(fs);
     if(!gl.getShaderParameter(fs,gl.COMPILE_STATUS)){this.lastErr='FS '+gl.getShaderInfoLog(fs);console.error(this.lastErr);return null;}
     const p=gl.createProgram();gl.attachShader(p,vs);gl.attachShader(p,fs);gl.linkProgram(p);
-    if(!gl.getProgramParameter(p,gl.LINK_STATUS)){this.lastErr='LINK '+gl.getProgramInfoLog(p);console.error(this.lastErr);return null;}
+    if(!gl.getProgramParameter(p,gl.LINK_STATUS)){this.lastErr='LINK '+(gl.getProgramInfoLog(p)||'(no log)');console.error(this.lastErr);return null;}
     p.u={};p.a={};
     const nu=gl.getProgramParameter(p,gl.ACTIVE_UNIFORMS);
     for(let i=0;i<nu;i++){const info=gl.getActiveUniform(p,i);p.u[info.name]=gl.getUniformLocation(p,info.name);}
@@ -20804,6 +20804,15 @@ const VS_SKIN_D=[
 ' vec4 r2=uBones[i0+2]*aW.x+uBones[i1+2]*aW.y+uBones[i2+2]*aW.z+uBones[i3+2]*aW.w;',
 ' vec4 q=uLightVP*vec4(dot(r0,p),dot(r1,p),dot(r2,p),1.0);vD=q.z*0.5+0.5;gl_Position=q;',
 '}'].join('\n');
+/* The same two shaders with the bones read from a small float texture
+   instead of 99 uniform vectors: many phone GPUs refuse to link a program
+   that close to their uniform limit. 128 x 1 texels, three per bone. */
+const BONE_TEX_W=128;
+const _texBones=src=>src
+  .replace(/uniform vec4 uBones\[\d+\];/,'uniform highp sampler2D uBoneTex;')
+  .replace('void main(){','highp vec4 bt(int i){return texture2D(uBoneTex,vec2((float(i)+0.5)/'+BONE_TEX_W+'.0,0.5));}\nvoid main(){')
+  .replace(/uBones\[(i\d(?:\+\d)?)\]/g,'bt($1)');
+const VS_SKIN_T=_texBones(VS_SKIN), VS_SKIN_DT=_texBones(VS_SKIN_D);
 /* Materials. Everything below works in bind-pose space (vB), so painted
    detail — lips, brows, the hairline, seams, laces, tears, blood — is pinned
    to the body however it moves. */
@@ -21159,14 +21168,49 @@ const Human={
   init(){
     const gl=R.gl;
     try{
-      this.err='';
+      // Try each way of drawing people until one links on this GPU: bones as
+      // uniforms or in a texture, the full material or the plain one.
+      const errs=[],H=location.hash;
       const maxU=gl.getParameter(gl.MAX_VERTEX_UNIFORM_VECTORS);
-      if(maxU<HNB*3+12){this.err='only '+maxU+' vertex uniforms';return;}
-      // the full material, or the plain backup if this GPU's compiler refuses it
-      this.prog=/#lite/.test(location.hash)?null:R.program(VS_SKIN,FS_SKIN);
-      if(!this.prog){this.err=R.lastErr||'full shader off';this.lite=true;this.prog=R.program(VS_SKIN,FS_SKIN_LITE);}
-      this.progD=R.program(VS_SKIN_D,FS_DEPTH);
-      if(!this.prog||!this.progD){this.err=(this.err?this.err+' / ':'')+(R.lastErr||'');return;}
+      const uniOK=maxU>=HNB*3+12&&!/tex/.test(H);
+      // float textures are built into WebGL2; WebGL1 needs the extension
+      const gl2=typeof WebGL2RenderingContext!=='undefined'&&gl instanceof WebGL2RenderingContext;
+      const texOK=gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS)>0&&(gl2||!!gl.getExtension('OES_texture_float'));
+      if(!uniOK)errs.push('uniforms:'+maxU);
+      if(!texOK)errs.push('no vertex textures');
+      const tries=[
+        uniOK&&!/lite/.test(H)&&['full',VS_SKIN,FS_SKIN,VS_SKIN_D,false,false],
+        texOK&&!/lite/.test(H)&&['full tex',VS_SKIN_T,FS_SKIN,VS_SKIN_DT,true,false],
+        texOK&&['simple tex',VS_SKIN_T,FS_SKIN_LITE,VS_SKIN_DT,true,true],
+        uniOK&&['simple',VS_SKIN,FS_SKIN_LITE,VS_SKIN_D,false,true]].filter(Boolean);
+      for(const [name,vs,fs,vsd,tex,lite] of tries){
+        const p=R.program(vs,fs);
+        if(!p){errs.push(name+': '+(R.lastErr||'?').slice(0,60));continue;}
+        const pd=R.program(vsd,FS_DEPTH);
+        if(!pd){errs.push(name+' shadow: '+(R.lastErr||'?').slice(0,60));continue;}
+        this.prog=p;this.progD=pd;this.useTex=tex;this.lite=lite;this.mode=name;break;
+      }
+      if(!this.prog){
+        // nothing linked: find out which half this GPU objects to, so the
+        // message on screen says exactly what to fix
+        const FS0='precision mediump float;void main(){gl_FragColor=vec4(1.0);}';
+        const VS0='attribute vec4 aPos;varying vec3 vN;varying vec3 vW;varying vec4 vC;varying vec4 vL;varying vec3 vB;varying float vMat;'+
+          'void main(){vN=vec3(0.0,1.0,0.0);vW=aPos.xyz;vC=vec4(0.0);vL=vec4(0.0);vB=aPos.xyz;vMat=0.0;gl_Position=vec4(aPos.xyz,1.0);}';
+        const t=(v,f)=>R.program(v,f)?'ok':'fail';
+        errs.push('diag gl'+(gl2?2:1)+' vu'+maxU+' vs:'+t(VS_SKIN,FS0)+' fs:'+t(VS0,FS_SKIN_LITE)+
+          ' fsfull:'+t(VS0,FS_SKIN)+' 12bones:'+t(VS_SKIN.replace('uBones['+(HNB*3)+']','uBones[12]'),FS0));
+        this.err=errs.join(' | ');
+        return;
+      }
+      this.err=errs.join(' | ');
+      if(this.useTex){
+        this.boneTex=gl.createTexture();this.boneBuf=new Float32Array(BONE_TEX_W*4);
+        gl.activeTexture(gl.TEXTURE3);gl.bindTexture(gl.TEXTURE_2D,this.boneTex);
+        gl.texImage2D(gl.TEXTURE_2D,0,gl2?gl.RGBA32F:gl.RGBA,BONE_TEX_W,1,0,gl.RGBA,gl.FLOAT,null);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+        gl.activeTexture(gl.TEXTURE0);
+      }
       const up=L=>{
         const vbo=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vbo);gl.bufferData(gl.ARRAY_BUFFER,_hb64(L.v),gl.STATIC_DRAW);
         const ib=_hb64(L.i),ibo=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ibo);
@@ -21177,6 +21221,15 @@ const Human={
       this.f=typeof HUMAN_MESH_F!=='undefined'?{lods:HUMAN_MESH_F.lods.map(up),hair:HUMAN_MESH_F.hair.map(up)}:null;
       this.ok=true;
     }catch(e){console.warn('human mesh disabled',e);this.err='init: '+(e&&e.message||e);this.ok=false;}
+  },
+  bones(p,hm){
+    const gl=R.gl;
+    if(!this.useTex){gl.uniform4fv(p.u['uBones[0]'],hm.S);return;}
+    this.boneBuf.set(hm.S);
+    gl.activeTexture(gl.TEXTURE3);gl.bindTexture(gl.TEXTURE_2D,this.boneTex);
+    gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,BONE_TEX_W,1,gl.RGBA,gl.FLOAT,this.boneBuf);
+    gl.uniform1i(p.u.uBoneTex,3);
+    gl.activeTexture(gl.TEXTURE0);
   },
   bind(p,m){
     const gl=R.gl,a=p.a;
@@ -21198,7 +21251,7 @@ const Human={
     gl.uniformMatrix4fv(p.u.uLightVP,false,R.lightVP);
     for(const e of this.list){
       const hm=e._hm;
-      gl.uniform4fv(p.u['uBones[0]'],hm.S);
+      this.bones(p,hm);
       const set=hm.female&&this.f?this.f:this.m;
       const m=set.lods[hm.lod];this.bind(p,m);gl.drawElements(gl.TRIANGLES,m.n,gl.UNSIGNED_SHORT,0);
       if(hm.long){const h=set.hair[hm.lod];this.bind(p,h);gl.drawElements(gl.TRIANGLES,h.n,gl.UNSIGNED_SHORT,0);}
@@ -21212,7 +21265,7 @@ const Human={
     R.litUniforms(p);
     for(const e of this.list){
       const hm=e._hm;
-      gl.uniform4fv(u['uBones[0]'],hm.S);
+      this.bones(p,hm);
       gl.uniform3fv(u.uSkin,hm.skin);gl.uniform3fv(u.uZSkin,hm.zskin);gl.uniform3fv(u.uHairC,hm.hair);
       gl.uniform3fv(u.uShirt,HUMAN_COL.shirt);gl.uniform3fv(u.uJeans,HUMAN_COL.jeans);gl.uniform3fv(u.uShoe,HUMAN_COL.shoe);
       gl.uniform3fv(u.uIris,hm.iris);
@@ -25017,7 +25070,7 @@ function boot(){
       Save.seenTutorial=true;   // the tutorial is gone: straight to the menu
       UI.show('menu');
       // say so if this device could not run the realistic people
-      if(!Human.ok)setTimeout(()=>UI.toast('Simple characters on this device ('+String(Human.err||'unknown').slice(0,120)+')'),1200);
+      if(!Human.ok)setTimeout(()=>UI.toast('Simple characters on this device ('+String(Human.err||'unknown').slice(0,220)+')'),1200);
       else if(Human.lite)setTimeout(()=>UI.toast('Characters in simplified detail on this device'),1200);
       // the menu groove starts on the first touch (browsers need one for sound)
       const firstTouch=()=>{Audio_.init();Audio_.resume();
@@ -25025,8 +25078,8 @@ function boot(){
       window.addEventListener('pointerdown',firstTouch);window.addEventListener('keydown',firstTouch);
       // build tag and how people are drawn on this device, so a stale copy or a
       // GPU that can't run the realistic bodies is obvious at a glance
-      const gpuNote=Human.ok?(Human.lite?'people: simple':'people: full'):'people: OLD ('+String(Human.err||'?').slice(0,60)+')';
-      $('#verNote').textContent='Remastered build 5 · '+gpuNote;
+      const gpuNote=Human.ok?'people: '+Human.mode:'people: OLD ('+String(Human.err||'?').slice(0,200)+')';
+      $('#verNote').textContent='Remastered build 6 · '+gpuNote;
     },260);
   },140);
   addEventListener('resize',()=>{R.resize();});
