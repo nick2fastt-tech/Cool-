@@ -920,8 +920,8 @@ function css(c){return 'rgb('+(c[0]*255|0)+','+(c[1]*255|0)+','+(c[2]*255|0)+')'
 /* ============================================================================
    1. PERSISTENT STORAGE
    ========================================================================== */
-const SAVE_KEY='infector_save_v1';          // legacy single-slot save (migrated)
-const STORE_KEY='infector_profiles_v1';
+const SAVE_KEY='infector_save_v1_retired';  // the old single-slot save is no longer carried over
+const STORE_KEY='infector_profiles_v2';     // v2: everyone starts fresh with the new people
 const DefaultSave={
   xp:0, name:'', owned:[],
   avatar:null, seenTutorial:false,
@@ -1406,6 +1406,7 @@ const Audio_={
   startMusic(kind){
     if(!this.ctx)return;
     this.stopMusic();
+    if(kind==='menu'){this.startGroove();return;}
     const c=this.ctx;
     const out=c.createGain();out.gain.value=0;out.connect(this.musicBus);
     out.gain.linearRampToValueAtTime(.5,c.currentTime+2.2);
@@ -1450,9 +1451,73 @@ const Audio_={
       m.out.gain.cancelScheduledValues(t);
       m.out.gain.setValueAtTime(m.out.gain.value,t);
       m.out.gain.linearRampToValueAtTime(0,t+.6);
-      m.voices.forEach(v=>v.o.stop(t+.7));
+      if(m.voices)m.voices.forEach(v=>v.o.stop(t+.7));
     }catch(e){}
     this.music=null;
+  },
+  /* ---- the menu groove: a swung drum machine, a slap-funk bassline in E
+     dorian and electric-piano stabs, scheduled ahead on the audio clock ---- */
+  startGroove(){
+    const c=this.ctx,out=c.createGain();out.gain.value=0;out.connect(this.musicBus);
+    out.gain.linearRampToValueAtTime(.62,c.currentTime+1.4);
+    const bpm=104;
+    const m={out,groove:true,kind:'menu',next:c.currentTime+.08,step:0,s16:60/bpm/4};
+    m.timer=setInterval(()=>this._grooveTick(),25);
+    this.music=m;
+  },
+  _grooveTick(){
+    const m=this.music,c=this.ctx;if(!m||!m.groove||!c)return;
+    while(m.next<c.currentTime+.14){
+      const st=m.step%16,bar=Math.floor(m.step/16)%8;
+      this._grooveStep(m,st,bar,m.next+(st%2?m.s16*.17:0));   // swing on the off sixteenths
+      m.next+=m.s16;m.step++;
+    }
+  },
+  _gOsc(m,t,o){
+    const c=this.ctx,os=c.createOscillator(),g=c.createGain();
+    os.type=o.type||'sine';os.frequency.setValueAtTime(o.f0,t);
+    if(o.f1)os.frequency.exponentialRampToValueAtTime(o.f1,t+(o.glide||o.dur));
+    let node=os;
+    if(o.fc){const f=c.createBiquadFilter();f.type='lowpass';f.Q.value=o.q||4;
+      f.frequency.setValueAtTime(o.fc,t);f.frequency.exponentialRampToValueAtTime(o.fc1||o.fc,t+o.dur);node.connect(f);node=f;}
+    g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(o.g,t+(o.atk||.004));
+    g.gain.exponentialRampToValueAtTime(.0001,t+o.dur);
+    node.connect(g);g.connect(m.out);os.start(t);os.stop(t+o.dur+.05);
+  },
+  _gNoise(m,t,o){
+    const c=this.ctx,s=c.createBufferSource();s.buffer=this.noiseBuf;s.playbackRate.value=o.rate||1;
+    const f=c.createBiquadFilter();f.type=o.type||'highpass';f.frequency.value=o.fc;f.Q.value=o.q||.8;
+    const g=c.createGain();g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(o.g,t+.002);
+    g.gain.exponentialRampToValueAtTime(.0001,t+o.dur);
+    s.connect(f);f.connect(g);g.connect(m.out);s.start(t,Math.random()*1.5);s.stop(t+o.dur+.03);
+  },
+  _grooveStep(m,st,bar,t){
+    const E=41.2,A=55;                                   // E1 and A1
+    const two=bar%4>=2, root=two?A:E;                    // Em9 for two bars, A9 for two
+    const fill=bar===7&&st>=12;
+    // drums
+    if(st===0||st===10||(st===7&&bar%2)||(st===3&&bar%4===3))this._gOsc(m,t,{f0:130,f1:42,dur:.26,g:.55,glide:.09});
+    if(st===4||st===12)this._gNoise(m,t,{type:'bandpass',fc:1900,q:.7,dur:.17,g:.28}),this._gOsc(m,t,{f0:210,f1:150,dur:.09,g:.14,type:'triangle'});
+    if(fill&&st%2)this._gNoise(m,t,{type:'bandpass',fc:1500,q:.8,dur:.09,g:.14});
+    if(st===15&&bar%2===0)this._gNoise(m,t,{type:'bandpass',fc:1700,q:.9,dur:.06,g:.06});   // ghost note
+    if(st!==14)this._gNoise(m,t,{fc:8200,dur:st%2?.025:.04,g:st%4===2?.07:(st%2?.025:.045)});
+    else this._gNoise(m,t,{fc:7000,dur:.24,g:.06});     // open hat
+    if(st===4||st===12)this._gNoise(m,t+.012,{fc:3000,dur:.05,g:.06});   // a clap layered on the snare
+    // bass: octave pops and slides
+    const BASS={0:[0,.22],3:[12,.09],6:[0,.12],8:[10,.1],10:[7,.12],11:[0,.08],13:[12,.07],14:[3,.12]};
+    const n=BASS[st];
+    if(n){const f=root*2*Math.pow(2,n[0]/12),pop=n[0]===12;
+      this._gOsc(m,t,{f0:f,dur:n[1]+.06,g:pop?.2:.26,type:'sawtooth',fc:pop?2400:1300,fc1:240,q:6});
+      this._gOsc(m,t,{f0:f*.5,dur:n[1]+.04,g:.16,type:'sine'});}
+    // electric-piano stabs on the offbeats
+    if(st===2||st===7||st===10||(st===15&&bar%2)){
+      const chord=two?[9,15,19,24]:[3,7,10,14];        // A9 / Em9 voicings
+      for(const sm of chord){const f=E*8*Math.pow(2,sm/12);
+        this._gOsc(m,t,{f0:f,dur:st===7?.42:.22,g:.05,type:'sine'});
+        this._gOsc(m,t,{f0:f*2,dur:.08,g:.018,type:'triangle'});}
+    }
+    // a muted guitar scratch on the 'e' of beats two and four
+    if(st===5||st===13)this._gNoise(m,t,{type:'bandpass',fc:1100,q:3,dur:.05,g:.08});
   },
   victory(){
     this.stopMusic();
@@ -1695,11 +1760,11 @@ const R={
   program(vsrc,fsrc){
     const gl=this.gl;
     const vs=gl.createShader(gl.VERTEX_SHADER);gl.shaderSource(vs,vsrc);gl.compileShader(vs);
-    if(!gl.getShaderParameter(vs,gl.COMPILE_STATUS)){console.error('VS',gl.getShaderInfoLog(vs));return null;}
+    if(!gl.getShaderParameter(vs,gl.COMPILE_STATUS)){this.lastErr='VS '+gl.getShaderInfoLog(vs);console.error(this.lastErr);return null;}
     const fs=gl.createShader(gl.FRAGMENT_SHADER);gl.shaderSource(fs,fsrc);gl.compileShader(fs);
-    if(!gl.getShaderParameter(fs,gl.COMPILE_STATUS)){console.error('FS',gl.getShaderInfoLog(fs));return null;}
+    if(!gl.getShaderParameter(fs,gl.COMPILE_STATUS)){this.lastErr='FS '+gl.getShaderInfoLog(fs);console.error(this.lastErr);return null;}
     const p=gl.createProgram();gl.attachShader(p,vs);gl.attachShader(p,fs);gl.linkProgram(p);
-    if(!gl.getProgramParameter(p,gl.LINK_STATUS)){console.error('LINK',gl.getProgramInfoLog(p));return null;}
+    if(!gl.getProgramParameter(p,gl.LINK_STATUS)){this.lastErr='LINK '+gl.getProgramInfoLog(p);console.error(this.lastErr);return null;}
     p.u={};p.a={};
     const nu=gl.getProgramParameter(p,gl.ACTIVE_UNIFORMS);
     for(let i=0;i<nu;i++){const info=gl.getActiveUniform(p,i);p.u[info.name]=gl.getUniformLocation(p,info.name);}
@@ -7968,7 +8033,7 @@ function humanLowest(W,sc){
    shadows, lamp pools and fog as the world around them. */
 const VS_SKIN=[
 'attribute vec4 aPos;attribute vec4 aNor;attribute vec4 aBone;attribute vec4 aWt;',
-'uniform mat4 uVP;uniform mat4 uLightVP;uniform vec4 uBones['+(HNB*3)+'];uniform vec4 uZ;uniform vec4 uInf;',
+'uniform mat4 uVP;uniform mat4 uLightVP;uniform vec4 uBones['+(HNB*3)+'];uniform mediump vec4 uZ;uniform mediump vec4 uInf;',
 'varying vec3 vN;varying vec3 vW;varying vec4 vC;varying vec4 vL;varying vec3 vB;varying float vMat;',
 'const vec3 HEADB=vec3(0.0,1.653,0.0);',
 'void main(){',
@@ -8009,8 +8074,8 @@ const VS_SKIN_D=[
    to the body however it moves. */
 const SKIN_MAT=`
 uniform vec3 uSkin;uniform vec3 uZSkin;uniform vec3 uHairC;uniform vec3 uShirt;uniform vec3 uJeans;
-uniform vec3 uShoe;uniform vec3 uIris;uniform vec4 uZ;uniform vec4 uFace;uniform vec4 uBlood;uniform vec4 uWound[4];
-uniform float uDetail;uniform float uSex;uniform vec4 uInf;uniform float uShM;uniform float uHairS;
+uniform vec3 uShoe;uniform vec3 uIris;uniform mediump vec4 uZ;uniform vec4 uFace;uniform vec4 uBlood;uniform vec4 uWound[4];
+uniform float uDetail;uniform float uSex;uniform mediump vec4 uInf;uniform float uShM;uniform float uHairS;
 varying vec3 vB;varying float vMat;
 const vec3 HEADB=vec3(0.0,1.653,0.0);
 float hs3(vec3 p){p=fract(p*0.3183099+vec3(0.11,0.17,0.13));p*=17.0;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}
@@ -8275,6 +8340,53 @@ const FS_SKIN=FS_MAIN
      small self-shadows, which otherwise come out as blocky dark patches. */
   .replace('float shadowAt(vec2 uv,float d){return step(d,unpack(texture2D(uShadowMap,uv))+uBias);}',
     'float shadowAt(vec2 uv,float d){return 1.0-smoothstep(0.03,0.32,(d-unpack(texture2D(uShadowMap,uv))-uBias)*uShM);}');
+/* Backup material for phones whose driver rejects the full one: the same
+   body, light and shadows, plain colours instead of the painted detail. */
+const LITE_MAT=`
+uniform vec3 uSkin;uniform vec3 uZSkin;uniform vec3 uHairC;uniform vec3 uShirt;uniform vec3 uJeans;uniform vec3 uShoe;uniform vec3 uIris;
+uniform mediump vec4 uZ;uniform mediump vec4 uInf;uniform float uShM;uniform float uHairS;
+varying vec3 vB;varying float vMat;
+const vec3 HEADB=vec3(0.0,1.653,0.0);
+void charMat(vec3 N,inout vec3 base,inout float em,inout float spK,inout float spA,inout vec3 Tg){
+  float m=vMat;vec3 h=vB-HEADB;spK=16.0;spA=0.05;
+  if(m<0.5){
+    base=mix(uSkin,uZSkin,clamp(uZ.x,0.0,1.0));
+    float hl=mix(0.075,-0.055,smoothstep(0.03,-0.07,h.z));
+    if(uHairS<1.5&&h.y>hl&&abs(h.x)<0.09)base=uHairC*0.9;
+  }
+  else if(m<1.5||m>8.5)base=uShirt;
+  else if(m<2.5)base=uJeans;
+  else if(m<4.5)base=uShoe;
+  else if(m<5.5){
+    base=vec3(0.92);
+    float r=length(h.xy-vec2(h.x<0.0?-0.0325:0.0325,0.026));
+    if(r<0.0065)base=uIris*0.7;
+    if(r<0.003)base=vec3(0.02);
+    if(uZ.y>0.5){base=vec3(0.85,1.0,0.45);em=1.0;}
+  }
+  else if(m<6.5)base=vec3(0.9,0.88,0.8);
+  else if(m<7.5)base=vec3(0.3,0.06,0.07);
+  else base=uHairC;
+}
+`;
+const FS_SKIN_LITE=FS_MAIN
+  .replace('precision mediump float;','#ifdef GL_FRAGMENT_PRECISION_HIGH\nprecision highp float;\n#else\nprecision mediump float;\n#endif\n'+LITE_MAT)
+  .replace('vec3 N=normalize(vN);','vec3 N=normalize(vN);if(!gl_FrontFacing)N=-N;')
+  .replace('vec3 base=vC.rgb;','vec3 base;float em=0.0,spK=24.0,spA=0.16;vec3 Tg=vec3(0.0,1.0,0.0);charMat(N,base,em,spK,spA,Tg);'+
+    // skin passes light on under the surface: wrap the falloff so the
+    // terminator across a face is soft instead of a hard dark edge
+    'if(vMat<0.5)lit=max((ndl+0.35)/1.35,0.0);')
+  .replace('if(uShadowOn>0.5&&ndl>0.02){','if(uShadowOn>0.5&&ndl>-0.36){')   // and the wrapped band still takes shadows
+  .replace('float spec=pow(max(dot(N,H),0.0),24.0)*0.16*sh*lit;',
+    'float spec=(spK<0.0?pow(sqrt(max(1.0-dot(Tg,H)*dot(Tg,H),0.0)),-spK):pow(max(dot(N,H),0.0),spK))*spA*sh*lit;')
+  .replace('col+=base*vC.a*1.35;','col+=base*em*1.35;')
+  .replace('float t=uTexel;','float t=uTexel*2.4;')    // softer self-shadow edges on people seen up close
+  /* On a person, a shadow fades in with the distance to whatever casts it:
+     the nose or brow (a few cm) cast none, the head on the shoulders a soft
+     one, a tree or a building a full one. The shadow map is too coarse for
+     small self-shadows, which otherwise come out as blocky dark patches. */
+  .replace('float shadowAt(vec2 uv,float d){return step(d,unpack(texture2D(uShadowMap,uv))+uBias);}',
+    'float shadowAt(vec2 uv,float d){return 1.0-smoothstep(0.03,0.32,(d-unpack(texture2D(uShadowMap,uv))-uBias)*uShM);}');
 /* realistic skin tones, lightest to deepest */
 const IRIS=[0x5a3a22,0x6b4426,0x3d2716,0x7a5a32,0x4f7aa8,0x5f8a6a,0x8a6a3a,0x2d1c10];
 const HAIR_STYLE_ID={hair_buzz:0,hair_long:1,hair_bob:2,hair_fade:3};
@@ -8285,10 +8397,14 @@ const Human={
   init(){
     const gl=R.gl;
     try{
-      this.prog=R.program(VS_SKIN,FS_SKIN);
+      this.err='';
+      const maxU=gl.getParameter(gl.MAX_VERTEX_UNIFORM_VECTORS);
+      if(maxU<HNB*3+12){this.err='only '+maxU+' vertex uniforms';return;}
+      // the full material, or the plain backup if this GPU's compiler refuses it
+      this.prog=/#lite/.test(location.hash)?null:R.program(VS_SKIN,FS_SKIN);
+      if(!this.prog){this.err=R.lastErr||'full shader off';this.lite=true;this.prog=R.program(VS_SKIN,FS_SKIN_LITE);}
       this.progD=R.program(VS_SKIN_D,FS_DEPTH);
-      if(!this.prog||!this.progD)return;
-      if(gl.getParameter(gl.MAX_VERTEX_UNIFORM_VECTORS)<HNB*3+16)return;
+      if(!this.prog||!this.progD){this.err=(this.err?this.err+' / ':'')+(R.lastErr||'');return;}
       const up=L=>{
         const vbo=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vbo);gl.bufferData(gl.ARRAY_BUFFER,_hb64(L.v),gl.STATIC_DRAW);
         const ib=_hb64(L.i),ibo=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ibo);
@@ -10985,6 +11101,7 @@ const UI={
   init(){
     $$('[data-nav]').forEach(b=>b.addEventListener('click',()=>{
       Audio_.init();Audio_.resume();
+      if(!Audio_.music&&Game.state==='menu')Audio_.startMusic('menu');
       const n=b.dataset.nav;
       Audio_.ui(n==='menu'?'back':'open');
       if(n==='quickplay')UI.quickJoin();
@@ -12137,6 +12254,13 @@ function boot(){
       Game.state='menu';
       Save.seenTutorial=true;   // the tutorial is gone: straight to the menu
       UI.show('menu');
+      // say so if this device could not run the realistic people
+      if(!Human.ok)setTimeout(()=>UI.toast('Simple characters on this device ('+String(Human.err||'unknown').slice(0,120)+')'),1200);
+      else if(Human.lite)setTimeout(()=>UI.toast('Characters in simplified detail on this device'),1200);
+      // the menu groove starts on the first touch (browsers need one for sound)
+      const firstTouch=()=>{Audio_.init();Audio_.resume();
+        if(!Audio_.music&&Game.state==='menu')Audio_.startMusic('menu');};
+      window.addEventListener('pointerdown',firstTouch);window.addEventListener('keydown',firstTouch);
       $('#verNote').textContent='Remastered · '+Servers.length+' servers · Easy → Insane';
     },260);
   },140);
