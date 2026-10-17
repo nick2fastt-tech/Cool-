@@ -22,5 +22,5 @@ run('ffmpeg', ['-loglevel', 'error', '-y',
   '-c:a', 'aac', '-b:a', '192k', '-ar', '48000',
   '-c:s', 'mov_text', '-metadata:s:s:0', 'language=eng', '-metadata:s:s:0', 'title=English',
   '-metadata', 'title=Battle Wars - S1E1 - Be Ready!',
-  '-shortest', out]);
+  '-t', String(450), out]);
 console.log(`done: ${out} (${(fs.statSync(out).size / 1e6).toFixed(1)} MB)`);
