@@ -9,8 +9,8 @@ Every episode is delivered as one **2K MP4** (2560×1440) with stereo sound and 
 | ID | Title | Length |
 |----|-------|--------|
 | `s1e1-be-ready` | Season 1, Episode 1: "BE READY!" | 7:30 |
-| `s1e2-the-red-diamonds` | Season 1, Episode 2: "THE RED DIAMONDS" | 1:30 |
-| `s1-red-diamonds` | The Red Diamonds scene on its own (used inside Episode 2) | 1:02 |
+| `s1e2-red-diamond-hunt` | Season 1, Episode 2: "THE RED DIAMOND HUNT" (Red Team suits) | 12:49 |
+| `s1-red-diamonds` | Early Red Diamonds teaser scene (blue suits) | 1:02 |
 
 Finished videos go to `output/<episode-id>/` (not stored in git — GitHub's 100 MB file limit).
 
@@ -28,7 +28,7 @@ Finished videos go to `output/<episode-id>/` (not stored in git — GitHub's 100
 
 ## Locations
 
-Aetherfall City streets · Aetherfall Coffee · Battle Wars HQ (outside, living room on floor 1, Controller Room on floor 3, hidden reactor room below) · the Soul Stealer's red-crystal cavern · title card (blue, or red "electric" style).
+Aetherfall City streets · Aetherfall Coffee · Battle Wars HQ (outside, living room on floor 1, Controller Room on floor 3, hidden reactor room below) · Red Team HQ · abandoned subway tunnels, lower machine chamber and platform · the ancient diamond chamber · the Soul Stealer's crystal cavern (red or violet) · title card (blue, or red "electric" style).
 
 ## How it's made
 

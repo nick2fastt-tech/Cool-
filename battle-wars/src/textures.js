@@ -44,11 +44,12 @@ export function drawEmblem(ctx, cx, cy, s, glow = '#7fd4ff', core = '#e8f7ff') {
   ctx.restore();
 }
 
-export function emblemTex() {
-  return canvasTex(128, 128, (ctx, w, h) => {
+const embCache = {};
+export function emblemTex(glow = '#7fd4ff', core = '#e8f7ff') {
+  return (embCache[glow] ||= canvasTex(128, 128, (ctx, w, h) => {
     ctx.clearRect(0, 0, w, h);
-    drawEmblem(ctx, 64, 64, 100);
-  });
+    drawEmblem(ctx, 64, 64, 100, glow, core);
+  }));
 }
 
 export function logoTex(w = 1024, h = 256, bg = null) {

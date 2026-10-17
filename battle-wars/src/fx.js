@@ -41,6 +41,62 @@ export function buildFX(parent) {
   for (let i = 0; i < 6; i++) { const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), waterMat); parent.add(m); jets.push(m); }
 
   const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), pos = new THREE.Vector3();
+  // glowing particles (fire, energy) and solid ones (debris, smoke, dust), both with per-particle colour
+  const GMAX = 3000, SMAX = 1500;
+  const glow = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }), GMAX);
+  const solid = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, transparent: true, opacity: 0.85 }), SMAX);
+  for (const m of [glow, solid]) { m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.frustumCulled = false; m.setColorAt(0, new THREE.Color()); parent.add(m); }
+  const rings = [];
+  for (let i = 0; i < 3; i++) { const r = new THREE.Mesh(new THREE.TorusGeometry(1, 0.08, 8, 48), new THREE.MeshBasicMaterial({ color: 0xff3040, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })); r.rotation.x = Math.PI / 2; parent.add(r); rings.push(r); }
+  const spheres = [];
+  for (let i = 0; i < 2; i++) { const m = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), new THREE.MeshBasicMaterial({ color: 0xa040ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })); parent.add(m); spheres.push(m); }
+  const fxLights = [];
+  for (let i = 0; i < 3; i++) { const l = new THREE.PointLight(0xff8a30, 0, 6, 1.6); l.visible = false; parent.add(l); fxLights.push(l); }
+  const col = new THREE.Color();
+  let ng = 0, ns = 0, nl = 0;
+  const addG = (x, y, z, s, c) => { if (ng >= GMAX || s <= 0) return; pos.set(x, y, z); sc.setScalar(s); mtx.compose(pos, q, sc); glow.setMatrixAt(ng, mtx); glow.setColorAt(ng, col.set(c)); ng++; };
+  const addS = (x, y, z, s, c) => { if (ns >= SMAX || s <= 0) return; pos.set(x, Math.max(0.01, y), z); sc.setScalar(s); mtx.compose(pos, q, sc); solid.setMatrixAt(ns, mtx); solid.setColorAt(ns, col.set(c)); ns++; };
+  const light = (x, y, z, c, i) => { if (nl >= fxLights.length) return; const l = fxLights[nl++]; l.visible = true; l.position.set(x, y, z); l.color.set(c); l.intensity = i; };
+  const FIRE = [0xfff2a0, 0xffc040, 0xff7a20, 0xff4010];
+  function fire(x, y, z, t, rate, size, seed) {
+    const life = 0.7;
+    const i0 = Math.floor((t - life) * rate), i1 = Math.floor(t * rate);
+    for (let i = i0; i <= i1; i++) {
+      const a = t - i / rate; if (a < 0 || a > life) continue;
+      const h1 = hash(i * 1.7 + seed), h2 = hash(i * 5.3 + seed), h3 = hash(i * 9.1 + seed);
+      const k = a / life;
+      addG(x + (h1 - 0.5) * size * 0.8 + Math.sin(a * 12 + i) * 0.03 * size, y + a * (0.9 + h2) * size * 1.4, z + (h3 - 0.5) * size * 0.8, size * 0.18 * (1 - k) * (0.6 + h2), FIRE[Math.min(3, Math.floor(k * 4))]);
+    }
+  }
+  function sparkBurst(e, t, color) {
+    const a = t - e.t, life = e.life ?? 0.9; if (a < 0 || a > life) return;
+    for (let i = 0; i < (e.n ?? 40); i++) {
+      const h1 = hash(i * 3.1 + e.t * 7), h2 = hash(i * 7.7 + e.t), h3 = hash(i * 1.3 + e.t * 3);
+      const th = h1 * Math.PI * 2, ph = (h2 - 0.3) * Math.PI;
+      const sp = (e.speed ?? 4) * (0.4 + h3);
+      addG(e.x + Math.cos(th) * Math.cos(ph) * sp * a, e.y + Math.sin(ph) * sp * a - 2 * a * a, e.z + Math.sin(th) * Math.cos(ph) * sp * a, (e.size ?? 0.05) * (1 - a / life), color ?? e.color ?? 0xc060ff);
+    }
+  }
+  function debris(e, t) {
+    const a = t - e.t, life = 1.4; if (a < 0 || a > life) return;
+    for (let i = 0; i < (e.n ?? 30); i++) {
+      const h1 = hash(i * 2.1 + e.t * 5), h2 = hash(i * 6.7 + e.t), h3 = hash(i * 4.4 + e.t * 2);
+      const th = h1 * Math.PI * 2, sp = 1 + h2 * 3;
+      addS(e.x + Math.cos(th) * sp * a, (e.y ?? 1) + (2 + h3 * 3) * a - 4.9 * a * a, e.z + Math.sin(th) * sp * a, 0.03 + h2 * 0.06, h3 < 0.5 ? 0x8a8378 : 0x5a554e);
+    }
+    for (let i = 0; i < 14; i++) {
+      const h1 = hash(i * 9.9 + e.t), h2 = hash(i * 3.7 + e.t);
+      addS(e.x + (h1 - 0.5) * 2 * a, (e.y ?? 1) + h2 * a, e.z + (h2 - 0.5) * 2 * a, (0.15 + 0.4 * a) * (1 - a / life), 0xb0a898);
+    }
+  }
+  function smoke(e, t) {
+    const a = t - e.t, life = e.dur ?? 2; if (a < 0 || a > life) return;
+    for (let i = 0; i < (e.n ?? 30); i++) {
+      const h1 = hash(i * 4.1 + e.t), h2 = hash(i * 8.3 + e.t), h3 = hash(i * 2.9 + e.t);
+      const th = h1 * Math.PI * 2, r = (0.2 + h2 * 1.2) * (0.3 + a);
+      addS(e.x + Math.cos(th + a) * r, (e.y ?? 1) + h3 * 2 * (0.4 + a * 0.5), e.z + Math.sin(th + a) * r, (0.15 + h2 * 0.25) * (1 + a) * (1 - a / life), h3 < 0.5 ? 0x2a1a3a : 0x3a2a4a);
+    }
+  }
   let n = 0, nb = 0;
   const add = (x, y, z, s, sy = s) => {
     if (n >= MAX || y < -0.05) return;
@@ -71,8 +127,77 @@ export function buildFX(parent) {
   return {
     update(t, X) {
       const v = X.val;
-      n = 0; nb = 0;
+      n = 0; nb = 0; ng = 0; ns = 0; nl = 0;
       const list = X.T.fx;
+      for (const r of rings) r.visible = false;
+      for (const m of spheres) m.visible = false;
+      let ri = 0, si = 0;
+      for (const e of list) {
+        const a = t - e.t;
+        const heroGone = (e.kind === 'flame' || e.kind === 'aura' || e.kind === 'flameSwirl') && X.val(`${e.who}.vis`, 0) < 0.5;
+        if (heroGone) continue;
+        if (e.kind === 'flame' && a >= 0 && a <= e.dur) {
+          const hp = X.hand(e.who, e.side ?? 'R');
+          const k = Math.min(1, a / 0.2, (e.dur - a) / 0.25);
+          fire(hp.x, hp.y + 0.05, hp.z, t, 90 * k, (e.size ?? 0.35) * k, e.t);
+          light(hp.x, hp.y + 0.3, hp.z, 0xff8a30, 4 * k * (0.85 + 0.15 * Math.sin(t * 30)));
+        } else if (e.kind === 'fire' && a >= 0 && a <= e.dur) {
+          const k = Math.min(1, a / 0.3, (e.dur - a) / 0.5);
+          fire(e.x, e.y, e.z, t, 120 * k, (e.size ?? 0.5) * k, e.t);
+          light(e.x, e.y + 0.4, e.z, 0xff8a30, 5 * k * (0.85 + 0.15 * Math.sin(t * 25)));
+        } else if (e.kind === 'flameSwirl' && a >= 0 && a <= e.dur) {
+          const k = Math.min(1, a / 0.5, (e.dur - a) / 0.6);
+          const cx = X.val(`${e.who}.x`), cz = X.val(`${e.who}.z`), cy = X.val(`${e.who}.y`);
+          for (let j = 0; j < 4; j++) {
+            const th = t * 3 + j * Math.PI / 2, r = 0.9;
+            fire(cx + Math.cos(th) * r, cy + 0.3 + j * 0.35 + 0.2 * Math.sin(t * 2 + j), cz + Math.sin(th) * r, t, 45 * k, 0.45 * k, e.t + j);
+          }
+          light(cx, cy + 1.6, cz + 0.5, 0xff8a30, 9 * k);
+        } else if (e.kind === 'aura' && a >= 0 && a <= e.dur) {
+          const hp = X.hand(e.who, e.side ?? 'R');
+          const k = Math.min(1, a / 0.3, (e.dur - a) / 0.4) * (e.power ?? 1);
+          for (let j = 0; j < 30; j++) {
+            const ag = ((t * 1.5 + hash(j * 3.3)) % 1);
+            const th = hash(j * 7.1) * Math.PI * 2 + t * 3;
+            addG(hp.x + Math.cos(th) * 0.12 * (1 - ag), hp.y - 0.05 + ag * 0.45, hp.z + Math.sin(th) * 0.12 * (1 - ag), 0.03 * k * (1 - ag) + 0.005, e.color ?? 0xff3040);
+          }
+          addG(hp.x, hp.y - 0.04, hp.z, 0.13 * k * (0.9 + 0.1 * Math.sin(t * 20)), e.color ?? 0xff3040);
+          light(hp.x, hp.y + 0.1, hp.z + 0.2, e.color ?? 0xff3040, 4 * k);
+        } else if (e.kind === 'dark' && a >= 0) {
+          const k = a / e.dur;
+          if (k <= 1) {
+            const x = e.from[0] + (e.to[0] - e.from[0]) * k, y = e.from[1] + (e.to[1] - e.from[1]) * k + Math.sin(k * Math.PI) * (e.arc ?? 0.3), z = e.from[2] + (e.to[2] - e.from[2]) * k;
+            addG(x, y, z, 0.22 * (e.size ?? 1), 0xd8a0ff);
+            addG(x, y, z, 0.38 * (e.size ?? 1), 0x7020c0);
+            for (let j = 0; j < 16; j++) { const kk = Math.max(0, k - j * 0.025); addG(e.from[0] + (e.to[0] - e.from[0]) * kk + (hash(j + e.t) - 0.5) * 0.15, e.from[1] + (e.to[1] - e.from[1]) * kk + Math.sin(kk * Math.PI) * (e.arc ?? 0.3), e.from[2] + (e.to[2] - e.from[2]) * kk, 0.12 * (1 - j / 16) * (e.size ?? 1), 0x9040e0); }
+            light(x, y, z, 0xa040ff, 6);
+          } else {
+            const b = { t: e.t + e.dur, x: e.to[0], y: e.to[1], z: e.to[2], n: 50, speed: 3.5, size: 0.06 };
+            sparkBurst(b, t, 0xc060ff);
+            debris({ t: e.t + e.dur, x: e.to[0], y: e.to[1], z: e.to[2], n: e.debris ?? 30 }, t);
+            if (a - e.dur < 0.3) light(e.to[0], e.to[1] + 0.3, e.to[2], 0xa040ff, 8 * (1 - (a - e.dur) / 0.3));
+          }
+        } else if (e.kind === 'sparks') sparkBurst(e, t);
+        else if (e.kind === 'debris') debris(e, t);
+        else if (e.kind === 'smoke') smoke(e, t);
+        else if (e.kind === 'ring' && a >= 0 && a <= (e.dur ?? 0.8) && ri < rings.length) {
+          const k = a / (e.dur ?? 0.8), r = rings[ri++];
+          r.visible = true; r.position.set(e.x, e.y ?? 0.15, e.z);
+          r.scale.set((e.radius ?? 5) * k + 0.2, (e.radius ?? 5) * k + 0.2, 1 + 3 * (1 - k));
+          r.material.color.set(e.color ?? 0xff3040); r.material.opacity = 1 - k;
+        } else if (e.kind === 'sphere' && a >= 0 && a <= (e.dur ?? 1.2) && si < spheres.length) {
+          const k = a / (e.dur ?? 1.2), m = spheres[si++];
+          m.visible = true; m.position.set(e.x, e.y ?? 1, e.z); m.scale.setScalar((e.radius ?? 8) * k + 0.1);
+          m.material.color.set(e.color ?? 0xa040ff); m.material.opacity = 0.45 * (1 - k);
+        } else if (e.kind === 'dust' && a >= 0 && a <= e.dur) {
+          // falling dust specks in the area around (x, z)
+          for (let j = 0; j < (e.n ?? 120); j++) {
+            const h1 = hash(j * 1.9 + e.t), h2 = hash(j * 4.7 + e.t), h3 = hash(j * 8.2 + e.t);
+            const fall = ((t * (0.35 + h3 * 0.4) + h1 * 4) % 4);
+            addS(e.x + (h1 - 0.5) * (e.w ?? 10), 3.6 - fall, e.z + (h2 - 0.5) * (e.d ?? 6), 0.012 + h3 * 0.012, 0xc8bca8);
+          }
+        }
+      }
       // ---- geyser from hydrant
       const flow = v('hyd.flow', 0);
       column.visible = flow > 0.02;
@@ -203,6 +328,9 @@ export function buildFX(parent) {
         floodGeo.attributes.position.needsUpdate = true;
         floodGeo.computeVertexNormals();
       }
+      glow.count = ng; glow.instanceMatrix.needsUpdate = true; if (glow.instanceColor) glow.instanceColor.needsUpdate = true;
+      solid.count = ns; solid.instanceMatrix.needsUpdate = true; if (solid.instanceColor) solid.instanceColor.needsUpdate = true;
+      for (let i = nl; i < fxLights.length; i++) { fxLights[i].intensity = 0; fxLights[i].visible = false; }
       drops.count = n;
       drops.instanceMatrix.needsUpdate = true;
       brown.count = nb;

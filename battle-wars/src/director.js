@@ -68,6 +68,14 @@ export function createDirector() {
       D.set(`${c}.x`, x, dt); D.set(`${c}.z`, z, dt); D.set(`${c}.ry`, ry, dt); D.set(`${c}.vis`, 1, dt); D.set(`${c}.y`, 0, dt);
       return D;
     },
+    // stop any movement in progress: drop future position keys and hold where they are now
+    stop(c, dt = 0) {
+      const t0 = now + dt;
+      const cur = {};
+      for (const k of ['x', 'z', 'y']) cur[k] = val(`${c}.${k}`, t0);
+      for (const k of ['x', 'z', 'y']) { const arr = T.tracks[`${c}.${k}`]; if (arr) T.tracks[`${c}.${k}`] = arr.filter((e) => e.t <= t0); push(`${c}.${k}`, t0, cur[k], 'step'); }
+      return D;
+    },
     hide(c, dt = 0) { return D.set(`${c}.vis`, 0, dt); },
     show(c, dt = 0) { return D.set(`${c}.vis`, 1, dt); },
     act(c, a, dt = 0) { return D.set(`${c}.act`, a, dt); },

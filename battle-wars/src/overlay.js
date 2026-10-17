@@ -11,6 +11,7 @@ export const SPEAKERS = {
   leon: { name: 'LEON', color: '#f2b632' },
   greg: { name: 'GREG', color: '#e6e6ee' },
   soul: { name: 'SOUL STEALER', color: '#ff4a5a' },
+  computer: { name: 'COMPUTER', color: '#8fe6ff' },
 };
 
 function wrap(ctx, text, maxW) {
@@ -151,6 +152,10 @@ export function drawOverlay(ctx, W, H, t, T, val) {
   for (const c of T.comics) drawComic(ctx, W, H, c, t);
   const fade = val('fade', 0);
   if (fade > 0) { ctx.fillStyle = `rgba(0,0,0,${clamp(fade)})`; ctx.fillRect(0, 0, W, H); }
+  const fr = val('flashRed', 0);
+  if (fr > 0) { ctx.fillStyle = `rgba(255,40,60,${clamp(fr)})`; ctx.fillRect(0, 0, W, H); }
+  const fv = val('flashViolet', 0);
+  if (fv > 0) { ctx.fillStyle = `rgba(170,80,255,${clamp(fv)})`; ctx.fillRect(0, 0, W, H); }
   const flash = val('flash', 0);
   if (flash > 0) { ctx.fillStyle = `rgba(255,255,255,${clamp(flash)})`; ctx.fillRect(0, 0, W, H); }
   for (const c of T.captions) if (t >= c.t0 && t <= c.t1) drawCaption(ctx, W, H, c, t);

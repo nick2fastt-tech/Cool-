@@ -2,8 +2,8 @@
 import * as THREE from 'three';
 import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
-import { buildHero, buildWaterGuy, buildSoulStealer, CAST, ACTIONS, EXPRESSIONS, pose, blendPose, locomotion, attachProp } from './characters.js';
-import { buildCity, buildCoffee, buildHQExterior, buildLiving, buildControl, buildTitle, buildReactor, buildCavern } from './sets.js';
+import { buildHero, buildWaterGuy, buildSoulStealer, buildProp, COSTUMES, CAST, ACTIONS, EXPRESSIONS, pose, blendPose, locomotion, attachProp } from './characters.js';
+import { buildCity, buildCoffee, buildHQExterior, buildLiving, buildControl, buildTitle, buildReactor, buildCavern, buildTunnels, buildMachineRoom, buildPlatform, buildDiamondChamber } from './sets.js';
 import { soulSymbolTex } from './textures.js';
 import { buildFX } from './fx.js';
 import { evalTrack, evalStep, buildGaitTables, gaitAt } from './director.js';
@@ -14,12 +14,13 @@ const P = Math.PI;
 const LEG_KEYS = ['y', 'lean', 'lLF', 'lLO', 'kL', 'fL', 'lRF', 'lRO', 'kR', 'fR'];
 
 export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-be-ready') {
-  const { buildEpisode } = await import(`../episodes/${epId}.js`);
+  const { buildEpisode, META } = await import(`../episodes/${epId}.js`);
+  const costume = COSTUMES[META?.costume] ?? {};
   await document.fonts.load('40px Bangers');
   await document.fonts.load('bold 40px "Inter Display"').catch(() => {});
   const T = buildEpisode();
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  const renderer = new THREE.WebGLRenderer({ antialias: !new URLSearchParams(location.search).has('noaa'), preserveDrawingBuffer: true });
   renderer.setPixelRatio(1);
   renderer.setSize(canvasW, canvasH);
   renderer.shadowMap.enabled = true;
@@ -40,14 +41,20 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   scene.add(fxRoot);
   const fx = buildFX(fxRoot);
   const SETS = {
-    city: buildCity(fx), coffee: buildCoffee(), hqExt: buildHQExterior(), living: buildLiving(), control: buildControl(), title: buildTitle(font, TextGeometry), reactor: buildReactor(), cavern: buildCavern(),
+    city: buildCity(fx), coffee: buildCoffee(), hqExt: buildHQExterior(), living: buildLiving(), control: buildControl(), title: buildTitle(font, TextGeometry), reactor: buildReactor(), cavern: buildCavern(), tunnel: buildTunnels(), machines: buildMachineRoom(), platform: buildPlatform(), chamber: buildDiamondChamber(),
     black: { name: 'black', group: new THREE.Group(), bg: new THREE.Color(0x000000), update() {} },
   };
   for (const s of Object.values(SETS)) { s.group.visible = false; scene.add(s.group); }
 
   // cast
   const heroes = {};
-  for (const n of ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg']) { heroes[n] = buildHero(CAST[n]); scene.add(heroes[n].root); }
+  for (const n of ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg']) { heroes[n] = buildHero({ ...CAST[n], ...(costume[n] ?? {}) }); scene.add(heroes[n].root); }
+  // generic hand props: `${name}.propR` / `${name}.propL` tracks pick one by name
+  const PROP_KINDS = ['notebook', 'pen', 'scanner', 'pipe', 'case', 'diamond', 'bar', 'buzzer'];
+  const handProps = {};
+  for (const n of Object.keys(heroes)) for (const side of ['L', 'R']) for (const k of PROP_KINDS) {
+    const m = buildProp(k); m.visible = false; heroes[n].J.hand[side].add(m); handProps[`${n}.${side}.${k}`] = m;
+  }
   const water = buildWaterGuy();
   scene.add(water.root);
   const soul = buildSoulStealer(soulSymbolTex());
@@ -73,7 +80,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'water']);
   const val = (name, d = 0) => { const v = evalTrack(T.tracks[name], curT); return v === undefined ? d : v; };
   let curT = 0;
-  const X = { T, scene, val: (n, d = 0) => val(n, d) };
+  const X = { T, scene, val: (n, d = 0) => val(n, d), hand: (n, side = 'R') => { const v = new THREE.Vector3(); heroes[n].J.hand[side].getWorldPosition(v); return v; } };
 
   function talkAmount(who, t) {
     for (const c of T.captions) {
@@ -242,9 +249,15 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     if (soul.root.visible) {
       soul.root.position.set(val('soul.x'), val('soul.y'), val('soul.z'));
       soul.root.rotation.y = val('soul.ry');
-      soul.update({ t, eyes: val('soul.eyes', 0), palm: val('soul.palm', 0), raise: val('soul.raise', 0), lookUp: val('soul.look', 0), talk: talkAmount('soul', t) });
+      soul.update({ t, eyes: val('soul.eyes', 0), palm: val('soul.palm', 0), raise: val('soul.raise', 0), lookUp: val('soul.look', 0), talk: talkAmount('soul', t), violet: val('soul.violet', 0), dissolve: val('soul.dissolve', 0), lean: val('soul.lean', 0), charge: val('soul.charge', 0) });
     }
-    fxRoot.visible = setEntry.set === 'city' || setEntry.set === 'coffee';
+    for (const key in handProps) {
+      const [n, side, k] = key.split('.');
+      handProps[key].visible = heroes[n].root.visible && evalTrack(T.tracks[`${n}.prop${side}`], t) === k;
+      if (k === 'scanner' && handProps[key].visible) { const r = val('scanner.red', 0) > 0.5 && Math.sin(t * 12) > 0; handProps[key].userData.screen.material.emissive.set(r ? 0xff2030 : 0x3fd2ff); handProps[key].userData.screen.material.color.set(r ? 0xff2030 : 0x3fd2ff); }
+    }
+    scene.updateMatrixWorld(true);
+    fxRoot.visible = setEntry.set !== 'title' && setEntry.set !== 'black';
     if (fxRoot.visible) fx.update(t, X);
     // hand props
     ctrlHeld.visible = val('ctrl.held', 0) > 0.5;
