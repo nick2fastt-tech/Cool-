@@ -1,6 +1,8 @@
 // BATTLE WARS - Season 1, Episode 1: "BE READY!"
 // The whole episode as a timeline: blocking, camera, captions, sound and effects.
-import { createDirector } from './director.js';
+import { createDirector } from '../src/director.js';
+
+export const META = { id: 's1e1-be-ready', title: 'Battle Wars - S1E1 - Be Ready!', file: 'Battle_Wars_S1E1_Be_Ready' };
 
 const P = Math.PI;
 const FACE = { px: P / 2, nx: -P / 2, pz: 0, nz: P };

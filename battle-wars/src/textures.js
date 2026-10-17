@@ -183,12 +183,12 @@ export function sidewalkTex() {
   }, { repeat: [20, 2] });
 }
 
-export function runeTex() {
+export function runeTex(line = '#bff3ff', glow = '#3fd2ff') {
   return canvasTex(256, 256, (ctx, w, h) => {
     ctx.clearRect(0, 0, w, h);
     ctx.translate(w / 2, h / 2);
-    ctx.strokeStyle = '#bff3ff';
-    ctx.shadowColor = '#3fd2ff';
+    ctx.strokeStyle = line;
+    ctx.shadowColor = glow;
     ctx.shadowBlur = 16;
     ctx.lineWidth = 8;
     ctx.beginPath(); ctx.arc(0, 0, 110, 0, Math.PI * 2); ctx.stroke();
@@ -258,4 +258,31 @@ export function gradientMap() {
   const t = new THREE.DataTexture(data, 3, 1, THREE.RedFormat);
   t.needsUpdate = true;
   return t;
+}
+
+// Soul Stealer's symbol: an eye inside a jagged ring.
+export function soulSymbolTex() {
+  return canvasTex(256, 256, (ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    ctx.translate(w / 2, h / 2);
+    ctx.strokeStyle = '#ffd0d0'; ctx.fillStyle = '#ff3040';
+    ctx.shadowColor = '#ff1030'; ctx.shadowBlur = 22; ctx.lineWidth = 7;
+    ctx.beginPath();
+    for (let i = 0; i <= 24; i++) { const a = (i / 24) * Math.PI * 2, r = i % 2 ? 92 : 112; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
+    ctx.closePath(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-70, 0); ctx.quadraticCurveTo(0, -55, 70, 0); ctx.quadraticCurveTo(0, 55, -70, 0); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, 22, 0, Math.PI * 2); ctx.fill();
+    for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(0, s * 40); ctx.lineTo(0, s * 80); ctx.stroke(); }
+  });
+}
+
+export function metalFloorTex() {
+  return canvasTex(256, 256, (ctx, w, h) => {
+    ctx.fillStyle = '#3a3f4a'; ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = '#262a32'; ctx.lineWidth = 4;
+    ctx.strokeRect(2, 2, w - 4, h - 4);
+    ctx.beginPath(); ctx.moveTo(w / 2, 0); ctx.lineTo(w / 2, h); ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2); ctx.stroke();
+    ctx.fillStyle = '#5a606c';
+    for (const [x, y] of [[12, 12], [w - 12, 12], [12, h - 12], [w - 12, h - 12], [w / 2 - 10, 12], [12, h / 2 - 10]]) { ctx.beginPath(); ctx.arc(x, y, 4, 0, 7); ctx.fill(); }
+  }, { repeat: [6, 5] });
 }

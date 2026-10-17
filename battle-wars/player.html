@@ -17,7 +17,7 @@
 <body>
 <div id="wrap">
   <div id="stage"></div>
-  <div class="bar"><button id="play">Play</button><input id="seek" type="range" min="0" max="450" step="0.04" value="0"><span id="time">0:00</span></div>
+  <div class="bar"><button id="play">Play</button><input id="seek" type="range" min="0" max="600" step="0.04" value="0"><span id="time">0:00</span></div>
   <p style="opacity:.6;font-size:13px">Live preview of the episode renderer (no audio here — the MP4 has the sound). Scrub to any moment.</p>
 </div>
 <script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}</script>
@@ -25,7 +25,7 @@
 import { createEpisode } from './src/main.js';
 const params = new URLSearchParams(location.search);
 const W = +(params.get('w') || 1280), H = +(params.get('h') || 720);
-const ep = await createEpisode(W, H);
+const ep = await createEpisode(W, H, params.get('ep') || 's1e1-be-ready');
 window.episode = ep;
 window.renderFrame = (t, q = 0.92) => ep.frame(t).toDataURL('image/jpeg', q);
 window.renderPNG = (t) => ep.frame(t).toDataURL('image/png');
@@ -40,7 +40,7 @@ if (!params.has('render')) {
   seek.oninput = () => { t = +seek.value; draw(); };
   btn.onclick = () => { playing = !playing; btn.textContent = playing ? 'Pause' : 'Play'; last = performance.now(); };
   const loop = (now) => { if (playing) { t = Math.min(ep.T.duration, t + (now - last) / 1000); last = now; draw(); } requestAnimationFrame(loop); };
-  draw(); requestAnimationFrame(loop);
+  seek.max = ep.T.duration; draw(); requestAnimationFrame(loop);
 }
 </script>
 </body>

@@ -1,5 +1,5 @@
 // Renders the episode to video segments with several headless Chromium workers in parallel.
-// Usage: node tools/render.mjs [--from 0] [--to 450] [--fps 24] [--workers 3] [--w 1280 --h 720] [--out build/video.mp4]
+// Usage: node tools/render.mjs --ep <episode-id> [--from 0] [--to <end>] [--fps 24] [--workers 4] [--w 2560 --h 1440] [--out build/<ep>/video.mp4]
 import { chromium } from 'playwright';
 import { spawn, execFileSync } from 'child_process';
 import fs from 'fs';
@@ -9,9 +9,11 @@ import { serve } from './serve.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const arg = (k, d) => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : d; };
-const FPS = +arg('fps', 24), W = +arg('w', 1280), H = +arg('h', 720), WORKERS = +arg('workers', 3);
-const from = +arg('from', 0), to = +arg('to', 450);
-const out = path.resolve(root, arg('out', 'build/video.mp4'));
+const EP = arg('ep', 's1e1-be-ready');
+const FPS = +arg('fps', 24), W = +arg('w', 2560), H = +arg('h', 1440), WORKERS = +arg('workers', 4);
+const { buildEpisode } = await import(`../episodes/${EP}.js`);
+const from = +arg('from', 0), to = +arg('to', buildEpisode().duration);
+const out = path.resolve(root, arg('out', `build/${EP}/video.mp4`));
 const segDir = path.join(path.dirname(out), 'segments');
 fs.mkdirSync(segDir, { recursive: true });
 
@@ -28,7 +30,7 @@ async function worker(id, a, b) {
   const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
   const page = await browser.newPage({ viewport: { width: W, height: H } });
   page.on('pageerror', (e) => console.error(`[w${id}]`, e.message));
-  await page.goto(`http://localhost:${port}/player.html?render&w=${W}&h=${H}`);
+  await page.goto(`http://localhost:${port}/player.html?render&w=${W}&h=${H}&ep=${EP}`);
   await page.waitForFunction('window.ready', null, { timeout: 120000 });
   const ff = spawn('ffmpeg', ['-loglevel', 'error', '-y', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-',
     '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p', '-r', String(FPS), seg], { stdio: ['pipe', 'inherit', 'inherit'] });

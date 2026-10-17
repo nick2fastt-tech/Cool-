@@ -2,18 +2,19 @@
 import * as THREE from 'three';
 import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
-import { buildHero, buildWaterGuy, CAST, ACTIONS, EXPRESSIONS, pose, blendPose, locomotion, attachProp } from './characters.js';
-import { buildCity, buildCoffee, buildHQExterior, buildLiving, buildControl, buildTitle } from './sets.js';
+import { buildHero, buildWaterGuy, buildSoulStealer, CAST, ACTIONS, EXPRESSIONS, pose, blendPose, locomotion, attachProp } from './characters.js';
+import { buildCity, buildCoffee, buildHQExterior, buildLiving, buildControl, buildTitle, buildReactor, buildCavern } from './sets.js';
+import { soulSymbolTex } from './textures.js';
 import { buildFX } from './fx.js';
 import { evalTrack, evalStep, buildGaitTables, gaitAt } from './director.js';
 import { drawOverlay } from './overlay.js';
 import { clamp, lerp, smoothstep, noise1, mk, mat } from './util.js';
-import { buildEpisode } from './episode.js';
 
 const P = Math.PI;
 const LEG_KEYS = ['y', 'lean', 'lLF', 'lLO', 'kL', 'fL', 'lRF', 'lRO', 'kR', 'fR'];
 
-export async function createEpisode(canvasW = 1280, canvasH = 720) {
+export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-be-ready') {
+  const { buildEpisode } = await import(`../episodes/${epId}.js`);
   await document.fonts.load('40px Bangers');
   await document.fonts.load('bold 40px "Inter Display"').catch(() => {});
   const T = buildEpisode();
@@ -39,16 +40,18 @@ export async function createEpisode(canvasW = 1280, canvasH = 720) {
   scene.add(fxRoot);
   const fx = buildFX(fxRoot);
   const SETS = {
-    city: buildCity(fx), coffee: buildCoffee(), hqExt: buildHQExterior(), living: buildLiving(), control: buildControl(), title: buildTitle(font, TextGeometry),
+    city: buildCity(fx), coffee: buildCoffee(), hqExt: buildHQExterior(), living: buildLiving(), control: buildControl(), title: buildTitle(font, TextGeometry), reactor: buildReactor(), cavern: buildCavern(),
     black: { name: 'black', group: new THREE.Group(), bg: new THREE.Color(0x000000), update() {} },
   };
   for (const s of Object.values(SETS)) { s.group.visible = false; scene.add(s.group); }
 
   // cast
   const heroes = {};
-  for (const n of ['aaron', 'flare', 'eric', 'barista']) { heroes[n] = buildHero(CAST[n]); scene.add(heroes[n].root); }
+  for (const n of ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg']) { heroes[n] = buildHero(CAST[n]); scene.add(heroes[n].root); }
   const water = buildWaterGuy();
   scene.add(water.root);
+  const soul = buildSoulStealer(soulSymbolTex());
+  scene.add(soul.root);
   // hand props
   const ctrlHeld = new THREE.Group(); mk(new THREE.BoxGeometry(0.2, 0.05, 0.11), mat(0x222831), ctrlHeld);
   attachProp(heroes.eric, 'R', ctrlHeld, [0.07, -0.09, 0.05], [0, 0, 0.3]);
@@ -67,7 +70,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720) {
     slices[n] = attachProp(heroes[n], 'R', m, [0, -0.12, 0.08], [0.4, 0, 0]);
   }
 
-  const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'water']);
+  const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'water']);
   const val = (name, d = 0) => { const v = evalTrack(T.tracks[name], curT); return v === undefined ? d : v; };
   let curT = 0;
   const X = { T, scene, val: (n, d = 0) => val(n, d) };
@@ -168,6 +171,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720) {
 
   const tmpV = new THREE.Vector3();
   function headPos(name) {
+    if (name === 'soul') return new THREE.Vector3(val('soul.x'), val('soul.y') + 2.0, val('soul.z'));
     if (name === 'water') {
       const s = val('water.scale', 1);
       return tmpV.set(val('water.x'), val('water.y') + 1.95 * s * val('water.stretch', 1), val('water.z')).clone();
@@ -234,6 +238,12 @@ export async function createEpisode(canvasW = 1280, canvasH = 720) {
     set.update(t, X);
     for (const n of Object.keys(heroes)) updateHero(n, t);
     updateWater(t);
+    soul.root.visible = val('soul.vis', 0) > 0.5;
+    if (soul.root.visible) {
+      soul.root.position.set(val('soul.x'), val('soul.y'), val('soul.z'));
+      soul.root.rotation.y = val('soul.ry');
+      soul.update({ t, eyes: val('soul.eyes', 0), palm: val('soul.palm', 0), raise: val('soul.raise', 0), lookUp: val('soul.look', 0), talk: talkAmount('soul', t) });
+    }
     fxRoot.visible = setEntry.set === 'city' || setEntry.set === 'coffee';
     if (fxRoot.visible) fx.update(t, X);
     // hand props

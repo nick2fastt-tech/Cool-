@@ -8,6 +8,9 @@ export const SPEAKERS = {
   eric: { name: 'ERIC', color: '#6dff8a' },
   water: { name: 'WATER GUY', color: '#5ad8ff' },
   barista: { name: 'BARISTA', color: '#e8c9a8' },
+  leon: { name: 'LEON', color: '#f2b632' },
+  greg: { name: 'GREG', color: '#e6e6ee' },
+  soul: { name: 'SOUL STEALER', color: '#ff4a5a' },
 };
 
 function wrap(ctx, text, maxW) {
@@ -111,6 +114,23 @@ function drawCard(ctx, W, H, c, t) {
     ctx.font = `${Math.round(30 * s)}px ${UI_FONT}`;
     ctx.fillStyle = '#bfe3ff';
     ctx.fillText(c.text, W / 2, H * 0.84);
+  } else if (c.kind === 'electric') {
+    // jagged lightning arcs crackling around the title
+    const n = Math.floor(t * 18);
+    ctx.globalCompositeOperation = 'lighter';
+    for (let b = 0; b < 5; b++) {
+      const h = (k) => { const x = Math.sin((n * 7 + b * 13 + k) * 12.9898) * 43758.5453; return x - Math.floor(x); };
+      if (h(1) < 0.35) continue;
+      let x = W * (0.15 + 0.7 * h(2)), y = H * (0.25 + 0.15 * h(3));
+      ctx.strokeStyle = h(4) < 0.5 ? '#ff5060' : '#ffe0e4';
+      ctx.shadowColor = '#ff2030'; ctx.shadowBlur = 18 * s;
+      ctx.lineWidth = (2 + 3 * h(5)) * s;
+      ctx.beginPath(); ctx.moveTo(x, y);
+      for (let i = 0; i < 9; i++) { x += (h(10 + i) - 0.5) * 70 * s; y += (18 + 30 * h(20 + i)) * s; ctx.lineTo(x, y); }
+      ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.shadowBlur = 0;
   } else if (c.kind === 'credits') {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';

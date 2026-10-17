@@ -81,6 +81,11 @@ export const ACTIONS = {
   ready: { gest: true, f: (a, t) => ({ aLF: 0.65, eL: 1.9, aRF: 0.65, eR: 1.9, aLT: 0.4, aRT: 0.4, aLO: 0.15, aRO: 0.15, lLF: 0.3, lRF: -0.3, kL: 0.25, kR: 0.25, y: -0.04 + 0.01 * S(t * 4), spF: 0.08 }) },
   thumbsUp: { gest: false, f: (a) => { const k = smoothstep(0, 0.3, a); return { aRF: 1.2 * k, eR: 1.4 * k, aRT: 0.4, aRO: 0.15, aLO: 0.12, eL: 0.2 }; } },
   climb: { upper: false, f: (a, t) => ({}) },
+  facepalm: { f: (a) => { const k = smoothstep(0, 0.35, a); return { aRF: 1.55 * k, aRT: 1.0 * k, aRO: -0.1, eR: 2.35 * k, hdN: 0.35 * k, spF: 0.12 * k, aLO: 0.12, eL: 0.2 }; } },
+  leanTable: { gest: true, f: (a, t) => ({ lean: 0.05, spF: 0.32, aLF: 0.85, aRF: 0.85, eL: 0.2, eR: 0.2, aLO: 0.22, aRO: 0.22, hdN: 0.15 + 0.02 * S(t * 1.5), lLO: 0.1, lRO: 0.1 }) },
+  sitSleep: { sit: true, f: (a, t) => ({ ...sitLegs, spF: 0.35 + 0.03 * S(t * 1.1), hdN: 0.55 + 0.05 * S(t * 1.1), hdT: 0.2, aLF: 0.4, aRF: 0.4, aLT: 0.9, aRT: 0.9, eL: 1.3, eR: 1.3, aLO: 0.08, aRO: 0.08 }) },
+  sitWake: { sit: true, gest: true, f: (a, t) => { const k = smoothstep(0, 0.8, a); return { ...sitLegs, spF: 0.35 - 0.3 * k, hdN: 0.55 - 0.5 * k, hdT: 0.2 - 0.25 * k, aLF: 0.4, aRF: 0.4 + 0.3 * k, aLT: 0.9, aRT: 0.9 - 0.6 * k, eL: 1.3, eR: 1.3 - 0.3 * k, aLO: 0.08, aRO: 0.08 + 0.2 * k }; } },
+  pointMap: { gest: false, f: (a, t) => { const k = smoothstep(0, 0.4, a); return { lean: 0.05, spF: 0.3, aRF: 1.0 + 0.1 * k, aRO: 0.0, eR: 0.15, aLF: 0.85, aLO: 0.22, eL: 0.2, hdN: 0.2, lLO: 0.1, lRO: 0.1 }; } },
 };
 
 export function locomotion(phase, run) {
@@ -117,6 +122,8 @@ export const EXPRESSIONS = {
   laugh: { smile: 1, open: 0.85, brow: 0.025, tilt: -0.2, lid: 0.6, wide: 1 },
   angry: { smile: -0.5, open: 0.2, brow: -0.015, tilt: 0.45, lid: 0.15, wide: 1 },
   mischief: { smile: 1, open: 0.2, brow: 0, tilt: 0.3, lid: 0.15, wide: 1 },
+  sleep: { smile: 0, open: 0, brow: -0.01, tilt: 0, lid: 0.95, wide: 1 },
+  serious: { smile: -0.1, open: 0, brow: -0.012, tilt: 0.2, lid: 0.2, wide: 1 },
 };
 
 function blendExpr(a, b, w) {
@@ -212,7 +219,8 @@ function buildHair(head, cfg, hc, r) {
     const base = new THREE.Vector3(x * r, r * 0.9, r * 0.5);
     const d = new THREE.Vector3(x * 0.6 + (R() - 0.5) * 0.3, -0.3, 0.75 + k * 0.2).normalize();
     const len = r * (0.45 + R() * 0.25);
-    const mesh = mk(new THREE.ConeGeometry(r * 0.2, len, 7), m, g, [base.x + d.x * len * 0.35, base.y + d.y * len * 0.35, base.z + d.z * len * 0.35]);
+    const bm = cfg.streakColor && Math.abs(x - 0.12) < 0.05 ? mat(cfg.streakColor, { r: 0.6 }) : m;
+    const mesh = mk(new THREE.ConeGeometry(r * 0.2, len, 7), bm, g, [base.x + d.x * len * 0.35, base.y + d.y * len * 0.35, base.z + d.z * len * 0.35]);
     mesh.quaternion.setFromUnitVectors(up, d);
   }
   // sideburns
@@ -237,7 +245,7 @@ export function buildHero(cfg) {
   const emb = cfg.emblem === false ? null : new THREE.MeshBasicMaterial({ map: emblemTex(), transparent: true });
 
   const body = grp(root);
-  body.scale.setScalar(0.86);
+  body.scale.setScalar(cfg.scale ?? 0.86);
   const hips = grp(body, 0, 0.95, 0); J.hips = hips;
   mk(new RoundedBoxGeometry(0.36, 0.22, 0.24, 3, 0.07), pants, hips, [0, -0.03, 0]);
   // belt + pouches
@@ -267,6 +275,18 @@ export function buildHero(cfg) {
     mk(new RoundedBoxGeometry(0.32, 0.5, 0.03, 2, 0.01), mat(cfg.apron, { r: 0.8 }), spine, [0, 0.12, 0.13]);
   }
   mk(new THREE.CylinderGeometry(0.085, 0.1, 0.08, 16), cfg.casual ? shirt : suitDark, spine, [0, 0.5, 0]);
+  if (cfg.coat) {
+    const coat = mat(cfg.coat, { r: 0.75 });
+    // long coat body, flared skirt down to the shins, popped collar and lapels
+    mk(new THREE.CapsuleGeometry(0.185, 0.24, 6, 18), coat, spine, [0, 0.25, 0], [0, 0, 0], [1.25, 1, 0.86]);
+    const skirt = new THREE.LatheGeometry([[0.24, 0.12], [0.26, 0], [0.3, -0.3], [0.34, -0.6], [0.36, -0.72]].map(([x, y]) => new THREE.Vector2(x, y)), 24);
+    mk(skirt, mat(cfg.coat, { r: 0.75, side: THREE.DoubleSide }), hips, [0, 0, 0], [0, 0, 0], [1, 1, 0.8]);
+    for (const sd of [1, -1]) {
+      mk(new THREE.BoxGeometry(0.1, 0.2, 0.03), coat, spine, [sd * 0.1, 0.56, -0.02], [-0.25, 0, sd * -0.35]);
+      mk(new THREE.BoxGeometry(0.07, 0.36, 0.02), mat(cfg.coatDark ?? 0x0c0c10, { r: 0.7 }), spine, [sd * 0.07, 0.3, 0.155], [0, 0, sd * 0.25]);
+    }
+    mk(new THREE.BoxGeometry(0.06, 0.04, 0.02), mat(0x9a9aa0, { m: 0.7 }), hips, [0, 0.07, 0.15]);
+  }
   // neck + head
   const neck = grp(spine, 0, 0.52, 0);
   mk(new THREE.CylinderGeometry(0.055, 0.06, 0.12, 12), skin, neck, [0, 0.03, 0]);
@@ -274,7 +294,7 @@ export function buildHero(cfg) {
   const r = 0.2, hc = 0.2;
   mk(new THREE.SphereGeometry(r, 32, 24), skin, head, [0, hc, 0], [0, 0, 0], [0.95, 1.07, 1.0]);
   // jaw/cheeks for a softer face shape
-  const face = buildFace(head, cfg, hc, r);
+  const face = cfg.face === 'greg' ? buildGregFace(head, hc, r) : buildFace(head, cfg, hc, r);
   if (cfg.hair) buildHair(head, cfg, hc, r);
 
   // arms
@@ -490,10 +510,108 @@ export function buildWaterGuy() {
   };
 }
 
+function buildGregFace(head, hc, r) {
+  const black = mat(0x050505, { r: 0.3 });
+  const eyes = [];
+  for (const sd of [1, -1]) {
+    const eg = grp(head, sd * r * 0.32, hc + r * 0.12, r * 0.94);
+    eg.rotation.y = sd * 0.32;
+    const eye = grp(eg);
+    mk(new THREE.CapsuleGeometry(r * 0.065, r * 0.32, 4, 8), black, eye, [0, 0, 0], [0, 0, 0], [1, 1, 0.5], false);
+    eyes.push({ eg, eye, ir: new THREE.Group() });
+  }
+  const dummy = () => new THREE.Group();
+  return { eyes, brows: [], smile: dummy(), open: dummy(), mg: dummy() };
+}
+
+// Soul Stealer: tall hooded villain with glowing red eyes and a red symbol in his palm.
+export function buildSoulStealer(symbolTex) {
+  const root = new THREE.Group();
+  const cloth = mat(0x15101e, { r: 0.92 });
+  const trim = mat(0x5a0a14, { r: 0.6, e: 0x400008, ei: 0.6 });
+  const body = grp(root);
+  const prof = [[0.62, 0], [0.58, 0.3], [0.48, 0.8], [0.36, 1.3], [0.33, 1.6], [0.4, 1.78], [0.18, 1.9], [0.0, 1.92]].map(([x, y]) => new THREE.Vector2(x, y));
+  const cloakGeo = new THREE.LatheGeometry(prof, 32);
+  const base = Float32Array.from(cloakGeo.attributes.position.array);
+  mk(cloakGeo, cloth, body);
+  mk(new THREE.TorusGeometry(0.6, 0.025, 6, 32), trim, body, [0, 0.03, 0], [P / 2, 0, 0]);
+  for (const sd of [1, -1]) mk(new THREE.BoxGeometry(0.04, 1.2, 0.02), trim, body, [sd * 0.12, 1.0, 0.43], [-0.17, 0, sd * 0.05]);
+  // hood
+  const hood = grp(body, 0, 2.02, 0);
+  mk(new THREE.SphereGeometry(0.34, 24, 18, P * 0.62, P * 1.76, 0, P * 0.78), mat(0x1c1426, { r: 0.9, side: THREE.DoubleSide }), hood, [0, 0, 0], [0, 0, 0], [1, 1.15, 1.05]);
+  mk(new THREE.ConeGeometry(0.12, 0.3, 10), mat(0x1c1426, { r: 0.9 }), hood, [0, 0.32, -0.1], [-0.5, 0, 0]);
+  mk(new THREE.SphereGeometry(0.27, 20, 14), new THREE.MeshBasicMaterial({ color: 0x020104 }), hood, [0, -0.02, 0.04], [0, 0, 0], [1, 1.1, 0.9]);
+  const glowTex = canvasTex(64, 64, (c, w, h) => { const g = c.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(255,80,80,1)'); g.addColorStop(0.3, 'rgba(255,20,30,0.6)'); g.addColorStop(1, 'rgba(255,0,0,0)'); c.fillStyle = g; c.fillRect(0, 0, w, h); });
+  const eyes = [];
+  for (const sd of [1, -1]) {
+    const e = grp(hood, sd * 0.09, 0.0, 0.29);
+    mk(new THREE.SphereGeometry(0.035, 12, 8), new THREE.MeshBasicMaterial({ color: 0xff3030 }), e, [0, 0, 0], [0, 0, 0], [1.3, 1, 0.5], false);
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.3), new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    glow.position.z = 0.03; e.add(glow);
+    eyes.push({ e, glow });
+  }
+  // arms: sleeves flaring toward the hands
+  const arms = {};
+  for (const [side, sd] of [['L', 1], ['R', -1]]) {
+    const sh = grp(body, sd * 0.36, 1.68, 0); sh.rotation.order = 'ZXY';
+    mk(new THREE.CylinderGeometry(0.15, 0.08, 0.75, 14, 1, true), mat(0x15101e, { r: 0.92, side: THREE.DoubleSide }), sh, [0, -0.36, 0]);
+    const hand = grp(sh, 0, -0.74, 0);
+    mk(new THREE.SphereGeometry(0.065, 12, 10), mat(0x3a3040, { r: 0.6 }), hand, [0, 0, 0], [0, 0, 0], [0.9, 1.1, 0.7]);
+    for (let i = 0; i < 4; i++) mk(new THREE.CapsuleGeometry(0.014, 0.06, 3, 6), mat(0x3a3040, { r: 0.6 }), hand, [(i - 1.5) * 0.025, -0.07, 0.01]);
+    arms[side] = { sh, hand };
+  }
+  const symbol = new THREE.Mesh(new THREE.PlaneGeometry(0.45, 0.45), new THREE.MeshBasicMaterial({ map: symbolTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  root.add(symbol);
+  const palmGlow = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 1.0), new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  root.add(palmGlow);
+  const handPos = new THREE.Vector3();
+  const palmLight = new THREE.PointLight(0xff2030, 0, 5, 1.5); palmLight.position.y = 0.2; arms.R.hand.add(palmLight);
+  const faceLight = new THREE.PointLight(0xff2030, 0, 2.5, 2); faceLight.position.set(0, 2.0, 0.6); body.add(faceLight);
+  return {
+    name: 'soul', root,
+    // st: { t, eyes 0..1, palm 0..1, raise 0..1, lookUp 0..1, talk }
+    update(st) {
+      const t = st.t;
+      body.position.y = 0.04 * Math.sin(t * 1.3);
+      const a = cloakGeo.attributes.position.array;
+      for (let i = 0; i < a.length; i += 3) {
+        const y = base[i + 1], k = Math.max(0, 1 - y / 1.2);
+        const th = Math.atan2(base[i + 2], base[i]);
+        const w = 1 + 0.05 * k * Math.sin(th * 5 + t * 2.2);
+        a[i] = base[i] * w; a[i + 2] = base[i + 2] * w;
+      }
+      cloakGeo.attributes.position.needsUpdate = true;
+      cloakGeo.computeVertexNormals();
+      const ey = clamp(st.eyes, 0, 1.4);
+      for (const e of eyes) { e.e.scale.set(1, Math.max(0.05, ey), 1); e.glow.material.opacity = Math.min(1, ey) * (0.8 + 0.2 * Math.sin(t * 9)) + (st.talk ?? 0) * 0.3; e.glow.scale.setScalar(0.6 + ey * 0.6); }
+      faceLight.intensity = ey * 1.2;
+      hood.rotation.x = -0.45 * st.lookUp + 0.04 * Math.sin(t * 0.9) - (st.talk ?? 0) * 0.04;
+      hood.rotation.y = 0.05 * Math.sin(t * 0.5);
+      const r = st.raise;
+      arms.R.sh.rotation.set(-1.25 * r, 0, -0.12 - 0.15 * r);
+      arms.R.hand.rotation.set(-0.35 * r + P * 0.0, 0, 0);
+      arms.L.sh.rotation.set(-0.1, 0, 0.12);
+      arms.R.hand.updateWorldMatrix(true, false);
+      arms.R.hand.getWorldPosition(handPos);
+      root.worldToLocal(handPos);
+      symbol.position.set(handPos.x, handPos.y + 0.22 + 0.03 * Math.sin(t * 2), handPos.z + 0.05);
+      palmGlow.position.set(handPos.x, handPos.y + 0.15, handPos.z + 0.02);
+      symbol.scale.setScalar(Math.max(0.001, st.palm) * 1.2);
+      symbol.rotation.z = t * 0.8;
+      symbol.material.opacity = Math.min(1, st.palm) * (0.85 + 0.15 * Math.sin(t * 11));
+      palmGlow.material.opacity = Math.min(1, st.palm) * 0.9;
+      palmGlow.scale.setScalar(0.5 + st.palm);
+      palmLight.intensity = st.palm * 6;
+    },
+  };
+}
+
 // Character colours / builds (matched to the reference sheet)
 export const CAST = {
   aaron: { name: 'aaron', seed: 1, hair: 'spiky', hairColor: 0x6b3a1e, browColor: 0x4a2612, skin: 0xe9b48f, skinDark: 0xdc9f79, eyeColor: 0x5a3416 },
   flare: { name: 'flare', seed: 2, hair: 'tall', hairColor: 0x17120f, browColor: 0x120d0a, skin: 0xe6b18a, skinDark: 0xd99f77, eyeColor: 0x3b2414 },
   eric: { name: 'eric', seed: 3, hair: 'wavy', hairColor: 0x4e3020, browColor: 0x3a2216, skin: 0xe8b28c, skinDark: 0xd99e78, eyeColor: 0x4a2c16 },
+  leon: { name: 'leon', seed: 5, scale: 0.93, hair: 'spiky', hairColor: 0x2a211c, streakColor: 0xb8b8bc, browColor: 0x1e1612, skin: 0xd9a07a, skinDark: 0xc98e68, eyeColor: 0x3a2412, suit: 0x18215e, suitDark: 0x0e133a, accent: 0xf2b632, accentGlow: 0x7a4a00, pad: 0x1f2f8a, boot: 0x1a2a7a },
+  greg: { name: 'greg', seed: 6, face: 'greg', skin: 0xf2f2f4, skinDark: 0xe6e6ea, eyeColor: 0x000000, casual: true, emblem: false, shirt: 0x141418, pants: 0x101014, boot: 0x0c0c10, glove: 0xf2f2f4, coat: 0x18181c, coatDark: 0x0a0a0c, belt: 0x0a0a0a },
   barista: { name: 'barista', seed: 4, hair: 'wavy', hairColor: 0x2b1d14, skin: 0xc98d68, skinDark: 0xb87d5a, eyeColor: 0x2d1a10, casual: true, emblem: false, shirt: 0xf4f1ea, pants: 0x4a3a2c, apron: 0x2f7d4f, boot: 0x2a2420, bareHands: true, sleeves: 'short' },
 };

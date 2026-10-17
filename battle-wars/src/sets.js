@@ -671,7 +671,10 @@ export function buildTitle(font, TextGeometry) {
     geo.computeBoundingBox(); geo.center();
     return new THREE.Mesh(geo, m);
   };
-  const title = mkText('BATTLE WARS', 1.0, 0.35, [face, metal]);
+  const blueMats = [face, metal];
+  const redMats = [new THREE.MeshStandardMaterial({ color: 0xffe0e0, metalness: 0.5, roughness: 0.2, emissive: 0xff2030, emissiveIntensity: 0.8 }), new THREE.MeshStandardMaterial({ color: 0xc0101c, metalness: 0.8, roughness: 0.25, emissive: 0x700008, emissiveIntensity: 0.7 })];
+  const blueBg = new THREE.Color(0x050a24), redBg = new THREE.Color(0x120206);
+  const title = mkText('BATTLE WARS', 1.0, 0.35, blueMats);
   g.add(title);
   const sub = mkText('BE READY!', 0.55, 0.22, [new THREE.MeshStandardMaterial({ color: 0xffd23a, metalness: 0.4, roughness: 0.3, emissive: 0xff7a00, emissiveIntensity: 0.4 }), new THREE.MeshStandardMaterial({ color: 0xff8a00, metalness: 0.5, roughness: 0.3 })]);
   sub.position.set(0, -1.2, 0.3);
@@ -690,8 +693,16 @@ export function buildTitle(font, TextGeometry) {
     update(t, X) {
       const v = X.val;
       const k = v('title.k', 0);
+      const red = v('title.theme', 0) > 0.5;
+      title.material = red ? redMats : blueMats;
+      X.scene.background = red ? redBg : blueBg;
+      rays.children.forEach((m, i) => m.material.color.set(red ? (i % 2 ? 0x8a0a16 : 0x3a0408) : (i % 2 ? 0x1d3fa8 : 0x0f2470)));
+      rim.color.set(red ? 0xff3040 : 0x4fb0ff);
+      sweep.color.set(red ? 0xff7070 : 0x9fe0ff);
+      emb.visible = !red;
       title.scale.setScalar(Math.max(0.001, k));
-      title.rotation.y = (1 - k) * 1.2;
+      title.rotation.y = Math.max(0, 1 - k) * 1.2;
+      title.position.x = red ? Math.sin(t * 61) * 0.03 * v('title.jolt', 0) : 0;
       const ks = v('title.sub', 0);
       sub.scale.setScalar(Math.max(0.001, ks));
       sub.position.y = v('title.subY', -1.2);
@@ -699,6 +710,206 @@ export function buildTitle(font, TextGeometry) {
       emb.material.opacity = 0.35 * k;
       rays.rotation.z = t * 0.15;
       sweep.position.set(Math.sin(t * 1.5) * 6, 1, 3);
+    },
+  };
+}
+
+// ------------------------------------------------------------------ HIDDEN REACTOR ROOM (below HQ)
+function subwayMap() {
+  const tex = canvasTex(1024, 576, () => {});
+  const { ctx } = tex.userData;
+  const lines = [
+    { c: '#3fd2ff', p: [[60, 140], [300, 160], [520, 260], [760, 240], [980, 120]] },
+    { c: '#7cf0ff', p: [[120, 480], [330, 380], [520, 260], [700, 420], [960, 470]] },
+    { c: '#3fa8ff', p: [[520, 40], [520, 260], [560, 540]] },
+  ];
+  const gems = [[300, 160], [700, 420], [560, 470]];
+  tex.draw = (t, on) => {
+    const w = 1024, h = 576;
+    ctx.clearRect(0, 0, w, h);
+    if (on <= 0.01) { tex.needsUpdate = true; return; }
+    ctx.globalAlpha = on;
+    ctx.fillStyle = 'rgba(20,90,140,0.25)'; ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = 'rgba(80,200,255,0.25)'; ctx.lineWidth = 1;
+    for (let x = 0; x < w; x += 48) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+    for (let y = 0; y < h; y += 48) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+    for (const l of lines) {
+      ctx.strokeStyle = l.c; ctx.lineWidth = 9; ctx.lineJoin = 'round'; ctx.shadowColor = l.c; ctx.shadowBlur = 14;
+      ctx.beginPath(); l.p.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke();
+      ctx.shadowBlur = 0; ctx.fillStyle = '#dff8ff';
+      for (const [x, y] of l.p) { ctx.beginPath(); ctx.arc(x, y, 11, 0, 7); ctx.fill(); }
+    }
+    for (const [i, [x, y]] of gems.entries()) {
+      const p = 1 + 0.25 * Math.sin(t * 5 + i * 2);
+      ctx.save(); ctx.translate(x, y); ctx.scale(p, p);
+      ctx.fillStyle = '#ff2a40'; ctx.shadowColor = '#ff2040'; ctx.shadowBlur = 25;
+      ctx.beginPath(); ctx.moveTo(0, -26); ctx.lineTo(20, 0); ctx.lineTo(0, 26); ctx.lineTo(-20, 0); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    const sy = (t * 140) % h;
+    ctx.fillStyle = 'rgba(160,240,255,0.25)'; ctx.fillRect(0, sy, w, 6);
+    ctx.fillStyle = '#bff3ff'; ctx.font = `34px ${TX.FONT}`; ctx.fillText('ABANDONED SUBWAY DISTRICT', 28, 50);
+    ctx.fillStyle = '#ff6a7a'; ctx.font = `22px ${TX.UI_FONT}`; ctx.fillText('RED DIAMOND SIGNATURES: 3', 28, h - 24);
+    ctx.globalAlpha = 1;
+    tex.needsUpdate = true;
+  };
+  return tex;
+}
+
+export function buildReactor() {
+  const g = new THREE.Group();
+  const L = lights(g, { sunPos: [3, 9, 6], target: [0, 0, -1], shadowSize: 10, sunI: 0.7, hemi: 0.45, sky: 0x9fb0d0, ground: 0x201820, rimColor: 0xff5050, rimI: 0.8, rimPos: [0, 4, -8] });
+  const fill = new THREE.PointLight(0xdde6ff, 22, 14, 1.3); fill.position.set(0, 3.4, 3.5); g.add(fill);
+  const roomLights = [];
+  for (const [x, z] of [[-3.5, -1], [3.5, -1], [-3.5, 3], [3.5, 3]]) {
+    const pl = new THREE.PointLight(0xe8f0ff, 6, 8, 1.6); pl.position.set(x, 3.6, z); g.add(pl);
+    const panel = box(g, 1.4, 0.06, 0.5, 0xffffff, [x, 3.95, z], { e: 0xe8f0ff, ei: 1.2, noShadow: true });
+    roomLights.push({ pl, panel });
+  }
+  const reactorLight = new THREE.PointLight(0xff2a2a, 14, 12, 1.4); reactorLight.position.set(0, 2.2, -3.4); g.add(reactorLight);
+  plane(g, 16, 13, new THREE.MeshStandardMaterial({ map: TX.metalFloorTex(), roughness: 0.6, metalness: 0.4 }), [0, 0, 0]);
+  const wall = mat(0x2b2f38, { r: 0.85 });
+  box(g, 16, 4.2, 0.3, 0, [0, 2.1, -6.6], { material: wall, noShadow: true });
+  box(g, 16, 4.2, 0.3, 0, [0, 2.1, 6.6], { material: wall, noShadow: true });
+  box(g, 0.3, 4.2, 13.2, 0, [-8, 2.1, 0], { material: wall, noShadow: true });
+  box(g, 0.3, 4.2, 13.2, 0, [8, 2.1, 0], { material: wall, noShadow: true });
+  box(g, 16, 0.2, 13.2, 0, [0, 4.1, 0], { material: mat(0x1a1d24), noShadow: true });
+  // support beams + pipes + hazard stripes
+  for (const x of [-5.5, 5.5]) for (const z of [-6.2, 6.2]) box(g, 0.5, 4.2, 0.5, 0x4a505c, [x, 2.1, z], { noShadow: true });
+  const pipeM = mat(0x6a5a4a, { r: 0.5, m: 0.6 });
+  for (const [y, z] of [[3.3, -6.3], [3.6, -6.25], [0.5, -6.3]]) mk(new THREE.CylinderGeometry(0.12, 0.12, 16, 12), pipeM, g, [0, y, z], [0, 0, P / 2]);
+  for (const y of [1.2, 2.8]) mk(new THREE.CylinderGeometry(0.1, 0.1, 13, 12), pipeM, g, [-7.75, y, 0], [P / 2, 0, 0]);
+  const stripes = new THREE.MeshStandardMaterial({ map: TX.stripesTex(), roughness: 0.7 });
+  stripes.map.wrapS = THREE.RepeatWrapping; stripes.map.repeat.set(6, 1);
+  plane(g, 6, 0.35, stripes, [0, 0.006, -1.9]);
+  // the reactor
+  const base = grp(g, 0, 0, -4.2);
+  const steel = mat(0x7a808c, { r: 0.35, m: 0.8 });
+  mk(new THREE.CylinderGeometry(1.7, 1.9, 0.6, 32), steel, base, [0, 0.3, 0]);
+  mk(new THREE.CylinderGeometry(1.25, 1.25, 0.3, 32), mat(0x3a3f4a, { r: 0.5, m: 0.6 }), base, [0, 0.75, 0]);
+  const glass = new THREE.MeshStandardMaterial({ color: 0xff8080, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.35, emissive: 0xff1020, emissiveIntensity: 0.4 });
+  mk(new THREE.CylinderGeometry(0.85, 0.85, 2.6, 32, 1, true), glass, base, [0, 2.2, 0]);
+  const coreM = new THREE.MeshStandardMaterial({ color: 0xff3040, emissive: 0xff1030, emissiveIntensity: 2, roughness: 0.3 });
+  const core = mk(new THREE.CylinderGeometry(0.38, 0.38, 2.5, 20), coreM, base, [0, 2.2, 0]);
+  const rings = [];
+  for (const y of [1.2, 2.2, 3.2]) rings.push(mk(new THREE.TorusGeometry(1.0, 0.07, 10, 40), steel, base, [0, y, 0], [P / 2, 0, 0]));
+  mk(new THREE.CylinderGeometry(1.2, 0.9, 0.5, 32), steel, base, [0, 3.7, 0]);
+  for (let i = 0; i < 6; i++) { const a = (i / 6) * P * 2; mk(new THREE.CylinderGeometry(0.06, 0.06, 2.6, 8), steel, base, [Math.cos(a) * 0.95, 2.2, Math.sin(a) * 0.95]); }
+  for (const sd of [-1, 1]) mk(new THREE.CylinderGeometry(0.14, 0.14, 2.4, 10), pipeM, base, [sd * 1.6, 1.8, 0.4], [0, 0, sd * 0.6]);
+  // map table + hologram
+  const table = grp(g, 0, 0, 0.2);
+  mk(new THREE.CylinderGeometry(0.5, 0.7, 0.85, 20), mat(0x3a3f4a, { r: 0.5, m: 0.6 }), table, [0, 0.42, 0]);
+  mk(new THREE.CylinderGeometry(1.3, 1.25, 0.12, 40), mat(0x262a34, { r: 0.3, m: 0.7 }), table, [0, 0.9, 0]);
+  const rim = mk(new THREE.TorusGeometry(1.28, 0.03, 8, 48), mat(0x3fd2ff, { e: 0x3fd2ff, ei: 1.4 }), table, [0, 0.96, 0], [P / 2, 0, 0]);
+  const beam = mk(new THREE.CylinderGeometry(1.15, 1.2, 1.1, 32, 1, true), new THREE.MeshBasicMaterial({ color: 0x3fd2ff, transparent: true, opacity: 0.08, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }), table, [0, 1.52, 0], [0, 0, 0], null, false);
+  const map = subwayMap();
+  const holo = mk(new THREE.PlaneGeometry(2.5, 1.4), new THREE.MeshBasicMaterial({ map, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }), table, [0, 2.05, 0], [-0.12, 0, 0], null, false);
+  const holoLight = new THREE.PointLight(0x3fd2ff, 5, 4, 1.5); holoLight.position.set(0, 1.6, 0); table.add(holoLight);
+  const gem = mk(new THREE.OctahedronGeometry(0.2, 0), new THREE.MeshStandardMaterial({ color: 0xff3040, emissive: 0xff1030, emissiveIntensity: 1.5, roughness: 0.15, metalness: 0.3, transparent: true, opacity: 0.85 }), table, [0, 1.3, 0], [0, 0, 0], [1, 1.4, 1], false);
+  // crates for Greg
+  const wood = mat(0x7a5a3a, { r: 0.8 });
+  box(g, 1.1, 0.47, 0.8, 0, [-4.6, 0.235, -1.9], { material: wood, round: 0.02 });
+  box(g, 1.0, 1.0, 1.0, 0, [-5.6, 0.5, -2.9], { material: wood, round: 0.02 });
+  box(g, 0.8, 0.8, 0.8, 0, [-5.5, 1.4, -2.9], { material: mat(0x6a4c30, { r: 0.8 }), round: 0.02 });
+  box(g, 1.0, 1.0, 1.0, 0, [-6.7, 0.5, -1.8], { material: wood, round: 0.02 });
+  // control console on the right wall
+  box(g, 2.6, 1.0, 0.7, 0x24305e, [6.6, 0.5, -2.2], { round: 0.04 });
+  const scr = plane(g, 2.2, 1.0, new THREE.MeshBasicMaterial({ color: 0x0a2a4a }), [7.6, 2.0, -2.2], [0, -P / 2, 0], false);
+  return {
+    name: 'reactor', group: g, bg: new THREE.Color(0x07080c), exposure: 1.05,
+    update(t, X) {
+      const v = X.val;
+      // power with a flicker on top
+      const pw = v('reactor.power', 1);
+      const fl = v('reactor.flicker', 0);
+      const flick = fl > 0 ? (Math.sin(t * 37) * Math.sin(t * 23.3) > 0.1 ? 1 : 0.15) : 1;
+      const p = clamp(pw * lerp(1, flick, fl) + v('reactor.flash', 0));
+      coreM.emissiveIntensity = 0.15 + 2.4 * p * (0.85 + 0.15 * Math.sin(t * 6));
+      glass.emissiveIntensity = 0.05 + 0.5 * p;
+      reactorLight.intensity = 1 + 16 * p;
+      core.scale.set(0.8 + 0.2 * p, 1, 0.8 + 0.2 * p);
+      rings.forEach((r, i) => { r.rotation.z = t * (0.3 + 0.9 * p) * (i % 2 ? -1 : 1); });
+      const rl = v('room.lights', 1);
+      const rf = rl < 0.99 && rl > 0.01 ? (Math.sin(t * 41) > 0 ? 1 : 0.3) : 1;
+      for (const r of roomLights) { r.pl.intensity = 6 * rl * rf; r.panel.material.emissiveIntensity = 1.2 * rl * rf; }
+      fill.intensity = 6 + 16 * rl;
+      L.hemi.intensity = 0.25 + 0.25 * rl;
+      const ho = v('holo.on', 1);
+      const hf = v('holo.glitch', 0) > 0 ? (Math.sin(t * 53) > -0.3 ? 1 : 0.2) : 1;
+      map.draw(t, ho * hf);
+      holoLight.intensity = 5 * ho * hf;
+      beam.material.opacity = 0.08 * ho * hf;
+      rim.material.emissiveIntensity = 0.3 + 1.1 * ho;
+      const gd = v('holo.diamond', 0);
+      gem.visible = gd > 0.01;
+      gem.scale.set(gd, gd * 1.4, gd);
+      gem.rotation.y = t * 1.4;
+      gem.position.y = 1.3 + 0.05 * Math.sin(t * 2);
+      scr.material.color.set(Math.sin(t * 2) > 0 ? 0x0a3a5a : 0x0a2a4a);
+    },
+  };
+}
+
+// ------------------------------------------------------------------ SOUL STEALER'S CAVERN (deep below)
+export function buildCavern() {
+  const g = new THREE.Group();
+  const hemi = new THREE.HemisphereLight(0x8a4060, 0x0a0408, 0.9); g.add(hemi);
+  const front = new THREE.PointLight(0xc0a0ff, 5, 9, 1.5); front.position.set(1.5, 3, 2.5); g.add(front);
+  const key = new THREE.DirectionalLight(0xff6070, 0.6); key.position.set(-3, 8, 5); key.castShadow = true;
+  key.shadow.mapSize.set(1024, 1024); Object.assign(key.shadow.camera, { left: -8, right: 8, top: 8, bottom: -8 }); g.add(key);
+  const R = rng(77);
+  const rock = new THREE.MeshStandardMaterial({ color: 0x2c2430, roughness: 0.95, flatShading: true });
+  const groundGeo = new THREE.PlaneGeometry(40, 40, 50, 50);
+  groundGeo.rotateX(-P / 2);
+  const gp = groundGeo.attributes.position;
+  for (let i = 0; i < gp.count; i++) { const x = gp.getX(i), z = gp.getZ(i); const d = Math.hypot(x, z + 2); gp.setY(i, (d > 3 ? 0.25 * Math.sin(x * 0.9) * Math.cos(z * 0.7) + 0.15 * R() : 0)); }
+  groundGeo.computeVertexNormals();
+  const ground = new THREE.Mesh(groundGeo, rock); ground.receiveShadow = true; g.add(ground);
+  mk(new THREE.SphereGeometry(16, 24, 16, 0, P * 2, 0, P / 2), new THREE.MeshStandardMaterial({ color: 0x1a141e, roughness: 1, side: THREE.BackSide, flatShading: true }), g, [0, -1, -2], [0, 0, 0], [1, 0.62, 1], false);
+  for (let i = 0; i < 26; i++) {
+    const a = (i / 26) * P * 2 + R() * 0.2, r = 9 + R() * 4;
+    const m = mk(new THREE.DodecahedronGeometry(1.5 + R() * 2.2, 0), rock, g, [Math.cos(a) * r, R() * 2, -2 + Math.sin(a) * r], [R() * 3, R() * 3, R() * 3], [1, 1.2 + R(), 1]);
+    m.castShadow = false;
+  }
+  for (let i = 0; i < 40; i++) {
+    const a = R() * P * 2, r = 2 + R() * 9;
+    mk(new THREE.ConeGeometry(0.15 + R() * 0.35, 1 + R() * 2.5, 6), rock, g, [Math.cos(a) * r, 8.6 - R() * 1.2, -2 + Math.sin(a) * r], [P, 0, 0], null, false);
+  }
+  // red diamond crystals
+  const crystalM = new THREE.MeshStandardMaterial({ color: 0xff3040, emissive: 0xff1030, emissiveIntensity: 1.2, roughness: 0.15, metalness: 0.2, transparent: true, opacity: 0.92 });
+  const clusters = [[-4.5, -5], [4.8, -4.5], [-6, 1], [6.2, 0.5], [-2.5, -7], [2.8, -7.2], [0, -8]];
+  const crystalLights = [];
+  for (const [cx, cz] of clusters) {
+    for (let i = 0; i < 5; i++) {
+      const h = 0.5 + R() * 1.2;
+      mk(new THREE.OctahedronGeometry(0.25, 0), crystalM, g, [cx + (R() - 0.5) * 0.9, h * 0.35, cz + (R() - 0.5) * 0.9], [(R() - 0.5) * 0.7, R() * 3, (R() - 0.5) * 0.7], [1, h * 3, 1], false);
+    }
+    const pl = new THREE.PointLight(0xff2030, 6, 7, 1.6); pl.position.set(cx, 1.0, cz); g.add(pl); crystalLights.push(pl);
+  }
+  // dais
+  mk(new THREE.CylinderGeometry(1.6, 2.0, 0.35, 10), mat(0x3a2e3e, { r: 0.9 }), g, [0, 0.17, -2]);
+  const ring = plane(g, 3.6, 3.6, new THREE.MeshBasicMaterial({ map: TX.soulSymbolTex(), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }), [0, 0.37, -2]);
+  // drifting embers
+  const embers = new THREE.InstancedMesh(new THREE.SphereGeometry(0.03, 6, 4), new THREE.MeshBasicMaterial({ color: 0xff5050 }), 160);
+  g.add(embers);
+  const mtx = new THREE.Matrix4();
+  return {
+    name: 'cavern', group: g, bg: new THREE.Color(0x050205), fog: [0x12040a, 6, 30], exposure: 1.1,
+    update(t, X) {
+      const v = X.val;
+      const glow = v('cave.glow', 0.6);
+      crystalM.emissiveIntensity = 0.4 + 1.4 * glow * (0.85 + 0.15 * Math.sin(t * 2));
+      crystalLights.forEach((l, i) => { l.intensity = (2 + 6 * glow) * (0.8 + 0.2 * Math.sin(t * 1.7 + i)); });
+      ring.material.opacity = v('cave.ring', 0) * (0.7 + 0.3 * Math.sin(t * 4));
+      ring.rotation.z = -t * 0.3;
+      for (let i = 0; i < 160; i++) {
+        const h1 = Math.sin(i * 12.9898) * 43758.5453 % 1, h2 = Math.sin(i * 78.233) * 12345.678 % 1;
+        const a = Math.abs(h1) * P * 2, r = 1.5 + Math.abs(h2) * 9;
+        const y = ((t * (0.15 + Math.abs(h2) * 0.25) + Math.abs(h1) * 7) % 7);
+        mtx.makeTranslation(Math.cos(a + t * 0.05) * r, y, -1.2 - Math.abs(Math.sin(a + t * 0.05)) * r * 0.8);
+        embers.setMatrixAt(i, mtx);
+      }
+      embers.instanceMatrix.needsUpdate = true;
     },
   };
 }
