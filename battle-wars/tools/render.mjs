@@ -14,7 +14,7 @@ const FPS = +arg('fps', 24), W = +arg('w', 2560), H = +arg('h', 1440), WORKERS =
 const { buildEpisode } = await import(`../episodes/${EP}.js`);
 const from = +arg('from', 0), to = +arg('to', buildEpisode().duration);
 const out = path.resolve(root, arg('out', `build/${EP}/video.mp4`));
-const segDir = path.join(path.dirname(out), 'segments');
+const segDir = path.join(path.dirname(out), 'segments_' + path.basename(out, '.mp4'));
 fs.mkdirSync(segDir, { recursive: true });
 
 const port = 8300 + Math.floor(Math.random() * 500);

@@ -8,6 +8,12 @@ const ALL = ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'water', 'soul
 
 export function buildEpisode() {
   const D = createDirector();
+  redDiamondsScene(D);
+  return D.end();
+}
+
+// The whole scene, starting at the director's current time (so other episodes can include it).
+export function redDiamondsScene(D) {
   const F = (on, yaw, dist, h = 0.15, x = {}) => ({ type: 'frame', on: Array.isArray(on) ? on : [on], yaw, dist, h, ...x });
   const R = (on, yaw, dist, h = 0.15, x = {}) => F(on, yaw, dist, h, { rel: Array.isArray(on) ? on[0] : on, ...x });
   const FIX = (pos, look, x = {}) => ({ type: 'fixed', pos, look, ...x });
@@ -129,5 +135,4 @@ export function buildEpisode() {
   D.music('none', 0, 0, 0.1);
   D.sfx('cutBlack', 0, 0.7);
   D.wait(2.2);
-  return D.end();
 }

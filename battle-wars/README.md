@@ -9,7 +9,8 @@ Every episode is delivered as one **2K MP4** (2560×1440) with stereo sound and 
 | ID | Title | Length |
 |----|-------|--------|
 | `s1e1-be-ready` | Season 1, Episode 1: "BE READY!" | 7:30 |
-| `s1-red-diamonds` | The Red Diamonds (Leon's warning + the Soul Stealer awakens) | 1:02 |
+| `s1e2-the-red-diamonds` | Season 1, Episode 2: "THE RED DIAMONDS" | 1:30 |
+| `s1-red-diamonds` | The Red Diamonds scene on its own (used inside Episode 2) | 1:02 |
 
 Finished videos go to `output/<episode-id>/` (not stored in git — GitHub's 100 MB file limit).
 
