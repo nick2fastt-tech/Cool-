@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Battle Wars S1E1 Player</title>
+<style>
+  @font-face { font-family: Bangers; src: url(node_modules/@fontsource/bangers/files/bangers-latin-400-normal.woff2) format('woff2'); }
+  html, body { margin: 0; background: #05070f; color: #dfe9ff; font-family: system-ui, sans-serif; }
+  #wrap { max-width: 1280px; margin: 0 auto; padding: 12px; }
+  canvas { width: 100%; height: auto; display: block; background: #000; border-radius: 8px; }
+  .bar { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
+  input[type=range] { flex: 1; }
+  button { background: #2f6dff; color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; font-weight: 700; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage"></div>
+  <div class="bar"><button id="play">Play</button><input id="seek" type="range" min="0" max="450" step="0.04" value="0"><span id="time">0:00</span></div>
+  <p style="opacity:.6;font-size:13px">Live preview of the episode renderer (no audio here — the MP4 has the sound). Scrub to any moment.</p>
+</div>
+<script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}</script>
+<script type="module">
+import { createEpisode } from './src/main.js';
+const params = new URLSearchParams(location.search);
+const W = +(params.get('w') || 1280), H = +(params.get('h') || 720);
+const ep = await createEpisode(W, H);
+window.episode = ep;
+window.renderFrame = (t, q = 0.92) => ep.frame(t).toDataURL('image/jpeg', q);
+window.renderPNG = (t) => ep.frame(t).toDataURL('image/png');
+window.timeline = () => JSON.parse(JSON.stringify({ captions: ep.T.captions, sfx: ep.T.sfx, music: ep.T.music, duration: ep.T.duration }));
+window.ready = true;
+if (!params.has('render')) {
+  document.getElementById('stage').appendChild(ep.canvas);
+  const seek = document.getElementById('seek'), timeEl = document.getElementById('time'), btn = document.getElementById('play');
+  let playing = false, t = 0, last = 0;
+  const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  const draw = () => { ep.frame(t); seek.value = t; timeEl.textContent = fmt(t); };
+  seek.oninput = () => { t = +seek.value; draw(); };
+  btn.onclick = () => { playing = !playing; btn.textContent = playing ? 'Pause' : 'Play'; last = performance.now(); };
+  const loop = (now) => { if (playing) { t = Math.min(ep.T.duration, t + (now - last) / 1000); last = now; draw(); } requestAnimationFrame(loop); };
+  draw(); requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>
