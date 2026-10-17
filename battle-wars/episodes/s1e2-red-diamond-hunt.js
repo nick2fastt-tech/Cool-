@@ -824,7 +824,7 @@ export function buildEpisode() {
   cast(['soul']); D.show('soul');
   D.music('none', 0, 0, 0.3);
   D.set('soul.raise', 0); D.set('soul.eyes', 1);
-  D.cam(FIX([0.2, 2.42, -0.05], [0, 2.42, -1.4], { pos2: [0.12, 2.42, -0.35], fov: 32 }));
+  D.cam(FIX([0.25, 2.42, 0.6], [0, 2.42, -1.4], { pos2: [0.15, 2.42, 0.25], fov: 32 }));
   D.wait(0.6);
   D.say('soul', 'Let the war begin.', { dur: 2.8 });
   D.anim('soul.eyes', 1.4, 0.3, -1.0); D.sfx('warHit', -1.0, 1.0); D.shake(0.15, 0.8, -1.0);
