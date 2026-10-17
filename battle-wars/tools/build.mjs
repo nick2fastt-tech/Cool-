@@ -1,6 +1,6 @@
-// Full pipeline for one episode: synthesize audio, render video at 2K, then make the
-// final MP4s in 720p, 1080p and 2K (series standard).
-// Usage: node tools/build.mjs --ep <episode-id> [--skip-render] [--workers 4] [--crf 20]
+// Full pipeline for one episode: synthesize audio, render video at 2K, then make the final MP4.
+// Series standard is one 2K file; --all-sizes also writes 1080p and 720p copies.
+// Usage: node tools/build.mjs --ep <episode-id> [--skip-render] [--all-sizes] [--workers 4] [--crf 20]
 import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
@@ -21,7 +21,7 @@ fs.mkdirSync(outDir, { recursive: true });
 run('node', ['tools/audio.mjs', '--ep', EP]);
 if (!has('--skip-render')) run('node', ['tools/render.mjs', '--ep', EP, '--workers', arg('workers', '4'), '--w', '2560', '--h', '1440', '--out', `build/${EP}/video.mp4`]);
 
-const SIZES = [['2K', 2560, 1440], ['1080p', 1920, 1080], ['720p', 1280, 720]];
+const SIZES = has('--all-sizes') ? [['2K', 2560, 1440], ['1080p', 1920, 1080], ['720p', 1280, 720]] : [['2K', 2560, 1440]];
 for (const [label, w, h] of SIZES) {
   const out = path.join(outDir, `${META.file}_${label}.mp4`);
   run('ffmpeg', ['-loglevel', 'error', '-y',

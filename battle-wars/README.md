@@ -2,7 +2,7 @@
 
 A kid-friendly (ages 9–14) 3D animated action-comedy series. Season 1 is planned at 12–14 episodes.
 
-Every episode is delivered as MP4 in **720p, 1080p and 2K** (rendered once at 2K, then scaled down), with stereo sound and captions. There are no voices or text-to-speech: every line is a caption with the speaker's name in their color, and sounds get captions too.
+Every episode is delivered as one **2K MP4** (2560×1440) with stereo sound and captions. Add `--all-sizes` to the build to also get 1080p and 720p copies. There are no voices or text-to-speech: every line is a caption with the speaker's name in their color, and sounds get captions too.
 
 ## Episodes
 
@@ -38,7 +38,7 @@ Everything is code — no 3D software or downloaded assets.
 - `tools/audio.mjs` — synthesizes the music, sound effects, footsteps and the captions file
 - `tools/render.mjs` — renders frames in headless Chromium (parallel workers) and encodes with ffmpeg
 - `tools/preview.mjs` — quick contact sheet of frames for checking shots
-- `tools/build.mjs` — runs it all and writes the 720p / 1080p / 2K MP4s
+- `tools/build.mjs` — runs it all and writes the 2K MP4 (`--all-sizes` adds 1080p and 720p)
 
 ### Build an episode
 
@@ -46,7 +46,7 @@ Needs Node 18+, ffmpeg and Playwright's Chromium.
 
 ```bash
 npm install
-node tools/build.mjs --ep s1-red-diamonds          # audio + 2K render + all three MP4s
+node tools/build.mjs --ep s1-red-diamonds          # audio + 2K render + the 2K MP4
 node tools/build.mjs --ep s1e1-be-ready --skip-render   # only redo audio/captions and re-mux
 node tools/preview.mjs s1-red-diamonds 0 60 4 tmp/sheet.jpg   # contact sheet, every 4 s
 ```
