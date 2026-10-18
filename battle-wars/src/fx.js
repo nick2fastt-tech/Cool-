@@ -177,6 +177,28 @@ export function buildFX(parent) {
             debris({ t: e.t + e.dur, x: e.to[0], y: e.to[1], z: e.to[2], n: e.debris ?? 30 }, t);
             if (a - e.dur < 0.3) light(e.to[0], e.to[1] + 0.3, e.to[2], 0xa040ff, 8 * (1 - (a - e.dur) / 0.3));
           }
+        } else if (e.kind === 'portal' && a >= 0 && a <= e.dur) {
+          const k = Math.min(1, a / 0.5, (e.dur - a) / 0.5), r = (e.radius ?? 1.2) * k;
+          const ry = e.ry ?? 0, cx = Math.cos(ry), sx = Math.sin(ry);
+          for (let j = 0; j < 160; j++) {
+            const h1 = hash(j * 2.7), h2 = hash(j * 9.3);
+            const ang = h1 * Math.PI * 2 + t * (2 + h2 * 3), rr = r * (0.25 + 0.75 * Math.sqrt(h2));
+            const lx = Math.cos(ang) * rr, ly = Math.sin(ang) * rr * 1.3;
+            addG(e.x + lx * cx, (e.y ?? 1.3) + ly, e.z - lx * sx, 0.035 + 0.04 * (1 - h2), j % 3 ? (e.color ?? 0xa050ff) : 0xffffff);
+          }
+          light(e.x, e.y ?? 1.3, e.z, e.color ?? 0xa050ff, 6 * k);
+        } else if (e.kind === 'beam' && a >= 0 && a <= e.dur) {
+          const hp = X.hand(e.who, e.side ?? 'R');
+          const k = Math.min(1, a / 0.1, (e.dur - a) / 0.2);
+          const n2 = 40;
+          for (let j = 0; j < n2; j++) {
+            const u = ((j / n2) + t * 3) % 1;
+            const x = hp.x + (e.to[0] - hp.x) * u, y = hp.y + (e.to[1] - hp.y) * u, z = hp.z + (e.to[2] - hp.z) * u;
+            addG(x, y, z, (e.width ?? 0.12) * k * (0.8 + 0.4 * hash(j + Math.floor(t * 30))), e.color ?? 0x4aa8ff);
+            addG(x, y, z, (e.width ?? 0.12) * 0.45 * k, 0xffffff);
+          }
+          addG(e.to[0], e.to[1], e.to[2], 0.35 * k, e.color ?? 0x4aa8ff);
+          light(hp.x, hp.y, hp.z, e.color ?? 0x4aa8ff, 5 * k);
         } else if (e.kind === 'sparks') sparkBurst(e, t);
         else if (e.kind === 'debris') debris(e, t);
         else if (e.kind === 'smoke') smoke(e, t);

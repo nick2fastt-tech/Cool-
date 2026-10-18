@@ -1,5 +1,6 @@
-// Full pipeline for one episode: synthesize audio, render video at 2K, then make the final MP4.
-// Series standard is one 2K file; --all-sizes also writes 1080p and 720p copies.
+// Full pipeline for one episode: synthesize audio, render video, then make the final MP4.
+// Series standard (from Episode 3): one 1080p file rendered natively at 1920x1080.
+// --2k renders at 2560x1440 instead; --all-sizes (with --2k) also writes 1080p and 720p copies.
 // Usage: node tools/build.mjs --ep <episode-id> [--skip-render] [--all-sizes] [--workers 4] [--crf 20]
 import { execFileSync } from 'child_process';
 import fs from 'fs';
@@ -18,10 +19,11 @@ const build = path.join(root, 'build', EP);
 const outDir = path.join(root, 'output', EP);
 fs.mkdirSync(outDir, { recursive: true });
 
+const [RW, RH] = has('--2k') ? ['2560', '1440'] : ['1920', '1080'];
 run('node', ['tools/audio.mjs', '--ep', EP]);
-if (!has('--skip-render')) run('node', ['tools/render.mjs', '--ep', EP, '--workers', arg('workers', '4'), '--w', '2560', '--h', '1440', '--out', `build/${EP}/video.mp4`]);
+if (!has('--skip-render')) run('node', ['tools/render.mjs', '--ep', EP, '--workers', arg('workers', '4'), '--w', RW, '--h', RH, '--out', `build/${EP}/video.mp4`]);
 
-const SIZES = has('--all-sizes') ? [['2K', 2560, 1440], ['1080p', 1920, 1080], ['720p', 1280, 720]] : [['2K', 2560, 1440]];
+const SIZES = has('--2k') ? (has('--all-sizes') ? [['2K', 2560, 1440], ['1080p', 1920, 1080], ['720p', 1280, 720]] : [['2K', 2560, 1440]]) : [['1080p', 1920, 1080]];
 for (const [label, w, h] of SIZES) {
   const out = path.join(outDir, `${META.file}_${label}.mp4`);
   run('ffmpeg', ['-loglevel', 'error', '-y',

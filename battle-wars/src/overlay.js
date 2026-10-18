@@ -12,6 +12,7 @@ export const SPEAKERS = {
   greg: { name: 'GREG', color: '#e6e6ee' },
   soul: { name: 'SOUL STEALER', color: '#ff4a5a' },
   computer: { name: 'COMPUTER', color: '#8fe6ff' },
+  shadow: { name: 'UNKNOWN VOICE', color: '#ff9a40' },
 };
 
 function wrap(ctx, text, maxW) {
@@ -152,6 +153,20 @@ export function drawOverlay(ctx, W, H, t, T, val) {
   for (const c of T.comics) drawComic(ctx, W, H, c, t);
   const fade = val('fade', 0);
   if (fade > 0) { ctx.fillStyle = `rgba(0,0,0,${clamp(fade)})`; ctx.fillRect(0, 0, W, H); }
+  const mem = val('memory', 0);
+  if (mem > 0) {
+    ctx.save();
+    ctx.globalAlpha = mem;
+    ctx.fillStyle = 'rgba(140,170,255,0.22)'; ctx.fillRect(0, 0, W, H);
+    const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.25, W / 2, H / 2, H * 0.85);
+    g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(230,235,255,0.85)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+  const fz = val('freezeTint', 0);
+  if (fz > 0) { ctx.fillStyle = `rgba(120,40,200,${0.18 * fz})`; ctx.fillRect(0, 0, W, H); }
+  const fw = val('flashWhite', 0);
+  if (fw > 0) { ctx.fillStyle = `rgba(255,255,255,${clamp(fw)})`; ctx.fillRect(0, 0, W, H); }
   const fr = val('flashRed', 0);
   if (fr > 0) { ctx.fillStyle = `rgba(255,40,60,${clamp(fr)})`; ctx.fillRect(0, 0, W, H); }
   const fv = val('flashViolet', 0);

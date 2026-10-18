@@ -682,6 +682,9 @@ export function buildTitle(font, TextGeometry) {
   const sub2 = mkText('THE RED DIAMOND HUNT', 0.5, 0.2, [new THREE.MeshStandardMaterial({ color: 0xffd0d0, metalness: 0.4, roughness: 0.3, emissive: 0xff2030, emissiveIntensity: 0.6 }), new THREE.MeshStandardMaterial({ color: 0x9a0a14, metalness: 0.6, roughness: 0.3 })]);
   sub2.position.set(0, -1.2, 0.3);
   g.add(sub2);
+  const sub3 = mkText("THE SOUL STEALER'S SECRET", 0.46, 0.18, [new THREE.MeshStandardMaterial({ color: 0xf0d8ff, metalness: 0.4, roughness: 0.3, emissive: 0xa040ff, emissiveIntensity: 0.6 }), new THREE.MeshStandardMaterial({ color: 0x5a1a8a, metalness: 0.6, roughness: 0.3 })]);
+  sub3.position.set(0, -1.2, 0.3);
+  g.add(sub3);
   const emb = new THREE.Mesh(new THREE.PlaneGeometry(4.5, 4.5), new THREE.MeshBasicMaterial({ map: TX.emblemTex(), transparent: true, opacity: 0.35, depthWrite: false }));
   emb.position.set(0, 0.2, -1.5);
   g.add(emb);
@@ -708,8 +711,8 @@ export function buildTitle(font, TextGeometry) {
       title.position.x = red ? Math.sin(t * 61) * 0.03 * v('title.jolt', 0) : 0;
       const ks = v('title.sub', 0);
       const which = v('title.subText', 'BE READY!');
-      sub.visible = which === 'BE READY!'; sub2.visible = which === 'THE RED DIAMOND HUNT';
-      for (const m of [sub, sub2]) { m.scale.setScalar(Math.max(0.001, ks)); m.position.y = v('title.subY', -1.2); }
+      sub.visible = which === 'BE READY!'; sub2.visible = which === 'THE RED DIAMOND HUNT'; sub3.visible = which === "THE SOUL STEALER'S SECRET";
+      for (const m of [sub, sub2, sub3]) { m.scale.setScalar(Math.max(0.001, ks)); m.position.y = v('title.subY', -1.2); }
       title.position.y = v('title.y', 0.25);
       emb.material.opacity = 0.35 * k;
       rays.rotation.z = t * 0.15;
@@ -875,7 +878,18 @@ export function buildReactor() {
   const buzzer = grp(g);
   mk(new THREE.CylinderGeometry(0.07, 0.07, 0.05, 14), mat(0x333333), buzzer, [0, 0.025, 0]);
   const buzzTop = mk(new THREE.CylinderGeometry(0.045, 0.045, 0.03, 14), mat(0xff3030, { e: 0xff2020, ei: 0.5 }), buzzer, [0, 0.06, 0]);
-  const deskRefs = { desk, chair, beacons, alarmLight, doorL, doorR, buzzer, buzzTop };
+  // lounge corner: couch facing a TV on the front wall
+  couch(g, 5.4, 4.8, 0);
+  box(g, 3.2, 1.8, 0.1, 0x0b0d12, [5.4, 1.75, 6.4], { round: 0.03, noShadow: true });
+  const hqTv = tvGame();
+  const hqTvScreen = plane(g, 3.0, 1.65, new THREE.MeshBasicMaterial({ map: hqTv }), [5.4, 1.75, 6.34], [0, P, 0], false);
+  box(g, 2.4, 0.4, 0.5, 0x2a2024, [5.4, 0.2, 6.1], { round: 0.02 });
+  // knocked-over mess after the fight
+  const mess = grp(g);
+  const mr = rng(88);
+  for (let i = 0; i < 6; i++) box(mess, 0.6 + mr() * 0.4, 0.4 + mr() * 0.4, 0.5, 0x7a5a3a, [-3 + mr() * 6, 0.2, -1 + mr() * 4], { rot: [mr() * 0.6, mr() * 3, mr() * 0.8], round: 0.02 });
+  rubble(mess, -1.5, 2.2, 8, mr, 2.5); rubble(mess, 2.0, -0.8, 8, mr, 2.5);
+  const deskRefs = { desk, chair, beacons, alarmLight, doorL, doorR, buzzer, buzzTop, hqTv, mess };
   return {
     name: 'reactor', group: g, bg: new THREE.Color(0x07080c), exposure: 1.05,
     update(t, X) {
@@ -907,6 +921,16 @@ export function buildReactor() {
       gem.rotation.y = t * 1.4;
       gem.position.y = 1.3 + 0.05 * Math.sin(t * 2);
       scr.material.color.set(Math.sin(t * 2) > 0 ? 0x0a3a5a : 0x0a2a4a);
+      deskRefs.hqTv.draw(t, 0, v('hq.tv', 0) < 0.5);
+      deskRefs.mess.visible = v('hq.mess', 0) > 0.5;
+      const pu = v('hq.purple', 0);
+      if (pu > 0.01) {
+        for (const r of roomLights) { r.pl.color.set(0xb050ff); r.panel.material.emissive.set(0xb050ff); }
+        fill.color.set(0x9050ff); L.hemi.color.set(0x8a50ff);
+      } else {
+        for (const r of roomLights) { r.pl.color.set(0xe8f0ff); r.panel.material.emissive.set(0xffffff); }
+        fill.color.set(0xdde6ff); L.hemi.color.set(0x9fb0d0);
+      }
       const al = v('hq.alarm', 0);
       deskRefs.beacons.forEach((bc, i) => { bc.beam.rotation.y = t * 4 + i; bc.beam.visible = al > 0.01; bc.beam.material.opacity = 0.25 * al; bc.dome.material.emissiveIntensity = 0.2 + al * (Math.sin(t * 8 + i) > 0 ? 1.4 : 0.4); });
       deskRefs.alarmLight.intensity = al * (Math.sin(t * 8) > 0 ? 10 : 3);
@@ -961,6 +985,25 @@ export function buildCavern() {
   // dais
   mk(new THREE.CylinderGeometry(1.6, 2.0, 0.35, 10), mat(0x3a2e3e, { r: 0.9 }), g, [0, 0.17, -2]);
   const ring = plane(g, 3.6, 3.6, new THREE.MeshBasicMaterial({ map: TX.soulSymbolTex(), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }), [0, 0.37, -2]);
+  // the Soul Stealer's hologram of the team
+  const teamTex = canvasTex(512, 320, () => {});
+  const teamHolo = mk(new THREE.PlaneGeometry(2.4, 1.5), new THREE.MeshBasicMaterial({ map: teamTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }), g, [0, 2.2, 0.2], [0, 0, 0], null, false);
+  const drawTeam = (t) => {
+    const c = teamTex.userData.ctx, w = 512, h = 320;
+    c.clearRect(0, 0, w, h);
+    c.fillStyle = 'rgba(160,80,255,0.15)'; c.fillRect(0, 0, w, h);
+    c.strokeStyle = 'rgba(200,140,255,0.9)'; c.lineWidth = 4; c.strokeRect(4, 4, w - 8, h - 8);
+    const hairs = ['#3a2a20', '#6b3a1e', '#1a1210', '#ffffff', '#4e3020'];
+    for (let i = 0; i < 5; i++) {
+      const x = 70 + i * 92, y = 200 + 5 * Math.sin(t * 2 + i);
+      c.fillStyle = i === 3 ? 'rgba(40,40,50,0.9)' : 'rgba(255,90,100,0.85)'; c.fillRect(x - 22, y - 40, 44, 90);
+      c.fillStyle = i === 3 ? '#f2f2f4' : 'rgba(240,200,170,0.95)'; c.beginPath(); c.arc(x, y - 62, 22, 0, 7); c.fill();
+      c.fillStyle = hairs[i]; if (i !== 3) { c.beginPath(); c.arc(x, y - 72, 20, P, 0); c.fill(); }
+    }
+    c.fillStyle = '#e0c0ff'; c.font = `26px ${TX.FONT}`; c.fillText('RED TEAM', 18, 34);
+    c.fillStyle = `rgba(220,180,255,${0.15 + 0.1 * Math.sin(t * 40)})`; c.fillRect(0, (t * 120) % h, w, 4);
+    teamTex.needsUpdate = true;
+  };
   // drifting embers
   const embers = new THREE.InstancedMesh(new THREE.SphereGeometry(0.03, 6, 4), new THREE.MeshBasicMaterial({ color: 0xff5050 }), 160);
   g.add(embers);
@@ -977,6 +1020,9 @@ export function buildCavern() {
       crystalM.emissiveIntensity = 0.4 + 1.4 * glow * (0.85 + 0.15 * Math.sin(t * 2));
       crystalLights.forEach((l, i) => { l.intensity = (2 + 6 * glow) * (0.8 + 0.2 * Math.sin(t * 1.7 + i)); });
       ring.material.opacity = v('cave.ring', 0) * (0.7 + 0.3 * Math.sin(t * 4));
+      const th = v('cave.holo', 0);
+      teamHolo.visible = th > 0.01;
+      if (teamHolo.visible) { teamHolo.material.opacity = th * (Math.sin(t * 31) > -0.85 ? 1 : 0.4); drawTeam(t); }
       ring.rotation.z = -t * 0.3;
       for (let i = 0; i < 160; i++) {
         const h1 = Math.sin(i * 12.9898) * 43758.5453 % 1, h2 = Math.sin(i * 78.233) * 12345.678 % 1;
@@ -1328,6 +1374,59 @@ export function buildDiamondChamber() {
       black.material.emissiveIntensity = 0.3 + 1.0 * bp * v('black.glow', 1);
       blackLight.intensity = 0.8 + 2 * bp * v('black.glow', 1);
       black.visible = v('black.vis', 1) > 0.5;
+    },
+  };
+}
+
+// ------------------------------------------------------------------ CITY PARK
+export function buildPark() {
+  const g = new THREE.Group();
+  const L = lights(g, { sunPos: [-12, 16, 10], target: [0, 0, 0], shadowSize: 16, sunI: 2.4, hemi: 1.25, sky: 0xe6f2ff, ground: 0x6a8a4a });
+  const R = rng(91);
+  const grassTex = canvasTex(256, 256, (c, w, h) => {
+    c.fillStyle = '#5aa04a'; c.fillRect(0, 0, w, h);
+    const r2 = rng(3);
+    for (let i = 0; i < 2500; i++) { c.fillStyle = r2() < 0.5 ? 'rgba(40,110,40,0.35)' : 'rgba(140,200,90,0.3)'; c.fillRect(r2() * w, r2() * h, 2, 4); }
+  }, { repeat: [14, 14] });
+  plane(g, 120, 120, new THREE.MeshStandardMaterial({ map: grassTex, roughness: 1 }), [0, 0, 0]);
+  // winding path
+  const path = new THREE.MeshStandardMaterial({ color: 0xd9c8a0, roughness: 0.95 });
+  for (let i = -14; i <= 14; i++) {
+    const x = i * 1.6, z = Math.sin(i * 0.25) * 2.2;
+    mk(new THREE.CylinderGeometry(1.5, 1.5, 0.02, 20), path, g, [x, 0.01, z], [0, 0, 0], [1, 1, 0.75], false).receiveShadow = true;
+  }
+  // pond
+  mk(new THREE.CylinderGeometry(4, 4, 0.04, 40), mat(0x5ab0e8, { r: 0.05, m: 0.2, e: 0x1a4a80, ei: 0.2 }), g, [9, 0.02, -9], [0, 0, 0], [1.4, 1, 1], false);
+  mk(new THREE.TorusGeometry(4, 0.2, 8, 40), mat(0xa09888), g, [9, 0.05, -9], [P / 2, 0, 0], [1.4, 1, 1]);
+  // trees, benches, lamps, flowers
+  const spots = [[-12, -7], [-6, -9], [2, -10], [-15, 6], [-8, 7], [4, 8], [12, 6], [16, -3], [-18, -2], [20, 10], [-22, 9], [24, -8]];
+  spots.forEach(([x, z], i) => tree(g, x, z, 1.2 + R() * 0.5, i + 3));
+  for (const [x, z, ry] of [[-4, 4.2, P], [6, -3.6, 0], [14, 3.6, P]]) {
+    const b = grp(g, x, 0, z); b.rotation.y = ry;
+    box(b, 1.8, 0.08, 0.5, 0x8a5a32, [0, 0.45, 0]);
+    box(b, 1.8, 0.4, 0.06, 0x8a5a32, [0, 0.7, -0.22]);
+    for (const sx of [-0.8, 0.8]) box(b, 0.08, 0.45, 0.45, 0x2b2f36, [sx, 0.22, 0]);
+  }
+  for (const x of [-10, 0, 10, 20]) streetLamp(g, x, 3.6, -1);
+  const flowerCols = [0xff5a7a, 0xffd23f, 0xb07aff, 0xffffff];
+  for (let i = 0; i < 60; i++) {
+    const x = (R() - 0.5) * 40, z = (R() - 0.5) * 30;
+    if (Math.abs(z - Math.sin(x / 1.6 * 0.25) * 2.2) < 2.4) continue;
+    mk(new THREE.SphereGeometry(0.08, 6, 5), mat(flowerCols[i % 4]), g, [x, 0.12, z]);
+    mk(new THREE.CylinderGeometry(0.01, 0.01, 0.12, 4), mat(0x3a8a3a), g, [x, 0.06, z]);
+  }
+  // city skyline beyond the park
+  for (let i = 0; i < 18; i++) building(g, -50 + i * 6.5, -45 - R() * 6, 5 + R() * 2, 6, 14 + R() * 24, [0xc9d6e3, 0xd9c7a7, 0xb7c4d6][i % 3], 400 + i);
+  // Flare's notebook flying through the air
+  const book = grp(g);
+  mk(new THREE.BoxGeometry(0.17, 0.025, 0.22), mat(0x6a2a1a, { r: 0.8 }), book);
+  return {
+    name: 'park', group: g, bg: TX.skyTex('#3f8fe0', '#9fd0f5', '#e8f4ff'), fog: [0xcfe4f5, 40, 120], exposure: 1.0,
+    update(t, X) {
+      const v = X.val;
+      book.visible = v('book.vis', 0) > 0.5;
+      book.position.set(v('book.x', 0), v('book.y', 0), v('book.z', 0));
+      book.rotation.set(t * 7, t * 3, 0);
     },
   };
 }

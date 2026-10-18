@@ -112,6 +112,19 @@ export const ACTIONS = {
   fistsClench: { gest: true, f: (a, t) => ({ aLO: 0.18, aRO: 0.18, eL: 0.5, eR: 0.5, aLF: 0.12, aRF: 0.12, spF: 0.05, y: 0.004 * S(t * 30) }) },
   armsOut: { f: (a) => { const k = smoothstep(0, 0.25, a); return { aLO: 1.3 * k, aRO: 1.3 * k, aLF: 0.6 * k, aRF: 0.6 * k, eL: 0.2, eR: 0.2, spF: -0.2 * k, hdN: -0.3 * k, lean: -0.1 * k }; } },
   lookUp: { gest: true, f: (a, t) => ({ hdN: -0.4, aLO: 0.12, aRO: 0.12, eL: 0.2, eR: 0.2 }) },
+  kneel: { f: (a, t) => ({ y: -0.42, lLF: 1.45, kL: 1.5, lRF: -0.15, kR: 2.2, fR: 0.6, spF: 0.3 + 0.04 * S(t * 4), aLF: 0.5, eL: 0.6, aRF: 0.7, eR: 0.6, hdN: 0.15 }) },
+  blastPose: { f: (a, t) => { const k = smoothstep(0, 0.2, a); return { aLF: 1.5 * k, aRF: 1.5 * k, aLO: 0.1, aRO: 0.1, aLT: 0.2, aRT: 0.2, eL: 0.15, eR: 0.15, lean: 0.12 * k, lLF: 0.5, kL: 0.4, lRF: -0.45, kR: 0.25, y: -0.06 + 0.01 * S(t * 30), hdN: -0.05 }; } },
+  oneHandBlast: { f: (a) => { const k = smoothstep(0, 0.15, a); return { aRF: 1.5 * k, aRO: 0.05, eR: 0.1, aLF: 0.4, eL: 1.2, aLO: 0.2, lean: 0.1 * k, lLF: 0.45, kL: 0.35, lRF: -0.4, kR: 0.2, spT: -0.2 * k }; } },
+  grabArm: { f: (a) => { const k = smoothstep(0, 0.3, a); return { aRF: 1.25 * k, eR: 0.35, aRO: -0.05, aLF: 1.1 * k, eL: 0.5, lean: 0.12 * k, lLF: 0.4, kL: 0.3, lRF: -0.3 }; } },
+  chargeHand: { f: (a, t) => { const k = smoothstep(0, 0.4, a); return { aRF: 1.45 * k, eR: 0.1, aRO: 0.0, aLO: 0.15, eL: 0.3, y: 0.01 * S(t * 25), spF: 0.05, hdN: 0.05 }; } },
+  freezeStep: { f: () => ({ lLF: 0.5, kL: 0.2, lRF: -0.45, kR: 0.7, aLF: -0.4, aRF: 0.45, eL: 0.3, eR: 0.3, aLO: 0.1, aRO: 0.1, y: -0.01 }) },
+  freezeStand: { f: () => ({ aRF: 0.8, eR: 0.9, aLO: 0.15, eL: 0.3, lLO: 0.1, lRO: 0.1, hdN: 0.05 }) },
+  struggle: { f: (a, t) => ({ aLO: 0.35 + 0.08 * S(t * 23), aRO: 0.35 + 0.08 * S(t * 19), aLF: 0.4, aRF: 0.4, eL: 1.1, eR: 1.1, spF: 0.2, hdN: 0.15, y: 0.008 * S(t * 31), lLO: 0.12, lRO: 0.12 }) },
+  tumble: { f: (a) => { const k = 1 - smoothstep(0.3, 1.1, a); return { y: -0.78 * k, lean: -1.2 * k, lLF: 0.9 * k, kL: 0.8 * k, lRF: 0.5 * k, kR: 1.0 * k, aLO: 1.0 * k, aRO: 1.0 * k, aLF: 1.2 * k, aRF: 0.8 * k, hdN: 0.3 * k }; } },
+  crouchTreat: { f: (a, t) => ({ lLF: 1.3, kL: 2.0, lRF: 1.2, kR: 2.1, y: -0.46, spF: 0.35, aRF: 1.05, eR: 0.3, aRO: 0.0, aLF: 0.6, eL: 1.0, hdN: 0.3 }) },
+  throwUp: { f: (a) => { const k = smoothstep(0, 0.25, a); return { aRF: 2.8 * k, aLF: 2.6 * k, aLO: 0.4, aRO: 0.4, eL: 0.2, eR: 0.2, spF: -0.15 * k, hdN: -0.3 * k, y: 0.05 * k }; } },
+  touchHair: { f: (a) => { const k = smoothstep(0, 0.4, a); return { aRF: 2.5 * k, eR: 1.9 * k, aRT: 0.7, aRO: 0.3, hdN: -0.1 * k, aLO: 0.15, eL: 0.3 }; } },
+  liftHand: { f: (a) => { const k = smoothstep(0, 0.35, a); return { aRF: 1.2 * k, eR: 0.6, aRT: -0.6 * k, aLO: 0.12, eL: 0.25, hdN: 0.2 }; } },
   facepalm: { f: (a) => { const k = smoothstep(0, 0.35, a); return { aRF: 1.55 * k, aRT: 1.0 * k, aRO: -0.1, eR: 2.35 * k, hdN: 0.35 * k, spF: 0.12 * k, aLO: 0.12, eL: 0.2 }; } },
   leanTable: { gest: true, f: (a, t) => ({ lean: 0.05, spF: 0.32, aLF: 0.85, aRF: 0.85, eL: 0.2, eR: 0.2, aLO: 0.22, aRO: 0.22, hdN: 0.15 + 0.02 * S(t * 1.5), lLO: 0.1, lRO: 0.1 }) },
   sitSleep: { sit: true, f: (a, t) => ({ ...sitLegs, spF: 0.35 + 0.03 * S(t * 1.1), hdN: 0.55 + 0.05 * S(t * 1.1), hdT: 0.2, aLF: 0.4, aRF: 0.4, aLT: 0.9, aRT: 0.9, eL: 1.3, eR: 1.3, aLO: 0.08, aRO: 0.08 }) },
@@ -168,7 +181,7 @@ function buildFace(head, cfg, hc, r) {
   const F = {};
   const skin = mat(cfg.skin, { r: 0.55 });
   const white = mat(0xffffff, { r: 0.3 });
-  const iris = mat(cfg.eyeColor, { r: 0.3 });
+  const iris = mat(cfg.eyeColor, { r: 0.3 }).clone();
   const black = mat(0x0b0b10, { r: 0.2 });
   const shine = mat(0xffffff, { basic: true });
   F.eyes = [];
@@ -205,12 +218,14 @@ function buildFace(head, cfg, hc, r) {
   mk(new THREE.PlaneGeometry(r * 0.46, r * 0.07), mat(0xffffff, { r: 0.4 }), F.open, [0, -r * 0.035, 0.001], [0, 0, 0], null, false);
   mk(new THREE.CircleGeometry(r * 0.15, 14, P, P), mat(0xd06a6a, { r: 0.6 }), F.open, [0, -r * 0.17, 0.001], [0, 0, 0], [1.3, 0.6, 1], false);
   F.mg = mg;
+  F.iris = iris;
   return F;
 }
 
 function buildHair(head, cfg, hc, r) {
   const R = rng(cfg.seed * 97 + 13);
-  const m = mat(cfg.hairColor, { r: 0.7 });
+  const m = mat(cfg.hairColor, { r: 0.7 }).clone();
+  cfg._hairMat = m;
   const g = grp(head, 0, hc, 0);
   const cap = mk(new THREE.SphereGeometry(r * 1.07, 26, 16, 0, P * 2, 0, P * 0.5), m, g, [0, r * 0.06, -r * 0.06], [-0.62, 0, 0]);
   cap.scale.set(1.0, 1.03, 1.05);
@@ -266,9 +281,9 @@ export function buildHero(cfg) {
   const J = {};
   const suit = mat(cfg.suit ?? 0x1f2d8a, { r: 0.55 });
   const suitDark = mat(cfg.suitDark ?? 0x131a4d, { r: 0.6 });
-  const accent = mat(cfg.accent ?? 0x2f6dff, { r: 0.4, e: cfg.accentGlow ?? 0x0b2a90, ei: 0.6 });
+  const accent = mat(cfg.accent ?? 0x2f6dff, { r: 0.4, e: cfg.accentGlow ?? 0x0b2a90, ei: 0.6 }).clone();
   const pad = mat(cfg.pad ?? 0x2747c7, { r: 0.35 });
-  const glove = cfg.bareHands ? mat(cfg.skin, { r: 0.55 }) : mat(cfg.glove ?? 0x151d55, { r: 0.6 });
+  const glove = (cfg.bareHands ? mat(cfg.skin, { r: 0.55 }) : mat(cfg.glove ?? 0x151d55, { r: 0.6 })).clone();
   const boot = mat(cfg.boot ?? 0x2850d0, { r: 0.4 });
   const sole = mat(0x0d1030, { r: 0.8 });
   const skin = mat(cfg.skin, { r: 0.55 });
@@ -368,7 +383,23 @@ export function buildHero(cfg) {
     J.hip[side] = hp; J.kn[side] = kn; J.an[side] = an;
   }
 
+  const base = { hair: cfg._hairMat ? cfg._hairMat.color.clone() : null, accent: accent.color.clone(), accentE: accent.emissive.clone(), glove: glove.color.clone(), iris: face.iris.color.clone() };
+  const BLUE = new THREE.Color(0x4aa8ff), PURPLE = new THREE.Color(0xb050ff), DARKP = new THREE.Color(0x2a0a3a);
   const hero = {
+    // power glows driven by tracks: hair/suit turning blue, eyes and gloves turning purple
+    applyGlow(g) {
+      if (cfg._hairMat) {
+        cfg._hairMat.color.copy(base.hair).lerp(BLUE, g.hair * 0.85);
+        cfg._hairMat.emissive.copy(BLUE).multiplyScalar(g.hair * 0.45);
+      }
+      accent.color.copy(base.accent).lerp(BLUE, g.suit);
+      accent.emissive.copy(base.accentE).lerp(BLUE, g.suit);
+      accent.emissiveIntensity = 0.6 + g.suit * 1.2;
+      face.iris.color.copy(base.iris).lerp(PURPLE, g.eyes);
+      face.iris.emissive.copy(PURPLE).multiplyScalar(g.eyes * 1.4);
+      glove.color.copy(base.glove).lerp(DARKP, g.glove);
+      glove.emissive.copy(PURPLE).multiplyScalar(g.glove * 0.6);
+    },
     name: cfg.name, root, J, face, cfg, seed: cfg.seed ?? 1,
     props: {},
     applyPose(p) {
@@ -544,7 +575,7 @@ export function buildWaterGuy() {
 }
 
 function buildGregFace(head, hc, r) {
-  const black = mat(0x050505, { r: 0.3 });
+  const black = mat(0x050505, { r: 0.3 }).clone();
   const eyes = [];
   for (const sd of [1, -1]) {
     const eg = grp(head, sd * r * 0.32, hc + r * 0.12, r * 0.94);
@@ -554,7 +585,7 @@ function buildGregFace(head, hc, r) {
     eyes.push({ eg, eye, ir: new THREE.Group() });
   }
   const dummy = () => new THREE.Group();
-  return { eyes, brows: [], smile: dummy(), open: dummy(), mg: dummy() };
+  return { eyes, brows: [], smile: dummy(), open: dummy(), mg: dummy(), iris: black };
 }
 
 // Soul Stealer: tall hooded villain with glowing red eyes and a red symbol in his palm.
@@ -604,6 +635,8 @@ export function buildSoulStealer(symbolTex) {
   const smokeM = new THREE.MeshStandardMaterial({ color: 0x2a1a3a, roughness: 1, transparent: true, opacity: 0.38, depthWrite: false });
   const smoke = [];
   for (let i = 0; i < 26; i++) { const m = mk(new THREE.IcosahedronGeometry(1, 1), smokeM, root, [0, 0, 0], [0, 0, 0], null, false); smoke.push(m); }
+  const shield = new THREE.Mesh(new THREE.SphereGeometry(1.25, 32, 16, -P / 2.6, P / 1.3, P * 0.18, P * 0.62), new THREE.MeshBasicMaterial({ color: 0xa050ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  shield.position.set(0, 1.25, 0.2); root.add(shield);
   const charge = new THREE.Mesh(new THREE.SphereGeometry(0.14, 16, 12), new THREE.MeshBasicMaterial({ color: 0xc070ff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
   root.add(charge);
   const chargeLight = new THREE.PointLight(0xa040ff, 0, 5, 1.6); charge.add(chargeLight);
@@ -642,7 +675,11 @@ export function buildSoulStealer(symbolTex) {
         m.position.set(Math.cos(a) * rr * (i < 14 ? 1 : 1.9), y, Math.sin(a) * rr * (i < 14 ? 1 : 1.9));
         m.scale.setScalar((0.12 + 0.1 * h1) * (1 + 0.15 * Math.sin(t * 2 + i)) * (1 + dz * 2.5));
       });
-      const cg = st.charge ?? 0;
+      const sh = st.shield ?? 0, crk = st.crack ?? 0;
+      shield.visible = sh > 0.01;
+      shield.material.opacity = sh * 0.35 * (crk > 0 ? (Math.sin(t * 47) > 0 ? 1 : 0.35) : (0.85 + 0.15 * Math.sin(t * 6)));
+      shield.scale.setScalar(1 + crk * 0.04 * Math.sin(t * 61));
+            const cg = st.charge ?? 0;
       charge.visible = cg > 0.01;
       if (charge.visible) {
         arms.R.hand.updateWorldMatrix(true, false);
@@ -720,6 +757,85 @@ export function buildProp(kind) {
     g.position.set(0, -0.08, 0.04);
   }
   return g;
+}
+
+// A small dog (and Eric's bird-dog transformation when bird = true).
+export function buildDog(bird = false) {
+  const root = new THREE.Group();
+  const fur = bird ? mat(0x2f6dff, { r: 0.5, e: 0x1a4cff, ei: 0.5 }) : mat(0xc8904e, { r: 0.85 });
+  const fur2 = bird ? mat(0x8fd4ff, { r: 0.4, e: 0x3fa0ff, ei: 0.6 }) : mat(0xf0e0c8, { r: 0.85 });
+  const dark = mat(0x1a1210, { r: 0.4 });
+  const S = bird ? 1.7 : 1;
+  const body = grp(root, 0, 0.32 * S, 0);
+  body.scale.setScalar(S);
+  mk(new THREE.CapsuleGeometry(0.13, 0.28, 6, 14), fur, body, [0, 0, 0], [P / 2, 0, 0]);
+  mk(new THREE.CapsuleGeometry(0.1, 0.18, 4, 10), fur2, body, [0, -0.05, 0.06], [P / 2, 0, 0], [1, 1, 0.8]);
+  mk(new THREE.TorusGeometry(0.09, 0.018, 6, 16), mat(0xd02030, { r: 0.5 }), body, [0, 0.07, 0.2], [P / 2 - 0.4, 0, 0]);
+  const head = grp(body, 0, 0.14, 0.26);
+  mk(new THREE.SphereGeometry(0.12, 16, 12), fur, head, [0, 0, 0]);
+  mk(new THREE.CapsuleGeometry(0.055, 0.08, 4, 10), fur2, head, [0, -0.03, 0.11], [P / 2, 0, 0]);
+  mk(new THREE.SphereGeometry(0.028, 10, 8), dark, head, [0, -0.01, 0.2]);
+  const jaw = grp(head, 0, -0.06, 0.08);
+  mk(new THREE.BoxGeometry(0.08, 0.02, 0.1), mat(0x8a3030), jaw, [0, 0, 0.03]);
+  for (const sd of [1, -1]) {
+    mk(new THREE.SphereGeometry(0.022, 10, 8), dark, head, [sd * 0.05, 0.04, 0.1]);
+    mk(new THREE.SphereGeometry(0.008, 6, 4), mat(0xffffff, { basic: true }), head, [sd * 0.05 + 0.006, 0.05, 0.12]);
+    const ear = mk(new THREE.SphereGeometry(0.06, 10, 8), bird ? fur2 : mat(0x8a5a2e, { r: 0.85 }), head, [sd * 0.1, 0.03, -0.02], [0, 0, sd * 0.5], [0.4, 1.1, 0.7]);
+  }
+  const tail = grp(body, 0, 0.06, -0.26);
+  mk(new THREE.CapsuleGeometry(0.025, 0.14, 4, 8), fur, tail, [0, 0.07, -0.02], [-0.6, 0, 0]);
+  const legs = [];
+  for (const [x, z] of [[0.07, 0.15], [-0.07, 0.15], [0.07, -0.15], [-0.07, -0.15]]) {
+    const l = grp(body, x, -0.05, z);
+    mk(new THREE.CapsuleGeometry(0.03, 0.16, 4, 8), fur, l, [0, -0.11, 0]);
+    mk(new THREE.SphereGeometry(0.035, 8, 6), fur2, l, [0, -0.21, 0.01]);
+    legs.push(l);
+  }
+  const wings = [];
+  if (bird) {
+    const feather = mat(0x6fc4ff, { r: 0.3, e: 0x2f8cff, ei: 1.1, side: THREE.DoubleSide });
+    for (const sd of [1, -1]) {
+      const w = grp(body, sd * 0.1, 0.08, 0.02);
+      for (let i = 0; i < 6; i++) {
+        const f = mk(new THREE.ConeGeometry(0.05, 0.36 - i * 0.03, 6), feather, w, [sd * (0.1 + i * 0.07), 0.02 - i * 0.012, -0.03 * i], [0, 0, sd * (-P / 2 + 0.15 * i)], [1, 1, 0.3], false);
+      }
+      wings.push({ w, sd });
+    }
+    const glow = new THREE.PointLight(0x4aa8ff, 3, 4, 1.6); glow.position.set(0, 0.2, 0); body.add(glow);
+  }
+  return {
+    root,
+    // st: { t, act, a (seconds in act), speed, phase }
+    update(st) {
+      const { t, a } = st;
+      const act = st.act ?? 'idle';
+      const walk = Math.min(1, (st.speed ?? 0) / 0.6);
+      const ph = st.phase ?? 0;
+      body.rotation.set(0, 0, 0); body.position.y = 0.32 * S; head.rotation.set(0, 0, 0); jaw.rotation.x = 0;
+      legs.forEach((l, i) => { l.rotation.set(Math.sin(ph + (i % 2 ? P : 0) + (i > 1 ? P : 0)) * 0.6 * walk, 0, 0); });
+      tail.rotation.set(0, Math.sin(t * 14) * 0.6, 0);
+      if (act === 'sit') { const k = Math.min(1, a * 4); body.rotation.x = -0.6 * k; body.position.y = (0.32 - 0.1 * k) * S; legs[2].rotation.x = -1.2 * k + 0.6 * k; legs[3].rotation.x = -0.6 * k; legs[0].rotation.x = 0.6 * k; legs[1].rotation.x = 0.6 * k; head.rotation.x = 0.4 * k; }
+      if (act === 'paw') { const k = Math.min(1, a * 4); body.rotation.x = -0.6; body.position.y = 0.22 * S; legs[0].rotation.x = -1.3 * k + 0.1 * Math.sin(t * 8); legs[1].rotation.x = 0.6; legs[2].rotation.x = -0.6; legs[3].rotation.x = -0.6; head.rotation.x = 0.3; }
+      if (act === 'roll') { const k = Math.min(1, a / 1.0); body.rotation.z = k * P * 2; body.position.y = (0.32 - 0.12 * Math.sin(k * P)) * S; legs.forEach((l) => { l.rotation.x = 0.8 * Math.sin(k * P); }); }
+      if (act === 'bark') { jaw.rotation.x = Math.abs(Math.sin(a * 16)) * 0.5; head.rotation.x = -0.15 * Math.abs(Math.sin(a * 16)); }
+      if (act === 'sniff') { head.rotation.x = 0.5 + 0.1 * Math.sin(t * 20); }
+      if (act === 'float') { legs.forEach((l, i) => { l.rotation.x = Math.sin(t * 6 + i) * 0.5; }); tail.rotation.y = Math.sin(t * 20) * 0.9; }
+      if (act === 'fly') { legs.forEach((l, i) => { l.rotation.x = 0.7; }); jaw.rotation.x = Math.abs(Math.sin(t * 9)) * 0.3; }
+      for (const w of wings) w.w.rotation.z = w.sd * (0.3 + 0.7 * Math.sin(t * 14));
+    },
+  };
+}
+
+// The huge shadow behind the Soul Stealer (Episode 3 ending).
+export function buildShadow() {
+  const root = new THREE.Group();
+  const m = new THREE.MeshStandardMaterial({ color: 0x050308, roughness: 1, transparent: true, opacity: 0.92 });
+  mk(new THREE.ConeGeometry(2.6, 7.5, 24, 1, true), m, root, [0, 3.7, 0], [0, 0, 0], null, false);
+  mk(new THREE.SphereGeometry(1.3, 20, 14), m, root, [0, 7.6, 0], [0, 0, 0], [1, 1.1, 1], false);
+  for (const sd of [1, -1]) mk(new THREE.ConeGeometry(0.5, 2.4, 8), m, root, [sd * 1.1, 8.6, 0], [0, 0, sd * -0.5], null, false);
+  const eyes = [];
+  for (const sd of [1, -1]) eyes.push(mk(new THREE.SphereGeometry(0.11, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff8a20, transparent: true, opacity: 0 }), root, [sd * 0.42, 7.7, 1.15], [0, 0, 0], [1.6, 0.6, 0.5], false));
+  return { root, update(t, eyesK) { eyes.forEach((e) => { e.material.opacity = eyesK; }); root.rotation.y = 0.05 * Math.sin(t * 0.4); } };
 }
 
 // Character colours / builds (matched to the reference sheet)

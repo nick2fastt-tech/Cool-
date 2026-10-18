@@ -2,8 +2,8 @@
 import * as THREE from 'three';
 import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
-import { buildHero, buildWaterGuy, buildSoulStealer, buildProp, COSTUMES, CAST, ACTIONS, EXPRESSIONS, pose, blendPose, locomotion, attachProp } from './characters.js';
-import { buildCity, buildCoffee, buildHQExterior, buildLiving, buildControl, buildTitle, buildReactor, buildCavern, buildTunnels, buildMachineRoom, buildPlatform, buildDiamondChamber } from './sets.js';
+import { buildHero, buildWaterGuy, buildSoulStealer, buildProp, buildDog, buildShadow, COSTUMES, CAST, ACTIONS, EXPRESSIONS, pose, blendPose, locomotion, attachProp } from './characters.js';
+import { buildCity, buildCoffee, buildHQExterior, buildLiving, buildControl, buildTitle, buildReactor, buildCavern, buildTunnels, buildMachineRoom, buildPlatform, buildDiamondChamber, buildPark } from './sets.js';
 import { soulSymbolTex } from './textures.js';
 import { buildFX } from './fx.js';
 import { evalTrack, evalStep, buildGaitTables, gaitAt } from './director.js';
@@ -41,7 +41,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   scene.add(fxRoot);
   const fx = buildFX(fxRoot);
   const SETS = {
-    city: buildCity(fx), coffee: buildCoffee(), hqExt: buildHQExterior(), living: buildLiving(), control: buildControl(), title: buildTitle(font, TextGeometry), reactor: buildReactor(), cavern: buildCavern(), tunnel: buildTunnels(), machines: buildMachineRoom(), platform: buildPlatform(), chamber: buildDiamondChamber(),
+    city: buildCity(fx), coffee: buildCoffee(), hqExt: buildHQExterior(), living: buildLiving(), control: buildControl(), title: buildTitle(font, TextGeometry), reactor: buildReactor(), cavern: buildCavern(), tunnel: buildTunnels(), machines: buildMachineRoom(), platform: buildPlatform(), chamber: buildDiamondChamber(), park: buildPark(),
     black: { name: 'black', group: new THREE.Group(), bg: new THREE.Color(0x000000), update() {} },
   };
   for (const s of Object.values(SETS)) { s.group.visible = false; scene.add(s.group); }
@@ -59,6 +59,16 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   scene.add(water.root);
   const soul = buildSoulStealer(soulSymbolTex());
   scene.add(soul.root);
+  const dogs = { dog: buildDog(false), birddog: buildDog(true) };
+  for (const d of Object.values(dogs)) scene.add(d.root);
+  const bigShadow = buildShadow(); scene.add(bigShadow.root);
+  // Leon's time-freeze field
+  const field = new THREE.Mesh(new THREE.SphereGeometry(1.15, 32, 20), new THREE.MeshBasicMaterial({ color: 0xa050ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  scene.add(field);
+  // dog leash
+  const leashGeo = new THREE.BufferGeometry().setFromPoints(Array.from({ length: 10 }, () => new THREE.Vector3()));
+  const leash = new THREE.Line(leashGeo, new THREE.LineBasicMaterial({ color: 0xd02030 }));
+  leash.frustumCulled = false; scene.add(leash);
   // hand props
   const ctrlHeld = new THREE.Group(); mk(new THREE.BoxGeometry(0.2, 0.05, 0.11), mat(0x222831), ctrlHeld);
   attachProp(heroes.eric, 'R', ctrlHeld, [0.07, -0.09, 0.05], [0, 0, 0.3]);
@@ -77,7 +87,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     slices[n] = attachProp(heroes[n], 'R', m, [0, -0.12, 0.08], [0.4, 0, 0]);
   }
 
-  const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'water']);
+  const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'water', 'dog', 'birddog']);
   const val = (name, d = 0) => { const v = evalTrack(T.tracks[name], curT); return v === undefined ? d : v; };
   let curT = 0;
   const X = { T, scene, val: (n, d = 0) => val(n, d), hand: (n, side = 'R') => { const v = new THREE.Vector3(); heroes[n].J.hand[side].getWorldPosition(v); return v; } };
@@ -130,6 +140,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     const bp = (t + h.seed * 1.37) % 3.9;
     const blink = bp < 0.14 ? Math.sin((bp / 0.14) * P) : 0;
     h.applyFace(e, talk, blink, { x: val(`${name}.lookX`), y: val(`${name}.lookY`) });
+    h.applyGlow({ hair: val(`${name}.hairGlow`), suit: val(`${name}.suitGlow`), eyes: val(`${name}.eyeGlow`), glove: val(`${name}.gloveGlow`) });
   }
 
   // Water Guy "actions" produce arm targets etc.
@@ -249,7 +260,36 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     if (soul.root.visible) {
       soul.root.position.set(val('soul.x'), val('soul.y'), val('soul.z'));
       soul.root.rotation.y = val('soul.ry');
-      soul.update({ t, eyes: val('soul.eyes', 0), palm: val('soul.palm', 0), raise: val('soul.raise', 0), lookUp: val('soul.look', 0), talk: talkAmount('soul', t), violet: val('soul.violet', 0), dissolve: val('soul.dissolve', 0), lean: val('soul.lean', 0), charge: val('soul.charge', 0) });
+      soul.update({ t, eyes: val('soul.eyes', 0), palm: val('soul.palm', 0), raise: val('soul.raise', 0), lookUp: val('soul.look', 0), talk: talkAmount('soul', t), violet: val('soul.violet', 0), dissolve: val('soul.dissolve', 0), lean: val('soul.lean', 0), charge: val('soul.charge', 0), shield: val('soul.shield', 0), crack: val('soul.crack', 0) });
+    }
+    for (const [n, d] of Object.entries(dogs)) {
+      d.root.visible = val(`${n}.vis`, 0) > 0.5;
+      if (!d.root.visible) continue;
+      d.root.position.set(val(`${n}.x`), val(`${n}.y`), val(`${n}.z`));
+      d.root.rotation.y = val(`${n}.ry`) + val(`${n}.spin`);
+      const st = evalStep(T.tracks[`${n}.act`], t);
+      const g = gaitAt(gait[n], t);
+      d.update({ t, act: st.v, a: st.since, speed: g.speed, phase: g.phase * 1.6 });
+    }
+    bigShadow.root.visible = val('shadow.vis', 0) > 0.5;
+    if (bigShadow.root.visible) { bigShadow.root.position.set(val('shadow.x'), 0, val('shadow.z')); bigShadow.update(t, val('shadow.eyes', 0)); }
+    const fk = val('leon.field', 0);
+    field.visible = fk > 0.01 && heroes.leon.root.visible;
+    if (field.visible) {
+      field.position.set(val('leon.x'), 1.0, val('leon.z'));
+      const ck = val('leon.fieldCrack', 0);
+      field.material.opacity = fk * 0.3 * (ck > 0 ? (Math.sin(t * 53) > -0.2 ? 1 : 0.3) : 0.85 + 0.15 * Math.sin(t * 4));
+      field.scale.setScalar(1 + ck * 0.05 * Math.sin(t * 70));
+      field.rotation.y = t * 0.5;
+    }
+    leash.visible = val('leash', 0) > 0.5 && heroes.eric.root.visible && dogs.dog.root.visible;
+    if (leash.visible) {
+      heroes.eric.root.updateMatrixWorld(true);
+      const a = X.hand('eric', 'L'), d = dogs.dog.root.position, ry = val('dog.ry');
+      const b = new THREE.Vector3(d.x + Math.sin(ry) * 0.2, d.y + 0.42, d.z + Math.cos(ry) * 0.2);
+      const pos = leashGeo.attributes.position;
+      for (let i = 0; i < 10; i++) { const k = i / 9; pos.setXYZ(i, a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k - Math.sin(k * Math.PI) * 0.25, a.z + (b.z - a.z) * k); }
+      pos.needsUpdate = true;
     }
     for (const key in handProps) {
       const [n, side, k] = key.split('.');
