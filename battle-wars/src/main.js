@@ -194,6 +194,9 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
       const s = val('water.scale', 1);
       return tmpV.set(val('water.x'), val('water.y') + 1.95 * s * val('water.stretch', 1), val('water.z')).clone();
     }
+    if (name === 'dog' || name === 'birddog') return new THREE.Vector3(val(`${name}.x`), val(`${name}.y`, 0) + 0.55, val(`${name}.z`));
+    if (name === 'shadow') return new THREE.Vector3(val('shadow.x'), 2.4, val('shadow.z'));
+    if (!heroes[name]) return new THREE.Vector3(0, 1.5, 0);
     heroes[name].J.head.getWorldPosition(tmpV);
     return tmpV.clone().add(new THREE.Vector3(0, 0.12, 0));
   }
@@ -313,5 +316,5 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     return out;
   }
 
-  return { T, frame, canvas: out, renderer };
+  return { T, frame, canvas: out, renderer, camera, heroes };
 }

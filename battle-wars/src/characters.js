@@ -416,7 +416,8 @@ export function buildHero(cfg) {
       J.an.L.rotation.x = p.fL; J.an.R.rotation.x = p.fR;
     },
     applyFace(e, talk, blink, look) {
-      const lid = clamp(1 - e.lid - blink, 0.06, 1.2);
+      // Greg's line eyes vanish if fully squinted, so he only half-squints
+      const lid = cfg.face === 'greg' ? clamp(1 - e.lid * 0.45 - blink, 0.08, 1.2) : clamp(1 - e.lid - blink, 0.06, 1.2);
       for (const ey of face.eyes) {
         ey.eye.scale.set(e.wide, lid * e.wide, 1);
         ey.ir.position.x = (look?.x ?? 0) * 0.02;
@@ -581,7 +582,7 @@ function buildGregFace(head, hc, r) {
     const eg = grp(head, sd * r * 0.32, hc + r * 0.12, r * 0.94);
     eg.rotation.y = sd * 0.32;
     const eye = grp(eg);
-    mk(new THREE.CapsuleGeometry(r * 0.065, r * 0.32, 4, 8), black, eye, [0, 0, 0], [0, 0, 0], [1, 1, 0.5], false);
+    mk(new THREE.CapsuleGeometry(r * 0.07, r * 0.32, 4, 8), black, eye, [0, 0, 0], [0, 0, 0], [1.1, 1, 1.5], false);
     eyes.push({ eg, eye, ir: new THREE.Group() });
   }
   const dummy = () => new THREE.Group();

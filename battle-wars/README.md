@@ -2,7 +2,7 @@
 
 A kid-friendly (ages 9–14) 3D animated action-comedy series. Season 1 is planned at 12–14 episodes.
 
-Every episode is delivered as one **2K MP4** (2560×1440) with stereo sound and captions. Add `--all-sizes` to the build to also get 1080p and 720p copies. There are no voices or text-to-speech: every line is a caption with the speaker's name in their color, and sounds get captions too.
+Every episode is delivered as one **1080p MP4** (1920×1080) with stereo sound and captions (Episodes 1–2 were made in 2K; `--2k` still renders at 2560×1440). There are no voices or text-to-speech: every line is a caption with the speaker's name in their color, and sounds get captions too.
 
 ## Episodes
 
@@ -10,6 +10,7 @@ Every episode is delivered as one **2K MP4** (2560×1440) with stereo sound and 
 |----|-------|--------|
 | `s1e1-be-ready` | Season 1, Episode 1: "BE READY!" | 7:30 |
 | `s1e2-red-diamond-hunt` | Season 1, Episode 2: "THE RED DIAMOND HUNT" (Red Team suits) | 12:49 |
+| `s1e3-soul-stealers-secret` | Season 1, Episode 3: "THE SOUL STEALER'S SECRET" | 10:45 |
 | `s1-red-diamonds` | Early Red Diamonds teaser scene (blue suits) | 1:02 |
 
 Finished videos go to `output/<episode-id>/` (not stored in git — GitHub's 100 MB file limit).
@@ -24,11 +25,13 @@ Finished videos go to `output/<episode-id>/` (not stored in git — GitHub's 100
 | **Greg** | white round head, two line eyes, black trench coat, usually sleepy | white |
 | **Leon** | the team's mentor: dark hair with a gray streak, navy suit with gold piping | amber |
 | **Water Guy** (villain) | body of flowing water, cartoon face | blue |
-| **Soul Stealer** (villain) | tall hooded cloak, glowing red eyes, red symbol in his palm | red |
+| **Soul Stealer** (villain) | tall hooded cloak, glowing eyes (red, or violet in his sanctuary), symbol in his palm | red |
+| **The Dog** | a very normal-looking park dog... that can float | — |
+| **Bird-dog Eric** | Eric's transformation: a blue dog with wings that chirp-barks | — |
 
 ## Locations
 
-Aetherfall City streets · Aetherfall Coffee · Battle Wars HQ (outside, living room on floor 1, Controller Room on floor 3, hidden reactor room below) · Red Team HQ · abandoned subway tunnels, lower machine chamber and platform · the ancient diamond chamber · the Soul Stealer's crystal cavern (red or violet) · title card (blue, or red "electric" style).
+Aetherfall City streets · Aetherfall City Park · Aetherfall Coffee · Battle Wars HQ (outside, living room on floor 1, Controller Room on floor 3, hidden reactor room below) · Red Team HQ (with a lounge couch and TV) · abandoned subway tunnels, lower machine chamber and platform · the ancient diamond chamber · the Soul Stealer's crystal cavern (red or violet) · title card (blue, or red "electric" style).
 
 ## How it's made
 
@@ -39,7 +42,7 @@ Everything is code — no 3D software or downloaded assets.
 - `tools/audio.mjs` — synthesizes the music, sound effects, footsteps and the captions file
 - `tools/render.mjs` — renders frames in headless Chromium (parallel workers) and encodes with ffmpeg
 - `tools/preview.mjs` — quick contact sheet of frames for checking shots
-- `tools/build.mjs` — runs it all and writes the 2K MP4 (`--all-sizes` adds 1080p and 720p)
+- `tools/build.mjs` — runs it all and writes the 1080p MP4 (`--2k` for 2K; `--2k --all-sizes` adds 1080p and 720p)
 
 ### Build an episode
 
@@ -47,12 +50,13 @@ Needs Node 18+, ffmpeg and Playwright's Chromium.
 
 ```bash
 npm install
-node tools/build.mjs --ep s1-red-diamonds          # audio + 2K render + the 2K MP4
+node tools/build.mjs --ep s1e3-soul-stealers-secret   # audio + 1080p render + the MP4
 node tools/build.mjs --ep s1e1-be-ready --skip-render   # only redo audio/captions and re-mux
-node tools/preview.mjs s1-red-diamonds 0 60 4 tmp/sheet.jpg   # contact sheet, every 4 s
+node tools/preview.mjs s1-red-diamonds 0 60 4 tmp/sheet.jpg   # contact sheets, every 4 s
+node tools/preview.mjs s1-red-diamonds 12.5,30,41 0 0 tmp/spot.jpg   # or exact times
 ```
 
-Rendering takes roughly 4–5× the episode length per resolution step on 4 CPU cores (2K is the slow part).
+Rendering runs on 4 CPU cores: 1080p takes several hours for a 10-minute episode, 2K about twice that. The render works in small chunks, so if it stops, run the same command again and it picks up where it left off.
 
 To preview interactively, serve this folder (`npx http-server .`) and open `player.html?ep=<episode-id>` — scrub to any moment.
 
