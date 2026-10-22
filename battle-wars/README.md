@@ -11,6 +11,7 @@ Every episode is delivered as one **1080p MP4** (1920×1080) with stereo sound a
 | `s1e1-be-ready` | Season 1, Episode 1: "BE READY!" | 7:30 |
 | `s1e2-red-diamond-hunt` | Season 1, Episode 2: "THE RED DIAMOND HUNT" (Red Team suits) | 12:49 |
 | `s1e3-soul-stealers-secret` | Season 1, Episode 3: "THE SOUL STEALER'S SECRET" | 10:45 |
+| `s1e4-spooky-halloween-party` | Season 1, Episode 4: "SPOOKY HALLOWEEN PARTY" (Halloween special) | 9:24 |
 | `s1-red-diamonds` | Early Red Diamonds teaser scene (blue suits) | 1:02 |
 
 Finished videos go to `output/<episode-id>/` (not stored in git — GitHub's 100 MB file limit).
@@ -28,10 +29,11 @@ Finished videos go to `output/<episode-id>/` (not stored in git — GitHub's 100
 | **Soul Stealer** (villain) | tall hooded cloak, glowing eyes (red, or violet in his sanctuary), symbol in his palm | red |
 | **The Dog** | a very normal-looking park dog... that can float | — |
 | **Bird-dog Eric** | Eric's transformation: a blue dog with wings that chirp-barks | — |
+| **Newark** | the team's friend and party host: wavy hair, black coat with orange trim, top hat and bow tie | purple |
 
 ## Locations
 
-Aetherfall City streets · Aetherfall City Park · Aetherfall Coffee · Battle Wars HQ (outside, living room on floor 1, Controller Room on floor 3, hidden reactor room below) · Red Team HQ (with a lounge couch and TV) · abandoned subway tunnels, lower machine chamber and platform · the ancient diamond chamber · the Soul Stealer's crystal cavern (red or violet) · title card (blue, or red "electric" style).
+Aetherfall City streets · Aetherfall City Park · Aetherfall Coffee · Battle Wars HQ (outside, living room on floor 1, Controller Room on floor 3, hidden reactor room below) · Red Team HQ (with a lounge couch and TV) · abandoned subway tunnels, lower machine chamber and platform · the ancient diamond chamber · the Soul Stealer's crystal cavern (red or violet) · title card (blue, red "electric", or orange-and-purple Halloween style) · Flare and Aaron's bedroom · the Halloween store · Newark's house (outside at night, and the party room with stage and dance floor). Halloween episodes also decorate the living room and add pajama and costume outfits.
 
 ## How it's made
 

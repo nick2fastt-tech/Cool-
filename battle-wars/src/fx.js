@@ -82,7 +82,7 @@ export function buildFX(parent) {
     for (let i = 0; i < (e.n ?? 30); i++) {
       const h1 = hash(i * 2.1 + e.t * 5), h2 = hash(i * 6.7 + e.t), h3 = hash(i * 4.4 + e.t * 2);
       const th = h1 * Math.PI * 2, sp = 1 + h2 * 3;
-      addS(e.x + Math.cos(th) * sp * a, (e.y ?? 1) + (2 + h3 * 3) * a - 4.9 * a * a, e.z + Math.sin(th) * sp * a, 0.03 + h2 * 0.06, h3 < 0.5 ? 0x8a8378 : 0x5a554e);
+      addS(e.x + Math.cos(th) * sp * a * (e.spread ?? 1), (e.y ?? 1) + (2 + h3 * 3) * a * (e.up ?? 1) - 4.9 * a * a, e.z + Math.sin(th) * sp * a * (e.spread ?? 1), (0.03 + h2 * 0.06) * (e.size ?? 1), e.color ? (h3 < 0.5 ? e.color : (e.color2 ?? e.color)) : (h3 < 0.5 ? 0x8a8378 : 0x5a554e));
     }
     for (let i = 0; i < 14; i++) {
       const h1 = hash(i * 9.9 + e.t), h2 = hash(i * 3.7 + e.t);
@@ -199,6 +199,68 @@ export function buildFX(parent) {
           }
           addG(e.to[0], e.to[1], e.to[2], 0.35 * k, e.color ?? 0x4aa8ff);
           light(hp.x, hp.y, hp.z, e.color ?? 0x4aa8ff, 5 * k);
+        } else if (e.kind === 'bodyAura' && a >= 0 && a <= e.dur) {
+          // glow rising around a whole character
+          if (X.val(`${e.who}.vis`, 0) < 0.5) continue;
+          const k = Math.min(1, a / 0.4, (e.dur - a) / 0.5) * (e.power ?? 1);
+          const cx = X.val(`${e.who}.x`), cz = X.val(`${e.who}.z`), cy = X.val(`${e.who}.y`);
+          for (let j = 0; j < 70; j++) {
+            const ag = ((t * 0.9 + hash(j * 3.3)) % 1), th = hash(j * 7.1) * Math.PI * 2 + t * 2;
+            const r = 0.42 + 0.1 * Math.sin(t * 3 + j);
+            addG(cx + Math.cos(th) * r, cy + ag * 2.0, cz + Math.sin(th) * r, 0.045 * k * (1 - ag) + 0.004, e.color ?? 0x4aa8ff);
+          }
+          light(cx, cy + 1.2, cz + 0.6, e.color ?? 0x4aa8ff, 6 * k);
+        } else if (e.kind === 'fireRings' && a >= 0 && a <= e.dur) {
+          // spinning rings of fire orbiting a point like a little galaxy
+          const k = Math.min(1, a / 0.6, (e.dur - a) / 0.3);
+          const n = e.n ?? 5, R = (e.orbit ?? 1.1) * (0.4 + 0.6 * Math.min(1, a / 0.8));
+          for (let i = 0; i < n; i++) {
+            const th = t * 1.6 + (i / n) * Math.PI * 2;
+            const cx = e.x + Math.cos(th) * R, cz = e.z + Math.sin(th) * R * 0.75, cy = e.y + 0.35 * Math.sin(th * 2 + i);
+            const tilt = t * 2 + i;
+            for (let j = 0; j < 22; j++) {
+              const u = (j / 22) * Math.PI * 2;
+              const rx = Math.cos(u) * 0.3, ry = Math.sin(u) * 0.3;
+              addG(cx + rx * Math.cos(tilt), cy + ry, cz + rx * Math.sin(tilt), (0.05 + 0.02 * hash(j + Math.floor(t * 20))) * k, FIRE[(j + Math.floor(t * 15)) % 3]);
+            }
+          }
+          addG(e.x, e.y, e.z, 0.12 * k, 0xffe08a);
+          light(e.x, e.y + 0.3, e.z + 0.5, 0xff8a30, 10 * k * (0.85 + 0.15 * Math.sin(t * 25)));
+        } else if (e.kind === 'orbs' && a >= 0 && a <= e.dur) {
+          // energy orbs orbit a character, then fly together to `to`
+          const cx = X.val(`${e.who}.x`), cz = X.val(`${e.who}.z`), cy = X.val(`${e.who}.y`);
+          const n = e.n ?? 6, m = smoothstep(e.merge ?? e.dur, (e.merge ?? e.dur) + 0.8, a);
+          const k = Math.min(1, a / 0.5) * (1 - smoothstep(e.dur - 0.3, e.dur, a));
+          for (let i = 0; i < n; i++) {
+            const th = t * 2.2 + (i / n) * Math.PI * 2;
+            const ox = cx + Math.cos(th) * 0.8, oz = cz + Math.sin(th) * 0.8, oy = cy + 1.1 + 0.4 * Math.sin(th * 2 + i);
+            const x = lerp(ox, e.to[0], m), y = lerp(oy, e.to[1], m), z = lerp(oz, e.to[2], m);
+            addG(x, y, z, 0.11 * k * (1 - 0.5 * m), e.color ?? 0x4aa8ff);
+            addG(x, y, z, 0.05 * k, 0xffffff);
+            for (let j = 0; j < 5; j++) { const b = th - 0.12 * (j + 1); addG(lerp(cx + Math.cos(b) * 0.8, e.to[0], m), lerp(cy + 1.1 + 0.4 * Math.sin(b * 2 + i), e.to[1], m), lerp(cz + Math.sin(b) * 0.8, e.to[2], m), 0.05 * k * (1 - j / 5), e.color ?? 0x4aa8ff); }
+          }
+          light(cx, cy + 1.4, cz + 0.5, e.color ?? 0x4aa8ff, 6 * k);
+        } else if (e.kind === 'vring' && a >= 0 && a <= e.dur) {
+          // upright ring that grows and cycles through colours
+          const k = a / e.dur, r = 0.3 + (e.radius ?? 1.6) * smoothstep(0, 0.7, k);
+          const fade = 1 - smoothstep(0.85, 1, k);
+          for (let j = 0; j < 72; j++) {
+            const u = (j / 72) * Math.PI * 2;
+            col.setHSL(((e.hue ?? 0) + k * 1.2 + j / 72 * 0.3) % 1, 1, 0.6);
+            const c = col.getHex();
+            addG(e.x + Math.cos(u) * r, e.y + Math.sin(u) * r, e.z, 0.07 * fade, c);
+          }
+          light(e.x, e.y, e.z + 0.6, 0xff60a0, 8 * fade);
+        } else if (e.kind === 'rain' && a >= 0 && a <= e.dur) {
+          // glittering sparkles drifting down over an area
+          const k = Math.min(1, a / 0.3, (e.dur - a) / 0.6);
+          for (let j = 0; j < (e.n ?? 160); j++) {
+            const h1 = hash(j * 1.9 + e.t), h2 = hash(j * 4.7 + e.t), h3 = hash(j * 8.2 + e.t);
+            const fall = (a * (0.7 + h3 * 0.6) + h1 * 0.3);
+            const y = (e.top ?? 3.6) - fall * 1.6;
+            if (y < 0.05) continue;
+            addG(e.x + (h1 - 0.5) * (e.w ?? 6), y, e.z + (h2 - 0.5) * (e.d ?? 4), (0.025 + 0.02 * Math.abs(Math.sin(t * 12 + j))) * k, h3 < 0.7 ? (e.color ?? 0x7fd4ff) : 0xffffff);
+          }
         } else if (e.kind === 'sparks') sparkBurst(e, t);
         else if (e.kind === 'debris') debris(e, t);
         else if (e.kind === 'smoke') smoke(e, t);

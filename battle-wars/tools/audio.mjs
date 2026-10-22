@@ -189,6 +189,49 @@ const SFX = {
   beamFire: () => mix(sweep(1.0, 600, 900, 'saw', (t) => env(t, 0.01, 0.4) * 0.12 * (1 + 0.3 * Math.sin(t * 80))), lowpass(nbuf(1.0, (t) => env(t, 0.01, 0.35) * 0.5), 3000), sweep(0.3, 1800, 400, 'sine', (t) => env(t, 0.002, 0.08) * 0.2)),
   bigBlast: () => mix(SFX.boom(), SFX.beamFire(), sweep(2.0, 60, 25, 'sine', (t) => env(t, 0.01, 0.7) * 0.8), highpass(nbuf(1.5, (t) => env(t, 0.01, 0.4) * 0.6), 2000)),
   cutBlack: () => sweep(0.8, 60, 35, 'sine', (t) => env(t, 0.005, 0.3) * 0.5),
+  // --- Episode 4 (Halloween)
+  alarmRing: () => mix(...Array.from({ length: 4 }, (_, i) => Float32Array.from([...new Float32Array(Math.floor(i * 0.5 * SR)), ...sweep(0.22, 1760, 1760, 'square', (t) => (t < 0.2 ? 0.1 : 0))]))),
+  alarmClick: () => mix(highpass(nbuf(0.06, (t) => env(t, 0.001, 0.01) * 0.8), 1500), sweep(0.12, 300, 120, 'sine', (t) => env(t, 0.001, 0.03) * 0.5)),
+  blanket: () => lowpass(nbuf(0.8, (t) => Math.sin(Math.PI * t / 0.8) * 0.5), 1500),
+  stairs: () => mix(...Array.from({ length: 8 }, (_, i) => Float32Array.from([...new Float32Array(Math.floor(i * 0.28 * SR)), ...sweep(0.12, 130, 70, 'sine', (t) => env(t, 0.002, 0.04) * 0.5)]))),
+  buttonMash: () => mix(...Array.from({ length: 12 }, (_, i) => Float32Array.from([...new Float32Array(Math.floor((i * 0.09 + rnd() * 0.03) * SR)), ...highpass(nbuf(0.03, (t) => env(t, 0.001, 0.006) * 0.4), 2000)]))),
+  gameHit: () => mix(sweep(0.18, 600, 90, 'square', (t) => env(t, 0.002, 0.06) * 0.14), lowpass(nbuf(0.15, (t) => env(t, 0.001, 0.04) * 0.3), 3000)),
+  bossRoar: () => mix(lowpass(sweep(1.4, 90, 60, 'saw', (t) => Math.sin(Math.PI * Math.min(1, t / 1.4)) * 0.35 * (0.7 + 0.3 * Math.sin(t * 40))), 900), lowpass(nbuf(1.4, (t) => Math.sin(Math.PI * t / 1.4) * 0.3), 700)),
+  pauseBlip: () => mix(sweep(0.08, 1200, 1200, 'square', () => 0.08), Float32Array.from([...new Float32Array(Math.floor(0.1 * SR)), ...sweep(0.12, 800, 800, 'square', (t) => 0.08 * Math.min(1, (0.12 - t) * 40))])),
+  munch: () => mix(...Array.from({ length: 3 }, (_, i) => Float32Array.from([...new Float32Array(Math.floor(i * 0.22 * SR)), ...bandpass(nbuf(0.1, (t) => env(t, 0.003, 0.03) * 0.4), 600, 3000)]))),
+  milkCrash: () => mix(SFX.cupDrop(), bandpass(nbuf(0.9, (t) => env(t, 0.005, 0.25) * 0.6), 500, 4000), Float32Array.from([...new Float32Array(Math.floor(0.12 * SR)), ...highpass(nbuf(0.7, (t) => env(t, 0.004, 0.2) * 0.7), 800)])),
+  cerealScatter: () => mix(...Array.from({ length: 26 }, () => Float32Array.from([...new Float32Array(Math.floor(rnd() * 0.9 * SR)), ...highpass(nbuf(0.02, (t) => env(t, 0.001, 0.004) * (0.2 + rnd() * 0.3)), 2500)]))),
+  towelRip: () => bandpass(nbuf(0.5, (t) => Math.sin(Math.PI * t / 0.5) * 0.6 * (0.6 + 0.4 * Math.sin(t * 200))), 1500, 6000),
+  phoneBuzz: () => lowpass(make(0.9, (t) => Math.sin(TAU * 150 * t) * (Math.sin(TAU * 6 * t) > 0 ? 0.25 : 0)), 600),
+  notify: () => mix(partials(0.5, [1568, 3136], 0.15, [0.2, 0.05]), Float32Array.from([...new Float32Array(Math.floor(0.12 * SR)), ...partials(0.6, [2093, 4186], 0.18, [0.2, 0.05])])),
+  storeBell: () => mix(partials(1.4, [2637, 5274, 7900], 0.5, [0.2, 0.08, 0.03]), Float32Array.from([...new Float32Array(Math.floor(0.15 * SR)), ...partials(1.2, [2349, 4698], 0.45, [0.16, 0.06])])),
+  skeletonPop: () => mix(sweep(0.5, 300, 900, 'saw', (t) => env(t, 0.005, 0.15) * 0.15), lowpass(make(1.6, (t) => ((t * (220 + 80 * Math.sin(t * 30))) % 1 < 0.5 ? 1 : -1) * 0.12 * (Math.sin(t * 22) > 0 ? 1 : 0.3) * Math.exp(-t * 1.2)), 2500), ...Array.from({ length: 6 }, (_, i) => Float32Array.from([...new Float32Array(Math.floor((0.05 + i * 0.07) * SR)), ...partials(0.08, [1800 + rnd() * 900], 0.02, [0.15])]))),
+  boneRattle: () => mix(...Array.from({ length: 14 }, () => Float32Array.from([...new Float32Array(Math.floor(rnd() * 0.6 * SR)), ...partials(0.07, [900 + rnd() * 1500, 2400 + rnd() * 900], 0.015, [0.15, 0.06])]))),
+  plasticWobble: () => mix(...Array.from({ length: 7 }, (_, i) => Float32Array.from([...new Float32Array(Math.floor(i * 0.09 * SR)), ...bandpass(nbuf(0.06, (t) => env(t, 0.002, 0.02) * 0.45), 400, 1800)]))),
+  scream: () => mix(sweep(0.9, 700, 1100, 'saw', (t) => Math.sin(Math.PI * t / 0.9) * 0.07 * (1 + 0.3 * Math.sin(t * 50))), sweep(0.9, 1400, 2200, 'sine', (t) => Math.sin(Math.PI * t / 0.9) * 0.05)),
+  register: () => mix(partials(0.7, [3520, 7040], 0.2, [0.15, 0.05]), Float32Array.from([...new Float32Array(Math.floor(0.25 * SR)), ...lowpass(nbuf(0.3, (t) => env(t, 0.003, 0.08) * 0.5), 2500)])),
+  bagRustle: () => bandpass(nbuf(0.9, (t) => Math.sin(Math.PI * t / 0.9) * 0.45 * (0.6 + 0.4 * Math.abs(Math.sin(t * 37)))), 1500, 7000),
+  muffledParty: () => lowpass(mix(...Array.from({ length: 8 }, (_, i) => Float32Array.from([...new Float32Array(Math.floor(i * 0.5 * SR)), ...sweep(0.3, 150, 42, 'sine', (t) => env(t, 0.001, 0.09) * 0.7)]))), 300),
+  applause: () => mix(...Array.from({ length: 90 }, () => Float32Array.from([...new Float32Array(Math.floor(rnd() * 2.4 * SR)), ...highpass(nbuf(0.05, (t) => env(t, 0.001, 0.01) * (0.15 + rnd() * 0.2)), 900 + rnd() * 800)]))),
+  crowdCheer: () => mix(...Array.from({ length: 20 }, () => Float32Array.from([...new Float32Array(Math.floor(rnd() * 0.4 * SR)), ...bandpass(sweep(1.6 + rnd(), 260 + rnd() * 300, 320 + rnd() * 400, 'saw', (t) => Math.sin(Math.PI * Math.min(1, t / 1.8)) * 0.02), 300, 2500)])), bandpass(nbuf(2.2, (t) => Math.sin(Math.PI * Math.min(1, t / 2.2)) * 0.5), 400, 4000), SFX.applause()),
+  crowdWow: () => mix(...Array.from({ length: 14 }, () => Float32Array.from([...new Float32Array(Math.floor(rnd() * 0.15 * SR)), ...bandpass(sweep(1.2, 300 + rnd() * 200, 220 + rnd() * 120, 'saw', (t) => Math.sin(Math.PI * t / 1.2) * 0.03), 300, 2000)]))),
+  crowdLaugh: () => mix(...Array.from({ length: 10 }, () => Float32Array.from([...new Float32Array(Math.floor(rnd() * 0.4 * SR)), ...bandpass(make(1.2, (t) => (((260 + rnd() * 2) * t) % 1 - 0.5) * 0.08 * (Math.sin(t * 30 + rnd()) > 0 ? 1 : 0.1) * Math.sin(Math.PI * t / 1.2)), 300, 2400)]))),
+  partyChatter: () => bandpass(nbuf(2.0, (t) => Math.sin(Math.PI * t / 2.0) * 0.22 * (0.7 + 0.3 * Math.sin(t * 11))), 300, 2600),
+  micTap: () => mix(sweep(0.15, 140, 60, 'sine', (t) => env(t, 0.001, 0.05) * 0.6), Float32Array.from([...new Float32Array(Math.floor(0.25 * SR)), ...sweep(0.15, 140, 60, 'sine', (t) => env(t, 0.001, 0.05) * 0.5)])),
+  spotlightOn: () => mix(sweep(0.2, 90, 60, 'sine', (t) => env(t, 0.001, 0.06) * 0.8), lowpass(nbuf(0.15, (t) => env(t, 0.001, 0.03) * 0.5), 1200)),
+  fireRoar: () => lowpass(nbuf(2.4, (t) => Math.min(1, t * 3) * Math.min(1, (2.4 - t) * 2) * 0.6 * (0.7 + 0.3 * Math.sin(t * 17))), 1200),
+  sparkle: () => mix(...Array.from({ length: 16 }, () => Float32Array.from([...new Float32Array(Math.floor(rnd() * 1.4 * SR)), ...partials(0.4, [2500 + rnd() * 3000], 0.08, [0.06])]))),
+  orbHum: () => mix(...[0, 1, 2, 3, 4, 5].map((i) => Float32Array.from([...new Float32Array(Math.floor(i * 0.18 * SR)), ...sweep(0.6, 500 + i * 120, 700 + i * 150, 'sine', (t) => Math.sin(Math.PI * t / 0.6) * 0.06)]))),
+  scratch: () => bandpass(make(0.5, (t) => noise() * Math.sin(Math.PI * t / 0.5) * 0.7 * (0.5 + 0.5 * Math.sin(TAU * (8 + 30 * t) * t))), 600, 3500),
+  djHype: () => mix(sweep(0.8, 200, 1600, 'saw', (t) => 0.05 * Math.sin(Math.PI * t / 0.8)), highpass(nbuf(0.8, (t) => (t / 0.8) ** 2 * 0.3), 3000)),
+  pumpkinTumble: () => mix(...Array.from({ length: 5 }, (_, i) => Float32Array.from([...new Float32Array(Math.floor((0.2 + i * 0.16) * SR)), ...sweep(0.22, 140, 60, 'sine', (t) => env(t, 0.002, 0.06) * 0.55)])), lowpass(nbuf(0.3, (t) => env(t, 0.002, 0.08) * 0.3), 1500)),
+  wingGust: () => lowpass(nbuf(1.2, (t) => Math.sin(Math.PI * t / 1.2) * 0.8 * (0.6 + 0.4 * Math.abs(Math.sin(t * 9)))), 900),
+  skeletonCrash: () => mix(SFX.metalCrash ? SFX.metalCrash() : SFX.clank(), ...Array.from({ length: 18 }, () => Float32Array.from([...new Float32Array(Math.floor(rnd() * 0.8 * SR)), ...partials(0.12, [800 + rnd() * 1800, 2400 + rnd() * 1500], 0.03, [0.2, 0.08])])), sweep(0.4, 110, 45, 'sine', (t) => env(t, 0.002, 0.12) * 0.7)),
+  plateWobble: () => mix(...Array.from({ length: 6 }, (_, i) => Float32Array.from([...new Float32Array(Math.floor(i * 0.12 * SR)), ...partials(0.12, [1900 + i * 80, 4300], 0.04, [0.12, 0.04])]))),
+  catchPlate: () => mix(partials(0.3, [1700, 4100], 0.08, [0.2, 0.06]), sweep(0.15, 160, 80, 'sine', (t) => env(t, 0.002, 0.04) * 0.5)),
+  cricket: () => mix(...Array.from({ length: 6 }, (_, i) => Float32Array.from([...new Float32Array(Math.floor(i * 0.33 * SR)), ...make(0.12, (t) => Math.sin(TAU * 4400 * t) * (Math.sin(TAU * 60 * t) > 0 ? 0.05 : 0))]))),
+  owl: () => mix(sweep(0.4, 420, 380, 'sine', (t) => Math.sin(Math.PI * t / 0.4) * 0.12), Float32Array.from([...new Float32Array(Math.floor(0.5 * SR)), ...sweep(0.7, 430, 360, 'sine', (t) => Math.sin(Math.PI * t / 0.7) * 0.12)])),
+  spookyStinger: () => mix(...[0, 1, 2].map((i) => Float32Array.from([...new Float32Array(Math.floor(i * 0.14 * SR)), ...tone(mtof([62, 65, 68][i]), 0.9, 'bell', 0.12)])), sweep(1.2, 80, 40, 'sine', (t) => env(t, 0.01, 0.4) * 0.4)),
 };
 const sfxCache = {};
 for (const e of T.sfx) {
@@ -205,7 +248,7 @@ for (const e of T.sfx) {
 
 // ------------------------------------------------------------ footsteps from the animation
 const setAt = (t) => { let s = T.sets[0].set; for (const e of T.sets) if (e.t0 <= t) s = e.set; return s; };
-const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg'], 1 / 96);
+const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark'], 1 / 96);
 const step = { soft: sweep(0.09, 140, 70, 'sine', (t) => env(t, 0.002, 0.025) * 0.5), tap: highpass(nbuf(0.04, (t) => env(t, 0.001, 0.008) * 0.25), 2500) };
 for (const c of Object.keys(gait)) {
   const tab = gait[c];
@@ -235,6 +278,12 @@ for (let t = 0; t < T.duration; t += 0.5) {
   if (set === 'reactor') {
     const pw = evalTrack(T.tracks['reactor.power'], t) ?? 1;
     if (pw > 0.02) put(make(0.6, (tt) => (Math.sin(TAU * 60 * (t + tt)) * 0.6 + Math.sin(TAU * 120 * (t + tt)) * 0.3 + Math.sin(TAU * 180 * (t + tt)) * 0.1) * Math.sin(Math.PI * tt / 0.6) * 0.16 * pw), t, 0, 1);
+  } else if (set === 'party') {
+    if (Math.round(t * 2) % 4 === 0) put(SFX.partyChatter(), t, (rnd() - 0.5) * 0.6, 0.35 * (evalTrack(T.tracks['amb.party'], t) ?? 1));
+  } else if (set === 'newarkExt') {
+    if (Math.round(t * 2) % 8 === 0) put(SFX.cricket(), t, (rnd() - 0.5) * 0.8, 0.5);
+    const mp = evalTrack(T.tracks['amb.muffled'], t) ?? 1;
+    if (mp > 0.01 && Math.round(t * 2) % 8 === 0) put(SFX.muffledParty(), t, 0, 0.6 * mp);
   } else if (set === 'cavern') {
     put(lowpass(nbuf(0.6, (tt) => Math.sin(Math.PI * tt / 0.6) * 0.18), 350), t, (rnd() - 0.5) * 0.6, 1);
   }
@@ -292,6 +341,11 @@ const STYLES = {
   adventure: { bpm: 96, key: 50, prog: [[0, 'min'], [-2, 'maj'], [-4, 'maj'], [-2, 'maj']], drums: { kick: 'x.......x.......', hat: '..x...x...x...x.', snare: '....x.......x...' }, bass: 'x..x....x..x....', bassKind: 'sub', pad: 0.035, comp: { kind: 'pluck', rhythm: 'x.x...x.x.x...x.', vol: 0.08, arp: true }, lead: null },
   sad: { bpm: 66, key: 57, prog: [[0, 'min'], [-4, 'maj'], [-9, 'maj'], [-2, 'maj']], drums: {}, bass: 'x...............', bassKind: 'sub', pad: 0.07, comp: { kind: 'bell', rhythm: 'x...x...x...x...', vol: 0.06, arp: true }, lead: null },
   heroic: { bpm: 140, key: 57, prog: [[0, 'min'], [-4, 'maj'], [-2, 'maj'], [-5, 'maj']], drums: { kick: 'x...x...x...x...', snare: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.' }, bass: 'x.x.x.x.x.x.x.x.', bassKind: 'bass', pad: 0.04, comp: { kind: 'brass', rhythm: 'x.....x.x.......', vol: 0.1, len: 0.25 }, lead: { kind: 'lead', notes: [69, -1, 72, -1, 76, -1, 74, 72, 74, -1, -1, -1, 72, 71, 69, -1], vol: 0.08 } },
+  spooky: { bpm: 108, key: 57, prog: [[0, 'min'], [-4, 'maj'], [-2, 'maj'], [-7, 'dom']], drums: { kick: 'x.......x.......', snare: '....x.......x...', hat: '..x...x...x...x.' }, bass: 'x...x...x...x...', bassKind: 'tuba', comp: { kind: 'pizz', rhythm: 'x.x.x.x.x.x.x.x.', vol: 0.1, arp: true }, lead: { kind: 'bell', notes: [69, -1, 72, -1, 76, -1, 75, -1, 74, -1, 72, -1, 69, -1, -1, -1], vol: 0.06 } },
+  party: { bpm: 120, key: 57, prog: [[0, 'min'], [-4, 'maj'], [-2, 'maj'], [-5, 'dom']], drums: { kick: 'x...x...x...x...', clap: '....x.......x...', hat: '..x...x...x...x.', shaker: 'x.x.x.x.x.x.x.x.' }, bass: 'x..xx..xx..xx..x', bassKind: 'bass', pad: 0.03, comp: { kind: 'stab', rhythm: '..x...x...x..x..', vol: 0.08 }, lead: { kind: 'lead', notes: [69, -1, 72, 69, 76, -1, 75, 74, 72, -1, 69, -1, 67, 69, -1, -1], vol: 0.07 } },
+  store: { bpm: 116, key: 62, prog: [[0, 'min'], [-2, 'maj'], [-4, 'maj'], [-5, 'dom']], drums: { kick: 'x.......x.......', snare: '....x.......x...' }, bass: 'x...x...x...x...', bassKind: 'tuba', comp: { kind: 'marimba', rhythm: 'x.x.x.x.x.x.x.x.', vol: 0.1, arp: true }, lead: null },
+  showtime: { bpm: 132, key: 60, prog: [[0, 'maj'], [-3, 'min'], [5, 'maj'], [7, 'dom']], drums: { kick: 'x...x...x...x...', snare: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.' }, bass: 'x.x.x.x.x.x.x.x.', bassKind: 'bass', comp: { kind: 'brass', rhythm: 'x.....x.x.......', vol: 0.09, len: 0.2 }, lead: { kind: 'lead', notes: [72, -1, 76, 79, -1, 76, 72, -1, 74, -1, 77, 81, -1, 79, 76, -1], vol: 0.07 } },
+  night: { bpm: 76, key: 55, prog: [[0, 'min'], [-4, 'maj'], [-2, 'maj'], [-7, 'min']], drums: { hat: 'x...x...x...x...' }, bass: 'x.......x.......', bassKind: 'sub', pad: 0.05, comp: { kind: 'bell', rhythm: 'x...x.x...x...x.', vol: 0.06, arp: true }, lead: null },
   chill: { bpm: 84, key: 53, prog: [[0, 'maj7'], [-1, 'min7'], [-3, 'min7'], [-5, 'maj7']], drums: { kick: 'x.........x.....', snare: '....x.......x...', hat: '..x...x...x...x.' }, bass: 'x.......x..x....', bassKind: 'sub', comp: { kind: 'marimba', rhythm: 'x...x.x...x...x.', vol: 0.1 }, lead: null },
 };
 
@@ -379,7 +433,7 @@ fs.mkdirSync(OUT, { recursive: true });
 fs.writeFileSync(path.join(OUT, 'audio.wav'), Buffer.concat([hdr, data]));
 
 // ------------------------------------------------------------ captions file (soft subtitles)
-const NAMES = { aaron: 'AARON', flare: 'FLARE', eric: 'ERIC', water: 'WATER GUY', barista: 'BARISTA', leon: 'LEON', greg: 'GREG', soul: 'SOUL STEALER' };
+const NAMES = { aaron: 'AARON', flare: 'FLARE', eric: 'ERIC', water: 'WATER GUY', barista: 'BARISTA', leon: 'LEON', greg: 'GREG', soul: 'SOUL STEALER', computer: 'COMPUTER', shadow: 'UNKNOWN VOICE', newark: 'NEWARK', dj: 'DJ', boss: 'GAME BOSS', skeleton: 'SKELETON', crowd: 'CROWD', everyone: 'EVERYONE' };
 const ts = (s) => { const ms = Math.round(s * 1000); const h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60, sec = Math.floor(ms / 1000) % 60; return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')},${String(ms % 1000).padStart(3, '0')}`; };
 const srt = [...T.captions].sort((a, b) => a.t0 - b.t0).map((c, i) => `${i + 1}\n${ts(c.t0)} --> ${ts(c.t1)}\n${c.sound ? `[${c.text}]` : `${c.label ?? NAMES[c.who]}: ${c.text}`}\n`).join('\n');
 fs.writeFileSync(path.join(OUT, 'captions.srt'), srt);

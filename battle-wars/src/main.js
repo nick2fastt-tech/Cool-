@@ -2,9 +2,10 @@
 import * as THREE from 'three';
 import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
-import { buildHero, buildWaterGuy, buildSoulStealer, buildProp, buildDog, buildShadow, COSTUMES, CAST, ACTIONS, EXPRESSIONS, pose, blendPose, locomotion, attachProp } from './characters.js';
+import { buildHero, buildWaterGuy, buildSoulStealer, buildProp, buildDog, buildShadow, COSTUMES, OUTFITS, CAST, ACTIONS, EXPRESSIONS, pose, blendPose, locomotion, attachProp } from './characters.js';
 import { buildCity, buildCoffee, buildHQExterior, buildLiving, buildControl, buildTitle, buildReactor, buildCavern, buildTunnels, buildMachineRoom, buildPlatform, buildDiamondChamber, buildPark } from './sets.js';
 import { soulSymbolTex } from './textures.js';
+import { buildBedroom, buildStore, buildNewarkExt, buildParty } from './halloween.js';
 import { buildFX } from './fx.js';
 import { evalTrack, evalStep, buildGaitTables, gaitAt } from './director.js';
 import { drawOverlay } from './overlay.js';
@@ -42,18 +43,29 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   const fx = buildFX(fxRoot);
   const SETS = {
     city: buildCity(fx), coffee: buildCoffee(), hqExt: buildHQExterior(), living: buildLiving(), control: buildControl(), title: buildTitle(font, TextGeometry), reactor: buildReactor(), cavern: buildCavern(), tunnel: buildTunnels(), machines: buildMachineRoom(), platform: buildPlatform(), chamber: buildDiamondChamber(), park: buildPark(),
+    ...(META?.halloween ? { bedroom: buildBedroom(), store: buildStore(), newarkExt: buildNewarkExt(), party: buildParty() } : {}),
     black: { name: 'black', group: new THREE.Group(), bg: new THREE.Color(0x000000), update() {} },
   };
   for (const s of Object.values(SETS)) { s.group.visible = false; scene.add(s.group); }
 
   // cast
-  const heroes = {};
-  for (const n of ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg']) { heroes[n] = buildHero({ ...CAST[n], ...(costume[n] ?? {}) }); scene.add(heroes[n].root); }
+  // each hero can have outfit variants (pajamas, party costumes); the `${name}.outfit` track picks one per frame
+  const heroes = {}, heroSets = {};
+  const HERO_NAMES = ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark'];
+  for (const n of HERO_NAMES) {
+    const extras = [...(CAST[n].extras ?? []), ...(META?.extras?.[n] ?? [])];
+    heroSets[n] = { base: buildHero({ ...CAST[n], ...(costume[n] ?? {}), extras }) };
+    for (const o of META?.outfits ?? []) if (OUTFITS[o]?.[n]) heroSets[n][o] = buildHero({ ...CAST[n], ...(costume[n] ?? {}), ...OUTFITS[o][n], extras: [...(OUTFITS[o][n].extras ?? []), ...extras.filter((e) => e === 'monsterMask')] });
+    for (const h of Object.values(heroSets[n])) { h.root.visible = false; scene.add(h.root); }
+    heroes[n] = heroSets[n].base;
+  }
+  const handAttached = [];
+  const onHand = (n, side, obj) => { handAttached.push({ n, side, obj }); return obj; };
   // generic hand props: `${name}.propR` / `${name}.propL` tracks pick one by name
-  const PROP_KINDS = ['notebook', 'pen', 'scanner', 'pipe', 'case', 'diamond', 'bar', 'buzzer'];
+  const PROP_KINDS = ['notebook', 'pen', 'scanner', 'pipe', 'case', 'diamond', 'bar', 'buzzer', 'phone', 'bowl', 'towels', 'capeFold', 'dinoPack', 'maskHeld', 'candy', 'plate', 'pizza', 'mic', 'clock'];
   const handProps = {};
   for (const n of Object.keys(heroes)) for (const side of ['L', 'R']) for (const k of PROP_KINDS) {
-    const m = buildProp(k); m.visible = false; heroes[n].J.hand[side].add(m); handProps[`${n}.${side}.${k}`] = m;
+    const m = buildProp(k); m.visible = false; heroes[n].J.hand[side].add(m); handProps[`${n}.${side}.${k}`] = onHand(n, side, m);
   }
   const water = buildWaterGuy();
   scene.add(water.root);
@@ -71,23 +83,23 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   leash.frustumCulled = false; scene.add(leash);
   // hand props
   const ctrlHeld = new THREE.Group(); mk(new THREE.BoxGeometry(0.2, 0.05, 0.11), mat(0x222831), ctrlHeld);
-  attachProp(heroes.eric, 'R', ctrlHeld, [0.07, -0.09, 0.05], [0, 0, 0.3]);
+  onHand('eric', 'R', attachProp(heroes.eric, 'R', ctrlHeld, [0.07, -0.09, 0.05], [0, 0, 0.3]));
   const cupHeld = new THREE.Group();
   mk(new THREE.CylinderGeometry(0.06, 0.045, 0.16, 14), mat(0xffffff, { r: 0.4 }), cupHeld, [0, 0, 0]);
   mk(new THREE.CylinderGeometry(0.062, 0.062, 0.05, 14), mat(0x8a5a32), cupHeld, [0, 0.01, 0]);
-  attachProp(heroes.flare, 'R', cupHeld, [0, -0.08, 0.06], [P / 2, 0, 0]);
+  onHand('flare', 'R', attachProp(heroes.flare, 'R', cupHeld, [0, -0.08, 0.06], [P / 2, 0, 0]));
   const billHeld = mk(new THREE.PlaneGeometry(0.16, 0.08), mat(0x7fc77f, { side: THREE.DoubleSide }), null);
-  attachProp(heroes.flare, 'L', billHeld, [0, -0.09, 0.05], [0, P / 2, 0]);
+  onHand('flare', 'L', attachProp(heroes.flare, 'L', billHeld, [0, -0.09, 0.05], [0, P / 2, 0]));
   const device = new THREE.Group(); mk(new THREE.BoxGeometry(0.12, 0.22, 0.1), mat(0xffcc1a), device); mk(new THREE.BoxGeometry(0.13, 0.05, 0.11), mat(0x1a1a1a), device, [0, 0.05, 0]);
-  attachProp(heroes.eric, 'R', device, [0, -0.1, 0.06], [0, 0, 0]);
+  onHand('eric', 'R', attachProp(heroes.eric, 'R', device, [0, -0.1, 0.06], [0, 0, 0]));
   const slices = {};
   const sliceGeo = new THREE.CircleGeometry(0.14, 3, -P / 6 + P / 2, P / 3);
   for (const n of ['aaron', 'flare', 'eric']) {
     const m = mk(sliceGeo, mat(0xe0602a, { side: THREE.DoubleSide }), null);
-    slices[n] = attachProp(heroes[n], 'R', m, [0, -0.12, 0.08], [0.4, 0, 0]);
+    slices[n] = onHand(n, 'R', attachProp(heroes[n], 'R', m, [0, -0.12, 0.08], [0.4, 0, 0]));
   }
 
-  const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'water', 'dog', 'birddog']);
+  const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'water', 'dog', 'birddog']);
   const val = (name, d = 0) => { const v = evalTrack(T.tracks[name], curT); return v === undefined ? d : v; };
   let curT = 0;
   const X = { T, scene, val: (n, d = 0) => val(n, d), hand: (n, side = 'R') => { const v = new THREE.Vector3(); heroes[n].J.hand[side].getWorldPosition(v); return v; } };
@@ -105,7 +117,13 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   }
 
   function updateHero(name, t) {
-    const h = heroes[name];
+    const outfit = evalStep(T.tracks[`${name}.outfit`], t).v ?? 'base';
+    const h = heroSets[name][outfit] ?? heroSets[name].base;
+    for (const v of Object.values(heroSets[name])) if (v !== h) v.root.visible = false;
+    if (heroes[name] !== h) {
+      heroes[name] = h;
+      for (const a of handAttached) if (a.n === name) h.J.hand[a.side].add(a.obj);
+    }
     const vis = val(`${name}.vis`, 0) > 0.5;
     h.root.visible = vis;
     if (!vis) return;
@@ -141,6 +159,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     const blink = bp < 0.14 ? Math.sin((bp / 0.14) * P) : 0;
     h.applyFace(e, talk, blink, { x: val(`${name}.lookX`), y: val(`${name}.lookY`) });
     h.applyGlow({ hair: val(`${name}.hairGlow`), suit: val(`${name}.suitGlow`), eyes: val(`${name}.eyeGlow`), glove: val(`${name}.gloveGlow`) });
+    h.applyExtras({ mask: val(`${name}.mask`), milk: val(`${name}.milk`) });
   }
 
   // Water Guy "actions" produce arm targets etc.

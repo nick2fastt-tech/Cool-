@@ -6,7 +6,7 @@ import * as TX from './textures.js';
 
 const P = Math.PI;
 
-function lights(g, o) {
+export function lights(g, o) {
   const hemi = new THREE.HemisphereLight(o.sky ?? 0xdfeeff, o.ground ?? 0x6b6155, o.hemi ?? 1.2);
   g.add(hemi);
   const sun = new THREE.DirectionalLight(o.sun ?? 0xfff2dd, o.sunI ?? 2.4);
@@ -27,27 +27,27 @@ function lights(g, o) {
   return { hemi, sun };
 }
 
-function box(parent, w, h, d, color, pos, o = {}) {
+export function box(parent, w, h, d, color, pos, o = {}) {
   const geo = o.round ? new RoundedBoxGeometry(w, h, d, 2, o.round) : new THREE.BoxGeometry(w, h, d);
   const m = mk(geo, o.material ?? mat(color, o), parent, pos, o.rot ?? [0, 0, 0]);
   if (o.noShadow) m.castShadow = false;
   return m;
 }
 
-function plane(parent, w, h, material, pos, rot = [-P / 2, 0, 0], shadow = true) {
+export function plane(parent, w, h, material, pos, rot = [-P / 2, 0, 0], shadow = true) {
   const m = mk(new THREE.PlaneGeometry(w, h), material, parent, pos, rot, null, false);
   m.receiveShadow = shadow;
   return m;
 }
 
 // ------------------------------------------------------------------ city pieces
-function streetLamp(g, x, z, face = 1) {
+export function streetLamp(g, x, z, face = 1) {
   const m = mat(0x2c3340, { r: 0.4, m: 0.5 });
   mk(new THREE.CylinderGeometry(0.07, 0.09, 4.2, 10), m, g, [x, 2.1, z]);
   mk(new THREE.BoxGeometry(0.08, 0.08, 1.0), m, g, [x, 4.15, z + face * 0.5]);
   mk(new THREE.BoxGeometry(0.35, 0.12, 0.5), mat(0xfff4d0, { e: 0xffe6a0, ei: 0.4 }), g, [x, 4.08, z + face * 1.0]);
 }
-function tree(g, x, z, s = 1, seed = 1) {
+export function tree(g, x, z, s = 1, seed = 1) {
   const r = rng(seed);
   mk(new THREE.CylinderGeometry(0.1 * s, 0.14 * s, 1.6 * s, 8), mat(0x6b4a2e), g, [x, 0.8 * s, z]);
   const leaf = mat([0x4caf50, 0x43a047, 0x5cbf60][Math.floor(r() * 3)], { r: 0.8 });
@@ -403,9 +403,34 @@ export function buildHQExterior() {
 function tvGame() {
   const tex = canvasTex(512, 288, () => {});
   const { ctx } = tex.userData;
-  tex.draw = (t, win, off) => {
+  tex.draw = (t, win, off, boss = 0, hp = 0.1, paused = 0, hit = 0) => {
     const w = 512, h = 288;
     if (off) { ctx.fillStyle = '#05070c'; ctx.fillRect(0, 0, w, h); tex.needsUpdate = true; return; }
+    if (boss > 0.5) {
+      // SLAUGHTER: a cartoon knight vs. a giant armored boss
+      const bg = ctx.createLinearGradient(0, 0, 0, h); bg.addColorStop(0, '#3a0a14'); bg.addColorStop(1, '#120408');
+      ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#2a0a10'; for (let i = 0; i < 6; i++) ctx.fillRect(i * 95 - 10, 70 + (i % 2) * 20, 40, 220);
+      ctx.fillStyle = '#5a1a20'; ctx.fillRect(0, 238, w, 50);
+      const bx = 330 + Math.sin(t * 1.6) * 18, by = 150 + Math.abs(Math.sin(t * 3.2)) * -6;
+      const fl = paused ? 0 : (Math.sin(t * 7) > 0.7 ? 1 : 0) || hit;
+      ctx.fillStyle = fl ? '#ffffff' : '#4a4a5a';
+      ctx.fillRect(bx - 55, by - 40, 110, 120); ctx.fillRect(bx - 75, by - 30, 25, 80); ctx.fillRect(bx + 50, by - 30, 25, 80);
+      ctx.fillStyle = fl ? '#ffffff' : '#3a3a48'; ctx.beginPath(); ctx.arc(bx, by - 60, 36, 0, 7); ctx.fill();
+      ctx.fillStyle = '#ff2a2a'; ctx.fillRect(bx - 20, by - 66, 14, 8); ctx.fillRect(bx + 6, by - 66, 14, 8);
+      ctx.fillStyle = '#8a8a9a'; ctx.fillRect(bx - 4, by - 104, 8, 22); ctx.fillRect(bx + 72, by - 120, 10, 150);
+      ctx.fillStyle = '#c0c0d0'; ctx.beginPath(); ctx.moveTo(bx + 77, by - 150); ctx.lineTo(bx + 90, by - 120); ctx.lineTo(bx + 64, by - 120); ctx.fill();
+      const kx = 140 + Math.sin(t * 5) * 30 * (paused ? 0 : 1), ky = 205;
+      ctx.fillStyle = '#4aa8ff'; ctx.fillRect(kx - 14, ky - 30, 28, 40); ctx.beginPath(); ctx.arc(kx, ky - 42, 13, 0, 7); ctx.fill();
+      ctx.fillStyle = '#ffe36a'; ctx.save(); ctx.translate(kx + 16, ky - 20); ctx.rotate(paused ? -0.6 : -0.6 + Math.sin(t * 14) * 0.9); ctx.fillRect(0, -3, 50, 6); ctx.restore();
+      if (!paused && Math.sin(t * 7) > 0.7) { ctx.fillStyle = '#ffe36a'; ctx.font = `34px ${TX.FONT}`; ctx.fillText('HIT!', bx - 30, by - 110); }
+      ctx.fillStyle = '#111'; ctx.fillRect(96, 14, 320, 26);
+      ctx.fillStyle = '#ff2a3a'; ctx.fillRect(100, 18, 312 * hp, 18);
+      ctx.fillStyle = '#ffd0d0'; ctx.font = `20px ${TX.FONT}`; ctx.textAlign = 'center'; ctx.fillText('THE IRON TYRANT', w / 2, 62); ctx.textAlign = 'left';
+      ctx.fillStyle = '#ff4a4a'; ctx.font = `26px ${TX.FONT}`; ctx.fillText('SLAUGHTER', 12, h - 12);
+      if (paused) { ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 0, w, h); ctx.fillStyle = '#ffffff'; ctx.font = `64px ${TX.FONT}`; ctx.textAlign = 'center'; ctx.fillText('PAUSED', w / 2, h / 2 + 22); ctx.textAlign = 'left'; }
+      tex.needsUpdate = true; return;
+    }
     const sky = ctx.createLinearGradient(0, 0, 0, h);
     sky.addColorStop(0, '#ff9a5a'); sky.addColorStop(1, '#5b2a6e');
     ctx.fillStyle = sky; ctx.fillRect(0, 0, w, h);
@@ -506,7 +531,7 @@ function dataScreen(seed) {
 }
 
 // ------------------------------------------------------------------ HQ LIVING ROOM (floor 1)
-function couch(g, x, z, ry) {
+export function couch(g, x, z, ry) {
   const c = grp(g, x, 0, z); c.rotation.y = ry;
   const m = mat(0x3b4fa8, { r: 0.85 });
   const m2 = mat(0x2f3f8a, { r: 0.85 });
@@ -515,6 +540,46 @@ function couch(g, x, z, ry) {
   box(c, 3.0, 0.8, 0.28, 0, [0, 0.62, -0.48], { material: m2, round: 0.1 });
   for (const s of [-1.45, 1.45]) box(c, 0.25, 0.55, 1.0, 0, [s, 0.36, 0], { material: m2, round: 0.08 });
   return c;
+}
+
+// small Halloween helpers for the living room (the full set lives in halloween.js)
+function hwWeb(g, pos, rot, size = 1.4) {
+  const tex = canvasTex(256, 256, (ctx, w) => {
+    ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 2;
+    for (let i = 0; i <= 8; i++) { const a = (i / 8) * P / 2; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * w * 1.1, Math.sin(a) * w * 1.1); ctx.stroke(); }
+    ctx.lineWidth = 1.3;
+    for (let r = 28; r < w; r += 30) { ctx.beginPath(); for (let i = 0; i <= 8; i++) { const a = (i / 8) * P / 2; const x = Math.cos(a) * r, y = Math.sin(a) * r; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.stroke(); }
+  });
+  return mk(new THREE.PlaneGeometry(size, size), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide }), g, pos, rot, null, false);
+}
+function hwString(g, pts) {
+  const mats = [0xff8a1a, 0x9a4ae0].map((c) => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 1.5 }));
+  const geo = new THREE.SphereGeometry(0.045, 8, 6);
+  let k = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = new THREE.Vector3(...pts[i]), b = new THREE.Vector3(...pts[i + 1]);
+    const n = Math.round(a.distanceTo(b) * 2.2);
+    for (let j = 0; j <= n; j++) { const u = j / n, p = a.clone().lerp(b, u); p.y -= Math.sin(u * P) * 0.2; mk(geo, mats[k++ % 2], g, [p.x, p.y, p.z], [0, 0, 0], null, false); }
+  }
+  return mats;
+}
+function hwPumpkin(g, x, y, z, s, ry) {
+  const p = grp(g, x, y, z); p.scale.setScalar(s); p.rotation.y = ry;
+  const skin = mat(0xff7a14, { r: 0.6 });
+  for (let i = 0; i < 7; i++) { const a = (i / 7) * P * 2; mk(new THREE.SphereGeometry(0.16, 14, 10), skin, p, [Math.sin(a) * 0.09, 0.17, Math.cos(a) * 0.09], [0, a, 0], [0.62, 0.9, 1]); }
+  const glow = mat(0xffe060, { e: 0xffb020, ei: 1.6 });
+  for (const sd of [1, -1]) mk(new THREE.ConeGeometry(0.035, 0.05, 3), glow, p, [sd * 0.06, 0.21, 0.205], [P / 2, 0, 0]);
+  mk(new THREE.BoxGeometry(0.13, 0.03, 0.02), glow, p, [0, 0.12, 0.205]);
+  mk(new THREE.CylinderGeometry(0.02, 0.03, 0.08, 6), mat(0x3a6a2a), p, [0, 0.36, 0]);
+}
+function hwGhost(g, x, y, z) {
+  const p = grp(g, x, y, z);
+  const w = mat(0xf6f6fb, { r: 0.5 });
+  mk(new THREE.SphereGeometry(0.42, 20, 14), w, p, [0, 0.3, 0], [0, 0, 0], [1, 1.1, 0.9]);
+  mk(new THREE.CylinderGeometry(0.41, 0.55, 0.6, 18, 1, true), mat(0xf6f6fb, { r: 0.5, side: THREE.DoubleSide }), p, [0, -0.08, 0], [0, 0, 0], [1, 1, 0.85]);
+  for (const sd of [1, -1]) mk(new THREE.SphereGeometry(0.06, 10, 8), mat(0x111111), p, [0.35, 0.42, sd * 0.13], [0, 0, 0], [0.5, 1.2, 0.8]);
+  mk(new THREE.SphereGeometry(0.075, 10, 8), mat(0x111111), p, [0.36, 0.22, 0], [0, 0, 0], [0.5, 1.3, 1]);
+  return p;
 }
 
 export function buildLiving() {
@@ -575,6 +640,43 @@ export function buildLiving() {
   const open = mk(new THREE.CircleGeometry(0.27, 24), new THREE.MeshStandardMaterial({ map: TX.pizzaTex(), roughness: 0.7 }), pizza, [0.35, 0.075, 0], [-P / 2, 0, 0]);
   box(pizza, 0.6, 0.6, 0.02, 0xe8dcc4, [0.35, 0.36, -0.3], { rot: [-0.2, 0, 0] });
 
+  // Halloween decorations (Episode 4)
+  const hw = grp(g); hw.visible = false;
+  for (const [pos, rot] of [[[-6.95, 3.35, -4.55], [0, P / 4, 0]], [[6.95, 3.35, -4.55], [0, -P / 4, P / 2]], [[-6.95, 3.35, 5.25], [0, 3 * P / 4, 0]], [[0, 3.5, -4.6], [0, 0, P * 0.75]]]) {
+    hwWeb(hw, pos, rot);
+  }
+  const hwLights = [
+    ...hwString(hw, [[-7.0, 3.3, -4.6], [-2.4, 3.3, -4.6], [2.4, 3.3, -4.6], [7.0, 3.3, -4.6]]),
+    ...hwString(hw, [[-7.05, 3.3, -4.5], [-7.05, 3.3, 0.5], [-7.05, 3.3, 5.3]]),
+    ...hwString(hw, [[7.05, 3.3, -4.5], [7.05, 3.3, 0.5], [7.05, 3.3, 5.3]]),
+  ];
+  for (const [x, z, ry] of [[-2.1, -4.25, 0.2], [2.1, -4.25, -0.2], [-0.4, 5.0, P]]) hwPumpkin(hw, x, z === 5.0 ? 0.9 : 0, z, z === 5.0 ? 0.8 : 1.1, ry);
+  hwPumpkin(hw, 0.7, 0.46, -0.65, 0.55, 0.3);
+  const ghost = hwGhost(hw, -6.6, 2.75, 2.6);
+  // kitchen corner (back-left): counter, fridge, popcorn, cereal + milk
+  const kit = grp(g); kit.visible = false;
+  box(kit, 2.8, 0.92, 0.7, 0x4a3a5a, [-5.3, 0.46, 4.95], { round: 0.02 });
+  box(kit, 2.9, 0.06, 0.76, 0xe8e4f0, [-5.3, 0.95, 4.95]);
+  box(kit, 2.8, 0.7, 0.4, 0x4a3a5a, [-5.3, 2.5, 5.2], { round: 0.02 });
+  box(kit, 0.85, 2.0, 0.75, 0xd8dde6, [-3.4, 1.0, 4.95], { round: 0.04, r: 0.3, m: 0.3 });
+  box(kit, 0.04, 0.5, 0.04, 0x9a9aa8, [-3.75, 1.3, 4.56], { m: 0.7 });
+  const bowl = grp(kit, -4.75, 0.98, 4.85);
+  mk(new THREE.SphereGeometry(0.24, 18, 10, 0, P * 2, P / 2, P / 2), mat(0xd02a2a, { r: 0.5, side: THREE.DoubleSide }), bowl, [0, 0.24, 0], [0, 0, 0]);
+  for (let i = 0; i < 26; i++) mk(new THREE.IcosahedronGeometry(0.045, 0), mat(0xfff4d0, { r: 0.9 }), bowl, [Math.sin(i * 2.4) * 0.16 * ((i % 4) / 4), 0.2 + 0.035 * (i % 3), Math.cos(i * 2.4) * 0.16 * ((i % 4) / 4)]);
+  const bowlCereal = grp(bowl); bowlCereal.visible = false;
+  for (let i = 0; i < 12; i++) mk(new THREE.TorusGeometry(0.02, 0.009, 4, 8), mat(0xd8a040), bowlCereal, [Math.sin(i * 1.7) * 0.12, 0.27, Math.cos(i * 1.7) * 0.12], [i, i * 2, 0]);
+  const cereal = grp(kit, -5.55, 0.98, 4.95);
+  const cerealBox = grp(cereal);
+  box(cerealBox, 0.36, 0.5, 0.13, 0, [0, 0.25, 0], { material: new THREE.MeshStandardMaterial({ map: TX.posterTex('CRUNCH!', '#ffd040', '#d02a2a'), roughness: 0.8 }) });
+  const milk = grp(kit, -5.55, 1.48, 4.95);
+  const carton = grp(milk);
+  box(carton, 0.16, 0.3, 0.16, 0xf6f6fa, [0, 0.15, 0]);
+  box(carton, 0.165, 0.08, 0.165, 0x3a7ad0, [0, 0.16, 0]);
+  mk(new THREE.ConeGeometry(0.115, 0.08, 4), mat(0xf6f6fa), carton, [0, 0.34, 0], [0, P / 4, 0]);
+  const puddle = mk(new THREE.CircleGeometry(0.7, 24), mat(0xffffff, { r: 0.15 }), kit, [-4.9, 0.012, 4.2], [-P / 2, 0, 0], [1, 0.7, 1], false);
+  const spill = grp(kit); spill.visible = false;
+  const R = rng(9);
+  for (let i = 0; i < 60; i++) mk(new THREE.TorusGeometry(0.025, 0.011, 4, 8), mat(0xd8a040), spill, [-5.2 + (R() - 0.5) * 2.0, 0.015, 4.1 + (R() - 0.5) * 1.3], [P / 2 + R(), R() * 3, 0], null, false);
   return {
     name: 'living', group: g, bg: new THREE.Color(0x101420), exposure: 1.05,
     refs: { ctrl, pizza },
@@ -586,7 +688,18 @@ export function buildLiving() {
       L.hemi.intensity = eve > 0.5 ? 0.55 : 0.95;
       lamp.intensity = eve > 0.5 ? 9 : 0;
       win.material.emissive.set(eve > 0.5 ? 0xff9a6a : 0xbfe6ff);
-      tv.draw(t, v('tv.win', 0), v('tv.off', 0) > 0.5);
+      tv.draw(t, v('tv.win', 0), v('tv.off', 0) > 0.5, v('tv.boss', 0), v('tv.hp', 0.12), v('tv.paused', 0) > 0.5, v('tv.hit', 0) > 0.5);
+      const hal = v('halloween', 0) > 0.5;
+      hw.visible = hal; kit.visible = v('kitchen', 0) > 0.5;
+      if (hal) { lamp.color.set(0xff8a30); hwLights.forEach((m, i) => { m.emissiveIntensity = 1.1 + 0.7 * Math.sin(t * 2.5 + i); }); ghost.position.y = 2.75 + 0.06 * Math.sin(t * 1.4); ghost.rotation.z = 0.05 * Math.sin(t * 0.9); }
+      if (kit.visible) {
+        const f = v('milk.fall', 0);
+        carton.rotation.z = -1.7 * smoothstep(0, 0.5, f); carton.position.set(0.5 * f, -0.48 * smoothstep(0.2, 1, f) * 1.0 - (f > 0.6 ? 0.98 * smoothstep(0.6, 1, f) : 0), -0.55 * smoothstep(0.4, 1, f));
+        cerealBox.rotation.x = -1.45 * smoothstep(0.1, 0.6, f); cerealBox.position.z = -0.1 * smoothstep(0.1, 0.6, f);
+        const pk = v('milk.puddle', 0); puddle.visible = pk > 0.01; puddle.scale.set(0.2 + 0.8 * pk, 0.14 + 0.56 * pk, 1);
+        spill.visible = v('cereal.mess', 0) > 0.5; bowlCereal.visible = v('bowl.cereal', 0) > 0.5;
+        bowl.visible = v('bowl.held', 0) < 0.5;
+      }
       tvLight.intensity = v('tv.off', 0) > 0.5 ? 0 : 3;
       ctrl.visible = v('ctrl.couch', 0) > 0.5;
       ctrl.position.set(v('ctrl.x', 0.6), 0.47, 0.6);
@@ -685,6 +798,11 @@ export function buildTitle(font, TextGeometry) {
   const sub3 = mkText("THE SOUL STEALER'S SECRET", 0.46, 0.18, [new THREE.MeshStandardMaterial({ color: 0xf0d8ff, metalness: 0.4, roughness: 0.3, emissive: 0xa040ff, emissiveIntensity: 0.6 }), new THREE.MeshStandardMaterial({ color: 0x5a1a8a, metalness: 0.6, roughness: 0.3 })]);
   sub3.position.set(0, -1.2, 0.3);
   g.add(sub3);
+  const sub4 = mkText('SPOOKY HALLOWEEN PARTY', 0.46, 0.18, [new THREE.MeshStandardMaterial({ color: 0xfff0c0, metalness: 0.4, roughness: 0.3, emissive: 0xff8a1a, emissiveIntensity: 0.7 }), new THREE.MeshStandardMaterial({ color: 0x5a1a8a, metalness: 0.6, roughness: 0.3 })]);
+  sub4.position.set(0, -1.2, 0.3);
+  g.add(sub4);
+  const orangeMats = [new THREE.MeshStandardMaterial({ color: 0xffe0b0, metalness: 0.5, roughness: 0.2, emissive: 0xff7a10, emissiveIntensity: 0.8 }), new THREE.MeshStandardMaterial({ color: 0xd05a08, metalness: 0.8, roughness: 0.25, emissive: 0x602000, emissiveIntensity: 0.7 })];
+  const hwBg = new THREE.Color(0x12061e);
   const emb = new THREE.Mesh(new THREE.PlaneGeometry(4.5, 4.5), new THREE.MeshBasicMaterial({ map: TX.emblemTex(), transparent: true, opacity: 0.35, depthWrite: false }));
   emb.position.set(0, 0.2, -1.5);
   g.add(emb);
@@ -699,20 +817,20 @@ export function buildTitle(font, TextGeometry) {
     update(t, X) {
       const v = X.val;
       const k = v('title.k', 0);
-      const red = v('title.theme', 0) > 0.5;
-      title.material = red ? redMats : blueMats;
-      X.scene.background = red ? redBg : blueBg;
-      rays.children.forEach((m, i) => m.material.color.set(red ? (i % 2 ? 0x8a0a16 : 0x3a0408) : (i % 2 ? 0x1d3fa8 : 0x0f2470)));
-      rim.color.set(red ? 0xff3040 : 0x4fb0ff);
-      sweep.color.set(red ? 0xff7070 : 0x9fe0ff);
-      emb.visible = !red;
+      const th = v('title.theme', 0), hw = th > 1.5, red = th > 0.5 && !hw;
+      title.material = hw ? orangeMats : red ? redMats : blueMats;
+      X.scene.background = hw ? hwBg : red ? redBg : blueBg;
+      rays.children.forEach((m, i) => m.material.color.set(hw ? (i % 2 ? 0x5a1a8a : 0x8a3a0a) : red ? (i % 2 ? 0x8a0a16 : 0x3a0408) : (i % 2 ? 0x1d3fa8 : 0x0f2470)));
+      rim.color.set(hw ? 0xa050ff : red ? 0xff3040 : 0x4fb0ff);
+      sweep.color.set(hw ? 0xffa050 : red ? 0xff7070 : 0x9fe0ff);
+      emb.visible = !red && !hw;
       title.scale.setScalar(Math.max(0.001, k));
       title.rotation.y = Math.max(0, 1 - k) * 1.2;
       title.position.x = red ? Math.sin(t * 61) * 0.03 * v('title.jolt', 0) : 0;
       const ks = v('title.sub', 0);
       const which = v('title.subText', 'BE READY!');
-      sub.visible = which === 'BE READY!'; sub2.visible = which === 'THE RED DIAMOND HUNT'; sub3.visible = which === "THE SOUL STEALER'S SECRET";
-      for (const m of [sub, sub2, sub3]) { m.scale.setScalar(Math.max(0.001, ks)); m.position.y = v('title.subY', -1.2); }
+      sub.visible = which === 'BE READY!'; sub2.visible = which === 'THE RED DIAMOND HUNT'; sub3.visible = which === "THE SOUL STEALER'S SECRET"; sub4.visible = which === 'SPOOKY HALLOWEEN PARTY';
+      for (const m of [sub, sub2, sub3, sub4]) { m.scale.setScalar(Math.max(0.001, ks)); m.position.y = v('title.subY', -1.2); }
       title.position.y = v('title.y', 0.25);
       emb.material.opacity = 0.35 * k;
       rays.rotation.z = t * 0.15;

@@ -129,6 +129,42 @@ export const ACTIONS = {
   leanTable: { gest: true, f: (a, t) => ({ lean: 0.05, spF: 0.32, aLF: 0.85, aRF: 0.85, eL: 0.2, eR: 0.2, aLO: 0.22, aRO: 0.22, hdN: 0.15 + 0.02 * S(t * 1.5), lLO: 0.1, lRO: 0.1 }) },
   sitSleep: { sit: true, f: (a, t) => ({ ...sitLegs, spF: 0.35 + 0.03 * S(t * 1.1), hdN: 0.55 + 0.05 * S(t * 1.1), hdT: 0.2, aLF: 0.4, aRF: 0.4, aLT: 0.9, aRT: 0.9, eL: 1.3, eR: 1.3, aLO: 0.08, aRO: 0.08 }) },
   sitWake: { sit: true, gest: true, f: (a, t) => { const k = smoothstep(0, 0.8, a); return { ...sitLegs, spF: 0.35 - 0.3 * k, hdN: 0.55 - 0.5 * k, hdT: 0.2 - 0.25 * k, aLF: 0.4, aRF: 0.4 + 0.3 * k, aLT: 0.9, aRT: 0.9 - 0.6 * k, eL: 1.3, eR: 1.3 - 0.3 * k, aLO: 0.08, aRO: 0.08 + 0.2 * k }; } },
+  // --- Episode 4 (Halloween)
+  sitBed: { sit: true, gest: true, f: (a, t, c) => ({ y: -0.62, lLF: 1.5, lRF: 1.5, kL: 0.05, kR: 0.08, fL: 0.3, fR: 0.3, spF: 0.12 + 0.02 * S(t * 1.3), aLF: 0.3, aRF: 0.3, eL: 0.6, eR: 0.6, aLO: 0.15, aRO: 0.15 }) },
+  sitStretch: { sit: true, f: (a) => { const k = smoothstep(0, 0.6, a) - smoothstep(1.8, 2.6, a); return { y: -0.62, lLF: 1.5, lRF: 1.5, kL: 0.05, kR: 0.08, fL: 0.3, fR: 0.3, spF: 0.12 - 0.3 * k, aLF: 0.3 + 2.6 * k, aRF: 0.3 + 2.6 * k, aLO: 0.15 + 0.3 * k, aRO: 0.15 + 0.3 * k, eL: 0.6 - 0.4 * k, eR: 0.6 - 0.4 * k, hdN: -0.35 * k }; } },
+  stretch: { f: (a) => { const k = smoothstep(0, 0.6, a) - smoothstep(1.6, 2.4, a); return { spF: -0.2 * k, aLF: 2.8 * k, aRF: 2.8 * k, aLO: 0.15 + 0.25 * k, aRO: 0.15 + 0.25 * k, eL: 0.3, eR: 0.3, hdN: -0.3 * k, y: 0.01 * k }; } },
+  lieSleep: { f: (a, t) => ({ lean: -1.52, y: -0.8, aLF: 0.15, aRF: 0.15, aLO: 0.12, aRO: 0.12, eL: 0.3, eR: 0.3, hdN: 0.3, lLO: 0.05, lRO: 0.05, spF: 0.015 * S(t * 1.1) }) },
+  lieSlap: { f: (a) => { const k = smoothstep(0, 0.25, a), hit = smoothstep(0.25, 0.4, a); return { lean: -1.52, y: -0.8, aLF: 0.15, aLO: 0.12, eL: 0.3, aRO: 0.12 + 1.35 * k, aRF: 0.5 * k - 0.4 * hit, eR: 0.3 + 0.4 * k, hdN: 0.3, hdY: -0.4 * k }; } },
+  boo: { f: (a) => { const k = smoothstep(0, 0.18, a); return { aLF: 1.9 * k, aRF: 1.9 * k, aLO: 0.35, aRO: 0.35, eL: 1.1 * k, eR: 1.1 * k, lean: 0.12 * k, spF: 0.15 * k, lLF: 0.4, kL: 0.4, lRF: -0.3, kR: 0.2, hdN: -0.1 }; } },
+  holdUpBoth: { f: (a) => { const k = smoothstep(0, 0.4, a); return { aLF: 2.3 * k, aRF: 2.3 * k, aLO: 0.3, aRO: 0.3, eL: 0.3, eR: 0.3, hdN: -0.25 * k, spF: -0.05 }; } },
+  showItem: { upper: true, f: (a) => { const k = smoothstep(0, 0.4, a); return { aLF: 1.0 * k, aRF: 1.0 * k, aLO: 0.2, aRO: 0.2, aLT: 0.3, aRT: 0.3, eL: 0.6, eR: 0.6, hdN: 0.15 }; } },
+  phone: { upper: true, gest: true, f: (a, t) => ({ aRF: 0.95, eR: 1.45, aRT: 0.55, aRO: 0.0, aLO: 0.12, eL: 0.25, hdN: 0.35 + 0.02 * S(t * 2) }) },
+  mic: { upper: true, f: (a, t) => ({ aRF: 1.05, eR: 2.05, aRT: 0.75, aRO: 0.1, aLF: 0.35 + 0.2 * S(t * 1.3), aLO: 0.5, eL: 0.5, spF: -0.03 }) },
+  micPresent: { upper: true, f: (a, t) => { const k = smoothstep(0, 0.4, a); return { aRF: 1.05, eR: 2.05, aRT: 0.75, aRO: 0.1, aLF: 1.2 * k, aLO: 1.0 * k, eL: 0.15, spT: 0.2 * k, hdY: 0.2 * k }; } },
+  welcome: { gest: false, f: (a, t) => { const k = smoothstep(0, 0.4, a); return { aLF: 0.7 * k, aRF: 0.7 * k, aLO: 0.9 * k, aRO: 0.9 * k, eL: 0.3, eR: 0.3, aLT: -0.6 * k, aRT: -0.6 * k, spF: -0.05, hdT: 0.08 * S(t * 2) }; } },
+  wave: { upper: true, f: (a, t) => ({ aRF: 2.4, aRO: 0.6, eR: 0.5 + 0.45 * S(a * 9), aLO: 0.12, eL: 0.2, hdT: 0.1 }) },
+  clap: { gest: false, f: (a, t, c) => { const s = Math.abs(S(a * 7 + c.seed)); return { aLF: 1.15, aRF: 1.15, aLT: 1.25, aRT: 1.25, eL: 1.2, eR: 1.2, aLO: 0.22 - 0.24 * s, aRO: 0.22 - 0.24 * s, y: 0.01 * s, hdN: -0.05 }; } },
+  cheerJump: { f: (a, t, c) => { const s = Math.abs(S(a * 6 + c.seed)); return { aLF: 2.5, aRF: 2.5, aLO: 0.7, aRO: 0.7, eL: 0.3, eR: 0.3, y: 0.06 * s, kL: 0.25 * (1 - s), kR: 0.25 * (1 - s), hdN: -0.2 }; } },
+  sitSlide: { sit: true, f: (a, t) => { const k = smoothstep(0, 1.2, a); return { ...sitLegs, y: -0.3 - 0.3 * k, lean: -0.35 * k, lLF: 1.55 - 0.5 * k, lRF: 1.55 - 0.6 * k, kL: 1.5 - 0.6 * k, kR: 1.5 - 0.5 * k, spF: -0.15 + 0.1 * Math.abs(S(a * 13)), hdN: -0.3, aLF: 0.6, aLT: 1.1, eL: 1.3, aRF: 0.8, aRT: 1.0, eR: 1.6, aLO: 0.1, aRO: 0.1 }; } },
+  beeDance: { f: (a, t) => {
+    const n1 = noise1(a * 9), n2 = noise1(a * 11 + 4), n3 = noise1(a * 7 + 9);
+    return { aLF: 1.6 + 1.0 * n1, aRF: 1.6 + 1.0 * n2, aLO: 0.6 + 0.6 * n3, aRO: 0.6 - 0.6 * n1, eL: 1.0 + 0.8 * n2, eR: 1.0 + 0.8 * n3, aLT: 0.6 * n1, aRT: 0.6 * n2,
+      y: 0.05 * Math.abs(S(a * 10)), kL: 0.4 + 0.4 * Math.max(0, S(a * 10)), kR: 0.4 + 0.4 * Math.max(0, -S(a * 10)), lLF: 0.5 * Math.max(0, S(a * 10)), lRF: 0.5 * Math.max(0, -S(a * 10)),
+      spT: 0.4 * n3, spS: 0.25 * n1, hdN: 0.2 * n2, hdY: 0.5 * n1, hdT: 0.2 * n3 };
+  } },
+  courtDance: { f: (a, t) => {
+    const b = a * P * 1.6, sw = S(b);
+    return { aRF: 2.3 + 0.2 * sw, aRO: 0.9, eR: 0.9, aRT: -0.4, aLF: 0.2, aLO: 0.45, aLT: 1.0, eL: 1.5, spT: 0.25 * sw, spS: 0.08 * sw, twist: 0.35 * sw,
+      lLF: 0.45 * Math.max(0, sw), lRF: 0.45 * Math.max(0, -sw), fL: 0.4 * Math.max(0, sw), fR: 0.4 * Math.max(0, -sw), y: 0.03 * Math.abs(sw), hdN: -0.2, hdT: 0.15 * sw };
+  } },
+  plateBalance: { f: (a, t) => { const w = S(a * 6), w2 = S(a * 9 + 1); return { aRF: 1.0 + 0.25 * w, eR: 1.3 + 0.2 * w2, aRT: 0.3, aRO: 0.1, aLF: 0.4 + 0.6 * w2, aLO: 1.2 + 0.3 * w, eL: 0.4, lean: 0.06 * w, tilt: 0.12 * w2, hdN: 0.1, kL: 0.3, kR: 0.3, y: -0.04 }; } },
+  catchItem: { f: (a) => { const k = smoothstep(0, 0.2, a); return { aLF: 1.35 * k, aRF: 1.35 * k, aLO: 0.05, aRO: 0.05, eL: 0.5, eR: 0.5, lean: 0.25 * k, spF: 0.25 * k, lLF: 0.6 * k, kL: 0.5 * k, lRF: -0.4 * k, hdN: 0.15 }; } },
+  fireRings: { f: (a, t) => { const k = smoothstep(0, 0.5, a); return { aRF: 1.4 * k, aRO: 0.6 * k, eR: 0.5, aLF: 1.4 * k, aLO: 0.6 * k, eL: 0.5, spF: -0.08, hdN: -0.1, lLF: 0.3, lRF: -0.2 }; } },
+  conjure: { f: (a, t) => ({ aLF: 1.1, aRF: 1.1, aLO: 0.55 + 0.1 * S(t * 3), aRO: 0.55 + 0.1 * S(t * 3 + 1), aLT: -0.7, aRT: -0.7, eL: 0.6, eR: 0.6, hdN: -0.15, spF: -0.04 }) },
+  sweepUp: { f: (a) => { const k = smoothstep(0, 0.5, a); return { aRF: 2.6 * k, aRO: 0.4, eR: 0.15, aLO: 0.3 + 0.4 * k, eL: 0.2, spF: -0.1 * k, hdN: -0.35 * k }; } },
+  sweepTable: { f: (a, t) => ({ lean: 0.08, spF: 0.42, aRF: 1.0, eR: 0.4, aRO: 0.15 + 0.35 * S(a * 7), aLF: 0.9, eL: 0.6, aLO: 0.2, hdN: 0.35, kL: 0.2, kR: 0.2 }) },
+  look: { gest: true, f: (a, t, c) => ({ spF: 0.02, aLO: 0.12, aRO: 0.12, eL: 0.18, eR: 0.18, hdN: 0.25 }) },
+  gasp: { f: (a) => { const k = smoothstep(0, 0.2, a); return { aLF: 1.3 * k, aRF: 1.3 * k, aLT: 1.2, aRT: 1.2, eL: 2.1 * k, eR: 2.1 * k, lean: -0.1 * k, hdN: -0.1 }; } },
   pointMap: { gest: false, f: (a, t) => { const k = smoothstep(0, 0.4, a); return { lean: 0.05, spF: 0.3, aRF: 1.0 + 0.1 * k, aRO: 0.0, eR: 0.15, aLF: 0.85, aLO: 0.22, eL: 0.2, hdN: 0.2, lLO: 0.1, lRO: 0.1 }; } },
 };
 
@@ -383,6 +419,7 @@ export function buildHero(cfg) {
     J.hip[side] = hp; J.kn[side] = kn; J.an[side] = an;
   }
 
+  const extras = buildExtras(cfg, J, neck, hc, r);
   const base = { hair: cfg._hairMat ? cfg._hairMat.color.clone() : null, accent: accent.color.clone(), accentE: accent.emissive.clone(), glove: glove.color.clone(), iris: face.iris.color.clone() };
   const BLUE = new THREE.Color(0x4aa8ff), PURPLE = new THREE.Color(0xb050ff), DARKP = new THREE.Color(0x2a0a3a);
   const hero = {
@@ -401,6 +438,9 @@ export function buildHero(cfg) {
       glove.emissive.copy(PURPLE).multiplyScalar(g.glove * 0.6);
     },
     name: cfg.name, root, J, face, cfg, seed: cfg.seed ?? 1,
+    extras,
+    // costume pieces that move: the monster mask (0 off, 1 on the face, 2 pushed up)
+    applyExtras(x) { if (extras.mask) { const m = x.mask ?? 0; extras.mask.visible = m > 0.5; const up = m > 1.5 ? 1 : 0; extras.maskPivot.rotation.x = -2.4 * up; extras.maskPivot.position.set(0, extras.maskHc + 0.05 * up, -0.03 * up); } if (extras.milk) extras.milk.visible = (x.milk ?? 0) > 0.5; },
     props: {},
     applyPose(p) {
       J.hips.position.y = 0.95 + p.y;
@@ -438,6 +478,130 @@ export function buildHero(cfg) {
     },
   };
   return hero;
+}
+
+// Costume pieces added on top of a hero: cfg.extras = ['cape', 'ruff', ...]
+function buildExtras(cfg, J, neck, hc, r) {
+  const ex = { mask: null, maskY: 0 };
+  const list = cfg.extras ?? [];
+  const has = (k) => list.includes(k);
+  const head = J.head;
+  if (has('cape')) {
+    const out = mat(0x0b0b10, { r: 0.55 }), inn = mat(0xb0101e, { r: 0.45, side: THREE.BackSide });
+    const geo = new THREE.CylinderGeometry(0.2, 0.44, 1.18, 22, 1, true, P * 0.6, P * 0.8);
+    const c = grp(J.spine, 0, 0.47, -0.02);
+    mk(geo, out, c, [0, -0.59, -0.03]); mk(geo, inn, c, [0, -0.59, -0.03]);
+    for (const sd of [1, -1]) mk(new THREE.BoxGeometry(0.15, 0.24, 0.015), mat(0xb0101e, { r: 0.45, side: THREE.DoubleSide }), c, [sd * 0.1, 0.12, -0.12], [-0.35, sd * 0.55, sd * 0.1]);
+    mk(new THREE.SphereGeometry(0.025, 10, 8), mat(0xd8b040, { m: 0.7, r: 0.3 }), c, [0, 0.02, 0.14]);
+  }
+  if (has('ruff')) {
+    const w = mat(0xf6f2ea, { r: 0.8 });
+    mk(new THREE.TorusGeometry(0.105, 0.045, 10, 28), w, neck, [0, 0.0, 0], [P / 2, 0, 0], [1, 1, 0.7]);
+    for (let i = 0; i < 16; i++) { const a = (i / 16) * P * 2; mk(new THREE.SphereGeometry(0.045, 8, 6), w, neck, [Math.sin(a) * 0.13, 0.0, Math.cos(a) * 0.13], [0, 0, 0], [1, 0.55, 1]); }
+  }
+  if (has('medallion')) {
+    const gold = mat(0xe0b040, { m: 0.8, r: 0.3, e: 0x402a00, ei: 0.4 });
+    mk(new THREE.TorusGeometry(0.15, 0.008, 6, 30, P), gold, J.spine, [0, 0.44, 0.07], [P * 0.62, 0, 0]);
+    mk(new THREE.CylinderGeometry(0.04, 0.04, 0.012, 16), gold, J.spine, [0, 0.31, 0.155], [P / 2, 0, 0]);
+  }
+  if (has('shoulderCape')) {
+    const m = mat(cfg.capeColor ?? 0x6a1430, { r: 0.6, side: THREE.DoubleSide });
+    mk(new THREE.CylinderGeometry(0.2, 0.3, 0.55, 16, 1, true, P * 0.55, P * 0.9), m, J.spine, [0, 0.2, -0.02]);
+  }
+  if (has('bowtie')) {
+    const o = mat(cfg.bowColor ?? 0xff7a1a, { r: 0.5 });
+    for (const sd of [1, -1]) mk(new THREE.ConeGeometry(0.03, 0.06, 8), o, neck, [sd * 0.03, 0.0, 0.065], [0, 0, sd * P / 2]);
+    mk(new THREE.SphereGeometry(0.014, 8, 6), o, neck, [0, 0, 0.068]);
+  }
+  if (has('topHat')) {
+    const h = grp(head, 0, hc + r * 0.98, -0.01); h.rotation.set(-0.08, 0, 0.1);
+    const blk = mat(0x111114, { r: 0.4 });
+    mk(new THREE.CylinderGeometry(0.27, 0.27, 0.015, 26), blk, h, [0, 0, 0]);
+    mk(new THREE.CylinderGeometry(0.15, 0.165, 0.32, 24), blk, h, [0, 0.16, 0]);
+    mk(new THREE.CylinderGeometry(0.168, 0.168, 0.05, 24), mat(cfg.bowColor ?? 0xff7a1a, { r: 0.5, e: 0x401800, ei: 0.4 }), h, [0, 0.04, 0]);
+  }
+  if (has('witchHat')) {
+    const h = grp(head, 0, hc + r * 0.95, -0.02); h.rotation.set(-0.12, 0, 0.12);
+    const m = mat(0x15101e, { r: 0.6 });
+    mk(new THREE.CylinderGeometry(0.33, 0.33, 0.012, 24), m, h, [0, 0, 0]);
+    const cone = mk(new THREE.ConeGeometry(0.17, 0.5, 18), m, h, [0, 0.25, 0]); cone.rotation.x = -0.15;
+    mk(new THREE.CylinderGeometry(0.172, 0.172, 0.05, 18), mat(0x8a3ad0, { r: 0.5 }), h, [0, 0.04, 0]);
+  }
+  if (has('catEars')) for (const sd of [1, -1]) {
+    mk(new THREE.ConeGeometry(0.07, 0.13, 4), mat(0x15151a, { r: 0.7 }), head, [sd * 0.12, hc + r * 1.05, 0.0], [0, 0, sd * -0.35]);
+  }
+  if (has('horns')) for (const sd of [1, -1]) {
+    mk(new THREE.ConeGeometry(0.035, 0.12, 10), mat(0xd02030, { r: 0.4, e: 0x400000, ei: 0.5 }), head, [sd * 0.1, hc + r * 1.0, 0.05], [0.2, 0, sd * -0.4]);
+  }
+  if (has('crown')) {
+    const gold = mat(0xf0c040, { m: 0.85, r: 0.25 });
+    const c = grp(head, 0, hc + r * 0.95, 0);
+    mk(new THREE.CylinderGeometry(0.15, 0.15, 0.06, 20, 1, true), mat(0xf0c040, { m: 0.85, r: 0.25, side: THREE.DoubleSide }), c, [0, 0.02, 0]);
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * P * 2; mk(new THREE.ConeGeometry(0.03, 0.08, 6), gold, c, [Math.sin(a) * 0.15, 0.09, Math.cos(a) * 0.15]); }
+  }
+  if (has('cowboyHat')) {
+    const h = grp(head, 0, hc + r * 0.92, 0); const m = mat(0x8a5a2e, { r: 0.8 });
+    mk(new THREE.CylinderGeometry(0.33, 0.33, 0.015, 24), m, h, [0, 0, 0], [0, 0, 0], [1, 1, 0.85]);
+    mk(new THREE.CylinderGeometry(0.15, 0.17, 0.16, 20), m, h, [0, 0.08, 0]);
+  }
+  if (has('headphones')) {
+    const m = mat(0x1a1a22, { r: 0.4 }), g = mat(0x3fd2ff, { e: 0x3fd2ff, ei: 1.0 });
+    mk(new THREE.TorusGeometry(0.21, 0.018, 6, 24, P), m, head, [0, hc + 0.02, 0], [0, P / 2, 0]);
+    for (const sd of [1, -1]) { mk(new THREE.CylinderGeometry(0.07, 0.07, 0.05, 16), m, head, [sd * 0.2, hc, 0], [0, 0, P / 2]); mk(new THREE.CylinderGeometry(0.05, 0.05, 0.052, 16), g, head, [sd * 0.205, hc, 0], [0, 0, P / 2]); }
+  }
+  if (has('pumpkinHead')) {
+    const pm = mat(0xff8a1a, { r: 0.6 }), glow = mat(0xffd040, { e: 0xffa020, ei: 1.6 });
+    const ph = grp(head, 0, hc + 0.01, 0);
+    for (let i = 0; i < 8; i++) { const a = (i / 8) * P * 2; mk(new THREE.SphereGeometry(r * 0.75, 14, 10), pm, ph, [Math.sin(a) * r * 0.45, 0, Math.cos(a) * r * 0.45], [0, a, 0], [0.6, 1.05, 1]); }
+    mk(new THREE.CylinderGeometry(0.025, 0.035, 0.09, 8), mat(0x3a6a2a), ph, [0, r * 1.1, 0]);
+    for (const sd of [1, -1]) mk(new THREE.ConeGeometry(0.04, 0.05, 3), glow, ph, [sd * 0.08, 0.05, r * 1.05], [P / 2, 0, 0]);
+    mk(new THREE.BoxGeometry(0.16, 0.035, 0.02), glow, ph, [0, -0.07, r * 1.04]);
+  }
+  if (has('ghostSheet')) {
+    const w = mat(0xf4f4f8, { r: 0.9, side: THREE.DoubleSide });
+    const prof = [[0.0, 0.42], [0.16, 0.38], [0.24, 0.25], [0.27, 0.0], [0.33, -0.5], [0.42, -1.05], [0.45, -1.1]].map(([x, y]) => new THREE.Vector2(x, y));
+    mk(new THREE.LatheGeometry(prof, 24), w, J.spine, [0, 0.62, 0]);
+    for (const sd of [1, -1]) mk(new THREE.CircleGeometry(0.04, 12), mat(0x111111, { side: THREE.DoubleSide }), J.spine, [sd * 0.08, 0.88, 0.235], [-0.3, 0, 0], [0.8, 1.2, 1]);
+  }
+  if (has('monsterMask')) {
+    const fur = mat(0x4a7a3a, { r: 0.95 }), dark = mat(0x2a4a22, { r: 0.95 });
+    const m = grp(head, 0, 0, 0); ex.mask = m; ex.maskY = 0;
+    const pivot = grp(m, 0, hc, 0); ex.maskPivot = pivot; ex.maskHc = hc;
+    mk(new THREE.SphereGeometry(r * 1.13, 24, 16, -P * 0.62, P * 1.24, 0, P), fur, pivot, [0, 0, 0.0], [0, 0, 0], [1, 1.04, 1.05]);
+    for (let i = 0; i < 12; i++) { const a = -1 + (i / 11) * 2; mk(new THREE.ConeGeometry(0.03, 0.09, 6), dark, pivot, [Math.sin(a) * r * 1.05, r * 0.95 + 0.04 * Math.cos(i), Math.cos(a) * r * 0.55], [0.3, 0, -a * 0.5]); }
+    for (const sd of [1, -1]) {
+      mk(new THREE.ConeGeometry(0.035, 0.16, 8), mat(0xe8e0c8, { r: 0.5 }), pivot, [sd * 0.13, r * 1.0, 0.06], [0.3, 0, sd * -0.5]);
+      mk(new THREE.SphereGeometry(0.045, 12, 10), mat(0xffe040, { e: 0xffc000, ei: 0.8 }), pivot, [sd * 0.08, 0.05, r * 1.08]);
+      mk(new THREE.SphereGeometry(0.02, 8, 6), mat(0x111111), pivot, [sd * 0.08, 0.05, r * 1.08 + 0.035]);
+    }
+    for (let i = 0; i < 6; i++) mk(new THREE.ConeGeometry(0.018, 0.05, 5), mat(0xffffff, { r: 0.4 }), pivot, [-0.1 + i * 0.04, -0.09, r * 1.06], [P, 0, 0]);
+    mk(new THREE.TorusGeometry(0.11, 0.02, 6, 16, P), mat(0x1a0a0a), pivot, [0, -0.07, r * 1.02], [0, 0, P]);
+    m.visible = false;
+  }
+  if (has('dino')) {
+    const g = mat(0x52c04a, { r: 0.55 }), belly = mat(0xd8f0a0, { r: 0.6 }), spike = mat(0x2f8a2f, { r: 0.5 });
+    mk(new THREE.SphereGeometry(0.3, 24, 18), g, J.spine, [0, 0.2, -0.02], [0, 0, 0], [1.15, 1.32, 1.05]);
+    mk(new THREE.SphereGeometry(0.22, 18, 14), belly, J.spine, [0, 0.14, 0.12], [0, 0, 0], [1.05, 1.3, 0.75]);
+    const tail = grp(J.hips, 0, -0.05, -0.2);
+    for (let i = 0; i < 5; i++) mk(new THREE.SphereGeometry(0.16 - i * 0.025, 14, 10), g, tail, [0, -0.06 * i, -0.13 * i], [0, 0, 0], [1, 0.85, 1.25]);
+    for (let i = 0; i < 6; i++) mk(new THREE.ConeGeometry(0.05, 0.1, 6), spike, J.spine, [0, 0.52 - i * 0.12, -0.32 + 0.02 * Math.abs(i - 2)], [-0.5 - i * 0.12, 0, 0]);
+    const hood = grp(head, 0, hc, 0);
+    mk(new THREE.SphereGeometry(r * 1.2, 22, 16), g, hood, [0, r * 0.62, -0.02], [0, 0, 0], [1.0, 0.72, 1.1]);
+    mk(new THREE.SphereGeometry(r * 0.85, 18, 12), g, hood, [0, r * 0.72, r * 0.9], [0, 0, 0], [0.85, 0.55, 1.0]);
+    for (let i = 0; i < 7; i++) { const a = -0.8 + (i / 6) * 1.6; mk(new THREE.ConeGeometry(0.016, 0.045, 5), mat(0xffffff, { r: 0.4 }), hood, [Math.sin(a) * r * 0.7, r * 0.42, r * 0.9 + Math.cos(a) * r * 0.55], [P, 0, 0]); }
+    for (const sd of [1, -1]) {
+      mk(new THREE.SphereGeometry(0.05, 12, 10), mat(0xffffff, { r: 0.3 }), hood, [sd * 0.09, r * 1.22, r * 0.45]);
+      mk(new THREE.SphereGeometry(0.025, 8, 6), mat(0x111111), hood, [sd * 0.09, r * 1.24, r * 0.45 + 0.035]);
+      mk(new THREE.SphereGeometry(0.012, 6, 5), mat(0x1a5a1a), hood, [sd * 0.04, r * 0.92, r * 1.62]);
+    }
+    for (let i = 0; i < 3; i++) mk(new THREE.ConeGeometry(0.05, 0.1, 6), spike, hood, [0, r * 1.38 - i * 0.04, -0.02 - i * 0.12], [-0.4 - i * 0.4, 0, 0]);
+  }
+  if (has('milkStain')) {
+    ex.milk = grp(J.spine, 0.03, 0.27, 0.142);
+    for (const [x, y, r] of [[0, 0, 0.07], [0.05, -0.06, 0.04], [-0.04, -0.08, 0.035], [0.02, -0.12, 0.025], [-0.06, 0.03, 0.03]]) mk(new THREE.CircleGeometry(r, 14), mat(0xf8f8ff, { r: 0.25 }), ex.milk, [x, y, 0.002], [0, 0, 0], null, false);
+    ex.milk.visible = false;
+  }
+  return ex;
 }
 
 // Props held in hands.
@@ -716,6 +880,19 @@ export function buildSoulStealer(symbolTex) {
 
 // Red Team uniforms (Episode 2 onward): same suit design, red and black with glowing red piping.
 const RED_SUIT = { suit: 0x8e1622, suitDark: 0x2a0a10, accent: 0xff3b3b, accentGlow: 0x8a0010, pad: 0xc0202e, boot: 0xa01824, glove: 0x2a0a10, belt: 0x1a0608, emblemGlow: '#ff8a8a', emblemCore: '#fff0f0' };
+// Episode 4 outfits (picked per scene with the `${name}.outfit` track)
+export const OUTFITS = {
+  pj: {
+    aaron: { casual: true, emblem: false, shirt: 0x9aa3ae, pants: 0x3a414e, boot: 0x2a3140, sleeves: 'short', bareHands: true, belt: 0x3a414e },
+    flare: { casual: true, emblem: false, shirt: 0x3d5fb8, pants: 0x3d5fb8, boot: 0x6a3a2a, bareHands: true, belt: 0x34509a },
+  },
+  party: {
+    aaron: { casual: true, emblem: false, shirt: 0x15151c, pants: 0x15151c, boot: 0x0d0d10, belt: 0x0d0d10, glove: 0x15151c, extras: ['cape'] },
+    flare: { casual: true, emblem: false, shirt: 0x6a1430, pants: 0x2a1a2a, boot: 0x2a1a14, belt: 0xd8b040, coat: 0x6a1430, coatDark: 0xd8b040, coatTrim: 0xe0c050, glove: 0xf6f2ea, extras: ['ruff', 'medallion'] },
+    greg: { casual: true, coat: null, armband: null, coatTrim: null, shirt: 0x52c04a, pants: 0x52c04a, boot: 0x3a9a34, belt: 0x52c04a, extras: ['dino'] },
+  },
+};
+
 export const COSTUMES = {
   red: {
     aaron: RED_SUIT, flare: RED_SUIT, eric: RED_SUIT,
@@ -756,6 +933,50 @@ export function buildProp(kind) {
     mk(new THREE.CylinderGeometry(0.04, 0.04, 0.03, 12), mat(0x333333), g, [0, 0, 0]);
     mk(new THREE.CylinderGeometry(0.025, 0.025, 0.02, 12), mat(0xff3030, { e: 0xff2020, ei: 0.8 }), g, [0, 0.02, 0]);
     g.position.set(0, -0.08, 0.04);
+  } else if (kind === 'phone') {
+    mk(new RoundedBoxGeometry(0.075, 0.015, 0.15, 2, 0.008), mat(0x1a1a22, { r: 0.3, m: 0.4 }), g, [0, 0, 0]);
+    mk(new THREE.PlaneGeometry(0.065, 0.13), mat(0xff9a3a, { e: 0xff8a2a, ei: 0.9 }), g, [0, 0.009, 0], [-P / 2, 0, 0], null, false);
+    g.position.set(0, -0.08, 0.06); g.rotation.set(0.9, 0, 0);
+  } else if (kind === 'bowl') {
+    mk(new THREE.SphereGeometry(0.15, 18, 10, 0, P * 2, P / 2, P / 2), mat(0xd02a2a, { r: 0.5, side: THREE.DoubleSide }), g, [0, 0.0, 0]);
+    for (let i = 0; i < 14; i++) mk(new THREE.IcosahedronGeometry(0.03, 0), mat(0xfff4d0, { r: 0.9 }), g, [Math.sin(i * 2.4) * 0.09 * (i % 3) / 2, 0.0 + 0.02 * (i % 2), Math.cos(i * 2.4) * 0.09 * (i % 3) / 2]);
+    g.position.set(0, -0.1, 0.12); g.rotation.set(0, 0, 0);
+  } else if (kind === 'towels') {
+    mk(new THREE.CylinderGeometry(0.06, 0.06, 0.2, 16), mat(0xffffff, { r: 0.9 }), g, [0, 0, 0], [0, 0, P / 2]);
+    g.position.set(0, -0.08, 0.05);
+  } else if (kind === 'capeFold') {
+    mk(new THREE.BoxGeometry(0.3, 0.04, 0.4), mat(0x0b0b10, { r: 0.6 }), g, [0, 0, 0.1], [0, 0, 0]);
+    mk(new THREE.BoxGeometry(0.3, 0.005, 0.4), mat(0xb0101e, { r: 0.5 }), g, [0, 0.023, 0.1]);
+    g.position.set(0, -0.08, 0.08); g.rotation.set(1.2, 0, 0);
+  } else if (kind === 'dinoPack') {
+    mk(new THREE.SphereGeometry(0.26, 16, 12), mat(0x52c04a, { r: 0.6 }), g, [0, 0, 0.12], [0, 0, 0], [1.1, 0.45, 1.25]);
+    for (const sd of [1, -1]) mk(new THREE.SphereGeometry(0.035, 8, 6), mat(0xffffff), g, [sd * 0.08, 0.1, 0.36]);
+    mk(new THREE.ConeGeometry(0.06, 0.25, 8), mat(0x52c04a, { r: 0.6 }), g, [0, -0.02, -0.22], [-P / 2, 0, 0]);
+    g.position.set(0, -0.14, 0.1); g.rotation.set(1.4, 0, 0);
+  } else if (kind === 'maskHeld') {
+    mk(new THREE.SphereGeometry(0.2, 16, 12, -P * 0.6, P * 1.2, 0, P), mat(0x4a7a3a, { r: 0.95 }), g, [0, 0, 0]);
+    for (const sd of [1, -1]) mk(new THREE.SphereGeometry(0.04, 10, 8), mat(0xffe040, { e: 0xffc000, ei: 0.8 }), g, [sd * 0.07, 0.04, 0.19]);
+    g.position.set(0, -0.12, 0.12); g.rotation.set(-0.4, 0, 0);
+  } else if (kind === 'candy') {
+    mk(new THREE.SphereGeometry(0.035, 10, 8), mat(0xff5aa0, { r: 0.3 }), g, [0, 0, 0]);
+    for (const sd of [1, -1]) mk(new THREE.ConeGeometry(0.025, 0.04, 6), mat(0xff5aa0, { r: 0.3 }), g, [sd * 0.045, 0, 0], [0, 0, sd * P / 2]);
+    g.position.set(0, -0.09, 0.05);
+  } else if (kind === 'plate') {
+    mk(new THREE.CylinderGeometry(0.17, 0.14, 0.02, 22), mat(0xffffff, { r: 0.4 }), g, [0, 0, 0]);
+    const c = [0xff8a1a, 0x8a3ad0, 0xffd040, 0x5ac05a, 0xd02a2a];
+    for (let i = 0; i < 9; i++) mk(new THREE.IcosahedronGeometry(0.035, 0), mat(c[i % 5], { r: 0.6 }), g, [Math.sin(i * 2.3) * 0.09, 0.03 + 0.02 * (i % 3), Math.cos(i * 2.3) * 0.09]);
+    g.position.set(0, -0.08, 0.14); g.rotation.set(0, 0, 0);
+  } else if (kind === 'pizza') {
+    mk(new THREE.CircleGeometry(0.16, 3, -P / 6 + P / 2, P / 3), mat(0xe0602a, { side: THREE.DoubleSide }), g, [0, 0, 0]);
+    mk(new THREE.BoxGeometry(0.17, 0.02, 0.025), mat(0xd8a050), g, [0, 0.155, 0]);
+    g.position.set(0, -0.13, 0.08); g.rotation.set(0.4, 0, 0);
+  } else if (kind === 'mic') {
+    mk(new THREE.CylinderGeometry(0.018, 0.012, 0.16, 10), mat(0x1a1a22, { r: 0.3, m: 0.6 }), g, [0, 0, 0]);
+    mk(new THREE.SphereGeometry(0.03, 12, 10), mat(0x9a9aa8, { r: 0.3, m: 0.8 }), g, [0, 0.09, 0]);
+    g.position.set(0, -0.06, 0.04); g.rotation.set(-0.3, 0, 0);
+  } else if (kind === 'clock') {
+    mk(new RoundedBoxGeometry(0.16, 0.08, 0.09, 2, 0.02), mat(0x1a1a22, { r: 0.4 }), g, [0, 0, 0]);
+    g.position.set(0, -0.08, 0.06);
   }
   return g;
 }
@@ -846,5 +1067,6 @@ export const CAST = {
   eric: { name: 'eric', seed: 3, hair: 'wavy', hairColor: 0x4e3020, browColor: 0x3a2216, skin: 0xe8b28c, skinDark: 0xd99e78, eyeColor: 0x4a2c16 },
   leon: { name: 'leon', seed: 5, scale: 0.93, hair: 'spiky', hairColor: 0x2a211c, streakColor: 0xb8b8bc, browColor: 0x1e1612, skin: 0xd9a07a, skinDark: 0xc98e68, eyeColor: 0x3a2412, suit: 0x18215e, suitDark: 0x0e133a, accent: 0xf2b632, accentGlow: 0x7a4a00, pad: 0x1f2f8a, boot: 0x1a2a7a },
   greg: { name: 'greg', seed: 6, face: 'greg', skin: 0xf2f2f4, skinDark: 0xe6e6ea, eyeColor: 0x000000, casual: true, emblem: false, shirt: 0x141418, pants: 0x101014, boot: 0x0c0c10, glove: 0xf2f2f4, coat: 0x18181c, coatDark: 0x0a0a0c, belt: 0x0a0a0a },
+  newark: { name: 'newark', seed: 11, scale: 0.9, hair: 'wavy', hairColor: 0x15100c, browColor: 0x15100c, skin: 0xa8734f, skinDark: 0x966442, eyeColor: 0x2a1a10, casual: true, emblem: false, shirt: 0xff7a1a, pants: 0x141418, boot: 0x0e0e12, belt: 0x0e0e12, coat: 0x16161a, coatDark: 0xff7a1a, coatTrim: 0xff8a2a, bareHands: true, extras: ['topHat', 'bowtie'] },
   barista: { name: 'barista', seed: 4, hair: 'wavy', hairColor: 0x2b1d14, skin: 0xc98d68, skinDark: 0xb87d5a, eyeColor: 0x2d1a10, casual: true, emblem: false, shirt: 0xf4f1ea, pants: 0x4a3a2c, apron: 0x2f7d4f, boot: 0x2a2420, bareHands: true, sleeves: 'short' },
 };

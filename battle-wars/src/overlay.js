@@ -13,6 +13,12 @@ export const SPEAKERS = {
   soul: { name: 'SOUL STEALER', color: '#ff4a5a' },
   computer: { name: 'COMPUTER', color: '#8fe6ff' },
   shadow: { name: 'UNKNOWN VOICE', color: '#ff9a40' },
+  newark: { name: 'NEWARK', color: '#c79bff' },
+  dj: { name: 'DJ', color: '#7fd4ff' },
+  boss: { name: 'GAME BOSS', color: '#ff5a5a' },
+  skeleton: { name: 'SKELETON', color: '#f2eee0' },
+  crowd: { name: 'CROWD', color: '#ffb35a' },
+  everyone: { name: 'EVERYONE', color: '#ffe066' },
 };
 
 function wrap(ctx, text, maxW) {
@@ -133,6 +139,23 @@ function drawCard(ctx, W, H, c, t) {
     }
     ctx.globalCompositeOperation = 'source-over';
     ctx.shadowBlur = 0;
+  } else if (c.kind === 'phone') {
+    // the party invitation on Flare's phone
+    const k = smoothstep(0, 0.35, a) - smoothstep(life - 0.35, life, a);
+    const pw = 300 * s, ph = 540 * s, px = W * 0.74 - pw / 2, py = H * 0.5 - ph / 2 + (1 - k) * 60 * s;
+    ctx.fillStyle = '#111118'; roundRect(ctx, px, py, pw, ph, 34 * s); ctx.fill();
+    const gr = ctx.createLinearGradient(0, py, 0, py + ph); gr.addColorStop(0, '#2a0a3a'); gr.addColorStop(1, '#5a1a08');
+    ctx.fillStyle = gr; roundRect(ctx, px + 12 * s, py + 14 * s, pw - 24 * s, ph - 28 * s, 24 * s); ctx.fill();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    c.lines.forEach((ln, i) => {
+      const la = smoothstep(c.t0 + 0.3 + (ln.at ?? i * 0.4), c.t0 + 0.6 + (ln.at ?? i * 0.4), t);
+      ctx.globalAlpha = alpha * la;
+      ctx.font = ln.big ? `${Math.round(40 * s)}px ${FONT}` : `${ln.bold ? 800 : 600} ${Math.round(21 * s)}px ${UI_FONT}`;
+      ctx.fillStyle = ln.color ?? '#fff3e0';
+      ctx.fillText(ln.text, px + pw / 2, py + (ln.y ?? (0.18 + i * 0.1)) * ph);
+    });
+    ctx.globalAlpha = alpha;
+    ctx.font = `${Math.round(56 * s)}px ${UI_FONT}`; ctx.fillText('🎃', px + pw / 2, py + 0.1 * ph);
   } else if (c.kind === 'credits') {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
