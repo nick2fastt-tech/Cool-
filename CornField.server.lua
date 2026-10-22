@@ -1,43 +1,47 @@
 --[[
 	=====================================================================
-	  CORN FIELD  -  a co-op horror game for Roblox  (ONE SCRIPT)
+	  CORN FIELD  v1.01  -  a co-op horror game for Roblox  (ONE SCRIPT)
 	=====================================================================
 
 	HOW TO INSTALL
 	  1. Open Roblox Studio.
 	  2. In the Explorer, right-click ServerScriptService > Insert Object > Script.
 	  3. Delete what is inside the new Script and paste this WHOLE file in.
-	  4. Press Play. The lobby, elevators, corn maze and monster are all built
-	     by this script, so you don't need anything else.
+	  4. Press Play. The lobby, elevators, both maps, the monster and the
+	     farmer are all built by this script. You don't need anything else.
 
-	BADGE + GAME PASS (do this on create.roblox.com > your game)
-	  * Badge: make a badge called "Escaped the Corn Field" and paste its ID
-	    into CONFIG.BadgeId below. Players get it when they escape.
-	  * Game Pass: make a pass called "Play as the Corn Monster", put it
-	    on sale for 100 Robux, and paste its ID into CONFIG.MonsterGamepassId.
+	BADGES + GAME PASS (do this on create.roblox.com > your game)
+	  * Badge 1: "Escaped the Corn Field"  -> paste its ID into CONFIG.BadgeId
+	  * Badge 2: "Survived the Nightmare"  -> paste its ID into CONFIG.NightmareBadgeId
+	  * Game Pass: "Play as the Corn Monster", on sale for 100 Robux.
+	    Paste its ID into CONFIG.MonsterGamepassId.
 	    (Roblox only lets you set the price on the website, not in a script.)
-	  * While an ID is still 0: in Studio everyone can test the monster,
-	    and the badge is skipped.
-	  * Studio > Game Settings > Security: turn on "Allow HTTP Requests"
-	    is NOT needed. Nothing extra is needed.
+	  * Beating Normal mode ALSO unlocks playing as the Corn Monster (saved).
+	    To save it between servers: Game Settings > Security >
+	    "Enable Studio Access to API Services" (for testing in Studio).
 
 	CONTROLS
-	  Shift (or the "Sprint" button on phones)  sprint. Tap = toggle, hold = hold.
+	  Shift (or the "Sprint" button on phones)  sprint (unlimited). Tap = toggle, hold = hold.
 	  1 / click the Flashlight tool                    flashlight on / off
-	  Q / E / R                                        the 3 gate buttons
-	  E                                                elevator mode buttons, prompts
+	  Q / E / R                                        the 3 gate buttons (Normal)
+	  E                                                everything else
 
-	HOW TO WIN
-	  Find the 3 glowing symbols in the corn. Each one has 1, 2 or 3 dots
-	  under it. Press the symbols on the gate panel in dot order (1 > 2 > 3).
-	  The gate opens. Run out of the field to escape and get the badge.
+	NORMAL MODE (the Corn Field)
+	  Find the 3 glowing symbols. Each has 1, 2 or 3 dots. Press them on the
+	  gate panel in dot order. The gate opens. Run out of the field.
+
+	NIGHTMARE MODE (the Farm)
+	  You wake up locked in a barn. Find the loose boards to get out.
+	  Find the rusty yellow key on the farmer's farm (he stabs trespassers
+	  with his pitchfork), call the police from the shed phone, unlock the
+	  gate by the road and get in the police car before it drives off.
 
 	THE CORN MONSTER
-	  He hides inside the corn walls. When he comes out, he bursts out of the
-	  wall about 10 studs BEHIND you. If there is no wall behind you, he comes
-	  out of the wall IN FRONT of you. He growls when he spots you and you
-	  can hear his heavy footsteps. Shine your flashlight on him and he slows
-	  down and crawls back into the corn.
+	  He doesn't come out often. When he does, he rips a hole in the corn
+	  wall about 10 studs BEHIND you (or IN FRONT if there's no wall behind).
+	  In Nightmare he claws his way out of the ground instead. He growls when
+	  he spots you and you can hear his heavy footsteps. Shine your
+	  flashlight on him to make him go away.
 =====================================================================]]
 
 local Players = game:GetService("Players")
@@ -52,33 +56,38 @@ local Lighting = game:GetService("Lighting")
 -- SETTINGS (change these)
 -- ====================================================================
 local CONFIG = {
-	BadgeId = 0, -- badge for escaping
+	BadgeId = 0, -- badge for escaping the Corn Field (Normal)
+	NightmareBadgeId = 0, -- badge for surviving Nightmare
 	MonsterGamepassId = 0, -- game pass to play as the Corn Monster
 	GamepassPrice = 100, -- only shown on the lobby sign
 
 	ElevatorCount = 4,
 	MaxPlayersPerElevator = 4,
 	ElevatorCountdown = 15, -- seconds after the first player gets in
-	NightmareUnlocked = false, -- Nightmare mode is still in progress
+	NightmareUnlocked = true,
 
 	MatchTime = 15 * 60, -- seconds before the night is over
+	FirstPerson = true, -- survivors are locked in first person
 
 	LobbyWalkSpeed = 16,
 	LobbySprintSpeed = 24,
-	WalkSpeed = 12, -- in the corn
-	SprintSpeed = 21,
-	StaminaMax = 100,
-	StaminaDrain = 15, -- per second while sprinting
-	StaminaRegen = 11, -- per second while not sprinting
-	FlashlightBattery = 300, -- seconds of light
+	WalkSpeed = 12, -- in the maps
+	SprintSpeed = 20, -- unlimited sprint
+	FlashlightBattery = 420, -- seconds of light
 
 	MonsterScale = 0.95,
-	EmergeDistance = 10, -- how far behind (or in front of) you he bursts out of the corn
+	EmergeDistance = 10, -- how far behind (or in front of) you he bursts out
 	MonsterSightRange = 95,
 	MonsterHearRange = 16, -- he hears you this close (more if you sprint)
 	MonsterCatchRange = 4.5,
 	MonsterPlayerSpeed = 19, -- walk speed when a PLAYER is the monster
 	MonsterPlayerCatchRange = 6,
+
+	FarmerWalkSpeed = 6,
+	FarmerChaseSpeed = 15.5, -- you can outrun him if you sprint
+	FarmerSightRange = 45,
+	FarmerCatchRange = 4.5,
+	PoliceDelay = 40, -- seconds after the call until the police arrive
 
 	CornDetail = 2, -- 1 = low (faster), 2 = normal, 3 = high
 
@@ -89,14 +98,16 @@ local CONFIG = {
 		Growl = "rbxasset://sounds/uuhhh.mp3",
 		Rustle = "rbxasset://sounds/action_footsteps_plastic.mp3",
 		Ding = "rbxasset://sounds/electronicpingshort.wav",
+		Stab = "rbxasset://sounds/swordlunge.wav",
+		Whoosh = "rbxasset://sounds/swordslash.wav",
 	},
 	GrowlPitch = 0.38, -- low pitch turns the default sound into a growl
 }
 
+-- the monster doesn't come out a lot (rearm = seconds between appearances)
 local MODES = {
-	Normal = { firstEmerge = 30, rearmMin = 18, rearmMax = 34, hunt = 15, litSlow = 0.45, fleeLit = 2.5, giveUp = 7 },
-	-- Nightmare is not finished yet (CONFIG.NightmareUnlocked = false)
-	Nightmare = { firstEmerge = 12, rearmMin = 8, rearmMax = 16, hunt = 19, litSlow = 0.7, fleeLit = 4.5, giveUp = 12 },
+	Normal = { firstEmerge = 50, rearmMin = 45, rearmMax = 80, hunt = 15, litSlow = 0.45, fleeLit = 2.5, giveUp = 7, twitch = 1 },
+	Nightmare = { firstEmerge = 60, rearmMin = 40, rearmMax = 70, hunt = 16.5, litSlow = 0.5, fleeLit = 3, giveUp = 8, twitch = 1.5 },
 }
 
 -- ====================================================================
@@ -300,9 +311,14 @@ local function buildHUD(plr)
 		}, back)
 		return fill
 	end
-	local stam = bar(0, Color3.fromRGB(230, 190, 70), "STAMINA")
 	local batt = bar(20, Color3.fromRGB(170, 210, 255), "FLASHLIGHT")
-	return { gui = gui, top = top, msg = msg, bars = bars, stam = stam, batt = batt, msgToken = 0 }
+	local old2 = pg:FindFirstChild("CornFX")
+	if old2 then
+		old2:Destroy()
+	end
+	local fx = make("ScreenGui", { Name = "CornFX", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 10 }, pg)
+	local flashFrame = make("Frame", { Name = "Flash", Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 1, BorderSizePixel = 0 }, fx)
+	return { gui = gui, top = top, msg = msg, bars = bars, batt = batt, flash = flashFrame, msgToken = 0 }
 end
 
 local function showMessage(plr, text, duration, color)
@@ -433,6 +449,35 @@ end
 -- ====================================================================
 -- GAME PASS + BADGE
 -- ====================================================================
+local DataStoreService = game:GetService("DataStoreService")
+local progressStore
+pcall(function()
+	progressStore = DataStoreService:GetDataStore("CornField_Progress_1")
+end)
+
+local function loadProgress(plr)
+	local st = PS[plr]
+	if not st then
+		return
+	end
+	if progressStore then
+		local ok, data = pcall(function()
+			return progressStore:GetAsync(tostring(plr.UserId))
+		end)
+		if ok and type(data) == "table" and data.beatNormal then
+			st.beatNormal = true
+		end
+	end
+	if not st.beatNormal and CONFIG.BadgeId ~= 0 then
+		local ok, has = pcall(function()
+			return BadgeService:UserHasBadgeAsync(plr.UserId, CONFIG.BadgeId)
+		end)
+		if ok and has then
+			st.beatNormal = true
+		end
+	end
+end
+
 local function checkPass(plr)
 	local st = PS[plr]
 	if not st then
@@ -457,17 +502,17 @@ MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(plr, passId, 
 	end
 end)
 
-local function awardBadge(plr)
-	if CONFIG.BadgeId == 0 then
+local function awardBadge(plr, badgeId)
+	if not badgeId or badgeId == 0 then
 		return
 	end
 	task.spawn(function()
 		local ok, has = pcall(function()
-			return BadgeService:UserHasBadgeAsync(plr.UserId, CONFIG.BadgeId)
+			return BadgeService:UserHasBadgeAsync(plr.UserId, badgeId)
 		end)
 		if ok and not has then
 			pcall(function()
-				BadgeService:AwardBadge(plr.UserId, CONFIG.BadgeId)
+				BadgeService:AwardBadge(plr.UserId, badgeId)
 			end)
 		end
 	end)
@@ -477,20 +522,57 @@ end
 -- FLASHLIGHT TOOL
 -- ====================================================================
 local function makeFlashlight(plr)
-	local tool = make("Tool", { Name = "Flashlight", RequiresHandle = true, CanBeDropped = false, ToolTip = "Click to turn on/off", Grip = C(0, 0, 0.4) })
-	local handle = part({ Name = "Handle", Size = Vector3.new(0.42, 0.42, 1.5), Color = Color3.fromRGB(34, 34, 36), Material = Enum.Material.Metal, Anchored = false, Massless = true, CFrame = C() }, tool)
-	local head = part({ Name = "Head", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.5, 0.62, 0.62), Color = Color3.fromRGB(24, 24, 26), Material = Enum.Material.Metal, Anchored = false, Massless = true, CFrame = C(0, 0, -0.95) * A(0, math.rad(90), 0) }, tool)
-	local lens = part({ Name = "Lens", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.05, 0.52, 0.52), Color = Color3.fromRGB(70, 70, 70), Material = Enum.Material.Glass, Anchored = false, Massless = true, CFrame = C(0, 0, -1.21) * A(0, math.rad(90), 0) }, tool)
-	local grip = part({ Name = "GripRing", Size = Vector3.new(0.46, 0.46, 0.5), Color = Color3.fromRGB(60, 40, 30), Material = Enum.Material.Fabric, Anchored = false, Massless = true, CFrame = C(0, 0, 0.35) }, tool)
-	local beam = part({ Name = "Beam", Size = Vector3.new(0.1, 0.1, 0.1), Transparency = 1, Anchored = false, Massless = true, CFrame = C(0, 0, -1.4) }, tool)
-	for _, p in ipairs({ head, lens, grip, beam }) do
-		p.CastShadow = false
+	local tool = make("Tool", { Name = "Flashlight", RequiresHandle = true, CanBeDropped = false, ToolTip = "Click to turn on/off", Grip = C(0, 0, 0.45) })
+	-- the handle is invisible; the real flashlight is built around it (front = -Z)
+	local handle = part({ Name = "Handle", Size = Vector3.new(0.4, 0.4, 1.6), Transparency = 1, Anchored = false, Massless = true, CFrame = C() }, tool)
+	local metal = Color3.fromRGB(38, 40, 44)
+	local dark = Color3.fromRGB(22, 22, 24)
+	local silver = Color3.fromRGB(170, 172, 178)
+	local parts = {}
+	local function fp(name, shape, size, cf, color, mat)
+		local p = part({ Name = name, Shape = shape, Size = size, CFrame = cf, Color = color, Material = mat or Enum.Material.Metal, Anchored = false, Massless = true, CastShadow = false }, tool)
+		parts[#parts + 1] = p
+		return p
+	end
+	local Cyl = Enum.PartType.Cylinder
+	local along = A(0, math.rad(90), 0) -- turns a cylinder to point along Z
+	fp("TailCap", Cyl, Vector3.new(0.28, 0.46, 0.46), C(0, 0, 0.98) * along, Color3.fromRGB(16, 16, 16), Enum.Material.SmoothPlastic)
+	fp("LanyardRing", Cyl, Vector3.new(0.05, 0.3, 0.3), C(0, 0, 1.16) * A(0, 0, 0), silver)
+	fp("Body", Cyl, Vector3.new(1.55, 0.42, 0.42), C(0, 0, 0.12) * along, metal)
+	for i = 0, 5 do
+		fp("Knurl", Cyl, Vector3.new(0.06, 0.45, 0.45), C(0, 0, 0.2 + i * 0.11) * along, dark, Enum.Material.DiamondPlate)
+	end
+	fp("Stripe", Cyl, Vector3.new(0.08, 0.44, 0.44), C(0, 0, -0.1) * along, Color3.fromRGB(210, 170, 40), Enum.Material.SmoothPlastic)
+	fp("SwitchBase", nil, Vector3.new(0.18, 0.1, 0.42), C(0, 0.22, -0.32), dark)
+	fp("Switch", nil, Vector3.new(0.12, 0.08, 0.2), C(0, 0.29, -0.32), Color3.fromRGB(150, 30, 30), Enum.Material.SmoothPlastic)
+	fp("Clip", nil, Vector3.new(0.04, 0.12, 0.95), C(0.23, 0, 0.3), silver)
+	fp("Neck", Cyl, Vector3.new(0.28, 0.52, 0.52), C(0, 0, -0.75) * along, metal)
+	fp("Head", Cyl, Vector3.new(0.45, 0.66, 0.66), C(0, 0, -1.08) * along, dark)
+	fp("Bezel", Cyl, Vector3.new(0.08, 0.7, 0.7), C(0, 0, -1.33) * along, silver)
+	local reflector = fp("Reflector", Cyl, Vector3.new(0.03, 0.56, 0.56), C(0, 0, -1.34) * along, silver, Enum.Material.Metal)
+	local bulb = fp("Bulb", Enum.PartType.Ball, Vector3.new(0.14, 0.14, 0.14), C(0, 0, -1.33), Color3.fromRGB(90, 90, 90), Enum.Material.Glass)
+	local lens = fp("Lens", Cyl, Vector3.new(0.03, 0.54, 0.54), C(0, 0, -1.37) * along, Color3.fromRGB(200, 210, 220), Enum.Material.Glass)
+	lens.Transparency = 0.5
+	local beamPart = fp("Beam", nil, Vector3.new(0.1, 0.1, 0.1), C(0, 0, -1.45), Color3.new(1, 1, 1))
+	beamPart.Transparency = 1
+	for _, p in ipairs(parts) do
 		make("WeldConstraint", { Part0 = handle, Part1 = p }, p)
 	end
-	handle.CastShadow = false
-	local spot = make("SpotLight", { Face = Enum.NormalId.Front, Range = 60, Angle = 48, Brightness = 3.6, Color = Color3.fromRGB(255, 240, 210), Shadows = true, Enabled = false }, beam)
-	local glow = make("PointLight", { Range = 9, Brightness = 0.6, Color = Color3.fromRGB(255, 235, 200), Enabled = false }, lens)
+	local spot = make("SpotLight", { Face = Enum.NormalId.Front, Range = 60, Angle = 50, Brightness = 3.4, Color = Color3.fromRGB(255, 240, 210), Shadows = true, Enabled = false }, beamPart)
+	local core = make("SpotLight", { Face = Enum.NormalId.Front, Range = 70, Angle = 18, Brightness = 2, Color = Color3.fromRGB(255, 248, 230), Shadows = false, Enabled = false }, beamPart)
+	local glow = make("PointLight", { Range = 8, Brightness = 0.6, Color = Color3.fromRGB(255, 235, 200), Enabled = false }, beamPart)
+	-- a faint visible light cone in the air
+	local a0 = make("Attachment", { Position = Vector3.new(0, 0, 0) }, beamPart)
+	local a1 = make("Attachment", { Position = Vector3.new(0, 0, -24) }, beamPart)
+	local cone = make("Beam", {
+		Attachment0 = a0, Attachment1 = a1, Width0 = 0.5, Width1 = 11, FaceCamera = true, LightEmission = 1, LightInfluence = 0,
+		Color = ColorSequence.new(Color3.fromRGB(255, 240, 210)), Transparency = NumberSequence.new(0.9, 1), Segments = 1, Enabled = false,
+	}, beamPart)
 
+	local st0 = PS[plr]
+	if st0 then
+		st0.flashFx = { spot = spot, core = core, spotB = spot.Brightness, coreB = core.Brightness }
+	end
 	local function setOn(on)
 		local st = PS[plr]
 		if on and st and st.battery <= 0 then
@@ -500,10 +582,12 @@ local function makeFlashlight(plr)
 		if st then
 			st.flashOn = on
 		end
-		spot.Enabled = on
-		glow.Enabled = on
-		lens.Material = on and Enum.Material.Neon or Enum.Material.Glass
-		lens.Color = on and Color3.fromRGB(255, 245, 215) or Color3.fromRGB(70, 70, 70)
+		spot.Enabled, core.Enabled, glow.Enabled, cone.Enabled = on, on, on, on
+		reflector.Material = on and Enum.Material.Neon or Enum.Material.Metal
+		reflector.Color = on and Color3.fromRGB(255, 245, 220) or silver
+		bulb.Material = on and Enum.Material.Neon or Enum.Material.Glass
+		bulb.Color = on and Color3.fromRGB(255, 250, 230) or Color3.fromRGB(90, 90, 90)
+		playSound(CONFIG.Sounds.Ding, handle, 0.25, 2.6, 20)
 	end
 	tool.Equipped:Connect(function()
 		setOn(true)
@@ -902,6 +986,7 @@ function Monster.new(parent, SC)
 	m.model = make("Model", { Name = "CornMonster" }, parent)
 	m.seg, m.cfs, m.decor = {}, {}, {}
 	m.pos, m.yaw, m.phase, m.crawlAmt, m.lastS = Vector3.new(), 0, 0, 0, 0
+	m.twitch = 1
 
 	local husk = Color3.fromRGB(128, 112, 60)
 	local huskDark = Color3.fromRGB(92, 80, 42)
@@ -1018,9 +1103,20 @@ function Monster.new(parent, SC)
 	return m
 end
 
+-- sharp random spasms (twitching arms, legs and head)
+local function jerk(now, seed, speed)
+	local n = math.noise(now * speed, seed, 0.37)
+	if math.abs(n) > 0.28 then
+		return n * 2.4
+	end
+	return n * 0.35
+end
+
 -- works out where every body segment goes this frame
-function Monster:pose(rootCF, now, k, chasing, lit)
+-- act (optional): { kind = "emerge"|"rise"|"sink"|"grab", ... }
+function Monster:pose(rootCF, now, k, chasing, lit, act)
 	local SC = self.scale
+	local tw = self.twitch or 1
 	local c = self.crawlAmt
 	local phase = self.phase
 	local out = self.cfs
@@ -1032,29 +1128,16 @@ function Monster:pose(rootCF, now, k, chasing, lit)
 		lean = 0.3
 	end
 	lean = lerp(lean, -1.2, c)
-	local twitchY = math.noise(now * 1.7, 1.3) * 0.5
-	local twitchZ = math.noise(now * 1.1, 7.7) * 0.35
-	local tb = base * A(lean, math.sin(phase) * 0.12 * k, math.sin(phase) * 0.05) * C(0, 0.4 * SC, 0)
-
-	out.Pelvis = base
-	out.Torso = tb * C(0, 1.8 * SC, 0)
+	local twitchY = math.noise(now * 1.7, 1.3) * 0.5 + jerk(now, 11.1, 4.5) * 0.3 * tw
+	local twitchZ = math.noise(now * 1.1, 7.7) * 0.35 + jerk(now, 12.7, 5.2) * 0.3 * tw
+	local spasm = jerk(now, 8.8, 3.1) * 0.07 * tw
 	local headTilt = 0.25 + c * 1.0
 	if lit then
 		headTilt = -0.4
 	end
-	local hp = tb * C(0, 4.6 * SC, -0.25 * SC) * A(headTilt, twitchY, twitchZ)
-	out.Head = hp * C(0, 0.95 * SC, 0)
 	local jawOpen = 0.12 + math.sin(now * 1.3) * 0.04
 	if chasing then
 		jawOpen = 0.5 + math.sin(now * 9) * 0.1
-	end
-	out.Jaw = hp * C(0, 0.1 * SC, -0.1 * SC) * A(jawOpen, 0, 0) * C(0, -0.2 * SC, 0)
-
-	local function chain(upperName, lowerName, baseCF, a1, a2, l1, l2)
-		local upperCF = baseCF * A(a1, 0, 0)
-		out[upperName] = upperCF * C(0, -l1 / 2, 0)
-		local elbowCF = upperCF * C(0, -l1, 0) * A(a2, 0, 0)
-		out[lowerName] = elbowCF * C(0, -l2 / 2, 0)
 	end
 
 	local swing = math.sin(phase) * 0.7 * k
@@ -1070,8 +1153,74 @@ function Monster:pose(rootCF, now, k, chasing, lit)
 		aR = lerp(aR, -lean + 0.1 + cs, c)
 		bend = lerp(bend, 0.35, c)
 	end
-	chain("UpperArmL", "ForeArmL", tb * C(-0.75 * SC, 3.3 * SC, 0), aL, bend, 3.3 * SC, 3.5 * SC)
-	chain("UpperArmR", "ForeArmR", tb * C(0.75 * SC, 3.3 * SC, 0), aR, bend, 3.3 * SC, 3.5 * SC)
+
+	if act then
+		if act.kind == "emerge" then -- pulling himself out of the corn wall, arms first
+			local a = act.a or 0
+			lean = lerp(-0.7, -0.25, a)
+			aL = lerp(1.9, 1.0, a) + math.sin(now * 16) * 0.15
+			aR = lerp(1.9, 1.0, a) + math.sin(now * 16 + 1.3) * 0.15
+			bend = 0.3
+			headTilt = lerp(0.8, 0.2, a)
+			jawOpen = 0.8 + math.sin(now * 20) * 0.1
+		elseif act.kind == "rise" then -- clawing up out of the ground
+			local a = act.a or 0
+			lean = lerp(-0.35, -0.15, a)
+			aL = lerp(2.9, 1.0, a) + math.sin(now * 14) * 0.3
+			aR = lerp(2.9, 1.0, a) + math.sin(now * 14 + 1.7) * 0.3
+			bend = 0.6
+			headTilt = lerp(-0.5, 0.2, a)
+			jawOpen = 0.85
+		elseif act.kind == "sink" then -- flailing as he sinks away from the light
+			lean = 0.25
+			aL = 2.4 + math.sin(now * 22) * 0.45
+			aR = 2.4 + math.sin(now * 22 + 2) * 0.45
+			bend = 1.1
+			headTilt = -0.5
+			jawOpen = 1.0
+		elseif act.kind == "grab" then -- picks you up... and throws you
+			local r = act.reach or 0
+			lean = 0.05
+			aL = lerp(0.6, 1.5, r)
+			aR = aL
+			bend = lerp(0.5, 0.15, r)
+			headTilt = -0.25
+			jawOpen = lerp(0.5, 0.95, r)
+			if act.hold then
+				jawOpen = 1.0 + math.sin(now * 30) * 0.08
+				twitchY += math.sin(now * 25) * 0.15
+			end
+			if act.throw then
+				aL = lerp(1.5, 3.0, act.throw)
+				aR = aL
+				lean = lerp(0.05, 0.35, act.throw)
+				bend = 0.1
+			end
+		end
+	end
+
+	-- twitching limbs
+	local bendL = bend + math.abs(jerk(now, 3.7, 7)) * 0.45 * tw
+	local bendR = bend + math.abs(jerk(now, 4.4, 7.4)) * 0.45 * tw
+	aL += jerk(now, 1.3, 6) * 0.4 * tw
+	aR += jerk(now, 2.9, 6.6) * 0.4 * tw
+
+	local tb = base * A(lean, math.sin(phase) * 0.12 * k, math.sin(phase) * 0.05 + spasm) * C(0, 0.4 * SC, 0)
+	out.Pelvis = base
+	out.Torso = tb * C(0, 1.8 * SC, 0)
+	local hp = tb * C(0, 4.6 * SC, -0.25 * SC) * A(headTilt, twitchY, twitchZ)
+	out.Head = hp * C(0, 0.95 * SC, 0)
+	out.Jaw = hp * C(0, 0.1 * SC, -0.1 * SC) * A(jawOpen, 0, 0) * C(0, -0.2 * SC, 0)
+
+	local function chain(upperName, lowerName, baseCF, a1, a2, l1, l2)
+		local upperCF = baseCF * A(a1, 0, 0)
+		out[upperName] = upperCF * C(0, -l1 / 2, 0)
+		local elbowCF = upperCF * C(0, -l1, 0) * A(a2, 0, 0)
+		out[lowerName] = elbowCF * C(0, -l2 / 2, 0)
+	end
+	-- the arms flare out a little, which looks wrong in a good way
+	chain("UpperArmL", "ForeArmL", tb * C(-0.75 * SC, 3.3 * SC, 0) * A(0, 0, -0.12 - math.abs(jerk(now, 6.6, 5)) * 0.15 * tw), aL, bendL, 3.3 * SC, 3.5 * SC)
+	chain("UpperArmR", "ForeArmR", tb * C(0.75 * SC, 3.3 * SC, 0) * A(0, 0, 0.12 + math.abs(jerk(now, 7.7, 5.3)) * 0.15 * tw), aR, bendR, 3.3 * SC, 3.5 * SC)
 
 	local legR = math.sin(phase) * 0.8 * k
 	local kneeR = -math.max(0, math.sin(phase - 1.0)) * 1.1 * k
@@ -1084,6 +1233,10 @@ function Monster:pose(rootCF, now, k, chasing, lit)
 		knL = lerp(knL, -1.7, c)
 		knR = lerp(knR, -1.7, c)
 	end
+	thL += jerk(now, 5.1, 5) * 0.15 * tw
+	thR += jerk(now, 5.9, 5.4) * 0.15 * tw
+	knL -= math.abs(jerk(now, 6.2, 5.5)) * 0.3 * tw
+	knR -= math.abs(jerk(now, 6.9, 5.8)) * 0.3 * tw
 	chain("ThighL", "ShinL", base * C(-0.38 * SC, -0.25 * SC, 0), thL, knL, 3.3 * SC, 3.4 * SC)
 	chain("ThighR", "ShinR", base * C(0.38 * SC, -0.25 * SC, 0), thR, knR, 3.3 * SC, 3.4 * SC)
 end
@@ -1159,23 +1312,521 @@ function Monster:growl()
 	self.growlSound:Play()
 end
 
+
 -- ====================================================================
--- MATCH (one corn field per elevator)
+-- THE FARMER (Nightmare mode)
+-- ====================================================================
+local Farmer = {}
+Farmer.__index = Farmer
+local FARMER_SEGMENTS = { "Torso", "Head", "ArmL", "ArmR", "LegL", "LegR", "Fork" }
+
+function Farmer.new(parent)
+	local f = setmetatable({}, Farmer)
+	local F = 1.15
+	f.scale = F
+	f.model = make("Model", { Name = "Farmer" }, parent)
+	f.seg, f.cfs, f.decor = {}, {}, {}
+	f.phase, f.lastS = 0, 0
+	local flannel = Color3.fromRGB(112, 30, 26)
+	local flannelDark = Color3.fromRGB(40, 14, 12)
+	local denim = Color3.fromRGB(50, 64, 98)
+	local skin = Color3.fromRGB(188, 150, 124)
+	local straw = Color3.fromRGB(186, 156, 92)
+	local wood = Color3.fromRGB(96, 70, 44)
+	local metal = Color3.fromRGB(70, 70, 72)
+	local blood = Color3.fromRGB(90, 8, 8)
+	local Fabric, Wood, Metal, Smooth = Enum.Material.Fabric, Enum.Material.Wood, Enum.Material.Metal, Enum.Material.SmoothPlastic
+
+	local function O(x, y, z)
+		return C(x * F, y * F, z * F)
+	end
+	local function seg(name, w, h, d, color, mat)
+		f.seg[name] = part({ Name = name, Size = Vector3.new(w * F, h * F, d * F), Color = color, Material = mat or Fabric }, f.model)
+	end
+	local function dec(segName, name, w, h, d, color, mat, cf, shape)
+		f.decor[#f.decor + 1] = { seg = segName, name = name, size = Vector3.new(w * F, h * F, d * F), color = color, mat = mat or Fabric, cf = cf, shape = shape }
+	end
+
+	seg("Torso", 2, 2.1, 1, flannel)
+	seg("Head", 1.1, 1.2, 1.1, skin, Smooth)
+	seg("ArmL", 0.9, 2, 0.9, flannel)
+	seg("ArmR", 0.9, 2, 0.9, flannel)
+	seg("LegL", 0.95, 2.1, 0.95, denim)
+	seg("LegR", 0.95, 2.1, 0.95, denim)
+	seg("Fork", 0.18, 0.18, 5.5, wood, Wood)
+
+	-- overalls + plaid shirt
+	dec("Torso", "Bib", 1.4, 1.3, 0.06, denim, Fabric, O(0, -0.3, -0.52))
+	dec("Torso", "StrapL", 0.25, 1.0, 0.06, denim, Fabric, O(-0.55, 0.55, -0.52))
+	dec("Torso", "StrapR", 0.25, 1.0, 0.06, denim, Fabric, O(0.55, 0.55, -0.52))
+	dec("Torso", "ButtonL", 0.14, 0.14, 0.05, metal, Metal, O(-0.55, 0.1, -0.56))
+	dec("Torso", "ButtonR", 0.14, 0.14, 0.05, metal, Metal, O(0.55, 0.1, -0.56))
+	dec("Torso", "BackDenim", 1.6, 1.0, 0.06, denim, Fabric, O(0, -0.5, 0.52))
+	for i = 1, 3 do
+		dec("Torso", "Plaid" .. i, 2.02, 0.08, 1.02, flannelDark, Fabric, O(0, -0.8 + i * 0.5, 0))
+	end
+	dec("Torso", "Stain", 0.5, 0.4, 0.05, blood, Smooth, O(0.3, -0.5, -0.56) * A(0, 0, 0.4))
+	for _, s in ipairs({ "L", "R" }) do
+		dec("Arm" .. s, "Hand" .. s, 0.85, 0.6, 0.85, skin, Smooth, O(0, -1.15, 0))
+		dec("Arm" .. s, "Cuff" .. s, 0.95, 0.2, 0.95, flannelDark, Fabric, O(0, -0.85, 0))
+		dec("Leg" .. s, "Boot" .. s, 1.0, 0.55, 1.3, Color3.fromRGB(52, 36, 24), Enum.Material.Fabric, O(0, -0.85, -0.15))
+		dec("Leg" .. s, "Mud" .. s, 1.0, 0.4, 1.0, Color3.fromRGB(70, 54, 36), Fabric, O(0, -0.5, 0))
+	end
+	-- face: sunken eyes, grey beard, straw hat
+	dec("Head", "EyeL", 0.22, 0.12, 0.05, Color3.fromRGB(8, 6, 6), Smooth, O(-0.24, 0.12, -0.56))
+	dec("Head", "EyeR", 0.22, 0.12, 0.05, Color3.fromRGB(8, 6, 6), Smooth, O(0.24, 0.12, -0.56))
+	dec("Head", "PupilL", 0.06, 0.06, 0.03, Color3.fromRGB(255, 60, 40), Enum.Material.Neon, O(-0.24, 0.12, -0.59))
+	dec("Head", "PupilR", 0.06, 0.06, 0.03, Color3.fromRGB(255, 60, 40), Enum.Material.Neon, O(0.24, 0.12, -0.59))
+	dec("Head", "BrowL", 0.32, 0.08, 0.06, Color3.fromRGB(110, 106, 100), Fabric, O(-0.24, 0.27, -0.57) * A(0, 0, -0.25))
+	dec("Head", "BrowR", 0.32, 0.08, 0.06, Color3.fromRGB(110, 106, 100), Fabric, O(0.24, 0.27, -0.57) * A(0, 0, 0.25))
+	dec("Head", "Nose", 0.18, 0.3, 0.14, Color3.fromRGB(170, 120, 100), Smooth, O(0, -0.02, -0.6))
+	dec("Head", "Beard", 1.15, 0.65, 0.5, Color3.fromRGB(120, 116, 108), Fabric, O(0, -0.42, -0.35))
+	dec("Head", "Mouth", 0.4, 0.07, 0.05, Color3.fromRGB(30, 10, 10), Smooth, O(0, -0.25, -0.62))
+	dec("Head", "Brim", 0.1, 2.5, 2.5, straw, Fabric, O(0, 0.62, 0) * A(0, 0, math.rad(90)), Enum.PartType.Cylinder)
+	dec("Head", "Crown", 0.75, 1.3, 1.3, straw, Fabric, O(0, 0.98, 0) * A(0, 0, math.rad(90)), Enum.PartType.Cylinder)
+	dec("Head", "HatBand", 0.18, 1.34, 1.34, Color3.fromRGB(60, 30, 20), Fabric, O(0, 0.72, 0) * A(0, 0, math.rad(90)), Enum.PartType.Cylinder)
+	-- the pitchfork (front is -Z)
+	dec("Fork", "Ferrule", 0.3, 0.3, 0.4, metal, Metal, O(0, 0, -2.8))
+	dec("Fork", "Crossbar", 1.3, 0.14, 0.14, metal, Metal, O(0, 0, -3.0))
+	for i, x in ipairs({ -0.55, 0, 0.55 }) do
+		dec("Fork", "Tine" .. i, 0.08, 0.08, 1.4, metal, Metal, O(x, 0, -3.7))
+		dec("Fork", "TineBlood" .. i, 0.09, 0.09, 0.45, blood, Smooth, O(x, 0, -4.2))
+	end
+
+	local torso = f.seg.Torso
+	f.stepSound = newSound(CONFIG.Sounds.Footstep, torso, 1.4, 0.8, 70)
+	f.yell = newSound(CONFIG.Sounds.Growl, torso, 3, 0.85, 120)
+	local bb = make("BillboardGui", { Size = UDim2.fromOffset(240, 50), StudsOffset = Vector3.new(0, 4.5, 0), AlwaysOnTop = false, MaxDistance = 80, Enabled = false }, f.seg.Head)
+	make("TextLabel", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "GET OFF MY LAND!", TextColor3 = Color3.fromRGB(255, 70, 50), TextStrokeTransparency = 0.2, Font = Enum.Font.Antique, TextScaled = true }, bb)
+	f.bubble = bb
+	return f
+end
+
+-- mode: "idle", "walk", "chase", "stab"
+function Farmer:pose(rootCF, now, k, mode, thrust)
+	local F = self.scale
+	local out = self.cfs
+	local phase = self.phase
+	local bob = math.abs(math.sin(phase)) * 0.15 * k
+	local lean = (mode == "chase") and -0.18 or ((mode == "stab") and -0.1 or 0)
+	local sw = math.sin(phase) * 0.7 * k
+	local headTilt = 0.15 + math.noise(now * 0.7, 3.3) * 0.25
+	local headRoll = 0.22 + math.noise(now * 0.5, 9.1) * 0.2 -- creepy tilted head
+	local hip = rootCF * C(0, 2.1 * F + bob, 0)
+	out.LegL = hip * C(-0.5 * F, 0, 0) * A(sw, 0, 0) * C(0, -1.05 * F, 0)
+	out.LegR = hip * C(0.5 * F, 0, 0) * A(-sw, 0, 0) * C(0, -1.05 * F, 0)
+	local torso = hip * A(lean, 0, 0) * C(0, 1.05 * F, 0)
+	out.Torso = torso
+	out.Head = torso * C(0, 1.05 * F, 0) * A(headTilt, 0, headRoll) * C(0, 0.6 * F, 0)
+	local aL, aR = -sw * 0.8, sw * 0.8
+	if mode == "chase" or mode == "stab" then
+		aL, aR = 1.15, 1.0
+		out.Fork = rootCF * C(0.2 * F, 2.75 * F, -(0.9 + (thrust or 0)))
+	else
+		aR = 0.35
+		local hand = torso * C(1.45 * F, 0.8 * F, 0) * A(aR, 0, -0.08) * C(0, -2.15 * F, 0)
+		out.Fork = C(hand.Position) * rootCF.Rotation * A(math.pi / 2, 0, 0) * C(0, 0, -0.9)
+	end
+	out.ArmL = torso * C(-1.45 * F, 0.8 * F, 0) * A(aL, 0, 0.08) * C(0, -1 * F, 0)
+	out.ArmR = torso * C(1.45 * F, 0.8 * F, 0) * A(aR, 0, -0.08) * C(0, -1 * F, 0)
+end
+
+function Farmer:apply()
+	local plist, clist = {}, {}
+	for i, name in ipairs(FARMER_SEGMENTS) do
+		plist[i] = self.seg[name]
+		clist[i] = self.cfs[name]
+	end
+	workspace:BulkMoveTo(plist, clist, Enum.BulkMoveMode.FireCFrameChanged)
+end
+
+function Farmer:assemble(rootCF)
+	self:pose(rootCF, os.clock(), 0, "idle", 0)
+	for name, p in pairs(self.seg) do
+		p.CFrame = self.cfs[name]
+	end
+	for _, d in ipairs(self.decor) do
+		local segPart = self.seg[d.seg]
+		local p = part({ Name = d.name, Shape = d.shape, Size = d.size, Color = d.color, Material = d.mat, CFrame = segPart.CFrame * d.cf }, self.model)
+		make("WeldConstraint", { Part0 = segPart, Part1 = p }, p)
+		p.Anchored = false
+		p.Massless = true
+	end
+end
+
+function Farmer:steps(k)
+	local s = math.sin(self.phase)
+	if k > 0.25 and (s >= 0) ~= (self.lastS >= 0) then
+		local snd = self.stepSound
+		snd.PlaybackSpeed = 0.75 + math.random() * 0.1
+		snd.TimePosition = 0
+		snd:Play()
+		task.delay(0.25, function()
+			if snd.Parent then
+				snd:Stop()
+			end
+		end)
+	end
+	self.lastS = s
+end
+
+-- ====================================================================
+-- MORE PROPS (farm, dead animals, police car)
+-- ====================================================================
+function Props.blood(f, pos, s)
+	local red = Color3.fromRGB(72, 6, 6)
+	part({ Name = "Blood", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.05, s, s), CFrame = C(pos + Vector3.new(0, 0.07, 0)) * A(0, 0, math.rad(90)), Color = red, Material = Enum.Material.SmoothPlastic, Reflectance = 0.08 }, f)
+	for i = 1, 4 do
+		local a = i * 1.7
+		local d = s * (0.55 + (i % 2) * 0.2)
+		local r = s * 0.25
+		part({ Name = "BloodDrop", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.05, r, r), CFrame = C(pos + Vector3.new(math.cos(a) * d, 0.075, math.sin(a) * d)) * A(0, 0, math.rad(90)), Color = red, Material = Enum.Material.SmoothPlastic }, f)
+	end
+end
+
+function Props.flies(f, pos)
+	local p = part({ Name = "Flies", Size = Vector3.new(1, 1, 1), Position = pos + Vector3.new(0, 1.6, 0), Transparency = 1 }, f)
+	make("ParticleEmitter", {
+		Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = ColorSequence.new(Color3.new(0, 0, 0)), LightEmission = 0,
+		Size = NumberSequence.new(0.12), Rate = 10, Lifetime = NumberRange.new(1, 2), Speed = NumberRange.new(1, 3),
+		SpreadAngle = Vector2.new(180, 180), Drag = 2, Acceleration = Vector3.new(0, 0.4, 0),
+	}, p)
+end
+
+function Props.deadCow(f, pos, yaw)
+	local cf = C(pos) * A(0, yaw, 0)
+	local white = Color3.fromRGB(214, 208, 196)
+	local black = Color3.fromRGB(26, 24, 22)
+	lp(f, cf, "CowBody", Vector3.new(2.4, 2.2, 4.8), C(0, 1.1, 0), white, Enum.Material.Fabric)
+	lp(f, cf, "Spot", Vector3.new(1.2, 0.05, 1.6), C(-0.3, 2.22, 0.8) * A(0, 0.4, 0), black, Enum.Material.Fabric)
+	lp(f, cf, "Spot", Vector3.new(0.9, 0.05, 1.1), C(0.4, 2.22, -1.2) * A(0, -0.3, 0), black, Enum.Material.Fabric)
+	lp(f, cf, "Spot", Vector3.new(0.05, 1.0, 1.4), C(-1.22, 1.3, -0.4), black, Enum.Material.Fabric)
+	for _, z in ipairs({ -1.6, 1.6 }) do
+		for _, y in ipairs({ 0.6, 1.5 }) do
+			lp(f, cf, "Leg", Vector3.new(2.2, 0.45, 0.45), C(2.3, y, z) * A(0, 0, (y - 1) * 0.3), white, Enum.Material.Fabric)
+			lp(f, cf, "Hoof", Vector3.new(0.35, 0.5, 0.5), C(3.45, y + (y - 1) * 0.35, z), black, Enum.Material.SmoothPlastic)
+		end
+	end
+	lp(f, cf, "CowHead", Vector3.new(1.2, 1.1, 1.7), C(0.2, 0.55, -3.0) * A(0, 0.3, 1.2), white, Enum.Material.Fabric)
+	lp(f, cf, "Snout", Vector3.new(1.0, 0.8, 0.5), C(0.6, 0.45, -3.8) * A(0, 0.3, 1.2), Color3.fromRGB(200, 150, 150), Enum.Material.SmoothPlastic)
+	lp(f, cf, "Horn", Vector3.new(0.15, 0.6, 0.15), C(-0.3, 0.9, -2.8) * A(0.4, 0, 0.8), Color3.fromRGB(220, 210, 180), Enum.Material.SmoothPlastic)
+	lp(f, cf, "Wound", Vector3.new(0.06, 1.2, 2.2), C(-1.22, 1.0, 0.6), Color3.fromRGB(110, 10, 10), Enum.Material.SmoothPlastic)
+	for i = 1, 4 do
+		lp(f, cf, "Rib", Vector3.new(0.12, 1.1, 0.12), C(-1.28, 1.0, -0.2 + i * 0.4) * A(0, 0, 0.1), Color3.fromRGB(220, 210, 190), Enum.Material.SmoothPlastic)
+	end
+	Props.blood(f, cf:PointToWorldSpace(Vector3.new(-2.2, 0, 0.4)), 4)
+	Props.flies(f, cf.Position)
+end
+
+function Props.deadPig(f, pos, yaw)
+	local cf = C(pos) * A(0, yaw, 0)
+	local pink = Color3.fromRGB(214, 150, 150)
+	lp(f, cf, "PigBody", Vector3.new(1.6, 1.5, 2.8), C(0, 0.75, 0), pink, Enum.Material.SmoothPlastic)
+	lp(f, cf, "PigHead", Vector3.new(1.1, 1.1, 1.0), C(0.1, 0.55, -1.8) * A(0, 0.2, 0.9), pink, Enum.Material.SmoothPlastic)
+	lp(f, cf, "PigSnout", Vector3.new(0.6, 0.45, 0.3), C(0.3, 0.45, -2.35) * A(0, 0.2, 0.9), Color3.fromRGB(190, 110, 110), Enum.Material.SmoothPlastic)
+	for _, z in ipairs({ -0.8, 0.8 }) do
+		for _, y in ipairs({ 0.4, 1.0 }) do
+			lp(f, cf, "PigLeg", Vector3.new(0.9, 0.35, 0.35), C(1.2, y, z), pink, Enum.Material.SmoothPlastic)
+		end
+	end
+	lp(f, cf, "Cut", Vector3.new(0.05, 0.25, 1.4), C(-0.82, 0.8, -0.3), Color3.fromRGB(110, 10, 10), Enum.Material.SmoothPlastic)
+	Props.blood(f, cf:PointToWorldSpace(Vector3.new(-1.5, 0, 0)), 3)
+	Props.flies(f, cf.Position)
+end
+
+function Props.deadChicken(f, pos, yaw)
+	local cf = C(pos) * A(0, yaw, 0)
+	lp(f, cf, "ChickenBody", Vector3.new(0.8, 0.8, 0.8), C(0, 0.35, 0), Color3.fromRGB(235, 232, 225), Enum.Material.Fabric, { Shape = Enum.PartType.Ball })
+	lp(f, cf, "ChickenHead", Vector3.new(0.4, 0.4, 0.4), C(0, 0.2, -0.75), Color3.fromRGB(235, 232, 225), Enum.Material.Fabric, { Shape = Enum.PartType.Ball })
+	lp(f, cf, "Comb", Vector3.new(0.08, 0.2, 0.25), C(0, 0.42, -0.75), Color3.fromRGB(200, 30, 30), Enum.Material.SmoothPlastic)
+	for i = 1, 6 do
+		local a = i * 1.1
+		lp(f, cf, "Feather", Vector3.new(0.25, 0.03, 0.5), C(math.cos(a) * (1 + i * 0.2), 0.05, math.sin(a) * (1 + i * 0.2)) * A(0, a, 0), Color3.fromRGB(230, 226, 218), Enum.Material.Fabric)
+	end
+	Props.blood(f, cf.Position + Vector3.new(0.3, 0, 0.4), 1.6)
+end
+
+function Props.deadSheep(f, pos, yaw)
+	local cf = C(pos) * A(0, yaw, 0)
+	local wool = Color3.fromRGB(200, 196, 186)
+	for i = 1, 5 do
+		lp(f, cf, "Wool", Vector3.new(1.4, 1.4, 1.4), C((i % 2) * 0.4 - 0.2, 0.7, -1.2 + i * 0.5), wool, Enum.Material.Fabric, { Shape = Enum.PartType.Ball })
+	end
+	lp(f, cf, "SheepHead", Vector3.new(0.8, 0.8, 1.0), C(0.2, 0.4, -2.0) * A(0, 0, 1.1), Color3.fromRGB(30, 28, 26), Enum.Material.SmoothPlastic)
+	for _, z in ipairs({ -0.8, 0.9 }) do
+		lp(f, cf, "SheepLeg", Vector3.new(1.4, 0.25, 0.25), C(1.1, 0.5, z), Color3.fromRGB(30, 28, 26), Enum.Material.SmoothPlastic)
+	end
+	Props.blood(f, cf.Position + Vector3.new(-1.2, 0, 0), 3)
+	Props.flies(f, cf.Position)
+end
+
+function Props.tractor(f, pos, yaw)
+	local cf = C(pos) * A(0, yaw, 0)
+	local rust = Color3.fromRGB(120, 60, 34)
+	local green = Color3.fromRGB(46, 70, 40)
+	lp(f, cf, "TractorBody", Vector3.new(3, 2.2, 6), C(0, 2.6, -0.5), green, Enum.Material.CorrodedMetal, { CanCollide = true })
+	lp(f, cf, "Hood", Vector3.new(2.6, 1.6, 3), C(0, 3.9, -2), green, Enum.Material.CorrodedMetal)
+	lp(f, cf, "Exhaust", Vector3.new(0.3, 2.4, 0.3), C(0.8, 5.6, -2.6), Color3.fromRGB(30, 30, 30), Enum.Material.Metal)
+	lp(f, cf, "Seat", Vector3.new(1.4, 0.4, 1.2), C(0, 4.1, 1.6), Color3.fromRGB(30, 26, 22), Enum.Material.Fabric)
+	lp(f, cf, "Wheel", Vector3.new(1.4, 4.4, 4.4), C(-2.2, 2.2, 1.6), Color3.fromRGB(22, 22, 22), Enum.Material.SmoothPlastic, { Shape = Enum.PartType.Cylinder })
+	lp(f, cf, "Wheel", Vector3.new(1.4, 4.4, 4.4), C(2.2, 2.2, 1.6), Color3.fromRGB(22, 22, 22), Enum.Material.SmoothPlastic, { Shape = Enum.PartType.Cylinder })
+	lp(f, cf, "Wheel", Vector3.new(0.8, 2.4, 2.4), C(-1.6, 1.2, -3), Color3.fromRGB(22, 22, 22), Enum.Material.SmoothPlastic, { Shape = Enum.PartType.Cylinder })
+	lp(f, cf, "Wheel", Vector3.new(0.8, 2.4, 2.4), C(1.6, 1.2, -3), Color3.fromRGB(22, 22, 22), Enum.Material.SmoothPlastic, { Shape = Enum.PartType.Cylinder })
+	lp(f, cf, "Rim", Vector3.new(1.42, 2, 2), C(-2.2, 2.2, 1.6), rust, Enum.Material.CorrodedMetal, { Shape = Enum.PartType.Cylinder })
+	lp(f, cf, "Rim", Vector3.new(1.42, 2, 2), C(2.2, 2.2, 1.6), rust, Enum.Material.CorrodedMetal, { Shape = Enum.PartType.Cylinder })
+	lp(f, cf, "Wheel2", Vector3.new(0.3, 0.3, 1.6), C(0, 4.9, 0.6) * A(0.6, 0, 0), Color3.fromRGB(30, 30, 30), Enum.Material.Metal)
+end
+
+function Props.trough(f, pos, yaw)
+	local cf = C(pos) * A(0, yaw, 0)
+	lp(f, cf, "Trough", Vector3.new(6, 1.6, 2), C(0, 0.8, 0), Color3.fromRGB(80, 80, 82), Enum.Material.CorrodedMetal, { CanCollide = true })
+	lp(f, cf, "Water", Vector3.new(5.6, 0.1, 1.6), C(0, 1.55, 0), Color3.fromRGB(40, 30, 20), Enum.Material.Glass)
+end
+
+function Props.choppingBlock(f, pos, yaw)
+	local cf = C(pos) * A(0, yaw, 0)
+	lp(f, cf, "Stump", Vector3.new(2, 2.2, 2.2), C(0, 1, 0) * A(0, 0, math.rad(90)), Color3.fromRGB(96, 70, 44), Enum.Material.Wood, { Shape = Enum.PartType.Cylinder, CanCollide = true })
+	lp(f, cf, "StumpTop", Vector3.new(0.05, 2, 2), C(0, 2.01, 0) * A(0, 0, math.rad(90)), Color3.fromRGB(170, 136, 90), Enum.Material.Wood, { Shape = Enum.PartType.Cylinder })
+	lp(f, cf, "AxeHandle", Vector3.new(0.2, 2.6, 0.25), C(0.3, 3.1, 0) * A(0, 0, -0.35), Color3.fromRGB(110, 80, 50), Enum.Material.Wood)
+	lp(f, cf, "AxeHead", Vector3.new(0.9, 0.5, 0.12), C(-0.05, 2.15, 0) * A(0, 0, -0.35), Color3.fromRGB(70, 70, 72), Enum.Material.Metal)
+	Props.blood(f, cf.Position + Vector3.new(1.4, 0, 0.5), 2)
+end
+
+function Props.hangingLantern(f, pos, flickers)
+	part({ Name = "LanternChain", Size = Vector3.new(0.1, 4, 0.1), Position = pos + Vector3.new(0, 2.6, 0), Color = Color3.fromRGB(40, 40, 40), Material = Enum.Material.Metal }, f)
+	part({ Name = "LanternCap", Size = Vector3.new(0.9, 0.25, 0.9), Position = pos + Vector3.new(0, 0.6, 0), Color = Color3.fromRGB(30, 30, 30), Material = Enum.Material.Metal }, f)
+	local glass = part({ Name = "LanternGlass", Size = Vector3.new(0.7, 1, 0.7), Position = pos, Color = Color3.fromRGB(255, 190, 100), Material = Enum.Material.Neon }, f)
+	local l = make("PointLight", { Color = Color3.fromRGB(255, 170, 90), Range = 22, Brightness = 1.1, Shadows = true }, glass)
+	if flickers then
+		Props.flicker(flickers, l, 0.45)
+	end
+end
+
+-- the rusty yellow key (returns the prompt part)
+function Props.rustyKey(f, pos)
+	local model = make("Model", { Name = "RustyKey" }, f)
+	local rust = Color3.fromRGB(186, 150, 40)
+	local cf = C(pos + Vector3.new(0, 0.35, 0)) * A(0, math.random() * 6, math.rad(80))
+	local root = part({ Name = "KeyShaft", Size = Vector3.new(0.14, 0.14, 1.5), CFrame = cf, Color = rust, Material = Enum.Material.CorrodedMetal }, model)
+	for i = 1, 8 do
+		local a = i / 8 * math.pi * 2
+		part({ Name = "KeyRing", Size = Vector3.new(0.12, 0.14, 0.24), CFrame = cf * C(math.cos(a) * 0.32, 0, 1.05 + math.sin(a) * 0.32) * A(0, -a, 0), Color = rust, Material = Enum.Material.CorrodedMetal }, model)
+	end
+	part({ Name = "KeyTooth", Size = Vector3.new(0.3, 0.14, 0.14), CFrame = cf * C(0.18, 0, -0.6), Color = rust, Material = Enum.Material.CorrodedMetal }, model)
+	part({ Name = "KeyTooth", Size = Vector3.new(0.22, 0.14, 0.14), CFrame = cf * C(0.14, 0, -0.35), Color = rust, Material = Enum.Material.CorrodedMetal }, model)
+	make("PointLight", { Color = Color3.fromRGB(255, 220, 90), Range = 7, Brightness = 0.8 }, root)
+	make("ParticleEmitter", { Texture = "rbxasset://textures/particles/sparkles_main.dds", Color = ColorSequence.new(Color3.fromRGB(255, 230, 120)), Rate = 4, Lifetime = NumberRange.new(0.6, 1.2), Speed = NumberRange.new(0.3, 1), Size = NumberSequence.new(0.25, 0), LightEmission = 1 }, root)
+	local hit = part({ Name = "KeyPickup", Size = Vector3.new(2, 2, 2), Position = pos + Vector3.new(0, 1, 0), Transparency = 1 }, model)
+	return model, hit
+end
+
+-- police car: front is -Z in local space. Returns everything we need.
+function Props.policeCar(f, cf)
+	local model = make("Model", { Name = "PoliceCar" }, f)
+	local root = part({ Name = "CarRoot", Size = Vector3.new(1, 1, 1), CFrame = cf, Transparency = 1 }, model)
+	local list = {}
+	local function cp(name, size, offset, color, mat, extra)
+		local props = { Name = name, Size = size, CFrame = cf * offset, Color = color, Material = mat or Enum.Material.SmoothPlastic }
+		if extra then
+			for k, v in pairs(extra) do
+				props[k] = v
+			end
+		end
+		local p = part(props, model)
+		list[#list + 1] = p
+		return p
+	end
+	local black = Color3.fromRGB(18, 18, 20)
+	local white = Color3.fromRGB(235, 235, 235)
+	cp("Chassis", Vector3.new(6, 0.8, 14), C(0, 1.3, 0), black)
+	cp("LowerFront", Vector3.new(6, 1.6, 4), C(0, 2.5, -5), black)
+	cp("LowerRear", Vector3.new(6, 1.6, 3.6), C(0, 2.5, 5.2), black)
+	local doorL = cp("DoorL", Vector3.new(0.2, 1.6, 6.4), C(-2.9, 2.5, 0.2), white)
+	local doorR = cp("DoorR", Vector3.new(0.2, 1.6, 6.4), C(2.9, 2.5, 0.2), white)
+	cp("Floor", Vector3.new(5.6, 0.3, 6.4), C(0, 1.85, 0.2), Color3.fromRGB(40, 40, 40))
+	cp("Hood", Vector3.new(5.8, 0.4, 3.8), C(0, 3.4, -5), black)
+	cp("Trunk", Vector3.new(5.8, 0.4, 3.4), C(0, 3.4, 5.2), black)
+	cp("Roof", Vector3.new(5.4, 0.3, 5.6), C(0, 5.3, 0.4), white)
+	for _, x in ipairs({ -2.65, 2.65 }) do
+		for _, z in ipairs({ -2.3, 3.1 }) do
+			cp("Pillar", Vector3.new(0.25, 1.9, 0.25), C(x, 4.3, z), black)
+		end
+		cp("SideGlass", Vector3.new(0.08, 1.4, 5.2), C(x, 4.25, 0.4), Color3.fromRGB(60, 70, 80), Enum.Material.Glass, { Transparency = 0.6 })
+	end
+	cp("Windshield", Vector3.new(5.2, 1.6, 0.1), C(0, 4.3, -2.4) * A(-0.35, 0, 0), Color3.fromRGB(60, 70, 80), Enum.Material.Glass, { Transparency = 0.6 })
+	cp("RearGlass", Vector3.new(5.2, 1.5, 0.1), C(0, 4.3, 3.2) * A(0.35, 0, 0), Color3.fromRGB(60, 70, 80), Enum.Material.Glass, { Transparency = 0.6 })
+	cp("LightBar", Vector3.new(4.2, 0.35, 0.9), C(0, 5.6, 0.4), black)
+	local red = cp("LightRed", Vector3.new(1.9, 0.4, 0.8), C(-1.05, 5.8, 0.4), Color3.fromRGB(255, 30, 30), Enum.Material.Neon)
+	local blue = cp("LightBlue", Vector3.new(1.9, 0.4, 0.8), C(1.05, 5.8, 0.4), Color3.fromRGB(30, 80, 255), Enum.Material.Neon)
+	local redL = make("PointLight", { Color = Color3.fromRGB(255, 40, 40), Range = 40, Brightness = 3 }, red)
+	local blueL = make("PointLight", { Color = Color3.fromRGB(40, 90, 255), Range = 40, Brightness = 3 }, blue)
+	for _, x in ipairs({ -2.2, 2.2 }) do
+		local hl = cp("Headlight", Vector3.new(1.2, 0.5, 0.1), C(x, 2.8, -7.05), Color3.fromRGB(255, 250, 220), Enum.Material.Neon)
+		make("SpotLight", { Face = Enum.NormalId.Front, Range = 60, Angle = 50, Brightness = 3, Color = Color3.fromRGB(255, 245, 220) }, hl)
+		cp("Taillight", Vector3.new(1.2, 0.5, 0.1), C(x, 2.8, 7.05), Color3.fromRGB(200, 20, 20), Enum.Material.Neon)
+	end
+	for _, x in ipairs({ -2.9, 2.9 }) do
+		for _, z in ipairs({ -4.4, 4.6 }) do
+			cp("Wheel", Vector3.new(0.9, 2.6, 2.6), C(x, 1.3, z), Color3.fromRGB(14, 14, 14), Enum.Material.SmoothPlastic, { Shape = Enum.PartType.Cylinder })
+			cp("Hubcap", Vector3.new(0.95, 1.2, 1.2), C(x, 1.3, z), Color3.fromRGB(160, 160, 165), Enum.Material.Metal, { Shape = Enum.PartType.Cylinder })
+		end
+	end
+	surfaceText(doorL, Enum.NormalId.Left, "POLICE", Color3.fromRGB(20, 40, 120), Enum.Font.GothamBlack)
+	surfaceText(doorR, Enum.NormalId.Right, "POLICE", Color3.fromRGB(20, 40, 120), Enum.Font.GothamBlack)
+	-- the officer driving
+	local blueShirt = Color3.fromRGB(30, 44, 90)
+	cp("OfficerBody", Vector3.new(1.8, 1.8, 1), C(-1.3, 3.6, 0.4), blueShirt, Enum.Material.Fabric)
+	cp("OfficerHead", Vector3.new(1, 1, 1), C(-1.3, 5.0, 0.4), Color3.fromRGB(200, 160, 130), Enum.Material.SmoothPlastic)
+	cp("OfficerCap", Vector3.new(1.1, 0.35, 1.3), C(-1.3, 5.55, 0.3), Color3.fromRGB(20, 26, 50), Enum.Material.Fabric)
+	cp("Badge", Vector3.new(0.3, 0.35, 0.05), C(-1.6, 3.9, -0.12), Color3.fromRGB(220, 190, 80), Enum.Material.Metal)
+	cp("Wheel3", Vector3.new(1.2, 1.2, 0.15), C(-1.3, 3.8, -1.3) * A(-0.5, 0, 0), black)
+	-- seats for the survivors
+	local seats = {}
+	for _, off in ipairs({ C(1.3, 2.6, 0.0), C(-1.3, 2.6, 2.6), C(1.3, 2.6, 2.6) }) do
+		local seat = make("Seat", { Name = "CarSeat", Size = Vector3.new(2, 0.6, 1.8), CFrame = cf * off, Color = Color3.fromRGB(30, 30, 32), Material = Enum.Material.Fabric, Anchored = true, CanCollide = false, TopSurface = Enum.SurfaceType.Smooth, BottomSurface = Enum.SurfaceType.Smooth }, model)
+		seats[#seats + 1] = seat
+		list[#list + 1] = seat
+	end
+	local doorHit = cp("DoorHit", Vector3.new(8, 4, 8), C(0, 3, 0), white, nil, { Transparency = 1 })
+	for _, p in ipairs(list) do
+		make("WeldConstraint", { Part0 = root, Part1 = p }, p)
+		p.Anchored = false
+		p.Massless = true
+	end
+	return { model = model, root = root, seats = seats, red = red, blue = blue, redL = redL, blueL = blueL, doorHit = doorHit }
+end
+
+-- ====================================================================
+-- NIGHTMARE MAP LAYOUT
+-- ====================================================================
+-- Block types: corn, barn, floor (barn inside), fence, farm, house, shed, gate
+local function genNightmare(rng)
+	local wall = genMaze(rng)
+	local wtype = {}
+	for x = 1, SIZE do
+		wtype[x] = {}
+		for y = 1, SIZE do
+			wtype[x][y] = "corn"
+		end
+	end
+	-- thin the maze into corn patches
+	for x = 2, SIZE - 1 do
+		for y = 2, SIZE - 1 do
+			if wall[x][y] and rng:NextNumber() < 0.42 then
+				wall[x][y] = false
+			end
+		end
+	end
+	local function set(x, y, isWall, t)
+		wall[x][y] = isWall
+		wtype[x][y] = t or "corn"
+	end
+	-- the barn and the yard around it
+	for x = 2, 9 do
+		for y = 2, 9 do
+			set(x, y, false)
+		end
+	end
+	for x = 3, 8 do
+		for y = 3, 8 do
+			local ring = x == 3 or x == 8 or y == 3 or y == 8
+			set(x, y, ring, ring and "barn" or "floor")
+		end
+	end
+	-- crossroads in the middle
+	for x = 11, 13 do
+		for y = 11, 13 do
+			set(x, y, false)
+		end
+	end
+	-- the farm (fenced), with 2 gaps and the farmhouse
+	for x = 14, SIZE - 1 do
+		for y = 14, SIZE - 1 do
+			local ring = x == 14 or y == 14
+			set(x, y, ring, ring and "fence" or "farm")
+		end
+	end
+	set(14, 19, false, "farm")
+	set(19, 14, false, "farm")
+	for x = 20, 22 do
+		for y = 20, 22 do
+			set(x, y, true, "house")
+		end
+	end
+	-- the tool shed with the phone
+	for x = 18, 21 do
+		for y = 3, 7 do
+			set(x, y, false)
+		end
+	end
+	set(20, 5, true, "shed")
+	-- the locked exit gate (south edge)
+	set(13, SIZE, true, "gate")
+	for x = 12, 14 do
+		set(x, SIZE - 1, false)
+	end
+	-- make sure the important places are reachable from the crossroads
+	local function carve(fx, fy)
+		local x, y = fx, fy
+		local function open(cx, cy)
+			if cx > 1 and cx < SIZE and cy > 1 and cy < SIZE and wtype[cx][cy] == "corn" then
+				wall[cx][cy] = false
+			end
+		end
+		while x ~= 12 do
+			open(x, y)
+			x += (12 > x) and 1 or -1
+		end
+		while y ~= 12 do
+			open(x, y)
+			y += (12 > y) and 1 or -1
+		end
+	end
+	for _, s in ipairs({ { 9, 5 }, { 13, 19 }, { 19, 13 }, { 18, 5 }, { 13, SIZE - 1 } }) do
+		local dm = bfs(wall, 12, 12)
+		if not dm[key(s[1], s[2])] then
+			carve(s[1], s[2])
+		end
+	end
+	return wall, wtype
+end
+
+-- ====================================================================
+-- MATCH (one map per elevator: the Corn Field or the Nightmare farm)
 -- ====================================================================
 local Match = {}
 Match.__index = Match
 local activeMatches = {}
 
+local function smooth(a)
+	a = math.clamp(a, 0, 1)
+	return a * a * (3 - 2 * a)
+end
+
+-- full-screen flash for one player (jumpscares)
+local function flash(plr, color, fromT, toT, dur)
+	local st = PS[plr]
+	local h = st and st.hud
+	if not h or not h.flash then
+		return
+	end
+	h.flash.BackgroundColor3 = color
+	h.flash.BackgroundTransparency = fromT
+	TweenService:Create(h.flash, TweenInfo.new(dur), { BackgroundTransparency = toT }):Play()
+end
+
 function Match.new(slot, mode)
 	local self = setmetatable({}, Match)
 	self.slot = slot
 	self.mode = mode
+	self.kind = (mode == "Nightmare") and "nightmare" or "corn"
 	self.D = MODES[mode] or MODES.Normal
-	self.origin = Vector3.new(3000 + (slot - 1) * 700, 0, 0)
+	self.origin = Vector3.new(3000 + (slot - 1) * 800, 0, 0)
 	self.players = {} -- [plr] = { role, status }
 	self.flickers = {}
 	self.ended = false
 	self.puzzle = { input = {}, opened = false }
+	self.holes = {}
 	return self
 end
 
@@ -1220,10 +1871,28 @@ function Match:inCamp(pos)
 	return bx <= 6 and by <= 6
 end
 
--- --------------------------------------------------------------------
--- building the corn field
--- --------------------------------------------------------------------
+function Match:inBarnBlock(bx, by)
+	return bx >= 3 and bx <= 8 and by >= 3 and by <= 8
+end
+
+function Match:inBarn(pos)
+	return self:inBarnBlock(self:toBlock(pos))
+end
+
+function Match:inFarm(pos)
+	local bx, by = self:toBlock(pos)
+	return bx >= 15 and by >= 15 and bx <= SIZE - 1 and by <= SIZE - 1
+end
+
 function Match:build()
+	if self.kind == "nightmare" then
+		self:buildNightmare()
+	else
+		self:buildCorn()
+	end
+end
+
+function Match:buildCorn()
 	local O = self.origin
 	local GY = O.Y
 	local rng = Random.new(os.time() + self.slot * 17)
@@ -1620,6 +2289,7 @@ function Match:build()
 	self.overlap = OverlapParams.new()
 	self.overlap.FilterType = Enum.RaycastFilterType.Include
 	self.overlap.FilterDescendantsInstances = { stalks }
+	self:finishBuild()
 end
 
 -- --------------------------------------------------------------------
@@ -1635,7 +2305,8 @@ function Match:openGate()
 	g.light.Color = Color3.fromRGB(70, 255, 110)
 	playSound(CONFIG.Sounds.Ding, g.lamp, 2, 0.6, 200)
 	for _, r in ipairs(g.roots) do
-		TweenService:Create(r.root, TweenInfo.new(3.2, Enum.EasingStyle.Sine), { CFrame = r.base * C(0, 0, r.sign * 4.8) }):Play()
+		local off = (g.axis == "X") and C(r.sign * 4.8, 0, 0) or C(0, 0, r.sign * 4.8)
+		TweenService:Create(r.root, TweenInfo.new(3.2, Enum.EasingStyle.Sine), { CFrame = r.base * off }):Play()
 	end
 	task.delay(3.3, function()
 		for _, p in ipairs(g.parts) do
@@ -1681,6 +2352,644 @@ function Match:pressButton(plr, shapeName)
 end
 
 -- --------------------------------------------------------------------
+-- building the Nightmare farm
+-- --------------------------------------------------------------------
+function Match:buildNightmare()
+	local O = self.origin
+	local rng = Random.new(os.time() + self.slot * 17)
+	local deco = Random.new(os.time() + self.slot * 31 + 7)
+	local detail = math.clamp(CONFIG.CornDetail, 1, 3)
+	local fl = self.flickers
+
+	local folder = make("Folder", { Name = "Nightmare_" .. self.slot }, workspace)
+	local blocks = make("Folder", { Name = "Blocks" }, folder)
+	local stalks = make("Folder", { Name = "Stalks" }, folder)
+	local props = make("Folder", { Name = "Props" }, folder)
+	local colliders = make("Folder", { Name = "Colliders" }, folder)
+	self.folder, self.blocks, self.stalks, self.props = folder, blocks, stalks, props
+
+	local wall, wtype = genNightmare(rng)
+	self.wall, self.wtype = wall, wtype
+	local span = SIZE * BS
+	local function W(x, y, z)
+		return O + Vector3.new(x, y, z)
+	end
+
+	-- ground
+	solid({ Name = "Ground", Size = Vector3.new(span + 320, 4, span + 320), Position = W(span / 2, -2, span / 2), Material = Enum.Material.Grass, Color = Color3.fromRGB(32, 40, 24) }, folder)
+	part({ Name = "FarmDirt", Size = Vector3.new(105, 0.1, 105), Position = W(192.5, 0.04, 192.5), Material = Enum.Material.Ground, Color = Color3.fromRGB(70, 54, 38) }, folder)
+	part({ Name = "YardDirt", Size = Vector3.new(80, 0.1, 80), Position = W(50, 0.04, 50), Material = Enum.Material.Ground, Color = Color3.fromRGB(66, 52, 36) }, folder)
+	for _ = 1, 50 do
+		local p = W(deco:NextNumber() * span, 0.1, deco:NextNumber() * span)
+		part({ Name = "Mud", Size = Vector3.new(3 + deco:NextNumber() * 5, 0.05, 3 + deco:NextNumber() * 5), CFrame = C(p) * A(0, deco:NextNumber() * 6, 0), Material = Enum.Material.Mud, Color = Color3.fromRGB(50, 40, 28) }, folder)
+	end
+
+	-- corn patches
+	local stemColors = { Color3.fromRGB(90, 100, 44), Color3.fromRGB(100, 106, 50), Color3.fromRGB(78, 90, 38) }
+	local leafColors = { Color3.fromRGB(56, 78, 34), Color3.fromRGB(68, 88, 38), Color3.fromRGB(80, 92, 42) }
+	local coreColors = { Color3.fromRGB(52, 68, 32), Color3.fromRGB(62, 78, 36), Color3.fromRGB(46, 60, 30) }
+	local stalksPerFace = detail == 1 and 1 or 2
+	local function addStalk(base, height)
+		part({ Name = "Stem", Shape = Enum.PartType.Cylinder, Size = Vector3.new(height, 0.3, 0.3), CFrame = C(base + Vector3.new(0, height / 2, 0)) * A(0, 0, math.rad(90)), Color = stemColors[deco:NextInteger(1, #stemColors)], Material = Enum.Material.Wood }, stalks)
+		for i = 1, 2 do
+			local yaw = deco:NextNumber() * math.pi * 2
+			part({ Name = "Leaf", Size = Vector3.new(2.6, 0.06, 0.55), CFrame = C(base.X, base.Y + height * (0.35 + 0.25 * i), base.Z) * A(0, yaw, 0) * C(1.2, 0, 0) * A(0, 0, -math.rad(28)), Color = leafColors[deco:NextInteger(1, #leafColors)], Material = Enum.Material.Grass }, stalks)
+		end
+		if deco:NextNumber() < 0.4 then
+			part({ Name = "Ear", Size = Vector3.new(0.5, 1.5, 0.5), CFrame = C(base + Vector3.new(0.4, height * 0.55, 0)) * A(0, 0, math.rad(12)), Color = Color3.fromRGB(176, 146, 52), Material = Enum.Material.SmoothPlastic }, stalks)
+		end
+		maybeYield()
+	end
+	for bx = 1, SIZE do
+		for by = 1, SIZE do
+			if wall[bx][by] and wtype[bx][by] == "corn" then
+				local exposed = bx == 1 or by == 1 or bx == SIZE or by == SIZE
+				for _, d in ipairs(DIRS) do
+					if self:isOpen(bx + d[1], by + d[2]) then
+						exposed = true
+					end
+				end
+				if exposed then
+					local c = self:bc(bx, by)
+					solid({ Name = "CornWall", Size = Vector3.new(BS, WALL_H, BS), Position = c + Vector3.new(0, WALL_H / 2, 0), Material = Enum.Material.Grass, Color = coreColors[deco:NextInteger(1, #coreColors)] }, blocks)
+					for _, d in ipairs(DIRS) do
+						if self:isOpen(bx + d[1], by + d[2]) then
+							local n = Vector3.new(d[1], 0, d[2])
+							local t = Vector3.new(-d[2], 0, d[1])
+							for k = 1, stalksPerFace do
+								local off = (k - (stalksPerFace + 1) / 2) * (BS / (stalksPerFace + 0.3)) + (deco:NextNumber() - 0.5) * 1.2
+								addStalk(c + n * (BS / 2 + 0.5 + deco:NextNumber() * 0.5) + t * off, deco:NextNumber() * 4 + 11)
+							end
+						end
+					end
+				end
+				maybeYield()
+			end
+		end
+	end
+
+	-- THE BARN (you start inside)
+	local barnRed = Color3.fromRGB(110, 30, 24)
+	local trim = Color3.fromRGB(200, 192, 176)
+	self.barnBlocks = {}
+	for bx = 3, 8 do
+		for by = 3, 8 do
+			if wtype[bx][by] == "barn" then
+				self.barnBlocks[key(bx, by)] = solid({ Name = "BarnWall", Size = Vector3.new(BS, 18, BS), Position = self:bc(bx, by) + Vector3.new(0, 9, 0), Material = Enum.Material.WoodPlanks, Color = barnRed }, blocks)
+			end
+		end
+	end
+	for _, c in ipairs({ { 20, 20 }, { 80, 20 }, { 20, 80 }, { 80, 80 } }) do
+		part({ Name = "BarnCorner", Size = Vector3.new(1.4, 18.4, 1.4), Position = W(c[1], 9.2, c[2]), Color = trim, Material = Enum.Material.Wood }, props)
+	end
+	for _, e in ipairs({ { 50, 19.8, 61, 0.6 }, { 50, 80.2, 61, 0.6 } }) do
+		part({ Name = "BarnTrim", Size = Vector3.new(e[3], 0.8, e[4]), Position = W(e[1], 17.8, e[2]), Color = trim, Material = Enum.Material.Wood }, props)
+	end
+	for _, e in ipairs({ 19.8, 80.2 }) do
+		part({ Name = "BarnTrim", Size = Vector3.new(0.6, 0.8, 61), Position = W(e, 17.8, 50), Color = trim, Material = Enum.Material.Wood }, props)
+	end
+	local roofColor = Color3.fromRGB(58, 52, 50)
+	wedge({ Name = "BarnRoof", Size = Vector3.new(64, 12, 32), CFrame = C(W(50, 24, 34)), Color = roofColor, Material = Enum.Material.CorrodedMetal }, props)
+	wedge({ Name = "BarnRoof", Size = Vector3.new(64, 12, 32), CFrame = C(W(50, 24, 66)) * A(0, math.pi, 0), Color = roofColor, Material = Enum.Material.CorrodedMetal }, props)
+	part({ Name = "BarnFloor", Size = Vector3.new(40, 0.2, 40), Position = W(50, 0.1, 50), Material = Enum.Material.WoodPlanks, Color = Color3.fromRGB(70, 50, 32) }, props)
+	for _ = 1, 40 do
+		part({ Name = "Straw", Size = Vector3.new(0.08, 0.04, 1.2 + deco:NextNumber()), CFrame = C(W(31 + deco:NextNumber() * 38, 0.22, 31 + deco:NextNumber() * 38)) * A(0, deco:NextNumber() * 6, 0), Color = Color3.fromRGB(196, 170, 90), Material = Enum.Material.Fabric }, props)
+	end
+	-- chained barn doors (north wall), inside and outside
+	for _, side in ipairs({ { z = 30.3, s = 1 }, { z = 19.7, s = -1 } }) do
+		for _, x in ipairs({ 45, 55 }) do
+			part({ Name = "BarnDoor", Size = Vector3.new(9.6, 12, 0.4), Position = W(x, 6, side.z), Color = Color3.fromRGB(90, 24, 20), Material = Enum.Material.WoodPlanks }, props)
+			part({ Name = "DoorBrace", Size = Vector3.new(0.6, 15, 0.45), CFrame = C(W(x, 6, side.z + side.s * 0.05)) * A(0, 0, math.atan2(9.6, 12)), Color = trim, Material = Enum.Material.Wood }, props)
+		end
+		for i = -5, 5 do
+			part({ Name = "ChainLink", Size = Vector3.new(0.6, 0.18, 0.18), CFrame = C(W(50 + i * 0.55, 6 + math.cos(i * 0.3) * 0.3, side.z + side.s * 0.35)) * A(i % 2 == 0 and math.rad(90) or 0, 0, 0), Color = Color3.fromRGB(80, 80, 82), Material = Enum.Material.Metal }, props)
+		end
+		part({ Name = "Padlock", Size = Vector3.new(0.9, 1.1, 0.4), Position = W(50, 5.4, side.z + side.s * 0.5), Color = Color3.fromRGB(60, 60, 60), Material = Enum.Material.Metal }, props)
+	end
+	local doorHint = part({ Name = "DoorHint", Size = Vector3.new(4, 4, 1), Position = W(50, 5, 31), Transparency = 1 }, props)
+	local doorPrompt = make("ProximityPrompt", { ActionText = "Open", ObjectText = "Barn Doors", HoldDuration = 0.4, MaxActivationDistance = 8, RequiresLineOfSight = false }, doorHint)
+	doorPrompt.Triggered:Connect(function(plr)
+		showMessage(plr, "The doors are chained shut... find another way out.", 4, Color3.fromRGB(255, 190, 140))
+	end)
+	-- writing on the wall
+	local writing = part({ Name = "Writing", Size = Vector3.new(30, 3, 0.1), Position = W(50, 15, 30.25), Transparency = 1 }, props)
+	surfaceText(writing, Enum.NormalId.Back, "HE COMES FROM THE GROUND", Color3.fromRGB(140, 10, 10), Enum.Font.Antique)
+	-- stalls with hay and a dead cow
+	for _, z in ipairs({ 34, 42, 50, 58, 66 }) do
+		part({ Name = "StallWall", Size = Vector3.new(8, 4.5, 0.4), Position = W(34, 2.25, z), Color = Color3.fromRGB(86, 62, 40), Material = Enum.Material.WoodPlanks }, props)
+		part({ Name = "StallPost", Size = Vector3.new(0.6, 6, 0.6), Position = W(38, 3, z), Color = Color3.fromRGB(70, 50, 30), Material = Enum.Material.Wood }, props)
+	end
+	Props.hay(props, W(33, 0, 38), 0.2)
+	Props.hay(props, W(33, 0, 54), -0.1)
+	Props.hay(props, W(33, 2.2, 54), 0.4)
+	Props.deadCow(props, W(33.5, 0, 46), math.rad(90))
+	Props.blood(props, W(40, 0, 44), 2.4)
+	Props.blood(props, W(44, 0, 42), 1.6)
+	-- the hay loft (climb the ladder)
+	solid({ Name = "Loft", Size = Vector3.new(40, 0.8, 8), Position = W(50, 9, 66), Color = Color3.fromRGB(80, 58, 36), Material = Enum.Material.WoodPlanks }, props)
+	for _, x in ipairs({ 32, 50, 68 }) do
+		part({ Name = "LoftPost", Size = Vector3.new(0.7, 9, 0.7), Position = W(x, 4.5, 62.5), Color = Color3.fromRGB(70, 50, 30), Material = Enum.Material.Wood }, props)
+	end
+	part({ Name = "LoftRail", Size = Vector3.new(40, 0.3, 0.3), Position = W(50, 11.5, 62.2), Color = Color3.fromRGB(70, 50, 30), Material = Enum.Material.Wood }, props)
+	local ladder = make("TrussPart", { Name = "Ladder", Anchored = true, Size = Vector3.new(2, 10, 2), Position = W(42, 5, 61), Color = Color3.fromRGB(96, 70, 44), Material = Enum.Material.Wood, Style = Enum.Style.NoSupports }, props)
+	ladder.CanCollide = true
+	Props.hay(props, W(56, 9.4, 66), 0)
+	Props.hay(props, W(61, 9.4, 66.5), 0.3)
+	Props.crates(props, W(36, 9.4, 66), 0.2)
+	-- lanterns, tools, cart
+	Props.hangingLantern(props, W(45, 12, 45), fl)
+	Props.hangingLantern(props, W(58, 12, 55), fl)
+	Props.wheelbarrow(props, W(60, 0, 58), math.rad(30))
+	Props.crates(props, W(62, 0, 34), 0.5)
+	part({ Name = "ToolRack", Size = Vector3.new(0.3, 4, 6), Position = W(69.7, 4, 56), Color = Color3.fromRGB(70, 50, 30), Material = Enum.Material.Wood }, props)
+	for i = 1, 2 do
+		part({ Name = "RackFork", Size = Vector3.new(0.18, 6, 0.18), CFrame = C(W(69.4, 4.5, 54 + i * 1.6)) * A(0, 0, 0.06), Color = Color3.fromRGB(96, 70, 44), Material = Enum.Material.Wood }, props)
+		part({ Name = "RackTines", Size = Vector3.new(0.12, 1.2, 1.2), Position = W(69.4, 8, 54 + i * 1.6), Color = Color3.fromRGB(70, 70, 72), Material = Enum.Material.Metal }, props)
+	end
+	-- the loose boards on the east wall (the way out)
+	local boards = make("Folder", { Name = "LooseBoards" }, props)
+	for i = 0, 4 do
+		local z = 41 + i * 2
+		part({ Name = "LooseBoard", Size = Vector3.new(0.3, 7.5, 1.7), CFrame = C(W(69.75, 3.75, z)) * A(0, 0, (i % 2 == 0 and 1 or -1) * 0.03), Color = Color3.fromRGB(96, 34, 26), Material = Enum.Material.WoodPlanks }, boards)
+		if i < 4 then
+			part({ Name = "Moonlight", Size = Vector3.new(0.05, 6, 0.12), Position = W(69.6, 3.6, z + 1), Color = Color3.fromRGB(150, 170, 220), Material = Enum.Material.Neon }, boards)
+		end
+	end
+	Props.hay(props, W(67, 0, 40.5), math.rad(90))
+	Props.hay(props, W(67, 0, 49.5), math.rad(90))
+	Props.hay(props, W(67, 2.2, 49.5), math.rad(95))
+	local boardHit = part({ Name = "BoardHit", Size = Vector3.new(1, 6, 8), Position = W(69, 3.5, 45), Transparency = 1 }, boards)
+	local boardPrompt = make("ProximityPrompt", { ActionText = "Pry loose", ObjectText = "Loose Boards", HoldDuration = 2.5, MaxActivationDistance = 8, RequiresLineOfSight = false }, boardHit)
+	boardPrompt.Triggered:Connect(function(plr)
+		self:openBarn(plr)
+	end)
+	self.boards = boards
+
+	-- FENCE around the farm
+	local fenceWood = Color3.fromRGB(88, 76, 62)
+	for bx = 14, SIZE - 1 do
+		for by = 14, SIZE - 1 do
+			if wtype[bx][by] == "fence" then
+				local c = self:bc(bx, by)
+				local dirs = {}
+				if bx == 14 then
+					dirs[#dirs + 1] = Vector3.new(0, 0, 1)
+				end
+				if by == 14 then
+					dirs[#dirs + 1] = Vector3.new(1, 0, 0)
+				end
+				for _, dir in ipairs(dirs) do
+					local alongZ = dir.Z ~= 0
+					for i = -4, 4 do
+						local h = 7 + deco:NextNumber() * 1.2
+						part({ Name = "Picket", Size = alongZ and Vector3.new(0.35, h, 1) or Vector3.new(1, h, 0.35), CFrame = C(c + dir * (i * 1.1) + Vector3.new(0, h / 2, 0)) * A(0, 0, (deco:NextNumber() - 0.5) * 0.06), Color = fenceWood, Material = Enum.Material.WoodPlanks }, props)
+					end
+					for _, y in ipairs({ 2, 5.5 }) do
+						part({ Name = "FenceRail", Size = alongZ and Vector3.new(0.3, 0.4, BS) or Vector3.new(BS, 0.4, 0.3), Position = c + Vector3.new(0, y, 0) + (alongZ and Vector3.new(0.3, 0, 0) or Vector3.new(0, 0, 0.3)), Color = Color3.fromRGB(70, 60, 48), Material = Enum.Material.Wood }, props)
+					end
+					part({ Name = "BarbedWire", Size = alongZ and Vector3.new(0.06, 0.06, BS) or Vector3.new(BS, 0.06, 0.06), Position = c + Vector3.new(0, 8.6, 0), Color = Color3.fromRGB(60, 60, 60), Material = Enum.Material.Metal }, props)
+					solid({ Name = "FenceCollider", Size = alongZ and Vector3.new(1.6, 12, BS) or Vector3.new(BS, 12, 1.6), Position = c + Vector3.new(0, 6, 0), Transparency = 1, CanQuery = false }, colliders)
+				end
+				maybeYield()
+			end
+		end
+	end
+	Props.signpost(props, self:bc(13, 18) + Vector3.new(-2, 0, 0), math.rad(-90), "PRIVATE PROPERTY\nKEEP OUT\nTRESPASSERS WILL BE\nDEALT WITH")
+	Props.signpost(props, self:bc(18, 13) + Vector3.new(0, 0, -2), math.rad(180), "KEEP OUT")
+
+	-- THE FARMHOUSE
+	local hcf = C(W(205, 0, 205)) * A(0, math.pi / 2, 0) -- front faces the farm (-X)
+	local siding = Color3.fromRGB(132, 122, 104)
+	lp(props, hcf, "Foundation", Vector3.new(31, 1, 31), C(0, 0.5, 0), Color3.fromRGB(80, 78, 74), Enum.Material.Cobblestone)
+	local houseBody = lp(blocks, hcf, "House", Vector3.new(30, 14, 30), C(0, 7.5, 0), siding, Enum.Material.WoodPlanks, { CanCollide = true, CanQuery = true })
+	houseBody.Name = "Farmhouse"
+	wedge({ Name = "HouseRoof", Size = Vector3.new(32, 9, 16), CFrame = hcf * C(0, 19, -8), Color = Color3.fromRGB(50, 40, 36), Material = Enum.Material.Slate }, props)
+	wedge({ Name = "HouseRoof", Size = Vector3.new(32, 9, 16), CFrame = hcf * C(0, 19, 8) * A(0, math.pi, 0), Color = Color3.fromRGB(50, 40, 36), Material = Enum.Material.Slate }, props)
+	lp(props, hcf, "Chimney", Vector3.new(3, 12, 3), C(9, 20, 4), Color3.fromRGB(110, 50, 40), Enum.Material.Brick)
+	for _, wp in ipairs({ { -8, 4.5 }, { 8, 4.5 }, { -8, 11 }, { 0, 11 }, { 8, 11 } }) do
+		lp(props, hcf, "WindowFrame", Vector3.new(4.4, 4.4, 0.3), C(wp[1], wp[2] + 0.5, -15.1), Color3.fromRGB(200, 196, 186), Enum.Material.Wood)
+		local glass = lp(props, hcf, "Window", Vector3.new(3.6, 3.6, 0.2), C(wp[1], wp[2] + 0.5, -15.25), Color3.fromRGB(150, 110, 50), Enum.Material.Neon, { Transparency = 0.35 })
+		lp(props, hcf, "Mullion", Vector3.new(0.2, 3.6, 0.1), C(wp[1], wp[2] + 0.5, -15.37), Color3.fromRGB(40, 30, 20), Enum.Material.Wood)
+		if wp[2] < 5 then
+			make("PointLight", { Color = Color3.fromRGB(255, 170, 80), Range = 12, Brightness = 0.6 }, glass)
+		end
+	end
+	lp(props, hcf, "FrontDoor", Vector3.new(4, 7.5, 0.3), C(0, 4.75, -15.15), Color3.fromRGB(50, 30, 20), Enum.Material.WoodPlanks)
+	lp(props, hcf, "HandPrint", Vector3.new(0.8, 0.9, 0.05), C(0.8, 5.5, -15.32) * A(0, 0, 0.3), Color3.fromRGB(110, 8, 8), Enum.Material.SmoothPlastic)
+	lp(props, hcf, "Porch", Vector3.new(30, 0.6, 6), C(0, 1.1, -18), Color3.fromRGB(90, 70, 50), Enum.Material.WoodPlanks, { CanCollide = true })
+	for _, x in ipairs({ -14, -5, 5, 14 }) do
+		lp(props, hcf, "PorchPost", Vector3.new(0.6, 8, 0.6), C(x, 5, -20.6), Color3.fromRGB(190, 186, 176), Enum.Material.Wood)
+	end
+	lp(props, hcf, "PorchRoof", Vector3.new(31, 0.5, 7), C(0, 9.2, -18.2) * A(-0.12, 0, 0), Color3.fromRGB(50, 40, 36), Enum.Material.Slate)
+	local porchBulb = lp(props, hcf, "PorchLight", Vector3.new(0.6, 0.8, 0.6), C(3, 8.2, -15.6), Color3.fromRGB(255, 200, 120), Enum.Material.Neon)
+	local porchL = make("PointLight", { Color = Color3.fromRGB(255, 180, 100), Range = 26, Brightness = 1.4, Shadows = true }, porchBulb)
+	Props.flicker(fl, porchL, 0.5)
+	lp(props, hcf, "RockingChair", Vector3.new(2, 0.4, 2), C(-8, 2.6, -17.6), Color3.fromRGB(70, 50, 34), Enum.Material.Wood)
+	lp(props, hcf, "ChairBack", Vector3.new(2, 3, 0.3), C(-8, 4, -16.6) * A(0.2, 0, 0), Color3.fromRGB(70, 50, 34), Enum.Material.Wood)
+
+	-- THE SHED with the phone
+	local sc = self:bc(20, 5)
+	solid({ Name = "Shed", Size = Vector3.new(9, 9, 9), Position = sc + Vector3.new(0, 4.5, 0), Color = Color3.fromRGB(70, 56, 44), Material = Enum.Material.WoodPlanks }, blocks)
+	wedge({ Name = "ShedRoof", Size = Vector3.new(10, 2.4, 10), CFrame = C(sc + Vector3.new(0, 10.2, 0)) * A(0, math.pi / 2, 0), Color = Color3.fromRGB(60, 58, 56), Material = Enum.Material.CorrodedMetal }, props)
+	part({ Name = "ShedDoor", Size = Vector3.new(0.2, 7, 3.6), Position = sc + Vector3.new(4.55, 3.5, 0), Color = Color3.fromRGB(50, 40, 30), Material = Enum.Material.WoodPlanks }, props)
+	local phoneBox = part({ Name = "Phone", Size = Vector3.new(0.4, 1.6, 1), Position = sc + Vector3.new(-4.7, 4.6, 0), Color = Color3.fromRGB(200, 186, 150), Material = Enum.Material.SmoothPlastic }, props)
+	part({ Name = "Handset", Size = Vector3.new(0.3, 1.3, 0.3), Position = sc + Vector3.new(-4.95, 4.7, 0.6), Color = Color3.fromRGB(30, 30, 30), Material = Enum.Material.SmoothPlastic }, props)
+	part({ Name = "Cord", Size = Vector3.new(0.08, 1.4, 0.08), CFrame = C(sc + Vector3.new(-4.95, 3.6, 0.45)) * A(0.2, 0, 0), Color = Color3.fromRGB(30, 30, 30), Material = Enum.Material.Fabric }, props)
+	part({ Name = "Dial", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.1, 0.6, 0.6), Position = sc + Vector3.new(-4.92, 4.9, -0.1), Color = Color3.fromRGB(40, 40, 40), Material = Enum.Material.Metal }, props)
+	local phoneBulb = part({ Name = "ShedBulb", Size = Vector3.new(0.5, 0.6, 0.5), Position = sc + Vector3.new(-5, 7.8, 0), Color = Color3.fromRGB(255, 220, 160), Material = Enum.Material.Neon }, props)
+	Props.flicker(fl, make("PointLight", { Color = Color3.fromRGB(255, 210, 150), Range = 16, Brightness = 1 }, phoneBulb), 0.5)
+	local phoneSign = part({ Name = "PhoneSign", Size = Vector3.new(0.2, 1, 3), Position = sc + Vector3.new(-4.6, 6.6, 0), Color = Color3.fromRGB(30, 24, 18), Material = Enum.Material.Wood }, props)
+	surfaceText(phoneSign, Enum.NormalId.Left, "PHONE", Color3.fromRGB(230, 220, 190))
+	local phonePrompt = make("ProximityPrompt", { ActionText = "Call the police", ObjectText = "Phone", HoldDuration = 1.5, MaxActivationDistance = 8, RequiresLineOfSight = false }, phoneBox)
+	phonePrompt.Triggered:Connect(function(plr)
+		self:callPolice(plr)
+	end)
+
+	-- THE EXIT GATE (needs the rusty key)
+	local gc = self:bc(13, SIZE)
+	self.gatePos = gc
+	local gateParts, gateRoots = {}, {}
+	for _, xSign in ipairs({ -1, 1 }) do
+		local xc = gc.X + xSign * 2.5
+		local root = part({ Name = "GateRoot", Size = Vector3.new(0.4, 0.4, 0.4), Position = Vector3.new(xc, 6, gc.Z), Transparency = 1 }, folder)
+		gateRoots[#gateRoots + 1] = { root = root, sign = xSign, base = root.CFrame }
+		local list = {}
+		for i = 1, 7 do
+			list[#list + 1] = solid({ Name = "Bar", Size = Vector3.new(0.35, 11.5, 0.35), Position = Vector3.new(xc + (i - 4) * 0.68, 5.75, gc.Z), Color = Color3.fromRGB(56, 40, 26), Material = Enum.Material.CorrodedMetal }, folder)
+		end
+		for _, y in ipairs({ 1.2, 5.6, 10.5 }) do
+			list[#list + 1] = solid({ Name = "Rail", Size = Vector3.new(4.9, 0.45, 0.5), Position = Vector3.new(xc, y, gc.Z), Color = Color3.fromRGB(50, 36, 24), Material = Enum.Material.CorrodedMetal }, folder)
+		end
+		for _, p in ipairs(list) do
+			make("WeldConstraint", { Part0 = root, Part1 = p }, p)
+			p.Anchored = false
+			gateParts[#gateParts + 1] = p
+		end
+	end
+	for _, xs in ipairs({ -5.2, 5.2 }) do
+		solid({ Name = "GatePost", Size = Vector3.new(1.2, 14, 1.2), Position = Vector3.new(gc.X + xs, 7, gc.Z), Color = Color3.fromRGB(50, 36, 24), Material = Enum.Material.Wood }, folder)
+	end
+	local chain = {}
+	for i = -3, 3 do
+		chain[#chain + 1] = part({ Name = "GateChain", Size = Vector3.new(0.5, 0.16, 0.16), CFrame = C(Vector3.new(gc.X + i * 0.45, 5.6, gc.Z - 0.4)) * A(i % 2 == 0 and math.rad(90) or 0, 0, 0), Color = Color3.fromRGB(80, 80, 82), Material = Enum.Material.Metal }, folder)
+	end
+	local lock = part({ Name = "GatePadlock", Size = Vector3.new(0.9, 1.1, 0.4), Position = Vector3.new(gc.X, 5, gc.Z - 0.6), Color = Color3.fromRGB(150, 120, 40), Material = Enum.Material.CorrodedMetal }, folder)
+	chain[#chain + 1] = lock
+	local gateLamp = part({ Name = "GateLamp", Size = Vector3.new(3, 0.6, 0.6), Position = Vector3.new(gc.X, 12.4, gc.Z - 0.9), Color = Color3.fromRGB(255, 40, 30), Material = Enum.Material.Neon }, folder)
+	local gateLight = make("PointLight", { Color = Color3.fromRGB(255, 60, 40), Range = 26, Brightness = 1.5 }, gateLamp)
+	solid({ Name = "GateBeam", Size = Vector3.new(BS + 1.6, 1.4, 1.2), Position = Vector3.new(gc.X, 13, gc.Z), Color = Color3.fromRGB(50, 36, 24), Material = Enum.Material.Wood }, folder)
+	self.gate = { roots = gateRoots, parts = gateParts, lamp = gateLamp, light = gateLight, chain = chain, axis = "X" }
+	local lockPrompt = make("ProximityPrompt", { ActionText = "Unlock", ObjectText = "Gate (needs the rusty key)", HoldDuration = 1, MaxActivationDistance = 8, RequiresLineOfSight = false }, lock)
+	lockPrompt.Triggered:Connect(function(plr)
+		self:unlockGate(plr)
+	end)
+	self.lockPrompt = lockPrompt
+
+	-- the road outside, and invisible walls so nobody wanders off
+	for i = -16, 40 do
+		part({ Name = "Road", Size = Vector3.new(10, 0.2, 14), Position = W(i * 10, 0.08, span + 16), Material = Enum.Material.Asphalt, Color = Color3.fromRGB(40, 40, 42) }, folder)
+		if i % 3 == 0 then
+			part({ Name = "RoadLine", Size = Vector3.new(4, 0.05, 0.4), Position = W(i * 10, 0.2, span + 16), Material = Enum.Material.SmoothPlastic, Color = Color3.fromRGB(200, 180, 60) }, folder)
+		end
+	end
+	part({ Name = "Path", Size = Vector3.new(8, 0.15, 10), Position = W(gc.X - O.X, 0.06, span + 4), Material = Enum.Material.Ground, Color = Color3.fromRGB(70, 56, 40) }, folder)
+	for _, xo in ipairs({ -30, 30 }) do
+		solid({ Name = "RoadLampPole", Size = Vector3.new(0.4, 12, 0.4), Position = Vector3.new(gc.X + xo, 6, O.Z + span + 8), Color = Color3.fromRGB(44, 40, 36), Material = Enum.Material.Metal }, folder)
+		local bulb = part({ Name = "RoadLamp", Size = Vector3.new(1.2, 0.6, 1.2), Position = Vector3.new(gc.X + xo, 12.2, O.Z + span + 8), Color = Color3.fromRGB(255, 235, 190), Material = Enum.Material.Neon }, folder)
+		Props.flicker(fl, make("PointLight", { Color = Color3.fromRGB(255, 230, 180), Range = 40, Brightness = 2 }, bulb), 0.2)
+	end
+	solid({ Name = "Boundary", Size = Vector3.new(span + 340, 40, 2), Position = W(span / 2, 20, span + 34), Transparency = 1, CanQuery = false }, folder)
+	solid({ Name = "Boundary", Size = Vector3.new(2, 40, 36), Position = W(-170, 20, span + 17), Transparency = 1, CanQuery = false }, folder)
+	solid({ Name = "Boundary", Size = Vector3.new(2, 40, 36), Position = W(span + 170, 20, span + 17), Transparency = 1, CanQuery = false }, folder)
+
+	-- the police car waits far down the road until someone calls
+	local carStart = C(W(-150, 0, span + 16)) * A(0, -math.pi / 2, 0) -- faces +X
+	local car = Props.policeCar(folder, carStart)
+	self.police = { state = "none", car = car, start = carStart, stop = C(Vector3.new(gc.X, 0, O.Z + span + 16)) * A(0, -math.pi / 2, 0), lightT = 0, flip = false }
+	car.red.Material, car.blue.Material = Enum.Material.SmoothPlastic, Enum.Material.SmoothPlastic
+	car.redL.Enabled, car.blueL.Enabled = false, false
+	local carPrompt = make("ProximityPrompt", { ActionText = "Get in", ObjectText = "Police Car", HoldDuration = 0.4, MaxActivationDistance = 10, RequiresLineOfSight = false, Enabled = false }, car.doorHit)
+	carPrompt.Triggered:Connect(function(plr)
+		self:enterCar(plr)
+	end)
+	self.carPrompt = carPrompt
+
+	-- the farm: dead animals, the rusty key, junk
+	local farmBlocks = {}
+	for bx = 15, SIZE - 1 do
+		for by = 15, SIZE - 1 do
+			if not wall[bx][by] and not (bx >= 19 and bx <= 23 and by >= 19 and by <= 23) then
+				farmBlocks[#farmBlocks + 1] = { bx, by }
+			end
+		end
+	end
+	for i = #farmBlocks, 2, -1 do
+		local j = rng:NextInteger(1, i)
+		farmBlocks[i], farmBlocks[j] = farmBlocks[j], farmBlocks[i]
+	end
+	self.farmBlocks = farmBlocks
+	local keyBlock
+	for _, b in ipairs(farmBlocks) do
+		if (b[1] >= 17 or b[2] >= 17) and not (b[1] <= 16 and b[2] == 19) and not (b[2] <= 16 and b[1] == 19) then
+			keyBlock = b
+			break
+		end
+	end
+	keyBlock = keyBlock or farmBlocks[1]
+	self.keyHome = self:bc(keyBlock[1], keyBlock[2]) + Vector3.new(1.5, 0, -1.5)
+	self:spawnKey(self.keyHome)
+	Props.crates(props, self:bc(keyBlock[1], keyBlock[2]) + Vector3.new(-2, 0, 2), rng:NextNumber() * 6)
+	local animals = { Props.deadCow, Props.deadPig, Props.deadChicken, Props.deadSheep, Props.deadCow, Props.deadPig, Props.deadChicken, Props.deadSheep, Props.deadCow }
+	for i, fn in ipairs(animals) do
+		local b = farmBlocks[i + 1]
+		if b and b ~= keyBlock then
+			fn(props, self:bc(b[1], b[2]) + Vector3.new(rng:NextNumber() * 4 - 2, 0, rng:NextNumber() * 4 - 2), rng:NextNumber() * 6)
+		end
+		maybeYield()
+	end
+	Props.deadChicken(props, W(66, 0, 88), 1)
+	Props.deadPig(props, W(92, 0, 30), 2)
+	Props.tractor(props, self:bc(16, 22), math.rad(30))
+	Props.trough(props, self:bc(17, 17) + Vector3.new(0, 0, 3), 0)
+	Props.choppingBlock(props, self:bc(18, 20), 0.4)
+	Props.scarecrow(props, self:bc(23, 16), math.rad(210))
+	Props.hay(props, self:bc(16, 18), 0.7)
+	Props.well(props, self:bc(23, 23))
+	for _, b in ipairs({ { 16, 16 }, { 22, 17 }, { 16, 23 } }) do
+		Props.lantern(props, self:bc(b[1], b[2]) + Vector3.new(3, 0, 3), 0, fl)
+	end
+	-- the rest of the map
+	Props.signpost(props, self:bc(12, 12) + Vector3.new(2, 0, 2), math.rad(225), "FARM: SOUTH-EAST\nSHED + PHONE: EAST\nROAD + GATE: SOUTH")
+	Props.lantern(props, self:bc(12, 12) - Vector3.new(3, 0, 3), 0, fl)
+	Props.lantern(props, self:bc(10, 5), 0, fl)
+	Props.lantern(props, self:bc(13, SIZE - 1) + Vector3.new(3, 0, 0), 0, fl)
+	for _ = 1, 10 do
+		local b = self:randomOpen(rng)
+		if b and not self:inBarnBlock(b[1], b[2]) then
+			local roll = rng:NextNumber()
+			local p = self:bc(b[1], b[2])
+			if roll < 0.3 then
+				Props.scarecrow(props, p, rng:NextNumber() * 6)
+			elseif roll < 0.55 then
+				Props.cross(props, p, rng:NextNumber() * 6)
+			elseif roll < 0.8 then
+				Props.pumpkin(props, p, rng:NextNumber() * 6, 2.2, true, fl)
+			else
+				Props.bones(props, p, rng:NextNumber() * 6)
+			end
+		end
+	end
+	for _ = 1, (detail == 1 and 10 or 22) do
+		local x = deco:NextNumber() * (span + 240) - 120
+		local z = deco:NextNumber() * (span - 20) - 120
+		if not (x > -18 and x < span + 18 and z > -18) then
+			Props.deadTree(props, W(x, 0, z), 14 + deco:NextNumber() * 10, deco)
+		end
+	end
+
+	self.center = W(50, 0, 50)
+	self:finishBuild()
+end
+
+function Match:randomOpen(rng)
+	for _ = 1, 40 do
+		local bx, by = rng:NextInteger(2, SIZE - 1), rng:NextInteger(2, SIZE - 1)
+		if self:isOpen(bx, by) then
+			return { bx, by }
+		end
+	end
+	return nil
+end
+
+-- shared at the end of both builds
+function Match:finishBuild()
+	local open = {}
+	for bx = 1, SIZE do
+		for by = 1, SIZE do
+			if not self.wall[bx][by] then
+				open[#open + 1] = { bx, by }
+			end
+		end
+	end
+	self.openBlocks = open
+	self.holeFolder = make("Folder", { Name = "Holes" }, self.folder)
+	self.rayParams = RaycastParams.new()
+	self.rayParams.FilterType = Enum.RaycastFilterType.Include
+	self.rayParams.FilterDescendantsInstances = { self.blocks }
+	self.overlap = OverlapParams.new()
+	self.overlap.FilterType = Enum.RaycastFilterType.Include
+	self.overlap.FilterDescendantsInstances = { self.stalks }
+end
+
+-- --------------------------------------------------------------------
+-- Nightmare objectives: barn, key, phone, gate, police car
+-- --------------------------------------------------------------------
+function Match:openBarn(plr)
+	if self.barnOpen or self.ended then
+		return
+	end
+	local info = self.players[plr]
+	if not info or info.status ~= "alive" then
+		return
+	end
+	self.barnOpen = true
+	local bx, by = 8, 5
+	local old = self.barnBlocks[key(bx, by)]
+	if old then
+		old:Destroy()
+	end
+	local c = self:bc(bx, by)
+	solid({ Name = "BarnWall", Size = Vector3.new(BS, 10, BS), Position = c + Vector3.new(0, 13, 0), Material = Enum.Material.WoodPlanks, Color = Color3.fromRGB(110, 30, 24) }, self.blocks)
+	self.wall[bx][by] = false
+	self.wtype[bx][by] = "floor"
+	if self.boards then
+		self.boards:Destroy()
+	end
+	for i = 1, 7 do
+		part({ Name = "BrokenBoard", Size = Vector3.new(0.3, 3 + math.random() * 3, 1.6), CFrame = C(c + Vector3.new(-6 + math.random() * 14, 0.3, (math.random() - 0.5) * 7)) * A(math.rad(90), math.random() * 6, 0), Color = Color3.fromRGB(96, 34, 26), Material = Enum.Material.WoodPlanks }, self.props)
+	end
+	playSound(CONFIG.Sounds.Stab, self.holeFolder, 2, 0.4, 80)
+	self:burst(c + Vector3.new(-4, 4, 0), Color3.fromRGB(110, 80, 50))
+	for p, i2 in pairs(self.players) do
+		if i2.status == "alive" then
+			if i2.role == "survivor" then
+				showMessage(p, plr.DisplayName .. " broke the boards! Find the rusty key in the farm and call the police.", 6, Color3.fromRGB(150, 255, 170))
+			else
+				showMessage(p, "They got out of the barn...", 4, Color3.fromRGB(190, 255, 120))
+			end
+		end
+	end
+end
+
+function Match:spawnKey(pos)
+	if self.keyModel then
+		self.keyModel:Destroy()
+	end
+	local model, hit = Props.rustyKey(self.props, Vector3.new(pos.X, self.origin.Y, pos.Z))
+	self.keyModel = model
+	local prompt = make("ProximityPrompt", { ActionText = "Take", ObjectText = "Rusty Yellow Key", HoldDuration = 0.5, MaxActivationDistance = 8, RequiresLineOfSight = false }, hit)
+	prompt.Triggered:Connect(function(plr)
+		local info = self.players[plr]
+		if self.keyHolder or not info or info.role ~= "survivor" or info.status ~= "alive" then
+			return
+		end
+		self.keyHolder = plr
+		if self.keyModel then
+			self.keyModel:Destroy()
+			self.keyModel = nil
+		end
+		playSound(CONFIG.Sounds.Ding, PS[plr].hrp, 1, 1.5, 30)
+		self:broadcast(plr.DisplayName .. " found the rusty key! Now unlock the gate by the road.", 5, Color3.fromRGB(255, 220, 110))
+	end)
+end
+
+function Match:dropKey(plr)
+	if self.keyHolder ~= plr then
+		return
+	end
+	self.keyHolder = nil
+	local st = PS[plr]
+	local pos = self.keyHome
+	if st and st.hrp and st.hrp.Parent and not self:inBarn(st.hrp.Position) then
+		pos = st.hrp.Position
+	end
+	self:spawnKey(pos)
+	self:broadcast("The rusty key was dropped!", 4, Color3.fromRGB(255, 200, 120), plr)
+end
+
+function Match:callPolice(plr)
+	local info = self.players[plr]
+	local pol = self.police
+	if not info or info.role ~= "survivor" or info.status ~= "alive" or not pol then
+		return
+	end
+	if pol.state ~= "none" then
+		showMessage(plr, "The police are already on the way.", 3)
+		return
+	end
+	pol.state = "called"
+	pol.arriveAt = os.clock() + CONFIG.PoliceDelay
+	playSound(CONFIG.Sounds.Ding, PS[plr].hrp, 1, 0.8, 30)
+	self:broadcast("911 was called! The police will come down the road in " .. CONFIG.PoliceDelay .. " seconds.", 6, Color3.fromRGB(140, 190, 255))
+end
+
+function Match:unlockGate(plr)
+	local info = self.players[plr]
+	if self.gateUnlocked or not info or info.role ~= "survivor" or info.status ~= "alive" then
+		return
+	end
+	if not self.keyHolder then
+		showMessage(plr, "It's locked. You need the rusty yellow key from the farm.", 4, Color3.fromRGB(255, 190, 140))
+		return
+	end
+	self.gateUnlocked = true
+	for _, p in ipairs(self.gate.chain) do
+		if p.Parent then
+			p:Destroy()
+		end
+	end
+	self.lockPrompt.Enabled = false
+	self.puzzle.opened = false
+	self:openGate()
+	self:broadcast("The gate is open! Get to the road!", 5, Color3.fromRGB(150, 255, 170))
+end
+
+function Match:enterCar(plr)
+	local pol = self.police
+	local info = self.players[plr]
+	local st = PS[plr]
+	if not pol or pol.state ~= "here" or not info or info.role ~= "survivor" or info.status ~= "alive" or not st.hum then
+		return
+	end
+	for _, seat in ipairs(pol.car.seats) do
+		if seat.Occupant == nil then
+			seat:Sit(st.hum)
+			st.hum.JumpPower = 0
+			st.hum.JumpHeight = 0
+			showMessage(plr, "You're in the police car! Waiting for the others...", 4, Color3.fromRGB(140, 190, 255))
+			return
+		end
+	end
+	showMessage(plr, "The car is full!", 3)
+end
+
+function Match:policeStep(dt, now)
+	local pol = self.police
+	local car = pol.car
+	if pol.state ~= "none" and pol.state ~= "called" then
+		pol.lightT += dt
+		if pol.lightT > 0.35 then
+			pol.lightT = 0
+			pol.flip = not pol.flip
+			car.red.Material = pol.flip and Enum.Material.Neon or Enum.Material.SmoothPlastic
+			car.blue.Material = pol.flip and Enum.Material.SmoothPlastic or Enum.Material.Neon
+			car.redL.Enabled = pol.flip
+			car.blueL.Enabled = not pol.flip
+		end
+	end
+	if pol.state == "called" and now >= pol.arriveAt then
+		pol.state = "arriving"
+		car.root.CFrame = pol.start
+		TweenService:Create(car.root, TweenInfo.new(7, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { CFrame = pol.stop }):Play()
+		task.delay(7, function()
+			if not self.ended and pol.state == "arriving" then
+				pol.state = "here"
+				self.carPrompt.Enabled = true
+				self:broadcast("The police are here! Get in the car!", 5, Color3.fromRGB(140, 190, 255))
+			end
+		end)
+	elseif pol.state == "here" then
+		local seated, outside = {}, 0
+		for _, s in ipairs(self:survivors()) do
+			local seat = s.st.hum.SeatPart
+			if seat and seat:IsDescendantOf(car.model) then
+				seated[#seated + 1] = s.plr
+			else
+				outside += 1
+			end
+		end
+		if #seated > 0 then
+			pol.leaveAt = pol.leaveAt or (now + 15)
+			if outside == 0 then
+				pol.leaveAt = math.min(pol.leaveAt, now + 1.5)
+			end
+			if now >= pol.leaveAt then
+				self:driveOff(seated)
+			end
+		else
+			pol.leaveAt = nil
+		end
+	end
+end
+
+function Match:driveOff(seated)
+	local pol = self.police
+	pol.state = "leaving"
+	pol.leaveAt = nil
+	self.carPrompt.Enabled = false
+	local far = pol.stop * C(0, 0, -400) -- forward along the road
+	TweenService:Create(pol.car.root, TweenInfo.new(8, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { CFrame = far }):Play()
+	for _, plr in ipairs(seated) do
+		showMessage(plr, "The police car drives off into the night...", 4, Color3.fromRGB(140, 190, 255))
+		task.delay(2.5, function()
+			if self.players[plr] and self.players[plr].status == "alive" then
+				self:escaped(plr)
+			end
+		end)
+	end
+	-- the police come back for anyone left behind
+	task.delay(9, function()
+		if self.ended then
+			return
+		end
+		pol.car.root.CFrame = pol.start
+		pol.state = "called"
+		pol.arriveAt = os.clock() + 25
+		self:broadcast("The police will come back for the rest of you in 25 seconds...", 5, Color3.fromRGB(140, 190, 255))
+	end)
+end
+
+-- --------------------------------------------------------------------
 -- players in the match
 -- --------------------------------------------------------------------
 function Match:survivors()
@@ -1695,6 +3004,17 @@ function Match:survivors()
 		end
 	end
 	return list
+end
+
+-- can the monster / farmer go after this survivor?
+function Match:targetable(s)
+	if s.st.hum.SeatPart then
+		return false
+	end
+	if self.kind == "nightmare" then
+		return not self:inBarn(s.hrp.Position)
+	end
+	return true
 end
 
 function Match:broadcast(text, dur, color, exceptPlr)
@@ -1712,6 +3032,9 @@ function Match:removePlayer(plr, status)
 	if not info or info.status ~= "alive" then
 		return
 	end
+	if self.keyHolder == plr and status ~= "escaped" then
+		self:dropKey(plr)
+	end
 	info.status = status
 	local st = PS[plr]
 	if st then
@@ -1719,32 +3042,49 @@ function Match:removePlayer(plr, status)
 	end
 end
 
-function Match:caught(plr)
+function Match:caught(plr, delay, byText)
 	local info = self.players[plr]
 	if not info or info.status ~= "alive" then
 		return
 	end
 	self:removePlayer(plr, "caught")
-	showMessage(plr, "The Corn Monster got you...", 3, Color3.fromRGB(255, 130, 110))
-	self:broadcast(plr.DisplayName .. " was taken by the Corn Monster.", 4, Color3.fromRGB(255, 150, 120), plr)
 	local st = PS[plr]
 	if st and st.hum and st.hum.Parent then
 		st.hum.WalkSpeed = 0
 		st.hum.JumpPower = 0
 		st.hum.JumpHeight = 0
 	end
-	task.delay(2.5, function()
+	local who = byText or "the Corn Monster"
+	self:broadcast(plr.DisplayName .. " was taken by " .. who .. ".", 4, Color3.fromRGB(255, 150, 120), plr)
+	task.delay(math.max(0, (delay or 2.5) - 0.6), function()
+		showMessage(plr, "You were caught by " .. who .. "...", 3, Color3.fromRGB(255, 130, 110))
+	end)
+	task.delay(delay or 2.5, function()
 		if PS[plr] and PS[plr].match == self then
 			sendToLobby(plr)
 		end
 	end)
 end
 
+local saveBeatNormal -- defined later
+
 function Match:escaped(plr)
 	self:removePlayer(plr, "escaped")
-	showMessage(plr, "YOU ESCAPED THE CORN FIELD!", 5, Color3.fromRGB(150, 255, 170))
 	self:broadcast(plr.DisplayName .. " escaped!", 4, Color3.fromRGB(150, 255, 170), plr)
-	awardBadge(plr)
+	local st = PS[plr]
+	if self.kind == "nightmare" then
+		showMessage(plr, "YOU SURVIVED THE NIGHTMARE!", 5, Color3.fromRGB(150, 255, 170))
+		awardBadge(plr, CONFIG.NightmareBadgeId)
+	else
+		awardBadge(plr, CONFIG.BadgeId)
+		if st and not st.beatNormal then
+			st.beatNormal = true
+			saveBeatNormal(plr)
+			showMessage(plr, "YOU ESCAPED! You can now play as the Corn Monster!", 6, Color3.fromRGB(190, 255, 120))
+		else
+			showMessage(plr, "YOU ESCAPED THE CORN FIELD!", 5, Color3.fromRGB(150, 255, 170))
+		end
+	end
 	task.delay(4, function()
 		if PS[plr] and PS[plr].match == self then
 			sendToLobby(plr)
@@ -1753,10 +3093,104 @@ function Match:escaped(plr)
 end
 
 -- --------------------------------------------------------------------
--- monster: picking where he bursts out
+-- effects: smoke bursts, holes in the corn, cracks in the ground
 -- --------------------------------------------------------------------
--- He comes out of the corn wall about EmergeDistance studs BEHIND the
--- player. If there is no wall there, he comes out IN FRONT instead.
+function Match:burst(pos, color)
+	local p = part({ Name = "Burst", Size = Vector3.new(1, 1, 1), Position = pos, Transparency = 1 }, self.folder)
+	local e = make("ParticleEmitter", {
+		Texture = "rbxasset://textures/particles/smoke_main.dds", Rate = 90, Lifetime = NumberRange.new(0.8, 1.5),
+		Speed = NumberRange.new(6, 14), SpreadAngle = Vector2.new(60, 60), Size = NumberSequence.new(1.5, 4),
+		Transparency = NumberSequence.new(0.35, 1), Color = ColorSequence.new(color or Color3.fromRGB(90, 110, 50)),
+		Acceleration = Vector3.new(0, -6, 0), RotSpeed = NumberRange.new(-120, 120),
+	}, p)
+	task.delay(0.4, function()
+		e.Enabled = false
+	end)
+	Debris:AddItem(p, 3)
+end
+
+function Match:rustleWall(sp)
+	local face = self:bc(sp.bx, sp.by) + Vector3.new(sp.dx, 0, sp.dy) * (BS / 2) + Vector3.new(0, 7, 0)
+	local found = workspace:GetPartBoundsInRadius(face, 8, self.overlap)
+	local list = {}
+	for _, p in ipairs(found) do
+		list[#list + 1] = { p = p, cf = p.CFrame }
+	end
+	task.spawn(function()
+		local t0 = os.clock()
+		while os.clock() - t0 < 1.3 do
+			local t = os.clock() - t0
+			local amp = (0.3 + t / 1.3) * 0.16
+			for _, e in ipairs(list) do
+				if e.p.Parent and e.p.CFrame.Position:FuzzyEq(e.cf.Position, 2) then
+					e.p.CFrame = e.cf * A(math.sin(t * 38 + e.cf.X) * amp, 0, math.sin(t * 31 + e.cf.Z) * amp)
+				end
+			end
+			task.wait(1 / 30)
+		end
+	end)
+end
+
+-- He tears a hole in the corn wall when he comes out
+function Match:wallHole(sp)
+	local id = key(sp.bx, sp.by) * 10 + (sp.dx + 1) * 3 + (sp.dy + 1)
+	local n = Vector3.new(sp.dx, 0, sp.dy)
+	local face = self:bc(sp.bx, sp.by) + n * (BS / 2)
+	-- broken stalks fly out onto the ground
+	local found = workspace:GetPartBoundsInRadius(face + Vector3.new(0, 6, 0), 5, self.overlap)
+	for _, p in ipairs(found) do
+		local land = Vector3.new(p.Position.X, self.origin.Y + 0.2 + math.random() * 0.3, p.Position.Z) + n * (2 + math.random() * 5)
+		TweenService:Create(p, TweenInfo.new(0.45 + math.random() * 0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { CFrame = C(land) * A(math.rad(90), math.random() * 6, 0) }):Play()
+	end
+	if self.holes[id] then
+		return
+	end
+	self.holes[id] = true
+	local up = Vector3.new(0, 1, 0)
+	local dark = Color3.fromRGB(10, 12, 6)
+	for i, h in ipairs({ 3.4, 6, 8.6 }) do
+		local d = (i == 2) and 6.4 or 5.2
+		part({ Name = "Hole", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.25, d, d), CFrame = CFrame.fromMatrix(face + n * 0.14 + Vector3.new(0, h, 0), n, up), Color = dark, Material = Enum.Material.Grass }, self.holeFolder)
+	end
+	for i = 1, 14 do
+		local a = i / 14 * math.pi * 2
+		local rim = face + n * 0.3 + Vector3.new(0, 6, 0) + (Vector3.new(-n.Z, 0, n.X) * math.cos(a) * 3.2) + Vector3.new(0, math.sin(a) * 4.4, 0)
+		part({ Name = "TornLeaf", Size = Vector3.new(0.4, 0.06, 1.6), CFrame = CFrame.lookAt(rim, rim + n + Vector3.new(0, -0.4, 0)) * A(0, 0, a), Color = Color3.fromRGB(70 + math.random(0, 30), 90, 40), Material = Enum.Material.Grass }, self.holeFolder)
+	end
+	for _ = 1, 4 do
+		local p = face + n * (1.5 + math.random() * 4) + Vector3.new((math.random() - 0.5) * 6, 0.25, (math.random() - 0.5) * 6)
+		part({ Name = "Husk", Size = Vector3.new(0.6, 0.06, 2), CFrame = C(p) * A(0, math.random() * 6, 0), Color = Color3.fromRGB(150, 130, 70), Material = Enum.Material.Fabric }, self.holeFolder)
+	end
+	self:burst(face + Vector3.new(0, 6, 0) + n, Color3.fromRGB(80, 110, 46))
+end
+
+-- He bursts out of the ground (Nightmare): cracks first, then the hole
+function Match:groundCrack(pos, burst)
+	local g = Vector3.new(pos.X, self.origin.Y, pos.Z)
+	if not burst then
+		for i = 1, 9 do
+			local a = i / 9 * math.pi * 2 + math.random() * 0.3
+			local len = 3 + math.random() * 4
+			local mid = g + Vector3.new(math.cos(a), 0, math.sin(a)) * (len / 2 + 1)
+			part({ Name = "Crack", Size = Vector3.new(0.35, 0.06, len), CFrame = CFrame.lookAt(mid + Vector3.new(0, 0.1, 0), g + Vector3.new(0, 0.1, 0)), Color = Color3.fromRGB(14, 10, 8), Material = Enum.Material.Slate }, self.holeFolder)
+		end
+		playSound(CONFIG.Sounds.Footstep, self.holeFolder, 3, 0.18, 90)
+		return
+	end
+	part({ Name = "GroundHole", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.12, 6.5, 6.5), CFrame = C(g + Vector3.new(0, 0.12, 0)) * A(0, 0, math.rad(90)), Color = Color3.fromRGB(8, 6, 4), Material = Enum.Material.Slate }, self.holeFolder)
+	for i = 1, 12 do
+		local a = i / 12 * math.pi * 2
+		local s = 0.8 + math.random() * 1
+		part({ Name = "Dirt", Shape = Enum.PartType.Ball, Size = Vector3.new(s, s, s), Position = g + Vector3.new(math.cos(a) * 3.7, s * 0.25, math.sin(a) * 3.7), Color = Color3.fromRGB(60 + math.random(0, 16), 44, 30), Material = Enum.Material.Ground }, self.holeFolder)
+	end
+	self:burst(g + Vector3.new(0, 2, 0), Color3.fromRGB(90, 66, 44))
+end
+
+-- --------------------------------------------------------------------
+-- monster: picking where he comes out
+-- --------------------------------------------------------------------
+-- Corn Field: out of the corn wall about EmergeDistance studs BEHIND the
+-- player. If there is no wall there, out of the wall IN FRONT instead.
 function Match:pickEmergeSpot(hrp)
 	local P = hrp.Position
 	local look = flat(hrp.CFrame.LookVector)
@@ -1808,45 +3242,41 @@ function Match:pickEmergeSpot(hrp)
 	return spot
 end
 
-function Match:rustleWall(sp)
-	local face = self:bc(sp.bx, sp.by) + Vector3.new(sp.dx, 0, sp.dy) * (BS / 2) + Vector3.new(0, 7, 0)
-	local found = workspace:GetPartBoundsInRadius(face, 8, self.overlap)
-	local list = {}
-	for _, p in ipairs(found) do
-		list[#list + 1] = { p = p, cf = p.CFrame }
+-- Nightmare: out of the ground about EmergeDistance studs behind you
+-- (or in front of you if there's no room behind)
+function Match:pickGroundSpot(hrp)
+	local P = hrp.Position
+	local look = flat(hrp.CFrame.LookVector)
+	if look.Magnitude < 0.01 then
+		look = Vector3.new(0, 0, -1)
 	end
-	task.spawn(function()
-		local t0 = os.clock()
-		while os.clock() - t0 < 1.3 do
-			local t = os.clock() - t0
-			local amp = (1 - t / 1.3) * 0.14
-			for _, e in ipairs(list) do
-				if e.p.Parent then
-					e.p.CFrame = e.cf * A(math.sin(t * 38 + e.cf.X) * amp, 0, math.sin(t * 31 + e.cf.Z) * amp)
+	look = look.Unit
+	local pbx, pby = self:toBlock(P)
+	local dm = bfs(self.wall, pbx, pby)
+	local ground = Vector3.new(P.X, self.origin.Y, P.Z)
+	local function ok(q)
+		local bx, by = self:toBlock(q)
+		if not self:isOpen(bx, by) or self:inBarnBlock(bx, by) then
+			return false
+		end
+		local d = dm[key(bx, by)]
+		if not d or d > 3 then
+			return false
+		end
+		return self:clearLine(P + Vector3.new(0, 2, 0), q + Vector3.new(0, 2, 0))
+	end
+	for _, sign in ipairs({ -1, 1 }) do
+		for _, ang in ipairs({ 0, 0.35, -0.35, 0.7, -0.7 }) do
+			local dir = A(0, ang, 0):VectorToWorldSpace(look) * sign
+			for _, dist in ipairs({ CONFIG.EmergeDistance, CONFIG.EmergeDistance - 2, CONFIG.EmergeDistance + 3 }) do
+				local q = ground + dir * dist
+				if ok(q) then
+					return q
 				end
 			end
-			task.wait(1 / 30)
 		end
-		for _, e in ipairs(list) do
-			if e.p.Parent then
-				e.p.CFrame = e.cf
-			end
-		end
-	end)
-end
-
-function Match:burst(pos)
-	local p = part({ Name = "Burst", Size = Vector3.new(1, 1, 1), Position = pos, Transparency = 1 }, self.folder)
-	local e = make("ParticleEmitter", {
-		Texture = "rbxasset://textures/particles/smoke_main.dds", Rate = 90, Lifetime = NumberRange.new(0.8, 1.5),
-		Speed = NumberRange.new(6, 14), SpreadAngle = Vector2.new(60, 60), Size = NumberSequence.new(1.5, 4),
-		Transparency = NumberSequence.new(0.35, 1), Color = ColorSequence.new(Color3.fromRGB(90, 110, 50)),
-		Acceleration = Vector3.new(0, -6, 0), RotSpeed = NumberRange.new(-120, 120),
-	}, p)
-	task.delay(0.4, function()
-		e.Enabled = false
-	end)
-	Debris:AddItem(p, 3)
+	end
+	return nil
 end
 
 -- --------------------------------------------------------------------
@@ -1854,6 +3284,7 @@ end
 -- --------------------------------------------------------------------
 function Match:aiInit()
 	local m = Monster.new(self.folder, CONFIG.MonsterScale)
+	m.twitch = self.D.twitch or 1
 	m.pos = self.center - Vector3.new(0, 80, 0)
 	m:assemble(C(m.pos))
 	self.mon = m
@@ -1885,7 +3316,7 @@ function Match:startEmerge(sp, target)
 	ai.t = 0
 	ai.spot = sp
 	ai.target = target
-	ai.lunged = false
+	ai.holed = false
 	m.crawlAmt = 0
 	m.pos = self:bc(sp.bx, sp.by)
 	m.yaw = math.atan2(-sp.dx, -sp.dy)
@@ -1893,13 +3324,46 @@ function Match:startEmerge(sp, target)
 	m.rustleSound:Play()
 end
 
+function Match:startRise(pos, target)
+	local m, ai = self.mon, self.ai
+	ai.mode = "rise"
+	ai.t = 0
+	ai.risePos = Vector3.new(pos.X, self.origin.Y, pos.Z)
+	ai.target = target
+	ai.burstDone = false
+	m.crawlAmt = 0
+	m.pos = ai.risePos - Vector3.new(0, 16, 0)
+	local st = PS[target]
+	if st and st.hrp then
+		local to = flat(st.hrp.Position - ai.risePos)
+		if to.Magnitude > 0.1 then
+			m.yaw = math.atan2(-to.X, -to.Z)
+		end
+	end
+	self:groundCrack(ai.risePos, false)
+end
+
+function Match:startSink(lit)
+	local m, ai = self.mon, self.ai
+	ai.mode = "sink"
+	ai.t = 0
+	ai.sinkPos = Vector3.new(m.pos.X, self.origin.Y, m.pos.Z)
+	ai.litSink = lit
+	m.path = nil
+	m:growl()
+	self:groundCrack(ai.sinkPos, true)
+end
+
 function Match:retreat(crawl)
 	local m, ai = self.mon, self.ai
+	if self.kind == "nightmare" then
+		self:startSink(crawl)
+		return
+	end
 	local sx, sy = self:nearestOpen(m.pos)
 	local dmM = bfs(self.wall, sx, sy)
-	local surv = self:survivors()
 	local dmPs = {}
-	for _, s in ipairs(surv) do
+	for _, s in ipairs(self:survivors()) do
 		local bx, by = self:toBlock(s.hrp.Position)
 		dmPs[#dmPs + 1] = bfs(self.wall, bx, by)
 	end
@@ -1930,11 +3394,11 @@ function Match:retreat(crawl)
 		end
 	end
 	ai.spot = best
-	ai.path = best and findPath(self.wall, sx, sy, best.ox, best.oy)
-	ai.idx = 2
+	m.path = best and findPath(self.wall, sx, sy, best.ox, best.oy)
+	m.idx = 2
 	ai.crawling = crawl
 	ai.litTime = 0
-	if not ai.path then
+	if not m.path then
 		self:goDormant()
 		return
 	end
@@ -1947,32 +3411,33 @@ function Match:goDormant()
 	ai.target = nil
 	ai.nextEmerge = os.clock() + self.D.rearmMin + math.random() * (self.D.rearmMax - self.D.rearmMin)
 	m.crawlAmt = 0
+	m.path = nil
 	m.pos = self.center - Vector3.new(0, 80, 0)
 	m:pose(C(m.pos), os.clock(), 0.05, false, false)
 	m:applyAnchored()
 end
 
-function Match:follow(dt, speed, chasePos)
-	local m, ai = self.mon, self.ai
+-- walk an agent (monster or farmer) along its path, or straight at chasePos
+function Match:follow(agent, dt, speed, chasePos)
 	local target
-	if ai.path and ai.path[ai.idx] then
-		target = self:bc(ai.path[ai.idx][1], ai.path[ai.idx][2])
+	if agent.path and agent.path[agent.idx] then
+		target = self:bc(agent.path[agent.idx][1], agent.path[agent.idx][2])
 	elseif chasePos then
 		target = Vector3.new(chasePos.X, self.origin.Y, chasePos.Z)
 	end
 	if not target then
 		return false, true
 	end
-	local to = flat(target - m.pos)
+	local to = flat(target - agent.pos)
 	local dd = to.Magnitude
 	if dd < 0.5 then
-		if ai.path and ai.path[ai.idx] then
-			ai.idx += 1
+		if agent.path and agent.path[agent.idx] then
+			agent.idx += 1
 		end
-		return false, (ai.path == nil or ai.path[ai.idx] == nil)
+		return false, (agent.path == nil or agent.path[agent.idx] == nil)
 	end
-	m.pos = m.pos + to.Unit * math.min(speed * dt, dd)
-	m.yaw = lerpAngle(m.yaw, math.atan2(-to.X, -to.Z), math.min(1, dt * 8))
+	agent.pos = agent.pos + to.Unit * math.min(speed * dt, dd)
+	agent.yaw = lerpAngle(agent.yaw, math.atan2(-to.X, -to.Z), math.min(1, dt * 8))
 	return true, false
 end
 
@@ -1987,24 +3452,32 @@ function Match:aiStep(dt, now)
 		local target = ai.target
 		local tInfo
 		for _, s in ipairs(surv) do
-			if s.plr == target then
+			if s.plr == target and self:targetable(s) then
 				tInfo = s
 			end
 		end
 		if not tInfo then
 			local choices = {}
 			for _, s in ipairs(surv) do
-				if not self:inCamp(s.hrp.Position) then
+				if self:targetable(s) and not (self.kind == "corn" and self:inCamp(s.hrp.Position)) then
 					choices[#choices + 1] = s
 				end
 			end
 			tInfo = choices[math.random(math.max(#choices, 1))]
 		end
 		if tInfo then
-			local sp = self:pickEmergeSpot(tInfo.hrp)
-			if sp then
-				self:startEmerge(sp, tInfo.plr)
-				return
+			if self.kind == "nightmare" then
+				local q = self:pickGroundSpot(tInfo.hrp)
+				if q then
+					self:startRise(q, tInfo.plr)
+					return
+				end
+			else
+				local sp = self:pickEmergeSpot(tInfo.hrp)
+				if sp then
+					self:startEmerge(sp, tInfo.plr)
+					return
+				end
 			end
 		end
 		ai.target = nil
@@ -2013,45 +3486,78 @@ function Match:aiStep(dt, now)
 	end
 
 	if ai.mode == "emerge" then
+		-- shakes the corn, rips a hole in the wall, and pulls himself out
 		ai.t += dt
 		local sp = ai.spot
 		local inside, outside = self:bc(sp.bx, sp.by), self:bc(sp.ox, sp.oy)
-		local moving = false
+		local a = 0
 		if ai.t < 1.2 then
 			m.pos = inside
-		elseif ai.t < 2.0 then
-			local a = (ai.t - 1.2) / 0.8
-			a = a * a * (3 - 2 * a)
-			m.pos = inside:Lerp(outside, a)
-			moving = true
-			if not ai.lunged then
-				ai.lunged = true
-				self:burst(self:bc(sp.bx, sp.by) + Vector3.new(sp.dx, 0, sp.dy) * (BS / 2) + Vector3.new(0, 6, 0))
+		elseif ai.t < 2.8 then
+			if not ai.holed then
+				ai.holed = true
+				self:wallHole(sp)
 				m:growl()
 				ai.lastGrowl = now
 			end
+			a = smooth((ai.t - 1.2) / 1.6)
+			m.pos = inside:Lerp(outside, a)
 		else
 			ai.mode = "hunt"
 			ai.chaseUntil = now + D.giveUp
-			ai.path = nil
+			m.path = nil
 			ai.lastPath = 0
 		end
-		m.phase += dt * (moving and 8 or 1.5)
-		local k = moving and 0.8 or 0.05
-		m:pose(C(m.pos) * A(0, m.yaw, 0), now, k, moving, false)
+		m.phase += dt * ((ai.t > 1.2) and 6 or 1.5)
+		local k = (ai.t > 1.2) and 0.6 or 0.05
+		m:pose(C(m.pos) * A(0, m.yaw, 0), now, k, true, false, { kind = "emerge", a = a })
 		m:applyAnchored()
 		m:steps(k)
 		return
 	end
 
-	if ai.mode == "pause" then
-		m.phase += dt * 1.2
-		m:pose(C(m.pos) * A(0, m.yaw, 0), now, 0.05, false, false)
+	if ai.mode == "rise" then
+		-- the ground cracks, then he claws his way up
+		ai.t += dt
+		local a = 0
+		if ai.t >= 1.4 then
+			if not ai.burstDone then
+				ai.burstDone = true
+				self:groundCrack(ai.risePos, true)
+				m:growl()
+				ai.lastGrowl = now
+			end
+			a = smooth((ai.t - 1.4) / 1.8)
+		end
+		m.pos = ai.risePos - Vector3.new(0, 16 * (1 - a), 0)
+		if ai.t >= 3.3 then
+			ai.mode = "hunt"
+			ai.chaseUntil = now + D.giveUp
+			m.path = nil
+			ai.lastPath = 0
+		end
+		m.phase += dt * 3
+		m:pose(C(m.pos) * A(0, m.yaw, 0), now, 0.3, true, false, { kind = "rise", a = a })
 		m:applyAnchored()
-		if now > ai.pauseUntil then
-			self:retreat(false)
+		return
+	end
+
+	if ai.mode == "sink" then
+		-- flails, then sinks back into the dirt
+		ai.t += dt
+		local a = smooth((ai.t - 0.5) / 1.5)
+		m.pos = ai.sinkPos - Vector3.new(0, 16 * a, 0)
+		m.phase += dt * 4
+		m:pose(C(m.pos) * A(0, m.yaw, 0), now, 0.3, false, true, { kind = "sink" })
+		m:applyAnchored()
+		if ai.t >= 2.1 then
+			self:goDormant()
 		end
 		return
+	end
+
+	if ai.mode == "grab" then
+		return -- handled by grabStep
 	end
 
 	if ai.mode == "burrow" then
@@ -2079,7 +3585,7 @@ function Match:aiStep(dt, now)
 		ai.visible = {}
 		for _, s in ipairs(surv) do
 			local d = flat(s.hrp.Position - m.pos).Magnitude
-			if d < CONFIG.MonsterSightRange and self:clearLine(eye, s.hrp.Position + Vector3.new(0, 1.5, 0)) then
+			if self:targetable(s) and d < CONFIG.MonsterSightRange and self:clearLine(eye, s.hrp.Position + Vector3.new(0, 1.5, 0)) then
 				ai.visible[s.plr] = true
 				-- he growls when he spots you
 				if now - (ai.lastVis[s.plr] or 0) > 3 and now - ai.lastGrowl > 3 then
@@ -2091,13 +3597,13 @@ function Match:aiStep(dt, now)
 		end
 	end
 
-	-- flashlight: slows him down, then he crawls away
+	-- flashlight: slows him down, then he runs off
 	local lit = false
 	for _, s in ipairs(surv) do
 		if s.st.flashOn and ai.visible[s.plr] then
 			local head = s.hrp.Position + Vector3.new(0, 1.5, 0)
 			local toM = (m.pos + Vector3.new(0, 7 * m.scale, 0)) - head
-			if toM.Magnitude < 50 and flat(toM).Magnitude > 0.5 and flat(s.hrp.CFrame.LookVector).Unit:Dot(flat(toM).Unit) > 0.82 then
+			if toM.Magnitude < 55 and flat(toM).Magnitude > 0.5 and flat(s.hrp.CFrame.LookVector).Unit:Dot(flat(toM).Unit) > 0.8 then
 				lit = true
 				if ai.mode == "hunt" then
 					ai.litBy = s.plr
@@ -2113,10 +3619,12 @@ function Match:aiStep(dt, now)
 
 	if ai.mode == "hunt" then
 		if lit and ai.litTime >= D.fleeLit then
-			m:growl()
 			ai.lastGrowl = now
 			if ai.litBy then
-				showMessage(ai.litBy, "It crawls away from the light!", 3, Color3.fromRGB(255, 230, 150))
+				showMessage(ai.litBy, self.kind == "nightmare" and "He sinks back into the ground!" or "It crawls away from the light!", 3, Color3.fromRGB(255, 230, 150))
+			end
+			if self.kind ~= "nightmare" then
+				m:growl()
 			end
 			self:retreat(true)
 			return
@@ -2125,11 +3633,13 @@ function Match:aiStep(dt, now)
 		-- choose who to chase
 		local best, bestD
 		for _, s in ipairs(surv) do
-			local d = flat(s.hrp.Position - m.pos).Magnitude
-			local hear = CONFIG.MonsterHearRange * ((s.st.sprinting and s.st.moving) and 1.8 or 1)
-			if ai.visible[s.plr] or d < hear then
-				if not bestD or d < bestD then
-					best, bestD = s, d
+			if self:targetable(s) then
+				local d = flat(s.hrp.Position - m.pos).Magnitude
+				local hear = CONFIG.MonsterHearRange * ((s.st.sprinting and s.st.moving) and 1.8 or 1)
+				if ai.visible[s.plr] or d < hear then
+					if not bestD or d < bestD then
+						best, bestD = s, d
+					end
 				end
 			end
 		end
@@ -2139,7 +3649,7 @@ function Match:aiStep(dt, now)
 		end
 		local tInfo
 		for _, s in ipairs(surv) do
-			if s.plr == ai.target then
+			if s.plr == ai.target and self:targetable(s) then
 				tInfo = s
 			end
 		end
@@ -2153,10 +3663,10 @@ function Match:aiStep(dt, now)
 		local speed = D.hunt * (lit and D.litSlow or 1)
 		local moved
 		if ai.visible[tInfo.plr] and dist < BS * 1.4 then
-			ai.path = nil
-			moved = self:follow(dt, speed, tPos)
+			m.path = nil
+			moved = self:follow(m, dt, speed, tPos)
 		else
-			if ai.path == nil or now - ai.lastPath > 0.35 then
+			if m.path == nil or now - ai.lastPath > 0.35 then
 				ai.lastPath = now
 				local sx, sy = self:nearestOpen(m.pos)
 				local gx, gy = self:toBlock(tPos)
@@ -2168,17 +3678,14 @@ function Match:aiStep(dt, now)
 						end
 					end
 				end
-				ai.path = findPath(self.wall, sx, sy, gx, gy)
-				ai.idx = 2
+				m.path = findPath(self.wall, sx, sy, gx, gy)
+				m.idx = 2
 			end
-			moved = self:follow(dt, speed, ai.visible[tInfo.plr] and tPos or nil)
+			moved = self:follow(m, dt, speed, ai.visible[tInfo.plr] and tPos or nil)
 		end
 
 		if dist < CONFIG.MonsterCatchRange and math.abs(tPos.Y - (m.pos.Y + 3)) < 8 then
-			self:caught(tInfo.plr)
-			ai.mode = "pause"
-			ai.pauseUntil = now + 2.5
-			ai.path = nil
+			self:startGrab(tInfo, false)
 			return
 		end
 
@@ -2191,14 +3698,15 @@ function Match:aiStep(dt, now)
 		return
 	end
 
-	-- retreat
+	-- retreat (Corn Field only): crawl back to a wall
 	local speed = ai.crawling and 16 or 9
-	local moved, finished = self:follow(dt, speed, nil)
+	local moved, finished = self:follow(m, dt, speed, nil)
 	if finished then
 		ai.mode = "burrow"
 		ai.t = 0
 		m.rustleSound:Play()
 		self:rustleWall(ai.spot)
+		self:wallHole(ai.spot)
 		return
 	end
 	if not ai.crawling then
@@ -2207,7 +3715,7 @@ function Match:aiStep(dt, now)
 				ai.mode = "hunt"
 				ai.target = s.plr
 				ai.chaseUntil = now + D.giveUp
-				ai.path = nil
+				m.path = nil
 				return
 			end
 		end
@@ -2221,17 +3729,123 @@ function Match:aiStep(dt, now)
 end
 
 -- --------------------------------------------------------------------
--- monster PLAYER (game pass)
+-- JUMPSCARE: the Corn Monster picks you up and throws you (2 seconds)
+-- --------------------------------------------------------------------
+function Match:startGrab(s, byPlayer)
+	if self.grab then
+		return
+	end
+	local m = self.mon
+	local hrp = s.hrp
+	self:caught(s.plr, 2.8)
+	hrp.Anchored = true
+	s.st.hum.AutoRotate = false
+	local look = flat(hrp.CFrame.LookVector)
+	look = (look.Magnitude > 0.01) and look.Unit or Vector3.new(0, 0, -1)
+	local ground, front
+	if byPlayer then
+		local mh = PS[self.monPlr].hrp
+		ground = Vector3.new(mh.Position.X, self.origin.Y, mh.Position.Z)
+		front = flat(mh.CFrame.LookVector)
+		front = (front.Magnitude > 0.01) and front.Unit or Vector3.new(0, 0, -1)
+		mh.Anchored = true
+	else
+		-- he steps right in front of where you're looking
+		ground = Vector3.new(hrp.Position.X, self.origin.Y, hrp.Position.Z) + look * 4.2
+		front = -look
+		m.pos = ground
+		m.yaw = math.atan2(look.X, look.Z)
+		m.crawlAmt = 0
+		m.path = nil
+		self.ai.mode = "grab"
+	end
+	self.grab = { plr = s.plr, hrp = hrp, t = 0, ground = ground, front = front, start = hrp.CFrame, byPlayer = byPlayer }
+end
+
+function Match:grabStep(dt, now)
+	local g = self.grab
+	local m = self.mon
+	local SC = m.scale
+	g.t += dt
+	local t = g.t
+	local hold = g.ground + g.front * 2.9 + Vector3.new(0, 9.6 * SC, 0)
+	local land = g.ground - g.front * 24 + Vector3.new(0, 1.2, 0)
+	local apex = g.ground - g.front * 6 + Vector3.new(0, 24, 0)
+	local rot = g.start.Rotation
+	local act = { kind = "grab", reach = 1 }
+	local cf
+	if t < 0.55 then
+		local a = smooth(t / 0.55)
+		act.reach = a
+		cf = CFrame.new(g.start.Position:Lerp(hold, a)) * rot
+	elseif t < 1.25 then
+		act.hold = true
+		if not g.roared then
+			g.roared = true
+			m.growlSound.Volume = 5
+			m:growl()
+			flash(g.plr, Color3.fromRGB(150, 0, 0), 0.35, 1, 0.7)
+		end
+		cf = CFrame.new(hold + Vector3.new(math.random() - 0.5, math.random() - 0.5, math.random() - 0.5) * 0.3) * rot
+	elseif t < 2.0 then
+		local a = (t - 1.25) / 0.75
+		act.throw = smooth(a)
+		if not g.thrown then
+			g.thrown = true
+			m.growlSound.Volume = 3.5
+			playSound(CONFIG.Sounds.Whoosh, m.seg.Torso, 2.5, 0.6, 80)
+		end
+		local p = hold * ((1 - a) ^ 2) + apex * (2 * (1 - a) * a) + land * (a * a)
+		cf = CFrame.new(p) * rot * A(-a * 6, 0, a * 2)
+	else
+		act.throw = 1
+		cf = CFrame.new(land) * rot * A(-math.pi / 2, 0, 0)
+		if not g.done then
+			g.done = true
+			flash(g.plr, Color3.new(0, 0, 0), 1, 0, 0.4)
+		end
+	end
+	if g.hrp.Parent then
+		g.hrp.CFrame = cf
+	end
+	m.phase += dt
+	if g.byPlayer then
+		m:pose(m.localRoot, now, 0.05, true, false, act)
+		m:applyWelds()
+	else
+		m:pose(C(m.pos) * A(0, m.yaw, 0), now, 0.05, true, false, act)
+		m:applyAnchored()
+	end
+	if t >= 2.4 then
+		self.grab = nil
+		if g.byPlayer then
+			local st = self.monPlr and PS[self.monPlr]
+			if st and st.hrp then
+				st.hrp.Anchored = false
+			end
+		else
+			self:retreat(true)
+		end
+	end
+end
+
+-- --------------------------------------------------------------------
+-- monster PLAYER (game pass or beat Normal)
 -- --------------------------------------------------------------------
 function Match:setupMonsterPlayer(plr)
 	local st = PS[plr]
 	local char, hum, hrp = st.char, st.hum, st.hrp
-	-- spawn far from the camp
-	local dm = bfs(self.wall, 4, 4)
-	local far, fd = nil, -1
+	-- spawn far away from the survivors
+	local fromX, fromY = 4, 4
+	if self.kind == "nightmare" then
+		fromX, fromY = 9, 5
+	end
+	local dm = bfs(self.wall, fromX, fromY)
+	local far, fd = self.openBlocks[1], -1
 	for _, b in ipairs(self.openBlocks) do
 		local d = dm[key(b[1], b[2])] or 0
-		if d > fd then
+		local okSpot = not (self.kind == "nightmare" and (self:inFarm(self:bc(b[1], b[2])) or self:inBarnBlock(b[1], b[2])))
+		if okSpot and d > fd then
 			far, fd = b, d
 		end
 	end
@@ -2241,9 +3855,7 @@ function Match:setupMonsterPlayer(plr)
 
 	-- hide the player's own body and wear the monster
 	for _, d in ipairs(char:GetDescendants()) do
-		if d:IsA("BasePart") then
-			d.Transparency = 1
-		elseif d:IsA("Decal") then
+		if d:IsA("BasePart") or d:IsA("Decal") then
 			d.Transparency = 1
 		end
 	end
@@ -2260,6 +3872,7 @@ function Match:setupMonsterPlayer(plr)
 	hum.UseJumpPower = true
 	hum.JumpPower = 0
 	hum.CameraOffset = Vector3.new(0, 7, 0)
+	plr.CameraMode = Enum.CameraMode.Classic
 	plr.CameraMinZoomDistance = 12
 	plr.CameraMaxZoomDistance = 30
 
@@ -2270,15 +3883,16 @@ function Match:setupMonsterPlayer(plr)
 		groundOffset = hum.HipHeight + hrp.Size.Y / 2
 	end
 	local m = Monster.new(char, CONFIG.MonsterScale)
+	m.twitch = self.D.twitch or 1
 	m:attachTo(hrp, groundOffset)
 	self.mon = m
 	self.monPlr = plr
 	self.mp = { lastVis = {}, lastGrowl = 0, losT = 0, visible = {} }
 
 	-- Growl button (G) for the monster player
-	local att = make("Attachment", { Name = "GrowlAttach", Position = Vector3.new(0, -2.6, 0) }, hrp)
+	local att = make("Attachment", { Name = "GrowlAttach", Position = Vector3.new(2, -1, -3) }, hrp)
 	local prompt = make("ProximityPrompt", {
-		ActionText = "Growl", ObjectText = "", KeyboardKeyCode = Enum.KeyCode.G, HoldDuration = 0, MaxActivationDistance = 6,
+		ActionText = "Growl", ObjectText = "", KeyboardKeyCode = Enum.KeyCode.G, HoldDuration = 0, MaxActivationDistance = 8,
 		RequiresLineOfSight = false, Exclusivity = Enum.ProximityPromptExclusivity.OnePerButton,
 	}, att)
 	prompt.Triggered:Connect(function(who)
@@ -2301,8 +3915,8 @@ function Match:monPlayerStep(dt, now)
 			self.hideConn:Disconnect()
 		end
 		self:aiInit()
-		self.ai.nextEmerge = now + 6
-		self:broadcast("The corn is moving again...", 4)
+		self.ai.nextEmerge = now + 10
+		self:broadcast("Something is moving out there...", 4)
 		return
 	end
 	local m = self.mon
@@ -2337,7 +3951,7 @@ function Match:monPlayerStep(dt, now)
 	for _, s in ipairs(surv) do
 		if s.st.flashOn and mp.visible[s.plr] then
 			local toM = (hrp.Position + Vector3.new(0, 4, 0)) - s.hrp.Position
-			if toM.Magnitude < 50 and flat(toM).Magnitude > 0.5 and flat(s.hrp.CFrame.LookVector).Unit:Dot(flat(toM).Unit) > 0.82 then
+			if toM.Magnitude < 55 and flat(toM).Magnitude > 0.5 and flat(s.hrp.CFrame.LookVector).Unit:Dot(flat(toM).Unit) > 0.8 then
 				lit = true
 			end
 		end
@@ -2347,9 +3961,10 @@ function Match:monPlayerStep(dt, now)
 	-- catching
 	for _, s in ipairs(surv) do
 		local d = flat(s.hrp.Position - hrp.Position).Magnitude
-		if d < CONFIG.MonsterPlayerCatchRange and math.abs(s.hrp.Position.Y - hrp.Position.Y) < 8 then
-			self:caught(s.plr)
+		if self:targetable(s) and d < CONFIG.MonsterPlayerCatchRange and math.abs(s.hrp.Position.Y - hrp.Position.Y) < 8 then
 			showMessage(plr, "You caught " .. s.plr.DisplayName .. "!", 3, Color3.fromRGB(190, 255, 120))
+			self:startGrab(s, true)
+			return
 		end
 	end
 
@@ -2357,6 +3972,179 @@ function Match:monPlayerStep(dt, now)
 	m:pose(m.localRoot, now, k, moving, lit)
 	m:applyWelds()
 	m:steps(k)
+end
+
+-- --------------------------------------------------------------------
+-- THE FARMER (Nightmare): stay off his farm
+-- --------------------------------------------------------------------
+function Match:farmerInit()
+	local rig = Farmer.new(self.folder)
+	local home = self:bc(19, 21)
+	rig:assemble(C(home) * A(0, math.pi / 2, 0))
+	self.farmer = { rig = rig, pos = home, yaw = math.pi / 2, mode = "patrol", losT = 0, waitUntil = os.clock() + 3, lastSeen = 0, lastPath = 0 }
+end
+
+function Match:farmerStep(dt, now)
+	local f = self.farmer
+	local rig = f.rig
+	if self.stab then
+		self:stabStep(dt, now)
+		return
+	end
+	local surv = self:survivors()
+	f.losT -= dt
+	if f.losT <= 0 then
+		f.losT = 0.2
+		local best, bd
+		for _, s in ipairs(surv) do
+			if self:targetable(s) then
+				local p = s.hrp.Position
+				local d = flat(p - f.pos).Magnitude
+				local seen = d < CONFIG.FarmerSightRange and self:clearLine(f.pos + Vector3.new(0, 6, 0), p + Vector3.new(0, 1.5, 0))
+				local chasingThis = f.mode == "chase" and f.target == s.plr
+				if (self:inFarm(p) and (d < 18 or seen)) or (chasingThis and seen and d < 40) then
+					if not bd or d < bd then
+						best, bd = s, d
+					end
+				end
+			end
+		end
+		if best then
+			if f.mode ~= "chase" then
+				rig.yell:Play()
+				showMessage(best.plr, "THE FARMER SAW YOU! Get off his farm!", 3, Color3.fromRGB(255, 120, 100))
+			end
+			f.mode = "chase"
+			f.target = best.plr
+			f.lastSeen = now
+		end
+	end
+	rig.bubble.Enabled = f.mode == "chase"
+	if f.mode == "chase" and now - f.lastSeen > 4 then
+		f.mode = "patrol"
+		f.path = nil
+		f.waitUntil = now + 1
+	end
+
+	local moved = false
+	local speed = CONFIG.FarmerWalkSpeed
+	local poseMode = "walk"
+	if f.mode == "chase" then
+		local tInfo
+		for _, s in ipairs(surv) do
+			if s.plr == f.target and self:targetable(s) then
+				tInfo = s
+			end
+		end
+		if not tInfo then
+			f.mode = "patrol"
+			f.path = nil
+		else
+			local tPos = tInfo.hrp.Position
+			local dist = flat(tPos - f.pos).Magnitude
+			speed = CONFIG.FarmerChaseSpeed
+			poseMode = "chase"
+			if dist < 12 and self:clearLine(f.pos + Vector3.new(0, 4, 0), tPos) then
+				f.path = nil
+				moved = self:follow(f, dt, speed, tPos)
+			else
+				if f.path == nil or now - f.lastPath > 0.4 then
+					f.lastPath = now
+					local sx, sy = self:nearestOpen(f.pos)
+					local gx, gy = self:nearestOpen(tPos)
+					f.path = findPath(self.wall, sx, sy, gx, gy)
+					f.idx = 2
+				end
+				moved = self:follow(f, dt, speed, nil)
+			end
+			if dist < CONFIG.FarmerCatchRange then
+				self:startStab(tInfo)
+				return
+			end
+		end
+	else
+		local finished = false
+		if f.path then
+			moved, finished = self:follow(f, dt, speed, nil)
+		end
+		if (not f.path or finished) and now >= f.waitUntil then
+			local b = self.farmBlocks[math.random(#self.farmBlocks)]
+			local sx, sy = self:nearestOpen(f.pos)
+			f.path = findPath(self.wall, sx, sy, b[1], b[2])
+			f.idx = 2
+			f.waitUntil = now + 2 + math.random() * 4
+		elseif finished then
+			f.path = nil
+		end
+	end
+	local k = moved and math.clamp(speed / 12, 0.4, 1.4) or 0
+	f.phase = (f.phase or 0) + dt * (moved and speed * 0.75 or 0)
+	rig.phase = f.phase
+	rig:pose(C(f.pos) * A(0, f.yaw, 0), now, k, moved and poseMode or (poseMode == "chase" and "chase" or "idle"), 0)
+	rig:apply()
+	rig:steps(k)
+end
+
+-- JUMPSCARE: the farmer stabs you in the stomach with his pitchfork
+function Match:startStab(s)
+	local f = self.farmer
+	local hrp = s.hrp
+	self:caught(s.plr, 2.8, "the Farmer")
+	hrp.Anchored = true
+	s.st.hum.AutoRotate = false
+	local look = flat(hrp.CFrame.LookVector)
+	look = (look.Magnitude > 0.01) and look.Unit or Vector3.new(0, 0, -1)
+	f.pos = Vector3.new(hrp.Position.X, self.origin.Y, hrp.Position.Z) + look * 3.4
+	f.yaw = math.atan2(look.X, look.Z)
+	f.mode = "stab"
+	f.path = nil
+	f.rig.yell:Play()
+	self.stab = { plr = s.plr, hrp = hrp, t = 0, start = hrp.CFrame }
+end
+
+function Match:stabStep(dt, now)
+	local s = self.stab
+	local f = self.farmer
+	s.t += dt
+	local t = s.t
+	local thrust = 0
+	local cf = s.start
+	if t < 0.45 then
+		thrust = lerp(0, -2.4, smooth(t / 0.45))
+	elseif t < 0.6 then
+		thrust = lerp(-2.4, -1.1, (t - 0.45) / 0.15)
+		if not s.hit then
+			s.hit = true
+			playSound(CONFIG.Sounds.Stab, f.rig.seg.Torso, 3, 0.8, 60)
+			flash(s.plr, Color3.fromRGB(170, 0, 0), 0.1, 1, 1.2)
+		end
+	elseif t < 1.5 then
+		thrust = -1.1
+		cf = s.start * C((math.random() - 0.5) * 0.12, 0.6 + (math.random() - 0.5) * 0.12, 0)
+	elseif t < 2.0 then
+		local a = smooth((t - 1.5) / 0.5)
+		thrust = lerp(-1.1, -2.2, a)
+		cf = s.start * C(0, 0.6 - a * 2.2, 0) * A(a * 1.3, 0, 0)
+		if not s.dark then
+			s.dark = true
+			flash(s.plr, Color3.new(0, 0, 0), 1, 0, 0.5)
+		end
+	else
+		thrust = -2.2
+		cf = s.start * C(0, -1.6, 0) * A(1.3, 0, 0)
+	end
+	if s.hrp.Parent then
+		s.hrp.CFrame = cf
+	end
+	local rig = f.rig
+	rig:pose(C(f.pos) * A(0, f.yaw, 0), now, 0, "stab", thrust)
+	rig:apply()
+	if t >= 2.3 then
+		self.stab = nil
+		f.mode = "patrol"
+		f.path = nil
+		f.waitUntil = now + 2
+	end
 end
 
 -- --------------------------------------------------------------------
@@ -2371,25 +4159,30 @@ function Match:start(plrs, monsterPlr)
 		st.role = self.players[plr].role
 	end
 
-	-- survivors spawn around the campfire
+	-- survivors spawn around the campfire (Corn Field) or inside the barn (Nightmare)
 	local i = 0
 	for plr, info in pairs(self.players) do
 		local st = PS[plr]
 		if info.role == "survivor" and st.char and st.hrp then
 			i += 1
 			local a = i * (math.pi * 2 / 4) + 0.6
-			local p = self.center + Vector3.new(math.cos(a) * 9, 4, math.sin(a) * 9)
+			local r = (self.kind == "nightmare") and 6 or 9
+			local p = self.center + Vector3.new(math.cos(a) * r, 4, math.sin(a) * r)
 			st.char:PivotTo(CFrame.lookAt(p, Vector3.new(self.center.X, p.Y, self.center.Z)))
 			st.hrp.AssemblyLinearVelocity = Vector3.zero
-			st.stamina = CONFIG.StaminaMax
 			st.battery = CONFIG.FlashlightBattery
 			st.flashOn = false
-			plr.CameraMaxZoomDistance = 14
+			plr.CameraMode = CONFIG.FirstPerson and Enum.CameraMode.LockFirstPerson or Enum.CameraMode.Classic
+			plr.CameraMaxZoomDistance = CONFIG.FirstPerson and 0.5 or 14
 			plr.CameraMinZoomDistance = 0.5
 			local tool = makeFlashlight(plr)
 			tool.Parent = plr:FindFirstChildOfClass("Backpack") or plr
 			st.tool = tool
-			showMessage(plr, "Find the 3 symbols. Press them at the gate in dot order. Stay quiet...", 7)
+			if self.kind == "nightmare" then
+				showMessage(plr, "You're locked in the barn... find a way out. Stay off the farmer's land.", 7, Color3.fromRGB(255, 200, 160))
+			else
+				showMessage(plr, "Find the 3 symbols. Press them at the gate in dot order. Stay quiet...", 7)
+			end
 		end
 	end
 
@@ -2397,6 +4190,9 @@ function Match:start(plrs, monsterPlr)
 		self:setupMonsterPlayer(monsterPlr)
 	else
 		self:aiInit()
+	end
+	if self.kind == "nightmare" then
+		self:farmerInit()
 	end
 
 	self.startTime = os.clock()
@@ -2418,6 +4214,12 @@ function Match:step(dt)
 	end
 	local now = os.clock()
 	local left = CONFIG.MatchTime - (now - self.startTime)
+	local flick = false
+	self.flickT += dt
+	if self.flickT > 0.1 then
+		self.flickT = 0
+		flick = true
+	end
 
 	-- survivors: escaping, flashlight battery
 	for plr, info in pairs(self.players) do
@@ -2428,14 +4230,21 @@ function Match:step(dt)
 					self:removePlayer(plr, "caught")
 				end
 			elseif info.role == "survivor" then
-				if self.puzzle.opened and st.hrp.Position.X < self.origin.X - 3 then
+				if self.kind == "corn" and self.puzzle.opened and st.hrp.Position.X < self.origin.X - 3 then
 					self:escaped(plr)
 				end
 				if st.flashOn then
 					st.battery = math.max(0, st.battery - dt)
+					local fx = st.flashFx
+					if fx and flick then
+						-- the light flickers when the battery is low
+						local low = st.battery < CONFIG.FlashlightBattery * 0.2
+						local mul = low and (0.45 + 0.55 * math.clamp(0.5 + math.noise(now * 9, plr.UserId % 97), 0, 1)) or 1
+						fx.spot.Brightness = fx.spotB * mul
+						fx.core.Brightness = fx.coreB * mul
+					end
 					if st.battery <= 0 and st.tool then
-						local hum = st.hum
-						hum:UnequipTools()
+						st.hum:UnequipTools()
 						showMessage(plr, "The flashlight died...", 3, Color3.fromRGB(255, 150, 120))
 					end
 				end
@@ -2443,20 +4252,26 @@ function Match:step(dt)
 		end
 	end
 
-	-- the monster
-	if self.monPlr then
+	-- the monster (and the farmer)
+	if self.grab then
+		self:grabStep(dt, now)
+	elseif self.monPlr then
 		self:monPlayerStep(dt, now)
 	elseif self.mon then
 		self:aiStep(dt, now)
 	end
+	if self.farmer then
+		self:farmerStep(dt, now)
+	end
+	if self.police then
+		self:policeStep(dt, now)
+	end
 
 	-- flickering lights
-	self.flickT += dt
-	if self.flickT > 0.1 then
-		self.flickT = 0
+	if flick then
 		for _, f in ipairs(self.flickers) do
 			if f.light.Parent then
-				f.light.Brightness = f.base * (1 - f.amt + f.amt * 2 * math.noise(now * 3, f.seed))
+				f.light.Brightness = f.base * (1 - f.amt + f.amt * 2 * math.clamp(0.5 + math.noise(now * 3, f.seed), 0, 1))
 			end
 		end
 	end
@@ -2465,15 +4280,36 @@ function Match:step(dt)
 	self.hudT += dt
 	if self.hudT > 0.25 then
 		self.hudT = 0
-		local mins = math.max(0, math.floor(left / 60))
-		local secs = math.max(0, math.floor(left % 60))
-		local clock = string.format("%d:%02d", mins, secs)
+		local clock = string.format("%d:%02d", math.max(0, math.floor(left / 60)), math.max(0, math.floor(left % 60)))
 		local alive = #self:survivors()
+		local survivorText
+		if self.kind == "nightmare" then
+			if not self.barnOpen then
+				survivorText = "Get out of the barn  |  " .. clock
+			else
+				local pol = self.police
+				local polText = "Police: call from the shed"
+				if pol.state == "called" then
+					polText = "Police: " .. math.max(0, math.ceil(pol.arriveAt - now)) .. "s"
+				elseif pol.state == "arriving" then
+					polText = "Police: coming!"
+				elseif pol.state == "here" then
+					polText = "Police: GET IN THE CAR"
+				elseif pol.state == "leaving" then
+					polText = "Police: leaving"
+				end
+				local keyText = self.keyHolder and "Key: YES" or "Key: in the farm"
+				local gateText = self.gateUnlocked and "Gate: OPEN" or "Gate: locked"
+				survivorText = keyText .. "  |  " .. polText .. "  |  " .. gateText .. "  |  " .. clock
+			end
+		else
+			local gate = self.puzzle.opened and "GATE OPEN - GET OUT!" or ("Gate code: " .. #self.puzzle.input .. "/3")
+			survivorText = "Find the symbols  |  " .. gate .. "  |  " .. clock
+		end
 		for plr, info in pairs(self.players) do
 			if info.status == "alive" then
 				if info.role == "survivor" then
-					local gate = self.puzzle.opened and "GATE OPEN - GET OUT!" or ("Gate code: " .. #self.puzzle.input .. "/3")
-					setTop(plr, "Find the symbols  |  " .. gate .. "  |  " .. clock)
+					setTop(plr, survivorText)
 				else
 					setTop(plr, "CORN MONSTER  |  Survivors left: " .. alive .. "  |  " .. clock)
 				end
@@ -2482,6 +4318,9 @@ function Match:step(dt)
 	end
 
 	-- end of the match?
+	if self.grab or self.stab then
+		return
+	end
 	local anyAlive = #self:survivors() > 0
 	if not anyAlive or left <= 0 then
 		if left <= 0 then
@@ -2709,11 +4548,11 @@ local function buildLobby()
 		s:Destroy()
 	end
 	local plaque = lp(f, statueCF, "Plaque", Vector3.new(5, 1.6, 0.3), C(0, 1, -3.1), WOOD_TRIM, Enum.Material.Wood)
-	surfaceText(plaque, Enum.NormalId.Front, "PLAY AS THE CORN MONSTER\n" .. CONFIG.GamepassPrice .. " R$ GAME PASS", GOLD)
+	surfaceText(plaque, Enum.NormalId.Front, "PLAY AS THE CORN MONSTER\nBEAT NORMAL MODE or " .. CONFIG.GamepassPrice .. " R$ GAME PASS", GOLD)
 	local spotPart = part({ Name = "StatueLight", Size = Vector3.new(0.4, 0.4, 0.4), CFrame = CFrame.lookAt(L(HW - 14, 14, -6), L(HW - 9, 5, -6)), Transparency = 1 }, f)
 	make("SpotLight", { Face = Enum.NormalId.Front, Range = 22, Angle = 40, Brightness = 3, Color = Color3.fromRGB(190, 255, 140) }, spotPart)
 	local prompt = make("ProximityPrompt", {
-		ActionText = "Play as Monster", ObjectText = "Corn Monster Game Pass", HoldDuration = 0.3, MaxActivationDistance = 10,
+		ActionText = "Play as Monster", ObjectText = "Beat Normal or get the Game Pass", HoldDuration = 0.3, MaxActivationDistance = 10,
 		RequiresLineOfSight = false,
 	}, plaque)
 	prompt.Triggered:Connect(function(plr)
@@ -2721,7 +4560,7 @@ local function buildLobby()
 		if not st then
 			return
 		end
-		if st.ownsPass then
+		if st.ownsPass or st.beatNormal then
 			st.wantMonster = not st.wantMonster
 			if st.wantMonster then
 				showMessage(plr, "Monster mode ON. Get in an elevator with friends - you'll be the Corn Monster!", 5, Color3.fromRGB(190, 255, 120))
@@ -2729,15 +4568,16 @@ local function buildLobby()
 				showMessage(plr, "Monster mode OFF. You'll play as a survivor.", 4)
 			end
 		elseif CONFIG.MonsterGamepassId ~= 0 then
+			showMessage(plr, "Beat Normal mode to unlock the Corn Monster - or get the game pass!", 5, Color3.fromRGB(255, 220, 140))
 			MarketplaceService:PromptGamePassPurchase(plr, CONFIG.MonsterGamepassId)
 		else
-			showMessage(plr, "The Corn Monster game pass is not set up yet.", 4, Color3.fromRGB(255, 170, 120))
+			showMessage(plr, "Beat Normal mode to unlock playing as the Corn Monster!", 5, Color3.fromRGB(255, 220, 140))
 		end
 	end)
 
 	-- how to play board on the west wall
 	local board = part({ Name = "RulesBoard", Size = Vector3.new(0.3, 9, 13), Position = L(-HW + 0.4, 9, -22), Color = WOOD_TRIM, Material = Enum.Material.Wood }, f)
-	surfaceText(board, Enum.NormalId.Right, "HOW TO PLAY\n\n1. Get in an elevator (4 players max)\n2. Find the 3 glowing symbols in the corn\n3. Count the dots: press them at the gate in order\n4. Escape the field!\n\nShift = sprint   Flashlight = scares him off\nHe hides in the corn walls...", Color3.fromRGB(235, 215, 170), Enum.Font.Antique, Color3.fromRGB(34, 22, 14))
+	surfaceText(board, Enum.NormalId.Right, "HOW TO PLAY\n\nNORMAL: find the 3 glowing symbols, press them at the gate in dot order, escape the field.\n\nNIGHTMARE: get out of the barn, find the rusty key on the farm, call the police, unlock the gate, get in the car.\n\nShift = sprint   Flashlight = makes him go away", Color3.fromRGB(235, 215, 170), Enum.Font.Antique, Color3.fromRGB(34, 22, 14))
 
 	-- title sign over the elevators
 	local title = part({ Name = "TitleSign", Size = Vector3.new(34, 4.5, 0.4), Position = L(0, 20.5, HD - 0.3), Color = WOOD_TRIM, Material = Enum.Material.Wood }, f)
@@ -2764,7 +4604,7 @@ local function buildLobby()
 		local bulb = lp(f, cf, "SconceBulb", Vector3.new(0.5, 0.7, 0.5), C(0, 0.4, -0.45), Color3.fromRGB(255, 210, 140), Enum.Material.Neon)
 		make("PointLight", { Color = Color3.fromRGB(255, 190, 120), Range = 14, Brightness = 0.9 }, bulb)
 	end
-	for _, z in ipairs({ -32, -10, 10, 28 }) do
+	for _, z in ipairs({ -32, -10, 10 }) do
 		sconce(L(-HW + 0.2, 9, z), Vector3.new(1, 0, 0))
 		sconce(L(HW - 0.2, 9, z), Vector3.new(-1, 0, 0))
 	end
@@ -2773,7 +4613,7 @@ local function buildLobby()
 	end
 
 	-- potted corn plants + bookshelf
-	for _, p in ipairs({ L(-HW + 3, 0, -HD + 3), L(HW - 3, 0, -HD + 3), L(-HW + 3, 0, HD - 4), L(HW - 3, 0, HD - 4) }) do
+	for _, p in ipairs({ L(-HW + 3, 0, -HD + 3), L(HW - 3, 0, -HD + 3), L(-HW + 3, 0, HD - 2), L(HW - 3, 0, HD - 2) }) do
 		Props.pottedCorn(f, p)
 	end
 	local shelfCF = C(L(HW - 1.4, 0, 16)) * A(0, math.pi / 2, 0)
@@ -2792,6 +4632,151 @@ local function buildLobby()
 	Props.hay(f, L(-30, 0, -30), 0.3)
 	Props.pumpkin(f, L(-26, 0, -31), 0.4, 2.2, true)
 	Props.pumpkin(f, L(26, 0, -31), -0.4, 2.2, true)
+end
+
+-- more lobby details (v1.01)
+local UPDATE_LOG = [[UPDATE LOG
+
+v1.01
+- NIGHTMARE MODE! Escape the barn, find the rusty key, call the police, drive away
+- New enemy: the Farmer. Stay off his farm...
+- The Corn Monster rips holes in the corn walls (and the ground)
+- Scarier, twitchier monster + new jumpscares
+- He comes out less often (but you'll know when he does)
+- New detailed flashlight, first person view
+- Unlimited sprint
+- Beat Normal mode to unlock playing as the Corn Monster
+- Lobby: update log, clock, front desk, trophy case and more
+
+v1.0
+- Corn Field release: lobby, 4 elevators, Normal mode, badge, game pass]]
+
+local clockHands
+local function buildLobbyExtras()
+	local f = lobbyFolder
+
+	-- update log on the west wall
+	local logFrame = part({ Name = "UpdateLogFrame", Size = Vector3.new(0.4, 12, 10), Position = L(-HW + 0.3, 10, 18), Color = GOLD, Material = Enum.Material.Wood }, f)
+	local log = part({ Name = "UpdateLog", Size = Vector3.new(0.2, 11.4, 9.4), Position = L(-HW + 0.55, 10, 18), Color = Color3.fromRGB(30, 20, 12), Material = Enum.Material.Wood }, f)
+	local label = surfaceText(log, Enum.NormalId.Right, UPDATE_LOG, Color3.fromRGB(240, 222, 180), Enum.Font.Antique)
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.TextYAlignment = Enum.TextYAlignment.Top
+	local _ = logFrame
+
+	-- grandfather clock (south wall) with moving hands and a swinging pendulum
+	local ccf = C(L(-36, 0, -HD + 1)) * A(0, math.pi, 0) -- faces +Z into the room
+	lp(f, ccf, "ClockBase", Vector3.new(2.8, 1, 1.6), C(0, 0.5, 0), WOOD_TRIM, Enum.Material.Wood, { CanCollide = true })
+	lp(f, ccf, "ClockCase", Vector3.new(2.4, 8, 1.4), C(0, 5, 0), WOOD_DARK, Enum.Material.Wood, { CanCollide = true })
+	lp(f, ccf, "ClockTop", Vector3.new(2.8, 0.6, 1.6), C(0, 9.3, 0), WOOD_TRIM, Enum.Material.Wood)
+	lp(f, ccf, "ClockGlass", Vector3.new(1.6, 3.6, 0.05), C(0, 3.6, -0.73), Color3.fromRGB(160, 170, 175), Enum.Material.Glass, { Transparency = 0.6 })
+	lp(f, ccf, "ClockFace", Vector3.new(0.05, 1.9, 1.9), C(0, 7.6, -0.72) * A(0, math.rad(90), 0), Color3.fromRGB(235, 225, 200), Enum.Material.SmoothPlastic, { Shape = Enum.PartType.Cylinder })
+	lp(f, ccf, "ClockRim", Vector3.new(0.04, 2.1, 2.1), C(0, 7.6, -0.7) * A(0, math.rad(90), 0), GOLD, Enum.Material.Metal, { Shape = Enum.PartType.Cylinder })
+	for i = 1, 12 do
+		local a = i / 12 * math.pi * 2
+		lp(f, ccf, "Tick", Vector3.new(0.08, 0.18, 0.02), C(math.sin(a) * 0.78, 7.6 + math.cos(a) * 0.78, -0.76) * A(0, 0, -a), Color3.fromRGB(30, 20, 14), Enum.Material.SmoothPlastic)
+	end
+	local hourHand = lp(f, ccf, "HourHand", Vector3.new(0.09, 0.5, 0.02), C(0, 7.85, -0.78), Color3.fromRGB(20, 14, 10), Enum.Material.SmoothPlastic)
+	local minuteHand = lp(f, ccf, "MinuteHand", Vector3.new(0.06, 0.75, 0.02), C(0, 7.97, -0.79), Color3.fromRGB(20, 14, 10), Enum.Material.SmoothPlastic)
+	local pendulum = lp(f, ccf, "Pendulum", Vector3.new(0.1, 2.6, 0.05), C(0, 4.3, -0.5), GOLD, Enum.Material.Metal)
+	local bob = lp(f, ccf, "PendulumBob", Vector3.new(0.05, 0.7, 0.7), C(0, 3.0, -0.5) * A(0, math.rad(90), 0), GOLD, Enum.Material.Metal, { Shape = Enum.PartType.Cylinder })
+	clockHands = { cf = ccf, hour = hourHand, minute = minuteHand, pendulum = pendulum, bob = bob }
+
+	-- front desk with a bell and a guest book
+	local dcf = C(L(37, 0, 6)) * A(0, math.pi / 2, 0) -- faces -X
+	lp(f, dcf, "Desk", Vector3.new(7, 3.6, 2.4), C(0, 1.8, 0), WOOD_DARK, Enum.Material.WoodPlanks, { CanCollide = true })
+	lp(f, dcf, "DeskTop", Vector3.new(7.4, 0.3, 2.8), C(0, 3.75, 0), WOOD_TRIM, Enum.Material.Wood)
+	lp(f, dcf, "DeskPanel", Vector3.new(6.4, 2.6, 0.05), C(0, 1.9, -1.23), WOOD, Enum.Material.Wood)
+	lp(f, dcf, "BellBase", Vector3.new(0.1, 0.7, 0.7), C(-2, 3.95, -0.3) * A(0, 0, math.rad(90)), GOLD, Enum.Material.Metal, { Shape = Enum.PartType.Cylinder })
+	local bell = lp(f, dcf, "Bell", Vector3.new(0.6, 0.6, 0.6), C(-2, 4.15, -0.3), GOLD, Enum.Material.Metal, { Shape = Enum.PartType.Ball })
+	lp(f, dcf, "GuestBook", Vector3.new(1.6, 0.15, 1.1), C(1, 3.98, -0.2) * A(0, 0.2, 0), Color3.fromRGB(90, 20, 20), Enum.Material.Fabric)
+	lp(f, dcf, "Pen", Vector3.new(0.05, 0.05, 0.7), C(1.6, 4.08, -0.2) * A(0, 0.6, 0), Color3.fromRGB(20, 20, 20), Enum.Material.SmoothPlastic)
+	local lampShade = lp(f, dcf, "DeskLamp", Vector3.new(0.8, 0.9, 0.9), C(2.8, 4.9, 0.4) * A(0, 0, math.rad(90)), Color3.fromRGB(40, 90, 50), Enum.Material.Glass, { Shape = Enum.PartType.Cylinder })
+	lp(f, dcf, "DeskLampPole", Vector3.new(0.12, 1, 0.12), C(2.8, 4.3, 0.4), GOLD, Enum.Material.Metal)
+	make("PointLight", { Color = Color3.fromRGB(255, 210, 150), Range = 12, Brightness = 0.9 }, lampShade)
+	local deskSign = lp(f, dcf, "DeskSign", Vector3.new(3, 0.8, 0.1), C(0, 3.2, -1.27), GOLD, Enum.Material.Metal)
+	surfaceText(deskSign, Enum.NormalId.Front, "FRONT DESK", Color3.fromRGB(40, 24, 12), Enum.Font.Antique)
+	local bellPrompt = make("ProximityPrompt", { ActionText = "Ring", ObjectText = "Bell", HoldDuration = 0, MaxActivationDistance = 7, RequiresLineOfSight = false }, bell)
+	bellPrompt.Triggered:Connect(function()
+		playSound(CONFIG.Sounds.Ding, bell, 1.2, 1.8, 50)
+	end)
+
+	-- two armchairs by the coffee table
+	for _, side in ipairs({ -1, 1 }) do
+		local acf = C(L(side * 12.5, 0, -22)) * A(0, side * math.rad(70), 0)
+		local leather = Color3.fromRGB(116, 64, 40)
+		lp(f, acf, "ArmchairBase", Vector3.new(4.2, 1.6, 4), C(0, 1.1, 0), Color3.fromRGB(86, 46, 28), Enum.Material.Fabric, { CanCollide = true })
+		lp(f, acf, "ArmchairBack", Vector3.new(4.2, 3.4, 0.9), C(0, 3.1, 1.6) * A(-0.12, 0, 0), Color3.fromRGB(86, 46, 28), Enum.Material.Fabric, { CanCollide = true })
+		for _, x in ipairs({ -2.3, 2.3 }) do
+			lp(f, acf, "ArmchairArm", Vector3.new(0.7, 2.2, 4), C(x, 1.9, 0), leather, Enum.Material.Fabric)
+		end
+		local seat = make("Seat", { Name = "ArmchairSeat", Anchored = true, Size = Vector3.new(3.4, 0.6, 3.2), CFrame = acf * C(0, 2.2, -0.2), Color = leather, Material = Enum.Material.Fabric, TopSurface = Enum.SurfaceType.Smooth, BottomSurface = Enum.SurfaceType.Smooth }, f)
+		seat.CanCollide = true
+	end
+
+	-- windows on the east wall: a cold moon outside
+	for _, z in ipairs({ -18, 29 }) do
+		part({ Name = "WindowFrame", Size = Vector3.new(0.4, 8, 6), Position = L(HW - 0.2, 10, z), Color = WOOD_TRIM, Material = Enum.Material.Wood }, f)
+		local glass = part({ Name = "WindowGlass", Size = Vector3.new(0.1, 7, 5), Position = L(HW - 0.45, 10, z), Color = Color3.fromRGB(30, 40, 70), Material = Enum.Material.Neon, Transparency = 0.55 }, f)
+		make("SurfaceLight", { Face = Enum.NormalId.Left, Color = Color3.fromRGB(140, 160, 220), Range = 14, Brightness = 0.6, Angle = 70 }, glass)
+		part({ Name = "WindowCross", Size = Vector3.new(0.12, 7, 0.25), Position = L(HW - 0.55, 10, z), Color = WOOD_TRIM, Material = Enum.Material.Wood }, f)
+		part({ Name = "WindowCross", Size = Vector3.new(0.12, 0.25, 5), Position = L(HW - 0.55, 10, z), Color = WOOD_TRIM, Material = Enum.Material.Wood }, f)
+		for _, s2 in ipairs({ -1, 1 }) do
+			part({ Name = "Curtain", Size = Vector3.new(0.3, 9.5, 1.6), Position = L(HW - 0.8, 9.4, z + s2 * 3.4), Color = RED_DARK, Material = Enum.Material.Fabric }, f)
+		end
+		part({ Name = "CurtainRod", Size = Vector3.new(0.2, 0.2, 9), Position = L(HW - 0.9, 14.4, z), Color = GOLD, Material = Enum.Material.Metal }, f)
+	end
+
+	-- trophy case (north-west corner)
+	local tcf = C(L(-HW + 1.6, 0, 29)) * A(0, -math.pi / 2, 0) -- faces +X
+	lp(f, tcf, "CaseBase", Vector3.new(6, 2.4, 2.6), C(0, 1.2, 0), WOOD_DARK, Enum.Material.Wood, { CanCollide = true })
+	lp(f, tcf, "CaseGlass", Vector3.new(6, 4, 2.6), C(0, 4.4, 0), Color3.fromRGB(180, 200, 210), Enum.Material.Glass, { Transparency = 0.75, CanCollide = true })
+	lp(f, tcf, "CaseTop", Vector3.new(6.2, 0.3, 2.8), C(0, 6.55, 0), WOOD_TRIM, Enum.Material.Wood)
+	lp(f, tcf, "TrophyCup", Vector3.new(1.2, 1.4, 1.4), C(-1.5, 3.4, 0) * A(0, 0, math.rad(90)), GOLD, Enum.Material.Metal, { Shape = Enum.PartType.Cylinder })
+	lp(f, tcf, "TrophyCob", Vector3.new(0.6, 1.8, 0.6), C(-1.5, 5, 0), Color3.fromRGB(230, 190, 70), Enum.Material.Metal)
+	lp(f, tcf, "TrophyBadge", Vector3.new(1.6, 1.6, 0.2), C(1.5, 4, 0), Color3.fromRGB(120, 20, 20), Enum.Material.SmoothPlastic)
+	local plate = lp(f, tcf, "TrophyPlate", Vector3.new(4, 0.8, 0.1), C(0, 1.6, -1.32), GOLD, Enum.Material.Metal)
+	surfaceText(plate, Enum.NormalId.Front, "ESCAPED THE CORN FIELD", Color3.fromRGB(40, 24, 12), Enum.Font.Antique)
+	make("PointLight", { Color = Color3.fromRGB(255, 220, 160), Range = 8, Brightness = 0.8 }, plate)
+
+	-- coat rack, paintings
+	local rcf = C(L(-41, 0, -33))
+	lp(f, rcf, "RackPole", Vector3.new(0.3, 7, 0.3), C(0, 3.5, 0), WOOD_TRIM, Enum.Material.Wood)
+	lp(f, rcf, "RackFoot", Vector3.new(2, 0.3, 0.3), C(0, 0.15, 0), WOOD_TRIM, Enum.Material.Wood)
+	lp(f, rcf, "RackFoot", Vector3.new(0.3, 0.3, 2), C(0, 0.15, 0), WOOD_TRIM, Enum.Material.Wood)
+	lp(f, rcf, "Coat", Vector3.new(1.4, 3, 0.7), C(0.5, 5, 0.2) * A(0, 0.3, 0.05), Color3.fromRGB(60, 50, 40), Enum.Material.Fabric)
+	lp(f, rcf, "StrawHat", Vector3.new(0.1, 1.8, 1.8), C(0, 7.1, 0) * A(0, 0, math.rad(90)), Color3.fromRGB(186, 156, 92), Enum.Material.Fabric, { Shape = Enum.PartType.Cylinder })
+	for _, x in ipairs({ -30, 30 }) do
+		part({ Name = "PaintingFrame", Size = Vector3.new(6.4, 4.4, 0.3), Position = L(x, 14.5, -HD + 0.15), Color = GOLD, Material = Enum.Material.Wood }, f)
+		local canvas = part({ Name = "Painting", Size = Vector3.new(5.6, 3.6, 0.1), Position = L(x, 14.5, -HD + 0.35), Color = Color3.fromRGB(26, 34, 22), Material = Enum.Material.Fabric }, f)
+		surfaceText(canvas, Enum.NormalId.Back, x < 0 and "THE FARM, 1953" or "HE WATCHES", Color3.fromRGB(190, 160, 80), Enum.Font.Antique)
+	end
+
+	-- call buttons next to every elevator
+	for _, ex in ipairs({ -33, -11, 11, 33 }) do
+		part({ Name = "CallPlate", Size = Vector3.new(0.9, 1.8, 0.1), Position = L(ex + 5.4, 4.6, HD - 0.05), Color = GOLD, Material = Enum.Material.Metal }, f)
+		part({ Name = "CallUp", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.1, 0.4, 0.4), CFrame = C(L(ex + 5.4, 5.1, HD - 0.12)) * A(0, math.rad(90), 0), Color = Color3.fromRGB(255, 220, 140), Material = Enum.Material.Neon }, f)
+		part({ Name = "CallDown", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.1, 0.4, 0.4), CFrame = C(L(ex + 5.4, 4.2, HD - 0.12)) * A(0, math.rad(90), 0), Color = Color3.fromRGB(120, 100, 70), Material = Enum.Material.SmoothPlastic }, f)
+	end
+end
+
+-- clock hands follow the real time; the pendulum swings
+local function runLobbyClock()
+	task.spawn(function()
+		while clockHands do
+			local t = os.date("*t")
+			local h = clockHands
+			local hourA = ((t.hour % 12) + t.min / 60) / 12 * math.pi * 2
+			local minA = (t.min + t.sec / 60) / 60 * math.pi * 2
+			local center = h.cf * C(0, 7.6, 0)
+			h.hour.CFrame = center * C(0, 0, -0.78) * A(0, 0, hourA) * C(0, 0.25, 0)
+			h.minute.CFrame = center * C(0, 0, -0.79) * A(0, 0, minA) * C(0, 0.37, 0)
+			local swing = math.sin(os.clock() * math.pi) * 0.18
+			local pivot = h.cf * C(0, 5.6, -0.5) * A(0, 0, swing)
+			h.pendulum.CFrame = pivot * C(0, -1.3, 0)
+			h.bob.CFrame = pivot * C(0, -2.6, 0) * A(0, math.rad(90), 0)
+			task.wait(0.1)
+		end
+	end)
 end
 
 -- --------------------------------------------------------------------
@@ -2848,7 +4833,7 @@ local function buildElevator(index, ex)
 		return btn
 	end
 	local normalBtn = modePanel(1, "NORMAL", Color3.fromRGB(110, 230, 110), "Select")
-	local nightBtn = modePanel(-1, "NIGHTMARE", Color3.fromRGB(150, 90, 200), "IN PROGRESS")
+	local nightBtn = modePanel(-1, "NIGHTMARE", Color3.fromRGB(150, 90, 200), CONFIG.NightmareUnlocked and "Select" or "IN PROGRESS")
 
 	local ev = {
 		index = index, x = ex, z0 = z0, depth = depth, players = {}, state = "waiting", mode = "Normal", countdown = nil,
@@ -2864,7 +4849,7 @@ local function buildElevator(index, ex)
 			end
 		end
 	end)
-	local nightPrompt = make("ProximityPrompt", { ActionText = "Select", ObjectText = "Nightmare Mode (In Progress)", HoldDuration = 0, MaxActivationDistance = 7, RequiresLineOfSight = false }, nightBtn)
+	local nightPrompt = make("ProximityPrompt", { ActionText = "Select", ObjectText = CONFIG.NightmareUnlocked and "Nightmare Mode" or "Nightmare Mode (In Progress)", HoldDuration = 0, MaxActivationDistance = 7, RequiresLineOfSight = false }, nightBtn)
 	nightPrompt.Triggered:Connect(function(plr)
 		if CONFIG.NightmareUnlocked and table.find(ev.players, plr) then
 			ev.mode = "Nightmare"
@@ -2982,17 +4967,28 @@ startMatchFromElevator = function(ev, group)
 		setDoors(ev, true)
 		return
 	end
-	-- who is the monster? (game pass owners who turned monster mode on)
+	-- who is the monster? A random player who unlocked it (game pass or
+	-- beat Normal) and turned monster mode on at the statue.
 	local monsterPlr
+	local eligible = {}
 	for _, plr in ipairs(final) do
 		local st = PS[plr]
-		if st.wantMonster and st.ownsPass then
-			if #final >= 2 then
-				monsterPlr = plr
-				break
-			else
-				showMessage(plr, "You need at least 1 survivor with you to be the monster. Playing as a survivor.", 5, Color3.fromRGB(255, 200, 120))
+		if st.wantMonster and (st.ownsPass or st.beatNormal) then
+			eligible[#eligible + 1] = plr
+		end
+	end
+	if #eligible > 0 then
+		if #final >= 2 then
+			monsterPlr = eligible[math.random(#eligible)]
+			for _, plr in ipairs(final) do
+				if plr == monsterPlr then
+					showMessage(plr, "You were picked to be the CORN MONSTER!", 5, Color3.fromRGB(190, 255, 120))
+				else
+					showMessage(plr, "Someone in your group is the Corn Monster...", 5, Color3.fromRGB(255, 200, 140))
+				end
 			end
+		else
+			showMessage(eligible[1], "You need at least 1 survivor with you to be the monster. Playing as a survivor.", 5, Color3.fromRGB(255, 200, 120))
 		end
 	end
 	ev.state = "ingame"
@@ -3007,6 +5003,21 @@ end
 -- ====================================================================
 -- PLAYERS
 -- ====================================================================
+saveBeatNormal = function(plr)
+	if not progressStore then
+		return
+	end
+	task.spawn(function()
+		pcall(function()
+			progressStore:UpdateAsync(tostring(plr.UserId), function(old)
+				local data = type(old) == "table" and old or {}
+				data.beatNormal = true
+				return data
+			end)
+		end)
+	end)
+end
+
 local function lobbyCFrame()
 	local a = math.random() * math.pi * 2
 	local p = L(math.cos(a) * 4, 4, -8 + math.sin(a) * 4)
@@ -3029,6 +5040,7 @@ sendToLobby = function(plr)
 	st.flashOn = false
 	st.tool = nil
 	st.sprinting = false
+	plr.CameraMode = Enum.CameraMode.Classic
 	plr.CameraMinZoomDistance = 0.5
 	plr.CameraMaxZoomDistance = 25
 	if plr.Parent == Players then
@@ -3037,26 +5049,25 @@ sendToLobby = function(plr)
 end
 
 local function makeSprintPrompt(plr, st, hrp)
-	local att = make("Attachment", { Name = "SprintAttach", Position = Vector3.new(0, -2.6, 0) }, hrp)
+	local att = make("Attachment", { Name = "SprintAttach", Position = Vector3.new(0, -1.2, -3.5) }, hrp)
 	local prompt = make("ProximityPrompt", {
 		Name = "SprintPrompt", ActionText = "Sprint", ObjectText = "", KeyboardKeyCode = Enum.KeyCode.LeftShift,
 		GamepadKeyCode = Enum.KeyCode.ButtonL3, HoldDuration = 0, MaxActivationDistance = 6, RequiresLineOfSight = false,
-		Exclusivity = Enum.ProximityPromptExclusivity.OnePerButton, UIOffset = Vector2.new(0, 40),
+		Exclusivity = Enum.ProximityPromptExclusivity.OnePerButton,
 	}, att)
+	-- (if two players stand close, you might press a friend's button:
+	-- it always toggles the sprint of whoever pressed it)
 	prompt.Triggered:Connect(function(who)
-		if who ~= plr then
-			return
-		end
-		st.pressT = os.clock()
-		if st.sprinting then
-			st.sprinting = false
-		elseif not st.exhausted then
-			st.sprinting = true
+		local s2 = PS[who]
+		if s2 then
+			s2.pressT = os.clock()
+			s2.sprinting = not s2.sprinting
 		end
 	end)
 	prompt.TriggerEnded:Connect(function(who)
-		if who == plr and os.clock() - (st.pressT or 0) > 0.35 then
-			st.sprinting = false -- it was held, so releasing stops it
+		local s2 = PS[who]
+		if s2 and os.clock() - (s2.pressT or 0) > 0.35 then
+			s2.sprinting = false -- it was held, so releasing stops it
 		end
 	end)
 end
@@ -3074,7 +5085,6 @@ local function onCharacterAdded(plr, char)
 	st.char, st.hum, st.hrp = char, hum, hrp
 	st.sprinting = false
 	st.exhausted = false
-	st.stamina = CONFIG.StaminaMax
 	task.spawn(fixAnimations, char, hum, hrp)
 	makeSprintPrompt(plr, st, hrp)
 	hum.Died:Connect(function()
@@ -3098,7 +5108,7 @@ local function onCharacterAdded(plr, char)
 end
 
 local function onPlayerAdded(plr)
-	local st = { stamina = CONFIG.StaminaMax, battery = CONFIG.FlashlightBattery, wantMonster = false, ownsPass = false }
+	local st = { battery = CONFIG.FlashlightBattery, wantMonster = false, ownsPass = false, beatNormal = false }
 	PS[plr] = st
 	plr.CameraMaxZoomDistance = 25
 	plr.CharacterAdded:Connect(function(char)
@@ -3111,6 +5121,7 @@ local function onPlayerAdded(plr)
 		st.hud = buildHUD(plr)
 	end)
 	task.spawn(checkPass, plr)
+	task.spawn(loadProgress, plr)
 end
 
 Players.PlayerAdded:Connect(onPlayerAdded)
@@ -3135,6 +5146,8 @@ end)
 -- BUILD THE LOBBY + MAIN LOOPS
 -- ====================================================================
 buildLobby()
+buildLobbyExtras()
+runLobbyClock()
 for i, x in ipairs({ -33, -11, 11, 33 }) do
 	if i <= CONFIG.ElevatorCount then
 		local ev = buildElevator(i, x)
@@ -3146,32 +5159,19 @@ for _, plr in ipairs(Players:GetPlayers()) do
 	task.spawn(onPlayerAdded, plr)
 end
 
--- sprint + stamina for everyone (runs every frame)
-RunService.Heartbeat:Connect(function(dt)
+-- sprint for everyone (unlimited, runs every frame)
+RunService.Heartbeat:Connect(function()
 	for _, st in pairs(PS) do
 		local hum, hrp = st.hum, st.hrp
 		if hum and hrp and hrp.Parent and hum.Health > 0 and st.role ~= "monster" then
 			local inMatch = st.match ~= nil
 			local moving = flat(hrp.AssemblyLinearVelocity).Magnitude > 2
 			st.moving = moving
-			local walk = inMatch and CONFIG.WalkSpeed or CONFIG.LobbyWalkSpeed
-			local run = inMatch and CONFIG.SprintSpeed or CONFIG.LobbySprintSpeed
-			local speed = walk
-			if st.sprinting and moving and not st.exhausted then
-				speed = run
-				if inMatch then
-					st.stamina = math.max(0, st.stamina - CONFIG.StaminaDrain * dt)
-				end
-			else
-				st.stamina = math.min(CONFIG.StaminaMax, st.stamina + CONFIG.StaminaRegen * dt * (moving and 0.6 or 1))
+			local speed = inMatch and CONFIG.WalkSpeed or CONFIG.LobbyWalkSpeed
+			if st.sprinting and moving then
+				speed = inMatch and CONFIG.SprintSpeed or CONFIG.LobbySprintSpeed
 			end
-			if st.stamina <= 0 then
-				st.exhausted = true
-				st.sprinting = false
-			elseif st.exhausted and st.stamina >= CONFIG.StaminaMax * 0.3 then
-				st.exhausted = false
-			end
-			if hum.WalkSpeed > 0 then
+			if hum.WalkSpeed > 0 and hum.WalkSpeed ~= speed then
 				hum.WalkSpeed = speed
 			end
 		end
@@ -3191,7 +5191,6 @@ task.spawn(function()
 				local survivorInMatch = st.match and st.role == "survivor"
 				h.bars.Visible = survivorInMatch and true or false
 				if survivorInMatch then
-					h.stam.Size = UDim2.fromScale(math.clamp(st.stamina / CONFIG.StaminaMax, 0, 1), 1)
 					h.batt.Size = UDim2.fromScale(math.clamp(st.battery / CONFIG.FlashlightBattery, 0, 1), 1)
 				end
 				if not st.match then
@@ -3205,7 +5204,7 @@ task.spawn(function()
 						local t = myEv.countdown and (" - leaving in " .. math.ceil(myEv.countdown)) or ""
 						setTop(plr, "Elevator " .. myEv.index .. "  |  " .. #myEv.players .. "/" .. CONFIG.MaxPlayersPerElevator .. "  |  Mode: " .. myEv.mode .. t)
 					else
-						local monsterNote = (st.ownsPass and st.wantMonster) and "  |  Monster mode ON" or ""
+						local monsterNote = ((st.ownsPass or st.beatNormal) and st.wantMonster) and "  |  Monster mode ON" or ""
 						setTop(plr, "Walk into an elevator to play (4 players max)" .. monsterNote)
 					end
 				end
