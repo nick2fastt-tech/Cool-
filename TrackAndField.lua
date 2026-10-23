@@ -2522,8 +2522,8 @@ local function updateCamera(dt: number)
 	local look: Vector3
 	local mode = cam.mode
 	if mode == "intro" then
-		offset = dir * 9 + right * 3 + up * 3.2
-		look = up * 1.6
+		offset = dir * 12 + right * 2 + up * 4.8
+		look = up * 1.2
 	elseif mode == "start" then
 		offset = dir * 16 + right * 1.5 + up * 5
 		look = up * 1.2
@@ -2626,7 +2626,15 @@ UserInputService.InputBegan:Connect(function(input: InputObject, processed: bool
 	local kc = input.KeyCode
 	if rebinding and input.UserInputType == Enum.UserInputType.Keyboard then
 		if kc ~= Enum.KeyCode.Escape then
-			(Settings :: any)[rebinding.key] = kc
+			-- binding a key that's already used swaps the two (left and right can never be the same key)
+			local s: any = Settings
+			local old = s[rebinding.key]
+			for _, other in ipairs({ "LeftKey", "RightKey", "PassKey" }) do
+				if other ~= rebinding.key and s[other] == kc then
+					s[other] = old
+				end
+			end
+			s[rebinding.key] = kc
 		end
 		rebinding = nil
 		refreshControlsUI()
@@ -3198,7 +3206,7 @@ local function placeRaceProps(current: Race, you: Runner)
 			local c = CFrame.lookAt(p, p + dd)
 			local perfect = d + seg / 2 >= line - CONFIG.PerfectPassBefore * SPM and d + seg / 2 <= line + CONFIG.PerfectPassAfter * SPM
 			local part = flat("ExchangeZone", c, LANE_W - 0.6, seg + 0.05, MARK_TOP + 0.004, if perfect then K.C_GOOD else K.C_WARN, Enum.Material.Neon, 0.02, RaceFolder)
-			part.Transparency = 0.6
+			part.Transparency = 0.45
 			d += step
 		end
 		local p, dd = trackSample(you.lane, you.sStart - START_BACK + line)
