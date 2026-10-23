@@ -113,12 +113,12 @@ local START_BACK = 0.8 -- runner's body starts this far behind the line
 
 -- surface heights (top faces)
 local GRASS_TOP = 0.2
-local DISC_Y0 = 0.22
-local DISC_STEP = 0.014
-local STRAIGHT_TOP = 0.48
-local LINE_TOP = 0.495
-local MARK_TOP = 0.51
-local FLOOR_TOP = 0.52 -- invisible walkable floor over the whole track
+local STRAIGHT_TOP = 0.48 -- running surface (straights and bends)
+local INFIELD_DISC_TOP = 0.45
+local LINE_TOP = 0.51
+local MARK_TOP = 0.53
+local FLOOR_TOP = 0.54 -- invisible walkable floor over the whole track
+local BEND_SEGMENTS = 36
 
 local function laneRadius(lane: number): number
 	return RC + (lane - 0.5) * LANE_W
@@ -308,22 +308,26 @@ local function buildTrack()
 		CanQuery = true,
 	})
 
-	-- the two bends: stacked discs, outer to inner (lines + lanes + infield)
-	for _, cx in ipairs({ HALF, -HALF }) do
-		local level = 0
-		local function nextTop(): number
-			level += 1
-			return DISC_Y0 + (level - 1) * DISC_STEP
+	-- the two bends: flat segments (no overlapping layers = no flicker)
+	local segAngle = math.pi / BEND_SEGMENTS
+	for _, sign in ipairs({ 1, -1 }) do
+		local cx = sign * HALF
+		local center = Vector3.new(cx, 0, 0)
+		for i = 0, BEND_SEGMENTS - 1 do
+			local a = (i + 0.5) * segAngle
+			local out = Vector3.new(sign * math.sin(a), 0, sign * math.cos(a))
+			local function segCF(r: number): CFrame
+				local pos = center + out * r
+				return CFrame.lookAt(pos, pos + out)
+			end
+			local seg = flat("Bend", segCF((RC + R_OUT) / 2), 2 * R_OUT * math.tan(segAngle / 2) + 0.05, R_OUT - RC, STRAIGHT_TOP, trackColor, TRACK_MATERIAL)
+			table.insert(trackSurfaces, seg)
+			for k = 0, LANES do
+				local r = RC + k * LANE_W
+				flat("BendLine", segCF(r), 2 * r * math.tan(segAngle / 2) + 0.02, LINE_W, LINE_TOP, LINE_COLOR, Enum.Material.SmoothPlastic, 0.02)
+			end
 		end
-		disc("BendLine", cx, R_OUT + LINE_W / 2, nextTop(), LINE_COLOR, Enum.Material.SmoothPlastic, false)
-		disc("BendLane", cx, R_OUT - LINE_W / 2, nextTop(), trackColor, TRACK_MATERIAL, true)
-		for k = LANES - 1, 1, -1 do
-			local r = RC + k * LANE_W
-			disc("BendLine", cx, r + LINE_W / 2, nextTop(), LINE_COLOR, Enum.Material.SmoothPlastic, false)
-			disc("BendLane", cx, r - LINE_W / 2, nextTop(), trackColor, TRACK_MATERIAL, true)
-		end
-		disc("BendKerb", cx, RC + LINE_W / 2, nextTop(), LINE_COLOR, Enum.Material.SmoothPlastic, false)
-		disc("BendInfield", cx, RC - LINE_W / 2, nextTop(), INFIELD_COLOR, Enum.Material.Grass, false)
+		disc("BendInfield", cx, RC - LINE_W / 2, INFIELD_DISC_TOP, INFIELD_COLOR, Enum.Material.Grass, false)
 
 		-- walkable floor for this bend
 		block({
@@ -338,7 +342,7 @@ local function buildTrack()
 		})
 	end
 
-	-- straights + infield rectangle (sit above the bend discs)
+	-- straights + infield rectangle
 	local zMid = (RC + R_OUT) / 2
 	for _, sign in ipairs({ 1, -1 }) do
 		local strip = flat("Straight", CFrame.new(0, 0, sign * zMid), STRAIGHT, LANES * LANE_W, STRAIGHT_TOP, trackColor, TRACK_MATERIAL)
@@ -1007,9 +1011,9 @@ local function makeBotModel(athlete, lane: number): (Model, BasePart)
 	if head and not Settings.PerformanceMode then
 		local tag = create("BillboardGui", {
 			Name = "NameTag",
-			Size = UDim2.fromOffset(150, 34),
-			StudsOffset = Vector3.new(0, 2.6, 0),
-			MaxDistance = 90,
+			Size = UDim2.fromScale(3.4, 0.72), -- in studs, so tags shrink with distance
+			StudsOffset = Vector3.new(0, 2.0, 0),
+			MaxDistance = 70,
 			LightInfluence = 0,
 			Adornee = head,
 			Parent = head,
@@ -1078,10 +1082,10 @@ do
 	local firsts = shuffle(table.clone(FIRST))
 	local lasts = shuffle(table.clone(LAST))
 	for i = 1, 16 do
-		local base = rng:NextNumber(0.952, 0.992)
+		local base = rng:NextNumber(0.958, 0.998)
 		local skill = {}
 		for _, ev in ipairs(EVENTS) do
-			skill[ev.Name] = math.clamp(base + rng:NextNumber(-0.008, 0.008), 0.94, 0.997)
+			skill[ev.Name] = math.clamp(base + rng:NextNumber(-0.008, 0.008), 0.95, 1)
 		end
 		local kit = KIT_COLORS[((i - 1) % #KIT_COLORS) + 1]
 		table.insert(roster, {
@@ -1358,13 +1362,13 @@ local setPanel = scaled(create("Frame", {
 corner(setPanel, 16)
 stroke(setPanel, C_TEXT, 1, 0.8)
 label({ Text = "SETTINGS", Font = FONT_BLACK, TextSize = 20, Position = UDim2.fromOffset(20, 16), Size = UDim2.fromOffset(200, 26), ZIndex = 21, Parent = setPanel })
-local closeSettings = button({ Text = "X", Font = FONT_BLACK, TextSize = 16, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -14, 0, 14), Size = UDim2.fromOffset(34, 34), ZIndex = 21, Parent = setPanel })
+local closeSettings = button({ Name = "Close", Text = "X", Font = FONT_BLACK, TextSize = 16, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -14, 0, 14), Size = UDim2.fromOffset(34, 34), ZIndex = 21, Parent = setPanel })
 
 type Option = { key: string, choices: { string }, buttons: { TextButton } }
 local options: { Option } = {}
 local function addOption(row: number, title: string, key: string, choices: { string }, labels: { string })
 	local y = 62 + (row - 1) * 64
-	label({ Text = title, Font = FONT_BOLD, TextSize = 15, TextColor3 = C_MUTED, Position = UDim2.fromOffset(20, y), Size = UDim2.fromOffset(150, 40), ZIndex = 21, Parent = setPanel })
+	label({ Text = title, Font = FONT_BOLD, TextSize = 14, TextColor3 = C_MUTED, Position = UDim2.fromOffset(20, y), Size = UDim2.fromOffset(154, 40), ZIndex = 21, Parent = setPanel })
 	local opt: Option = { key = key, choices = choices, buttons = {} }
 	for i, choice in ipairs(choices) do
 		local b = button({
@@ -1498,10 +1502,24 @@ corner(overlay, 16)
 stroke(overlay, C_ACCENT, 2, 0.4)
 local ovTitle = label({ Name = "Title", Text = "", Font = FONT_BLACK, TextSize = 24, TextXAlignment = Enum.TextXAlignment.Center, Position = UDim2.fromOffset(0, 14), Size = UDim2.new(1, 0, 0, 30), ZIndex = 16, Parent = overlay })
 local ovSub = label({ Name = "Sub", Text = "", Font = FONT_BOLD, TextSize = 15, TextColor3 = C_ACCENT, TextXAlignment = Enum.TextXAlignment.Center, Position = UDim2.fromOffset(0, 46), Size = UDim2.new(1, 0, 0, 20), ZIndex = 16, Parent = overlay })
-local ovHeader = label({ Name = "Header", Text = "", Font = FONT_BOLD, TextSize = 12, TextColor3 = C_MUTED, Position = UDim2.fromOffset(24, 74), Size = UDim2.new(1, -48, 0, 16), ZIndex = 16, Parent = overlay })
 type OvRow = { frame: Frame, cols: { TextLabel } }
 local ovRows: { OvRow } = {}
-local OV_COLS: { { any } } = { { 10, 34, Enum.TextXAlignment.Center }, { 50, 50, Enum.TextXAlignment.Left }, { 104, 200, Enum.TextXAlignment.Left }, { 310, 90, Enum.TextXAlignment.Left }, { 400, 100, Enum.TextXAlignment.Right }, { 508, 36, Enum.TextXAlignment.Center } }
+local OV_COLS: { { any } } = { { 4, 44, Enum.TextXAlignment.Center }, { 50, 50, Enum.TextXAlignment.Left }, { 104, 200, Enum.TextXAlignment.Left }, { 310, 90, Enum.TextXAlignment.Left }, { 400, 100, Enum.TextXAlignment.Right }, { 508, 36, Enum.TextXAlignment.Center } }
+local ovHeaders: { TextLabel } = {}
+for c, spec in ipairs(OV_COLS) do
+	ovHeaders[c] = label({
+		Name = "Header" .. c,
+		Text = "",
+		Font = FONT_BOLD,
+		TextSize = 12,
+		TextColor3 = C_MUTED,
+		TextXAlignment = spec[3],
+		Position = UDim2.fromOffset(18 + spec[1], 74),
+		Size = UDim2.fromOffset(spec[2], 16),
+		ZIndex = 16,
+		Parent = overlay,
+	})
+end
 for i = 1, 8 do
 	local f = create("Frame", {
 		Name = "Row" .. i,
@@ -1729,9 +1747,8 @@ local function stepRunner(r: Runner, dt: number, t: number, event: Event, goal: 
 			r.started = true
 			r.startTime = r.reaction
 			r.lastTap = r.reaction
-			if r.bufferedTap then
-				r.bufferedTap = false
-			end
+			r.bufferedTap = false
+			dt = math.min(dt, t - r.reaction) -- only move for the part of the frame after the reaction
 		else
 			return
 		end
@@ -1748,7 +1765,7 @@ local function stepRunner(r: Runner, dt: number, t: number, event: Event, goal: 
 	local vmax = event.MaxSpeed * r.cap * fatigue * staminaFactor
 
 	if r.finished then
-		r.speed = math.max(0, r.speed - 9 * dt)
+		r.speed = math.max(0, r.speed - 11 * dt)
 	elseif r.isPlayer then
 		local sinceTap = t - r.lastTap
 		local driving = sinceTap <= CONFIG.DriveWindow or (t - r.startTime) < CONFIG.BlockPushTime
@@ -2107,24 +2124,24 @@ local function updateCamera(dt: number)
 	local look: Vector3
 	local mode = cam.mode
 	if mode == "start" then
-		offset = dir * 7 + right * 6 + up * 2.6
-		look = up * 1.4 - dir * 0.5
+		offset = dir * 16 + right * 1.5 + up * 5
+		look = up * 1.2
 	elseif mode == "finish" then
 		offset = dir * 10 + right * 3 + up * 3.4
 		look = up * 2.2
 	elseif Settings.Camera == "Side" then
-		offset = right * 17 + up * 4.5 + dir * 2
-		look = up * 2 + dir * 4
+		offset = right * 21 + up * 12.5 + dir * 2
+		look = up * 1.5 + dir * 3
 	else
-		offset = -dir * 13 + right * 4.5 + up * 5.5
-		look = dir * 14 + up * 2
+		offset = -dir * 11 + right * 0.5 + up * 6.2
+		look = dir * 12 + up * 2
 	end
 	local k = if cam.snap then 1 else 1 - math.exp(-dt * 5)
 	cam.offset = cam.offset:Lerp(offset, k)
 	cam.look = cam.look:Lerp(look, k)
 	cam.snap = false
 	local speedFrac = math.clamp(r.speed / 37, 0, 1)
-	local fovTarget = if mode == "chase" then 70 + 12 * speedFrac else 62
+	local fovTarget = if mode == "chase" then 68 + 10 * speedFrac else 62
 	cam.fov += (fovTarget - cam.fov) * math.min(1, dt * 4)
 	camera.FieldOfView = cam.fov
 	camera.CFrame = CFrame.lookAt(base + cam.offset, base + cam.look)
@@ -2161,6 +2178,7 @@ local function onTap(side: string)
 	end
 	local gap = t - r.lastTap
 	if gap < CONFIG.MinTapGap then
+		r.lastSide = side -- too fast to count, but keep the left/right alternation
 		return
 	end
 	if r.lastSide == side then
@@ -2318,11 +2336,13 @@ tabBests.Activated:Connect(function()
 	refreshLeaderboard()
 end)
 
-local function showOverlay(title: string, sub: string, header: string, rows: { { string } }, footer: string, footerColor: Color3?)
+local function showOverlay(title: string, sub: string, headers: { string }, rows: { { string } }, footer: string, footerColor: Color3?)
 	overlay.Visible = true
 	ovTitle.Text = title
 	ovSub.Text = sub
-	ovHeader.Text = header
+	for c, h in ipairs(ovHeaders) do
+		h.Text = headers[c] or ""
+	end
 	ovFooter.Text = footer
 	ovFooter.TextColor3 = footerColor or C_TEXT
 	for i, row in ipairs(ovRows) do
@@ -2352,7 +2372,7 @@ local function updateHud(r: Runner?, event: Event?)
 	staminaFill.Size = UDim2.fromScale(frac, 1)
 	staminaValue.Text = tostring(math.floor(stamina + 0.5))
 	local target = if frac > 0.5 then C_GOOD elseif frac > 0.25 then Color3.fromRGB(250, 200, 40) else C_BAD
-	staminaFill.BackgroundColor3 = staminaFill.BackgroundColor3:Lerp(target, 0.15)
+	staminaFill.BackgroundColor3 = if r then staminaFill.BackgroundColor3:Lerp(target, 0.15) else target
 	if r and event then
 		speedLabel.Text = string.format("%.1f / %.1f studs/s", r.speed, event.MaxSpeed)
 		laneLabel.Text = "LANE " .. r.lane
@@ -2493,7 +2513,7 @@ local function runHeat(event: Event, round: string, athletes: { Athlete }): { Re
 	showOverlay(
 		event.Name .. "  " .. string.upper(round),
 		"LANE DRAW (random)",
-		"LANE                    ATHLETE                                                        BEST",
+		{ "LANE", "", "ATHLETE", "", "BEST", "" },
 		drawRows,
 		if you then ("You are in lane " .. you.lane) else "Watching this race",
 		C_ACCENT
@@ -2533,13 +2553,17 @@ local function runHeat(event: Event, round: string, athletes: { Athlete }): { Re
 		end
 		return order[1]
 	end
-	startCamera(if you and not you.dq then you else runners[1], "start")
+	local watching = you ~= nil or Settings.AutoRace -- with Auto Race off you keep your own camera
+	if watching then
+		startCamera(if you and not you.dq then you else runners[1], "start")
+	end
 
 	-- starting sequence (repeats after a false start)
 	while true do
 		current.phase = "marks"
 		current.falseStartBy = nil
 		setPoses(current, "marks")
+		refreshLeaderboard()
 		flash("ON YOUR MARKS", C_TEXT, nil, nil)
 		waitFor(2.2)
 		current.phase = "set"
@@ -2646,7 +2670,7 @@ local function runHeat(event: Event, round: string, athletes: { Athlete }): { Re
 				elseif r.finished and r.poseState == "dip" and t - r.finishClock > 0.35 then
 					r.poseState = "run"
 				end
-				if r.finished and r.poseState ~= "celebrate" and r.speed < 4 and t - r.finishClock > 1 then
+				if r.finished and r.poseState ~= "celebrate" and r.speed < 6 and t - r.finishClock > 1 then
 					r.poseState = "celebrate"
 					r.poseClock = 0
 				end
@@ -2786,7 +2810,7 @@ end
 
 local function finishRaceScreen(current: Race, title: string, sub: string, results: { Result }, footer: string, footerColor: Color3?)
 	clearFlash()
-	showOverlay(title, sub, "PL     LANE    ATHLETE                                         REACTION            TIME", resultRows(results, true), footer, footerColor)
+	showOverlay(title, sub, { "PL", "LANE", "ATHLETE", "REACTION", "TIME", "" }, resultRows(results, true), footer, footerColor)
 	storeLastResults(title, results)
 	waitFor(CONFIG.ResultsTime)
 	hideOverlay()
@@ -2915,7 +2939,7 @@ local function runEvent(event: Event)
 		})
 	end
 	local finFooter = if youThrough then "YOU MADE THE FINAL!" elseif youIn then "You did not qualify - watch the final" else "Here are the finalists"
-	showOverlay(event.Name .. "  FINALISTS", "These 8 athletes are making it to the final", "#      HEAT    ATHLETE                                         SEMIFINAL            TIME", finalRows, finFooter, if youThrough then C_GOOD else C_ACCENT)
+	showOverlay(event.Name .. "  FINALISTS", "These 8 athletes are making it to the final", { "#", "HEAT", "ATHLETE", "SEMIFINAL", "TIME", "" }, finalRows, finFooter, if youThrough then C_GOOD else C_ACCENT)
 	waitFor(CONFIG.FinalistsTime)
 	hideOverlay()
 
@@ -2964,16 +2988,29 @@ updateHud(nil, nil)
 refreshLeaderboard()
 
 player.CharacterAdded:Connect(function()
+	-- the old character is gone: forget its locked state and bot template
 	controlsLocked = false
+	if botTemplate then
+		botTemplate:Destroy()
+	end
 	botTemplate = nil
 	botTemplateFor = nil
 	local current = race
-	if current and current.you and current.phase ~= "done" then
+	local you = current and current.you
+	if current and you and not you.dq and current.phase ~= "done" then
+		-- respawned mid race: put the new character back in its lane
 		task.wait(0.5)
 		lockPlayer(true)
-		local you = current.you :: Runner
 		you.rig = nil
 		placePlayerAt(you)
+	else
+		-- make sure movement works on the new character
+		local controls = getControls()
+		if controls then
+			pcall(function()
+				controls:Enable()
+			end)
+		end
 	end
 end)
 
