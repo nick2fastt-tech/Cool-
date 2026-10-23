@@ -12,18 +12,22 @@
 	    * Builds an 8-lane 400 m track (red or blue) on grass. No stadium.
 	    * Runs 60m, 100m, 200m and 400m automatically, one after another.
 	      Each event has a semifinal and a final. You are teleported to
-	      your (random) lane automatically.
+	      your (random) lane automatically. No bots on the track: you race
+	      alone, rivals only appear as times on the leaderboard/results.
 	    * Speed Stars style running: tap left / right in rhythm
 	      (every 0.49 s keeps you at top speed).
 	        PC: A / D, Left / Right arrows, or Q / E
 	        Phone / tablet: tap the left or right half of the screen
 	        Gamepad: L1 / R1 (or L2 / R2, D-pad left / right)
-	    * Speed limits: 36.5 studs/s (60m, 100m), 37.3 (200m), 35.2 (400m).
+	    * Speed limits: 36.8 studs/s (60m), 37.9 (100m), 37.7 (200m),
+	      34.3 (400m).
 	    * Reaction time 0.02 - 0.05 s. Tap during "Set" = false start:
 	      the race restarts and your reaction becomes 0.15 s.
 	      A second false start is a disqualification.
-	    * Custom procedural running / start / finish animations that work
-	      on both R6 and R15 avatars (no animation uploads needed).
+	    * Custom animations on YOUR avatar (R6 and R15, no uploads needed):
+	      crouch start ("on your marks" + "set"), block clearance, drive
+	      phase (low body angle rising over the first 20-30 m), upright
+	      sprint, finish-line dip, braking jog and celebration.
 	    * UI: leaderboard, settings (track colour, performance mode,
 	      auto race, camera) and stamina bar at the bottom.
 
@@ -68,7 +72,6 @@ local CONFIG = {
 	ReactionAfterFalseStart = 0.15,
 	BotReactionMin = 0.10,
 	BotReactionMax = 0.17,
-	BotFalseStartChance = 0.04,
 
 	-- flow
 	IntroTime = 4,
@@ -76,13 +79,14 @@ local CONFIG = {
 	FinalistsTime = 8,
 }
 
-type Event = { Name: string, Meters: number, MaxSpeed: number }
+-- DriveMeters = length of the drive phase (low body angle out of the blocks)
+type Event = { Name: string, Meters: number, MaxSpeed: number, DriveMeters: number }
 
 local EVENTS: { Event } = {
-	{ Name = "60m", Meters = 60, MaxSpeed = 36.5 },
-	{ Name = "100m", Meters = 100, MaxSpeed = 36.5 },
-	{ Name = "200m", Meters = 200, MaxSpeed = 37.3 },
-	{ Name = "400m", Meters = 400, MaxSpeed = 35.2 },
+	{ Name = "60m", Meters = 60, MaxSpeed = 36.8, DriveMeters = 25 },
+	{ Name = "100m", Meters = 100, MaxSpeed = 37.9, DriveMeters = 30 },
+	{ Name = "200m", Meters = 200, MaxSpeed = 37.7, DriveMeters = 25 },
+	{ Name = "400m", Meters = 400, MaxSpeed = 34.3, DriveMeters = 20 },
 }
 
 local TRACK_COLORS = {
@@ -232,7 +236,6 @@ end
 local World = create("Folder", { Name = "TrackAndField_World", Parent = Workspace })
 local TrackFolder = create("Folder", { Name = "Track", Parent = World })
 local DecorFolder = create("Folder", { Name = "Decor", Parent = World })
-local RunnersFolder = create("Folder", { Name = "Runners", Parent = World })
 local BlocksFolder = create("Folder", { Name = "StartingBlocks", Parent = World })
 
 local trackSurfaces: { BasePart } = {} -- recoloured by the Track Colour setting
@@ -551,34 +554,36 @@ end
 --   pitch  > 0 swings a limb forward (or tilts the head up)
 --   pitch  < 0 on "root" leans the body forward
 --   roll   > 0 moves a right limb outward (negative for left)
--- applyPose converts that into Motor6D.Transform for any rig.
+-- applyPose converts that into the joint's Transform for any rig.
+-- Joints are found by the body part they move, so it works with classic
+-- Motor6D avatars and with newer avatars that use AnimationConstraints.
 
-local JOINTS_R15 = {
-	root = "Root",
-	waist = "Waist",
-	neck = "Neck",
-	shoulderR = "RightShoulder",
-	shoulderL = "LeftShoulder",
-	elbowR = "RightElbow",
-	elbowL = "LeftElbow",
-	hipR = "RightHip",
-	hipL = "LeftHip",
-	kneeR = "RightKnee",
-	kneeL = "LeftKnee",
-	ankleR = "RightAnkle",
-	ankleL = "LeftAnkle",
+local CHILD_PART_R15 = {
+	LowerTorso = "root",
+	UpperTorso = "waist",
+	Head = "neck",
+	RightUpperArm = "shoulderR",
+	LeftUpperArm = "shoulderL",
+	RightLowerArm = "elbowR",
+	LeftLowerArm = "elbowL",
+	RightUpperLeg = "hipR",
+	LeftUpperLeg = "hipL",
+	RightLowerLeg = "kneeR",
+	LeftLowerLeg = "kneeL",
+	RightFoot = "ankleR",
+	LeftFoot = "ankleL",
 }
-local JOINTS_R6 = {
-	root = "RootJoint",
-	neck = "Neck",
-	shoulderR = "Right Shoulder",
-	shoulderL = "Left Shoulder",
-	hipR = "Right Hip",
-	hipL = "Left Hip",
+local CHILD_PART_R6 = {
+	Torso = "root",
+	Head = "neck",
+	["Right Arm"] = "shoulderR",
+	["Left Arm"] = "shoulderL",
+	["Right Leg"] = "hipR",
+	["Left Leg"] = "hipL",
 }
 
-type JointInfo = { motor: Motor6D, rot: CFrame, inv: CFrame }
-type Rig = { model: Model, isR15: boolean, joints: { [string]: JointInfo }, cur: { [string]: { number } } }
+type JointLink = { joint: any, rot: CFrame, inv: CFrame }
+type Rig = { model: Model, isR15: boolean, joints: { [string]: { JointLink } }, cur: { [string]: { number } } }
 type Pose = { [string]: { number } }
 
 local function newRig(model: Model): Rig?
@@ -587,20 +592,32 @@ local function newRig(model: Model): Rig?
 		return nil
 	end
 	local isR15 = hum.RigType == Enum.HumanoidRigType.R15
-	local names = if isR15 then JOINTS_R15 else JOINTS_R6
-	local byName: { [string]: Motor6D } = {}
+	local partToKey: { [string]: string } = if isR15 then CHILD_PART_R15 else CHILD_PART_R6
+	local rig: Rig = { model = model, isR15 = isR15, joints = {}, cur = {} }
+	local function add(key: string, joint: Instance, rot: CFrame)
+		local list = rig.joints[key]
+		if not list then
+			list = {}
+			rig.joints[key] = list
+			rig.cur[key] = { 0, 0, 0, 0, 0 }
+		end
+		table.insert(list, { joint = joint, rot = rot, inv = rot:Inverse() })
+	end
 	for _, d in ipairs(model:GetDescendants()) do
 		if d:IsA("Motor6D") then
-			byName[d.Name] = d
-		end
-	end
-	local rig: Rig = { model = model, isR15 = isR15, joints = {}, cur = {} }
-	for key, name in pairs(names) do
-		local m = byName[name]
-		if m then
-			local rot = m.C0.Rotation
-			rig.joints[key] = { motor = m, rot = rot, inv = rot:Inverse() }
-			rig.cur[key] = { 0, 0, 0, 0, 0 }
+			local p0, p1 = d.Part0, d.Part1
+			local key = p1 and partToKey[p1.Name]
+			if key and p0 and p1 and p0:IsDescendantOf(model) and p1:IsDescendantOf(model) then
+				add(key, d, d.C0.Rotation)
+			end
+		elseif d:IsA("AnimationConstraint") then
+			local a0, a1 = d.Attachment0, d.Attachment1
+			local p0 = a0 and a0.Parent
+			local p1 = a1 and a1.Parent
+			local key = p1 and partToKey[p1.Name]
+			if a0 and key and p0 and p0:IsDescendantOf(model) and p1 and p1:IsDescendantOf(model) then
+				add(key, d, a0.CFrame.Rotation)
+			end
 		end
 	end
 	if not rig.joints.root then
@@ -616,20 +633,25 @@ end
 local ZERO_J = J()
 
 local function applyPose(rig: Rig, pose: Pose, alpha: number)
-	for key, info in pairs(rig.joints) do
+	for key, links in pairs(rig.joints) do
 		local target = pose[key] or ZERO_J
 		local cur = rig.cur[key]
 		for i = 1, 5 do
 			cur[i] = cur[i] + (target[i] - cur[i]) * alpha
 		end
 		local cf = CFrame.new(0, cur[4], cur[5]) * CFrame.Angles(cur[1], cur[2], cur[3])
-		info.motor.Transform = info.inv * cf * info.rot
+		for _, link in ipairs(links) do
+			link.joint.Transform = link.inv * cf * link.rot
+		end
 	end
 end
 
 local function resetRig(rig: Rig)
-	for _, info in pairs(rig.joints) do
-		info.motor.Transform = CFrame.identity
+	for key, links in pairs(rig.joints) do
+		for _, link in ipairs(links) do
+			link.joint.Transform = CFrame.identity
+		end
+		rig.cur[key] = { 0, 0, 0, 0, 0 }
 	end
 end
 
@@ -701,53 +723,73 @@ local function poseSet(isR15: boolean): Pose
 	}
 end
 
--- phase in radians, amp 0..1 (how hard we sprint), drive 0..1 (acceleration lean)
+-- Sprint cycle.
+--   phase: stride phase in radians (right leg swings forward while cos(phase) > 0)
+--   amp:   0..1 how hard you sprint
+--   drive: 1 = first step out of the blocks (low ~45 degree body angle),
+--          0 = upright top-speed running. Goes 1 -> 0 over the drive phase.
 local function poseRun(phase: number, amp: number, drive: number, isR15: boolean): Pose
 	local s, c = math.sin(phase), math.cos(phase)
+	local fwdR, fwdL = math.max(0, c), math.max(0, -c) -- leg swinging forward
 	if isR15 then
-		local lean = -(0.2 + 0.42 * drive)
-		local bob = (-0.1 + 0.1 * math.cos(phase * 2)) * amp
-		local hipBias = 0.32 * amp - lean * 0.85
+		local lean = -(0.14 + 0.66 * drive)
+		local bob = (-0.06 - 0.32 * drive + 0.09 * math.cos(phase * 2)) * amp
+		local hipC = 0.28 * amp - lean * 0.55
+		local hipA = (0.8 + 0.18 * drive) * amp
+		local kneeA = (1.8 - 0.8 * drive) * amp -- low heel recovery in the drive, high at top speed
+		local armA = (0.95 + 0.3 * drive) * amp
 		return {
-			root = J(lean, 0.08 * amp * s, 0, bob),
-			waist = J(-0.05, -0.16 * amp * s, 0),
-			neck = J(-lean * 0.55, 0.08 * amp * s, 0),
-			hipR = J(hipBias + 0.95 * amp * s),
-			hipL = J(hipBias - 0.95 * amp * s),
-			kneeR = J(-(0.25 + 1.55 * amp * math.max(0, c))),
-			kneeL = J(-(0.25 + 1.55 * amp * math.max(0, -c))),
-			ankleR = J(0.25 * amp * math.max(0, -c)),
-			ankleL = J(0.25 * amp * math.max(0, c)),
-			shoulderR = J(0.1 - lean * 0.4 - 1.05 * amp * s, 0, 0.1),
-			shoulderL = J(0.1 - lean * 0.4 + 1.05 * amp * s, 0, -0.1),
-			elbowR = J(1.25 + 0.35 * amp * math.max(0, -s)),
-			elbowL = J(1.25 + 0.35 * amp * math.max(0, s)),
+			root = J(lean + 0.03 * math.sin(phase * 2) * amp, 0.09 * amp * s, 0, bob, -0.25 * drive),
+			waist = J(-0.04 - 0.1 * drive, -0.2 * amp * s, 0),
+			neck = J(-lean * 0.6 - 0.12 * drive, 0.1 * amp * s, 0),
+			hipR = J(hipC + hipA * s),
+			hipL = J(hipC - hipA * s),
+			kneeR = J(-(0.12 + kneeA * fwdR ^ 1.3)),
+			kneeL = J(-(0.12 + kneeA * fwdL ^ 1.3)),
+			ankleR = J(0.3 * amp * fwdR - 0.45 * amp * fwdL),
+			ankleL = J(0.3 * amp * fwdL - 0.45 * amp * fwdR),
+			shoulderR = J(0.12 - lean * 0.35 - armA * s, 0, 0.1 + 0.05 * amp),
+			shoulderL = J(0.12 - lean * 0.35 + armA * s, 0, -0.1 - 0.05 * amp),
+			elbowR = J(1.35 + 0.4 * amp * math.max(0, -s) - 0.25 * amp * math.max(0, s)),
+			elbowL = J(1.35 + 0.4 * amp * math.max(0, s) - 0.25 * amp * math.max(0, -s)),
 		}
 	end
-	local lean = -(0.12 + 0.3 * drive)
+	local lean = -(0.1 + 0.5 * drive)
 	return {
-		root = J(lean, 0.06 * amp * s, 0, 0.12 * amp * math.abs(math.cos(phase))),
+		root = J(lean, 0.07 * amp * s, 0, 0.1 * amp * math.abs(c) - 0.2 * drive),
 		neck = J(-lean * 0.6),
-		hipR = J(-lean * 0.8 + 0.15 * amp + 1.0 * amp * s),
-		hipL = J(-lean * 0.8 + 0.15 * amp - 1.0 * amp * s),
-		shoulderR = J(0.15 - lean * 0.5 - 1.25 * amp * s, 0, 0.08),
-		shoulderL = J(0.15 - lean * 0.5 + 1.25 * amp * s, 0, -0.08),
+		hipR = J(-lean * 0.75 + 0.18 * amp + 1.05 * amp * s),
+		hipL = J(-lean * 0.75 + 0.18 * amp - 1.05 * amp * s),
+		shoulderR = J(0.15 - lean * 0.4 - 1.3 * amp * s, 0, 0.1),
+		shoulderL = J(0.15 - lean * 0.4 + 1.3 * amp * s, 0, -0.1),
 	}
 end
 
+-- finish: lunge the chest over the line, arms swept back
 local function poseDip(isR15: boolean): Pose
+	if isR15 then
+		return {
+			root = J(-1.0, 0, 0, -0.35, -0.3),
+			waist = J(-0.22),
+			neck = J(0.7),
+			shoulderR = J(-1.25, 0, 0.25),
+			shoulderL = J(-1.25, 0, -0.25),
+			elbowR = J(0.25),
+			elbowL = J(0.25),
+			hipL = J(1.35),
+			kneeL = J(-0.25),
+			hipR = J(0.3),
+			kneeR = J(-0.9),
+			ankleR = J(-0.5),
+		}
+	end
 	return {
-		root = J(-0.85, 0, 0, isR15 and -0.25 or -0.1),
-		waist = J(-0.25),
-		neck = J(0.55),
-		shoulderR = J(-0.9, 0, 0.2),
-		shoulderL = J(-0.9, 0, -0.2),
-		elbowR = J(0.3),
-		elbowL = J(0.3),
-		hipR = J(0.4),
-		hipL = J(1.5),
-		kneeR = J(-0.6),
-		kneeL = J(-0.3),
+		root = J(-0.9, 0, 0, -0.15),
+		neck = J(0.6),
+		shoulderR = J(-1.2, 0, 0.2),
+		shoulderL = J(-1.2, 0, -0.2),
+		hipL = J(1.3),
+		hipR = J(0.2),
 	}
 end
 
@@ -813,227 +855,6 @@ local function rootHeightOf(model: Model): number
 	return 3
 end
 
----------------------------------------------------------------------
--- RUNNER MODELS (bots look like your avatar, in their own kit)
----------------------------------------------------------------------
-local SKIN_TONES = {
-	Color3.fromRGB(255, 220, 177),
-	Color3.fromRGB(234, 192, 134),
-	Color3.fromRGB(198, 134, 66),
-	Color3.fromRGB(141, 85, 36),
-	Color3.fromRGB(97, 58, 30),
-	Color3.fromRGB(66, 40, 22),
-}
-local KIT_COLORS = {
-	Color3.fromRGB(220, 40, 40),
-	Color3.fromRGB(30, 90, 200),
-	Color3.fromRGB(250, 200, 30),
-	Color3.fromRGB(20, 150, 70),
-	Color3.fromRGB(240, 120, 20),
-	Color3.fromRGB(130, 50, 180),
-	Color3.fromRGB(20, 20, 24),
-	Color3.fromRGB(240, 240, 240),
-	Color3.fromRGB(0, 170, 190),
-	Color3.fromRGB(200, 30, 120),
-	Color3.fromRGB(110, 70, 40),
-	Color3.fromRGB(90, 120, 30),
-	Color3.fromRGB(10, 40, 100),
-	Color3.fromRGB(160, 160, 170),
-	Color3.fromRGB(255, 90, 90),
-	Color3.fromRGB(60, 200, 140),
-}
-
-local botTemplate: Model? = nil
-local botTemplateFor: Model? = nil
-
-local function stripModel(model: Model)
-	for _, d in ipairs(model:GetDescendants()) do
-		if d:IsA("BaseScript") or d:IsA("ModuleScript") or d:IsA("Accessory") or d:IsA("Clothing")
-			or d:IsA("ShirtGraphic") or d:IsA("BodyColors") or d:IsA("ForceField") or d:IsA("Tool")
-			or d:IsA("Sound") or d:IsA("SurfaceAppearance") or d:IsA("Animator") or d:IsA("BillboardGui")
-			or d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam")
-		then
-			d:Destroy()
-		end
-	end
-end
-
--- simple blocky R6 rig used if your avatar can't be copied
-local function buildBlockRig(): Model
-	local model = create("Model", { Name = "Runner" })
-	local function limb(name: string, size: Vector3): BasePart
-		return create("Part", {
-			Name = name,
-			Size = size,
-			TopSurface = Enum.SurfaceType.Smooth,
-			BottomSurface = Enum.SurfaceType.Smooth,
-			Material = Enum.Material.SmoothPlastic,
-			Parent = model,
-		})
-	end
-	local root = limb("HumanoidRootPart", Vector3.new(2, 2, 1))
-	root.Transparency = 1
-	local torso = limb("Torso", Vector3.new(2, 2, 1))
-	local head = limb("Head", Vector3.new(2, 1, 1))
-	create("SpecialMesh", { MeshType = Enum.MeshType.Head, Scale = Vector3.new(1.25, 1.25, 1.25), Parent = head })
-	create("Decal", { Name = "face", Texture = "rbxasset://textures/face.png", Face = Enum.NormalId.Front, Parent = head })
-	local la = limb("Left Arm", Vector3.new(1, 2, 1))
-	local ra = limb("Right Arm", Vector3.new(1, 2, 1))
-	local ll = limb("Left Leg", Vector3.new(1, 2, 1))
-	local rl = limb("Right Leg", Vector3.new(1, 2, 1))
-	local function motor(name: string, p0: BasePart, p1: BasePart, c0: CFrame, c1: CFrame)
-		create("Motor6D", { Name = name, Part0 = p0, Part1 = p1, C0 = c0, C1 = c1, Parent = p0 })
-	end
-	motor("RootJoint", root, torso, CFrame.new(0, 0, 0, -1, 0, 0, 0, 0, 1, 0, 1, 0), CFrame.new(0, 0, 0, -1, 0, 0, 0, 0, 1, 0, 1, 0))
-	motor("Neck", torso, head, CFrame.new(0, 1, 0, -1, 0, 0, 0, 0, 1, 0, 1, 0), CFrame.new(0, -0.5, 0, -1, 0, 0, 0, 0, 1, 0, 1, 0))
-	motor("Right Shoulder", torso, ra, CFrame.new(1, 0.5, 0, 0, 0, 1, 0, 1, 0, -1, 0, 0), CFrame.new(-0.5, 0.5, 0, 0, 0, 1, 0, 1, 0, -1, 0, 0))
-	motor("Left Shoulder", torso, la, CFrame.new(-1, 0.5, 0, 0, 0, -1, 0, 1, 0, 1, 0, 0), CFrame.new(0.5, 0.5, 0, 0, 0, -1, 0, 1, 0, 1, 0, 0))
-	motor("Right Hip", torso, rl, CFrame.new(1, -1, 0, 0, 0, 1, 0, 1, 0, -1, 0, 0), CFrame.new(0.5, 1, 0, 0, 0, 1, 0, 1, 0, -1, 0, 0))
-	motor("Left Hip", torso, ll, CFrame.new(-1, -1, 0, 0, 0, -1, 0, 1, 0, 1, 0, 0), CFrame.new(-0.5, 1, 0, 0, 0, -1, 0, 1, 0, 1, 0, 0))
-	local hum = create("Humanoid", { RigType = Enum.HumanoidRigType.R6, Parent = model })
-	hum.HipHeight = 0
-	model.PrimaryPart = root
-	return model
-end
-
-local function getBotTemplate(): Model
-	local char = player.Character
-	if botTemplate and botTemplateFor == char then
-		return botTemplate
-	end
-	local result: Model? = nil
-	if char and char:FindFirstChildOfClass("Humanoid") and char:FindFirstChild("HumanoidRootPart") then
-		local wasArchivable = char.Archivable
-		char.Archivable = true
-		local ok, clone = pcall(function()
-			return char:Clone()
-		end)
-		char.Archivable = wasArchivable
-		if ok and clone then
-			stripModel(clone)
-			if clone:FindFirstChild("HumanoidRootPart") and clone:FindFirstChildOfClass("Humanoid") then
-				result = clone
-			else
-				clone:Destroy()
-			end
-		end
-	end
-	if not result then
-		result = buildBlockRig()
-	end
-	if botTemplate then
-		botTemplate:Destroy()
-	end
-	botTemplate = result
-	botTemplateFor = char
-	return result :: Model
-end
-
-local KIT_PARTS = {
-	UpperTorso = "kit",
-	Torso = "kit",
-	LowerTorso = "shorts",
-	LeftUpperLeg = "shorts",
-	RightUpperLeg = "shorts",
-	LeftFoot = "shoes",
-	RightFoot = "shoes",
-}
-
-local function makeBotModel(athlete, lane: number): (Model, BasePart)
-	local model = getBotTemplate():Clone()
-	model.Name = athlete.Name
-	local isR15 = false
-	local hum = model:FindFirstChildOfClass("Humanoid")
-	if hum then
-		isR15 = hum.RigType == Enum.HumanoidRigType.R15
-		hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-		hum.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
-		hum.BreakJointsOnDeath = false
-		hum.RequiresNeck = false
-	end
-	for _, d in ipairs(model:GetDescendants()) do
-		if d:IsA("BasePart") then
-			d.Anchored = false
-			d.CanCollide = false
-			d.CanTouch = false
-			d.CanQuery = false
-			d.Massless = true
-			d.CastShadow = not Settings.PerformanceMode
-			local role = KIT_PARTS[d.Name]
-			if d.Name == "HumanoidRootPart" then
-				d.Transparency = 1
-			elseif role == "kit" then
-				d.Color = athlete.Kit
-			elseif role == "shorts" then
-				d.Color = athlete.Shorts
-			elseif role == "shoes" then
-				d.Color = athlete.Shoes
-			elseif not isR15 and (d.Name == "Left Leg" or d.Name == "Right Leg") then
-				d.Color = athlete.Shorts
-			else
-				d.Color = athlete.Skin
-			end
-			if d:IsA("MeshPart") then
-				pcall(function()
-					(d :: MeshPart).TextureID = ""
-				end)
-			end
-		end
-	end
-	local root = model:FindFirstChild("HumanoidRootPart") :: BasePart
-	root.Anchored = true
-	model.PrimaryPart = root
-
-	-- bib with lane number
-	local torso = (model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso")) :: BasePart?
-	if torso then
-		local bib = create("SurfaceGui", {
-			Name = "Bib",
-			Face = Enum.NormalId.Front,
-			SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud,
-			PixelsPerStud = 50,
-			Parent = torso,
-		})
-		create("TextLabel", {
-			Size = UDim2.fromScale(0.5, 0.36),
-			Position = UDim2.fromScale(0.25, 0.3),
-			BackgroundColor3 = Color3.fromRGB(250, 250, 250),
-			BorderSizePixel = 0,
-			Text = tostring(lane),
-			TextScaled = true,
-			Font = Enum.Font.GothamBlack,
-			TextColor3 = Color3.fromRGB(20, 20, 20),
-			Parent = bib,
-		})
-	end
-	-- name tag
-	local head = model:FindFirstChild("Head") :: BasePart?
-	if head and not Settings.PerformanceMode then
-		local tag = create("BillboardGui", {
-			Name = "NameTag",
-			Size = UDim2.fromScale(3.4, 0.72), -- in studs, so tags shrink with distance
-			StudsOffset = Vector3.new(0, 2.0, 0),
-			MaxDistance = 70,
-			LightInfluence = 0,
-			Adornee = head,
-			Parent = head,
-		})
-		create("TextLabel", {
-			Size = UDim2.fromScale(1, 1),
-			BackgroundTransparency = 1,
-			Text = string.format("%s  <font color=\"#ffd23f\">L%d</font>", athlete.Name, lane),
-			RichText = true,
-			TextScaled = true,
-			Font = Enum.Font.GothamBold,
-			TextColor3 = Color3.new(1, 1, 1),
-			TextStrokeTransparency = 0.4,
-			Parent = tag,
-		})
-	end
-	model.Parent = RunnersFolder
-	return model, root
-end
-
 -- starting blocks
 local function placeBlocks(lane: number, s: number)
 	local pos, dir = trackSample(lane, s - START_BACK - 0.8)
@@ -1066,15 +887,13 @@ end
 local FIRST = { "Marcus", "Andre", "Kenji", "Tobi", "Luca", "Jaylen", "Omar", "Felix", "Darius", "Mateo", "Kofi", "Ryan", "Elias", "Noah", "Tariq", "Hugo", "Isaac", "Malik", "Leo", "Zion" }
 local LAST = { "Carter", "Okafor", "Silva", "Hayes", "Moreau", "Brooks", "Tanaka", "Mensah", "Novak", "Reyes", "Bailey", "Kowalski", "Grant", "Duarte", "Osei", "Lindqvist", "Ward", "Fischer", "Asante", "Cole" }
 
+-- Rivals have no characters on the track: they only exist as times on the
+-- leaderboard, the results and the finalists screen. You race alone.
 type Athlete = {
 	Name: string,
 	IsPlayer: boolean,
 	Skill: { [string]: number },
 	Tau: number,
-	Kit: Color3,
-	Shorts: Color3,
-	Shoes: Color3,
-	Skin: Color3,
 }
 
 local roster: { Athlete } = {}
@@ -1087,16 +906,11 @@ do
 		for _, ev in ipairs(EVENTS) do
 			skill[ev.Name] = math.clamp(base + rng:NextNumber(-0.008, 0.008), 0.95, 1)
 		end
-		local kit = KIT_COLORS[((i - 1) % #KIT_COLORS) + 1]
 		table.insert(roster, {
 			Name = string.sub(firsts[i], 1, 1) .. ". " .. lasts[i],
 			IsPlayer = false,
 			Skill = skill,
 			Tau = rng:NextNumber(1.16, 1.34),
-			Kit = kit,
-			Shorts = kit:Lerp(Color3.new(0, 0, 0), 0.55),
-			Shoes = if rng:NextNumber() < 0.5 then Color3.fromRGB(245, 245, 245) else Color3.fromRGB(255, 120, 40),
-			Skin = SKIN_TONES[rng:NextInteger(1, #SKIN_TONES)],
 		})
 	end
 end
@@ -1106,10 +920,6 @@ local youAthlete: Athlete = {
 	IsPlayer = true,
 	Skill = {},
 	Tau = CONFIG.PlayerTau,
-	Kit = Color3.new(1, 1, 1),
-	Shorts = Color3.new(0, 0, 0),
-	Shoes = Color3.new(1, 1, 1),
-	Skin = Color3.new(1, 1, 1),
 }
 
 -- season bests: [eventName] = { {name, time, isPlayer} }
@@ -1630,13 +1440,6 @@ local function applyPerformance()
 	for _, info in ipairs(texturedParts) do
 		info.part.Material = if perf then Enum.Material.SmoothPlastic else info.material
 	end
-	for _, d in ipairs(RunnersFolder:GetDescendants()) do
-		if d:IsA("BasePart") then
-			d.CastShadow = not perf
-		elseif d:IsA("BillboardGui") then
-			d.Enabled = not perf
-		end
-	end
 end
 
 for _, opt in ipairs(options) do
@@ -2006,19 +1809,18 @@ local function drivePlayerCharacter(r: Runner)
 	end
 end
 
-local function placeBot(r: Runner)
-	local root = r.root
-	if not root then
-		return
-	end
-	local pos, dir = runnerSample(r)
-	local p = pos + Vector3.new(0, r.rootHeight, 0)
-	root.CFrame = CFrame.lookAt(p, p + dir)
-end
-
 ---------------------------------------------------------------------
 -- POSES PER FRAME
 ---------------------------------------------------------------------
+-- 1 at the blocks, easing to 0 at the end of the drive phase
+local function driveAmount(r: Runner, event: Event): number
+	if r.finished then
+		return 0
+	end
+	local x = math.clamp(r.dist / (event.DriveMeters * SPM), 0, 1)
+	return 1 - x * x * (3 - 2 * x)
+end
+
 local function runnerPose(r: Runner, event: Event): Pose
 	local rig = r.rig :: Rig
 	local isR15 = rig.isR15
@@ -2029,11 +1831,14 @@ local function runnerPose(r: Runner, event: Event): Pose
 		return poseSet(isR15)
 	elseif state == "run" then
 		local frac = math.clamp(r.speed / event.MaxSpeed, 0, 1)
-		local drive = if r.finished then 0 else math.clamp(1 - frac * 1.15, 0, 1)
-		local amp = math.clamp(0.35 + frac * 0.75, 0, 1)
 		if r.finished then
-			amp = math.clamp(r.speed / event.MaxSpeed * 1.3, 0.15, 1)
+			-- braking jog after the line: sit back, strides shrink
+			local pose = poseRun(r.phase, math.clamp(frac * 1.3, 0.15, 1), 0, isR15)
+			pose.root[1] += 0.22 * (1 - frac)
+			return pose
 		end
+		local drive = driveAmount(r, event)
+		local amp = math.clamp(0.6 + frac * 0.45 + drive * 0.3, 0, 1)
 		return poseRun(r.phase, amp, drive, isR15)
 	elseif state == "dip" then
 		return poseDip(isR15)
@@ -2052,7 +1857,7 @@ RunService.PreSimulation:Connect(function(dt: number)
 		local rig = r.rig
 		if rig and rig.model.Parent then
 			r.poseClock += dt
-			local cyclesPerSec = 1.15 + r.speed / 28
+			local cyclesPerSec = 1.15 + r.speed / 28 + 0.5 * driveAmount(r, current.event)
 			if r.speed > 0.2 then
 				r.phase = (r.phase + dt * math.pi * 2 * cyclesPerSec) % (math.pi * 2)
 			end
@@ -2408,9 +2213,6 @@ end
 
 local function cleanupRace(current: Race)
 	for _, r in ipairs(current.runners) do
-		if not r.isPlayer and r.model then
-			r.model:Destroy()
-		end
 		if r.isPlayer and r.rig then
 			resetRig(r.rig)
 		end
@@ -2448,8 +2250,6 @@ local function resetForRestart(current: Race)
 		end
 		if r.isPlayer and not r.dq then
 			placePlayerAt(r)
-		elseif r.root then
-			placeBot(r)
 		end
 	end
 end
@@ -2515,31 +2315,22 @@ local function runHeat(event: Event, round: string, athletes: { Athlete }): { Re
 		"LANE DRAW (random)",
 		{ "LANE", "", "ATHLETE", "", "BEST", "" },
 		drawRows,
-		if you then ("You are in lane " .. you.lane) else "Watching this race",
+		if you then ("You are in lane " .. you.lane) else "Not racing - live results on the leaderboard",
 		C_ACCENT
 	)
 	refreshLeaderboard()
 	waitFor(CONFIG.IntroTime, function(left)
 		subText.Text = ""
 		bigText.Text = ""
-		ovFooter.Text = (if you then ("You are in lane " .. you.lane .. "  -  ") else "Watching  -  ") .. "starting in " .. math.ceil(left)
+		ovFooter.Text = (if you then ("You are in lane " .. you.lane .. "  -  ") else "Not racing - live results on the leaderboard  -  ") .. "starting in " .. math.ceil(left)
 	end)
 	hideOverlay()
 
-	-- build runners on the track
-	for _, r in ipairs(runners) do
-		placeBlocks(r.lane, r.sStart)
-		if r.isPlayer then
-			lockPlayer(true)
-			placePlayerAt(r)
-		else
-			local model, root = makeBotModel(r.athlete, r.lane)
-			r.model = model
-			r.root = root
-			r.rootHeight = rootHeightOf(model)
-			r.rig = newRig(model)
-			placeBot(r)
-		end
+	-- only you are on the track (rivals are times on the leaderboard)
+	if you then
+		placeBlocks(you.lane, you.sStart)
+		lockPlayer(true)
+		placePlayerAt(you)
 	end
 	touchLeft.Visible = you ~= nil
 	touchRight.Visible = you ~= nil
@@ -2553,9 +2344,8 @@ local function runHeat(event: Event, round: string, athletes: { Athlete }): { Re
 		end
 		return order[1]
 	end
-	local watching = you ~= nil or Settings.AutoRace -- with Auto Race off you keep your own camera
-	if watching then
-		startCamera(if you and not you.dq then you else runners[1], "start")
+	if you then
+		startCamera(you, "start")
 	end
 
 	-- starting sequence (repeats after a false start)
@@ -2570,26 +2360,9 @@ local function runHeat(event: Event, round: string, athletes: { Athlete }): { Re
 		setPoses(current, "set")
 		flash("SET", C_ACCENT, nil, nil)
 		local hold = rng:NextNumber(1.3, 2.1)
-		local botCheat: Runner? = nil
-		if rng:NextNumber() < CONFIG.BotFalseStartChance then
-			local candidates = {}
-			for _, r in ipairs(runners) do
-				if not r.isPlayer and not r.dq and r.falseStarts == 0 then
-					table.insert(candidates, r)
-				end
-			end
-			if #candidates > 0 then
-				botCheat = candidates[rng:NextInteger(1, #candidates)]
-			end
-		end
-		local cheatAt = hold * rng:NextNumber(0.5, 0.95)
 		local t0 = os.clock()
 		while os.clock() - t0 < hold do
 			if current.falseStartBy then
-				break
-			end
-			if botCheat and os.clock() - t0 >= cheatAt then
-				current.falseStartBy = botCheat
 				break
 			end
 			task.wait()
@@ -2620,12 +2393,9 @@ local function runHeat(event: Event, round: string, athletes: { Athlete }): { Re
 				if hum then
 					hum:Move(Vector3.zero)
 				end
-				cam.target = leaderRunner()
 				touchLeft.Visible = false
 				touchRight.Visible = false
 			end
-		else
-			flash("FALSE START", C_BAD, fs.athlete.Name .. " (lane " .. fs.lane .. ")" .. (if isDQ then " - disqualified" else " - warned"), nil)
 		end
 		if fs.dq then
 			fs.poseState = "celebrate"
@@ -2648,7 +2418,7 @@ local function runHeat(event: Event, round: string, athletes: { Athlete }): { Re
 	local lastBoard = 0
 	local lastUi = 0
 	local allDoneAt: number? = nil
-	local botsDoneAt: number? = nil
+	local rivalsDoneAt: number? = nil
 	local youFinishShown = false
 
 	while true do
@@ -2657,13 +2427,14 @@ local function runHeat(event: Event, round: string, athletes: { Athlete }): { Re
 		current.clock += dt
 		local t = current.clock
 		local unfinished = 0
-		local botsUnfinished = 0
+		local rivalsUnfinished = 0
 		for _, r in ipairs(runners) do
 			local wasFinished = r.finished
 			stepRunner(r, dt, t, event, current.goal)
 			if not r.dq then
 				if r.started and r.poseState == "set" then
 					r.poseState = "run"
+					r.phase = math.pi * 1.5 -- block clearance: the back (right) leg drives through first
 				end
 				if not r.finished and current.goal - r.dist < 2.2 * SPM and r.speed > 0 then
 					r.poseState = "dip"
@@ -2677,16 +2448,12 @@ local function runHeat(event: Event, round: string, athletes: { Athlete }): { Re
 				if not r.finished and not r.dnf then
 					unfinished += 1
 					if not r.isPlayer then
-						botsUnfinished += 1
+						rivalsUnfinished += 1
 					end
 				end
 			end
-			if r.isPlayer then
-				if not r.dq then
-					drivePlayerCharacter(r)
-				end
-			else
-				placeBot(r)
+			if r.isPlayer and not r.dq then
+				drivePlayerCharacter(r)
 			end
 			if r.finished and not wasFinished then
 				-- assign the place right away (finish order = time order)
@@ -2708,19 +2475,15 @@ local function runHeat(event: Event, round: string, athletes: { Athlete }): { Re
 			end
 		end
 		-- places can shift by milliseconds; fix celebrations once everyone is in
-		if botsUnfinished == 0 and not botsDoneAt then
-			botsDoneAt = t
+		if rivalsUnfinished == 0 and not rivalsDoneAt then
+			rivalsDoneAt = t
 		end
-		if you and not you.finished and not you.dq and botsDoneAt and t - botsDoneAt > 10 then
+		if you and not you.finished and not you.dq and rivalsDoneAt and t - rivalsDoneAt > 10 then
 			you.dnf = true -- stopped tapping
 			flash("DNF", C_BAD, "Did not finish", 2)
 		end
 		if unfinished == 0 and not allDoneAt then
 			allDoneAt = t
-		end
-		-- spectating: follow the leader
-		if not you or you.dq then
-			cam.target = leaderRunner()
 		end
 		if t - lastBoard > 0.05 then
 			lastBoard = t
@@ -2988,13 +2751,8 @@ updateHud(nil, nil)
 refreshLeaderboard()
 
 player.CharacterAdded:Connect(function()
-	-- the old character is gone: forget its locked state and bot template
+	-- the old character is gone: forget its locked state
 	controlsLocked = false
-	if botTemplate then
-		botTemplate:Destroy()
-	end
-	botTemplate = nil
-	botTemplateFor = nil
 	local current = race
 	local you = current and current.you
 	if current and you and not you.dq and current.phase ~= "done" then
