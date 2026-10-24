@@ -36,3 +36,4 @@ Delete any old Forest Hunt 1.0 scripts first.
 - A brand-new **Gus** (cave trader with a miner helmet and a backpack full of swords): buy swords, upgrades, event info, chat (he answers in the chat box too).
 - Grow-a-Garden-style UI (bubbly outlined text), light grey + black.
 - Only the world you're in is drawn, so it stays smooth on phones. Settings → Graphics → FAST for older devices.
+- With the server copy installed, the Roblox player list shows everyone's Kills, Candy and Coins.

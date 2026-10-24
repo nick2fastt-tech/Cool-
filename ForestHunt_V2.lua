@@ -1584,6 +1584,25 @@ if IS_SERVER then
 	end
 	syncBossClock()
 
+	------------------------------------------------------------------------------------------ leaderboard (the Roblox player list)
+	local function setStats(p, prof)
+		if not prof then return end
+		local ls = p:FindFirstChild("leaderstats")
+		if not ls then
+			ls = Instance.new("Folder")
+			ls.Name = "leaderstats"
+			for _, n in ipairs({ "Kills", "Candy", "Coins" }) do
+				local v = Instance.new("IntValue")
+				v.Name = n
+				v.Parent = ls
+			end
+			ls.Parent = p
+		end
+		ls.Kills.Value = prof.kills or 0
+		ls.Candy.Value = prof.candies or 0
+		ls.Coins.Value = math.min(prof.coins or 0, 2 ^ 52)
+	end
+
 	------------------------------------------------------------------------------------------ saving
 	local function load(p)
 		local st = PW[p]
@@ -1599,6 +1618,7 @@ if IS_SERVER then
 		st.profile = cleanProfile(data)
 		st.canSave = store ~= nil and ok
 		st.loaded = true
+		setStats(p, st.profile)
 	end
 
 	local function save(p)
@@ -1722,6 +1742,7 @@ if IS_SERVER then
 			if type(a) == "table" and st.loaded then
 				st.profile = cleanProfile(a)
 				st.dirty = true
+				setStats(p, st.profile)
 			end
 		end
 	end)
@@ -1836,7 +1857,15 @@ local function part(props, class)
 	props.TopSurface = Enum.SurfaceType.Smooth
 	props.BottomSurface = Enum.SurfaceType.Smooth
 	if props.Material == nil then props.Material = Enum.Material.SmoothPlastic end
+	-- Roblox balls are always perfect spheres, so squashed ones become a block + sphere mesh
+	local squash = false
+	local sz = props.Size
+	if props.Shape == Enum.PartType.Ball and sz and (sz.X ~= sz.Y or sz.Y ~= sz.Z) then
+		props.Shape = nil
+		squash = true
+	end
 	local p = make(class or "Part", props)
+	if squash then make("SpecialMesh", { MeshType = Enum.MeshType.Sphere, Parent = p }) end
 	builtCount += 1
 	if building and builtCount % 220 == 0 then task.wait() end
 	return p
@@ -4939,9 +4968,10 @@ do
 			Radius = size / 2, MaxText = 60, Parent = gui })
 		return face, label, holder
 	end
-	local swingB, _, swingH = round("⚔", 96, UDim2.new(1, -24, 1, -96), UI.PANEL)
-	local dashB, _, dashH = round("💨", 64, UDim2.new(1, -132, 1, -100), UI.PANEL2)
-	local sprintB, sprintL, sprintH = round("🏃", 64, UDim2.new(1, -40, 1, -204), UI.PANEL2)
+	-- placed just left of Roblox's own jump button (which grows on tablets)
+	local swingB, _, swingH = round("⚔", 96, UDim2.new(1, -186, 1, -34), UI.PANEL)
+	local dashB, _, dashH = round("💨", 64, UDim2.new(1, -292, 1, -46), UI.PANEL2)
+	local sprintB, sprintL, sprintH = round("🏃", 64, UDim2.new(1, -202, 1, -146), UI.PANEL2)
 	swingB.Activated:Connect(function() Swing.request() end)
 	dashB.Activated:Connect(function() Input.dash() end)
 	sprintB.Activated:Connect(function()
@@ -5779,8 +5809,9 @@ do
 		local col = pick(CANDY_COLORS)
 		local ball = make("Part", { Name = "Candy", Shape = Enum.PartType.Ball, Size = Vector3.new(1.5, 1.5, 1.5), Material = Enum.Material.SmoothPlastic, Color = col,
 			Anchored = true, CanCollide = false, CanQuery = false, CanTouch = false, CastShadow = false, CFrame = CFrame.new(pos), Parent = pickFolder })
-		local stripe = make("Part", { Shape = Enum.PartType.Ball, Size = Vector3.new(1.55, 0.4, 1.55), Material = Enum.Material.Neon, Color = WHITE, Anchored = false,
+		local stripe = make("Part", { Size = Vector3.new(1.55, 0.4, 1.55), Material = Enum.Material.Neon, Color = WHITE, Anchored = false,
 			Massless = true, CanCollide = false, CanQuery = false, CanTouch = false, CastShadow = false, CFrame = CFrame.new(pos) * CFrame.Angles(0, 0, 0.6), Parent = ball })
+		make("SpecialMesh", { MeshType = Enum.MeshType.Sphere, Parent = stripe })
 		weld(ball, stripe)
 		for _, sx in ipairs({ -1, 1 }) do
 			local w = make("WedgePart", { Size = Vector3.new(0.2, 1.1, 1.1), Material = Enum.Material.SmoothPlastic, Color = col:Lerp(WHITE, 0.3), Anchored = false, Massless = true,
@@ -5937,7 +5968,7 @@ do
 				if not L.blocked(lx, lz, 2) and circleFree(O.X + lx, O.Z + lz, 2) then
 					local wantGate = S.world ~= "grave" or lz > 0 or S.kills >= GRAVE_GATE_KILLS
 					if wantGate then
-						if candies < 4 then
+						if candies < 2 and rng:NextNumber() < 0.25 then
 							makeCandy(O + Vector3.new(lx, 3, lz), false)
 						elseif coins < 10 then
 							makeCoin(O + Vector3.new(lx, 3, lz), 5 * WORLDS[S.world].mult * EVENT_MULT, false)
@@ -7270,7 +7301,7 @@ RunService.Heartbeat:Connect(function(dt)
 	-- autosave (multiplayer)
 	saveT -= dt
 	if saveT <= 0 then
-		saveT = 12
+		saveT = 8
 		if Link.coop and profileReady and S.dirty then
 			S.dirty = false
 			Link.send("save", profileOut())
