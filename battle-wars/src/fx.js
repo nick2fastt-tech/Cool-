@@ -45,7 +45,10 @@ export function buildFX(parent) {
   const GMAX = 3000, SMAX = 1500;
   const glow = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }), GMAX);
   const solid = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, transparent: true, opacity: 0.85 }), SMAX);
-  for (const m of [glow, solid]) { m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.frustumCulled = false; m.setColorAt(0, new THREE.Color()); parent.add(m); }
+  // soft dust puffs (smooth, see-through)
+  const DMAX = 900;
+  const dust = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 2), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, transparent: true, opacity: 0.38, depthWrite: false }), DMAX);
+  for (const m of [glow, solid, dust]) { m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.frustumCulled = false; m.setColorAt(0, new THREE.Color()); parent.add(m); }
   const rings = [];
   for (let i = 0; i < 3; i++) { const r = new THREE.Mesh(new THREE.TorusGeometry(1, 0.08, 8, 48), new THREE.MeshBasicMaterial({ color: 0xff3040, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })); r.rotation.x = Math.PI / 2; parent.add(r); rings.push(r); }
   const spheres = [];
@@ -53,10 +56,11 @@ export function buildFX(parent) {
   const fxLights = [];
   for (let i = 0; i < 3; i++) { const l = new THREE.PointLight(0xff8a30, 0, 6, 1.6); l.visible = false; parent.add(l); fxLights.push(l); }
   const col = new THREE.Color();
-  let ng = 0, ns = 0, nl = 0;
+  let ng = 0, ns = 0, nl = 0, nd = 0;
+  const addD = (x, y, z, s, c) => { if (nd >= DMAX || s <= 0) return; pos.set(x, Math.max(0.01, y), z); sc.setScalar(s); mtx.compose(pos, q, sc); dust.setMatrixAt(nd, mtx); dust.setColorAt(nd, col.set(c)); nd++; };
   const addG = (x, y, z, s, c) => { if (ng >= GMAX || s <= 0) return; pos.set(x, y, z); sc.setScalar(s); mtx.compose(pos, q, sc); glow.setMatrixAt(ng, mtx); glow.setColorAt(ng, col.set(c)); ng++; };
   const addS = (x, y, z, s, c) => { if (ns >= SMAX || s <= 0) return; pos.set(x, Math.max(0.01, y), z); sc.setScalar(s); mtx.compose(pos, q, sc); solid.setMatrixAt(ns, mtx); solid.setColorAt(ns, col.set(c)); ns++; };
-  const light = (x, y, z, c, i) => { if (nl >= fxLights.length) return; const l = fxLights[nl++]; l.visible = true; l.position.set(x, y, z); l.color.set(c); l.intensity = i; };
+  const light = (x, y, z, c, i, dist = 6) => { if (nl >= fxLights.length) return; const l = fxLights[nl++]; l.visible = true; l.position.set(x, y, z); l.color.set(c); l.intensity = i; l.distance = dist; };
   const FIRE = [0xfff2a0, 0xffc040, 0xff7a20, 0xff4010];
   function fire(x, y, z, t, rate, size, seed) {
     const life = 0.7;
@@ -127,7 +131,7 @@ export function buildFX(parent) {
   return {
     update(t, X) {
       const v = X.val;
-      n = 0; nb = 0; ng = 0; ns = 0; nl = 0;
+      n = 0; nb = 0; ng = 0; ns = 0; nl = 0; nd = 0;
       const list = X.T.fx;
       for (const r of rings) r.visible = false;
       for (const m of spheres) m.visible = false;
@@ -202,7 +206,8 @@ export function buildFX(parent) {
         } else if (e.kind === 'bodyAura' && a >= 0 && a <= e.dur) {
           // glow rising around a whole character
           if (X.val(`${e.who}.vis`, 0) < 0.5) continue;
-          const k = Math.min(1, a / 0.4, (e.dur - a) / 0.5) * (e.power ?? 1);
+          let k = Math.min(1, a / 0.4, (e.dur - a) / 0.5) * (e.power ?? 1);
+          if (e.flicker) k *= (Math.sin(t * 31) * Math.sin(t * 11.3) > 0.1 ? 1 : 0.15);
           const cx = X.val(`${e.who}.x`), cz = X.val(`${e.who}.z`), cy = X.val(`${e.who}.y`);
           for (let j = 0; j < 70; j++) {
             const ag = ((t * 0.9 + hash(j * 3.3)) % 1), th = hash(j * 7.1) * Math.PI * 2 + t * 2;
@@ -260,6 +265,86 @@ export function buildFX(parent) {
             const y = (e.top ?? 3.6) - fall * 1.6;
             if (y < 0.05) continue;
             addG(e.x + (h1 - 0.5) * (e.w ?? 6), y, e.z + (h2 - 0.5) * (e.d ?? 4), (0.025 + 0.02 * Math.abs(Math.sin(t * 12 + j))) * k, h3 < 0.7 ? (e.color ?? 0x7fd4ff) : 0xffffff);
+          }
+        } else if (e.kind === 'web' && a >= 0 && a <= e.dur) {
+          // Greg's red-and-blue energy barrier wrapped around a big body
+          const k = Math.min(1, a / 0.8, (e.dur - a) / 0.3);
+          const rings = e.rings ?? 6, R0 = e.radius ?? 4;
+          for (let i = 0; i < rings; i++) {
+            const y = e.y + (i - (rings - 1) / 2) * (e.gap ?? 1.4), tilt = 0.3 * Math.sin(i * 2.1);
+            const rr = R0 * (0.9 + 0.1 * Math.sin(t * 3 + i)) * Math.min(1, a / (0.3 + i * 0.12));
+            for (let j = 0; j < 60; j++) {
+              const u = (j / 60) * Math.PI * 2 + t * (i % 2 ? 1.5 : -1.5);
+              addG(e.x + Math.cos(u) * rr, y + Math.sin(u) * rr * tilt, e.z + Math.sin(u) * rr, (0.09 + 0.04 * hash(j + Math.floor(t * 24))) * k * (e.size ?? 1), (i + j) % 2 ? 0xff3a3a : 0x4ab0ff);
+            }
+          }
+          light(e.x, e.y, e.z, 0xc060ff, 30 * k * (e.lightScale ?? 1), 30);
+        } else if (e.kind === 'drain' && a >= 0 && a <= e.dur) {
+          // energy pulled out of each hero toward a point (the crown)
+          const k = Math.min(1, a / 0.6, (e.dur - a) / 0.5) * (e.power ?? 1);
+          const to = e.to === 'crown' ? X.crownPos() : { x: e.to[0], y: e.to[1], z: e.to[2] };
+          for (const [wi, who] of e.who.entries()) {
+            if (X.val(`${who}.vis`, 0) < 0.5) continue;
+            const cx = X.val(`${who}.x`), cy = X.val(`${who}.y`) + 1.0, cz = X.val(`${who}.z`);
+            const c1 = who === 'greg' ? 0xff3a3a : who === 'flare' ? 0xff8a30 : who === 'leon' ? 0xf2b632 : 0x4ab0ff;
+            for (let j = 0; j < 36; j++) {
+              const u = ((t * (0.55 + 0.25 * hash(j * 3.1 + wi)) + hash(j * 7.7 + wi)) % 1);
+              const sx = cx + (hash(j * 1.3 + wi) - 0.5) * 0.6, sy = cy + (hash(j * 2.9 + wi) - 0.5) * 1.2, sz = cz + (hash(j * 4.1 + wi) - 0.5) * 0.6;
+              const x = lerp(sx, to.x, u), y = lerp(sy, to.y, u) + Math.sin(u * Math.PI) * 1.0, z = lerp(sz, to.z, u);
+              addG(x, y, z, (0.05 + 0.03 * hash(j)) * k * (1 - 0.5 * u), j % 4 === 0 ? 0xffffff : c1);
+            }
+          }
+          addG(to.x, to.y, to.z, 0.3 * k * (0.8 + 0.2 * Math.sin(t * 20)), 0xc060ff);
+          light(to.x, to.y + 0.3, to.z, 0xb040ff, 10 * k, 10);
+        } else if (e.kind === 'fireCircle' && a >= 0 && a <= e.dur) {
+          // rings of fire around a spot on the ground
+          const k = Math.min(1, a / 0.5, (e.dur - a) / 0.5);
+          const n = e.n ?? 1;
+          for (let ci = 0; ci < n; ci++) {
+            const cxx = e.x + (e.offsets ? e.offsets[ci][0] : 0), czz = e.z + (e.offsets ? e.offsets[ci][1] : 0);
+            const R = (e.radius ?? 2) * (0.3 + 0.7 * Math.min(1, a / 0.6));
+            for (let j = 0; j < 22; j++) {
+              const u = (j / 22) * Math.PI * 2 + t * 0.8;
+              fire(cxx + Math.cos(u) * R, e.y ?? 0.05, czz + Math.sin(u) * R, t, 26 * k, (e.size ?? 0.9) * k, e.t + j * 3.7 + ci * 11);
+            }
+          }
+          light(e.x, (e.y ?? 0) + 1.5, e.z, 0xff8a30, (e.light ?? 25) * k * (0.85 + 0.15 * Math.sin(t * 25)), 18);
+        } else if (e.kind === 'flashBurst' && a >= 0 && a <= (e.dur ?? 0.8)) {
+          // blinding flash of light (Aaron's Blue Flash)
+          const d = e.dur ?? 0.8, k = 1 - a / d;
+          for (let j = 0; j < 90; j++) {
+            const h1 = hash(j * 3.3 + e.t), h2 = hash(j * 5.1 + e.t), r = (e.radius ?? 2) * (0.2 + a * 3) * h2;
+            const th = h1 * Math.PI * 2, ph = (h2 - 0.5) * Math.PI;
+            addG(e.x + Math.cos(th) * Math.cos(ph) * r, e.y + Math.sin(ph) * r, e.z + Math.sin(th) * Math.cos(ph) * r, (0.12 + 0.2 * (1 - h2)) * k * (e.size ?? 1), j % 3 ? (e.color ?? 0x7fd4ff) : 0xffffff);
+          }
+          addG(e.x, e.y, e.z, (e.radius ?? 2) * 0.6 * k, 0xffffff);
+          light(e.x, e.y, e.z, e.color ?? 0x7fd4ff, (e.light ?? 60) * k, 24);
+        } else if (e.kind === 'dustCloud' && a >= 0 && a <= (e.dur ?? 3)) {
+          // billowing dust after a crash
+          const d = e.dur ?? 3, k = a / d;
+          for (let j = 0; j < (e.n ?? 60); j++) {
+            const h1 = hash(j * 2.3 + e.t), h2 = hash(j * 6.1 + e.t), h3 = hash(j * 9.7 + e.t);
+            const th = h1 * Math.PI * 2, r = (e.radius ?? 3) * (0.2 + Math.sqrt(k) * (0.6 + h2 * 0.6));
+            addD(e.x + Math.cos(th) * r, (e.y ?? 0) + 0.2 + h3 * (e.h ?? 1.5) * (0.4 + k), e.z + Math.sin(th) * r, (e.size ?? 0.6) * (0.5 + h2) * (0.6 + k) * (1 - smoothstep(0.55, 1, k)), h3 < 0.5 ? (e.color ?? 0xc8c0b0) : (e.color2 ?? 0xa8a296));
+          }
+        } else if (e.kind === 'bolt' && a >= 0 && a <= (e.dur ?? 0.35)) {
+          // lightning strike from the sky to a point
+          const fr = Math.floor(t * 30);
+          let x = e.x + (hash(e.t) - 0.5) * 8, y = e.top ?? 60, z = e.z + (hash(e.t + 1) - 0.5) * 8;
+          const steps = 26;
+          for (let j = 0; j < steps; j++) {
+            const u = (j + 1) / steps;
+            const nx = lerp(x, e.x, 1 / (steps - j)) + (hash(fr + j * 3.1) - 0.5) * 2.5 * (1 - u), ny = lerp(e.top ?? 60, e.y ?? 0, u), nz = lerp(z, e.z, 1 / (steps - j)) + (hash(fr + j * 7.3) - 0.5) * 2.5 * (1 - u);
+            for (let q = 0; q < 4; q++) addG(lerp(x, nx, q / 4), lerp(y, ny, q / 4), lerp(z, nz, q / 4), 0.35 * (e.size ?? 1), q % 2 ? 0xffffff : (e.color ?? 0xc070ff));
+            x = nx; y = ny; z = nz;
+          }
+          light(e.x, (e.y ?? 0) + 4, e.z, e.color ?? 0xc070ff, 120, 60);
+        } else if (e.kind === 'slimeDrip' && a >= 0 && a <= e.dur) {
+          if (X.val(`${e.who}.vis`, 0) < 0.5) continue;
+          const cx = X.val(`${e.who}.x`), cz = X.val(`${e.who}.z`), cy = X.val(`${e.who}.y`);
+          for (let j = 0; j < 24; j++) {
+            const u = ((t * 0.8 + hash(j * 3.7)) % 1);
+            addS(cx + (hash(j * 1.9) - 0.5) * 0.5, cy + 1.6 * (1 - u) * (0.4 + 0.6 * hash(j * 5.3)), cz + (hash(j * 2.7) - 0.5) * 0.4, 0.025 * (1 - u * 0.5), 0x9a40e0);
           }
         } else if (e.kind === 'sparks') sparkBurst(e, t);
         else if (e.kind === 'debris') debris(e, t);
@@ -414,6 +499,7 @@ export function buildFX(parent) {
       }
       glow.count = ng; glow.instanceMatrix.needsUpdate = true; if (glow.instanceColor) glow.instanceColor.needsUpdate = true;
       solid.count = ns; solid.instanceMatrix.needsUpdate = true; if (solid.instanceColor) solid.instanceColor.needsUpdate = true;
+      dust.count = nd; dust.instanceMatrix.needsUpdate = true; if (dust.instanceColor) dust.instanceColor.needsUpdate = true;
       for (let i = nl; i < fxLights.length; i++) { fxLights[i].intensity = 0; fxLights[i].visible = false; }
       drops.count = n;
       drops.instanceMatrix.needsUpdate = true;

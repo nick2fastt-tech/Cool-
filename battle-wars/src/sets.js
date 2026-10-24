@@ -54,7 +54,7 @@ export function tree(g, x, z, s = 1, seed = 1) {
   for (let i = 0; i < 4; i++) mk(new THREE.IcosahedronGeometry((0.6 + r() * 0.35) * s, 1), leaf, g, [x + (r() - 0.5) * 0.8 * s, (2.0 + r() * 0.7) * s, z + (r() - 0.5) * 0.8 * s]);
   mk(new THREE.CylinderGeometry(0.55 * s, 0.6 * s, 0.35, 12), mat(0x8d8a84), g, [x, 0.17, z]);
 }
-function building(g, x, z, w, d, h, color, seed, lit = false, front = 1) {
+export function building(g, x, z, w, d, h, color, seed, lit = false, front = 1) {
   const tex = TX.windowsTex(seed, color, lit);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(Math.max(1, Math.round(w / 4)), Math.max(1, Math.round(h / 6)));
@@ -372,25 +372,50 @@ export function buildHQExterior() {
   // neighbours, trees, lamps
   building(g, -19, -10, 10, 9, 14, 0xd2c4a8, 9);
   building(g, 19, -10, 10, 9, 17, 0xbfcfe0, 10);
-  for (let i = 0; i < 6; i++) tree(g, -12 + i * 4.8 + (i > 2 ? 0 : 0), -0.8, 0.9, i * 13 + 2);
-  for (let x = -24; x <= 24; x += 12) streetLamp(g, x, 1.9, 1);
+  const centerG = grp(g); // centre trees + lamp can be cleared for wide plaza staging (Episode 5)
+  for (let i = 0; i < 6; i++) tree(i === 2 || i === 3 ? centerG : g, -12 + i * 4.8 + (i > 2 ? 0 : 0), -0.8, 0.9, i * 13 + 2);
+  for (let x = -24; x <= 24; x += 12) streetLamp(x === 0 ? centerG : g, x, 1.9, 1);
   const car = buildCar(); g.add(car);
+  // Episode 5: front doors that swing open (and get bashed by Leon), a balcony, a distant skyline
+  const doors = [];
+  for (const sd of [-1, 1]) {
+    const pv = grp(hq, sd * 1.2, 0, 5.28);
+    box(pv, 1.18, 2.55, 0.1, 0, [-sd * 0.59, 1.28, 0], { material: mat(0x2a3a8a, { r: 0.35, m: 0.3 }) });
+    box(pv, 0.9, 1.6, 0.11, 0, [-sd * 0.59, 1.45, 0], { material: mat(0x8fc8f0, { r: 0.05, m: 0.4, e: 0x1a3060, ei: 0.4 }) });
+    box(pv, 0.06, 0.4, 0.14, 0, [-sd * 1.05, 1.25, 0.04], { material: mat(0xd8d8e0, { m: 0.7 }) });
+    doors.push(pv);
+  }
+  const balc = grp(hq, 4.5, 6.6, 5.6);
+  box(balc, 4.2, 0.2, 1.5, 0, [0, 0, 0], { material: navy });
+  box(balc, 4.2, 0.9, 0.05, 0, [0, 0.55, 0.72], { material: mat(0xbfe6ff, { r: 0.05, m: 0.2, opacity: 0.4 }) });
+  box(balc, 4.25, 0.06, 0.1, 0, [0, 1.0, 0.72], { material: glow });
+  balc.visible = false;
+  const skyline = grp(g); skyline.visible = false;
+  { const R = rng(808); for (let i = 0; i < 22; i++) building(skyline, -75 + i * 7 + R() * 2, 62 + R() * 18, 6 + R() * 3, 8, 16 + R() * 34, [0xaebcd0, 0xbfc9d8, 0x9fb0c8, 0xc9d6e3][i % 4], 950 + i); }
   const skyDay = TX.skyTex('#3f8fe0', '#9fd0f5', '#e8f4ff');
+  const skyShade = TX.skyTex('#33405a', '#5d6d88', '#8e9db4');
+  const skyNight = TX.skyTex('#03050f', '#0a1230', '#1a2650');
   const skyEve = TX.skyTex('#2b2f6e', '#c4608a', '#ffb070');
   return {
     name: 'hqExt', group: g, bg: skyDay, fog: [0xcfe4f5, 50, 140], exposure: 1.0,
     refs: { car },
     update(t, X) {
       const v = X.val;
-      const eve = v('evening', 0);
-      X.scene.background = eve > 0.5 ? skyEve : skyDay;
-      X.scene.fog.color.set(eve > 0.5 ? 0xe09a88 : 0xcfe4f5);
-      L.sun.color.set(eve > 0.5 ? 0xff9a5a : 0xfff2dd);
-      L.sun.intensity = eve > 0.5 ? 1.1 : 2.5;
+      const eve = v('evening', 0), shade = v('ufo.shade', 0), night = v('night', 0) > 0.5;
+      X.scene.background = night ? skyNight : eve > 0.5 ? skyEve : shade > 0.5 ? skyShade : skyDay;
+      X.scene.fog.color.set(night ? 0x0d1430 : eve > 0.5 ? 0xe09a88 : shade > 0.5 ? 0x8a96aa : 0xcfe4f5);
+      L.sun.color.set(night ? 0x8a9aff : eve > 0.5 ? 0xff9a5a : 0xfff2dd);
+      L.sun.intensity = night ? 0.35 : (eve > 0.5 ? 1.1 : 2.5) * (1 - 0.72 * shade);
       L.sun.position.set(eve > 0.5 ? -18 : 12, eve > 0.5 ? 5 : 16, 14);
-      L.hemi.intensity = eve > 0.5 ? 0.55 : 1.2;
-      glassDay.emissiveIntensity = eve > 0.5 ? 0.85 : 0;
-      glassDay.color.set(eve > 0.5 ? 0x3a3550 : 0x6fa8d8);
+      L.hemi.intensity = night ? 0.3 : (eve > 0.5 ? 0.55 : 1.2) * (1 - 0.4 * shade);
+      const dk = v('hq.doors', 0), br = v('hq.doorBroken', 0);
+      doors[0].rotation.set(0, -dk * 1.45, 0); doors[1].rotation.set(0, dk * 1.45 + br * 0.25, -br * 0.18);
+      doors[1].position.y = -br * 0.25;
+      balc.visible = v('hq.balcony', 0) > 0.5;
+      centerG.visible = v('hq.clear', 0) < 0.5;
+      skyline.visible = v('hq.skyline', 0) > 0.5;
+      glassDay.emissiveIntensity = night ? 1.1 : eve > 0.5 ? 0.85 : 0;
+      glassDay.color.set(night || eve > 0.5 ? 0x3a3550 : 0x6fa8d8);
       beacon.material.emissiveIntensity = Math.sin(t * 4) > 0 ? 2.5 : 0.2;
       car.position.set(v('hcar.x', -40), 0, v('hcar.z', 5.5));
       for (const w of car.userData.wheels) w.rotation.z = -v('hcar.x', -40) / 0.4;
@@ -629,6 +654,15 @@ export function buildLiving() {
   box(g, 0.08, 1.0, 5.0, 0x1d2a7a, [4.3, 2.0, -0.6], { rot: [0.585, 0, 0] });
   // door left
   box(g, 0.1, 2.3, 1.2, 0x1d2a7a, [-7.08, 1.15, 2.6]);
+  // Episode 5: night lighting + the reinforced steel table for the crown
+  const ceil = new THREE.PointLight(0xffe0b8, 0, 12, 1.3); ceil.position.set(-1.5, 3.2, 0); g.add(ceil);
+  const steel = grp(g, -3.6, 0, -1.7); steel.visible = false;
+  const sm = mat(0x6a7486, { r: 0.35, m: 0.7 }), sd = mat(0x3a4250, { r: 0.4, m: 0.6 });
+  box(steel, 1.7, 0.12, 1.1, 0, [0, 0.9, 0], { material: sm, round: 0.02 });
+  box(steel, 1.74, 0.03, 1.14, 0, [0, 0.83, 0], { material: mat(0x7fd4ff, { e: 0x2f8cff, ei: 0.9 }) });
+  for (const [x, z] of [[-0.72, -0.42], [0.72, -0.42], [-0.72, 0.42], [0.72, 0.42]]) box(steel, 0.14, 0.84, 0.14, 0, [x, 0.42, z], { material: sd });
+  box(steel, 1.5, 0.08, 0.08, 0, [0, 0.2, 0], { material: sd });
+  for (const [x, z] of [[-0.75, -0.48], [0.75, -0.48], [-0.75, 0.48], [0.75, 0.48]]) mk(new THREE.CylinderGeometry(0.03, 0.03, 0.02, 8), mat(0xc8d0dc, { m: 0.8 }), steel, [x, 0.97, z]);
   // controller on couch + pizza
   const ctrl = grp(g); box(ctrl, 0.22, 0.05, 0.12, 0x222831, [0, 0, 0], { round: 0.02 });
   const pizza = grp(g, 0, 0.46, -0.85);
@@ -682,12 +716,14 @@ export function buildLiving() {
     refs: { ctrl, pizza },
     update(t, X) {
       const v = X.val;
-      const eve = v('evening', 0);
-      L.sun.intensity = eve > 0.5 ? 0.5 : 1.7;
-      L.sun.color.set(eve > 0.5 ? 0xff9a5a : 0xffffff);
-      L.hemi.intensity = eve > 0.5 ? 0.55 : 0.95;
-      lamp.intensity = eve > 0.5 ? 9 : 0;
-      win.material.emissive.set(eve > 0.5 ? 0xff9a6a : 0xbfe6ff);
+      const eve = v('evening', 0), night = v('night', 0) > 0.5;
+      L.sun.intensity = night ? 0.12 : eve > 0.5 ? 0.5 : 1.7;
+      L.sun.color.set(night ? 0x8090ff : eve > 0.5 ? 0xff9a5a : 0xffffff);
+      L.hemi.intensity = night ? 0.45 : eve > 0.5 ? 0.55 : 0.95;
+      lamp.intensity = night ? 11 : eve > 0.5 ? 9 : 0;
+      ceil.intensity = night ? 9 : 0;
+      win.material.emissive.set(night ? 0x0c1838 : eve > 0.5 ? 0xff9a6a : 0xbfe6ff);
+      steel.visible = v('steelTable', 0) > 0.5;
       tv.draw(t, v('tv.win', 0), v('tv.off', 0) > 0.5, v('tv.boss', 0), v('tv.hp', 0.12), v('tv.paused', 0) > 0.5, v('tv.hit', 0) > 0.5);
       const hal = v('halloween', 0) > 0.5;
       hw.visible = hal; kit.visible = v('kitchen', 0) > 0.5;
@@ -801,6 +837,9 @@ export function buildTitle(font, TextGeometry) {
   const sub4 = mkText('SPOOKY HALLOWEEN PARTY', 0.46, 0.18, [new THREE.MeshStandardMaterial({ color: 0xfff0c0, metalness: 0.4, roughness: 0.3, emissive: 0xff8a1a, emissiveIntensity: 0.7 }), new THREE.MeshStandardMaterial({ color: 0x5a1a8a, metalness: 0.6, roughness: 0.3 })]);
   sub4.position.set(0, -1.2, 0.3);
   g.add(sub4);
+  const sub5 = mkText('BEHEMOTH AWAKENS', 0.5, 0.2, [new THREE.MeshStandardMaterial({ color: 0xf0d8ff, metalness: 0.4, roughness: 0.3, emissive: 0xb040ff, emissiveIntensity: 0.75 }), new THREE.MeshStandardMaterial({ color: 0x3a3f50, metalness: 0.8, roughness: 0.3 })]);
+  sub5.position.set(0, -1.2, 0.3);
+  g.add(sub5);
   const orangeMats = [new THREE.MeshStandardMaterial({ color: 0xffe0b0, metalness: 0.5, roughness: 0.2, emissive: 0xff7a10, emissiveIntensity: 0.8 }), new THREE.MeshStandardMaterial({ color: 0xd05a08, metalness: 0.8, roughness: 0.25, emissive: 0x602000, emissiveIntensity: 0.7 })];
   const hwBg = new THREE.Color(0x12061e);
   const emb = new THREE.Mesh(new THREE.PlaneGeometry(4.5, 4.5), new THREE.MeshBasicMaterial({ map: TX.emblemTex(), transparent: true, opacity: 0.35, depthWrite: false }));
@@ -829,8 +868,8 @@ export function buildTitle(font, TextGeometry) {
       title.position.x = red ? Math.sin(t * 61) * 0.03 * v('title.jolt', 0) : 0;
       const ks = v('title.sub', 0);
       const which = v('title.subText', 'BE READY!');
-      sub.visible = which === 'BE READY!'; sub2.visible = which === 'THE RED DIAMOND HUNT'; sub3.visible = which === "THE SOUL STEALER'S SECRET"; sub4.visible = which === 'SPOOKY HALLOWEEN PARTY';
-      for (const m of [sub, sub2, sub3, sub4]) { m.scale.setScalar(Math.max(0.001, ks)); m.position.y = v('title.subY', -1.2); }
+      sub.visible = which === 'BE READY!'; sub2.visible = which === 'THE RED DIAMOND HUNT'; sub3.visible = which === "THE SOUL STEALER'S SECRET"; sub4.visible = which === 'SPOOKY HALLOWEEN PARTY'; sub5.visible = which === 'BEHEMOTH AWAKENS';
+      for (const m of [sub, sub2, sub3, sub4, sub5]) { m.scale.setScalar(Math.max(0.001, ks)); m.position.y = v('title.subY', -1.2); }
       title.position.y = v('title.y', 0.25);
       emb.material.opacity = 0.35 * k;
       rays.rotation.z = t * 0.15;

@@ -6,6 +6,8 @@ import { buildHero, buildWaterGuy, buildSoulStealer, buildProp, buildDog, buildS
 import { buildCity, buildCoffee, buildHQExterior, buildLiving, buildControl, buildTitle, buildReactor, buildCavern, buildTunnels, buildMachineRoom, buildPlatform, buildDiamondChamber, buildPark } from './sets.js';
 import { soulSymbolTex } from './textures.js';
 import { buildBedroom, buildStore, buildNewarkExt, buildParty } from './halloween.js';
+import { buildBehemoth, buildCrown, buildUFO, buildTiger, buildGregRoom, buildDowntown, buildParkRuin } from './behemoth.js';
+import { behemothRig, behParams } from './behemothRig.js';
 import { buildFX } from './fx.js';
 import { evalTrack, evalStep, buildGaitTables, gaitAt } from './director.js';
 import { drawOverlay } from './overlay.js';
@@ -19,6 +21,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   const costume = COSTUMES[META?.costume] ?? {};
   await document.fonts.load('40px Bangers');
   await document.fonts.load('bold 40px "Inter Display"').catch(() => {});
+  await document.fonts.load('700 40px Caveat').catch(() => {});
   const T = buildEpisode();
 
   const renderer = new THREE.WebGLRenderer({ antialias: !new URLSearchParams(location.search).has('noaa'), preserveDrawingBuffer: true });
@@ -44,6 +47,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   const SETS = {
     city: buildCity(fx), coffee: buildCoffee(), hqExt: buildHQExterior(), living: buildLiving(), control: buildControl(), title: buildTitle(font, TextGeometry), reactor: buildReactor(), cavern: buildCavern(), tunnel: buildTunnels(), machines: buildMachineRoom(), platform: buildPlatform(), chamber: buildDiamondChamber(), park: buildPark(),
     ...(META?.halloween ? { bedroom: buildBedroom(), store: buildStore(), newarkExt: buildNewarkExt(), party: buildParty() } : {}),
+    ...(META?.behemoth ? { gregRoom: buildGregRoom(), downtown: buildDowntown(), parkRuin: buildParkRuin() } : {}),
     black: { name: 'black', group: new THREE.Group(), bg: new THREE.Color(0x000000), update() {} },
   };
   for (const s of Object.values(SETS)) { s.group.visible = false; scene.add(s.group); }
@@ -74,6 +78,21 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   const dogs = { dog: buildDog(false), birddog: buildDog(true) };
   for (const d of Object.values(dogs)) scene.add(d.root);
   const bigShadow = buildShadow(); scene.add(bigShadow.root);
+  // Episode 5 creatures and objects
+  const beh = META?.behemoth ? buildBehemoth() : null;
+  const crown = META?.behemoth ? buildCrown() : null;
+  const ufo = META?.behemoth ? buildUFO() : null;
+  const tiger = META?.behemoth ? buildTiger() : null;
+  for (const o of [beh, crown, ufo, tiger]) if (o) { o.root.visible = false; scene.add(o.root); }
+  let rig = null;
+  // Greg's stretchy arms: a chain of sleeve beads from each hand out to a target point
+  const stretchArms = {};
+  if (META?.behemoth) for (const side of ['L', 'R']) {
+    const beads = [];
+    for (let i = 0; i < 34; i++) { const m = mk(new THREE.SphereGeometry(1, 10, 8), mat(0x16161a, { r: 0.6 }), scene); m.visible = false; beads.push(m); }
+    const hand = mk(new THREE.SphereGeometry(0.075, 14, 10), mat(0xf2f2f4, { r: 0.55 }), scene); hand.visible = false;
+    stretchArms[side] = { beads, hand };
+  }
   // Leon's time-freeze field
   const field = new THREE.Mesh(new THREE.SphereGeometry(1.15, 32, 20), new THREE.MeshBasicMaterial({ color: 0xa050ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
   scene.add(field);
@@ -99,10 +118,10 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     slices[n] = onHand(n, 'R', attachProp(heroes[n], 'R', m, [0, -0.12, 0.08], [0.4, 0, 0]));
   }
 
-  const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'water', 'dog', 'birddog']);
+  const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'water', 'dog', 'birddog', 'tiger']);
   const val = (name, d = 0) => { const v = evalTrack(T.tracks[name], curT); return v === undefined ? d : v; };
   let curT = 0;
-  const X = { T, scene, val: (n, d = 0) => val(n, d), hand: (n, side = 'R') => { const v = new THREE.Vector3(); heroes[n].J.hand[side].getWorldPosition(v); return v; } };
+  const X = { T, scene, val: (n, d = 0) => val(n, d), hand: (n, side = 'R') => { const v = new THREE.Vector3(); heroes[n].J.hand[side].getWorldPosition(v); return v; }, rig: () => rig, crownPos: () => crown ? crown.root.position.clone() : new THREE.Vector3() };
 
   function talkAmount(who, t) {
     for (const c of T.captions) {
@@ -136,7 +155,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     const w = smoothstep(0, 0.28, st.since);
     if (w < 1) p = blendPose(pose(prev.f(st.since + 2, t, ctx)), p, w);
     const g = gaitAt(gait[name], t);
-    const moveW = cur.sit ? 0 : smoothstep(0.12, 0.6, g.speed);
+    const moveW = (cur.sit || val(`${name}.y`) > 0.25) ? 0 : smoothstep(0.12, 0.6, g.speed);
     if (moveW > 0) {
       const loco = locomotion(g.phase, smoothstep(1.9, 3.4, g.speed));
       if (cur.upper) { for (const k of LEG_KEYS) p[k] = lerp(p[k], loco[k], moveW); }
@@ -158,8 +177,9 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     const bp = (t + h.seed * 1.37) % 3.9;
     const blink = bp < 0.14 ? Math.sin((bp / 0.14) * P) : 0;
     h.applyFace(e, talk, blink, { x: val(`${name}.lookX`), y: val(`${name}.lookY`) });
-    h.applyGlow({ hair: val(`${name}.hairGlow`), suit: val(`${name}.suitGlow`), eyes: val(`${name}.eyeGlow`), glove: val(`${name}.gloveGlow`) });
-    h.applyExtras({ mask: val(`${name}.mask`), milk: val(`${name}.milk`) });
+    const fl = val(`${name}.flicker`, 0);
+    h.applyGlow({ hair: val(`${name}.hairGlow`), suit: val(`${name}.suitGlow`), eyes: val(`${name}.eyeGlow`), glove: val(`${name}.gloveGlow`), red: val(`${name}.redEyes`), dim: val(`${name}.dim`), flicker: fl > 0 ? (Math.sin(t * 37) * Math.sin(t * 13.7) > 0 ? 1 : 1 - fl) : 0 });
+    h.applyExtras({ mask: val(`${name}.mask`), milk: val(`${name}.milk`), slime: val(`${name}.slime`), scuff: val(`${name}.scuff`) });
   }
 
   // Water Guy "actions" produce arm targets etc.
@@ -215,6 +235,10 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     }
     if (name === 'dog' || name === 'birddog') return new THREE.Vector3(val(`${name}.x`), val(`${name}.y`, 0) + 0.55, val(`${name}.z`));
     if (name === 'shadow') return new THREE.Vector3(val('shadow.x'), 2.4, val('shadow.z'));
+    if (name === 'beh') { const r = rig ?? behemothRig(behParams((n, tt, d) => { const v = evalTrack(T.tracks[n], tt); return v === undefined ? d : v; }, curT)); return new THREE.Vector3(r.head[0], r.head[1], r.head[2]); }
+    if (name === 'tiger') { tiger.headG.getWorldPosition(tmpV); return tmpV.clone(); }
+    if (name === 'ufo') return new THREE.Vector3(val('ufo.x'), val('ufo.y'), val('ufo.z'));
+    if (name === 'crown') return crown.root.position.clone();
     if (!heroes[name]) return new THREE.Vector3(0, 1.5, 0);
     heroes[name].J.head.getWorldPosition(tmpV);
     return tmpV.clone().add(new THREE.Vector3(0, 0.12, 0));
@@ -292,6 +316,59 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
       const st = evalStep(T.tracks[`${n}.act`], t);
       const g = gaitAt(gait[n], t);
       d.update({ t, act: st.v, a: st.since, speed: g.speed, phase: g.phase * 1.6 });
+    }
+    if (beh) {
+      const vis = val('beh.vis', 0) > 0.5;
+      beh.root.visible = vis;
+      rig = vis ? behemothRig(behParams((n, tt, d) => { const v = evalTrack(T.tracks[n], tt); return v === undefined ? d : v; }, t)) : null;
+      if (vis) beh.update({ t, rig, jaw: val('beh.jaw', 0), plates: val('beh.plates', 0), dark: val('beh.dark', 0), cracks: val('beh.cracks', 0), eyesRed: val('beh.eyesRed', 0), eyes: val('beh.eyes', 1), crest: val('beh.crest', 0), bolts: val('beh.bolts', 0), claws: val('beh.claws', 1) });
+      const mode = evalStep(T.tracks['crown.mode'], t).v ?? 'head';
+      const cs = { t, vis: false, x: 0, y: 0, z: 0, size: 1, glow: val('crown.glow', 0.3) };
+      if (mode === 'head' && vis) {
+        const lift = val('crown.lift', 0);
+        Object.assign(cs, { vis: true, x: rig.crown[0], y: rig.crown[1] + lift * rig.s * 0.05, z: rig.crown[2], yaw: rig.yaw, pitch: -rig.pitch * 0.6 + lift * 0.4, size: 0.028 * rig.s });
+      } else if (mode === 'leon' && heroes.leon.root.visible) {
+        heroes.leon.root.updateMatrixWorld(true);
+        const a = X.hand('leon', 'L'), b = X.hand('leon', 'R');
+        const sz = val('crown.size', 0.5);
+        Object.assign(cs, { vis: true, x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 0.04, z: (a.z + b.z) / 2, yaw: val('leon.ry'), pitch: 0, size: sz });
+      } else if (mode === 'world') {
+        Object.assign(cs, { vis: true, x: val('crown.x'), y: val('crown.y'), z: val('crown.z'), yaw: val('crown.ry'), pitch: val('crown.rx'), size: val('crown.size', 0.5) });
+      }
+      crown.update(cs);
+      ufo.update({ t, vis: val('ufo.vis', 0) > 0.5, x: val('ufo.x'), y: val('ufo.y', 70), z: val('ufo.z'), size: val('ufo.size', 60), hatch: val('ufo.hatch', 0), beam: val('ufo.beam', 0) });
+      tiger.root.visible = val('tiger.vis', 0) > 0.5;
+      if (tiger.root.visible) {
+        tiger.root.position.set(val('tiger.x'), val('tiger.y'), val('tiger.z'));
+        tiger.root.rotation.set(0, val('tiger.ry'), 0);
+        const st = evalStep(T.tracks['tiger.act'], t);
+        const g = gaitAt(gait.tiger, t);
+        tiger.update({ t, act: st.v, a: st.since, speed: g.speed, phase: g.phase });
+      }
+      // Greg's stretched arms
+      const sk = val('greg.stretch', 0);
+      for (const side of ['L', 'R']) {
+        const A = stretchArms[side];
+        const on = sk > 0.01 && heroes.greg.root.visible;
+        A.hand.visible = on;
+        for (const b of A.beads) b.visible = on;
+        if (!on) continue;
+        heroes.greg.root.updateMatrixWorld(true);
+        const h0 = X.hand('greg', side);
+        const tg = new THREE.Vector3(val(`greg.t${side}x`), val(`greg.t${side}y`), val(`greg.t${side}z`));
+        const end = h0.clone().lerp(tg, sk);
+        const bend = val(`greg.bend${side}`, 0);
+        const mid = h0.clone().add(end).multiplyScalar(0.5);
+        mid.y += val('greg.sag', 0) * h0.distanceTo(end) * 0.15;
+        mid.x += bend * h0.distanceTo(end) * 0.3;
+        const n = A.beads.length;
+        A.beads.forEach((b, i) => {
+          const u = (i + 1) / (n + 1), iu = 1 - u;
+          b.position.set(iu * iu * h0.x + 2 * iu * u * mid.x + u * u * end.x, iu * iu * h0.y + 2 * iu * u * mid.y + u * u * end.y + 0.03 * Math.sin(t * 9 + i * 0.7), iu * iu * h0.z + 2 * iu * u * mid.z + u * u * end.z);
+          b.scale.setScalar(0.06 * (1 + 0.1 * Math.sin(t * 7 + i)));
+        });
+        A.hand.position.copy(end);
+      }
     }
     bigShadow.root.visible = val('shadow.vis', 0) > 0.5;
     if (bigShadow.root.visible) { bigShadow.root.position.set(val('shadow.x'), 0, val('shadow.z')); bigShadow.update(t, val('shadow.eyes', 0)); }

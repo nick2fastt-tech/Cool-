@@ -19,6 +19,7 @@ export const SPEAKERS = {
   skeleton: { name: 'SKELETON', color: '#f2eee0' },
   crowd: { name: 'CROWD', color: '#ffb35a' },
   everyone: { name: 'EVERYONE', color: '#ffe066' },
+  behemoth: { name: 'BEHEMOTH', color: '#c78bff' },
 };
 
 function wrap(ctx, text, maxW) {
@@ -33,7 +34,7 @@ function wrap(ctx, text, maxW) {
   return lines;
 }
 
-function drawCaption(ctx, W, H, c, t) {
+function drawCaption(ctx, W, H, c, t, drop = 0) {
   const s = H / 720;
   const a = Math.min(smoothstep(c.t0, c.t0 + 0.12, t), 1 - smoothstep(c.t1 - 0.12, c.t1, t));
   if (a <= 0) return;
@@ -53,7 +54,7 @@ function drawCaption(ctx, W, H, c, t) {
   const widths = lines.map((l, i) => ctx.measureText(l).width + (i === 0 ? lw : 0));
   const bw = Math.max(...widths) + 40 * s;
   const bh = lines.length * lh + 22 * s;
-  const bx = (W - bw) / 2, by = c.sound ? 26 * s : H - bh - 34 * s;
+  const bx = (W - bw) / 2, by = c.sound ? 26 * s + drop * 84 * s : H - bh - 34 * s;
   ctx.fillStyle = 'rgba(0,0,0,0.62)';
   roundRect(ctx, bx, by, bw, bh, 14 * s);
   ctx.fill();
@@ -139,6 +140,73 @@ function drawCard(ctx, W, H, c, t) {
     }
     ctx.globalCompositeOperation = 'source-over';
     ctx.shadowBlur = 0;
+  } else if (c.kind === 'lightning') {
+    // purple lightning cracking across the sky (top of the frame)
+    const n = Math.floor(t * 16);
+    ctx.globalCompositeOperation = 'lighter';
+    for (let b = 0; b < (c.n ?? 4); b++) {
+      const h = (k) => { const x = Math.sin((n * 7 + b * 13 + k) * 12.9898) * 43758.5453; return x - Math.floor(x); };
+      if (h(1) < (c.chance ?? 0.55)) continue;
+      let x = W * (0.05 + 0.9 * h(2)), y = -10 * s;
+      ctx.strokeStyle = h(4) < 0.5 ? (c.color ?? '#c070ff') : '#f4e4ff';
+      ctx.shadowColor = c.glow ?? '#a040ff'; ctx.shadowBlur = 26 * s;
+      ctx.lineWidth = (2.5 + 3 * h(5)) * s;
+      ctx.beginPath(); ctx.moveTo(x, y);
+      const segs = 6 + Math.floor(h(6) * 6);
+      for (let i = 0; i < segs; i++) {
+        x += (h(10 + i) - 0.5) * 90 * s; y += (20 + 34 * h(20 + i)) * s * (c.reach ?? 1);
+        ctx.lineTo(x, y);
+        if (h(30 + i) < 0.25) { ctx.moveTo(x, y); ctx.lineTo(x + (h(40 + i) - 0.5) * 120 * s, y + 50 * s); ctx.moveTo(x, y); }
+      }
+      ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.shadowBlur = 0;
+  } else if (c.kind === 'wrist') {
+    // Leon's wrist display: zoomed footage of Behemoth's crown + a size chart
+    const k = smoothstep(0, 0.35, a) - smoothstep(life - 0.35, life, a);
+    const pw = W * 0.62, ph = H * 0.56, px = (W - pw) / 2, py = H * 0.1 + (1 - k) * 30 * s;
+    ctx.fillStyle = 'rgba(6,14,34,0.88)'; roundRect(ctx, px, py, pw, ph, 18 * s); ctx.fill();
+    ctx.strokeStyle = '#5fd8ff'; ctx.lineWidth = 3 * s; roundRect(ctx, px, py, pw, ph, 18 * s); ctx.stroke();
+    ctx.fillStyle = '#8fe8ff'; ctx.font = `800 ${Math.round(20 * s)}px ${UI_FONT}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    ctx.fillText('LEON  //  TARGET SCAN: BEHEMOTH', px + 22 * s, py + 26 * s);
+    ctx.fillStyle = Math.sin(t * 6) > 0 ? '#ff4a5a' : '#802030'; ctx.beginPath(); ctx.arc(px + pw - 30 * s, py + 26 * s, 7 * s, 0, Math.PI * 2); ctx.fill();
+    // footage box
+    const fx = px + 22 * s, fy = py + 50 * s, fw = pw * 0.52, fh = ph - 72 * s;
+    ctx.save(); ctx.beginPath(); ctx.rect(fx, fy, fw, fh); ctx.clip();
+    ctx.fillStyle = '#121a2a'; ctx.fillRect(fx, fy, fw, fh);
+    const z = 1 + 1.3 * smoothstep(0.4, 2.4, a);
+    ctx.translate(fx + fw / 2, fy + fh * 0.62); ctx.scale(z, z); ctx.translate(0, fh * 0.12 * (z - 1));
+    const u = fh / 300;
+    ctx.fillStyle = '#6a7486';
+    ctx.beginPath(); ctx.moveTo(-130 * u, 120 * u); ctx.quadraticCurveTo(-90 * u, -10 * u, -20 * u, -30 * u); ctx.lineTo(90 * u, -20 * u); ctx.quadraticCurveTo(140 * u, 0, 120 * u, 30 * u); ctx.lineTo(10 * u, 40 * u); ctx.quadraticCurveTo(-40 * u, 60 * u, -60 * u, 140 * u); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#7ff0ff'; ctx.beginPath(); ctx.ellipse(55 * u, -8 * u, 9 * u, 5 * u, 0, 0, Math.PI * 2); ctx.fill();
+    const gl = 0.5 + 0.5 * Math.sin(a * 5);
+    ctx.fillStyle = '#9a8aa0';
+    ctx.beginPath(); ctx.moveTo(-40 * u, -28 * u); for (let i = 0; i <= 6; i++) ctx.lineTo((-40 + i * 13) * u, (i % 2 ? -78 : -58) * u); ctx.lineTo(38 * u, -28 * u); ctx.closePath(); ctx.fill();
+    ctx.shadowColor = '#c060ff'; ctx.shadowBlur = 20 * s * gl;
+    ctx.fillStyle = `rgba(200,110,255,${0.5 + 0.5 * gl})`; ctx.fillRect(-38 * u, -46 * u, 74 * u, 8 * u);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+    ctx.strokeStyle = '#ff4a5a'; ctx.lineWidth = 2 * s; const bx = fx + fw / 2 - 45 * s, by = fy + fh * 0.22;
+    ctx.strokeRect(bx, by, 90 * s, 70 * s);
+    ctx.fillStyle = '#ff8a9a'; ctx.font = `700 ${Math.round(14 * s)}px ${UI_FONT}`; ctx.fillText('CROWN', bx, by - 10 * s);
+    // size chart
+    const cx0 = px + pw * 0.58, cy0 = py + 60 * s, cw = pw * 0.38, chh = ph - 110 * s;
+    ctx.fillStyle = '#8fe8ff'; ctx.font = `700 ${Math.round(16 * s)}px ${UI_FONT}`; ctx.fillText('SIZE', cx0, cy0);
+    ctx.strokeStyle = 'rgba(143,232,255,0.4)'; ctx.lineWidth = 1.5 * s; ctx.strokeRect(cx0, cy0 + 14 * s, cw, chh);
+    const shown = smoothstep(0.2, 2.6, a);
+    ctx.beginPath();
+    for (let i = 0; i <= 60 * shown; i++) {
+      const xx = cx0 + (i / 60) * cw;
+      const lvl = i < 20 ? 0.08 : i < 23 ? 0.08 + (i - 20) * 0.28 : i < 40 ? 0.92 : 0.92;
+      const yy = cy0 + 14 * s + chh * (1 - lvl);
+      if (i === 0) ctx.moveTo(xx, yy); else ctx.lineTo(xx, yy);
+    }
+    ctx.strokeStyle = '#5fd8ff'; ctx.lineWidth = 3 * s; ctx.stroke();
+    if (shown > 0.36) { const xx = cx0 + cw * 0.35; ctx.strokeStyle = `rgba(200,110,255,${0.6 + 0.4 * gl})`; ctx.lineWidth = 4 * s; ctx.beginPath(); ctx.moveTo(xx, cy0 + 14 * s); ctx.lineTo(xx, cy0 + 14 * s + chh); ctx.stroke(); ctx.fillStyle = '#d6a8ff'; ctx.fillText('CROWN GLOW', xx + 6 * s, cy0 + 34 * s); }
+    ctx.fillStyle = '#8fe8ff'; ctx.font = `600 ${Math.round(14 * s)}px ${UI_FONT}`;
+    ctx.fillText('x50 IN 4.2 SEC', cx0 + 4 * s, cy0 + chh + 30 * s);
   } else if (c.kind === 'phone') {
     // the party invitation on Flare's phone
     const k = smoothstep(0, 0.35, a) - smoothstep(life - 0.35, life, a);
@@ -196,5 +264,6 @@ export function drawOverlay(ctx, W, H, t, T, val) {
   if (fv > 0) { ctx.fillStyle = `rgba(170,80,255,${clamp(fv)})`; ctx.fillRect(0, 0, W, H); }
   const flash = val('flash', 0);
   if (flash > 0) { ctx.fillStyle = `rgba(255,255,255,${clamp(flash)})`; ctx.fillRect(0, 0, W, H); }
-  for (const c of T.captions) if (t >= c.t0 && t <= c.t1) drawCaption(ctx, W, H, c, t);
+  const locCard = T.cards.some((c) => c.kind === 'location' && t >= c.t0 && t <= c.t1) ? 1 : 0;
+  for (const c of T.captions) if (t >= c.t0 && t <= c.t1) drawCaption(ctx, W, H, c, t, locCard);
 }

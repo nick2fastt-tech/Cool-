@@ -165,6 +165,27 @@ export const ACTIONS = {
   sweepTable: { f: (a, t) => ({ lean: 0.08, spF: 0.42, aRF: 1.0, eR: 0.4, aRO: 0.15 + 0.35 * S(a * 7), aLF: 0.9, eL: 0.6, aLO: 0.2, hdN: 0.35, kL: 0.2, kR: 0.2 }) },
   look: { gest: true, f: (a, t, c) => ({ spF: 0.02, aLO: 0.12, aRO: 0.12, eL: 0.18, eR: 0.18, hdN: 0.25 }) },
   gasp: { f: (a) => { const k = smoothstep(0, 0.2, a); return { aLF: 1.3 * k, aRF: 1.3 * k, aLT: 1.2, aRT: 1.2, eL: 2.1 * k, eR: 2.1 * k, lean: -0.1 * k, hdN: -0.1 }; } },
+  // --- Episode 5 (Behemoth Awakens)
+  fly: { f: (a, t) => ({ lean: 1.35, aLF: 2.85, aRF: 2.6, aLO: 0.12, aRO: 0.25, eL: 0.05, eR: 0.35, hdN: -1.0, lLF: -0.08, lRF: 0.12, kL: 0.1, kR: 0.35, spF: -0.1 + 0.02 * S(t * 3), y: 0.02 * S(t * 2.5) }) },
+  hover: { gest: true, f: (a, t) => ({ aLO: 0.55, aRO: 0.55, aLF: 0.2, aRF: 0.2, eL: 0.3, eR: 0.3, lLF: 0.15, lRF: -0.05, kL: 0.35, kR: 0.5, fL: 0.4, fR: 0.4, spF: 0.04 + 0.02 * S(t * 2), y: 0.03 * S(t * 2.2) }) },
+  stretchArms: { f: (a, t) => ({ lean: 1.2, aLF: 1.6, aRF: 1.6, aLO: 0.9, aRO: 0.9, eL: 0.0, eR: 0.0, hdN: -0.8, lLF: 0.1, lRF: -0.1, kL: 0.3, kR: 0.4, y: 0.02 * S(t * 3) }) },
+  flail: { f: (a, t) => ({ lean: 0.4 * S(a * 5), aLF: 2.2 + 0.6 * S(a * 17), aRF: 2.0 - 0.6 * S(a * 15), aLO: 0.9, aRO: 0.9, eL: 0.5, eR: 0.5, lLF: 0.6 * S(a * 13), lRF: -0.6 * S(a * 13), kL: 0.6, kR: 0.6, hdN: -0.2 }) },
+  heroLand: { f: (a) => { const k = 1 - smoothstep(0.5, 1.4, a); return { y: -0.45 * k - 0.02, lLF: 1.45 * k + 0.1, kL: 1.6 * k, lRF: -0.2 * k, kR: 2.0 * k, fR: 0.6 * k, spF: 0.4 * k, aRF: 0.4 * k, eR: 0.2, aRO: 0.1, aLF: -0.2 * k, aLO: 0.9 * k, eL: 0.2, hdN: -0.3 * k }; } },
+  liftOver: { f: (a, t) => { const k = smoothstep(0, 0.4, a); return { aLF: 2.9 * k, aRF: 2.9 * k, aLO: 0.35, aRO: 0.35, eL: 0.25, eR: 0.25, lLF: 0.4, lRF: -0.3, kL: 0.4, kR: 0.25, y: -0.06 * k + 0.01 * S(t * 25), spF: -0.12 * k, hdN: -0.35 * k }; } },
+  throwOver: { f: (a) => { const k = smoothstep(0, 0.12, a), b = smoothstep(0.12, 0.35, a); return { aLF: 2.9 - 1.6 * b, aRF: 2.9 - 1.6 * b, aLO: 0.35, aRO: 0.35, eL: 0.25, eR: 0.25, lean: 0.25 * b, spF: -0.15 * k + 0.4 * b, lLF: 0.7, kL: 0.5, lRF: -0.5, kR: 0.2, y: -0.06, hdN: -0.2 }; } },
+  carried: { f: (a, t) => ({ lean: 1.4, aLF: 2.7, aRF: 2.7, aLO: 0.3, aRO: 0.3, eL: 0.1, eR: 0.1, hdN: -1.0, lLF: 0.1, lRF: -0.1, kL: 0.2, kR: 0.3, spF: 0.02 * S(t * 9) }) },
+  climb: { f: (a, t) => { const c = S(a * 6); return { lean: 0.55, spF: 0.3, aLF: 2.2 + 0.5 * c, aRF: 2.2 - 0.5 * c, aLO: 0.3, aRO: 0.3, eL: 0.6 - 0.4 * c, eR: 0.6 + 0.4 * c, lLF: 1.0 + 0.5 * c, lRF: 1.0 - 0.5 * c, kL: 1.4, kR: 1.4, y: -0.35, hdN: -0.5 }; } },
+  heave: { f: (a, t) => ({ aLF: 2.75, aRF: 2.75, aLO: 0.25 + 0.05 * S(t * 31), aRO: 0.25 + 0.05 * S(t * 29), eL: 0.6, eR: 0.6, lean: -0.2, spF: -0.25, lLF: 0.6, kL: 0.8, lRF: -0.3, kR: 0.5, y: -0.12 + 0.012 * S(t * 33), hdN: -0.3 }) },
+  holdHigh: { f: (a, t) => { const k = smoothstep(0, 0.4, a); return { aLF: 2.8 * k, aRF: 2.8 * k, aLO: 0.4, aRO: 0.4, eL: 0.35, eR: 0.35, spF: -0.1 * k, hdN: -0.45 * k, lLO: 0.12, lRO: 0.12 }; } },
+  cover: { f: (a, t) => ({ aLF: 1.6, aRF: 1.6, aLT: 1.1, aRT: 1.1, eL: 2.0, eR: 2.0, aLO: 0.1, aRO: 0.1, spF: 0.3, hdN: 0.35, lean: 0.1, kL: 0.4, kR: 0.4, lLF: 0.3, y: -0.08 }) },
+  knockBack: { f: (a) => { const k = 1 - smoothstep(0.2, 0.9, a); return { lean: -0.9 * k, spF: -0.3 * k, aLF: 1.5 * k, aRF: 1.4 * k, aLO: 1.1 * k + 0.1, aRO: 1.1 * k + 0.1, eL: 0.5, eR: 0.5, lLF: 0.8 * k, kL: 0.5 * k, lRF: 0.4 * k, kR: 0.7 * k, hdN: 0.4 * k, y: -0.2 * k }; } },
+  getUp: { f: (a) => { const k = 1 - smoothstep(0, 1.6, a); return { y: -0.45 * k, lLF: 1.3 * k, kL: 1.8 * k, lRF: 0.4 * k, kR: 1.4 * k, spF: 0.5 * k + 0.1, aLF: 0.7 * k, aRF: 1.0 * k, eL: 0.6, eR: 0.5, aLO: 0.2, aRO: 0.2, hdN: 0.2 * k }; } },
+  reachTremble: { f: (a, t) => { const k = smoothstep(0, 0.5, a); return { aRF: 1.45 * k + 0.05 * S(t * 37), aRO: 0.05, eR: 0.15 + 0.06 * S(t * 41), aLO: 0.25, aLF: 0.3, eL: 0.6, spF: 0.15, lean: 0.06, hdN: 0.05, lLF: 0.45, kL: 0.5, lRF: -0.3, kR: 0.3, y: -0.08 + 0.01 * S(t * 30) }; } },
+  brushOff: { f: (a, t) => { const s2 = S(a * 9); return { aRF: 0.9 + 0.2 * s2, aRT: 1.0, eR: 1.4 + 0.2 * s2, aRO: -0.05, aLF: 0.3, aLO: 0.2, eL: 0.4, hdN: 0.4, spF: 0.15 }; } },
+  sitSlump: { sit: true, gest: true, f: (a, t) => ({ ...sitLegs, y: -0.4, lean: -0.3, spF: -0.25, aLF: 0.2, aRF: 0.2, aLO: 0.7, aRO: 0.7, eL: 0.4, eR: 0.4, hdN: -0.15, lLF: 1.2, lRF: 1.25, kL: 1.1, kR: 1.15 }) },
+  raiseHand: { gest: false, f: (a) => { const k = smoothstep(0, 0.3, a); return { aRF: 2.85 * k, aRO: 0.15, eR: 0.15, aLO: 0.12, eL: 0.2, hdN: -0.05 }; } },
+  powerFail: { f: (a, t) => { const k = smoothstep(0, 0.3, a); return { aLF: 1.2 * k, aRF: 1.2 * k, aLO: 0.5 * k, aRO: 0.5 * k, eL: 0.4, eR: 0.4, spF: 0.1, lLF: 0.3, lRF: -0.25, kL: 0.3, kR: 0.25, y: -0.04 + 0.006 * S(t * 30), hdN: -0.05 }; } },
+  doubleOver: { f: (a, t) => ({ spF: 0.6, hdN: 0.25, aLF: 0.9, aRF: 0.9, aLT: 0.8, aRT: 0.8, eL: 0.5, eR: 0.5, lLF: 0.3, kL: 0.5, kR: 0.4, y: -0.1, lean: 0.12 + 0.03 * S(t * 3) }) },
   pointMap: { gest: false, f: (a, t) => { const k = smoothstep(0, 0.4, a); return { lean: 0.05, spF: 0.3, aRF: 1.0 + 0.1 * k, aRO: 0.0, eR: 0.15, aLF: 0.85, aLO: 0.22, eL: 0.2, hdN: 0.2, lLO: 0.1, lRO: 0.1 }; } },
 };
 
@@ -421,7 +442,7 @@ export function buildHero(cfg) {
 
   const extras = buildExtras(cfg, J, neck, hc, r);
   const base = { hair: cfg._hairMat ? cfg._hairMat.color.clone() : null, accent: accent.color.clone(), accentE: accent.emissive.clone(), glove: glove.color.clone(), iris: face.iris.color.clone() };
-  const BLUE = new THREE.Color(0x4aa8ff), PURPLE = new THREE.Color(0xb050ff), DARKP = new THREE.Color(0x2a0a3a);
+  const BLUE = new THREE.Color(0x4aa8ff), PURPLE = new THREE.Color(0xb050ff), DARKP = new THREE.Color(0x2a0a3a), REDEYE = new THREE.Color(0xff1a1a);
   const hero = {
     // power glows driven by tracks: hair/suit turning blue, eyes and gloves turning purple
     applyGlow(g) {
@@ -436,11 +457,16 @@ export function buildHero(cfg) {
       face.iris.emissive.copy(PURPLE).multiplyScalar(g.eyes * 1.4);
       glove.color.copy(base.glove).lerp(DARKP, g.glove);
       glove.emissive.copy(PURPLE).multiplyScalar(g.glove * 0.6);
+      // red power eyes (Greg) and dimmed accents after the power drain
+      if (g.red > 0) { face.iris.color.lerp(REDEYE, g.red); face.iris.emissive.copy(REDEYE).multiplyScalar(g.red * 2.2); }
+      const dim = 1 - 0.85 * (g.dim ?? 0);
+      accent.emissiveIntensity *= dim;
+      if (extras.armorGlow) { extras.armorGlow.emissiveIntensity = (1.2 + g.suit * 1.0) * dim * (g.flicker ? (0.35 + 0.65 * g.flicker) : 1); }
     },
     name: cfg.name, root, J, face, cfg, seed: cfg.seed ?? 1,
     extras,
     // costume pieces that move: the monster mask (0 off, 1 on the face, 2 pushed up)
-    applyExtras(x) { if (extras.mask) { const m = x.mask ?? 0; extras.mask.visible = m > 0.5; const up = m > 1.5 ? 1 : 0; extras.maskPivot.rotation.x = -2.4 * up; extras.maskPivot.position.set(0, extras.maskHc + 0.05 * up, -0.03 * up); } if (extras.milk) extras.milk.visible = (x.milk ?? 0) > 0.5; },
+    applyExtras(x) { if (extras.mask) { const m = x.mask ?? 0; extras.mask.visible = m > 0.5; const up = m > 1.5 ? 1 : 0; extras.maskPivot.rotation.x = -2.4 * up; extras.maskPivot.position.set(0, extras.maskHc + 0.05 * up, -0.03 * up); } if (extras.milk) extras.milk.visible = (x.milk ?? 0) > 0.5; if (extras.slimeParts) for (const m of extras.slimeParts) m.visible = (x.slime ?? 0) > 0.5; if (extras.scuffs) for (const m of extras.scuffs) m.visible = (x.scuff ?? 0) > 0.5; },
     props: {},
     applyPose(p) {
       J.hips.position.y = 0.95 + p.y;
@@ -595,6 +621,43 @@ function buildExtras(cfg, J, neck, hc, r) {
       mk(new THREE.SphereGeometry(0.012, 6, 5), mat(0x1a5a1a), hood, [sd * 0.04, r * 0.92, r * 1.62]);
     }
     for (let i = 0; i < 3; i++) mk(new THREE.ConeGeometry(0.05, 0.1, 6), spike, hood, [0, r * 1.38 - i * 0.04, -0.02 - i * 0.12], [-0.4 - i * 0.4, 0, 0]);
+  }
+  if (has('armor')) {
+    // Episode 5 upgraded uniform: chest plate, bigger shoulder guards, forearm guards with glowing strips
+    const steel = mat(cfg.armorColor ?? 0x9fb4d8, { r: 0.28, m: 0.65 });
+    const glowA = mat(cfg.accent ?? 0x7fe0ff, { r: 0.3, e: cfg.accentGlow ?? 0x2fc0ff, ei: 1.2 }).clone();
+    ex.armorGlow = glowA;
+    mk(new RoundedBoxGeometry(0.3, 0.2, 0.06, 2, 0.025), steel, J.spine, [0, 0.34, 0.125], [-0.08, 0, 0]);
+    mk(new THREE.BoxGeometry(0.2, 0.014, 0.012), glowA, J.spine, [0, 0.27, 0.16]);
+    mk(new THREE.BoxGeometry(0.012, 0.12, 0.012), glowA, J.spine, [0, 0.36, 0.158]);
+    for (const [side, sd] of [['L', 1], ['R', -1]]) {
+      mk(new RoundedBoxGeometry(0.15, 0.06, 0.19, 2, 0.025), steel, J.sh[side], [sd * 0.025, 0.035, 0], [0, 0, sd * -0.3]);
+      mk(new THREE.BoxGeometry(0.15, 0.012, 0.012), glowA, J.sh[side], [sd * 0.03, 0.005, 0.095], [0, 0, sd * -0.3]);
+      mk(new RoundedBoxGeometry(0.1, 0.13, 0.1, 2, 0.02), steel, J.el[side], [0, -0.15, 0.01]);
+      mk(new THREE.BoxGeometry(0.012, 0.11, 0.012), glowA, J.el[side], [0, -0.15, 0.062]);
+      mk(new RoundedBoxGeometry(0.11, 0.1, 0.06, 2, 0.02), steel, J.kn[side], [0, -0.0, 0.085]);
+    }
+  }
+  if (has('slime')) {
+    // Greg after his trip through Behemoth's mouth
+    const sl = mat(0xb050ff, { r: 0.1, m: 0.1, e: 0x6a10c0, ei: 0.6, opacity: 0.85 });
+    ex.slime = grp(J.hips);
+    const R2 = rng(cfg.seed * 13 + 5);
+    const parts = [[J.head, 0, 0.32, 0, 0.1], [J.head, 0.1, 0.25, 0.12, 0.06], [J.head, -0.12, 0.2, 0.1, 0.05], [J.spine, 0.08, 0.35, 0.16, 0.08], [J.spine, -0.1, 0.2, 0.17, 0.07], [J.spine, 0.05, 0.1, -0.16, 0.09], [J.sh.L, 0, -0.15, 0.06, 0.06], [J.sh.R, 0, -0.1, 0.06, 0.07], [J.el.L, 0, -0.1, 0.05, 0.05], [J.el.R, 0, -0.18, 0.05, 0.06], [J.kn.L, 0, -0.15, 0.06, 0.06], [J.hips, 0.1, -0.02, 0.12, 0.07]];
+    ex.slimeParts = [];
+    for (const [par, x, y, z, r0] of parts) {
+      const m = mk(new THREE.SphereGeometry(r0, 10, 8), sl, par, [x, y, z], [0, 0, 0], [1.3, 0.7 + R2() * 0.4, 1.1], false);
+      m.visible = false; ex.slimeParts.push(m);
+      const d = mk(new THREE.SphereGeometry(r0 * 0.4, 8, 6), sl, par, [x + 0.02, y - r0 * 0.9, z + 0.01], [0, 0, 0], [0.8, 1.6, 0.8], false);
+      d.visible = false; ex.slimeParts.push(d);
+    }
+  }
+  if (has('scuffs')) {
+    ex.scuffs = [];
+    const dirt = mat(0x2a2620, { r: 1, opacity: 0.55 });
+    for (const [par, x, y, z, r0, ry] of [[J.spine, 0.06, 0.18, 0.143, 0.035, 0], [J.spine, -0.09, 0.36, 0.14, 0.025, 0], [J.kn.L, 0, -0.2, 0.08, 0.03, 0], [J.el.R, 0, -0.08, 0.062, 0.022, 0], [J.hips, -0.1, -0.02, 0.125, 0.03, 0]]) {
+      const m = mk(new THREE.CircleGeometry(r0, 10), dirt, par, [x, y, z], [0, ry, 0], [1.4, 1, 1], false); m.visible = false; ex.scuffs.push(m);
+    }
   }
   if (has('milkStain')) {
     ex.milk = grp(J.spine, 0.03, 0.27, 0.142);
@@ -893,7 +956,14 @@ export const OUTFITS = {
   },
 };
 
+// Episode 5: upgraded blue uniforms (brighter glowing accents + armor pieces)
+const BLUE2 = { suit: 0x2340b8, suitDark: 0x0e1a5a, accent: 0x8fe8ff, accentGlow: 0x2fc8ff, pad: 0x3460e8, boot: 0x2a56d8, glove: 0x0e1a5a, belt: 0x0b1240, emblemGlow: '#8fe8ff', emblemCore: '#f0fbff', armorColor: 0xb4c4e4 };
 export const COSTUMES = {
+  blue2: {
+    aaron: BLUE2, flare: BLUE2, eric: BLUE2,
+    leon: { ...BLUE2, suit: 0x18215e, suitDark: 0x0e133a, accent: 0xf2b632, accentGlow: 0xb07a00, pad: 0x24359a, armorColor: 0xc8b47a },
+    greg: { coatTrim: 0x5fd8ff, armband: 0x3fa8ff },
+  },
   red: {
     aaron: RED_SUIT, flare: RED_SUIT, eric: RED_SUIT,
     leon: { ...RED_SUIT, suit: 0x6e0f18, accent: 0xf2b632, accentGlow: 0x7a4a00, pad: 0x9a1824 },

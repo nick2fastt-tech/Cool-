@@ -231,6 +231,32 @@ const SFX = {
   catchPlate: () => mix(partials(0.3, [1700, 4100], 0.08, [0.2, 0.06]), sweep(0.15, 160, 80, 'sine', (t) => env(t, 0.002, 0.04) * 0.5)),
   cricket: () => mix(...Array.from({ length: 6 }, (_, i) => Float32Array.from([...new Float32Array(Math.floor(i * 0.33 * SR)), ...make(0.12, (t) => Math.sin(TAU * 4400 * t) * (Math.sin(TAU * 60 * t) > 0 ? 0.05 : 0))]))),
   owl: () => mix(sweep(0.4, 420, 380, 'sine', (t) => Math.sin(Math.PI * t / 0.4) * 0.12), Float32Array.from([...new Float32Array(Math.floor(0.5 * SR)), ...sweep(0.7, 430, 360, 'sine', (t) => Math.sin(Math.PI * t / 0.7) * 0.12)])),
+  // --- Episode 5
+  penRoll: () => bandpass(make(1.3, (t) => noise() * 0.25 * (0.6 + 0.4 * Math.sin(t * 60)) * Math.min(1, t * 8) * Math.min(1, (1.3 - t) * 6)), 1500, 5000),
+  penDrop: () => mix(partials(0.25, [2300, 3900], 0.05, [0.25, 0.1]), Float32Array.from([...new Float32Array(Math.floor(0.12 * SR)), ...partials(0.15, [2100, 3600], 0.04, [0.15, 0.06])])),
+  monsterRoar: () => mix(lowpass(sweep(2.4, 85, 48, 'saw', (t) => Math.sin(Math.PI * Math.min(1, t / 2.4)) * 0.5 * (0.65 + 0.35 * Math.sin(t * 34))), 700), lowpass(nbuf(2.4, (t) => Math.sin(Math.PI * t / 2.4) * 0.55), 500), bandpass(nbuf(2.4, (t) => Math.sin(Math.PI * t / 2.4) * 0.25 * (0.5 + 0.5 * Math.sin(t * 13))), 600, 2200), sweep(2.4, 40, 30, 'sine', (t) => Math.sin(Math.PI * t / 2.4) * 0.5)),
+  tigerRoar: () => mix(lowpass(sweep(1.3, 210, 120, 'saw', (t) => Math.sin(Math.PI * Math.min(1, t / 1.3)) * 0.35 * (0.6 + 0.4 * Math.sin(t * 45))), 1400), bandpass(nbuf(1.3, (t) => Math.sin(Math.PI * t / 1.3) * 0.4), 300, 2500)),
+  tinyGrowl: () => lowpass(sweep(0.7, 420, 300, 'saw', (t) => Math.sin(Math.PI * t / 0.7) * 0.22 * (0.6 + 0.4 * Math.sin(t * 70))), 1800),
+  squeak: () => sweep(0.25, 1400, 2600, 'sine', (t) => Math.sin(Math.PI * t / 0.25) * 0.25),
+  fireLand: () => mix(SFX.flameIgnite(), sweep(0.4, 120, 45, 'sine', (t) => env(t, 0.002, 0.1) * 0.9), lowpass(nbuf(0.6, (t) => env(t, 0.002, 0.15) * 0.6), 1200)),
+  doorsCrash: () => mix(SFX.metalCrash(), SFX.doorBang(), lowpass(nbuf(0.8, (t) => env(t, 0.002, 0.2) * 0.8), 2500)),
+  ufoHum: () => mix(make(4.0, (t) => (Math.sin(TAU * 55 * t) * 0.5 + Math.sin(TAU * 110.7 * t) * 0.25 + Math.sin(TAU * 221 * t + Math.sin(TAU * 0.5 * t) * 3) * 0.12) * Math.min(1, t / 0.8) * Math.min(1, (4 - t) / 1.2) * 0.45), lowpass(nbuf(4.0, (t) => Math.min(1, t / 0.8) * Math.min(1, (4 - t)) * 0.15), 300)),
+  hatchOpen: () => mix(sweep(1.4, 90, 60, 'saw', (t) => Math.min(1, t * 4) * Math.min(1, (1.4 - t) * 3) * 0.15), highpass(nbuf(1.0, (t) => env(t, 0.01, 0.4) * 0.3), 3000), Float32Array.from([...new Float32Array(Math.floor(1.1 * SR)), ...SFX.clunk()])),
+  fallWhistle: () => sweep(1.6, 1800, 500, 'sine', (t) => Math.min(1, t * 3) * 0.18),
+  crownFlash: () => mix(sweep(0.6, 300, 1600, 'saw', (t) => env(t, 0.01, 0.25) * 0.12), partials(1.4, [523, 659, 784, 1046], 0.4, [0.12, 0.1, 0.08, 0.06]), sweep(1.0, 60, 30, 'sine', (t) => env(t, 0.005, 0.4) * 0.5)),
+  thunder: () => mix(lowpass(nbuf(3.0, (t) => (env(t, 0.005, 0.25) + 0.6 * env(Math.max(0, t - 0.3), 0.05, 0.9)) * 0.9), (t) => 2500 * Math.exp(-t * 1.5) + 120), sweep(2.5, 55, 28, 'sine', (t) => env(t, 0.01, 0.8) * 0.6)),
+  metalGrow: () => mix(lowpass(sweep(3.0, 45, 140, 'saw', (t) => Math.min(1, t) * 0.3 * (0.7 + 0.3 * Math.sin(t * 25))), 900), ...Array.from({ length: 8 }, (_, i) => Float32Array.from([...new Float32Array(Math.floor((0.2 + i * 0.33) * SR)), ...partials(0.4, [150 + i * 20, 390 + i * 30, 840], 0.12, [0.25, 0.15, 0.06])]))),
+  tailSlam: () => mix(SFX.boom(), SFX.shockwave(), lowpass(nbuf(1.0, (t) => env(t, 0.002, 0.3) * 0.7), 900)),
+  trashClang: () => mix(partials(1.2, [320, 812, 1290, 2140], 0.3, [0.4, 0.3, 0.2, 0.1]), lowpass(nbuf(0.5, (t) => env(t, 0.001, 0.08) * 0.7), 5000), sweep(0.3, 120, 50, 'sine', (t) => env(t, 0.002, 0.08) * 0.6)),
+  trashRoll: () => mix(...Array.from({ length: 7 }, (_, i) => Float32Array.from([...new Float32Array(Math.floor(i * 0.2 * SR)), ...partials(0.25, [300 + i * 12, 780], 0.08, [0.15, 0.08])])), lowpass(nbuf(1.5, (t) => Math.min(1, t * 5) * Math.max(0, 1 - t / 1.5) * 0.25), 600)),
+  blueFlash: () => mix(sweep(0.5, 400, 3200, 'sine', (t) => env(t, 0.005, 0.2) * 0.3), highpass(nbuf(0.8, (t) => env(t, 0.002, 0.25) * 0.5), 2500), partials(1.2, [880, 1320, 1760], 0.4, [0.12, 0.1, 0.08])),
+  stretchBoing: () => make(0.8, (t) => Math.sin(TAU * (180 + 220 * Math.sin(t * 9) * Math.exp(-t * 2.5)) * t) * env(t, 0.005, 0.35) * 0.35),
+  gulp: () => mix(sweep(0.35, 300, 80, 'sine', (t) => env(t, 0.01, 0.12) * 0.7), lowpass(nbuf(0.5, (t) => env(t, 0.02, 0.15) * 0.4), 500)),
+  slimeSplat: () => mix(lowpass(nbuf(0.5, (t) => env(t, 0.002, 0.12) * 0.8), 1200), sweep(0.3, 220, 70, 'sine', (t) => env(t, 0.002, 0.08) * 0.5), bandpass(nbuf(0.6, (t) => Math.max(0, Math.sin(t * 50)) * env(t, 0.05, 0.2) * 0.3), 300, 1500)),
+  crownCrack: () => mix(highpass(nbuf(0.6, (t) => env(t, 0.001, 0.08) * 1.0), 1200), SFX.metalCrash(), sweep(0.5, 900, 60, 'saw', (t) => env(t, 0.002, 0.15) * 0.3)),
+  drainHum: () => mix(make(2.4, (t) => (Math.sin(TAU * 98 * t + Math.sin(TAU * 3 * t) * 2) * 0.4 + Math.sin(TAU * 196.5 * t) * 0.2) * Math.sin(Math.PI * t / 2.4) * 0.35), sweep(2.4, 900, 300, 'sine', (t) => Math.sin(Math.PI * t / 2.4) * 0.08)),
+  energyFizzle: () => mix(sweep(0.5, 900, 120, 'square', (t) => env(t, 0.002, 0.15) * 0.08), highpass(nbuf(0.4, (t) => env(t, 0.002, 0.1) * 0.3 * (Math.sin(t * 300) > 0 ? 1 : 0.2)), 3000)),
+  crownHum: () => make(2.6, (t) => (Math.sin(TAU * 110 * t) * 0.5 + Math.sin(TAU * 165 * t) * 0.3 + Math.sin(TAU * 220.5 * t) * 0.2) * Math.sin(Math.PI * t / 2.6) * 0.4 * (0.7 + 0.3 * Math.sin(t * 9))),
   spookyStinger: () => mix(...[0, 1, 2].map((i) => Float32Array.from([...new Float32Array(Math.floor(i * 0.14 * SR)), ...tone(mtof([62, 65, 68][i]), 0.9, 'bell', 0.12)])), sweep(1.2, 80, 40, 'sine', (t) => env(t, 0.01, 0.4) * 0.4)),
 };
 const sfxCache = {};
@@ -260,7 +286,8 @@ for (const c of Object.keys(gait)) {
       const vis = (evalTrack(T.tracks[`${c}.vis`], t) ?? 0) > 0.5;
       const set = setAt(t);
       const sp = tab.speed[i];
-      if (vis && sp > 0.3 && !['title', 'black'].includes(set)) {
+      const airborne = (evalTrack(T.tracks[`${c}.y`], t) ?? 0) > 0.25;
+      if (vis && sp > 0.3 && !airborne && !['title', 'black'].includes(set)) {
         const vol = Math.min(1, 0.35 + sp * 0.15);
         put(step.soft, t, (st % 2 ? -0.15 : 0.15), vol);
         put(step.tap, t, 0, vol * (set === 'control' ? 1.2 : 0.8));
@@ -346,6 +373,7 @@ const STYLES = {
   store: { bpm: 116, key: 62, prog: [[0, 'min'], [-2, 'maj'], [-4, 'maj'], [-5, 'dom']], drums: { kick: 'x.......x.......', snare: '....x.......x...' }, bass: 'x...x...x...x...', bassKind: 'tuba', comp: { kind: 'marimba', rhythm: 'x.x.x.x.x.x.x.x.', vol: 0.1, arp: true }, lead: null },
   showtime: { bpm: 132, key: 60, prog: [[0, 'maj'], [-3, 'min'], [5, 'maj'], [7, 'dom']], drums: { kick: 'x...x...x...x...', snare: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.' }, bass: 'x.x.x.x.x.x.x.x.', bassKind: 'bass', comp: { kind: 'brass', rhythm: 'x.....x.x.......', vol: 0.09, len: 0.2 }, lead: { kind: 'lead', notes: [72, -1, 76, 79, -1, 76, 72, -1, 74, -1, 77, 81, -1, 79, 76, -1], vol: 0.07 } },
   night: { bpm: 76, key: 55, prog: [[0, 'min'], [-4, 'maj'], [-2, 'maj'], [-7, 'min']], drums: { hat: 'x...x...x...x...' }, bass: 'x.......x.......', bassKind: 'sub', pad: 0.05, comp: { kind: 'bell', rhythm: 'x...x.x...x...x.', vol: 0.06, arp: true }, lead: null },
+  behemoth: { bpm: 92, key: 45, prog: [[0, 'min'], [1, 'maj'], [-2, 'maj'], [0, 'min']], drums: { kick: 'x..x....x..x..x.', snare: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.' }, bass: 'x..x....x..x..x.', bassKind: 'tuba', pad: 0.07, comp: { kind: 'brass', rhythm: 'x.....x.........', vol: 0.12, len: 0.3 }, lead: null },
   chill: { bpm: 84, key: 53, prog: [[0, 'maj7'], [-1, 'min7'], [-3, 'min7'], [-5, 'maj7']], drums: { kick: 'x.........x.....', snare: '....x.......x...', hat: '..x...x...x...x.' }, bass: 'x.......x..x....', bassKind: 'sub', comp: { kind: 'marimba', rhythm: 'x...x.x...x...x.', vol: 0.1 }, lead: null },
 };
 
@@ -433,7 +461,7 @@ fs.mkdirSync(OUT, { recursive: true });
 fs.writeFileSync(path.join(OUT, 'audio.wav'), Buffer.concat([hdr, data]));
 
 // ------------------------------------------------------------ captions file (soft subtitles)
-const NAMES = { aaron: 'AARON', flare: 'FLARE', eric: 'ERIC', water: 'WATER GUY', barista: 'BARISTA', leon: 'LEON', greg: 'GREG', soul: 'SOUL STEALER', computer: 'COMPUTER', shadow: 'UNKNOWN VOICE', newark: 'NEWARK', dj: 'DJ', boss: 'GAME BOSS', skeleton: 'SKELETON', crowd: 'CROWD', everyone: 'EVERYONE' };
+const NAMES = { aaron: 'AARON', flare: 'FLARE', eric: 'ERIC', water: 'WATER GUY', barista: 'BARISTA', leon: 'LEON', greg: 'GREG', soul: 'SOUL STEALER', computer: 'COMPUTER', shadow: 'UNKNOWN VOICE', newark: 'NEWARK', dj: 'DJ', boss: 'GAME BOSS', skeleton: 'SKELETON', crowd: 'CROWD', everyone: 'EVERYONE', behemoth: 'BEHEMOTH' };
 const ts = (s) => { const ms = Math.round(s * 1000); const h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60, sec = Math.floor(ms / 1000) % 60; return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')},${String(ms % 1000).padStart(3, '0')}`; };
 const srt = [...T.captions].sort((a, b) => a.t0 - b.t0).map((c, i) => `${i + 1}\n${ts(c.t0)} --> ${ts(c.t1)}\n${c.sound ? `[${c.text}]` : `${c.label ?? NAMES[c.who]}: ${c.text}`}\n`).join('\n');
 fs.writeFileSync(path.join(OUT, 'captions.srt'), srt);
