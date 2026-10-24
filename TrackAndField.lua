@@ -1,22 +1,28 @@
 --[[
 	=====================================================================
-	  TRACK AND FIELD  (demo)                         one LocalScript
+	  TRACK AND FIELD  (demo)                            one script
 	=====================================================================
-	  INSTALL
-	    1. Roblox Studio -> an empty Baseplate place.
-	    2. Explorer: StarterPlayer > StarterPlayerScripts -> insert a LocalScript.
-	    3. Paste this whole file into it and press Play.
-	    (The script builds its own world: terrain, track, trees, lake...)
+	  INSTALL (one script does everything)
+	    1. Roblox Studio -> an empty Baseplate place, published, with
+	       Game Settings > Security > "Enable Studio Access to API Services" ON
+	       (needed to save PBs and world records).
+	    2. Explorer: ServerScriptService -> insert a Script, paste this whole file, Play.
+	       The server half saves progress and runs the 40-yard dash line; it
+	       copies itself to every player as the client half automatically.
+	    (No server access? Paste it into a LocalScript in StarterPlayerScripts
+	     instead: everything works, but nothing is saved.)
 
 	  EVENTS   60m, 100m, 200m, 400m, 4x100m, 4x200m, 4x400m
 	    Every event: semifinal -> finalists screen -> final introductions
 	    (username + semifinal time) -> final -> podium. An announcer calls
 	    the race and says the winner's name (captions + voice).
-	    No bots on the track: you race alone, rivals are leaderboard times.
+	    Bots on Track (Settings) shows your 7 rivals running beside you;
+	    off = you race alone and rivals are leaderboard times.
 
 	  RUNNING  tap left / right in rhythm, one tap every 0.3 s holds top speed.
 	    PC:       A / D (rebindable), Left / Right arrows, mouse left / right click
-	              Relays: Space (or W / Up) to pass the baton in the exchange zone
+	              Relays: Space (or W / Up) to pass - the PASS button turns green
+	              in the perfect window; your teammate runs the next leg
 	              Menu keys: L leaderboard, P settings, C camera
 	    Phone:    tap the left / right half of the screen, PASS button in relays
 	    Gamepad:  L1 / R1 (or L2 / R2), A to pass
@@ -37,12 +43,311 @@
 	    high knees, bend lean, finish dip, braking jog and celebrations
 	    (Bolt's lightning pose / Lyles' power-up).
 
-	  SETTINGS  Event, AFK, white & royal blue uniform, track colour, camera,
-	    celebration, announcer voice, performance mode, key rebinding.
+	  SAVING  Your PBs and settings are saved. World records are shared by
+	    everyone in the game and stay until another player beats them.
+
+	  40-YARD DASH  Optional, on the grass in the infield. Walk to the blue pad
+	    to join the line (other players wait their turn). It has its own WR.
+
+	  SETTINGS  Event, AFK, bots on/off, white & royal blue uniform, track
+	    colour, camera, celebration, announcer voice, performance mode, keys.
+	    Top right: INDOOR arena button (coming soon).
 
 	  Scale: 1 stud = 0.28 m, so 100 m = 357 studs.
 	=====================================================================
 ]]
+
+---------------------------------------------------------------------
+-- SERVER HALF: saves PBs + world records (DataStore), runs the 40-yard
+-- dash line, and gives every player the client half of this script.
+---------------------------------------------------------------------
+if game:GetService("RunService"):IsServer() then
+	(function()
+		local Players = game:GetService("Players")
+		local ReplicatedStorage = game:GetService("ReplicatedStorage")
+		local DataStoreService = game:GetService("DataStoreService")
+		-- default world records (just above a perfect run) until a player beats them
+		local DEFAULT_WR: { [string]: number } = {
+			["40yd"] = 4.83,
+			["60m"] = 7.09,
+			["100m"] = 10.70,
+			["200m"] = 20.24,
+			["400m"] = 43.32,
+			["4x100m"] = 38.98,
+			["4x200m"] = 77.20,
+			["4x400m"] = 169.80,
+		}
+		local DEFAULT_HOLDER: { [string]: string } = {
+			["40yd"] = "GridironGhost",
+			["60m"] = "LegendLightning",
+			["100m"] = "BoltLegacy_958",
+			["200m"] = "BendMaster_LY",
+			["400m"] = "IronLungs400",
+			["4x100m"] = "Lightning AC",
+			["4x200m"] = "Velocity TC",
+			["4x400m"] = "Thunder Track",
+		}
+		local old = ReplicatedStorage:FindFirstChild("TrackAndFieldNet")
+		if old then
+			old:Destroy()
+		end
+		local net = Instance.new("Folder")
+		net.Name = "TrackAndFieldNet"
+		local function remote(className: string, name: string): any
+			local r = Instance.new(className)
+			r.Name = name
+			r.Parent = net
+			return r
+		end
+		local getData = remote("RemoteFunction", "GetData")
+		local submit = remote("RemoteEvent", "Submit")
+		local saveSettings = remote("RemoteEvent", "SaveSettings")
+		local recordsEvent = remote("RemoteEvent", "Records")
+		local dashEvent = remote("RemoteEvent", "Dash")
+		net.Parent = ReplicatedStorage
+
+		local playerStore: any, recordStore: any = nil, nil
+		local storesOk = pcall(function()
+			playerStore = DataStoreService:GetDataStore("TrackAndField_Players_v1")
+			recordStore = DataStoreService:GetDataStore("TrackAndField_Records_v1")
+		end)
+		local records: { [string]: { time: number, holder: string } } = {}
+		for name, t in pairs(DEFAULT_WR) do
+			records[name] = { time = t, holder = DEFAULT_HOLDER[name] }
+		end
+		if storesOk then
+			task.spawn(function()
+				for name in pairs(DEFAULT_WR) do
+					local ok, value = pcall(function()
+						return recordStore:GetAsync("WR_" .. name)
+					end)
+					if ok and type(value) == "table" and type(value.time) == "number" and type(value.holder) == "string" then
+						records[name] = { time = value.time, holder = value.holder }
+						recordsEvent:FireAllClients(name, records[name])
+					end
+				end
+			end)
+		end
+
+		type Profile = { pbs: { [string]: number }, settings: { [string]: any }, loaded: boolean }
+		local profiles: { [Player]: Profile } = {}
+		local function loadProfile(plr: Player)
+			local profile: Profile = { pbs = {}, settings = {}, loaded = false }
+			profiles[plr] = profile
+			if storesOk then
+				local ok, value = pcall(function()
+					return playerStore:GetAsync("u" .. plr.UserId)
+				end)
+				if ok and type(value) == "table" then
+					if type(value.pbs) == "table" then
+						for k, v in pairs(value.pbs) do
+							if type(k) == "string" and type(v) == "number" then
+								profile.pbs[k] = v
+							end
+						end
+					end
+					if type(value.settings) == "table" then
+						for k, v in pairs(value.settings) do
+							if type(k) == "string" and (type(v) == "string" or type(v) == "boolean") then
+								profile.settings[k] = v
+							end
+						end
+					end
+				end
+			end
+			profile.loaded = true
+		end
+		local function saveProfile(plr: Player)
+			local profile = profiles[plr]
+			if not profile or not profile.loaded or not storesOk then
+				return
+			end
+			pcall(function()
+				playerStore:SetAsync("u" .. plr.UserId, { pbs = profile.pbs, settings = profile.settings })
+			end)
+		end
+
+		-- 40-yard dash line
+		local queue: { Player } = {}
+		local current: Player? = nil
+		local currentSince = 0
+		local started = false
+		local function broadcast()
+			local names = {}
+			for _, p in ipairs(queue) do
+				table.insert(names, p.Name)
+			end
+			dashEvent:FireAllClients("state", if current then current.Name else "", if current then current.UserId else 0, names)
+		end
+		local function advance()
+			if not current and #queue > 0 then
+				current = table.remove(queue, 1)
+				currentSince = os.clock()
+				started = false
+			end
+			broadcast()
+		end
+		local function leave(plr: Player)
+			local i = table.find(queue, plr)
+			if i then
+				table.remove(queue, i)
+			end
+			if current == plr then
+				current = nil
+			end
+		end
+		dashEvent.OnServerEvent:Connect(function(plr: Player, action: any)
+			if action == "join" then
+				if current ~= plr and not table.find(queue, plr) then
+					table.insert(queue, plr)
+				end
+			elseif action == "leave" then
+				leave(plr)
+			elseif action == "start" then
+				if current == plr then
+					started = true
+					currentSince = os.clock()
+				end
+			elseif action == "done" then
+				if current == plr then
+					current = nil
+				end
+			elseif action == "defer" then
+				-- it's their turn but they're mid-race: let the next person go, keep their spot at the front
+				if current == plr and not started then
+					if #queue > 0 then
+						current = table.remove(queue, 1)
+						table.insert(queue, 1, plr)
+						started = false
+					end
+					currentSince = os.clock()
+				end
+			end
+			advance()
+		end)
+		task.spawn(function()
+			while true do
+				task.wait(1)
+				if current and os.clock() - currentSince > (if started then 30 else 15) then
+					current = nil
+					advance()
+				end
+			end
+		end)
+
+		Players.PlayerAdded:Connect(loadProfile)
+		for _, p in ipairs(Players:GetPlayers()) do
+			task.spawn(loadProfile, p)
+		end
+		Players.PlayerRemoving:Connect(function(plr: Player)
+			saveProfile(plr)
+			profiles[plr] = nil
+			leave(plr)
+			advance()
+		end)
+		game:BindToClose(function()
+			for plr in pairs(profiles) do
+				saveProfile(plr)
+			end
+		end)
+
+		getData.OnServerInvoke = function(plr: Player)
+			local t0 = os.clock()
+			while not (profiles[plr] and profiles[plr].loaded) and os.clock() - t0 < 10 do
+				task.wait(0.1)
+			end
+			local profile = profiles[plr]
+			return {
+				pbs = if profile then profile.pbs else {},
+				settings = if profile then profile.settings else {},
+				records = records,
+				saving = storesOk,
+			}
+		end
+
+		submit.OnServerEvent:Connect(function(plr: Player, eventName: any, time: any)
+			if type(eventName) ~= "string" or type(time) ~= "number" or DEFAULT_WR[eventName] == nil or time ~= time then
+				return
+			end
+			time = math.ceil(time * 100 - 1e-6) / 100
+			if time < DEFAULT_WR[eventName] - 0.3 or time > 900 then
+				return -- not physically possible in this game
+			end
+			local profile = profiles[plr]
+			if profile then
+				local pb = profile.pbs[eventName]
+				if not pb or time < pb then
+					profile.pbs[eventName] = time
+					task.spawn(saveProfile, plr)
+				end
+			end
+			-- world record: only counts when beaten by 0.01 - 0.05 s
+			local wr = records[eventName]
+			if wr and time < wr.time then
+				local margin = math.floor((wr.time - time) * 100 + 0.5) / 100
+				if margin >= 0.01 and margin <= 0.05 then
+					local new = { time = time, holder = plr.Name }
+					records[eventName] = new
+					recordsEvent:FireAllClients(eventName, new)
+					if storesOk then
+						task.spawn(function()
+							pcall(function()
+								recordStore:UpdateAsync("WR_" .. eventName, function(stored: any): any
+									if type(stored) == "table" and type(stored.time) == "number" and stored.time <= time then
+										return nil
+									end
+									return new
+								end)
+							end)
+						end)
+					end
+				end
+			end
+		end)
+
+		saveSettings.OnServerEvent:Connect(function(plr: Player, settings: any)
+			local profile = profiles[plr]
+			if not profile or type(settings) ~= "table" then
+				return
+			end
+			local clean = {}
+			local count = 0
+			for k, v in pairs(settings) do
+				if type(k) == "string" and #k < 32 and (type(v) == "boolean" or (type(v) == "string" and #v < 32)) then
+					clean[k] = v
+					count += 1
+				end
+				if count > 24 then
+					break
+				end
+			end
+			profile.settings = clean
+		end)
+
+		-- give every player the client half of this script
+		local ok, err = pcall(function()
+			local existing = ReplicatedStorage:FindFirstChild("TrackAndFieldClient")
+			if existing then
+				existing:Destroy()
+			end
+			local copy = (script :: any):Clone()
+			copy.Name = "TrackAndFieldClient"
+			copy.RunContext = Enum.RunContext.Client
+			copy.Parent = ReplicatedStorage
+		end)
+		if not ok then
+			warn("[Track And Field] Could not start the game for players automatically (" .. tostring(err) .. "). Also paste this script into a LocalScript in StarterPlayer > StarterPlayerScripts.")
+		end
+	end)()
+	return
+end
+
+-- only one copy of the game runs per player
+if (_G :: any).TrackAndFieldClientRunning then
+	return
+end
+(_G :: any).TrackAndFieldClientRunning = true
+
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -123,6 +428,7 @@ local Settings = {
 	Celebration = "Bolt",
 	Voice = true,
 	PerformanceMode = false,
+	Bots = false,
 	LeftKey = Enum.KeyCode.A,
 	RightKey = Enum.KeyCode.D,
 	PassKey = Enum.KeyCode.Space,
@@ -130,7 +436,10 @@ local Settings = {
 
 -- colours + shared constants (kept in one table: Luau allows 200 locals)
 local K: { [string]: any } = {}
+local X: { [string]: any } = {} -- newer features (bots, relays, saving, 40-yard dash, free-roam animation)
 K.ROYAL = Color3.fromRGB(35, 78, 214)
+K.KITS = { Color3.fromRGB(220, 40, 40), Color3.fromRGB(250, 200, 30), Color3.fromRGB(20, 150, 70), Color3.fromRGB(240, 120, 20), Color3.fromRGB(130, 50, 180), Color3.fromRGB(20, 20, 24), Color3.fromRGB(0, 170, 190), Color3.fromRGB(200, 30, 120) }
+K.SKINS = { Color3.fromRGB(255, 220, 177), Color3.fromRGB(234, 192, 134), Color3.fromRGB(198, 134, 66), Color3.fromRGB(141, 85, 36), Color3.fromRGB(97, 58, 30), Color3.fromRGB(66, 40, 22) }
 K.ROYAL_LIGHT = Color3.fromRGB(110, 150, 255)
 K.WHITE = Color3.fromRGB(248, 249, 253)
 K.GOLD = Color3.fromRGB(255, 204, 64)
@@ -1077,47 +1386,116 @@ local function poseDip(isR15: boolean): Pose
 	}
 end
 
+-- after the line: celebration sequences that play out over time
+local function airplane(t: number, isR15: boolean): Pose
+	-- arms spread like wings while jogging it out
+	local pose = poseRun((t * 1.5) % 1, 0.32, 0, 0, isR15)
+	pose.root[1] = 0.05
+	pose.root[3] = math.sin(t * 2.6) * 0.14
+	pose.shoulderR = J(0.12, 0, 1.45)
+	pose.shoulderL = J(0.12, 0, -1.45)
+	pose.elbowR = J(0.1)
+	pose.elbowL = J(0.1)
+	pose.neck = J(0.3)
+	return pose
+end
+
 local function poseCelebrate(kind: string, t: number, isR15: boolean): Pose
-	if kind == "bolt" then
-		-- Usain Bolt's lightning pose: lean back, left arm pointing to the sky,
-		-- right arm drawn back like a bow
-		local sway = math.sin(t * 2) * 0.03
+	if kind == "bolt" or kind == "lyles" then
+		if t < 1.7 then
+			return airplane(t, isR15)
+		end
+		local loopT = (t - 1.7) % 7
+		if kind == "bolt" then
+			if loopT < 4.5 then
+				-- Usain Bolt's lightning pose: lean back, left arm to the sky, right arm drawn like a bow
+				local sway = math.sin(t * 2) * 0.03
+				return {
+					root = J(0.16 + sway, 0.35, -0.05),
+					waist = J(0.08, 0.15),
+					neck = J(0.5, 0.35),
+					shoulderL = J(2.45, 0, -0.7),
+					elbowL = J(0.05),
+					shoulderR = J(isR15 and 0.85 or 1.2, 0, 0.45),
+					elbowR = J(2.1 + math.sin(t * 3) * 0.08),
+					hipR = J(0, 0, 0.12),
+					hipL = J(0.3, 0, -0.1),
+					kneeL = J(-0.35),
+				}
+			end
+			-- chest thump
+			local thump = math.max(0, math.sin(t * 9)) * 0.25
+			return {
+				root = J(0.05, 0, 0, math.abs(math.sin(t * 4.5)) * 0.06),
+				neck = J(0.45),
+				shoulderR = J(1.05 + thump, 0, 0.15),
+				elbowR = J(2.2),
+				shoulderL = J(2.6, 0, -0.35),
+				elbowL = J(0.15),
+			}
+		end
+		if loopT < 3.5 then
+			-- Noah Lyles' anime power-up: wide stance, fists clenched, shaking
+			local shake = math.sin(t * 38) * 0.035
+			return {
+				root = J(0.08, 0, shake, isR15 and -0.35 or -0.05),
+				neck = J(0.45 + shake),
+				shoulderR = J(0.35 + shake, 0, 0.5),
+				shoulderL = J(0.35 - shake, 0, -0.5),
+				elbowR = J(1.65),
+				elbowL = J(1.65),
+				hipR = J(0.25, 0, 0.32),
+				hipL = J(0.25, 0, -0.32),
+				kneeR = J(-0.55),
+				kneeL = J(-0.55),
+			}
+		end
+		-- double-biceps flex
+		local pulse = math.sin(t * 6) * 0.06
 		return {
-			root = J(0.16 + sway, 0.35, -0.05),
-			waist = J(0.08, 0.15),
-			neck = J(0.5, 0.35),
-			shoulderL = J(2.45, 0, -0.7),
-			elbowL = J(0.05),
-			shoulderR = J(isR15 and 0.85 or 1.2, 0, 0.45),
-			elbowR = J(2.1 + math.sin(t * 3) * 0.08),
+			root = J(0.06, 0, 0, -0.05),
+			neck = J(0.35, math.sin(t * 1.5) * 0.3),
+			shoulderR = J(0.25, 0, 1.45 + pulse),
+			shoulderL = J(0.25, 0, -1.45 - pulse),
+			elbowR = J(2.3),
+			elbowL = J(2.3),
 			hipR = J(0, 0, 0.12),
-			hipL = J(0.3, 0, -0.1),
-			kneeL = J(-0.35),
-		}
-	elseif kind == "lyles" then
-		-- Noah Lyles' anime power-up: wide stance, fists clenched, shaking
-		local shake = math.sin(t * 38) * 0.035
-		return {
-			root = J(0.08, 0, shake, isR15 and -0.35 or -0.05),
-			neck = J(0.45 + shake),
-			shoulderR = J(0.35 + shake, 0, 0.5),
-			shoulderL = J(0.35 - shake, 0, -0.5),
-			elbowR = J(1.65),
-			elbowL = J(1.65),
-			hipR = J(0.25, 0, 0.32),
-			hipL = J(0.25, 0, -0.32),
-			kneeR = J(-0.55),
-			kneeL = J(-0.55),
+			hipL = J(0, 0, -0.12),
 		}
 	elseif kind == "podium" then
-		local bounce = math.abs(math.sin(t * 4.5)) * 0.15
+		if t < 2.2 then
+			-- fist pump
+			local pump = math.sin(t * 9) * 0.3
+			return {
+				root = J(0.05, 0, 0, math.abs(math.sin(t * 4.5)) * 0.08),
+				neck = J(0.3),
+				shoulderR = J(2.45 + pump, 0, 0.25),
+				elbowR = J(isR15 and 0.7 or 0),
+				shoulderL = J(0.1, 0, -0.15),
+				elbowL = J(0.6),
+			}
+		end
+		-- point to the sky, other hand on the hip
 		return {
-			root = J(0.1, 0, 0, bounce),
-			neck = J(0.3),
-			shoulderR = J(2.75, 0, 0.5),
-			shoulderL = J(2.75, 0, -0.5),
-			elbowR = J(0.2),
-			elbowL = J(0.2),
+			root = J(0.1, 0, 0, math.sin(t * 2) * 0.02),
+			neck = J(0.55),
+			shoulderR = J(2.95, 0, 0.1),
+			elbowR = J(0.05),
+			shoulderL = J(-0.2, 0, -0.5),
+			elbowL = J(1.7),
+		}
+	elseif kind == "watch" then
+		-- relay runner after the handoff: hands on hips, watching the team
+		local breathe = math.sin(t * 3) * 0.03
+		return {
+			root = J(-0.05, 0, 0, breathe),
+			neck = J(0.1, 0.35, 0),
+			shoulderR = J(-0.2, 0, 0.5),
+			shoulderL = J(-0.2, 0, -0.5),
+			elbowR = J(1.7),
+			elbowL = J(1.7),
+			hipR = J(0, 0, 0.1),
+			hipL = J(0, 0, -0.1),
 		}
 	elseif kind == "dq" then
 		return {
@@ -1129,19 +1507,29 @@ local function poseCelebrate(kind: string, t: number, isR15: boolean): Pose
 			elbowL = J(2.3),
 		}
 	end
-	-- tired: hands on knees, breathing hard
-	local breathe = math.sin(t * 5) * 0.04
+	-- tired: hands on knees, then stand up with hands on the head
+	if t < 3 then
+		local breathe = math.sin(t * 5) * 0.04
+		return {
+			root = J(-0.8 + breathe, 0, 0, isR15 and -0.3 or -0.1),
+			neck = J(0.5),
+			shoulderR = J(isR15 and 1.05 or 0.95, 0, 0.12),
+			shoulderL = J(isR15 and 1.05 or 0.95, 0, -0.12),
+			elbowR = J(0.25),
+			elbowL = J(0.25),
+			hipR = J(isR15 and 1.15 or 0.8, 0, 0.1),
+			hipL = J(isR15 and 1.15 or 0.8, 0, -0.1),
+			kneeR = J(-0.4),
+			kneeL = J(-0.4),
+		}
+	end
 	return {
-		root = J(-0.8 + breathe, 0, 0, isR15 and -0.3 or -0.1),
-		neck = J(0.5),
-		shoulderR = J(isR15 and 1.05 or 0.95, 0, 0.12),
-		shoulderL = J(isR15 and 1.05 or 0.95, 0, -0.12),
-		elbowR = J(0.25),
-		elbowL = J(0.25),
-		hipR = J(isR15 and 1.15 or 0.8, 0, 0.1),
-		hipL = J(isR15 and 1.15 or 0.8, 0, -0.1),
-		kneeR = J(-0.4),
-		kneeL = J(-0.4),
+		root = J(0.03, 0, 0, math.sin(t * 3.5) * 0.04),
+		neck = J(0.3, math.sin(t * 0.8) * 0.3),
+		shoulderR = J(isR15 and 2.4 or 2.9, 0, isR15 and 1.05 or 0.55),
+		shoulderL = J(isR15 and 2.4 or 2.9, 0, isR15 and -1.05 or -0.55),
+		elbowR = J(2.3),
+		elbowL = J(2.3),
 	}
 end
 
@@ -1195,6 +1583,7 @@ local function makeRoster(names: { string }): { Athlete }
 	return list
 end
 
+X.DASH = makeEvent("40yd", 36.576, 36.5, 20) -- 40 yards on the grass
 local roster = makeRoster(K.USERNAMES)
 local teamRoster = makeRoster(K.TEAMS)
 local youAthlete: Athlete = { Name = player.Name, IsPlayer = true, Skill = {}, Tau = CONFIG.PlayerTau, PassSkill = 1 }
@@ -1208,12 +1597,14 @@ K.WR_HOLDERS = {
 	["4x100m"] = "Lightning AC",
 	["4x200m"] = "Velocity TC",
 	["4x400m"] = "Thunder Track",
+	["40yd"] = "GridironGhost",
 }
 local worldRecords: { [string]: { time: number, holder: string, isPlayer: boolean } } = {}
 local seasonBests: { [string]: { { name: string, time: number, isPlayer: boolean } } } = {}
 for _, e in ipairs(EVENTS) do
 	seasonBests[e.Name] = {}
 end
+seasonBests["40yd"] = {}
 
 local function recordBest(eventName: string, athlete: Athlete, t: number)
 	local list = seasonBests[eventName]
@@ -1405,7 +1796,9 @@ for i = 1, 8 do
 end
 
 -- leaderboard (right)
-UI.lbPanel = scaled(panel({ Name = "Leaderboard", AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -14, 0, 64), Size = UDim2.fromOffset(312, 446), Parent = UI.gui }))
+UI.indoorButton = scaled(button({ Name = "IndoorButton", Text = "INDOOR ARENA  -  SOON", Font = K.FONT_BLACK, TextSize = 13, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -14, 0, 12), Size = UDim2.fromOffset(312, 38), BackgroundColor3 = K.C_PANEL, Parent = UI.gui }))
+stroke(UI.indoorButton, K.ROYAL_LIGHT, 1.5, 0.3)
+UI.lbPanel = scaled(panel({ Name = "Leaderboard", AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -14, 0, 104), Size = UDim2.fromOffset(312, 446), Parent = UI.gui }))
 label({ Text = "LEADERBOARD", Font = K.FONT_BLACK, TextSize = 16, TextColor3 = K.GOLD, Position = UDim2.fromOffset(16, 12), Size = UDim2.fromOffset(200, 20), Parent = UI.lbPanel })
 UI.lbSub = label({ Name = "Sub", Text = "", Font = K.FONT_REG, TextSize = 12, TextColor3 = K.C_MUTED, Position = UDim2.fromOffset(16, 34), Size = UDim2.fromOffset(280, 16), TextTruncate = Enum.TextTruncate.AtEnd, Parent = UI.lbPanel })
 UI.tabRace = button({ Name = "TabRace", Text = "RACE", TextSize = 13, Position = UDim2.fromOffset(16, 56), Size = UDim2.fromOffset(134, 28), Parent = UI.lbPanel })
@@ -1555,7 +1948,7 @@ for _, spec in ipairs(K.POD_SPEC) do
 end
 
 -- settings panel with GAME / CONTROLS tabs
-UI.setPanel = scaled(panel({ Name = "Settings", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(470, 520), Visible = false, ZIndex = 25, Parent = UI.gui }))
+UI.setPanel = scaled(panel({ Name = "Settings", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(470, 568), Visible = false, ZIndex = 25, Parent = UI.gui }))
 label({ Text = "SETTINGS", Font = K.FONT_BLACK, TextSize = 20, Position = UDim2.fromOffset(20, 16), Size = UDim2.fromOffset(200, 26), ZIndex = 26, Parent = UI.setPanel })
 UI.closeSettings = button({ Name = "Close", Text = "X", Font = K.FONT_BLACK, TextSize = 16, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -14, 0, 14), Size = UDim2.fromOffset(34, 34), ZIndex = 26, Parent = UI.setPanel })
 UI.tabGame = button({ Name = "TabGame", Text = "GAME", TextSize = 13, Position = UDim2.fromOffset(20, 54), Size = UDim2.fromOffset(206, 30), ZIndex = 26, Parent = UI.setPanel })
@@ -1580,12 +1973,13 @@ UI.eventPrev = button({ Name = "EventPrev", Text = "<", Font = K.FONT_BLACK, Pos
 UI.eventValue = label({ Name = "EventValue", Text = "ALL (rotate)", Font = K.FONT_BLACK, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Center, Position = UDim2.fromOffset(240, 7), Size = UDim2.fromOffset(164, 32), ZIndex = 27, Parent = UI.gamePage })
 UI.eventNext = button({ Name = "EventNext", Text = ">", Font = K.FONT_BLACK, Position = UDim2.fromOffset(412, 7), Size = UDim2.fromOffset(36, 32), ZIndex = 27, Parent = UI.gamePage })
 addOption(2, "AFK", "AFK", { "on", "off" }, { "ON", "OFF" })
-addOption(3, "Uniform (white & blue)", "Uniform", { "on", "off" }, { "ON", "OFF" })
-addOption(4, "Track Colour", "TrackColor", { "Red", "Blue" }, { "RED", "BLUE" })
-addOption(5, "Camera  [C]", "Camera", { "Chase", "Side" }, { "CHASE", "SIDE" })
-addOption(6, "Win Celebration", "Celebration", { "Bolt", "Lyles" }, { "BOLT", "LYLES" })
-addOption(7, "Announcer Voice", "Voice", { "on", "off" }, { "ON", "OFF" })
-addOption(8, "Performance Mode", "PerformanceMode", { "on", "off" }, { "ON", "OFF" })
+addOption(3, "Bots on Track", "Bots", { "on", "off" }, { "ON", "OFF" })
+addOption(4, "Uniform (white & blue)", "Uniform", { "on", "off" }, { "ON", "OFF" })
+addOption(5, "Track Colour", "TrackColor", { "Red", "Blue" }, { "RED", "BLUE" })
+addOption(6, "Camera  [C]", "Camera", { "Chase", "Side" }, { "CHASE", "SIDE" })
+addOption(7, "Win Celebration", "Celebration", { "Bolt", "Lyles" }, { "BOLT", "LYLES" })
+addOption(8, "Announcer Voice", "Voice", { "on", "off" }, { "ON", "OFF" })
+addOption(9, "Performance Mode", "PerformanceMode", { "on", "off" }, { "ON", "OFF" })
 
 -- controls page
 type Bind = { key: string, button: TextButton }
@@ -1650,9 +2044,11 @@ local function updateScale()
 	UI.logoScale.Scale = uiScale
 	UI.subScale.Scale = uiScale
 	if vp.X < 900 then
-		UI.lbPanel.Position = UDim2.new(1, -8, 0, 60)
+		UI.indoorButton.Position = UDim2.new(1, -8, 0, 8)
+		UI.lbPanel.Position = UDim2.new(1, -8, 0, 8 + 46 * uiScale)
 	else
-		UI.lbPanel.Position = UDim2.new(1, -14, 0, 64)
+		UI.indoorButton.Position = UDim2.new(1, -14, 0, 12)
+		UI.lbPanel.Position = UDim2.new(1, -14, 0, 12 + 50 * uiScale)
 	end
 end
 
@@ -1976,6 +2372,11 @@ type Runner = {
 	splits: { number },
 	bend: number,
 	note: string,
+	external: boolean, -- true = distance comes from where your character really is (no teleporting)
+	lastPos: Vector3?,
+	line: { origin: Vector3, dir: Vector3 }?, -- straight path (40-yard dash) instead of a lane
+	handoffAt: number,
+	visOffset: number?, -- drawn this far ahead of r.dist (smooths the baton hand-over)
 }
 
 type Race = {
@@ -1989,6 +2390,7 @@ type Race = {
 	you: Runner?,
 	splitMarks: { number },
 	said: { [string]: boolean },
+	relay: any,
 }
 
 local race: Race? = nil
@@ -2071,7 +2473,9 @@ local function stepRunner(r: Runner, dt: number, t: number, event: Event, goal: 
 	if not r.finished then
 		r.stamina = math.max(0, r.stamina - CONFIG.StaminaDrain * (r.speed / event.MaxSpeed) * dt)
 	end
-	r.dist += r.speed * dt
+	if not r.external then
+		r.dist += r.speed * dt
+	end
 
 	-- relay exchange zones
 	if event.Relay and r.leg < event.Legs and not r.finished then
@@ -2149,6 +2553,10 @@ local function newRunner(athlete: Athlete, lane: number, event: Event): Runner
 		splits = {},
 		bend = 0,
 		note = "",
+		external = false,
+		lastPos = nil,
+		line = nil,
+		handoffAt = 0,
 	}
 end
 
@@ -2178,7 +2586,9 @@ local function simulateHeat(event: Event, athletes: { Athlete }): { Runner }
 end
 
 -- world records start just above a perfect run, so they can be beaten
-for _, e in ipairs(EVENTS) do
+local allEvents = table.clone(EVENTS)
+table.insert(allEvents, X.DASH)
+for _, e in ipairs(allEvents) do
 	local ideal: Athlete = { Name = "ideal", IsPlayer = false, Skill = { [e.Name] = 1 }, Tau = CONFIG.PlayerTau, PassSkill = 1 }
 	local r = newRunner(ideal, 1, e)
 	r.reaction = 0.035
@@ -2192,7 +2602,7 @@ for _, e in ipairs(EVENTS) do
 		stepRunner(r, 1 / 60, t, e, goal)
 		r.passAt = -3
 	end
-	local wr = math.floor((officialTime(r.finishTime or t) + 0.03) * 100 + 0.5) / 100
+	local wr = math.floor((officialTime(r.finishTime or t) + (if e.Relay then 0.04 else 0.03)) * 100 + 0.5) / 100
 	worldRecords[e.Name] = { time = wr, holder = K.WR_HOLDERS[e.Name] or "Legend", isPlayer = false }
 end
 
@@ -2200,7 +2610,12 @@ end
 -- PLAYER CONTROL
 ---------------------------------------------------------------------
 local function runnerSample(r: Runner): (Vector3, Vector3)
-	return trackSample(r.lane, r.sStart - START_BACK + r.dist)
+	local line = r.line
+	local d = r.dist + (r.visOffset or 0)
+	if line then
+		return line.origin + line.dir * (d - START_BACK), line.dir
+	end
+	return trackSample(r.lane, r.sStart - START_BACK + d)
 end
 
 local function getPlayerParts(): (Model?, Humanoid?, BasePart?)
@@ -2288,9 +2703,6 @@ local function lockPlayer(lock: boolean)
 			hum.JumpHeight = savedHumanoid.JumpHeight
 			hum.AutoRotate = savedHumanoid.AutoRotate
 		end
-		if char then
-			setAnimateEnabled(char, true)
-		end
 	end
 end
 
@@ -2306,9 +2718,29 @@ local function placePlayerAt(r: Runner)
 	r.rootHeight = h
 	r.model = char
 	r.root = root
+	r.external = true
+	r.lastPos = nil
 	if not r.rig or r.rig.model ~= char then
 		r.rig = newRig(char)
 	end
+end
+
+-- distance = how far your character really ran along the lane this frame
+local function measurePlayer(r: Runner)
+	local root = r.root
+	if not r.external or not root then
+		return
+	end
+	local rp = root.Position
+	local lp = r.lastPos
+	if lp then
+		local _, dir = runnerSample(r)
+		local d = Vector3.new(rp.X - lp.X, 0, rp.Z - lp.Z):Dot(dir)
+		if d > 0 and d < 25 then
+			r.dist += d
+		end
+	end
+	r.lastPos = rp
 end
 
 local function drivePlayerCharacter(r: Runner)
@@ -2317,36 +2749,30 @@ local function drivePlayerCharacter(r: Runner)
 		return
 	end
 	if r.model ~= char then
-		placePlayerAt(r) -- respawned mid race
+		if r.external then
+			placePlayerAt(r) -- respawned mid race
+		end
 		return
 	end
+	-- you are never moved by the game while running: the Humanoid runs at
+	-- your speed along your lane and the race distance follows your body
 	local pos, dir = runnerSample(r)
 	local rp = root.Position
 	local err = Vector3.new(pos.X - rp.X, 0, pos.Z - rp.Z)
-	if err.Magnitude > 12 or rp.Y < FLOOR_TOP - 5 then
-		placePlayerAt(r)
-		return
-	end
-	if r.speed < 0.05 and not r.started then
+	if r.speed < 0.05 then
 		hum.WalkSpeed = 0
 		hum:Move(Vector3.zero)
 		return
 	end
-	local along = err:Dot(dir)
-	local lateral = err - dir * along
+	local lateral = err - dir * err:Dot(dir)
 	hum.AutoRotate = true
-	hum.WalkSpeed = math.clamp(r.speed + along * 3, 0, r.speed * 1.25 + 4)
-	local move = dir * math.max(r.speed, 1) + lateral * 5
-	if move.Magnitude > 0.01 and hum.WalkSpeed > 0.05 then
-		hum:Move(move.Unit)
-	else
-		hum:Move(Vector3.zero)
-	end
+	hum.WalkSpeed = r.speed
+	hum:Move((dir * math.max(r.speed, 1) + lateral * 4).Unit)
 end
 
 -- relay baton in your right hand
 local baton: BasePart? = nil
-local function giveBaton(give: boolean)
+local function giveBaton(give: boolean, holder: Model?)
 	if baton then
 		baton:Destroy()
 		baton = nil
@@ -2354,7 +2780,7 @@ local function giveBaton(give: boolean)
 	if not give then
 		return
 	end
-	local char = player.Character
+	local char = holder or player.Character
 	local hand = char and (char:FindFirstChild("RightHand") or char:FindFirstChild("Right Arm"))
 	if not hand or not hand:IsA("BasePart") then
 		return
@@ -2413,6 +2839,23 @@ local function runnerPose(r: Runner, event: Event): Pose
 		local drive = driveAmount(r, event)
 		local amp = math.clamp(0.62 + frac * 0.42 + drive * 0.3, 0, 1)
 		return poseRun(r.phase, amp, drive, r.bend, isR15)
+	elseif state == "handoffGive" or state == "handoffTake" then
+		-- baton exchange: incoming runner reaches forward, outgoing reaches back
+		local frac = math.clamp(r.speed / event.MaxSpeed, 0, 1)
+		local pose = poseRun(r.phase, math.clamp(0.6 + frac * 0.4, 0, 1), 0, r.bend, isR15)
+		if state == "handoffGive" then
+			pose.shoulderR = J(1.5, 0, 0.05)
+			pose.elbowR = J(0.08)
+			pose.root[1] -= 0.1
+			pose.neck = J(0.25)
+		else
+			pose.shoulderR = J(-1.05, 0, 0.3)
+			pose.elbowR = J(0.12)
+			pose.neck = J(0.1, 0.25, 0)
+		end
+		return pose
+	elseif state == "relayWait" then
+		return X.poseRelayWait(r.poseClock, isR15)
 	elseif state == "dip" then
 		return poseDip(isR15)
 	elseif state == "celebrate" then
@@ -2423,25 +2866,41 @@ end
 
 RunService.PreSimulation:Connect(function(dt: number)
 	local current = race
-	if not current then
-		return
-	end
-	for _, r in ipairs(current.runners) do
-		local rig = r.rig
-		if rig and rig.model.Parent then
-			r.poseClock += dt
-			local frac = math.clamp(r.speed / current.event.MaxSpeed, 0, 1)
-			if r.speed > 0.2 then
-				-- 1.8 strides/s out of the blocks -> ~2.2 at top speed (4.4 steps/s, like Bolt)
-				r.phase = (r.phase + dt * (1.8 + 0.42 * frac)) % 1
+	local animated: { [Model]: boolean } = {}
+	if current then
+		local bodies: { any } = table.clone(current.runners)
+		local rs = current.relay
+		if rs then
+			if rs.mate then
+				table.insert(bodies, rs.mate)
 			end
-			-- lean into the bend (Lyles-style bend running)
-			local s = r.sStart - START_BACK + r.dist
-			local bendTarget = if onBend(r.lane, s) and r.poseState == "run" then 0.17 * frac * frac * (R1 / laneRadius(r.lane)) else 0
-			r.bend += (bendTarget - r.bend) * math.min(1, dt * 4)
-			local alpha = math.min(1, dt * (if r.poseState == "run" then 18 else 9))
-			applyPose(rig, runnerPose(r, current.event), alpha)
+			for _, b in ipairs(rs.trailing) do
+				table.insert(bodies, b)
+			end
 		end
+		for _, r in ipairs(bodies) do
+			local rig = r.rig
+			if rig and rig.model.Parent then
+				animated[rig.model] = true
+				r.poseClock += dt
+				local frac = math.clamp(r.speed / current.event.MaxSpeed, 0, 1)
+				if r.speed > 0.2 then
+					-- 1.8 strides/s out of the blocks -> ~2.2 at top speed (4.4 steps/s, like Bolt)
+					r.phase = (r.phase + dt * (1.8 + 0.42 * frac)) % 1
+				end
+				-- lean into the bend (Lyles-style bend running)
+				local bendTarget = 0
+				if not r.line and r.poseState == "run" and onBend(r.lane, r.sStart - START_BACK + r.dist) then
+					bendTarget = 0.17 * frac * frac * (R1 / laneRadius(r.lane))
+				end
+				r.bend += (bendTarget - r.bend) * math.min(1, dt * 4)
+				local alpha = math.min(1, dt * (if r.poseState == "run" then 18 else 9))
+				applyPose(rig, runnerPose(r, current.event), alpha)
+			end
+		end
+	end
+	if X.freeRoam then
+		X.freeRoam(dt, animated)
 	end
 end)
 
@@ -2635,6 +3094,9 @@ UserInputService.InputBegan:Connect(function(input: InputObject, processed: bool
 				end
 			end
 			s[rebinding.key] = kc
+			if X.saveSettings then
+				X.saveSettings()
+			end
 		end
 		rebinding = nil
 		refreshControlsUI()
@@ -2768,11 +3230,21 @@ for _, opt in ipairs(UI.options) do
 				Settings.Celebration = choice
 			elseif opt.key == "Voice" then
 				Settings.Voice = choice == "on"
+			elseif opt.key == "Bots" then
+				Settings.Bots = choice == "on"
 			end
 			refreshSettingsUI()
+			if X.saveSettings then
+				X.saveSettings()
+			end
 		end)
 	end
 end
+
+UI.indoorButton.Activated:Connect(function()
+	flash("INDOOR ARENA", K.ROYAL_LIGHT, "Coming soon!", 2.5)
+	announce("The indoor arena is coming soon!")
+end)
 
 local eventChoices = { "Rotation" }
 for _, e in ipairs(EVENTS) do
@@ -2783,6 +3255,9 @@ local function stepEvent(delta: number)
 	idx = ((idx - 1 + delta) % #eventChoices) + 1
 	Settings.Event = eventChoices[idx]
 	refreshSettingsUI()
+	if X.saveSettings then
+		X.saveSettings()
+	end
 end
 UI.eventPrev.Activated:Connect(function()
 	stepEvent(-1)
@@ -2959,6 +3434,7 @@ local function showOverlay(title: string, sub: string, headers: { string }, rows
 				elseif m == "DQ" or m == "NR" then K.C_BAD
 				elseif m == "WR" or m == "G" then K.GOLD
 				elseif m == "S" then K.SILVER
+				elseif m == "PB" then K.ROYAL_LIGHT
 				elseif m == "B" then K.BRONZE
 				else K.C_WARN
 		end
@@ -3041,7 +3517,7 @@ local function updateProgress(current: Race)
 	local you = current.you
 	UI.progressFill.Size = UDim2.fromScale(if you then math.clamp(you.dist / current.goal, 0, 1) else 0, 1)
 	for i, z in ipairs(UI.zoneTicks) do
-		z.Visible = current.event.Relay and i < current.event.Legs
+		z.Visible = false
 		if z.Visible then
 			z.Position = UDim2.fromScale(legLine(current.event, i) / current.goal, 0.5)
 		end
@@ -3182,35 +3658,13 @@ local function resetForRestart(current: Race)
 	end
 end
 
--- starting blocks + (relays) your exchange zones highlighted on the track
+-- starting blocks (relays: nothing on the track, just the PASS button)
 local function placeRaceProps(current: Race, you: Runner)
 	local pos, dir = trackSample(you.lane, you.sStart - START_BACK - 0.8)
 	local cf = CFrame.lookAt(pos, pos + dir)
 	block({ Name = "BlockRail", Size = Vector3.new(0.35, 0.18, 2.6), CFrame = cf * CFrame.new(0, 0.09 - FLOOR_TOP + TRACK_TOP, 0), Color = Color3.fromRGB(70, 70, 76), Material = Enum.Material.Metal, Parent = RaceFolder })
 	for _, info in ipairs({ { -0.45, -0.55 }, { 0.45, 0.6 } }) do
 		block({ Name = "Pedal", Size = Vector3.new(0.55, 0.6, 0.15), CFrame = cf * CFrame.new(info[1], 0.32 - FLOOR_TOP + TRACK_TOP, info[2]) * CFrame.Angles(math.rad(-50), 0, 0), Color = Color3.fromRGB(230, 230, 230), Material = Enum.Material.SmoothPlastic, Parent = RaceFolder })
-	end
-	local event = current.event
-	if not event.Relay then
-		return
-	end
-	for k = 1, event.Legs - 1 do
-		local line = legLine(event, k)
-		local from = line - CONFIG.ZoneBefore * SPM
-		local to = line + CONFIG.ZoneAfter * SPM
-		local step = 3
-		local d = from
-		while d < to do
-			local seg = math.min(step, to - d)
-			local p, dd = trackSample(you.lane, you.sStart - START_BACK + d + seg / 2)
-			local c = CFrame.lookAt(p, p + dd)
-			local perfect = d + seg / 2 >= line - CONFIG.PerfectPassBefore * SPM and d + seg / 2 <= line + CONFIG.PerfectPassAfter * SPM
-			local part = flat("ExchangeZone", c, LANE_W - 0.6, seg + 0.05, MARK_TOP + 0.004, if perfect then K.C_GOOD else K.C_WARN, Enum.Material.Neon, 0.02, RaceFolder)
-			part.Transparency = 0.45
-			d += step
-		end
-		local p, dd = trackSample(you.lane, you.sStart - START_BACK + line)
-		flat("LegLine", CFrame.lookAt(p, p + dd), LANE_W - LINE_W, 0.3, MARK_TOP + 0.006, K.WHITE, Enum.Material.SmoothPlastic, 0.02, RaceFolder)
 	end
 end
 
@@ -3299,6 +3753,10 @@ local function updateBoards(current: Race, t: number)
 end
 
 local function runHeat(event: Event, round: string, athletes: { Athlete }, semiTimes: { [string]: { time: number?, heat: string, mark: string } }?): { Result }
+	local waitStart = os.clock()
+	while X.dashRunning and os.clock() - waitStart < 80 do
+		task.wait(0.2)
+	end
 	local lanes = shuffle({ 1, 2, 3, 4, 5, 6, 7, 8 })
 	local runners: { Runner } = {}
 	local you: Runner? = nil
@@ -3328,6 +3786,7 @@ local function runHeat(event: Event, round: string, athletes: { Athlete }, semiT
 		you = you,
 		splitMarks = splitMarks,
 		said = {},
+		relay = { mate = nil, trailing = {} },
 	}
 	race = current
 	UI.evName.Text = event.Name
@@ -3362,7 +3821,7 @@ local function runHeat(event: Event, round: string, athletes: { Athlete }, semiT
 	-- loading screen while you are taken to your lane
 	if you then
 		local yr = you
-		showLoading(string.upper(event.Name .. "  " .. round), "LANE " .. yr.lane .. (if event.Relay then "  -  you run every leg" else ""), 2.2, function()
+		showLoading(string.upper(event.Name .. "  " .. round), "LANE " .. yr.lane .. (if event.Relay then "  -  your team wears white & royal blue" else ""), 2.2, function()
 			placeRaceProps(current, yr)
 			lockPlayer(true)
 			placePlayerAt(yr)
@@ -3378,6 +3837,13 @@ local function runHeat(event: Event, round: string, athletes: { Athlete }, semiT
 	end
 	UI.touchLeft.Visible = you ~= nil
 	UI.touchRight.Visible = you ~= nil
+	if Settings.Bots then
+		for i, r in ipairs(runners) do
+			if not r.isPlayer then
+				X.addBot(r, i)
+			end
+		end
+	end
 
 	if round == "Final" then
 		introduceFinal(current, semiTimes or {})
@@ -3464,7 +3930,14 @@ local function runHeat(event: Event, round: string, athletes: { Athlete }, semiT
 		for _, r in ipairs(runners) do
 			local wasFinished = r.finished
 			local prevDist = r.dist
+			measurePlayer(r)
 			stepRunner(r, dt, t, event, current.goal)
+			if r.isPlayer and event.Relay and not r.dq then
+				X.relayTick(current, r, dt, t)
+			end
+			if r.poseState == "handoffTake" and t - r.handoffAt > 0.35 then
+				r.poseState = "run"
+			end
 			if not r.dq then
 				if r.started and r.poseState == "set" then
 					r.poseState = "run"
@@ -3486,8 +3959,15 @@ local function runHeat(event: Event, round: string, athletes: { Athlete }, semiT
 					end
 				end
 			end
+			if not r.isPlayer and r.model then
+				X.placeModel(r)
+			end
 			if r.isPlayer and not r.dq then
-				drivePlayerCharacter(r)
+				if r.external then
+					drivePlayerCharacter(r)
+				else
+					X.placeModel(r)
+				end
 				-- splits
 				local mark = current.splitMarks[nextSplit]
 				if mark and r.dist >= mark * SPM + START_BACK and r.speed > 0 then
@@ -3500,6 +3980,9 @@ local function runHeat(event: Event, round: string, athletes: { Athlete }, semiT
 				-- relay exchanges
 				if event.Relay and #r.splits > lastPassCount then
 					lastPassCount = #r.splits
+					if not r.finished then
+						X.handoff(current, r, t)
+					end
 					local legTime = r.splits[#r.splits]
 					table.insert(splitLines, string.format("Leg %d   %s", lastPassCount, fmtOfficial(legTime)))
 					setSplits(splitLines)
@@ -3548,7 +4031,7 @@ local function runHeat(event: Event, round: string, athletes: { Athlete }, semiT
 					announce(r.athlete.Name .. " wins it in " .. fmtOfficial(r.finishTime) .. "!", r.athlete.Name .. " wins it!")
 				end
 			end
-			if r.isPlayer and prevDist == 0 and r.dist > 0 then
+			if r.isPlayer and prevDist <= START_BACK and r.dist > START_BACK and r.started then
 				cam.shake = math.max(cam.shake, 0.3)
 			end
 		end
@@ -3614,31 +4097,13 @@ local function runHeat(event: Event, round: string, athletes: { Athlete }, semiT
 		r.place = i
 		local note = ""
 		if status == "OK" and r.finishTime then
-			local off = officialTime(r.finishTime)
-			local wr = worldRecords[event.Name]
-			if wr and off < wr.time then
-				local margin = math.floor((wr.time - off) * 100 + 0.5) / 100
-				if margin >= CONFIG.WRMinMargin and margin <= CONFIG.WRMaxMargin then
-					note = "WR"
-					worldRecords[event.Name] = { time = off, holder = r.athlete.Name, isPlayer = r.isPlayer }
-				elseif margin > CONFIG.WRMaxMargin then
-					note = "NR" -- beat by more than 0.05: not ratified
-				end
-			end
-			recordBest(event.Name, r.athlete, r.finishTime)
+			note = X.checkRecords(event.Name, r, r.finishTime)
 		end
 		r.note = note
 		table.insert(results, { athlete = r.athlete, lane = r.lane, time = if status == "OK" then r.finishTime else nil, rt = r.reaction, status = status, heat = round, mark = "", note = note })
 	end
 	for _, res in ipairs(results) do
-		if res.note == "WR" then
-			setVignette(0.5, K.GOLD)
-			flash("NEW WORLD RECORD!", K.GOLD, res.athlete.Name .. "  " .. fmtOfficial(res.time), 4)
-			announce("A NEW WORLD RECORD! " .. res.athlete.Name .. " runs " .. fmtOfficial(res.time) .. "!", "A new world record for " .. res.athlete.Name .. "!")
-		elseif res.note == "NR" then
-			flash("WR NOT RATIFIED", K.C_BAD, "Beaten by more than 0.05 s - it doesn't count", 4)
-			announce("That was under the world record by more than five hundredths, so it doesn't count!", "That world record does not count!")
-		end
+		X.recordFlash(res.note, res.athlete.Name, res.time)
 	end
 	refreshWR(event.Name)
 	return results
@@ -3848,6 +4313,903 @@ local function runEvent(event: Event)
 end
 
 ---------------------------------------------------------------------
+-- BOTS (optional), RELAY TEAMMATES, FREE-ROAM ANIMATION, SAVING,
+-- 40-YARD DASH
+---------------------------------------------------------------------
+-- move a body (bot / teammate / old relay runner) to its spot on the lane
+X.placeModel = function(b: any)
+	local root = b.root
+	if not root or not root.Parent then
+		return
+	end
+	local pos, dir = runnerSample(b)
+	local p = pos + Vector3.new(0, b.rootHeight, 0)
+	root.CFrame = CFrame.lookAt(p, p + dir)
+end
+
+X.stripModel = function(model: Model, keepKit: boolean)
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BaseScript") or d:IsA("ModuleScript") or d:IsA("Sound") or d:IsA("ForceField") or d:IsA("Tool")
+			or d:IsA("Animator") or d:IsA("BillboardGui") or d:IsA("ParticleEmitter") or d:IsA("Trail") or d.Name == "TF_Baton"
+		then
+			d:Destroy()
+		elseif not keepKit and (d:IsA("Accessory") or d:IsA("Clothing") or d:IsA("ShirtGraphic") or d:IsA("BodyColors") or d:IsA("SurfaceAppearance") or d:IsA("SurfaceGui")) then
+			d:Destroy()
+		end
+	end
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") then
+			d.Anchored = false
+			d.CanCollide = false
+			d.CanTouch = false
+			d.CanQuery = false
+			d.Massless = true
+			d.CastShadow = not Settings.PerformanceMode
+		end
+	end
+	local hum = model:FindFirstChildOfClass("Humanoid")
+	if hum then
+		hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+		hum.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+		hum.BreakJointsOnDeath = false
+		hum.RequiresNeck = false
+	end
+	local root = model:FindFirstChild("HumanoidRootPart")
+	if root and root:IsA("BasePart") then
+		root.Anchored = true
+		root.Transparency = 1
+		model.PrimaryPart = root
+	end
+end
+
+-- copy of your avatar (keeps the uniform when keepKit is true)
+X.cloneSelf = function(keepKit: boolean): Model?
+	local char = player.Character
+	if not char or not char:FindFirstChild("HumanoidRootPart") or not char:FindFirstChildOfClass("Humanoid") then
+		return nil
+	end
+	local was = char.Archivable
+	char.Archivable = true
+	local ok, copy = pcall(function()
+		return char:Clone()
+	end)
+	char.Archivable = was
+	if not ok or not copy then
+		return nil
+	end
+	X.stripModel(copy, keepKit)
+	if not copy:FindFirstChild("HumanoidRootPart") then
+		copy:Destroy()
+		return nil
+	end
+	return copy
+end
+
+-- simple blocky R6 runner, used when your avatar can't be copied
+X.blockRig = function(): Model
+	local model = create("Model", { Name = "Runner" })
+	local function limb(name: string, size: Vector3): any
+		return create("Part", { Name = name, Size = size, TopSurface = Enum.SurfaceType.Smooth, BottomSurface = Enum.SurfaceType.Smooth, Material = Enum.Material.SmoothPlastic, CanCollide = false, Massless = true, Parent = model })
+	end
+	local root = limb("HumanoidRootPart", Vector3.new(2, 2, 1))
+	root.Transparency = 1
+	root.Anchored = true
+	local torso = limb("Torso", Vector3.new(2, 2, 1))
+	local head = limb("Head", Vector3.new(2, 1, 1))
+	create("SpecialMesh", { MeshType = Enum.MeshType.Head, Scale = Vector3.new(1.25, 1.25, 1.25), Parent = head })
+	local parts = { ["Left Arm"] = limb("Left Arm", Vector3.new(1, 2, 1)), ["Right Arm"] = limb("Right Arm", Vector3.new(1, 2, 1)), ["Left Leg"] = limb("Left Leg", Vector3.new(1, 2, 1)), ["Right Leg"] = limb("Right Leg", Vector3.new(1, 2, 1)) }
+	local function motor(name: string, p0: BasePart, p1: BasePart, c0: CFrame, c1: CFrame)
+		create("Motor6D", { Name = name, Part0 = p0, Part1 = p1, C0 = c0, C1 = c1, Parent = p0 })
+	end
+	motor("RootJoint", root, torso, CFrame.new(0, 0, 0, -1, 0, 0, 0, 0, 1, 0, 1, 0), CFrame.new(0, 0, 0, -1, 0, 0, 0, 0, 1, 0, 1, 0))
+	motor("Neck", torso, head, CFrame.new(0, 1, 0, -1, 0, 0, 0, 0, 1, 0, 1, 0), CFrame.new(0, -0.5, 0, -1, 0, 0, 0, 0, 1, 0, 1, 0))
+	motor("Right Shoulder", torso, parts["Right Arm"], CFrame.new(1, 0.5, 0, 0, 0, 1, 0, 1, 0, -1, 0, 0), CFrame.new(-0.5, 0.5, 0, 0, 0, 1, 0, 1, 0, -1, 0, 0))
+	motor("Left Shoulder", torso, parts["Left Arm"], CFrame.new(-1, 0.5, 0, 0, 0, -1, 0, 1, 0, 1, 0, 0), CFrame.new(0.5, 0.5, 0, 0, 0, -1, 0, 1, 0, 1, 0, 0))
+	motor("Right Hip", torso, parts["Right Leg"], CFrame.new(1, -1, 0, 0, 0, 1, 0, 1, 0, -1, 0, 0), CFrame.new(0.5, 1, 0, 0, 0, 1, 0, 1, 0, -1, 0, 0))
+	motor("Left Hip", torso, parts["Left Leg"], CFrame.new(-1, -1, 0, 0, 0, -1, 0, 1, 0, 1, 0, 0), CFrame.new(-0.5, 1, 0, 0, 0, -1, 0, 1, 0, 1, 0, 0))
+	create("Humanoid", { RigType = Enum.HumanoidRigType.R6, HipHeight = 0, DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None, Parent = model })
+	model.PrimaryPart = root
+	return model
+end
+
+-- bots on the track (Settings > Bots): your avatar's body in their own kit
+X.addBot = function(r: Runner, index: number)
+	local model = X.cloneSelf(false) or X.blockRig()
+	model.Name = r.athlete.Name
+	local hum = model:FindFirstChildOfClass("Humanoid")
+	local isR15 = hum ~= nil and hum.RigType == Enum.HumanoidRigType.R15
+	local kit = K.KITS[((index - 1) % #K.KITS) + 1]
+	local shorts = kit:Lerp(Color3.new(0, 0, 0), 0.5)
+	local skin = K.SKINS[((index * 3) % #K.SKINS) + 1]
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") and d.Name ~= "HumanoidRootPart" then
+			local n = d.Name
+			if n == "UpperTorso" or n == "Torso" then
+				d.Color = kit
+			elseif n == "LowerTorso" or n == "LeftUpperLeg" or n == "RightUpperLeg" or (not isR15 and (n == "Left Leg" or n == "Right Leg")) then
+				d.Color = shorts
+			elseif n == "LeftFoot" or n == "RightFoot" then
+				d.Color = K.WHITE
+			else
+				d.Color = skin
+			end
+			if d:IsA("MeshPart") then
+				pcall(function()
+					(d :: MeshPart).TextureID = ""
+				end)
+			end
+		end
+	end
+	model.Parent = RaceFolder
+	r.model = model
+	r.root = model:FindFirstChild("HumanoidRootPart") :: BasePart?
+	r.rig = newRig(model)
+	r.rootHeight = rootHeightOf(model)
+	X.placeModel(r)
+end
+
+-- relays: your teammates are copies of you in the team uniform. One waits in
+-- the exchange zone, looks back, starts running, and you hand over the baton.
+X.relayTick = function(current: Race, r: Runner, dt: number, t: number)
+	local event = current.event
+	local rs = current.relay
+	local vo = r.visOffset
+	if vo then
+		vo *= math.exp(-dt * 2.5)
+		r.visOffset = if vo > 0.02 then vo else nil
+	end
+	-- runners who already handed over: slow down and stop in their lane
+	for _, b in ipairs(rs.trailing) do
+		b.speed = math.max(0, b.speed - 14 * dt)
+		if b.poseState == "handoffGive" and t - b.since > 0.4 then
+			b.poseState = "run"
+		end
+		if b.poseState == "run" and b.speed < 3 then
+			b.poseState = "celebrate"
+			b.celebrate = "watch"
+			b.poseClock = 0
+		end
+		if b.isCharacter then
+			local char, hum = getPlayerParts()
+			if hum and char == b.model then
+				local _, dir = runnerSample(b)
+				hum.WalkSpeed = b.speed
+				hum:Move(if b.speed > 0.3 then dir else Vector3.zero)
+			end
+		else
+			b.dist += b.speed * dt
+			X.placeModel(b)
+		end
+	end
+	if r.finished or r.leg >= event.Legs then
+		return
+	end
+	local line = legLine(event, r.leg)
+	local zoneStart = line - CONFIG.ZoneBefore * SPM
+	local mate = rs.mate
+	if not mate and r.dist >= zoneStart - 45 * SPM then
+		local m = X.cloneSelf(true) or X.blockRig()
+		if m then
+			m.Name = "Teammate" .. (r.leg + 1)
+			mate = {
+				model = m,
+				root = m:FindFirstChild("HumanoidRootPart"),
+				rig = newRig(m),
+				rootHeight = rootHeightOf(m),
+				lane = r.lane,
+				sStart = r.sStart,
+				dist = zoneStart,
+				speed = 0,
+				running = false,
+				phase = 0.25,
+				poseState = "relayWait",
+				poseClock = 0,
+				bend = 0,
+				finished = false,
+				celebrate = "watch",
+				forLeg = r.leg,
+			}
+			m.Parent = RaceFolder
+			rs.mate = mate
+		end
+	end
+	if mate and mate.forLeg == r.leg then
+		-- the teammate takes off when you're 10 m from the zone and is timed to be an arm's
+		-- length ahead, at about your speed, right in the middle of the perfect-pass window
+		local goAt = zoneStart - 10 * SPM
+		local meetAt = line - (CONFIG.PerfectPassBefore - CONFIG.PerfectPassAfter) * 0.5 * SPM
+		if not mate.running and r.dist >= goAt then
+			mate.running = true
+			mate.poseState = "run"
+		end
+		if mate.running then
+			local before = mate.dist
+			local dRunner = meetAt - goAt
+			local dMate = meetAt + 1.8 - zoneStart
+			local u = math.max(0, (r.dist - goAt) / dRunner)
+			local target
+			if u <= 1 then
+				local k = math.clamp(0.97 * dRunner / dMate, 0.5, 2.9)
+				local b = k - 2
+				local a = 1 - b
+				target = zoneStart + dMate * (a * u * u + b * u * u * u)
+			else
+				target = before + r.speed * 0.97 * dt
+			end
+			mate.dist = math.max(before, target, r.dist + 1.8)
+			mate.speed = if dt > 0 then (mate.dist - before) / dt else mate.speed
+		end
+		X.placeModel(mate)
+	end
+end
+
+-- the pass: baton goes from your hand to your teammate's, the camera stays with the baton
+X.handoff = function(current: Race, r: Runner, t: number)
+	local rs = current.relay
+	local mate = rs.mate
+	if not mate or not mate.root then
+		return
+	end
+	table.insert(rs.trailing, {
+		model = r.model,
+		root = r.root,
+		rig = r.rig,
+		rootHeight = r.rootHeight,
+		lane = r.lane,
+		sStart = r.sStart,
+		dist = r.dist,
+		speed = r.speed,
+		phase = r.phase,
+		poseState = "handoffGive",
+		poseClock = 0,
+		since = t,
+		bend = r.bend,
+		finished = false,
+		celebrate = "watch",
+		isCharacter = r.external,
+	})
+	r.model = mate.model
+	r.root = mate.root
+	r.rig = mate.rig
+	r.rootHeight = mate.rootHeight
+	r.visOffset = math.max(0, mate.dist - r.dist) -- no free distance: the new runner eases back onto your line
+	r.phase = mate.phase
+	r.external = false
+	r.poseState = "handoffTake"
+	r.handoffAt = t
+	giveBaton(true, mate.model)
+	rs.mate = nil
+end
+
+X.poseRelayWait = function(t: number, isR15: boolean): Pose
+	local bob = math.sin(t * 4) * 0.03
+	return {
+		root = J(-0.35, 0, 0, (isR15 and -0.2 or 0) + bob),
+		waist = J(0, 0.35),
+		neck = J(0.2, 1.1, 0), -- looking back for the incoming runner
+		hipL = J(0.5),
+		kneeL = J(-0.5),
+		hipR = J(-0.15),
+		kneeR = J(-0.25),
+		shoulderR = J(-0.6, 0, 0.2),
+		elbowR = J(0.3),
+		shoulderL = J(0.6, 0, -0.1),
+		elbowL = J(1.2),
+	}
+end
+
+-- custom idle / walk / jump animations when you're not racing
+X.poseIdle = function(t: number, isR15: boolean): Pose
+	local cycle = t % 14
+	local breathe = math.sin(t * 2.1) * 0.025
+	local sway = math.sin(t * 0.7) * 0.04
+	if cycle > 8.5 and cycle < 11 then
+		-- shake the legs and arms out, like a sprinter before a race
+		local s = math.sin(t * 22)
+		return {
+			root = J(0, 0, sway, math.abs(math.sin(t * 9)) * 0.08),
+			neck = J(-0.1),
+			shoulderR = J(0.1 + s * 0.12, 0, 0.25 + s * 0.1),
+			shoulderL = J(0.1 - s * 0.12, 0, -0.25 - s * 0.1),
+			elbowR = J(0.3 + s * 0.2),
+			elbowL = J(0.3 - s * 0.2),
+			kneeR = J(-0.15 - math.max(0, s) * 0.25),
+			kneeL = J(-0.15 - math.max(0, -s) * 0.25),
+		}
+	elseif cycle >= 11 then
+		-- hands on hips, looking around
+		return {
+			root = J(0, 0, 0, breathe),
+			neck = J(0.05, math.sin((cycle - 11) * 2.1) * 0.7, 0),
+			shoulderR = J(-0.2, 0, 0.5),
+			shoulderL = J(-0.2, 0, -0.5),
+			elbowR = J(1.7),
+			elbowL = J(1.7),
+			hipR = J(0, 0, 0.06),
+			hipL = J(0, 0, -0.06),
+		}
+	end
+	return {
+		root = J(0, 0, sway, breathe),
+		waist = J(0, sway * 1.5),
+		neck = J(0.02, math.sin(t * 0.5) * 0.15),
+		shoulderR = J(0.05, 0, 0.1),
+		shoulderL = J(0.05, 0, -0.1),
+		elbowR = J(0.2),
+		elbowL = J(0.2),
+		hipR = J(0, 0, 0.04),
+		hipL = J(0, 0, -0.04),
+	}
+end
+
+X.poseWalk = function(u: number, amp: number, isR15: boolean): Pose
+	local s, c = math.sin(u * math.pi * 2), math.cos(u * math.pi * 2)
+	if isR15 then
+		return {
+			root = J(-0.04, 0.06 * s * amp, 0, -0.05 * math.abs(c) * amp),
+			waist = J(0, -0.08 * s * amp),
+			neck = J(0.04, 0.04 * s),
+			hipR = J(0.45 * amp * s),
+			hipL = J(-0.45 * amp * s),
+			kneeR = J(-(0.12 + 0.75 * amp * math.max(0, c))),
+			kneeL = J(-(0.12 + 0.75 * amp * math.max(0, -c))),
+			ankleR = J(0.15 * amp * c),
+			ankleL = J(-0.15 * amp * c),
+			shoulderR = J(-0.45 * amp * s, 0, 0.08),
+			shoulderL = J(0.45 * amp * s, 0, -0.08),
+			elbowR = J(0.25 + 0.2 * amp * math.max(0, -s)),
+			elbowL = J(0.25 + 0.2 * amp * math.max(0, s)),
+		}
+	end
+	return {
+		root = J(-0.03, 0.05 * s * amp, 0, 0.05 * math.abs(c) * amp),
+		hipR = J(0.6 * amp * s),
+		hipL = J(-0.6 * amp * s),
+		shoulderR = J(-0.65 * amp * s, 0, 0.06),
+		shoulderL = J(0.65 * amp * s, 0, -0.06),
+	}
+end
+
+X.poseAir = function(vy: number): Pose
+	if vy > 0 then
+		return { root = J(0.05), neck = J(0.2), shoulderR = J(0.7, 0, 0.35), shoulderL = J(0.7, 0, -0.35), elbowR = J(0.6), elbowL = J(0.6), hipR = J(0.6), kneeR = J(-1.0), hipL = J(0.2), kneeL = J(-0.45) }
+	end
+	return { root = J(0), neck = J(0.1), shoulderR = J(0.4, 0, 0.9), shoulderL = J(0.4, 0, -0.9), hipR = J(0.25), kneeR = J(-0.35), hipL = J(-0.1), kneeL = J(-0.2) }
+end
+
+X.free = { model = nil, rig = nil, lastPos = nil, speed = 0, vy = 0, phase = 0, clock = 0 }
+X.freeRoam = function(dt: number, animated: { [Model]: boolean })
+	local char = player.Character
+	local f = X.free
+	if not char or animated[char] then
+		f.lastPos = nil
+		return
+	end
+	local root = char:FindFirstChild("HumanoidRootPart")
+	if not root or not root:IsA("BasePart") then
+		return
+	end
+	if f.model ~= char or not f.rig then
+		f.model = char
+		f.rig = newRig(char)
+		setAnimateEnabled(char, false)
+	end
+	local rig = f.rig
+	if not rig then
+		return
+	end
+	local pos = root.Position
+	local v = Vector3.zero
+	if f.lastPos and dt > 0 then
+		v = (pos - f.lastPos) / dt
+	end
+	f.lastPos = pos
+	local horizontal = Vector3.new(v.X, 0, v.Z).Magnitude
+	if horizontal > 200 then
+		horizontal = 0 -- a respawn / spawn, not movement
+	end
+	f.speed += (horizontal - f.speed) * math.min(1, dt * 8)
+	f.vy += (math.clamp(v.Y, -200, 200) - f.vy) * math.min(1, dt * 10)
+	f.clock += dt
+	local pose: Pose
+	if math.abs(f.vy) > 6 then
+		pose = X.poseAir(f.vy)
+	elseif f.speed > 0.6 then
+		local running = f.speed > 19
+		f.phase = (f.phase + dt * (if running then 1.6 + f.speed / 40 else 0.85 + f.speed / 14)) % 1
+		pose = if running then poseRun(f.phase, 0.7, 0, 0, rig.isR15) else X.poseWalk(f.phase, math.clamp(f.speed / 16, 0.35, 1), rig.isR15)
+	else
+		pose = X.poseIdle(f.clock, rig.isR15)
+	end
+	applyPose(rig, pose, math.min(1, dt * 10))
+end
+
+-- records: world record (0.01 - 0.05 s rule), personal best, saving
+X.checkRecords = function(eventName: string, r: Runner, time: number): string
+	local note = ""
+	if r.isPlayer then
+		local off = officialTime(time)
+		local wr = worldRecords[eventName]
+		local oldBest = bestOf(eventName, r.athlete.Name)
+		if wr and off < wr.time then
+			local margin = math.floor((wr.time - off) * 100 + 0.5) / 100
+			if margin >= CONFIG.WRMinMargin and margin <= CONFIG.WRMaxMargin then
+				note = "WR"
+				worldRecords[eventName] = { time = off, holder = player.Name, isPlayer = true }
+			elseif margin > CONFIG.WRMaxMargin then
+				note = "NR" -- beaten by more than 0.05: not ratified
+			end
+		end
+		if note ~= "WR" and (not oldBest or time < oldBest - 1e-6) then
+			note = if note == "NR" then "NR" else "PB"
+		end
+		X.submit(eventName, time)
+	end
+	recordBest(eventName, r.athlete, time)
+	return note
+end
+
+X.recordFlash = function(note: string, name: string, time: number?)
+	if note == "WR" then
+		setVignette(0.5, K.GOLD)
+		flash("NEW WORLD RECORD!", K.GOLD, name .. "  " .. fmtOfficial(time), 4)
+		announce("A NEW WORLD RECORD! " .. name .. " runs " .. fmtOfficial(time) .. "!", "A new world record for " .. name .. "!")
+	elseif note == "NR" then
+		flash("WR NOT RATIFIED", K.C_BAD, "Beaten by more than 0.05 s - it doesn't count", 4)
+		announce("That was under the world record by more than five hundredths, so it doesn't count!", "That world record does not count!")
+	elseif note == "PB" then
+		flash("NEW PERSONAL BEST!", K.ROYAL_LIGHT, fmtOfficial(time), 3)
+	end
+end
+
+X.net = nil
+X.submit = function(eventName: string, time: number)
+	local net = X.net
+	if net and net.Submit then
+		net.Submit:FireServer(eventName, time)
+	end
+end
+
+X.saveSettings = function()
+	local net = X.net
+	if not net or not net.SaveSettings then
+		return
+	end
+	local s: any = Settings
+	local out = {}
+	for _, k in ipairs({ "Event", "TrackColor", "Camera", "Celebration" }) do
+		out[k] = s[k]
+	end
+	for _, k in ipairs({ "Uniform", "Voice", "PerformanceMode", "Bots" }) do
+		out[k] = s[k]
+	end
+	for _, k in ipairs({ "LeftKey", "RightKey", "PassKey" }) do
+		out[k] = s[k].Name
+	end
+	net.SaveSettings:FireServer(out)
+end
+
+X.applyRecord = function(name: any, rec: any)
+	if type(name) == "string" and worldRecords[name] and type(rec) == "table" and type(rec.time) == "number" and rec.time > 0 then
+		worldRecords[name] = { time = rec.time, holder = tostring(rec.holder), isPlayer = rec.holder == player.Name }
+	end
+end
+
+X.loadSettings = function(saved: { [string]: any })
+	local s: any = Settings
+	for _, k in ipairs({ "Event", "TrackColor", "Camera", "Celebration" }) do
+		if type(saved[k]) == "string" then
+			s[k] = saved[k]
+		end
+	end
+	for _, k in ipairs({ "Uniform", "Voice", "PerformanceMode", "Bots" }) do
+		if type(saved[k]) == "boolean" then
+			s[k] = saved[k]
+		end
+	end
+	for _, k in ipairs({ "LeftKey", "RightKey", "PassKey" }) do
+		if type(saved[k]) == "string" then
+			local ok, kc = pcall(function()
+				return (Enum.KeyCode :: any)[saved[k]]
+			end)
+			if ok and kc then
+				s[k] = kc
+			end
+		end
+	end
+	if not table.find(eventChoices, s.Event) then
+		s.Event = "Rotation"
+	end
+	if not K.TRACK_COLORS[s.TrackColor] then
+		s.TrackColor = "Red"
+	end
+	if s.Camera ~= "Chase" and s.Camera ~= "Side" then
+		s.Camera = "Chase"
+	end
+	if s.Celebration ~= "Bolt" and s.Celebration ~= "Lyles" then
+		s.Celebration = "Bolt"
+	end
+	applyTrackColor()
+	applyPerformance()
+	refreshUniform()
+	refreshSettingsUI()
+	refreshControlsUI()
+end
+
+X.netInit = function()
+	local folder = game:GetService("ReplicatedStorage"):WaitForChild("TrackAndFieldNet", 6)
+	if not folder then
+		return -- running without the server half: nothing is saved this session
+	end
+	local getData = folder:WaitForChild("GetData", 5)
+	if not getData or not getData:IsA("RemoteFunction") then
+		return
+	end
+	local ok, data = pcall(function()
+		return getData:InvokeServer()
+	end)
+	if not ok or type(data) ~= "table" then
+		return
+	end
+	X.net = {
+		Submit = folder:FindFirstChild("Submit"),
+		SaveSettings = folder:FindFirstChild("SaveSettings"),
+		Dash = folder:FindFirstChild("Dash"),
+		Records = folder:FindFirstChild("Records"),
+	}
+	X.saving = data.saving == true
+	if type(data.pbs) == "table" then
+		for name, t in pairs(data.pbs) do
+			if type(name) == "string" and seasonBests[name] and type(t) == "number" then
+				recordBest(name, if string.sub(name, 1, 2) == "4x" then youTeam else youAthlete, t)
+			end
+		end
+	end
+	if type(data.records) == "table" then
+		for name, rec in pairs(data.records) do
+			X.applyRecord(name, rec)
+		end
+	end
+	if type(data.settings) == "table" then
+		X.loadSettings(data.settings)
+	end
+	local records = X.net.Records
+	if records and records:IsA("RemoteEvent") then
+		records.OnClientEvent:Connect(function(name: any, rec: any)
+			X.applyRecord(name, rec)
+			refreshLeaderboard()
+			X.dashRefreshBoard()
+			if type(rec) == "table" and rec.holder ~= player.Name and type(rec.time) == "number" then
+				announce("New world record in the " .. tostring(name) .. " by " .. tostring(rec.holder) .. ": " .. fmtTime(rec.time) .. "!")
+			end
+		end)
+	end
+	local dash = X.net.Dash
+	if dash and dash:IsA("RemoteEvent") then
+		dash.OnClientEvent:Connect(function(kind: any, curName: any, curId: any, line: any)
+			if kind == "state" then
+				X.onDashState(tostring(curName or ""), tonumber(curId) or 0, if type(line) == "table" then line else {})
+			end
+		end)
+		dash:FireServer("sync")
+	end
+	if not X.saving then
+		announce("Saving is off: publish the game and turn on Studio Access to API Services.")
+	end
+	refreshLeaderboard()
+end
+
+-- 40-YARD DASH on the grass (optional, with a line and its own world record)
+X.dashOrigin = Vector3.new(-70, 0, -46)
+X.dashDir = Vector3.new(1, 0, 0)
+X.dashRunning = false
+X.dashQueued = false
+X.dashWaiting = false
+X.dashState = { current = "", currentId = 0, line = {} }
+X.dashBoard = nil
+X.lastLinePos = 0
+
+X.dashBuild = function()
+	local f = create("Folder", { Name = "FortyYardDash", Parent = World })
+	local o, d = X.dashOrigin, X.dashDir
+	local yard = 0.9144 * SPM
+	local width = 16
+	for y = 0, 40, 5 do
+		local p = o + d * (y * yard)
+		block({ Name = "YardLine", Size = Vector3.new(if y == 0 or y == 40 then 0.5 else 0.25, 0.04, width), CFrame = CFrame.new(p.X, 0.03, p.Z), Color = K.WHITE, Material = Enum.Material.SmoothPlastic, Parent = f })
+	end
+	for _, side in ipairs({ -1, 1 }) do
+		local c = o + d * (20 * yard) + Vector3.new(0, 0, side * width / 2)
+		block({ Name = "SideLine", Size = Vector3.new(40 * yard + 6, 0.04, 0.3), CFrame = CFrame.new(c.X, 0.03, c.Z), Color = K.WHITE, Material = Enum.Material.SmoothPlastic, Parent = f })
+	end
+	for _, y in ipairs({ 10, 20, 30, 40 }) do
+		local p = o + d * (y * yard) + Vector3.new(0, 0, -width / 2 + 2.6)
+		local numberPart = block({ Name = "YardNumber", Size = Vector3.new(3.2, 0.05, 2.6), CFrame = CFrame.new(p.X, 0.04, p.Z) * CFrame.Angles(0, math.pi / 2, 0), Transparency = 1, Parent = f })
+		label3D(numberPart, Enum.NormalId.Top, 40, { { "N", UDim2.fromScale(0, 0), UDim2.fromScale(1, 1), tostring(y), K.WHITE } })
+	end
+	for _, y in ipairs({ 0, 40 }) do
+		for _, side in ipairs({ -1, 1 }) do
+			local p = o + d * (y * yard) + Vector3.new(0, 0, side * (width / 2 + 1.2))
+			block({ Name = "Cone", Size = Vector3.new(1.1, 1.5, 1.1), CFrame = CFrame.new(p.X, 0.75, p.Z), Color = Color3.fromRGB(255, 120, 20), Material = Enum.Material.SmoothPlastic, Parent = f })
+		end
+	end
+	local pad = block({ Name = "DashStartPad", Size = Vector3.new(3, 0.1, 5), CFrame = CFrame.new(o.X - 3.5, 0.05, o.Z), Color = K.ROYAL, Material = Enum.Material.SmoothPlastic, CanQuery = true, Parent = f })
+	local prompt = create("ProximityPrompt", {
+		ActionText = "Join the line",
+		ObjectText = "40-Yard Dash",
+		HoldDuration = 0,
+		MaxActivationDistance = 14,
+		RequiresLineOfSight = false,
+		Parent = pad,
+	})
+	prompt.Triggered:Connect(function()
+		X.dashJoin()
+	end)
+	for _, dx in ipairs({ -5, 5 }) do
+		block({ Name = "DashBoardLeg", Size = Vector3.new(0.4, 5, 0.4), CFrame = CFrame.new(o.X - 2 + dx, 2.5, o.Z - width / 2 - 5), Color = Color3.fromRGB(60, 62, 70), Material = Enum.Material.Metal, Parent = f })
+	end
+	local board = block({ Name = "DashBoard", Size = Vector3.new(12, 6, 0.5), CFrame = CFrame.new(o.X - 2, 7, o.Z - width / 2 - 5), Color = Color3.fromRGB(14, 16, 24), Material = Enum.Material.SmoothPlastic, Parent = f })
+	X.dashBoard = label3D(board, Enum.NormalId.Back, 20, {
+		{ "Title", UDim2.fromScale(0.04, 0.04), UDim2.fromScale(0.92, 0.2), "40-YARD DASH", K.WHITE },
+		{ "WR", UDim2.fromScale(0.04, 0.28), UDim2.fromScale(0.92, 0.18), "", K.GOLD },
+		{ "Now", UDim2.fromScale(0.04, 0.52), UDim2.fromScale(0.92, 0.16), "", K.C_TEXT },
+		{ "Line", UDim2.fromScale(0.04, 0.74), UDim2.fromScale(0.92, 0.18), "", K.C_MUTED },
+	})
+	X.dashRefreshBoard()
+end
+
+X.dashRefreshBoard = function()
+	local b = X.dashBoard
+	if not b then
+		return
+	end
+	local wr = worldRecords["40yd"]
+	b.WR.Text = if wr then ("WR  " .. fmtTime(wr.time) .. "  " .. wr.holder) else ""
+	local st = X.dashState
+	b.Now.Text = if st.current ~= "" then ("NOW RUNNING: " .. st.current) else "Walk to the blue pad to run"
+	b.Line.Text = if #st.line > 0 then ("IN LINE: " .. table.concat(st.line, ", ")) else "Nobody waiting"
+end
+
+X.racing = function(): boolean
+	local current = race
+	return current ~= nil and current.you ~= nil and current.phase ~= "done" and current.event ~= X.DASH
+end
+
+X.dashJoin = function()
+	if X.dashRunning or X.dashQueued then
+		return
+	end
+	local net = X.net
+	if net and net.Dash then
+		X.dashQueued = true
+		X.lastLinePos = 0
+		net.Dash:FireServer("join")
+		if X.racing() then
+			announce("You joined the line for the 40-yard dash. You'll go after this race.")
+		else
+			announce("You joined the line for the 40-yard dash.")
+		end
+	elseif X.racing() then
+		-- no server: run it as soon as this race is over
+		X.dashQueued = true
+		task.spawn(function()
+			while X.racing() do
+				task.wait(0.25)
+			end
+			X.dashQueued = false
+			X.dashRun()
+		end)
+		flash("40-YARD DASH", K.C_ACCENT, "You're up after this race", 2)
+	else
+		task.spawn(X.dashRun)
+	end
+end
+
+-- it's your turn: run now, or hold your spot (letting the next person go first) until your race is over
+X.dashTurn = function()
+	if X.dashWaiting then
+		return
+	end
+	X.dashWaiting = true
+	task.spawn(function()
+		while X.dashState.currentId == player.UserId and not X.dashRunning do
+			if not X.racing() then
+				X.dashQueued = false
+				X.dashWaiting = false
+				X.dashRun()
+				return
+			end
+			local net = X.net
+			if net and net.Dash then
+				net.Dash:FireServer("defer")
+			end
+			task.wait(3)
+		end
+		X.dashWaiting = false
+	end)
+end
+
+X.onDashState = function(curName: string, curId: number, line: { string })
+	X.dashState = { current = curName, currentId = curId, line = line }
+	X.dashRefreshBoard()
+	if curId == player.UserId and X.dashQueued and not X.dashRunning then
+		X.dashTurn()
+	elseif X.dashQueued then
+		local spot = table.find(line, player.Name)
+		if spot and spot ~= X.lastLinePos then
+			X.lastLinePos = spot
+			announce("You're number " .. spot .. " in line for the 40-yard dash.")
+		end
+	end
+end
+
+X.dashRun = function()
+	X.dashRunning = true
+	local net = X.net
+	if net and net.Dash then
+		net.Dash:FireServer("start")
+	end
+	local ok: boolean, err: any = pcall(function(): any
+		local char, hum, root = getPlayerParts()
+		if not char or not hum or not root then
+			return nil
+		end
+		local o, d = X.dashOrigin, X.dashDir
+		local event: Event = X.DASH
+		-- walk (never teleport) to the start line
+		local target = o - d * START_BACK
+		lockPlayer(false) -- you may still be frozen from the last race
+		local walkSpeed = hum.WalkSpeed
+		hum.WalkSpeed = math.max(walkSpeed, 24) -- jog over
+		flash("40-YARD DASH", K.C_ACCENT, "Head to the start line", 2)
+		local t0 = os.clock()
+		local lastMove = -10
+		local arrived = false
+		while os.clock() - t0 < 45 do
+			local rp = root.Position
+			if Vector3.new(rp.X - target.X, 0, rp.Z - target.Z).Magnitude < 2 then
+				arrived = true
+				break
+			end
+			if os.clock() - lastMove > 5 then -- MoveTo gives up after 8 s, so keep asking
+				lastMove = os.clock()
+				hum:MoveTo(Vector3.new(target.X, rp.Y, target.Z))
+			end
+			task.wait(0.1)
+		end
+		hum:Move(Vector3.zero)
+		hum.WalkSpeed = walkSpeed
+		if not arrived or not root.Parent then
+			flash("40-YARD DASH", K.C_WARN, "Didn't reach the start line - join again", 2.5)
+			return nil
+		end
+		lockPlayer(true)
+		local rp = root.Position
+		char:PivotTo(CFrame.lookAt(rp, rp + d)) -- turn to face the finish (same spot)
+		local r = newRunner(youAthlete, 1, event)
+		r.line = { origin = o, dir = d }
+		r.model = char
+		r.root = root
+		r.rig = newRig(char)
+		r.rootHeight = rootHeightOf(char)
+		r.external = true
+		r.dist = math.clamp(START_BACK + (rp - o):Dot(d), 0, START_BACK * 2)
+		local current: Race = {
+			event = event,
+			round = "Dash",
+			runners = { r },
+			phase = "set",
+			clock = 0,
+			goal = event.Meters * SPM + START_BACK,
+			falseStartBy = nil,
+			you = r,
+			splitMarks = {},
+			said = {},
+			relay = { mate = nil, trailing = {} },
+		}
+		race = current
+		UI.evName.Text = "40 YARDS"
+		UI.evRound.Text = "DASH ON THE GRASS"
+		refreshLeaderboard()
+		startCamera(r, "start")
+		UI.touchLeft.Visible = true
+		UI.touchRight.Visible = true
+		-- 3-point stance, then GO (tapping during "set" = false start, just go again)
+		while true do
+			current.phase = "set"
+			current.falseStartBy = nil
+			setPoses(current, "set")
+			flash("SET", K.GOLD, "40-yard dash", nil)
+			local hold = rng:NextNumber(1.2, 2)
+			local t1 = os.clock()
+			while os.clock() - t1 < hold and not current.falseStartBy do
+				task.wait()
+			end
+			if not current.falseStartBy then
+				break
+			end
+			current.phase = "falsestart"
+			setPoses(current, "stand")
+			flash("FALSE START", K.C_BAD, "Try again", 1.5)
+			waitFor(1.6)
+		end
+		current.phase = "running"
+		current.clock = 0
+		flash("GO!", K.C_GOOD, nil, 0.6)
+		cam.mode = "chase"
+		r.poseState = "set"
+		while true do
+			local dt = math.min(RunService.Heartbeat:Wait(), 0.1)
+			current.clock += dt
+			local t = current.clock
+			local wasFinished = r.finished
+			measurePlayer(r)
+			stepRunner(r, dt, t, event, current.goal)
+			if r.started and r.poseState == "set" then
+				r.poseState = "run"
+				r.phase = 0.25
+			end
+			if not r.finished and current.goal - r.dist < 2.2 * SPM and r.speed > 0 then
+				r.poseState = "dip"
+			elseif r.finished and r.poseState == "dip" and t - r.finishClock > 0.35 then
+				r.poseState = "run"
+			end
+			if r.finished and r.poseState ~= "celebrate" and r.speed < 6 and t - r.finishClock > 1 then
+				r.poseState = "celebrate"
+				r.celebrate = "podium"
+				r.poseClock = 0
+			end
+			drivePlayerCharacter(r)
+			if r.finished and not wasFinished then
+				cam.mode = "finish"
+				screenFlash(0.4)
+				flash(fmtOfficial(r.finishTime), K.GOLD, "40-yard dash", nil)
+			end
+			UI.clockLabel.Text = if r.finished then fmtOfficial(r.finishTime) else fmtClock(t)
+			updateHud(r, event)
+			updateProgress(current)
+			if r.finished and t - r.finishClock > 2.5 then
+				break
+			end
+			if t > 25 then
+				break
+			end
+		end
+		current.phase = "done"
+		if r.finished and r.finishTime then
+			local note = X.checkRecords(event.Name, r, r.finishTime)
+			announce("40-yard dash: " .. player.Name .. " runs " .. fmtOfficial(r.finishTime) .. "!")
+			X.recordFlash(note, player.Name, r.finishTime)
+			X.dashRefreshBoard()
+			waitFor(2.5)
+		end
+		return nil
+	end)
+	if not ok then
+		warn("[Track And Field] 40-yard dash: " .. tostring(err))
+	end
+	local current = race
+	if current and current.event == X.DASH then
+		race = nil
+	end
+	stopCamera()
+	lockPlayer(false)
+	updateHud(nil, nil)
+	UI.progress.Visible = false
+	UI.posBadge.Text = ""
+	UI.touchLeft.Visible = false
+	UI.touchRight.Visible = false
+	UI.clockLabel.Text = "0.00"
+	clearFlash()
+	setVignette(0)
+	refreshLeaderboard()
+	if net and net.Dash then
+		net.Dash:FireServer("done")
+	end
+	X.dashRunning = false
+end
+
+---------------------------------------------------------------------
 -- START
 ---------------------------------------------------------------------
 local camera0 = Workspace.CurrentCamera
@@ -3880,14 +5242,15 @@ local function onCharacter(char: Model)
 	end)
 	local current = race
 	local you = current and current.you
-	if current and you and not you.dq and current.phase ~= "done" then
+	X.free.model = nil
+	if current and you and not you.dq and current.phase ~= "done" and you.external then
 		-- respawned mid race: put the new character back in its lane
 		task.wait(0.5)
 		lockPlayer(true)
 		you.rig = nil
 		placePlayerAt(you)
 		setBib(you.lane)
-		giveBaton(current.event.Relay)
+		giveBaton(current.event.Relay and you.leg == 1)
 	else
 		local controls = getControls()
 		if controls then
@@ -3906,10 +5269,12 @@ task.spawn(function()
 		buildTerrain()
 		buildTrack()
 		buildDecor()
+		X.dashBuild()
 		setupLighting()
 		setupVoice()
 		applyPerformance()
 	end)
+	X.netInit()
 	if player.Character then
 		onCharacter(player.Character)
 	end
