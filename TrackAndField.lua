@@ -1,16 +1,22 @@
 --[[
 	=====================================================================
-	  TRACK AND FIELD  (demo)                            one script
+	  TRACK AND FIELD  v5 (demo)                         one script
 	=====================================================================
 	  INSTALL (one script does everything)
+	    0. Installed an older version before? DELETE it first - look for an old
+	       LocalScript in StarterPlayer > StarterPlayerScripts (and any older
+	       Script in ServerScriptService). Two copies running at once fight over
+	       your character. (This version also finds old copies and switches them
+	       off, and shows "OLD VERSION FOUND" if it had to.)
 	    1. Roblox Studio -> an empty Baseplate place, published, with
 	       Game Settings > Security > "Enable Studio Access to API Services" ON
 	       (needed to save PBs and world records).
 	    2. Explorer: ServerScriptService -> insert a Script, paste this whole file, Play.
-	       The server half saves progress and runs the 40-yard dash line; it
-	       copies itself to every player as the client half automatically.
+	       The server half saves progress, runs the 40-yard dash line and puts the
+	       uniform on everyone; it copies itself to every player as the client half.
 	    (No server access? Paste it into a LocalScript in StarterPlayerScripts
-	     instead: everything works, but nothing is saved.)
+	     instead: everything works, but nothing is saved and only you see the kit.)
+	    The menu (top left) shows "TRACK AND FIELD v5" so you know which version runs.
 
 	  EVENTS   60m, 100m, 200m, 400m, 4x100m, 4x200m, 4x400m
 	    Every event: semifinal -> finalists screen -> final introductions
@@ -20,6 +26,8 @@
 	    off = you race alone and rivals are leaderboard times.
 
 	  RUNNING  tap left / right in rhythm, one tap every 0.3 s holds top speed.
+	    Your body really runs down the lane (pushed by physics every frame, never
+	    teleported), and nothing - not even Roblox's default controls - can stop it.
 	    PC:       A / D (rebindable), Left / Right arrows, mouse left / right click
 	              Relays: Space (or W / Up) to pass - the PASS button turns green
 	              in the perfect window; your teammate runs the next leg
@@ -39,9 +47,15 @@
 
 	  ANIMATIONS  Made in code for R6 and R15 (Motor6D or AnimationConstraint
 	    joints), based on Usain Bolt / Noah Lyles sprint form: crouch start,
-	    block clearance, 45 degree drive phase, upright top-speed cycle with
-	    high knees, bend lean, finish dip, braking jog and celebrations
-	    (Bolt's lightning pose / Lyles' power-up).
+	    block clearance, a 20-frame drive-phase cycle (45 degree lean, full
+	    extension), a 20-frame top-speed cycle (high knee, heel tucked under the
+	    hips, foot clawed back under the body, big arm swing), bend lean, finish
+	    dip, braking jog, celebrations, idle and walk. Other players see Roblox's
+	    normal animations on you; the camera swings around you, never through you.
+
+	  UNIFORM  White & royal blue singlet with side panels, collar, sash and crest,
+	    a race bib with your lane number, your name on the back, half tights with
+	    hip numbers, socks, spikes and wristbands (toggle in Settings).
 
 	  SAVING  Your PBs and settings are saved. World records are shared by
 	    everyone in the game and stay until another player beats them.
@@ -58,11 +72,329 @@
 ]]
 
 ---------------------------------------------------------------------
--- SERVER HALF: saves PBs + world records (DataStore), runs the 40-yard
--- dash line, and gives every player the client half of this script.
+-- UNIFORM KIT: white & royal blue singlet, half tights, socks and spikes, with a bib,
+-- hip numbers and your name on the back. The server puts it on your character so every
+-- player sees it (without the server half, your own client puts it on just for you).
+---------------------------------------------------------------------
+local KIT: { [string]: any } = {}
+KIT.VERSION = 5
+KIT.WHITE = Color3.fromRGB(236, 239, 246) -- soft white: pure white glows in the sunlight bloom
+KIT.ROYAL = Color3.fromRGB(28, 70, 204)
+KIT.NAVY = Color3.fromRGB(14, 32, 104)
+KIT.PIN = Color3.fromRGB(120, 172, 255)
+KIT.INK = Color3.fromRGB(20, 22, 30)
+KIT.BIB = Color3.fromRGB(252, 252, 250)
+KIT.METAL = Color3.fromRGB(176, 182, 194)
+KIT.SIDES = { Enum.NormalId.Front, Enum.NormalId.Back, Enum.NormalId.Left, Enum.NormalId.Right }
+
+KIT.new = function(className: string, props: { [string]: any }, parent: Instance?): any
+	local o: any = Instance.new(className)
+	for k, v in pairs(props) do
+		o[k] = v
+	end
+	if parent then
+		o.Parent = parent
+	end
+	return o
+end
+-- a rectangle in fractions of its parent: x, y, width, height
+KIT.box = function(parent: Instance, x: number, y: number, w: number, h: number, color: Color3, z: number?, rot: number?): any
+	return KIT.new("Frame", { Position = UDim2.fromScale(x, y), Size = UDim2.fromScale(w, h), BackgroundColor3 = color, BorderSizePixel = 0, ZIndex = z or 1, Rotation = rot or 0 }, parent)
+end
+KIT.text = function(parent: Instance, x: number, y: number, w: number, h: number, text: string, color: Color3, z: number?): any
+	return KIT.new("TextLabel", { Position = UDim2.fromScale(x, y), Size = UDim2.fromScale(w, h), BackgroundTransparency = 1, Text = text, TextScaled = true, Font = Enum.Font.GothamBlack, TextColor3 = color, ZIndex = z or 4 }, parent)
+end
+KIT.circle = function(parent: Instance, cx: number, cy: number, size: number, color: Color3, z: number?, ring: number?): any
+	local f = KIT.new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(cx, cy), Size = UDim2.fromScale(size, size), BackgroundColor3 = color, BackgroundTransparency = if ring then 1 else 0, BorderSizePixel = 0, ZIndex = z or 3 }, parent)
+	KIT.new("UICorner", { CornerRadius = UDim.new(0.5, 0) }, f)
+	KIT.new("UIAspectRatioConstraint", { AspectRatio = 1, DominantAxis = Enum.DominantAxis.Width }, f)
+	if ring then
+		KIT.new("UIStroke", { Color = color, Thickness = ring }, f)
+	end
+	return f
+end
+KIT.gui = function(st: any, part: BasePart, face: Enum.NormalId, build: (any) -> ())
+	local sg = KIT.new("SurfaceGui", { Name = "TF_Kit", Face = face, SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud, PixelsPerStud = 90, LightInfluence = 1, ClipsDescendants = true, ZIndexBehavior = Enum.ZIndexBehavior.Sibling }, part)
+	build(sg)
+	table.insert(st.guis, sg)
+end
+-- a race number on a white bib (front / back of the singlet) - it follows your lane
+KIT.bib = function(st: any, sg: any, x: number, y: number, w: number, h: number, pins: boolean)
+	local bib = KIT.box(sg, x, y, w, h, KIT.BIB, 5)
+	KIT.new("UIStroke", { Color = Color3.fromRGB(150, 156, 170), Thickness = 1.5 }, bib)
+	local head = KIT.box(bib, 0, 0, 1, 0.24, KIT.ROYAL, 6)
+	KIT.text(head, 0.05, 0.1, 0.9, 0.8, "TRACK AND FIELD", KIT.BIB, 7)
+	table.insert(st.numbers, KIT.text(bib, 0.08, 0.26, 0.84, 0.72, "1", KIT.INK, 7))
+	if pins then
+		for _, p in ipairs({ { 0.07, 0.34 }, { 0.93, 0.34 }, { 0.07, 0.9 }, { 0.93, 0.9 } }) do
+			KIT.circle(bib, p[1], p[2], 0.06, KIT.METAL, 8)
+		end
+	end
+end
+-- singlet on a torso face area (y0 .. y0 + h of the face)
+KIT.singlet = function(st: any, part: BasePart, y0: number, h: number, name: string)
+	KIT.gui(st, part, Enum.NormalId.Front, function(sg)
+		KIT.box(sg, 0, y0, 0.12, h, KIT.ROYAL, 2)
+		KIT.box(sg, 0.88, y0, 0.12, h, KIT.ROYAL, 2)
+		KIT.box(sg, 0.12, y0, 0.018, h, KIT.PIN, 2)
+		KIT.box(sg, 0.862, y0, 0.018, h, KIT.PIN, 2)
+		KIT.circle(sg, 0.5, y0, 0.3, KIT.ROYAL, 3, 6) -- collar
+		-- royal sash across the chest with light-blue pin lines
+		KIT.box(sg, -0.25, y0 + h * 0.44, 1.5, h * 0.15, KIT.ROYAL, 2, -26)
+		KIT.box(sg, -0.25, y0 + h * 0.405, 1.5, h * 0.022, KIT.PIN, 2, -26)
+		KIT.box(sg, -0.25, y0 + h * 0.61, 1.5, h * 0.022, KIT.PIN, 2, -26)
+		KIT.text(sg, 0.6, y0 + h * 0.23, 0.25, h * 0.13, "T&F", KIT.ROYAL, 4)
+		local crest = KIT.circle(sg, 0.28, y0 + h * 0.3, 0.12, KIT.ROYAL, 4)
+		KIT.text(crest, 0.12, 0.2, 0.76, 0.6, "TF", KIT.WHITE, 5)
+		KIT.bib(st, sg, 0.25, y0 + h * 0.5, 0.5, h * 0.42, true)
+	end)
+	KIT.gui(st, part, Enum.NormalId.Back, function(sg)
+		KIT.box(sg, 0, y0, 0.12, h, KIT.ROYAL, 2)
+		KIT.box(sg, 0.88, y0, 0.12, h, KIT.ROYAL, 2)
+		KIT.box(sg, 0.12, y0, 0.018, h, KIT.PIN, 2)
+		KIT.box(sg, 0.862, y0, 0.018, h, KIT.PIN, 2)
+		KIT.circle(sg, 0.5, y0, 0.3, KIT.ROYAL, 3, 6)
+		KIT.text(sg, 0.15, y0 + h * 0.12, 0.7, h * 0.17, string.upper(name), KIT.ROYAL, 4)
+		KIT.box(sg, 0.3, y0 + h * 0.31, 0.4, h * 0.02, KIT.PIN, 2)
+		KIT.bib(st, sg, 0.28, y0 + h * 0.38, 0.44, h * 0.42, true)
+	end)
+	for _, face in ipairs({ Enum.NormalId.Left, Enum.NormalId.Right }) do
+		KIT.gui(st, part, face, function(sg)
+			KIT.box(sg, 0, y0, 1, h, KIT.ROYAL, 2)
+			KIT.box(sg, 0.12, y0, 0.06, h, KIT.PIN, 2)
+			KIT.box(sg, 0.82, y0, 0.06, h, KIT.PIN, 2)
+		end)
+	end
+	KIT.gui(st, part, Enum.NormalId.Top, function(sg)
+		KIT.box(sg, 0, 0, 1, 0.14, KIT.ROYAL, 2)
+		KIT.box(sg, 0, 0.86, 1, 0.14, KIT.ROYAL, 2)
+	end)
+end
+-- a white side stripe and a hip number on the outside of the shorts
+KIT.hipNumber = function(st: any, sg: any, x: number, y: number, w: number, h: number)
+	local tag = KIT.box(sg, x, y, w, h, KIT.BIB, 5)
+	KIT.new("UIStroke", { Color = Color3.fromRGB(150, 156, 170), Thickness = 1 }, tag)
+	table.insert(st.numbers, KIT.text(tag, 0.1, 0.08, 0.8, 0.84, "1", KIT.INK, 6))
+end
+-- socks / wristbands: a band near the bottom of a limb part, all four sides
+KIT.band = function(st: any, part: BasePart, y: number, h: number, color: Color3, stripe: Color3?)
+	for _, face in ipairs(KIT.SIDES) do
+		KIT.gui(st, part, face, function(sg)
+			KIT.box(sg, 0, y, 1, h, color, 2)
+			if stripe then
+				KIT.box(sg, 0, y, 1, math.min(0.07, h * 0.3), stripe, 3)
+			end
+		end)
+	end
+end
+-- spikes: royal shoe, white sole and stripe, metal spike plate underneath
+KIT.spikes = function(st: any, part: BasePart, outer: Enum.NormalId, y: number)
+	for _, face in ipairs(KIT.SIDES) do
+		KIT.gui(st, part, face, function(sg)
+			if y > 0 then
+				KIT.box(sg, 0, y, 1, 1 - y, KIT.ROYAL, 2)
+			end
+			KIT.box(sg, 0, y + (1 - y) * 0.7, 1, (1 - y) * 0.3, KIT.WHITE, 3)
+			if face == outer then
+				KIT.box(sg, 0.12, y + (1 - y) * 0.28, 0.76, (1 - y) * 0.16, KIT.WHITE, 3, -18)
+			end
+		end)
+	end
+	KIT.gui(st, part, Enum.NormalId.Bottom, function(sg)
+		KIT.box(sg, 0, 0, 1, 1, KIT.METAL, 2)
+		for i = 0, 5 do
+			KIT.circle(sg, 0.3 + (i % 2) * 0.4, 0.2 + math.floor(i / 2) * 0.3, 0.14, KIT.INK, 3)
+		end
+	end)
+end
+
+-- dress a character. Returns what is needed to take it all off again, or nil
+KIT.wear = function(char: Model, name: string, number: number): any
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if not hum then
+		return nil
+	end
+	local isR15 = hum.RigType == Enum.HumanoidRigType.R15
+	local st: any = { char = char, colors = {}, textures = {}, hidden = {}, transparency = {}, guis = {}, numbers = {} }
+	-- your own skin tone for bare arms and legs
+	local skin = Color3.fromRGB(204, 142, 105)
+	local bodyColors = char:FindFirstChildOfClass("BodyColors")
+	local head = char:FindFirstChild("Head")
+	if bodyColors then
+		skin = bodyColors.HeadColor3
+	elseif head and head:IsA("BasePart") then
+		skin = head.Color
+	end
+	-- take off what would cover the kit (clothes, shirt pictures, layered jackets, skin textures)
+	for _, d in ipairs(char:GetDescendants()) do
+		local parent = d.Parent
+		if d:IsA("Clothing") or d:IsA("ShirtGraphic") or d:IsA("BodyColors")
+			or (d:IsA("SurfaceAppearance") and parent ~= nil and parent.Parent == char and parent.Name ~= "Head")
+		then
+			local inst: Instance = d
+			table.insert(st.hidden, { inst = inst, parent = parent })
+			inst.Parent = nil
+		elseif d:IsA("WrapLayer") and parent and parent:IsA("BasePart") then
+			st.transparency[parent] = parent.Transparency
+			parent.Transparency = 1
+		end
+	end
+	local function paint(inst: Instance?, color: Color3): BasePart?
+		if not inst or not inst:IsA("BasePart") then
+			return nil
+		end
+		local part = inst :: BasePart
+		if st.colors[part] == nil then
+			st.colors[part] = part.Color
+		end
+		part.Color = color
+		if part:IsA("MeshPart") and st.textures[part] == nil then
+			local mp = part :: MeshPart
+			local ok, tex = pcall(function()
+				return mp.TextureID
+			end)
+			if ok then
+				st.textures[part] = tex
+				pcall(function()
+					mp.TextureID = ""
+				end)
+			end
+		end
+		return part
+	end
+	if isR15 then
+		local top = paint(char:FindFirstChild("UpperTorso"), KIT.WHITE)
+		local shorts = paint(char:FindFirstChild("LowerTorso"), KIT.ROYAL)
+		if top then
+			KIT.singlet(st, top, 0, 1, name)
+		end
+		if shorts then
+			for _, face in ipairs(KIT.SIDES) do
+				KIT.gui(st, shorts, face, function(sg)
+					KIT.box(sg, 0, 0, 1, 0.32, KIT.WHITE, 2)
+					KIT.box(sg, 0, 0.13, 1, 0.07, KIT.ROYAL, 3)
+					if face == Enum.NormalId.Left or face == Enum.NormalId.Right then
+						KIT.box(sg, 0.42, 0.32, 0.16, 0.68, KIT.WHITE, 2)
+					end
+				end)
+			end
+		end
+		for _, side in ipairs({ "Left", "Right" }) do
+			local outer = if side == "Left" then Enum.NormalId.Left else Enum.NormalId.Right
+			local thigh = paint(char:FindFirstChild(side .. "UpperLeg"), KIT.ROYAL)
+			local shin = paint(char:FindFirstChild(side .. "LowerLeg"), skin)
+			local foot = paint(char:FindFirstChild(side .. "Foot"), KIT.ROYAL)
+			paint(char:FindFirstChild(side .. "UpperArm"), skin)
+			local fore = paint(char:FindFirstChild(side .. "LowerArm"), skin)
+			paint(char:FindFirstChild(side .. "Hand"), skin)
+			if thigh then
+				for _, face in ipairs(KIT.SIDES) do
+					KIT.gui(st, thigh, face, function(sg)
+						KIT.box(sg, 0, 0.9, 1, 0.1, KIT.WHITE, 2) -- hem
+						if face == outer then
+							KIT.box(sg, 0.4, 0, 0.2, 0.9, KIT.WHITE, 2)
+							KIT.hipNumber(st, sg, 0.14, 0.08, 0.72, 0.34)
+						elseif face == Enum.NormalId.Front and side == "Right" then
+							KIT.text(sg, 0.48, 0.06, 0.44, 0.16, "T&F", KIT.WHITE, 4)
+						end
+					end)
+				end
+			end
+			if shin then
+				KIT.band(st, shin, 0.68, 0.32, KIT.WHITE, KIT.ROYAL)
+			end
+			if foot then
+				KIT.spikes(st, foot, outer, 0)
+			end
+			if fore then
+				KIT.band(st, fore, 0.74, 0.16, KIT.ROYAL, KIT.PIN)
+			end
+		end
+	else
+		local torso = paint(char:FindFirstChild("Torso"), KIT.WHITE)
+		if torso then
+			KIT.singlet(st, torso, 0, 0.8, name)
+			for _, face in ipairs(KIT.SIDES) do
+				KIT.gui(st, torso, face, function(sg)
+					KIT.box(sg, 0, 0.8, 1, 0.2, KIT.ROYAL, 6)
+					KIT.box(sg, 0, 0.8, 1, 0.045, KIT.WHITE, 7)
+				end)
+			end
+		end
+		for _, side in ipairs({ "Left", "Right" }) do
+			local outer = if side == "Left" then Enum.NormalId.Left else Enum.NormalId.Right
+			local leg = paint(char:FindFirstChild(side .. " Leg"), skin)
+			local arm = paint(char:FindFirstChild(side .. " Arm"), skin)
+			if leg then
+				for _, face in ipairs(KIT.SIDES) do
+					KIT.gui(st, leg, face, function(sg)
+						KIT.box(sg, 0, 0, 1, 0.42, KIT.ROYAL, 2) -- shorts
+						KIT.box(sg, 0, 0.42, 1, 0.035, KIT.WHITE, 3)
+						if face == outer then
+							KIT.box(sg, 0.4, 0, 0.2, 0.42, KIT.WHITE, 3)
+							KIT.hipNumber(st, sg, 0.15, 0.05, 0.7, 0.22)
+						end
+						KIT.box(sg, 0, 0.64, 1, 0.2, KIT.WHITE, 2) -- sock
+						KIT.box(sg, 0, 0.64, 1, 0.035, KIT.ROYAL, 3)
+					end)
+				end
+				KIT.spikes(st, leg, outer, 0.84)
+			end
+			if arm then
+				KIT.band(st, arm, 0.78, 0.1, KIT.ROYAL, KIT.PIN)
+			end
+		end
+	end
+	KIT.setNumber(st, number)
+	return st
+end
+
+KIT.setNumber = function(st: any, number: number)
+	for _, label in ipairs(st.numbers) do
+		label.Text = tostring(number)
+	end
+end
+
+-- take the kit off again and give the character its own look back
+KIT.remove = function(st: any)
+	for _, g in ipairs(st.guis) do
+		g:Destroy()
+	end
+	for part, color in pairs(st.colors) do
+		part.Color = color
+	end
+	for part, tex in pairs(st.textures) do
+		pcall(function()
+			part.TextureID = tex
+		end)
+	end
+	for part, tr in pairs(st.transparency) do
+		part.Transparency = tr
+	end
+	if st.char.Parent then
+		for _, h in ipairs(st.hidden) do
+			pcall(function()
+				h.inst.Parent = h.parent or st.char
+			end)
+		end
+	end
+end
+
+---------------------------------------------------------------------
+-- SERVER HALF: saves PBs + world records (DataStore), runs the 40-yard dash line, puts the
+-- uniform on everyone, and gives every player the client half of this script.
 ---------------------------------------------------------------------
 if game:GetService("RunService"):IsServer() then
 	(function()
+		local G = _G :: any
+		local live = G.TrackAndFieldServer
+		if typeof(live) == "Instance" and live ~= script and live.Parent ~= nil then
+			return -- this version already runs from another Script
+		end
+		G.TrackAndFieldServer = script
+		pcall(function()
+			script:SetAttribute("TFVersion", KIT.VERSION)
+		end)
 		local Players = game:GetService("Players")
 		local ReplicatedStorage = game:GetService("ReplicatedStorage")
 		local DataStoreService = game:GetService("DataStoreService")
@@ -87,30 +419,47 @@ if game:GetService("RunService"):IsServer() then
 			["4x200m"] = "Velocity TC",
 			["4x400m"] = "Thunder Track",
 		}
-		local old = ReplicatedStorage:FindFirstChild("TrackAndFieldNet")
-		if old then
-			old:Destroy()
+
+		-- an older copy of the game pasted into another Script would take over the remotes and the
+		-- client copy (and run its old version for everyone): switch it off
+		local warned: { [Instance]: boolean } = {}
+		local function stopOldServerCopies()
+			local roots: { Instance } = { game:GetService("ServerScriptService"), game:GetService("Workspace") }
+			for _, root in ipairs(roots) do
+				for _, d in ipairs(root:GetDescendants()) do
+					if d ~= script and d:IsA("Script") and not d:IsA("LocalScript") and d:GetAttribute("TFVersion") == nil
+						and (d :: Script).RunContext ~= Enum.RunContext.Client
+					then
+						local n = string.lower(d.Name)
+						if n == "script" or string.find(n, "track", 1, true) ~= nil or string.find(n, "field", 1, true) ~= nil then
+							pcall(function()
+								(d :: any).Enabled = false
+							end)
+							pcall(function()
+								(d :: any).Disabled = true
+							end)
+							if not warned[d] then
+								warned[d] = true
+								warn("[Track And Field] Switched off an older copy of the game: " .. d:GetFullName() .. " - delete it.")
+							end
+						end
+					end
+				end
+			end
 		end
-		local net = Instance.new("Folder")
-		net.Name = "TrackAndFieldNet"
-		local function remote(className: string, name: string): any
-			local r = Instance.new(className)
-			r.Name = name
-			r.Parent = net
-			return r
-		end
-		local getData = remote("RemoteFunction", "GetData")
-		local submit = remote("RemoteEvent", "Submit")
-		local saveSettings = remote("RemoteEvent", "SaveSettings")
-		local recordsEvent = remote("RemoteEvent", "Records")
-		local dashEvent = remote("RemoteEvent", "Dash")
-		net.Parent = ReplicatedStorage
 
 		local playerStore: any, recordStore: any = nil, nil
 		local storesOk = pcall(function()
 			playerStore = DataStoreService:GetDataStore("TrackAndField_Players_v1")
 			recordStore = DataStoreService:GetDataStore("TrackAndField_Records_v1")
 		end)
+		local remotes: { [string]: any } = {}
+		local function fireAll(name: string, ...: any)
+			local r = remotes[name]
+			if r then
+				r:FireAllClients(...)
+			end
+		end
 		local records: { [string]: { time: number, holder: string } } = {}
 		for name, t in pairs(DEFAULT_WR) do
 			records[name] = { time = t, holder = DEFAULT_HOLDER[name] }
@@ -123,7 +472,7 @@ if game:GetService("RunService"):IsServer() then
 					end)
 					if ok and type(value) == "table" and type(value.time) == "number" and type(value.holder) == "string" then
 						records[name] = { time = value.time, holder = value.holder }
-						recordsEvent:FireAllClients(name, records[name])
+						fireAll("Records", name, records[name])
 					end
 				end
 			end)
@@ -131,6 +480,44 @@ if game:GetService("RunService"):IsServer() then
 
 		type Profile = { pbs: { [string]: number }, settings: { [string]: any }, loaded: boolean }
 		local profiles: { [Player]: Profile } = {}
+		local function saveProfile(plr: Player)
+			local profile = profiles[plr]
+			if not profile or not profile.loaded or not storesOk then
+				return
+			end
+			pcall(function()
+				playerStore:SetAsync("u" .. plr.UserId, { pbs = profile.pbs, settings = profile.settings })
+			end)
+		end
+
+		-- uniform: on by default, off if the player switched it off
+		local kits: { [Model]: any } = {}
+		local kitWanted: { [Player]: boolean } = {}
+		local kitNumber: { [Player]: number } = {}
+		local function applyKit(plr: Player)
+			local char = plr.Character
+			if not char or not char.Parent or not char:FindFirstChildOfClass("Humanoid") then
+				return
+			end
+			local want = kitWanted[plr]
+			if want == nil then
+				local profile = profiles[plr]
+				want = not (profile ~= nil and profile.settings.Uniform == false)
+			end
+			local st = kits[char]
+			if want and not st then
+				local ok, res = pcall(KIT.wear, char, plr.Name, kitNumber[plr] or 1)
+				if ok and res then
+					kits[char] = res
+				elseif not ok then
+					warn("[Track And Field] uniform: " .. tostring(res))
+				end
+			elseif not want and st then
+				kits[char] = nil
+				pcall(KIT.remove, st)
+			end
+		end
+
 		local function loadProfile(plr: Player)
 			local profile: Profile = { pbs = {}, settings = {}, loaded = false }
 			profiles[plr] = profile
@@ -156,15 +543,7 @@ if game:GetService("RunService"):IsServer() then
 				end
 			end
 			profile.loaded = true
-		end
-		local function saveProfile(plr: Player)
-			local profile = profiles[plr]
-			if not profile or not profile.loaded or not storesOk then
-				return
-			end
-			pcall(function()
-				playerStore:SetAsync("u" .. plr.UserId, { pbs = profile.pbs, settings = profile.settings })
-			end)
+			applyKit(plr) -- the saved setting may say "no uniform"
 		end
 
 		-- 40-yard dash line
@@ -177,7 +556,7 @@ if game:GetService("RunService"):IsServer() then
 			for _, p in ipairs(queue) do
 				table.insert(names, p.Name)
 			end
-			dashEvent:FireAllClients("state", if current then current.Name else "", if current then current.UserId else 0, names)
+			fireAll("Dash", "state", if current then current.Name else "", if current then current.UserId else 0, names)
 		end
 		local function advance()
 			if not current and #queue > 0 then
@@ -196,35 +575,6 @@ if game:GetService("RunService"):IsServer() then
 				current = nil
 			end
 		end
-		dashEvent.OnServerEvent:Connect(function(plr: Player, action: any)
-			if action == "join" then
-				if current ~= plr and not table.find(queue, plr) then
-					table.insert(queue, plr)
-				end
-			elseif action == "leave" then
-				leave(plr)
-			elseif action == "start" then
-				if current == plr then
-					started = true
-					currentSince = os.clock()
-				end
-			elseif action == "done" then
-				if current == plr then
-					current = nil
-				end
-			elseif action == "defer" then
-				-- it's their turn but they're mid-race: let the next person go, keep their spot at the front
-				if current == plr and not started then
-					if #queue > 0 then
-						current = table.remove(queue, 1)
-						table.insert(queue, 1, plr)
-						started = false
-					end
-					currentSince = os.clock()
-				end
-			end
-			advance()
-		end)
 		task.spawn(function()
 			while true do
 				task.wait(1)
@@ -235,13 +585,224 @@ if game:GetService("RunService"):IsServer() then
 			end
 		end)
 
-		Players.PlayerAdded:Connect(loadProfile)
+		-- the remotes the client half talks to (rebuilt if an older copy ever replaces them)
+		local net: Instance? = nil
+		local function buildNet()
+			local old = ReplicatedStorage:FindFirstChild("TrackAndFieldNet")
+			if old and old ~= net then
+				if old:GetAttribute("TFVersion") == nil then
+					stopOldServerCopies()
+				end
+				old:Destroy()
+			end
+			local folder = Instance.new("Folder")
+			folder.Name = "TrackAndFieldNet"
+			folder:SetAttribute("TFVersion", KIT.VERSION)
+			local function remote(className: string, name: string): any
+				local r = Instance.new(className)
+				r.Name = name
+				r.Parent = folder
+				remotes[name] = r
+				return r
+			end
+			local getData = remote("RemoteFunction", "GetData")
+			local submit = remote("RemoteEvent", "Submit")
+			local saveSettings = remote("RemoteEvent", "SaveSettings")
+			remote("RemoteEvent", "Records")
+			local dashEvent = remote("RemoteEvent", "Dash")
+			local kitEvent = remote("RemoteEvent", "Kit")
+
+			getData.OnServerInvoke = function(plr: Player)
+				local t0 = os.clock()
+				while not (profiles[plr] and profiles[plr].loaded) and os.clock() - t0 < 10 do
+					task.wait(0.1)
+				end
+				local profile = profiles[plr]
+				return {
+					pbs = if profile then profile.pbs else {},
+					settings = if profile then profile.settings else {},
+					records = records,
+					saving = storesOk,
+				}
+			end
+
+			submit.OnServerEvent:Connect(function(plr: Player, eventName: any, time: any)
+				if type(eventName) ~= "string" or type(time) ~= "number" or DEFAULT_WR[eventName] == nil or time ~= time then
+					return
+				end
+				time = math.ceil(time * 100 - 1e-6) / 100
+				if time < DEFAULT_WR[eventName] - 0.3 or time > 900 then
+					return -- not physically possible in this game
+				end
+				local profile = profiles[plr]
+				if profile then
+					local pb = profile.pbs[eventName]
+					if not pb or time < pb then
+						profile.pbs[eventName] = time
+						task.spawn(saveProfile, plr)
+					end
+				end
+				-- world record: only counts when beaten by 0.01 - 0.05 s
+				local wr = records[eventName]
+				if wr and time < wr.time then
+					local margin = math.floor((wr.time - time) * 100 + 0.5) / 100
+					if margin >= 0.01 and margin <= 0.05 then
+						local new = { time = time, holder = plr.Name }
+						records[eventName] = new
+						fireAll("Records", eventName, new)
+						if storesOk then
+							task.spawn(function()
+								pcall(function()
+									recordStore:UpdateAsync("WR_" .. eventName, function(stored: any): any
+										if type(stored) == "table" and type(stored.time) == "number" and stored.time <= time then
+											return nil
+										end
+										return new
+									end)
+								end)
+							end)
+						end
+					end
+				end
+			end)
+
+			saveSettings.OnServerEvent:Connect(function(plr: Player, settings: any)
+				local profile = profiles[plr]
+				if not profile or type(settings) ~= "table" then
+					return
+				end
+				local clean = {}
+				local count = 0
+				for k, v in pairs(settings) do
+					if type(k) == "string" and #k < 32 and (type(v) == "boolean" or (type(v) == "string" and #v < 32)) then
+						clean[k] = v
+						count += 1
+					end
+					if count > 24 then
+						break
+					end
+				end
+				profile.settings = clean
+			end)
+
+			dashEvent.OnServerEvent:Connect(function(plr: Player, action: any)
+				if action == "join" then
+					if current ~= plr and not table.find(queue, plr) then
+						table.insert(queue, plr)
+					end
+				elseif action == "leave" then
+					leave(plr)
+				elseif action == "start" then
+					if current == plr then
+						started = true
+						currentSince = os.clock()
+					end
+				elseif action == "done" then
+					if current == plr then
+						current = nil
+					end
+				elseif action == "defer" then
+					-- it's their turn but they're mid-race: let the next person go, keep their spot at the front
+					if current == plr and not started then
+						if #queue > 0 then
+							current = table.remove(queue, 1)
+							table.insert(queue, 1, plr)
+							started = false
+						end
+						currentSince = os.clock()
+					end
+				end
+				advance()
+			end)
+
+			kitEvent.OnServerEvent:Connect(function(plr: Player, action: any, value: any)
+				if action == "wear" and type(value) == "boolean" then
+					kitWanted[plr] = value
+					applyKit(plr)
+				elseif action == "number" and type(value) == "number" and value == value then
+					local n = math.clamp(math.floor(value), 1, 99)
+					kitNumber[plr] = n
+					local char = plr.Character
+					local st = char and kits[char]
+					if st then
+						KIT.setNumber(st, n)
+					end
+				end
+			end)
+
+			folder.Parent = ReplicatedStorage
+			net = folder
+		end
+
+		-- give every player the client half of this script
+		local function deployClient()
+			local have = false
+			for _, c in ipairs(ReplicatedStorage:GetChildren()) do
+				if c.Name == "TrackAndFieldClient" then
+					if c:GetAttribute("TFVersion") == KIT.VERSION and not have then
+						have = true
+					else
+						c:Destroy() -- an older (or duplicate) client copy
+					end
+				end
+			end
+			if have then
+				return
+			end
+			local ok, err = pcall(function()
+				local copy = (script :: any):Clone()
+				copy.Name = "TrackAndFieldClient"
+				copy.RunContext = Enum.RunContext.Client
+				copy:SetAttribute("TFVersion", KIT.VERSION)
+				copy.Parent = ReplicatedStorage
+			end)
+			if not ok then
+				warn("[Track And Field] Could not start the game for players automatically (" .. tostring(err) .. "). Also paste this script into a LocalScript in StarterPlayer > StarterPlayerScripts.")
+			end
+		end
+
+		buildNet()
+		deployClient()
+		-- if an older copy replaces the remotes or the client copy later, take them back
+		ReplicatedStorage.ChildRemoved:Connect(function(c: Instance)
+			if c == net then
+				net = nil
+				task.defer(function()
+					stopOldServerCopies()
+					buildNet()
+				end)
+			end
+		end)
+		ReplicatedStorage.ChildAdded:Connect(function(c: Instance)
+			if c.Name == "TrackAndFieldClient" and c:GetAttribute("TFVersion") ~= KIT.VERSION then
+				task.defer(function()
+					stopOldServerCopies()
+					deployClient()
+				end)
+			end
+		end)
+
+		local function onPlayer(plr: Player)
+			plr.CharacterAppearanceLoaded:Connect(function()
+				applyKit(plr)
+			end)
+			plr.CharacterRemoving:Connect(function(char: Model)
+				kits[char] = nil
+			end)
+			if plr.Character and plr:HasAppearanceLoaded() then
+				applyKit(plr)
+			end
+			loadProfile(plr)
+		end
+		Players.PlayerAdded:Connect(onPlayer)
 		for _, p in ipairs(Players:GetPlayers()) do
-			task.spawn(loadProfile, p)
+			task.spawn(onPlayer, p)
 		end
 		Players.PlayerRemoving:Connect(function(plr: Player)
 			saveProfile(plr)
 			profiles[plr] = nil
+			kitWanted[plr] = nil
+			kitNumber[plr] = nil
 			leave(plr)
 			advance()
 		end)
@@ -250,103 +811,22 @@ if game:GetService("RunService"):IsServer() then
 				saveProfile(plr)
 			end
 		end)
-
-		getData.OnServerInvoke = function(plr: Player)
-			local t0 = os.clock()
-			while not (profiles[plr] and profiles[plr].loaded) and os.clock() - t0 < 10 do
-				task.wait(0.1)
-			end
-			local profile = profiles[plr]
-			return {
-				pbs = if profile then profile.pbs else {},
-				settings = if profile then profile.settings else {},
-				records = records,
-				saving = storesOk,
-			}
-		end
-
-		submit.OnServerEvent:Connect(function(plr: Player, eventName: any, time: any)
-			if type(eventName) ~= "string" or type(time) ~= "number" or DEFAULT_WR[eventName] == nil or time ~= time then
-				return
-			end
-			time = math.ceil(time * 100 - 1e-6) / 100
-			if time < DEFAULT_WR[eventName] - 0.3 or time > 900 then
-				return -- not physically possible in this game
-			end
-			local profile = profiles[plr]
-			if profile then
-				local pb = profile.pbs[eventName]
-				if not pb or time < pb then
-					profile.pbs[eventName] = time
-					task.spawn(saveProfile, plr)
-				end
-			end
-			-- world record: only counts when beaten by 0.01 - 0.05 s
-			local wr = records[eventName]
-			if wr and time < wr.time then
-				local margin = math.floor((wr.time - time) * 100 + 0.5) / 100
-				if margin >= 0.01 and margin <= 0.05 then
-					local new = { time = time, holder = plr.Name }
-					records[eventName] = new
-					recordsEvent:FireAllClients(eventName, new)
-					if storesOk then
-						task.spawn(function()
-							pcall(function()
-								recordStore:UpdateAsync("WR_" .. eventName, function(stored: any): any
-									if type(stored) == "table" and type(stored.time) == "number" and stored.time <= time then
-										return nil
-									end
-									return new
-								end)
-							end)
-						end)
-					end
-				end
-			end
-		end)
-
-		saveSettings.OnServerEvent:Connect(function(plr: Player, settings: any)
-			local profile = profiles[plr]
-			if not profile or type(settings) ~= "table" then
-				return
-			end
-			local clean = {}
-			local count = 0
-			for k, v in pairs(settings) do
-				if type(k) == "string" and #k < 32 and (type(v) == "boolean" or (type(v) == "string" and #v < 32)) then
-					clean[k] = v
-					count += 1
-				end
-				if count > 24 then
-					break
-				end
-			end
-			profile.settings = clean
-		end)
-
-		-- give every player the client half of this script
-		local ok, err = pcall(function()
-			local existing = ReplicatedStorage:FindFirstChild("TrackAndFieldClient")
-			if existing then
-				existing:Destroy()
-			end
-			local copy = (script :: any):Clone()
-			copy.Name = "TrackAndFieldClient"
-			copy.RunContext = Enum.RunContext.Client
-			copy.Parent = ReplicatedStorage
-		end)
-		if not ok then
-			warn("[Track And Field] Could not start the game for players automatically (" .. tostring(err) .. "). Also paste this script into a LocalScript in StarterPlayer > StarterPlayerScripts.")
-		end
 	end)()
 	return
 end
 
--- only one copy of the game runs per player
-if (_G :: any).TrackAndFieldClientRunning then
-	return
+-- only one copy of the game runs per player (a copy that was removed no longer counts).
+-- Older versions are found and switched off further down (see OLD COPIES).
+do
+	local G = _G :: any
+	local live = G.TrackAndFieldClient
+	if typeof(live) == "Instance" and live ~= script and live.Parent ~= nil then
+		return
+	end
+	G.TrackAndFieldOlderFlag = G.TrackAndFieldClientRunning == true and live == nil
+	G.TrackAndFieldClient = script
+	G.TrackAndFieldClientRunning = true -- older versions see this and stay off
 end
-(_G :: any).TrackAndFieldClientRunning = true
 
 
 local Players = game:GetService("Players")
@@ -437,6 +917,104 @@ local Settings = {
 -- colours + shared constants (kept in one table: Luau allows 200 locals)
 local K: { [string]: any } = {}
 local X: { [string]: any } = {} -- newer features (bots, relays, saving, 40-yard dash, free-roam animation)
+
+---------------------------------------------------------------------
+-- OLD COPIES: an older version of this game (for example an old LocalScript left in
+-- StarterPlayerScripts) must never run next to this one. Two copies fight over your
+-- character - one switches the default controls back on, the other snaps you forward.
+-- They are found, switched off, and what they built is removed.
+---------------------------------------------------------------------
+X.VERSION = 5
+X.oldWarned = false
+X.isOldCopy = function(d: Instance): boolean
+	if d == script or not d:IsA("BaseScript") or d:GetAttribute("TFVersion") ~= nil then
+		return false
+	end
+	if not d:IsA("LocalScript") and (d :: BaseScript).RunContext ~= Enum.RunContext.Client then
+		return false
+	end
+	local n = string.lower(d.Name)
+	return n == "localscript" or n == "script" or string.find(n, "track", 1, true) ~= nil
+		or string.find(n, "field", 1, true) ~= nil or string.find(n, "t&f", 1, true) ~= nil
+end
+X.oldCopySigns = function(): boolean
+	if (_G :: any).TrackAndFieldOlderFlag then
+		return true
+	end
+	if Workspace:FindFirstChild("TrackAndField_World") then
+		return true
+	end
+	local pg = player:FindFirstChild("PlayerGui")
+	return pg ~= nil and (pg:FindFirstChild("TrackAndFieldUI") ~= nil or pg:FindFirstChild("TrackAndFieldLoading") ~= nil)
+end
+X.stopOldCopies = function()
+	if not X.oldCopySigns() then
+		return
+	end
+	(_G :: any).TrackAndFieldOlderFlag = false
+	local roots: { Instance } = {}
+	local function add(inst: Instance?)
+		if inst then
+			table.insert(roots, inst)
+		end
+	end
+	add(player:FindFirstChild("PlayerScripts"))
+	add(player:FindFirstChild("PlayerGui"))
+	add(player:FindFirstChild("Backpack"))
+	add(player.Character)
+	add(game:GetService("ReplicatedFirst"))
+	add(game:GetService("ReplicatedStorage"))
+	local stopped = 0
+	for _, root in ipairs(roots) do
+		for _, d in ipairs(root:GetDescendants()) do
+			if X.isOldCopy(d) then
+				pcall(function()
+					(d :: any).Enabled = false
+				end)
+				pcall(function()
+					(d :: any).Disabled = true
+				end)
+				stopped += 1
+				warn("[Track And Field] Switched off an older copy of the game: " .. d:GetFullName() .. " - delete it.")
+			end
+		end
+	end
+	local oldWorld = Workspace:FindFirstChild("TrackAndField_World")
+	if oldWorld then
+		oldWorld:Destroy()
+	end
+	local pg = player:FindFirstChild("PlayerGui")
+	if pg then
+		for _, n in ipairs({ "TrackAndFieldUI", "TrackAndFieldLoading" }) do
+			local g = pg:FindFirstChild(n)
+			if g then
+				g:Destroy()
+			end
+		end
+	end
+	local after = X.afterOldCopy
+	if after then
+		task.defer(after, stopped)
+	else
+		X.pendingOldRestore = true -- found while starting up: tidy up once the world is built
+	end
+end
+Workspace.ChildAdded:Connect(function(c: Instance)
+	if c.Name == "TrackAndField_World" then
+		task.defer(X.stopOldCopies)
+	end
+end)
+task.spawn(function()
+	local pg = player:WaitForChild("PlayerGui")
+	pg.ChildAdded:Connect(function(c: Instance)
+		if c.Name == "TrackAndFieldUI" or c.Name == "TrackAndFieldLoading" then
+			task.defer(X.stopOldCopies)
+		end
+	end)
+end)
+X.stopOldCopies()
+task.delay(2, X.stopOldCopies)
+task.delay(6, X.stopOldCopies)
 K.ROYAL = Color3.fromRGB(35, 78, 214)
 K.KITS = { Color3.fromRGB(220, 40, 40), Color3.fromRGB(250, 200, 30), Color3.fromRGB(20, 150, 70), Color3.fromRGB(240, 120, 20), Color3.fromRGB(130, 50, 180), Color3.fromRGB(20, 20, 24), Color3.fromRGB(0, 170, 190), Color3.fromRGB(200, 30, 120) }
 K.SKINS = { Color3.fromRGB(255, 220, 177), Color3.fromRGB(234, 192, 134), Color3.fromRGB(198, 134, 66), Color3.fromRGB(141, 85, 36), Color3.fromRGB(97, 58, 30), Color3.fromRGB(66, 40, 22) }
@@ -467,15 +1045,15 @@ local R_OUT = RC + LANES * LANE_W
 local HALF = STRAIGHT / 2
 local LINE_W = 0.22
 local START_BACK = 0.8
-local INNER_APRON = 3.5
-local OUTER_APRON = 4
-local BAND_IN = RC - INNER_APRON
-local BAND_OUT = R_OUT + OUTER_APRON
+K.INNER_APRON = 3.5
+K.OUTER_APRON = 4
+local BAND_IN = RC - K.INNER_APRON
+local BAND_OUT = R_OUT + K.OUTER_APRON
 local TRACK_TOP = 0.3
-local LINE_TOP = 0.33
-local MARK_TOP = 0.35
+K.LINE_TOP = 0.33
+K.MARK_TOP = 0.35
 local FLOOR_TOP = 0.36
-local BEND_SEGMENTS = 36
+K.BEND_SEGMENTS = 36
 local FINISH_S = STRAIGHT
 
 local function laneRadius(lane: number): number
@@ -603,11 +1181,13 @@ end
 ---------------------------------------------------------------------
 -- WORLD
 ---------------------------------------------------------------------
-local oldWorld = Workspace:FindFirstChild("TrackAndField_World")
-if oldWorld then
-	oldWorld:Destroy()
+for _, n in ipairs({ "TrackAndFieldWorld", "TrackAndField_World" }) do
+	local o = Workspace:FindFirstChild(n)
+	if o then
+		o:Destroy()
+	end
 end
-local World = create("Folder", { Name = "TrackAndField_World", Parent = Workspace })
+local World = create("Folder", { Name = "TrackAndFieldWorld", Parent = Workspace })
 local TrackFolder = create("Folder", { Name = "Track", Parent = World })
 local DecorFolder = create("Folder", { Name = "Decor", Parent = World })
 local RaceFolder = create("Folder", { Name = "RaceProps", Parent = World })
@@ -755,7 +1335,7 @@ local boardGui: any = nil
 
 local function buildTrack()
 	local trackColor = K.TRACK_COLORS[Settings.TrackColor]
-	local segAngle = math.pi / BEND_SEGMENTS
+	local segAngle = math.pi / K.BEND_SEGMENTS
 	local zMid = (RC + R_OUT) / 2
 	local function len(r: number): number
 		return 2 * r * math.tan(segAngle / 2)
@@ -763,7 +1343,7 @@ local function buildTrack()
 	-- bends: flat segments (no overlapping layers = no flicker)
 	for _, sign in ipairs({ 1, -1 }) do
 		local center = Vector3.new(sign * HALF, 0, 0)
-		for i = 0, BEND_SEGMENTS - 1 do
+		for i = 0, K.BEND_SEGMENTS - 1 do
 			local a = (i + 0.5) * segAngle
 			local out = Vector3.new(sign * math.sin(a), 0, sign * math.cos(a))
 			local function segCF(r: number): CFrame
@@ -771,12 +1351,12 @@ local function buildTrack()
 				return CFrame.lookAt(pos, pos + out)
 			end
 			table.insert(trackSurfaces, flat("Bend", segCF(zMid), len(R_OUT) + 0.05, R_OUT - RC, TRACK_TOP, trackColor, K.TRACK_MATERIAL))
-			table.insert(trackSurfaces, flat("OuterApron", segCF((R_OUT + BAND_OUT) / 2), len(BAND_OUT) + 0.05, OUTER_APRON, TRACK_TOP, trackColor, K.TRACK_MATERIAL))
-			flat("InnerApron", segCF((BAND_IN + RC) / 2), len(RC) + 0.05, INNER_APRON, TRACK_TOP, K.APRON_COLOR, Enum.Material.Concrete)
+			table.insert(trackSurfaces, flat("OuterApron", segCF((R_OUT + BAND_OUT) / 2), len(BAND_OUT) + 0.05, K.OUTER_APRON, TRACK_TOP, trackColor, K.TRACK_MATERIAL))
+			flat("InnerApron", segCF((BAND_IN + RC) / 2), len(RC) + 0.05, K.INNER_APRON, TRACK_TOP, K.APRON_COLOR, Enum.Material.Concrete)
 			flat("Kerb", segCF(RC - 0.25), len(RC) + 0.02, 0.5, TRACK_TOP + 0.12, K.KERB_COLOR, Enum.Material.Metal, 0.17)
 			for k = 1, LANES do
 				local r = RC + k * LANE_W
-				flat("BendLine", segCF(r), len(r) + 0.02, LINE_W, LINE_TOP, K.LINE_COLOR, Enum.Material.SmoothPlastic, 0.02)
+				flat("BendLine", segCF(r), len(r) + 0.02, LINE_W, K.LINE_TOP, K.LINE_COLOR, Enum.Material.SmoothPlastic, 0.02)
 			end
 			local fcf = segCF((BAND_IN + BAND_OUT) / 2)
 			block({
@@ -793,11 +1373,11 @@ local function buildTrack()
 	-- straights
 	for _, sign in ipairs({ 1, -1 }) do
 		table.insert(trackSurfaces, flat("Straight", CFrame.new(0, 0, sign * zMid), STRAIGHT, LANES * LANE_W, TRACK_TOP, trackColor, K.TRACK_MATERIAL))
-		table.insert(trackSurfaces, flat("OuterApron", CFrame.new(0, 0, sign * (R_OUT + BAND_OUT) / 2), STRAIGHT, OUTER_APRON, TRACK_TOP, trackColor, K.TRACK_MATERIAL))
-		flat("InnerApron", CFrame.new(0, 0, sign * (BAND_IN + RC) / 2), STRAIGHT, INNER_APRON, TRACK_TOP, K.APRON_COLOR, Enum.Material.Concrete)
+		table.insert(trackSurfaces, flat("OuterApron", CFrame.new(0, 0, sign * (R_OUT + BAND_OUT) / 2), STRAIGHT, K.OUTER_APRON, TRACK_TOP, trackColor, K.TRACK_MATERIAL))
+		flat("InnerApron", CFrame.new(0, 0, sign * (BAND_IN + RC) / 2), STRAIGHT, K.INNER_APRON, TRACK_TOP, K.APRON_COLOR, Enum.Material.Concrete)
 		flat("Kerb", CFrame.new(0, 0, sign * (RC - 0.25)), STRAIGHT, 0.5, TRACK_TOP + 0.12, K.KERB_COLOR, Enum.Material.Metal, 0.17)
 		for k = 1, LANES do
-			flat("LaneLine", CFrame.new(0, 0, sign * (RC + k * LANE_W)), STRAIGHT, LINE_W, LINE_TOP, K.LINE_COLOR, Enum.Material.SmoothPlastic, 0.02)
+			flat("LaneLine", CFrame.new(0, 0, sign * (RC + k * LANE_W)), STRAIGHT, LINE_W, K.LINE_TOP, K.LINE_COLOR, Enum.Material.SmoothPlastic, 0.02)
 		end
 		block({
 			Name = "StraightFloor",
@@ -811,7 +1391,7 @@ local function buildTrack()
 	end
 
 	-- finish line + start lines for every event (staggered on the bends)
-	flat("FinishLine", CFrame.new(HALF, 0, zMid), 0.45, LANES * LANE_W, MARK_TOP, K.LINE_COLOR, Enum.Material.SmoothPlastic, 0.02)
+	flat("FinishLine", CFrame.new(HALF, 0, zMid), 0.45, LANES * LANE_W, K.MARK_TOP, K.LINE_COLOR, Enum.Material.SmoothPlastic, 0.02)
 	local seen = {}
 	for _, e in ipairs(EVENTS) do
 		for lane = 1, LANES do
@@ -820,15 +1400,15 @@ local function buildTrack()
 			if not seen[key] and math.abs(s - FINISH_S) > 0.5 then
 				seen[key] = true
 				local pos, dir = trackSample(lane, s)
-				flat("StartLine", CFrame.lookAt(pos, pos + dir), LANE_W - LINE_W, 0.2, MARK_TOP, K.LINE_COLOR, Enum.Material.SmoothPlastic, 0.02)
+				flat("StartLine", CFrame.lookAt(pos, pos + dir), LANE_W - LINE_W, 0.2, K.MARK_TOP, K.LINE_COLOR, Enum.Material.SmoothPlastic, 0.02)
 			end
 		end
 	end
 
 	-- lane numbers painted after the finish line
 	for lane = 1, LANES do
-		local pos = Vector3.new(HALF + 4, MARK_TOP, laneRadius(lane))
-		local p = flat("LaneNumber" .. lane, CFrame.lookAt(pos, pos + Vector3.new(-1, 0, 0)), 3.2, 3.2, MARK_TOP + 0.005, K.LINE_COLOR, Enum.Material.SmoothPlastic, 0.02)
+		local pos = Vector3.new(HALF + 4, K.MARK_TOP, laneRadius(lane))
+		local p = flat("LaneNumber" .. lane, CFrame.lookAt(pos, pos + Vector3.new(-1, 0, 0)), 3.2, 3.2, K.MARK_TOP + 0.005, K.LINE_COLOR, Enum.Material.SmoothPlastic, 0.02)
 		p.Transparency = 1
 		label3D(p, Enum.NormalId.Top, 40, { { "N", UDim2.fromScale(0, 0), UDim2.fromScale(1, 1), tostring(lane), K.LINE_COLOR } })
 	end
@@ -1212,28 +1792,31 @@ local function resetRig(rig: Rig)
 	end
 end
 
--- Sprint cycle keyframes (degrees), 10 keys per stride cycle, right side.
--- u = 0: right foot touchdown. Contact ~20% of the cycle at top speed
--- (Bolt: 0.086 s contact, 4.36 steps/s, 2.70 m steps). Front-side
--- mechanics (Lyles): knee driven high, foot lands under the hips.
--- Hip = thigh angle relative to the trunk, knee/elbow = flexion,
--- ankle = dorsiflexion (+ toes up), shoulder = arm swing (+ forward).
+-- Sprint cycle keyframes (degrees): 20 frames per stride, one every 5% of the cycle,
+-- right side (the left side plays the same frames half a cycle later).
+-- Frame 1 = right foot touchdown. Contact lasts ~20% of the cycle at top speed (Bolt:
+-- 0.086 s on the ground, ~2.4 strides/s). Front-side mechanics (Lyles): the knee is driven
+-- high in front, the heel folds tight under the hips, the foot is clawed back to land under
+-- the body. Hip = thigh angle to the trunk, knee/elbow = flexion, ankle = dorsiflexion
+-- (+ toes up), shoulder = arm swing (+ forward). The right arm swings with the left leg.
 K.TOP = {
-	hip = { 26, 8, -14, -6, 22, 50, 74, 76, 60, 40 },
-	knee = { 24, 44, 32, 72, 112, 128, 108, 78, 48, 30 },
-	ankle = { 4, 14, -24, -12, 2, 10, 16, 16, 12, 8 },
-	shoulder = { 40, 64, 58, 26, -12, -42, -52, -44, -14, 18 },
-	elbow = { 96, 106, 102, 90, 76, 62, 58, 64, 78, 88 },
+	--         TD    5%   10%   15%  TO20%  25%   30%   35%   40%   45%   50%   55%   60%   65%   70%   75%   80%   85%   90%   95%
+	hip = { 24, 14, 3, -8, -16, -18, -12, 0, 16, 34, 52, 66, 74, 76, 70, 60, 48, 38, 31, 27 },
+	knee = { 26, 38, 44, 36, 24, 40, 70, 98, 118, 128, 126, 112, 92, 70, 50, 36, 26, 20, 20, 22 },
+	ankle = { -4, 8, 14, 4, -24, -28, -18, -6, 4, 12, 16, 18, 18, 16, 12, 8, 5, 2, 0, -2 },
+	shoulder = { 58, 66, 70, 68, 58, 42, 22, 0, -20, -38, -50, -56, -58, -54, -42, -24, -2, 20, 38, 50 },
+	elbow = { 70, 66, 64, 66, 70, 78, 86, 94, 102, 108, 112, 114, 112, 106, 98, 90, 82, 76, 72, 70 },
 }
--- Drive phase (acceleration): longer contact, full hip extension at
--- toe-off (body, hip, knee and ankle in one line), low heel recovery,
--- bigger arm range. The trunk starts at ~45 degrees and rises.
+-- Drive phase (first steps out of the blocks): longer ground contact (~30% of the cycle),
+-- full extension at toe-off - head, hips and ankle in one straight line - a low heel
+-- recovery and a big, powerful arm swing. The trunk starts at ~45 degrees and rises.
 K.DRIVE = {
-	hip = { 42, 18, -8, -22, 6, 46, 78, 84, 70, 54 },
-	knee = { 46, 54, 38, 18, 58, 88, 96, 86, 66, 50 },
-	ankle = { 10, 20, 6, -30, -10, 12, 20, 20, 16, 12 },
-	shoulder = { 50, 82, 74, 34, -20, -56, -66, -56, -20, 22 },
-	elbow = { 100, 110, 104, 90, 70, 54, 50, 56, 74, 92 },
+	--         TD    5%   10%   15%   20%   25%  TO30%  35%   40%   45%   50%   55%   60%   65%   70%   75%   80%   85%   90%   95%
+	hip = { 52, 40, 28, 16, 6, -1, -4, 2, 16, 34, 52, 68, 79, 84, 83, 77, 69, 62, 57, 54 },
+	knee = { 62, 60, 54, 44, 30, 16, 8, 24, 50, 74, 90, 96, 94, 88, 80, 74, 70, 67, 64, 63 },
+	ankle = { 12, 20, 22, 18, 8, -12, -32, -26, -10, 6, 16, 22, 24, 24, 22, 20, 18, 16, 14, 13 },
+	shoulder = { 70, 80, 86, 86, 78, 60, 34, 6, -22, -46, -62, -70, -72, -66, -50, -26, 2, 30, 52, 64 },
+	elbow = { 84, 80, 76, 76, 80, 88, 98, 108, 116, 122, 126, 128, 126, 120, 112, 104, 96, 90, 86, 84 },
 }
 
 -- periodic Catmull-Rom spline through the keys
@@ -1251,10 +1834,20 @@ local function curve(keys: { number }, u: number): number
 	return 0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3)
 end
 
-local function cycle(name: string, u: number, drive: number): number
+-- one joint at stride phase u, blended between top speed (drive 0) and drive phase (drive 1), degrees
+local function cycleDeg(name: string, u: number, drive: number): number
 	local a = curve((K.TOP :: any)[name], u)
 	local b = curve((K.DRIVE :: any)[name], u)
-	return math.rad(a + (b - a) * drive)
+	return a + (b - a) * drive
+end
+local function cycle(name: string, u: number, drive: number): number
+	return math.rad(cycleDeg(name, u, drive))
+end
+
+-- R6 limbs have no knees or elbows: aim the straight leg along the hip-to-foot line of the
+-- bent leg (for two equal segments that is hip - knee/2), and swing the straight arm a bit less
+local function legLineR6(u: number, drive: number): number
+	return math.rad(cycleDeg("hip", u, drive) - cycleDeg("knee", u, drive) * 0.5)
 end
 
 -- u: stride phase 0..1, amp: 0..1 effort, drive: 1 = first step, 0 = upright,
@@ -1262,34 +1855,37 @@ end
 local function poseRun(u: number, amp: number, drive: number, bend: number, isR15: boolean): Pose
 	local uL = (u + 0.5) % 1
 	local lean = -math.rad(8 + 37 * drive)
+	-- pelvis turns with the forward leg, shoulders counter-rotate (peaks at the knee lift)
 	local twist = math.sin((u - 0.4) * math.pi * 2)
 	if isR15 then
-		local bob = (-0.08 * math.cos((u - 0.08) * math.pi * 4) - 0.02) * amp - 0.45 * drive
+		-- lowest at mid-stance, highest in mid-flight: two bounces per stride
+		local bob = (-0.1 * math.cos((u - 0.08) * math.pi * 4) - 0.02) * amp - 0.25 * drive
+		local armOut = 0.1 + 0.04 * drive
 		return {
-			root = J(lean, math.rad(7) * twist * amp, bend, bob, -0.3 * drive),
-			waist = J(-0.03, -math.rad(12) * twist * amp, -bend * 0.3),
-			neck = J(-lean * 0.75 - 0.05 * drive, math.rad(5) * twist * amp, -bend * 0.4),
+			root = J(lean, math.rad(6) * twist * amp, bend, bob, -0.3 * drive),
+			waist = J(-0.03, -math.rad(11) * twist * amp, -bend * 0.3),
+			neck = J(-lean * 0.78 - 0.05 * drive, math.rad(5) * twist * amp, -bend * 0.4),
 			hipR = J(cycle("hip", u, drive) * amp),
 			hipL = J(cycle("hip", uL, drive) * amp),
 			kneeR = J(-cycle("knee", u, drive) * amp),
 			kneeL = J(-cycle("knee", uL, drive) * amp),
 			ankleR = J(cycle("ankle", u, drive) * amp),
 			ankleL = J(cycle("ankle", uL, drive) * amp),
-			shoulderR = J(cycle("shoulder", u, drive) * amp, 0, 0.12),
-			shoulderL = J(cycle("shoulder", uL, drive) * amp, 0, -0.12),
+			shoulderR = J(cycle("shoulder", u, drive) * amp, 0, armOut),
+			shoulderL = J(cycle("shoulder", uL, drive) * amp, 0, -armOut),
 			elbowR = J(cycle("elbow", u, drive)),
 			elbowL = J(cycle("elbow", uL, drive)),
 		}
 	end
-	-- R6 has straight limbs: smaller leg range, bigger arm swing
 	local leanR6 = -math.rad(6 + 26 * drive)
+	local bobR6 = (0.08 * math.abs(math.cos(u * math.pi * 2)) - 0.04) * amp - 0.2 * drive
 	return {
-		root = J(leanR6, math.rad(5) * twist * amp, bend, 0.1 * amp * math.abs(math.cos(u * math.pi * 2)) - 0.2 * drive),
+		root = J(leanR6, math.rad(5) * twist * amp, bend, bobR6),
 		neck = J(-leanR6 * 0.7, 0, -bend * 0.4),
-		hipR = J((cycle("hip", u, drive) * 0.8 - math.rad(8)) * amp),
-		hipL = J((cycle("hip", uL, drive) * 0.8 - math.rad(8)) * amp),
-		shoulderR = J((cycle("shoulder", u, drive) * 1.15 + math.rad(6)) * amp, 0, 0.1),
-		shoulderL = J((cycle("shoulder", uL, drive) * 1.15 + math.rad(6)) * amp, 0, -0.1),
+		hipR = J(legLineR6(u, drive) * 0.85 * amp),
+		hipL = J(legLineR6(uL, drive) * 0.85 * amp),
+		shoulderR = J((cycle("shoulder", u, drive) * 0.85 + math.rad(4)) * amp, 0, 0.1),
+		shoulderL = J((cycle("shoulder", uL, drive) * 0.85 + math.rad(4)) * amp, 0, -0.1),
 	}
 end
 
@@ -1643,7 +2239,7 @@ K.FONT_REG = Enum.Font.GothamMedium
 
 local UI: { [string]: any } = {} -- every UI element lives here
 UI.playerGui = player:WaitForChild("PlayerGui")
-for _, n in ipairs({ "TrackAndFieldUI", "TrackAndFieldLoading" }) do
+for _, n in ipairs({ "TrackAndFieldHUD", "TrackAndFieldLoader", "TrackAndFieldUI", "TrackAndFieldLoading" }) do
 	local o = UI.playerGui:FindFirstChild(n)
 	if o then
 		o:Destroy()
@@ -1651,7 +2247,7 @@ for _, n in ipairs({ "TrackAndFieldUI", "TrackAndFieldLoading" }) do
 end
 
 UI.gui = create("ScreenGui", {
-	Name = "TrackAndFieldUI",
+	Name = "TrackAndFieldHUD",
 	ResetOnSpawn = false,
 	IgnoreGuiInset = true,
 	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
@@ -1659,7 +2255,7 @@ UI.gui = create("ScreenGui", {
 	Parent = UI.playerGui,
 })
 UI.loadGui = create("ScreenGui", {
-	Name = "TrackAndFieldLoading",
+	Name = "TrackAndFieldLoader",
 	ResetOnSpawn = false,
 	IgnoreGuiInset = true,
 	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
@@ -1754,8 +2350,11 @@ for i = 1, 18 do
 	table.insert(UI.speedLines, { frame = f, angle = rng:NextNumber(0, math.pi * 2), dist = rng:NextNumber(0.3, 1), rate = rng:NextNumber(0.9, 1.6) })
 end
 UI.vignette = {}
-local vignetteSpecs: { { any } } = { { UDim2.fromScale(1, 0.2), UDim2.fromScale(0, 0), 90 }, { UDim2.fromScale(1, 0.2), UDim2.fromScale(0, 0.8), 270 }, { UDim2.fromScale(0.15, 1), UDim2.fromScale(0, 0), 0 }, { UDim2.fromScale(0.15, 1), UDim2.fromScale(0.85, 0), 180 } }
-for i, spec in ipairs(vignetteSpecs) do
+do
+	local specs: { { any } } = { { UDim2.fromScale(1, 0.2), UDim2.fromScale(0, 0), 90 }, { UDim2.fromScale(1, 0.2), UDim2.fromScale(0, 0.8), 270 }, { UDim2.fromScale(0.15, 1), UDim2.fromScale(0, 0), 0 }, { UDim2.fromScale(0.15, 1), UDim2.fromScale(0.85, 0), 180 } }
+	K.vignetteSpecs = specs
+end
+for i, spec in ipairs(K.vignetteSpecs) do
 	local v = create("Frame", { Name = "Vignette" .. i, Size = spec[1], Position = spec[2], BackgroundColor3 = Color3.new(0, 0, 0), BorderSizePixel = 0, BackgroundTransparency = 1, ZIndex = 1, Parent = UI.fxLayer })
 	create("UIGradient", { Transparency = NumberSequence.new(0, 1), Rotation = spec[3], Parent = v })
 	table.insert(UI.vignette, v)
@@ -1769,6 +2368,7 @@ UI.lbButton = button({ Name = "LeaderboardButton", Text = "LEADERBOARD  [L]", Si
 stroke(UI.lbButton, K.GOLD, 1.5, 0.35)
 UI.setButton = button({ Name = "SettingsButton", Text = "SETTINGS  [P]", Size = UDim2.fromOffset(176, 42), LayoutOrder = 2, BackgroundColor3 = K.C_PANEL, Parent = UI.menu })
 stroke(UI.setButton, K.ROYAL_LIGHT, 1.5, 0.35)
+UI.versionLabel = label({ Name = "Version", Text = "TRACK AND FIELD  v" .. X.VERSION, Font = K.FONT_BOLD, TextSize = 11, TextColor3 = K.C_MUTED, TextStrokeTransparency = 0.6, Size = UDim2.fromOffset(176, 14), LayoutOrder = 3, Parent = UI.menu })
 
 -- top race bar: event, real race clock, position + progress strip
 UI.raceBar = scaled(panel({ Name = "RaceBar", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 8), Size = UDim2.fromOffset(560, 70), Parent = UI.gui }))
@@ -2164,157 +2764,54 @@ local function announce(text: string, spoken: string?)
 end
 
 ---------------------------------------------------------------------
--- UNIFORM: white & royal blue kit on your own avatar
+-- UNIFORM: the server dresses you (so everyone sees it); without the server half your
+-- own client does it (only you see it). The kit itself is KIT at the top of the script.
 ---------------------------------------------------------------------
-type UniformState = {
-	colors: { [BasePart]: Color3 },
-	textures: { [MeshPart]: string },
-	hidden: { { inst: Instance, parent: Instance? } },
-	transparency: { [BasePart]: number },
-	guis: { Instance },
-	bib: TextLabel?,
-}
-local uniformStates: { [Model]: UniformState } = {}
-K.R15_KIT = { UpperTorso = "top", LowerTorso = "shorts", LeftUpperLeg = "shorts", RightUpperLeg = "shorts", LeftFoot = "shoe", RightFoot = "shoe" }
-
-local function kitGui(st: UniformState, part: BasePart, face: Enum.NormalId, build: (Instance) -> ())
-	local sg = create("SurfaceGui", { Name = "TF_Kit", Face = face, SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud, PixelsPerStud = 60, LightInfluence = 1, Parent = part })
-	build(sg)
-	table.insert(st.guis, sg)
-end
-
-local function bar(parent: Instance, pos: UDim2, size: UDim2, color: Color3): any
-	return create("Frame", { Position = pos, Size = size, BackgroundColor3 = color, BorderSizePixel = 0, Parent = parent })
-end
+local uniformStates: { [Model]: any } = {}
+X.bibNumber = 1
+X.kitRemote = nil :: RemoteEvent?
 
 local function applyUniform(char: Model)
 	if uniformStates[char] then
 		return
 	end
-	local hum = char:FindFirstChildOfClass("Humanoid")
-	if not hum then
-		return
-	end
-	local isR15 = hum.RigType == Enum.HumanoidRigType.R15
-	local st: UniformState = { colors = {}, textures = {}, hidden = {}, transparency = {}, guis = {}, bib = nil }
-	uniformStates[char] = st
-	for _, d in ipairs(char:GetChildren()) do
-		if d:IsA("Clothing") or d:IsA("ShirtGraphic") or d:IsA("BodyColors") then
-			local inst: Instance = d
-			table.insert(st.hidden, { inst = inst, parent = inst.Parent })
-			inst.Parent = nil
-		elseif d:IsA("Accessory") then
-			local handle = d:FindFirstChild("Handle")
-			if handle and handle:IsA("BasePart") and handle:FindFirstChildOfClass("WrapLayer") then
-				st.transparency[handle] = handle.Transparency
-				handle.Transparency = 1 -- layered clothing (jackets etc.) would cover the kit
-			end
-		end
-	end
-	local function paint(part: BasePart, color: Color3)
-		if not st.colors[part] then
-			st.colors[part] = part.Color
-		end
-		part.Color = color
-		if part:IsA("MeshPart") and not st.textures[part :: MeshPart] then
-			local mp = part :: MeshPart
-			pcall(function()
-				st.textures[mp] = mp.TextureID
-				mp.TextureID = ""
-			end)
-		end
-	end
-	local torsoInst = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
-	local torso: BasePart? = if torsoInst and torsoInst:IsA("BasePart") then torsoInst else nil
-	if isR15 then
-		for name, role in pairs(K.R15_KIT) do
-			local p = char:FindFirstChild(name)
-			if p and p:IsA("BasePart") then
-				paint(p, if role == "top" or role == "shoe" then K.WHITE else K.ROYAL)
-			end
-		end
-		for _, n in ipairs({ "LeftUpperLeg", "RightUpperLeg" }) do
-			local p = char:FindFirstChild(n)
-			if p and p:IsA("BasePart") then
-				for _, face in ipairs({ Enum.NormalId.Left, Enum.NormalId.Right }) do
-					kitGui(st, p, face, function(sg)
-						bar(sg, UDim2.fromScale(0.42, 0), UDim2.fromScale(0.16, 1), K.WHITE)
-					end)
-				end
-			end
-		end
-	else
-		if torso then
-			paint(torso, K.WHITE)
-		end
-		for _, n in ipairs({ "Left Leg", "Right Leg" }) do
-			local p = char:FindFirstChild(n)
-			if p and p:IsA("BasePart") then
-				for _, face in ipairs({ Enum.NormalId.Front, Enum.NormalId.Back, Enum.NormalId.Left, Enum.NormalId.Right }) do
-					kitGui(st, p, face, function(sg)
-						bar(sg, UDim2.fromScale(0, 0), UDim2.fromScale(1, 0.46), K.ROYAL)
-						bar(sg, UDim2.fromScale(0, 0.86), UDim2.fromScale(1, 0.14), K.WHITE)
-						if face == Enum.NormalId.Left or face == Enum.NormalId.Right then
-							bar(sg, UDim2.fromScale(0.42, 0), UDim2.fromScale(0.16, 0.46), K.WHITE)
-						end
-					end)
-				end
-			end
-		end
-	end
-	if torso then
-		kitGui(st, torso, Enum.NormalId.Front, function(sg)
-			bar(sg, UDim2.fromScale(0, 0), UDim2.fromScale(0.1, 1), K.ROYAL)
-			bar(sg, UDim2.fromScale(0.9, 0), UDim2.fromScale(0.1, 1), K.ROYAL)
-			local band = bar(sg, UDim2.fromScale(0, 0.14), UDim2.fromScale(1, 0.24), K.ROYAL)
-			create("TextLabel", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "T&F", TextScaled = true, Font = Enum.Font.GothamBlack, TextColor3 = K.WHITE, Parent = band })
-			local bibFrame = create("Frame", { Position = UDim2.fromScale(0.27, 0.48), Size = UDim2.fromScale(0.46, 0.38), BackgroundColor3 = Color3.fromRGB(252, 252, 252), BorderSizePixel = 0, Parent = sg })
-			create("UIStroke", { Color = K.ROYAL, Thickness = 2, Parent = bibFrame })
-			st.bib = create("TextLabel", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "1", TextScaled = true, Font = Enum.Font.GothamBlack, TextColor3 = Color3.fromRGB(16, 16, 20), Parent = bibFrame })
-		end)
-		kitGui(st, torso, Enum.NormalId.Back, function(sg)
-			local band = bar(sg, UDim2.fromScale(0, 0.12), UDim2.fromScale(1, 0.3), K.ROYAL)
-			create("TextLabel", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = string.upper(player.Name), TextScaled = true, Font = Enum.Font.GothamBlack, TextColor3 = K.WHITE, Parent = band })
-		end)
+	local ok, st = pcall(KIT.wear, char, player.Name, X.bibNumber)
+	if ok and st then
+		uniformStates[char] = st
+	elseif not ok then
+		warn("[Track And Field] uniform: " .. tostring(st))
 	end
 end
 
 local function removeUniform(char: Model)
 	local st = uniformStates[char]
-	if not st then
-		return
-	end
-	uniformStates[char] = nil
-	for _, g in ipairs(st.guis) do
-		g:Destroy()
-	end
-	for part, color in pairs(st.colors) do
-		part.Color = color
-	end
-	for part, tex in pairs(st.textures) do
-		pcall(function()
-			part.TextureID = tex
-		end)
-	end
-	for part, tr in pairs(st.transparency) do
-		part.Transparency = tr
-	end
-	for _, h in ipairs(st.hidden) do
-		if char.Parent then
-			h.inst.Parent = h.parent or char
-		end
+	if st then
+		uniformStates[char] = nil
+		pcall(KIT.remove, st)
 	end
 end
 
+-- your lane number on the bib and the hip numbers
 local function setBib(lane: number)
+	X.bibNumber = lane
+	local remote = X.kitRemote
+	if remote then
+		remote:FireServer("number", lane)
+		return
+	end
 	local char = player.Character
 	local st = char and uniformStates[char]
-	if st and st.bib then
-		st.bib.Text = tostring(lane)
+	if st then
+		KIT.setNumber(st, lane)
 	end
 end
 
 local function refreshUniform()
+	local remote = X.kitRemote
+	if remote then
+		remote:FireServer("wear", Settings.Uniform)
+		return
+	end
 	local char = player.Character
 	if not char then
 		return
@@ -2668,6 +3165,9 @@ end
 
 local function lockPlayer(lock: boolean)
 	local char, hum = getPlayerParts()
+	if not lock then
+		X.moverOff() -- always hand your body back to you
+	end
 	if lock and not controlsLocked then
 		controlsLocked = true
 		local controls = getControls()
@@ -2685,8 +3185,10 @@ local function lockPlayer(lock: boolean)
 			hum.JumpPower = 0
 			hum.JumpHeight = 0
 		end
+		-- Roblox's own Animate keeps running: other players see its normal run animation,
+		-- while on your screen this game's sprint animation is laid over it every frame
 		if char then
-			setAnimateEnabled(char, false)
+			setAnimateEnabled(char, true)
 		end
 	elseif not lock and controlsLocked then
 		controlsLocked = false
@@ -2696,14 +3198,92 @@ local function lockPlayer(lock: boolean)
 				controls:Enable()
 			end)
 		end
+		X.moverOff()
 		if hum then
 			hum:Move(Vector3.zero)
-			hum.WalkSpeed = savedHumanoid.WalkSpeed
-			hum.JumpPower = savedHumanoid.JumpPower
-			hum.JumpHeight = savedHumanoid.JumpHeight
-			hum.AutoRotate = savedHumanoid.AutoRotate
+			hum.WalkSpeed = if savedHumanoid.WalkSpeed > 0 then savedHumanoid.WalkSpeed else 16
+			hum.JumpPower = if savedHumanoid.JumpPower > 0 then savedHumanoid.JumpPower else 50
+			hum.JumpHeight = if savedHumanoid.JumpHeight > 0 then savedHumanoid.JumpHeight else 7.2
+			hum.AutoRotate = true
 		end
 	end
+end
+
+-- Physics mover: a LinearVelocity (flat plane, gravity untouched) + AlignOrientation on your
+-- HumanoidRootPart. Your body really runs - it is pushed along at your speed every physics step,
+-- never teleported - and nothing else (the default controls, another script) can stop it.
+X.motor = { lv = nil, ao = nil, root = nil }
+X.mover = function(root: BasePart): (LinearVelocity, AlignOrientation)
+	local m = X.motor
+	local lv: LinearVelocity? = m.lv
+	local ao: AlignOrientation? = m.ao
+	if m.root ~= root or not lv or not lv.Parent or not ao or not ao.Parent then
+		if lv then
+			lv:Destroy()
+		end
+		if ao then
+			ao:Destroy()
+		end
+		local found = root:FindFirstChild("TF_MoveAttachment")
+		local att: Attachment = if found and found:IsA("Attachment") then found else create("Attachment", { Name = "TF_MoveAttachment", Parent = root })
+		lv = create("LinearVelocity", {
+			Name = "TF_Mover",
+			Attachment0 = att,
+			RelativeTo = Enum.ActuatorRelativeTo.World,
+			VelocityConstraintMode = Enum.VelocityConstraintMode.Plane,
+			PrimaryTangentAxis = Vector3.xAxis,
+			SecondaryTangentAxis = Vector3.zAxis,
+			ForceLimitsEnabled = true,
+			MaxForce = 1e7,
+			Enabled = false,
+			Parent = root,
+		})
+		ao = create("AlignOrientation", {
+			Name = "TF_Facing",
+			Attachment0 = att,
+			Mode = Enum.OrientationAlignmentMode.OneAttachment,
+			Responsiveness = 45,
+			MaxTorque = 1e7,
+			Enabled = false,
+			Parent = root,
+		})
+		m.lv = lv
+		m.ao = ao
+		m.root = root
+	end
+	return lv :: LinearVelocity, ao :: AlignOrientation
+end
+
+-- run your body at this velocity (studs/s, flat) facing this way
+X.moveDir = nil :: Vector3?
+X.drive = function(root: BasePart, hum: Humanoid, velocity: Vector3, face: Vector3)
+	local lv, ao = X.mover(root)
+	local flat = Vector3.new(velocity.X, 0, velocity.Z)
+	lv.PlaneVelocity = Vector2.new(flat.X, flat.Z)
+	lv.Enabled = true
+	local f = Vector3.new(face.X, 0, face.Z)
+	if f.Magnitude > 0.01 then
+		ao.CFrame = CFrame.lookAt(Vector3.zero, f.Unit)
+		ao.Enabled = true
+	end
+	hum.AutoRotate = false
+	hum.WalkSpeed = flat.Magnitude
+	local md = if flat.Magnitude > 0.05 then flat.Unit else Vector3.zero
+	X.moveDir = md
+	hum:Move(md)
+end
+
+X.moverOff = function()
+	local m = X.motor
+	local lv: LinearVelocity? = m.lv
+	local ao: AlignOrientation? = m.ao
+	if lv then
+		lv.Enabled = false
+	end
+	if ao then
+		ao.Enabled = false
+	end
+	X.moveDir = nil
 end
 
 local function placePlayerAt(r: Runner)
@@ -2723,6 +3303,7 @@ local function placePlayerAt(r: Runner)
 	if not r.rig or r.rig.model ~= char then
 		r.rig = newRig(char)
 	end
+	X.drive(root, hum, Vector3.zero, dir) -- stand still in your blocks until the gun
 end
 
 -- distance = how far your character really ran along the lane this frame
@@ -2760,14 +3341,16 @@ local function drivePlayerCharacter(r: Runner)
 	local rp = root.Position
 	local err = Vector3.new(pos.X - rp.X, 0, pos.Z - rp.Z)
 	if r.speed < 0.05 then
-		hum.WalkSpeed = 0
-		hum:Move(Vector3.zero)
+		X.drive(root, hum, Vector3.zero, dir)
 		return
 	end
+	-- run along the lane, gently steering back to its centre line
 	local lateral = err - dir * err:Dot(dir)
-	hum.AutoRotate = true
-	hum.WalkSpeed = r.speed
-	hum:Move((dir * math.max(r.speed, 1) + lateral * 4).Unit)
+	local steer = lateral * 4
+	if steer.Magnitude > 6 then
+		steer = steer.Unit * 6
+	end
+	X.drive(root, hum, dir * r.speed + steer, dir)
 end
 
 -- relay baton in your right hand
@@ -2885,8 +3468,9 @@ RunService.PreSimulation:Connect(function(dt: number)
 				r.poseClock += dt
 				local frac = math.clamp(r.speed / current.event.MaxSpeed, 0, 1)
 				if r.speed > 0.2 then
-					-- 1.8 strides/s out of the blocks -> ~2.2 at top speed (4.4 steps/s, like Bolt)
-					r.phase = (r.phase + dt * (1.8 + 0.42 * frac)) % 1
+					-- 2.0 strides/s out of the blocks -> 2.6 at top speed (5.2 steps/s): a Roblox
+					-- avatar is small for this speed, so its legs turn over a bit faster than Bolt's
+					r.phase = (r.phase + dt * (2.0 + 0.62 * frac)) % 1
 				end
 				-- lean into the bend (Lyles-style bend running)
 				local bendTarget = 0
@@ -2907,32 +3491,91 @@ end)
 ---------------------------------------------------------------------
 -- CAMERA
 ---------------------------------------------------------------------
+-- The camera orbits around its target (yaw / distance / height), so changing view - "set" to
+-- chase at the gun, chase to the finish view - swings around you instead of through you.
+-- yaw 0 = behind, pi/2 = your right side, pi = in front.
 local cam = {
 	active = false,
 	target = nil :: Runner?,
 	mode = "chase", -- "start" | "chase" | "finish" | "intro"
-	offset = Vector3.new(0, 6, 14),
-	look = Vector3.new(0, 2, 0),
+	yaw = 0,
+	dist = 11,
+	height = 6,
+	lookFwd = 12,
+	lookUp = 2,
 	snap = true,
 	fov = 70,
 	introBase = Vector3.zero,
 	introDir = Vector3.new(1, 0, 0),
 	shake = 0,
+	base = nil :: Vector3?, -- smoothed point the camera circles
+	lastTargetBase = nil :: Vector3?,
+	lastRoot = nil :: BasePart?,
+	releasing = false,
+	releaseClock = 0,
 }
 
-local function startCamera(target: Runner?, mode: string)
+-- where each view wants to be: yaw, distance, height, look ahead, look up
+K.CAM_VIEWS = {
+	intro = { math.pi - 0.17, 12.2, 4.8, 0, 1.2 },
+	start = { math.pi - 0.09, 16, 5, 0, 1.2 },
+	finish = { math.pi - 0.29, 10.4, 3.4, 0, 2.2 },
+	side = { math.pi / 2 + 0.09, 21, 12.5, 3, 1.5 },
+	chase = { 0.045, 11, 6.2, 12, 2 },
+	release = { 0, 12.5, 4.2, 4, 1.6 },
+}
+
+local function camTargetBase(): (Vector3?, Vector3, number, BasePart?)
+	if cam.mode == "intro" then
+		return cam.introBase, cam.introDir, 0, nil
+	end
+	local r = cam.target
+	if not r then
+		return nil, Vector3.new(0, 0, -1), 0, nil
+	end
+	local _, d = runnerSample(r)
+	local root = r.root
+	if root and root.Parent then
+		local rp = root.Position
+		return Vector3.new(rp.X, FLOOR_TOP, rp.Z), d, r.speed, root
+	end
+	return runnerSample(r), d, r.speed, nil
+end
+
+local function startCamera(target: Runner?, mode: string, smooth: boolean?)
 	cam.active = true
+	cam.releasing = false
 	cam.target = target
 	cam.mode = mode
-	cam.snap = true
 	local camera = Workspace.CurrentCamera
 	if camera then
+		if smooth and camera.CameraType ~= Enum.CameraType.Scriptable then
+			-- start from wherever the normal camera is, then glide into the new view
+			local base, dir = camTargetBase()
+			if base then
+				local off = camera.CFrame.Position - base
+				local right = dir:Cross(Vector3.yAxis)
+				local flat = Vector3.new(off.X, 0, off.Z)
+				cam.yaw = math.atan2(flat:Dot(right), -flat:Dot(dir))
+				cam.dist = math.max(4, flat.Magnitude)
+				cam.height = off.Y
+				cam.base = base
+				cam.lastTargetBase = base
+				cam.lastRoot = if target then target.root else nil
+				cam.snap = false
+			else
+				cam.snap = true
+			end
+		else
+			cam.snap = true
+		end
 		camera.CameraType = Enum.CameraType.Scriptable
 	end
 end
 
-local function stopCamera()
+local function finishRelease()
 	cam.active = false
+	cam.releasing = false
 	local camera = Workspace.CurrentCamera
 	if camera then
 		camera.CameraType = Enum.CameraType.Custom
@@ -2944,6 +3587,23 @@ local function stopCamera()
 	end
 end
 
+-- hand the camera back to Roblox: glide behind your character first, then let go
+local function stopCamera()
+	if not cam.active or cam.releasing then
+		if not cam.active then
+			finishRelease()
+		end
+		return
+	end
+	local _, _, root = getPlayerParts()
+	if not root then
+		finishRelease()
+		return
+	end
+	cam.releasing = true
+	cam.releaseClock = 0
+end
+
 local function updateCamera(dt: number)
 	if not cam.active then
 		return
@@ -2953,55 +3613,68 @@ local function updateCamera(dt: number)
 		return
 	end
 	camera.CameraType = Enum.CameraType.Scriptable
-	local base: Vector3
-	local dir: Vector3
-	local speed = 0
-	if cam.mode == "intro" then
-		base = cam.introBase
-		dir = cam.introDir
-	else
-		local r = cam.target
-		if not r then
+	local targetBase: Vector3?, dir: Vector3, speed: number, root: BasePart?
+	if cam.releasing then
+		cam.releaseClock += dt
+		local _, _, proot = getPlayerParts()
+		if not proot or cam.releaseClock > 0.7 then
+			finishRelease()
 			return
 		end
-		local _, d = runnerSample(r)
-		dir = d
-		speed = r.speed
-		if r.root and r.root.Parent then
-			local rp = r.root.Position
-			base = Vector3.new(rp.X, FLOOR_TOP, rp.Z)
-		else
-			local p = runnerSample(r)
-			base = p
-		end
+		local rp = proot.Position
+		targetBase = Vector3.new(rp.X, FLOOR_TOP, rp.Z)
+		local look = proot.CFrame.LookVector
+		dir = if Vector3.new(look.X, 0, look.Z).Magnitude > 0.1 then Vector3.new(look.X, 0, look.Z).Unit else Vector3.new(0, 0, -1)
+		speed = 0
+		root = proot
+	else
+		targetBase, dir, speed, root = camTargetBase()
 	end
+	if not targetBase then
+		return
+	end
+	-- follow the target exactly while it moves, but glide over any sudden jump
+	-- (a new runner after a baton pass, the next lane in the final introductions)
+	local prevBase = cam.base
+	local last = cam.lastTargetBase
+	local base: Vector3
+	if cam.snap or not prevBase or not last then
+		base = targetBase
+	else
+		base = prevBase
+		local moved = targetBase - last
+		local jumped = root ~= cam.lastRoot or moved.Magnitude > math.max(3, speed * dt * 2.5)
+		if not jumped then
+			base += moved
+		end
+		base += (targetBase - base) * (1 - math.exp(-dt * 5))
+	end
+	cam.base = base
+	cam.lastTargetBase = targetBase
+	cam.lastRoot = root
+
+	local mode = cam.mode
+	local key = if cam.releasing then "release" elseif mode == "chase" and Settings.Camera == "Side" then "side" else mode
+	local view = K.CAM_VIEWS[key] or K.CAM_VIEWS.chase
+	if cam.snap then
+		cam.yaw, cam.dist, cam.height, cam.lookFwd, cam.lookUp = view[1], view[2], view[3], view[4], view[5]
+	else
+		local ky = 1 - math.exp(-dt * (if cam.releasing then 6 elseif mode == "intro" then 2.5 else 3.4))
+		local kd = 1 - math.exp(-dt * (if cam.releasing then 7 else 4))
+		local dy = (view[1] - cam.yaw + math.pi) % (2 * math.pi) - math.pi -- shortest way round
+		cam.yaw += dy * ky
+		cam.dist += (view[2] - cam.dist) * kd
+		cam.height += (view[3] - cam.height) * kd
+		cam.lookFwd += (view[4] - cam.lookFwd) * kd
+		cam.lookUp += (view[5] - cam.lookUp) * kd
+	end
+	cam.snap = false
 	local up = Vector3.yAxis
 	local right = dir:Cross(up)
-	local offset: Vector3
-	local look: Vector3
-	local mode = cam.mode
-	if mode == "intro" then
-		offset = dir * 12 + right * 2 + up * 4.8
-		look = up * 1.2
-	elseif mode == "start" then
-		offset = dir * 16 + right * 1.5 + up * 5
-		look = up * 1.2
-	elseif mode == "finish" then
-		offset = dir * 10 + right * 3 + up * 3.4
-		look = up * 2.2
-	elseif Settings.Camera == "Side" then
-		offset = right * 21 + up * 12.5 + dir * 2
-		look = up * 1.5 + dir * 3
-	else
-		offset = -dir * 11 + right * 0.5 + up * 6.2
-		look = dir * 12 + up * 2
-	end
-	local k = if cam.snap then 1 else 1 - math.exp(-dt * (if mode == "intro" then 3 else 5))
-	cam.offset = cam.offset:Lerp(offset, k)
-	cam.look = cam.look:Lerp(look, k)
-	cam.snap = false
+	local offset = (-dir * math.cos(cam.yaw) + right * math.sin(cam.yaw)) * cam.dist + up * cam.height
+	local look = dir * cam.lookFwd + up * cam.lookUp
 	local speedFrac = math.clamp(speed / 37, 0, 1)
-	local fovTarget = if mode == "chase" then 68 + 12 * speedFrac else 62
+	local fovTarget = if mode == "chase" and not cam.releasing then 68 + 12 * speedFrac else 62
 	cam.fov += (fovTarget - cam.fov) * math.min(1, dt * 4)
 	camera.FieldOfView = cam.fov
 	local shake = Vector3.zero
@@ -3009,10 +3682,22 @@ local function updateCamera(dt: number)
 		cam.shake = math.max(0, cam.shake - dt * 2)
 		shake = Vector3.new(rng:NextNumber(-1, 1), rng:NextNumber(-1, 1), rng:NextNumber(-1, 1)) * cam.shake * 0.25
 	end
-	camera.CFrame = CFrame.lookAt(base + cam.offset + shake, base + cam.look)
+	camera.CFrame = CFrame.lookAt(base + offset + shake, base + look)
 end
 
 RunService:BindToRenderStep("TrackAndFieldCamera", Enum.RenderPriority.Camera.Value + 1, updateCamera)
+
+-- while you race, your run direction is re-applied right after the default controls read their
+-- input every frame, so they can never cancel it (the physics mover holds your speed as well)
+RunService:BindToRenderStep("TrackAndFieldMove", Enum.RenderPriority.Input.Value + 1, function()
+	local md = X.moveDir
+	if md then
+		local _, hum = getPlayerParts()
+		if hum then
+			hum:Move(md)
+		end
+	end
+end)
 
 ---------------------------------------------------------------------
 -- INPUT: taps, baton pass, menu keys, rebinding
@@ -3068,9 +3753,9 @@ local function onPass()
 	end
 end
 
-local leftKeys = { [Enum.KeyCode.Left] = true, [Enum.KeyCode.ButtonL1] = true, [Enum.KeyCode.ButtonL2] = true, [Enum.KeyCode.DPadLeft] = true }
-local rightKeys = { [Enum.KeyCode.Right] = true, [Enum.KeyCode.ButtonR1] = true, [Enum.KeyCode.ButtonR2] = true, [Enum.KeyCode.DPadRight] = true }
-local passKeys = { [Enum.KeyCode.W] = true, [Enum.KeyCode.Up] = true, [Enum.KeyCode.ButtonA] = true }
+K.leftKeys = { [Enum.KeyCode.Left] = true, [Enum.KeyCode.ButtonL1] = true, [Enum.KeyCode.ButtonL2] = true, [Enum.KeyCode.DPadLeft] = true }
+K.rightKeys = { [Enum.KeyCode.Right] = true, [Enum.KeyCode.ButtonR1] = true, [Enum.KeyCode.ButtonR2] = true, [Enum.KeyCode.DPadRight] = true }
+K.passKeys = { [Enum.KeyCode.W] = true, [Enum.KeyCode.Up] = true, [Enum.KeyCode.ButtonA] = true }
 
 local rebinding: Bind? = nil
 local refreshControlsUI: () -> () = function() end
@@ -3109,11 +3794,11 @@ UserInputService.InputBegan:Connect(function(input: InputObject, processed: bool
 		onTap("R")
 		return
 	end
-	if kc == Settings.LeftKey or leftKeys[kc] then
+	if kc == Settings.LeftKey or K.leftKeys[kc] then
 		onTap("L")
-	elseif kc == Settings.RightKey or rightKeys[kc] then
+	elseif kc == Settings.RightKey or K.rightKeys[kc] then
 		onTap("R")
-	elseif kc == Settings.PassKey or passKeys[kc] then
+	elseif kc == Settings.PassKey or K.passKeys[kc] then
 		onPass()
 	elseif kc == Enum.KeyCode.L then
 		toggleLeaderboard()
@@ -3246,14 +3931,14 @@ UI.indoorButton.Activated:Connect(function()
 	announce("The indoor arena is coming soon!")
 end)
 
-local eventChoices = { "Rotation" }
+K.eventChoices = { "Rotation" }
 for _, e in ipairs(EVENTS) do
-	table.insert(eventChoices, e.Name)
+	table.insert(K.eventChoices, e.Name)
 end
 local function stepEvent(delta: number)
-	local idx = table.find(eventChoices, Settings.Event) or 1
-	idx = ((idx - 1 + delta) % #eventChoices) + 1
-	Settings.Event = eventChoices[idx]
+	local idx = table.find(K.eventChoices, Settings.Event) or 1
+	idx = ((idx - 1 + delta) % #K.eventChoices) + 1
+	Settings.Event = K.eventChoices[idx]
 	refreshSettingsUI()
 	if X.saveSettings then
 		X.saveSettings()
@@ -3453,7 +4138,7 @@ local function setSplits(lines: { string })
 	end
 end
 
-local speedLineAlpha = 0
+X.speedLineAlpha = 0
 local function updateHud(r: Runner?, event: Event?)
 	local current = race
 	local stamina = if r then r.stamina else CONFIG.StaminaMax
@@ -3482,7 +4167,7 @@ local function updateHud(r: Runner?, event: Event?)
 			end
 		end
 		UI.passButton.Visible = showPass
-		speedLineAlpha = if running and not Settings.PerformanceMode then math.clamp((r.speed / event.MaxSpeed - 0.8) / 0.2, 0, 1) else 0
+		X.speedLineAlpha = if running and not Settings.PerformanceMode then math.clamp((r.speed / event.MaxSpeed - 0.8) / 0.2, 0, 1) else 0
 	else
 		UI.speedValue.Text = "0.0"
 		UI.speedBarFill.Size = UDim2.fromScale(0, 1)
@@ -3490,7 +4175,7 @@ local function updateHud(r: Runner?, event: Event?)
 		UI.legChip.Text = ""
 		UI.rhythmBack.Visible = false
 		UI.passButton.Visible = false
-		speedLineAlpha = 0
+		X.speedLineAlpha = 0
 	end
 end
 
@@ -3534,7 +4219,7 @@ end
 RunService.RenderStepped:Connect(function(dt: number)
 	local t = os.clock()
 	for i, line in ipairs(UI.speedLines) do
-		if speedLineAlpha > 0.01 then
+		if X.speedLineAlpha > 0.01 then
 			line.dist += dt * line.rate * 1.6
 			if line.dist > 1.1 then
 				line.dist = rng:NextNumber(0.25, 0.4)
@@ -3545,7 +4230,7 @@ RunService.RenderStepped:Connect(function(dt: number)
 			line.frame.Position = UDim2.fromScale(x, y)
 			line.frame.Rotation = math.deg(line.angle)
 			line.frame.Size = UDim2.fromOffset(60 + 160 * line.dist, 2)
-			line.frame.BackgroundTransparency = 1 - speedLineAlpha * 0.5 * math.clamp(line.dist, 0, 1)
+			line.frame.BackgroundTransparency = 1 - X.speedLineAlpha * 0.5 * math.clamp(line.dist, 0, 1)
 		elseif line.frame.BackgroundTransparency < 1 then
 			line.frame.BackgroundTransparency = 1
 		end
@@ -3672,7 +4357,7 @@ local function laneBoards(current: Race)
 	for _, r in ipairs(current.runners) do
 		if not r.isPlayer then
 			local pos, dir = trackSample(r.lane, r.sStart + 2.5)
-			local p = flat("LaneBoard", CFrame.lookAt(pos, pos + dir), LANE_W - 0.8, 3, MARK_TOP + 0.01, K.C_BG, Enum.Material.SmoothPlastic, 0.02, RaceFolder)
+			local p = flat("LaneBoard", CFrame.lookAt(pos, pos + dir), LANE_W - 0.8, 3, K.MARK_TOP + 0.01, K.C_BG, Enum.Material.SmoothPlastic, 0.02, RaceFolder)
 			p.Transparency = 1
 			label3D(p, Enum.NormalId.Top, 40, {
 				{ "Name", UDim2.fromScale(0, 0.1), UDim2.fromScale(1, 0.45), r.athlete.Name, K.WHITE },
@@ -4471,10 +5156,10 @@ X.relayTick = function(current: Race, r: Runner, dt: number, t: number)
 		end
 		if b.isCharacter then
 			local char, hum = getPlayerParts()
-			if hum and char == b.model then
+			local _, _, broot = getPlayerParts()
+			if hum and broot and char == b.model then
 				local _, dir = runnerSample(b)
-				hum.WalkSpeed = b.speed
-				hum:Move(if b.speed > 0.3 then dir else Vector3.zero)
+				X.drive(broot, hum, dir * (if b.speed > 0.3 then b.speed else 0), dir)
 			end
 		else
 			b.dist += b.speed * dt
@@ -4692,7 +5377,6 @@ X.freeRoam = function(dt: number, animated: { [Model]: boolean })
 	if f.model ~= char or not f.rig then
 		f.model = char
 		f.rig = newRig(char)
-		setAnimateEnabled(char, false)
 	end
 	local rig = f.rig
 	if not rig then
@@ -4817,7 +5501,7 @@ X.loadSettings = function(saved: { [string]: any })
 			end
 		end
 	end
-	if not table.find(eventChoices, s.Event) then
+	if not table.find(K.eventChoices, s.Event) then
 		s.Event = "Rotation"
 	end
 	if not K.TRACK_COLORS[s.TrackColor] then
@@ -4857,6 +5541,15 @@ X.netInit = function()
 		Dash = folder:FindFirstChild("Dash"),
 		Records = folder:FindFirstChild("Records"),
 	}
+	local kitRemote = folder:FindFirstChild("Kit")
+	if kitRemote and kitRemote:IsA("RemoteEvent") then
+		-- the server dresses everyone: take off a kit this client may have put on by itself
+		local char = player.Character
+		if char then
+			removeUniform(char)
+		end
+		X.kitRemote = kitRemote
+	end
 	X.saving = data.saving == true
 	if type(data.pbs) == "table" then
 		for name, t in pairs(data.pbs) do
@@ -5111,7 +5804,7 @@ X.dashRun = function()
 		UI.evName.Text = "40 YARDS"
 		UI.evRound.Text = "DASH ON THE GRASS"
 		refreshLeaderboard()
-		startCamera(r, "start")
+		startCamera(r, "start", true)
 		UI.touchLeft.Visible = true
 		UI.touchRight.Visible = true
 		-- 3-point stance, then GO (tapping during "set" = false start, just go again)
@@ -5212,14 +5905,58 @@ end
 ---------------------------------------------------------------------
 -- START
 ---------------------------------------------------------------------
-local camera0 = Workspace.CurrentCamera
-if camera0 then
-	camera0:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
+X.camera0 = Workspace.CurrentCamera
+if X.camera0 then
+	X.camera0:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
 end
 updateScale()
 updateHud(nil, nil)
 refreshLeaderboard()
 refreshControlsUI()
+
+-- an older copy was just switched off: put back what it may have changed
+X.afterOldCopy = function(stopped: number)
+	pcall(setupLighting) -- old versions delete this game's lighting when they start
+	pcall(applyPerformance)
+	local current = race
+	if not (current and current.you and current.phase ~= "done") then
+		local controls = getControls()
+		if controls then
+			pcall(function()
+				controls:Enable()
+			end)
+		end
+		local char, hum = getPlayerParts()
+		if char then
+			setAnimateEnabled(char, true)
+		end
+		if hum then
+			if hum.WalkSpeed < 1 then
+				hum.WalkSpeed = 16
+			end
+			if hum.JumpPower < 1 and hum.JumpHeight < 0.5 then
+				hum.JumpPower = 50
+				hum.JumpHeight = 7.2
+			end
+			hum.AutoRotate = true
+		end
+		local camera = Workspace.CurrentCamera
+		if not cam.active and camera and camera.CameraType == Enum.CameraType.Scriptable then
+			camera.CameraType = Enum.CameraType.Custom
+			if hum then
+				camera.CameraSubject = hum
+			end
+		end
+	end
+	if not X.oldWarned then
+		X.oldWarned = true
+		-- tell you after the welcome message (or right away if the game is already going)
+		task.delay(if X.welcomed then 0.5 else 5.5, function()
+			flash("OLD VERSION FOUND", K.C_WARN, "It's switched off now - delete old Track And Field scripts in StarterPlayerScripts", 6)
+			announce("An old copy of Track and Field was running at the same time. It's switched off now - delete it from StarterPlayerScripts.", "An old copy of the game was switched off.")
+		end)
+	end
+end
 
 local function onCharacter(char: Model)
 	-- the old character is gone: forget its locked state
@@ -5236,7 +5973,7 @@ local function onCharacter(char: Model)
 			end
 			conn:Disconnect()
 		end
-		if Settings.Uniform and player.Character == char then
+		if Settings.Uniform and player.Character == char and not X.kitRemote then
 			applyUniform(char)
 		end
 	end)
@@ -5275,12 +6012,17 @@ task.spawn(function()
 		applyPerformance()
 	end)
 	X.netInit()
+	if X.pendingOldRestore then
+		X.pendingOldRestore = false
+		X.afterOldCopy(0)
+	end
 	if player.Character then
 		onCharacter(player.Character)
 	end
 	flash("TRACK AND FIELD", K.GOLD, "60m  100m  200m  400m  4x100m  4x200m  4x400m", 3.5)
 	announce("Welcome to Track and Field, " .. player.Name .. "!", "Welcome to Track and Field, " .. player.Name)
 	task.wait(4)
+	X.welcomed = true
 	if not player.Character then
 		player.CharacterAdded:Wait()
 	end
