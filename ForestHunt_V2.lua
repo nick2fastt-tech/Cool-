@@ -1,5 +1,5 @@
 --[[
-	⚔️🎃  FOREST HUNT 2.06  —  HALLOWEEN 2X EVENT  —  ONE SCRIPT
+	⚔️🎃  FOREST HUNT 2.07  —  HALLOWEEN 2X EVENT  —  ONE SCRIPT
 	=====================================================================
 	The WHOLE game is this one file. It works in two places:
 
@@ -25,6 +25,14 @@
 	           E = talk to Gus  ·  1-5 = switch sword  ·  M = worlds  ·  G = sword bag  ·  H = go home to the cave
 	  Mobile : ⚔ swing button · 💨 dash button · 🏃 sprint toggle · walk up to Gus and tap "Talk"
 	  Chat   : stand near Gus and type ("hi gus", "upgrade", "sword", "boss", "candy", "joke"...)
+
+	WHAT'S NEW IN 2.07
+	  • 👑 ADMIN PANEL (yellow + black) for the game's owner, anyone testing in Studio, and anyone
+	    in ADMIN_IDS (see GAME CONFIG): Get All Swords · God Mode · Unlock All Worlds ·
+	    Infect Everyone · Set Your Coins · Admin Sword (infinite damage) · Fly · Spawn Bosses.
+	    Open it with the yellow 👑 button on the left; the 🕊 Fly button sits next to it.
+	    Flying: walk to fly where the camera looks · Space / jump = up · Ctrl = down.
+	    The server double-checks admin actions, so normal players can't use them.
 
 	WHAT'S NEW IN 2.06
 	  • Your sword stays IN your hand: every piece is held with exact welds, the sword is placed
@@ -89,7 +97,7 @@ local RunService        = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local IS_SERVER = RunService:IsServer()
-local VERSION = "2.06"
+local VERSION = "2.07"
 local NET_NAME = "ForestHunt2_Net"
 
 ------------------------------------------------------------------------------------------------
@@ -130,6 +138,29 @@ end
 local function eventOn() return nowUnix() < EVENT_END end
 local EVENT_MULT = eventOn() and 2 or 1 -- refreshed every few seconds by the main loops
 local CANDY_GOAL = 100          -- candies needed for the Pumpkin Overnight Sword
+
+-- 👑 ADMINS get the yellow + black Admin Panel. The game's owner (or the owner of its group) and anyone
+-- testing in Roblox Studio are admins automatically. To add more people, put their Roblox UserId here:
+--   local ADMIN_IDS = { [12345678] = true, [87654321] = true }
+local ADMIN_IDS = {}
+local adminCache = {}
+local function isAdmin(plr)
+	if not plr then return false end
+	if ADMIN_IDS[plr.UserId] then return true end
+	if adminCache[plr] ~= nil then return adminCache[plr] end
+	local yes = false
+	pcall(function()
+		if RunService:IsStudio() then
+			yes = true
+		elseif game.CreatorType == Enum.CreatorType.User then
+			yes = plr.UserId == game.CreatorId
+		elseif game.CreatorType == Enum.CreatorType.Group then
+			yes = plr:GetRankInGroup(game.CreatorId) == 255
+		end
+	end)
+	adminCache[plr] = yes == true
+	return adminCache[plr]
+end
 local BOSS_EVERY = 600          -- a boss rises in every world every 10 minutes
 local GRAVE_GATE_KILLS = 120    -- the graveyard gates open at 120 kills
 
@@ -268,6 +299,12 @@ for i, s in ipairs(SWORDS) do
 	s.order = i
 	SWORD_BY_ID[s.id] = s
 end
+-- 👑 the Admin Sword: admins only (not sold anywhere, not one of the 5 swords), infinite damage
+SWORD_BY_ID.admin = { id = "admin", name = "Admin Sword", price = -1, admin = true, order = 99, dmg = 1e9, speed = 1.4, reach = 13, effect = "pumpkin",
+	combo = { "spin", "slash", "upper", "chop" }, len = 5.2, width = 0.7, thick = 0.16, grip = 1.4, guard = "dragon",
+	bladeC = Color3.fromRGB(22, 22, 22), bladeM = Enum.Material.Metal, edgeC = Color3.fromRGB(255, 212, 0), edgeNeon = true,
+	guardC = Color3.fromRGB(255, 200, 0), gripC = Color3.fromRGB(22, 22, 22), wrapC = Color3.fromRGB(255, 212, 0), gem = Color3.fromRGB(255, 240, 120),
+	trail = Color3.fromRGB(255, 220, 40), glow = Color3.fromRGB(255, 210, 40), desc = "👑 ADMIN ONLY · infinite damage" }
 
 local UPGRADES = {
 	{ id = "damage", name = "Sharpness",     icon = "⚔️", max = 10, base = 30, growth = 1.62, step = 0.12, desc = "+12% damage" },
@@ -1671,7 +1708,7 @@ local DEFAULT_PROFILE = {
 	levels = { damage = 0, speed = 0, range = 0, health = 0 }, pumpkin = false,
 	music = true, sfx = true, gfx = "high", gfxSet = false, talked = false,
 }
-local function cleanProfile(t)
+local function cleanProfile(t, allowAdmin)
 	local p = table.clone(DEFAULT_PROFILE)
 	p.owned = { rusty = true }
 	p.levels = { damage = 0, speed = 0, range = 0, health = 0 }
@@ -1682,7 +1719,7 @@ local function cleanProfile(t)
 	p.kills = num(t.kills, 1e8)
 	if type(t.owned) == "table" then
 		for id, v in pairs(t.owned) do
-			if SWORD_BY_ID[id] and v == true then p.owned[id] = true end
+			if SWORD_BY_ID[id] and v == true and (id ~= "admin" or allowAdmin) then p.owned[id] = true end
 		end
 	end
 	if type(t.equipped) == "string" and p.owned[t.equipped] then p.equipped = t.equipped end
@@ -1776,7 +1813,7 @@ if IS_SERVER then
 				task.wait(i)
 			end
 		end
-		st.profile = cleanProfile(data)
+		st.profile = cleanProfile(data, isAdmin(p))
 		st.canSave = store ~= nil and ok
 		st.loaded = true
 		setStats(p, st.profile)
@@ -1850,7 +1887,7 @@ if IS_SERVER then
 		elseif msg == "safe" then
 			st.safe = a == true
 		elseif msg == "sword" then
-			if type(a) == "string" and SWORD_BY_ID[a] then p:SetAttribute("FH_Sword", a) end
+			if type(a) == "string" and SWORD_BY_ID[a] and (a ~= "admin" or isAdmin(p)) then p:SetAttribute("FH_Sword", a) end
 		elseif msg == "swing" then
 			local now = os.clock()
 			if now - (st.swingAt or 0) < 0.12 then return end
@@ -1874,7 +1911,8 @@ if IS_SERVER then
 			if dist > 26 + m.def.radius then return end
 			local flags = tonumber(c) or 0
 			local eff = (type(d) == "string" and (d == "frost" or d == "burn" or d == "venom" or d == "pumpkin")) and d or nil
-			local dmg = math.clamp(b, 1, 6000)
+			local cap = (p:GetAttribute("FH_Sword") == "admin" and isAdmin(p)) and 1e9 or 6000 -- 👑 the Admin Sword really is infinite
+			local dmg = math.clamp(b, 1, cap)
 			Sim.now = os.clock()
 			Sim.damage(a, dmg, p.UserId, { crit = flags % 2 == 1, finisher = math.floor(flags / 2) % 2 == 1, effect = eff, from = root.Position })
 			local style = (flags % 2 == 1) and 1 or 0
@@ -1899,9 +1937,23 @@ if IS_SERVER then
 				st.dead = false
 				p:SetAttribute("FH_ZombieAt", nil)
 			end
+		elseif msg == "admin" then
+			-- 👑 admin panel actions that touch other players / the monster brain (checked again here!)
+			if not isAdmin(p) then return end
+			if a == "infect" then
+				for _, o in ipairs(Players:GetPlayers()) do
+					if o ~= p and PW[o] then ev:FireClient(o, "infect", p.DisplayName) end
+				end
+			elseif a == "boss" then
+				if b == "all" then
+					for _, wid in ipairs(WORLD_ORDER) do Sim.spawnBoss(wid) end
+				elseif type(b) == "string" and SPAWNS[b] then
+					Sim.spawnBoss(b)
+				end
+			end
 		elseif msg == "save" then
 			if type(a) == "table" and st.loaded then
-				st.profile = cleanProfile(a)
+				st.profile = cleanProfile(a, isAdmin(p))
 				st.dirty = true
 				setStats(p, st.profile)
 			end
@@ -5280,6 +5332,8 @@ do
 	end
 	local NEWS = {
 		{ "📜 WHAT'S NEW IN " .. VERSION },
+		{ "👑 Admin panel for the game's owner (yellow + black)" },
+		{ "📜 2.06" },
 		{ "🗡 Your sword stays firmly in your hand" },
 		{ "⛪ A brand-new, super detailed church for boss fights" },
 		{ "🧟 More detailed zombies, minibosses + bosses" },
@@ -5672,6 +5726,7 @@ do
 	end
 
 	function Player.hurt(amount, fromPos, effect)
+		if S.god then return end -- 👑 admin god mode
 		if not S.playing or S.dead or S.talking or S.world == "cave" or S.traveling then return end
 		local now = os.clock()
 		local root = getRoot()
@@ -5715,6 +5770,10 @@ do
 	-- burning / sickness ticking down (called every frame)
 	local fireFx
 	function Player.tickEffects(dt, now)
+		if S.god then -- 👑 admin god mode: always full health, nothing sticks
+			S.hp = maxHP()
+			S.burnUntil, S.sickUntil, S.chillUntil = 0, 0, 0
+		end
 		local root = getRoot()
 		local burning = now < S.burnUntil and not S.dead
 		if burning and root and not fireFx then
@@ -5761,6 +5820,15 @@ do
 	function Player.cure()
 		S.burnUntil, S.sickUntil, S.chillUntil = 0, 0, 0
 	end
+
+	-- 🧟 an admin infected everyone (works anywhere, even in the cave)
+	function Player.infect(by)
+		if not S.playing or S.dead then return end
+		toast("🧟 " .. tostring(by or "An admin") .. " INFECTED EVERYONE!", Color3.fromRGB(150, 255, 80), 4)
+		FX.burst(FX.toxic, (getRoot() and getRoot().Position) or Vector3.zero, 20, Color3.fromRGB(120, 255, 80))
+		Player.die()
+	end
+	On.infect = function(by) Player.infect(by) end
 
 	-- 🧟 you never just "respawn": you fall, turn into a zombie, rise up... then wake up in the cave
 	function Player.die()
@@ -8861,6 +8929,237 @@ do
 end
 
 ------------------------------------------------------------------------------------------------
+-- 👑 ADMIN PANEL (yellow + black) — only admins see it (see ADMIN_IDS near the top of the file).
+-- Everything that affects other players or the monsters is checked again by the server.
+------------------------------------------------------------------------------------------------
+local Admin = { fly = false, built = false }
+do
+	local YEL, YEL2, BLK = Color3.fromRGB(255, 212, 0), Color3.fromRGB(255, 236, 120), Color3.fromRGB(14, 14, 14)
+	local gui = make("ScreenGui", { Name = "FH2_Admin", ResetOnSpawn = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 30, Enabled = false, Parent = playerGui })
+	local panel, list, coinBox
+	local labels = {}
+
+	-- a chunky yellow button with black text and a black outline
+	local function ybtn(parent, text, size, pos, order)
+		local holder = make("Frame", { Size = size, Position = pos or UDim2.new(), BackgroundTransparency = 1, LayoutOrder = order or 0, Parent = parent })
+		local shadow = make("Frame", { Size = UDim2.new(1, 0, 1, -2), Position = UDim2.fromOffset(0, 4), BackgroundColor3 = BLK, Parent = holder })
+		UI.corner(shadow, 12)
+		local face = make("TextButton", { Size = UDim2.new(1, 0, 1, -4), BackgroundColor3 = YEL, Text = "", AutoButtonColor = false, Parent = holder })
+		UI.corner(face, 12)
+		UI.stroke(face, 3, BLK)
+		make("UIGradient", { Rotation = 90, Color = ColorSequence.new(YEL2, YEL), Parent = face })
+		local label = UI.text({ Text = text, Size = UDim2.new(1, -12, 1, -6), Position = UDim2.fromOffset(6, 3), TextColor3 = BLK, Stroke = 0, MaxText = 22, Parent = face })
+		local sc = make("UIScale", { Parent = holder })
+		face.MouseButton1Down:Connect(function() tween(sc, 0.06, { Scale = 0.93 }) end)
+		face.MouseButton1Up:Connect(function() tween(sc, 0.16, { Scale = 1 }, Enum.EasingStyle.Back) end)
+		face.MouseLeave:Connect(function() tween(sc, 0.16, { Scale = 1 }) end)
+		return face, label, holder
+	end
+
+	local function say(msg) toast("👑 " .. msg, YEL, 3) end
+
+	------------------------------------------------------------------ the actions
+	function Admin.allSwords()
+		for _, s in ipairs(SWORDS) do S.owned[s.id] = true end
+		S.pumpkin = true
+		markDirty()
+		playSfx("buy")
+		say("You own ALL swords!")
+	end
+
+	function Admin.setGod(on)
+		S.god = on
+		if on then S.hp = maxHP(); Player.cure() end
+		if labels.god then labels.god.Text = on and "🛡 GOD MODE: ON" or "🛡 GOD MODE: OFF" end
+		say(on and "God mode ON — nothing can hurt you" or "God mode OFF")
+	end
+
+	function Admin.unlockWorlds()
+		local most = GRAVE_GATE_KILLS
+		for _, wid in ipairs(WORLD_ORDER) do most = math.max(most, WORLDS[wid].need or 0) end
+		S.kills = math.max(S.kills, most)
+		markDirty()
+		if Unlocks.check then Unlocks.check(false) end
+		say("Every world is unlocked!")
+	end
+
+	function Admin.infect()
+		playSfx("zGroan", nil, { pitch = 0.7, vol = 1.2 })
+		if Link.coop then
+			Link.send("admin", "infect")
+			say("Everyone else got INFECTED! 🧟")
+		else
+			say("Nobody else is here... so YOU got infected! 🧟")
+			Player.infect(player.DisplayName)
+		end
+	end
+
+	function Admin.setCoins(n)
+		n = math.floor(math.clamp(tonumber(n) or 0, 0, 1e12))
+		S.coins = n
+		S.shownCoins = n
+		markDirty()
+		Player.pulseCoins()
+		say("Coins set to " .. commas(n))
+	end
+
+	function Admin.adminSword()
+		S.owned.admin = true
+		markDirty()
+		Player.equip("admin")
+		say("ADMIN SWORD equipped — infinite damage!")
+	end
+
+	function Admin.spawnBoss(where)
+		if where ~= "all" and not SPAWNS[S.world] then
+			say("Go into a world first (or press SPAWN ALL BOSSES)")
+			return
+		end
+		local target = (where == "all") and "all" or S.world
+		if Link.coop then
+			Link.send("admin", "boss", target)
+		else
+			Sim.now = os.clock()
+			if target == "all" then
+				for _, wid in ipairs(WORLD_ORDER) do Sim.spawnBoss(wid) end
+			else
+				local W = Sim.worlds[target]
+				if W and W.boss and not W.boss.dead then say("A boss is already here!") return end
+				Sim.spawnBoss(target)
+			end
+		end
+		say(target == "all" and "Bosses are rising in EVERY world!" or ("A boss is rising in the " .. WORLDS[target].name .. "!"))
+	end
+
+	------------------------------------------------------------------ flying
+	local flyAtt, flyLV
+	local function keyDown(k)
+		local ok, r = pcall(function() return UserInputService:IsKeyDown(k) end)
+		return ok and r == true
+	end
+	local function clearFly()
+		if flyLV then flyLV:Destroy() end
+		if flyAtt then flyAtt:Destroy() end
+		flyLV, flyAtt = nil, nil
+	end
+	function Admin.setFly(on)
+		Admin.fly = on
+		clearFly()
+		local root = getRoot()
+		if on and root then
+			flyAtt = make("Attachment", { Name = "FH2_FlyAtt", Parent = root })
+			flyLV = make("LinearVelocity", { Name = "FH2_Fly", Attachment0 = flyAtt, MaxForce = 1e7, RelativeTo = Enum.ActuatorRelativeTo.World,
+				VelocityConstraintMode = Enum.VelocityConstraintMode.Vector, VectorVelocity = Vector3.zero, Parent = root })
+		end
+		local t = on and "🕊 FLY: ON" or "🕊 FLY: OFF"
+		if labels.fly then labels.fly.Text = t end
+		if labels.flyHud then labels.flyHud.Text = on and "🕊 ON" or "🕊 Fly" end
+	end
+	-- every frame: fly where you walk + where the camera looks · Space / jump = up · Ctrl = down
+	function Admin.update()
+		if not Admin.fly then return end
+		local root, hum, cam = getRoot(), getHum(), workspace.CurrentCamera
+		if not root or not hum then return end
+		if S.dead then return end
+		if not flyLV or flyLV.Parent ~= root then Admin.setFly(true) end
+		local move = hum.MoveDirection
+		local v = Vector3.zero
+		if move.Magnitude > 0.05 then
+			local look = cam and cam.CFrame.LookVector or Vector3.new(0, 0, -1)
+			local flatLook = Vector3.new(look.X, 0, look.Z)
+			local ahead = (flatLook.Magnitude > 0.01) and math.max(0, move:Dot(flatLook.Unit)) or 0
+			v = move * 70 + Vector3.new(0, look.Y * ahead * 70, 0)
+		end
+		if hum.Jump or keyDown(Enum.KeyCode.Space) then v += Vector3.new(0, 45, 0) end
+		if keyDown(Enum.KeyCode.LeftControl) or keyDown(Enum.KeyCode.RightControl) then v -= Vector3.new(0, 45, 0) end
+		flyLV.VectorVelocity = v
+	end
+
+	------------------------------------------------------------------ the panel
+	local function build()
+		Admin.built = true
+		panel = make("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.52), Size = UDim2.fromScale(0.92, 0.8), BackgroundColor3 = BLK, Visible = false, Parent = gui })
+		make("UISizeConstraint", { MaxSize = Vector2.new(600, 470), Parent = panel })
+		UI.corner(panel, 16)
+		UI.stroke(panel, 4, YEL)
+		-- yellow + black hazard stripes along the top
+		local head = make("Frame", { Size = UDim2.new(1, 0, 0, 52), BackgroundColor3 = YEL, ClipsDescendants = true, Parent = panel })
+		UI.corner(head, 16)
+		make("Frame", { Position = UDim2.new(0, 0, 1, -16), Size = UDim2.new(1, 0, 0, 16), BackgroundColor3 = YEL, BorderSizePixel = 0, Parent = head })
+		for k = 0, 24 do
+			make("Frame", { Position = UDim2.fromOffset(k * 34 - 10, 40), Size = UDim2.fromOffset(16, 30), Rotation = 35, BackgroundColor3 = BLK, BorderSizePixel = 0, Parent = head })
+		end
+		UI.text({ Text = "👑 ADMIN PANEL", Position = UDim2.fromOffset(14, 4), Size = UDim2.new(1, -80, 0, 34), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = BLK, Stroke = 0, Parent = head })
+		local close, closeLabel = ybtn(panel, "✕", UDim2.fromOffset(40, 40), UDim2.new(1, -48, 0, 6))
+		close.BackgroundColor3 = BLK
+		closeLabel.TextColor3 = YEL
+		close.Activated:Connect(function() playSfx("click"); Admin.toggle(false) end)
+		list = make("ScrollingFrame", { Position = UDim2.fromOffset(12, 64), Size = UDim2.new(1, -24, 1, -76), BackgroundTransparency = 1, BorderSizePixel = 0,
+			ScrollBarThickness = 6, ScrollBarImageColor3 = YEL, CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y,
+			ScrollingDirection = Enum.ScrollingDirection.Y, Parent = panel })
+		make("UIGridLayout", { CellSize = UDim2.new(0.5, -6, 0, 54), CellPadding = UDim2.fromOffset(8, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = list })
+		local function add(order, text, fn, key)
+			local face, label = ybtn(list, text, UDim2.new(), nil, order)
+			if key then labels[key] = label end
+			face.Activated:Connect(function()
+				playSfx("click")
+				fn()
+			end)
+			return face
+		end
+		add(1, "⚔ GET ALL SWORDS", Admin.allSwords)
+		add(2, "🛡 GOD MODE: OFF", function() Admin.setGod(not S.god) end, "god")
+		add(3, "🗺 UNLOCK ALL WORLDS", Admin.unlockWorlds)
+		add(4, "🧟 INFECT EVERYONE", Admin.infect)
+		-- coins: type a number, then SET
+		local boxHolder = make("Frame", { BackgroundColor3 = BLK, LayoutOrder = 5, Parent = list })
+		UI.corner(boxHolder, 12)
+		UI.stroke(boxHolder, 3, YEL)
+		coinBox = make("TextBox", { Size = UDim2.new(1, -16, 1, -10), Position = UDim2.fromOffset(8, 5), BackgroundTransparency = 1, Text = "", PlaceholderText = "💰 type coins...",
+			TextColor3 = YEL, PlaceholderColor3 = Color3.fromRGB(150, 130, 40), Font = UI.FONT, TextScaled = true, ClearTextOnFocus = false, Parent = boxHolder })
+		make("UITextSizeConstraint", { MaxTextSize = 24, Parent = coinBox })
+		add(6, "💰 SET MY COINS", function()
+			local digits = string.gsub(coinBox.Text or "", "[^%d]", "")
+			if digits == "" then say("Type how many coins you want first") return end
+			Admin.setCoins(tonumber(digits))
+		end)
+		add(7, "⚡ ADMIN SWORD (∞ DMG)", Admin.adminSword)
+		add(8, "🕊 FLY: OFF", function() Admin.setFly(not Admin.fly) end, "fly")
+		add(9, "👹 SPAWN BOSS HERE", function() Admin.spawnBoss("here") end)
+		add(10, "👹 SPAWN ALL BOSSES", function() Admin.spawnBoss("all") end)
+		-- the Admin + Fly buttons on the HUD (left column, under Settings)
+		local col = HUD.leftCol
+		col.Size = UDim2.fromOffset(240, 334)
+		local aFace, aLabel = ybtn(col, "", UDim2.fromOffset(66, 66), UDim2.fromOffset(0, 262))
+		aLabel.Text = "👑"
+		aLabel.Size = UDim2.new(1, -12, 0.62, 0)
+		UI.text({ Text = "Admin", Size = UDim2.new(1, -4, 0.3, 0), Position = UDim2.new(0, 2, 0.66, 0), TextColor3 = BLK, Stroke = 0, MaxText = 14, Parent = aFace })
+		aFace.Activated:Connect(function() playSfx("click"); Admin.toggle() end)
+		local fFace, fLabel = ybtn(col, "🕊 Fly", UDim2.fromOffset(84, 66), UDim2.fromOffset(72, 262))
+		labels.flyHud = fLabel
+		fFace.Activated:Connect(function() playSfx("click"); Admin.setFly(not Admin.fly) end)
+		Admin.hudButton, Admin.flyButton = aFace, fFace
+	end
+
+	function Admin.toggle(on)
+		if not panel then return end
+		if on == nil then on = not panel.Visible end
+		panel.Visible = on
+		if on and Menu.closeAll then Menu.closeAll() end
+	end
+
+	-- shows the panel to admins (checked once at start; studio + owner + ADMIN_IDS)
+	function Admin.refresh()
+		task.spawn(function()
+			if not isAdmin(player) then return end
+			if not Admin.built then build() end
+			gui.Enabled = true
+		end)
+	end
+	Admin.gui = gui
+end
+
+------------------------------------------------------------------------------------------------
 -- PROFILE (saved progress from the server)
 ------------------------------------------------------------------------------------------------
 local profileReady = not Link.coop
@@ -9136,6 +9435,7 @@ RunService.RenderStepped:Connect(function(dt)
 	local now = os.clock()
 	local cam = workspace.CurrentCamera
 	watchFps(dt)
+	safe("admin", Admin.update)
 	if worldReady then
 		-- monsters + Gus are posed right before the frame is drawn (smooth, no lag behind)
 		safe("views", Views.update, dt, now, cam)
@@ -9420,6 +9720,7 @@ task.spawn(function()
 	end
 	Unlocks.check(true)
 	Pickups.candyCheck(true)
+	Admin.refresh()
 	Intro.ready(Link.coop and (S.canSave and "Ready! 🌐 Multiplayer ON · 💾 Saving ON" or "Ready! 🌐 Multiplayer ON") or "Ready! 👤 Solo mode")
 	Intro.setStats(string.format("💰 %s   💀 %s kills   %s", commas(S.coins), commas(S.kills),
 		S.pumpkin and "🎃 Pumpkin Sword!" or ("🍬 " .. math.min(S.candies, CANDY_GOAL) .. "/" .. CANDY_GOAL)),

@@ -1,7 +1,7 @@
 # Cool-
 Wow
 
-## ⚔️🎃 Forest Hunt 2.06 — Halloween 2X Event (Roblox)
+## ⚔️🎃 Forest Hunt 2.07 — Halloween 2X Event (Roblox)
 
 The whole game is one file: [`ForestHunt_V2.lua`](ForestHunt_V2.lua).
 
@@ -21,6 +21,14 @@ Delete any old Forest Hunt 1.0 scripts first.
 | Q — dash (can't be hit mid-dash) | 💨 button |
 | E — talk to Gus | tap "Talk" |
 | 1–5 — switch sword · M — worlds · G — sword bag · H — go home | menu buttons, top left |
+
+### What's new in 2.07: 👑 Admin panel
+A yellow + black **Admin Panel** for admins only: the game's owner (or the owner of its group), anyone testing in Roblox Studio, and anyone whose UserId you add to `ADMIN_IDS` near the top of the script.
+- ⚔ Get all swords · 🛡 God mode · 🗺 Unlock all worlds · 🧟 Infect everyone · 💰 Set your coins
+- ⚡ **Admin Sword** with infinite damage · 🕊 **Fly** (button on screen too) · 👹 Spawn a boss here / in every world
+
+Open it with the yellow 👑 button on the left. Flying: walk to fly where the camera looks, Space / jump = up, Ctrl = down.
+The server checks every admin action again, so normal players can't use them (and can't keep the Admin Sword in their save).
 
 ### What's new in 2.06
 - **Your sword stays in your hand.** Every piece is held with exact welds, the sword is placed in your palm before it's attached, leftover copies are cleared, and a loose sword re-attaches itself.
