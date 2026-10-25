@@ -1,5 +1,5 @@
 --[[
-	⚔️🎃  FOREST HUNT 2.0  —  HALLOWEEN 2X EVENT  —  ONE SCRIPT
+	⚔️🎃  FOREST HUNT 2.01  —  HALLOWEEN 2X EVENT  —  ONE SCRIPT
 	=====================================================================
 	The WHOLE game is this one file. It works in two places:
 
@@ -21,6 +21,24 @@
 	           E = talk to Gus  ·  1-5 = switch sword  ·  M = worlds  ·  G = sword bag  ·  H = go home to the cave
 	  Mobile : ⚔ swing button · 💨 dash button · 🏃 sprint toggle · walk up to Gus and tap "Talk"
 	  Chat   : stand near Gus and type ("hi gus", "upgrade", "sword", "boss", "candy", "joke"...)
+
+	WHAT'S NEW IN 2.01
+	  • Custom animations really play now. Your character's poses run AFTER Roblox's own
+	    animator (so the default walk can't overwrite them), and monsters + Gus are "baked"
+	    skeletons moved in one batch every frame (no joints to break, no physics fighting them).
+	  • Better animations: every monster type has its own walk (shamble, giant stomp, stiff ice
+	    walk, monkey gallop, toxic wobble, gas zombies flailing when they're on fire), 3 different
+	    attacks each, flinches toward the side you hit them, and different deaths.
+	    You get landing squash, a falling pose, dash lunge, hurt flinch, sword-trailing sprint,
+	    an idle sword twirl, and your head turns toward nearby monsters.
+	  • Bug fixes: HUD no longer hides under Roblox's chat or the player list · Shift sprint no
+	    longer toggles shift-lock · monster feet no longer point backwards · hit flashes are
+	    reused (Roblox only shows 31 highlights at once) · gas zombies lit by a fire sword
+	    now get their full flames when they ignite.
+	  • Faster on PC + phones: phones start on FAST graphics and build fewer tiny decorations,
+	    small parts skip shadows and touch checks, FAST mode turns off decoration lights and
+	    slows decoration particles, and if HIGH graphics keeps dropping below ~38 FPS the
+	    game switches to FAST by itself (Settings → Graphics to change it back).
 
 	WHAT'S IN 2.0
 	  • You start in a glowing CAVE. Walk through a tunnel to go OUTSIDE and fight.
@@ -44,7 +62,7 @@ local RunService        = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local IS_SERVER = RunService:IsServer()
-local VERSION = "2.0"
+local VERSION = "2.01"
 local NET_NAME = "ForestHunt2_Net"
 
 ------------------------------------------------------------------------------------------------
@@ -1415,7 +1433,7 @@ do
 					if m and not m.dead and not m.removed then
 						local ok, err = pcall(updateMob, W, m, dt, now, hs)
 						if not ok then
-							warn("[Forest Hunt 2.0] monster hiccup: " .. tostring(err))
+							warn("[Forest Hunt " .. VERSION .. "] monster hiccup: " .. tostring(err))
 							removeMob(m)
 						elseif not m.removed then
 							refreshFlags(m, now)
@@ -1509,7 +1527,7 @@ end
 local DEFAULT_PROFILE = {
 	coins = 0, candies = 0, kills = 0, owned = { rusty = true }, equipped = "rusty",
 	levels = { damage = 0, speed = 0, range = 0, health = 0 }, pumpkin = false,
-	music = true, sfx = true, gfx = "high", talked = false,
+	music = true, sfx = true, gfx = "high", gfxSet = false, talked = false,
 }
 local function cleanProfile(t)
 	local p = table.clone(DEFAULT_PROFILE)
@@ -1533,6 +1551,7 @@ local function cleanProfile(t)
 	p.music = t.music ~= false
 	p.sfx = t.sfx ~= false
 	p.gfx = (t.gfx == "low") and "low" or "high"
+	p.gfxSet = t.gfxSet == true
 	p.talked = t.talked == true
 	return p
 end
@@ -1629,7 +1648,7 @@ if IS_SERVER then
 		local ok, err = pcall(function() store:SetAsync("u_" .. p.UserId, prof) end)
 		if not ok then
 			st.dirty = true
-			warn("[Forest Hunt 2.0] save failed: " .. tostring(err))
+			warn("[Forest Hunt " .. VERSION .. "] save failed: " .. tostring(err))
 		end
 	end
 
@@ -1641,7 +1660,7 @@ if IS_SERVER then
 		task.delay(40, function()
 			local st = PW[p]
 			if st and not st.hello and p.Parent then
-				warn("[Forest Hunt 2.0] " .. p.Name .. " has no game on their screen. Did you also paste this file into a LocalScript in StarterPlayerScripts?")
+				warn("[Forest Hunt " .. VERSION .. "] " .. p.Name .. " has no game on their screen. Did you also paste this file into a LocalScript in StarterPlayerScripts?")
 			end
 		end)
 	end)
@@ -1763,7 +1782,7 @@ if IS_SERVER then
 			end
 		end
 		local ok, err = pcall(Sim.update, dt, os.clock(), hunters)
-		if not ok then warn("[Forest Hunt 2.0] server tick: " .. tostring(err)) end
+		if not ok then warn("[Forest Hunt " .. VERSION .. "] server tick: " .. tostring(err)) end
 		if Sim.bossClock > lastBossClock + 1 then syncBossClock() end
 		lastBossClock = Sim.bossClock
 		for _, wid in ipairs(WORLD_ORDER) do
@@ -1791,7 +1810,7 @@ if IS_SERVER then
 		end
 	end)
 
-	print("[Forest Hunt 2.0] server running — multiplayer + saving ON")
+	print("[Forest Hunt " .. VERSION .. "] server running — multiplayer + saving ON")
 	return
 end
 
@@ -1857,6 +1876,12 @@ local function part(props, class)
 	props.TopSurface = Enum.SurfaceType.Smooth
 	props.BottomSurface = Enum.SurfaceType.Smooth
 	if props.Material == nil then props.Material = Enum.Material.SmoothPlastic end
+	-- speed: nothing in this game uses .Touched, and see-through decorations don't need raycasts;
+	-- little parts don't need to cast shadows either
+	if props.CanTouch == nil then props.CanTouch = false end
+	if props.CanQuery == nil and props.CanCollide == false then props.CanQuery = false end
+	local sz0 = props.Size
+	if props.CastShadow == nil and sz0 and math.max(sz0.X, sz0.Y, sz0.Z) < 2.5 then props.CastShadow = false end
 	-- Roblox balls are always perfect spheres, so squashed ones become a block + sphere mesh
 	local squash = false
 	local sz = props.Size
@@ -1956,6 +1981,7 @@ local SND = {
 	caw      = { ids = { 90731208 }, vol = 0.55 },
 	whoosh   = { ids = {}, fb = BUILTIN.whoosh, vol = 0.7 },
 	splash   = { ids = {}, fb = BUILTIN.splash, vol = 0.6 },
+	stomp    = { ids = {}, fb = BUILTIN.thud, fbPitch = 0.45, vol = 0.8 },
 	-- loops (first working id wins)
 	mCave    = { ids = { 1848183670 }, loop = true },
 	mWorld   = { ids = { 1843463175 }, loop = true },
@@ -2127,10 +2153,12 @@ do
 		if not p then return end
 		t = t or 0
 		Lighting.ClockTime = p.clock
+		-- FAST graphics turns off decoration lights, so it brightens the ambient light a little to make up for it
+		local amb = GFX.high and p.amb or p.amb:Lerp(Color3.fromRGB(190, 186, 200), 0.18)
 		if t > 0 then
-			tween(Lighting, t, { Brightness = p.bright, Ambient = p.amb, OutdoorAmbient = p.out, ExposureCompensation = p.exp })
+			tween(Lighting, t, { Brightness = p.bright, Ambient = amb, OutdoorAmbient = p.out, ExposureCompensation = p.exp })
 		else
-			Lighting.Brightness, Lighting.Ambient, Lighting.OutdoorAmbient, Lighting.ExposureCompensation = p.bright, p.amb, p.out, p.exp
+			Lighting.Brightness, Lighting.Ambient, Lighting.OutdoorAmbient, Lighting.ExposureCompensation = p.bright, amb, p.out, p.exp
 		end
 		local a = Look.atmo
 		if a and a.Parent then
@@ -2145,8 +2173,51 @@ do
 end
 
 ------------------------------------------------------------------------------------------------
--- RIGS: every monster is a Roblox "boy" R15 rig (15 body parts + Motor6D joints) that this
--- script animates by hand every frame. Your own avatar can also become one (when you die).
+-- PERFORMANCE: phones start on FAST graphics, decorations register their lights and particles
+-- here so FAST mode can dim them, and an FPS watchdog drops to FAST if the game struggles.
+------------------------------------------------------------------------------------------------
+local Perf = { lights = {}, emitters = {} }
+do
+	Perf.mobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+	Perf.detail = Perf.mobile and 0.55 or 1 -- how much optional decoration gets built
+	GFX.high = not Perf.mobile
+	-- a decoration light (Key = true keeps it on even in FAST mode, Class = "SpotLight" for spotlights)
+	function Perf.light(props)
+		local key, class = props.Key, props.Class or "PointLight"
+		props.Key, props.Class = nil, nil
+		if props.Shadows == nil then props.Shadows = false end
+		local l = make(class, props)
+		table.insert(Perf.lights, { l = l, key = key == true })
+		if not GFX.high and not key then l.Enabled = false end
+		return l
+	end
+	-- a decoration particle emitter (FAST mode slows it down)
+	function Perf.fx(props)
+		local e = make("ParticleEmitter", props)
+		local rate = e.Rate
+		table.insert(Perf.emitters, { e = e, rate = rate })
+		if not GFX.high then e.Rate = rate * 0.35 end
+		return e
+	end
+	-- phones skip some optional decorations (spread out evenly, never random)
+	function Perf.keep(i)
+		return Perf.detail >= 1 or (i * 0.6180339887) % 1 < Perf.detail
+	end
+	function Perf.apply()
+		for _, x in ipairs(Perf.lights) do
+			if x.l.Parent then x.l.Enabled = GFX.high or x.key end
+		end
+		for _, x in ipairs(Perf.emitters) do
+			if x.e.Parent then x.e.Rate = x.rate * (GFX.high and 1 or 0.35) end
+		end
+	end
+end
+
+------------------------------------------------------------------------------------------------
+-- RIGS: every monster is a Roblox "boy" R15 rig (15 body parts). It's built with joints, then
+-- "baked" into an anchored skeleton: every frame this script works out where each body part goes
+-- (forward kinematics) and moves them all at once with workspace:BulkMoveTo. No physics joints,
+-- so the hand-made animations always show — and it's light enough for phones.
 ------------------------------------------------------------------------------------------------
 local Rigs = {}
 do
@@ -2166,13 +2237,118 @@ do
 	end
 	Rigs.extra = extra
 
+	-- rotate a joint relative to its parent part (works for baked bones AND real characters)
 	function Rigs.setJ(J, name, cf)
 		local j = J[name]
 		if not j then return end
-		if j.a then
-			j.m.Transform = j.a * cf * j.b
-		else
+		if j.a then cf = j.a * cf * j.b end
+		if j.e then
+			j.e.T = cf
+		elseif j.m and j.m.Parent then
 			j.m.Transform = cf
+		end
+	end
+
+	-- turn a jointed model into an anchored skeleton (see the note at the top)
+	function Rigs.bake(model, root, J, keepJoints)
+		local edges, byJoint, joints = {}, {}, {}
+		local function link(a, b, e)
+			local la = edges[a]
+			if not la then la = {}; edges[a] = la end
+			table.insert(la, { to = b, e = e })
+			local lb = edges[b]
+			if not lb then lb = {}; edges[b] = lb end
+			table.insert(lb, { to = a, e = e })
+		end
+		for _, d in ipairs(model:GetDescendants()) do
+			local e
+			if d:IsA("JointInstance") then
+				local p0, p1 = d.Part0, d.Part1
+				if p0 and p1 and p0:IsDescendantOf(model) and p1:IsDescendantOf(model) then e = { p0 = p0, p1 = p1, c0 = d.C0, c1 = d.C1 } end
+			elseif d:IsA("AnimationConstraint") or d:IsA("RigidConstraint") then
+				local a0, a1 = d.Attachment0, d.Attachment1
+				if a0 and a1 and a0.Parent and a1.Parent and a0.Parent:IsA("BasePart") and a1.Parent:IsA("BasePart") then
+					e = { p0 = a0.Parent, p1 = a1.Parent, c0 = a0.CFrame, c1 = a1.CFrame }
+				end
+			elseif d:IsA("WeldConstraint") then
+				local p0, p1 = d.Part0, d.Part1
+				if p0 and p1 then e = { p0 = p0, p1 = p1, c0 = p0.CFrame:ToObjectSpace(p1.CFrame), c1 = CFrame.new() } end
+			end
+			if e then
+				e.T = CFrame.new()
+				e.c0i, e.c1i = e.c0:Inverse(), e.c1:Inverse()
+				byJoint[d] = e
+				link(e.p0, e.p1, e)
+				table.insert(joints, d)
+			end
+		end
+		local parts, order = { root }, {}
+		local seen = { [root] = true }
+		local queue, qi = { root }, 1
+		while qi <= #queue do
+			local p = queue[qi]
+			qi += 1
+			for _, l in ipairs(edges[p] or {}) do
+				local q = l.to
+				if not seen[q] then
+					seen[q] = true
+					table.insert(order, { part = q, parent = p, e = l.e, rev = (l.e.p0 == q) })
+					table.insert(parts, q)
+					table.insert(queue, q)
+				end
+			end
+		end
+		-- loose parts (not joined to anything) ride along with the root
+		local r0 = root.CFrame
+		for _, d in ipairs(model:GetDescendants()) do
+			if d:IsA("BasePart") and not seen[d] then
+				seen[d] = true
+				local off = r0:ToObjectSpace(d.CFrame)
+				local e = { p0 = root, p1 = d, c0 = off, c1 = CFrame.new(), c0i = off:Inverse(), c1i = CFrame.new(), T = CFrame.new() }
+				table.insert(order, { part = d, parent = root, e = e, rev = false })
+				table.insert(parts, d)
+			end
+		end
+		if J then
+			for _, j in pairs(J) do
+				if type(j) == "table" and j.m and byJoint[j.m] then j.e = byJoint[j.m] end
+			end
+		end
+		for _, d in ipairs(joints) do
+			if keepJoints then
+				pcall(function() d.Enabled = false end)
+			else
+				d:Destroy()
+			end
+		end
+		for _, p in ipairs(parts) do
+			p.Anchored = true
+			p.CanCollide, p.CanTouch, p.CanQuery = false, false, false
+		end
+		return { root = root, order = order, parts = parts, cfs = table.create(#parts), world = {} }
+	end
+
+	-- place every part of a baked skeleton for this frame
+	function Rigs.pose(sk, rootCF)
+		local world, cfs = sk.world, sk.cfs
+		world[sk.root] = rootCF
+		cfs[1] = rootCF
+		for i, b in ipairs(sk.order) do
+			local e = b.e
+			local pcf = world[b.parent]
+			local cf
+			if b.rev then
+				cf = pcf * e.c1 * e.T:Inverse() * e.c0i
+			else
+				cf = pcf * e.c0 * e.T * e.c1i
+			end
+			world[b.part] = cf
+			cfs[i + 1] = cf
+		end
+		if not pcall(workspace.BulkMoveTo, workspace, sk.parts, cfs, Enum.BulkMoveMode.FireCFrameChanged) then
+			for i, p in ipairs(sk.parts) do
+				if p.Parent then p.CFrame = cfs[i] end
+			end
 		end
 	end
 
@@ -2192,7 +2368,7 @@ do
 		local fabric = o.cloth or Enum.Material.Fabric
 		local function bp(name, size, color, mat)
 			return part({ Name = name, Size = size * s, Color = color, Material = mat or Enum.Material.SmoothPlastic, Anchored = false,
-				CanCollide = false, CanQuery = false, CanTouch = false, Massless = true, Parent = model })
+				CanCollide = false, CanQuery = false, CanTouch = false, Massless = true, CastShadow = true, Parent = model })
 		end
 		local function jt(name, p0, p1, a, b)
 			J[name] = { m = motor(name, p0, p1, CFrame.new(a * s), CFrame.new(b * s)) }
@@ -2220,11 +2396,12 @@ do
 			local ll = bp(nm .. "LowerLeg", Vector3.new(0.95 * Lb, lowLegH, 0.95 * Lb), o.shins or o.pants, fabric)
 			jt("Knee" .. side, ul, ll, Vector3.new(0, -upLegH / 2, 0), Vector3.new(0, lowLegH / 2, 0))
 			local ft = bp(nm .. "Foot", Vector3.new(1 * Lb, footH, 1.2 * Lb), o.shoes or Color3.fromRGB(50, 40, 34))
-			jt("Ankle" .. side, ll, ft, Vector3.new(0, -lowLegH / 2, 0), Vector3.new(0, footH / 2, -0.1))
+			jt("Ankle" .. side, ll, ft, Vector3.new(0, -lowLegH / 2, 0), Vector3.new(0, footH / 2, 0.12)) -- toes poke forward
 			P["uArm" .. side], P["lArm" .. side], P["hand" .. side] = ua, la, hand
 			P["uLeg" .. side], P["lLeg" .. side], P["foot" .. side] = ul, ll, ft
 		end
 		P.chest, P.pelvis = P.upperTorso, P.lowerTorso
+		P.lowLeg = lowLegH * s
 		model.PrimaryPart = root
 		return model, P, J, yRoot * s
 	end
@@ -2447,8 +2624,8 @@ do
 		local barrel = extra(model, P.chest, Vector3.new(1.5, 1.1, 1.1) * s, CFrame.new(0, 0.1 * s, 0.95 * s) * CFrame.Angles(0, 0, math.pi / 2),
 			Color3.fromRGB(60, 70, 50), Enum.Material.Metal, Enum.PartType.Cylinder)
 		extra(model, barrel, Vector3.new(0.3, 1.14, 1.14) * s, CFrame.new(0, 0, 0), glow, Enum.Material.Neon, Enum.PartType.Cylinder)
-		make("PointLight", { Range = 10, Brightness = 1.2, Color = glow, Shadows = false, Parent = barrel })
-		make("ParticleEmitter", { Name = "Bubbles", Rate = 6, Lifetime = NumberRange.new(0.6, 1.2), Speed = NumberRange.new(1, 2.5), SpreadAngle = Vector2.new(25, 25),
+		if GFX.high then make("PointLight", { Range = 10, Brightness = 1.2, Color = glow, Shadows = false, Parent = barrel }) end
+		make("ParticleEmitter", { Name = "Bubbles", Rate = GFX.high and 6 or 3, Lifetime = NumberRange.new(0.6, 1.2), Speed = NumberRange.new(1, 2.5), SpreadAngle = Vector2.new(25, 25),
 			Size = NumberSequence.new(0.22, 0), Color = ColorSequence.new(glow), LightEmission = 0.7, Parent = barrel })
 		return model, P, J, rootH
 	end
@@ -2990,7 +3167,7 @@ do
 		local head = part({ Size = Vector3.new(0.7, 0.6, 0.7), Position = pos + Vector3.new(0, 1.3, -0.3), Material = Enum.Material.Neon,
 			Color = Color3.fromRGB(255, 150, 50), CanCollide = false, CastShadow = false, Parent = parent })
 		make("Fire", { Size = 2.4, Heat = 6, Color = Color3.fromRGB(255, 150, 40), SecondaryColor = Color3.fromRGB(255, 60, 20), Parent = head })
-		if light ~= false then make("PointLight", { Range = 20, Brightness = 1.6, Color = Color3.fromRGB(255, 160, 80), Shadows = false, Parent = head }) end
+		if light ~= false then Perf.light({ Range = 20, Brightness = 1.6, Color = Color3.fromRGB(255, 160, 80), Shadows = false, Parent = head }) end
 		return head
 	end
 
@@ -3012,7 +3189,7 @@ do
 			end
 			part({ Size = Vector3.new(s * 0.42, s * 0.1, 0.05), CFrame = cf * CFrame.new(0, -s * 0.12, -s * 0.48), Material = Enum.Material.Neon, Color = glow,
 				CanCollide = false, CastShadow = false, Parent = parent })
-			if light then make("PointLight", { Range = 12, Brightness = 1.3, Color = Color3.fromRGB(255, 170, 60), Shadows = false, Parent = body }) end
+			if light then Perf.light({ Range = 12, Brightness = 1.3, Color = Color3.fromRGB(255, 170, 60), Shadows = false, Parent = body }) end
 		end
 		return body
 	end
@@ -3050,7 +3227,7 @@ do
 		part({ Size = Vector3.new(22, 18, 1), CFrame = CFrame.new(O + Vector3.new(0, 9, 217)), Material = Enum.Material.SmoothPlastic, Color = BLACK, Parent = parent })
 		local glow = part({ Size = Vector3.new(16, 14, 0.5), CFrame = CFrame.new(O + Vector3.new(0, 7, 216)), Material = Enum.Material.Neon,
 			Color = Color3.fromRGB(255, 170, 80), Transparency = 0.6, CanCollide = false, Parent = parent })
-		make("PointLight", { Range = 16, Brightness = 1.2, Color = Color3.fromRGB(255, 170, 90), Parent = glow })
+		Perf.light({ Range = 16, Brightness = 1.2, Color = Color3.fromRGB(255, 170, 90), Key = true, Parent = glow })
 		for _, x in ipairs({ -12, 12 }) do torch(parent, O + Vector3.new(x, 4, 195), x < 0) end
 		sign(parent, CFrame.new(O + Vector3.new(0, 20.5, 196.6)), Vector3.new(16, 3.2, 0.4), "🕯 BACK TO THE CAVE", nil, Color3.fromRGB(60, 44, 30), WHITE)
 		-- side + back walls (jagged rocks)
@@ -3085,7 +3262,7 @@ do
 
 	local function fireflies(parent, pos, size, color, rate)
 		local holder = part({ Size = size, Position = pos, Transparency = 1, CanCollide = false, CanQuery = false, CanTouch = false, CastShadow = false, Parent = parent })
-		make("ParticleEmitter", { Rate = rate or 4, Lifetime = NumberRange.new(4, 7), Speed = NumberRange.new(0.3, 1), SpreadAngle = Vector2.new(180, 180),
+		Perf.fx({ Rate = rate or 4, Lifetime = NumberRange.new(4, 7), Speed = NumberRange.new(0.3, 1), SpreadAngle = Vector2.new(180, 180),
 			Size = NumberSequence.new(0.25), Color = ColorSequence.new(color), LightEmission = 1,
 			Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.3, 0.1), NumberSequenceKeypoint.new(1, 1) }),
 			Parent = holder })
@@ -3093,7 +3270,7 @@ do
 	end
 	local function fog(parent, pos, size, color, rate)
 		local f = part({ Size = size, Position = pos, Transparency = 1, CanCollide = false, CanQuery = false, CanTouch = false, CastShadow = false, Parent = parent })
-		make("ParticleEmitter", { Texture = "rbxasset://textures/particles/smoke_main.dds", Rate = rate or 4, Lifetime = NumberRange.new(5, 8), Speed = NumberRange.new(0.2, 0.6),
+		Perf.fx({ Texture = "rbxasset://textures/particles/smoke_main.dds", Rate = rate or 4, Lifetime = NumberRange.new(5, 8), Speed = NumberRange.new(0.2, 0.6),
 			SpreadAngle = Vector2.new(180, 10), Size = NumberSequence.new(7, 10), Color = ColorSequence.new(color),
 			Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.4, 0.8), NumberSequenceKeypoint.new(1, 1) }),
 			Parent = f })
@@ -3105,10 +3282,12 @@ do
 		local F = Folders.cave
 		local stone = Color3.fromRGB(66, 58, 60)
 		part({ Name = "CaveFloor", Size = Vector3.new(260, 4, 260), Position = Vector3.new(0, -2, 0), Material = Enum.Material.Slate, Color = Color3.fromRGB(70, 62, 62), Parent = F })
-		for _ = 1, 40 do
-			local s = vr:NextNumber(5, 14)
-			part({ Size = Vector3.new(s, 0.3, s * vr:NextNumber(0.6, 1.2)), CFrame = CFrame.new(vr:NextNumber(-70, 70), 0.05, vr:NextNumber(-70, 70)) * CFrame.Angles(0, vr:NextNumber(0, 3), 0),
-				Material = Enum.Material.Pebble, Color = Color3.fromRGB(84, 74, 72), CanCollide = false, CastShadow = false, Parent = F })
+		for i = 1, 40 do
+			local s, k, x, z, r = vr:NextNumber(5, 14), vr:NextNumber(0.6, 1.2), vr:NextNumber(-70, 70), vr:NextNumber(-70, 70), vr:NextNumber(0, 3)
+			if Perf.keep(i) then
+				part({ Size = Vector3.new(s, 0.3, s * k), CFrame = CFrame.new(x, 0.05, z) * CFrame.Angles(0, r, 0),
+					Material = Enum.Material.Pebble, Color = Color3.fromRGB(84, 74, 72), CanCollide = false, CastShadow = false, Parent = F })
+			end
 		end
 		-- walls (a ring of huge rocks) with three tunnel openings
 		for i = 0, 35 do
@@ -3140,9 +3319,10 @@ do
 					Material = Enum.Material.Slate, Color = color, CanCollide = not down, Parent = F })
 			end
 		end
-		for _ = 1, 34 do
+		for i = 1, 34 do
 			local p = Vector3.new(vr:NextNumber(-74, 74), 47, vr:NextNumber(-74, 74))
-			spike(p, vr:NextNumber(5, 12), vr:NextNumber(1.6, 3.4), true, Color3.fromRGB(70, 62, 64))
+			local h, w = vr:NextNumber(5, 12), vr:NextNumber(1.6, 3.4)
+			if Perf.keep(i) then spike(p, h, w, true, Color3.fromRGB(70, 62, 64)) end
 		end
 		for _ = 1, 22 do
 			local a = vr:NextNumber(0, math.pi * 2)
@@ -3167,7 +3347,7 @@ do
 					CanCollide = false, Parent = F })
 				main = main or cp
 			end
-			if i % 2 == 0 then make("PointLight", { Range = 22, Brightness = 1.6, Color = crystalC[i % 3 + 1], Shadows = false, Parent = main }) end
+			if i % 2 == 0 then Perf.light({ Range = 22, Brightness = 1.6, Color = crystalC[i % 3 + 1], Shadows = false, Parent = main }) end
 		end
 		-- campfire ring
 		do
@@ -3183,8 +3363,8 @@ do
 			end
 			local flame = part({ Name = "Campfire", Size = Vector3.new(1, 1, 1), Position = c + Vector3.new(0, 1, 0), Transparency = 1, CanCollide = false, Parent = F })
 			make("Fire", { Size = 7, Heat = 10, Color = Color3.fromRGB(255, 140, 40), SecondaryColor = Color3.fromRGB(255, 60, 20), Parent = flame })
-			make("PointLight", { Range = 34, Brightness = 2.4, Color = Color3.fromRGB(255, 150, 70), Shadows = true, Parent = flame })
-			make("ParticleEmitter", { Rate = 7, Lifetime = NumberRange.new(1, 2.2), Speed = NumberRange.new(2, 6), SpreadAngle = Vector2.new(25, 25),
+			Perf.light({ Range = 34, Brightness = 2.4, Color = Color3.fromRGB(255, 150, 70), Shadows = true, Key = true, Parent = flame })
+			Perf.fx({ Rate = 7, Lifetime = NumberRange.new(1, 2.2), Speed = NumberRange.new(2, 6), SpreadAngle = Vector2.new(25, 25),
 				Size = NumberSequence.new(0.18), Color = ColorSequence.new(Color3.fromRGB(255, 170, 60)), LightEmission = 1, Parent = flame })
 			for _, a in ipairs({ 30, 150, 270 }) do
 				local r = math.rad(a)
@@ -3217,7 +3397,7 @@ do
 			rock(F, look + at(87, 0, 37.5), Vector3.new(34, 21, 18), stone:Lerp(BLACK, 0.18)) -- lintel above the opening
 			local inf = info[wid]
 			local glow = part({ Size = Vector3.new(22, 22, 1), CFrame = look + at(121, 0, 10), Material = Enum.Material.Neon, Color = inf[3]:Lerp(WHITE, 0.55), Parent = F })
-			make("PointLight", { Range = 30, Brightness = 2, Color = inf[3], Parent = glow })
+			Perf.light({ Range = 30, Brightness = 2, Color = inf[3], Key = true, Parent = glow })
 			local beam = part({ Size = Vector3.new(20, 18, 30), CFrame = look + at(104, 0, 9), Material = Enum.Material.Neon, Color = inf[3]:Lerp(WHITE, 0.6),
 				Transparency = 0.93, CanCollide = false, CastShadow = false, Parent = F })
 			beam.Name = "LightBeam"
@@ -3275,7 +3455,7 @@ do
 		-- glowing pool with mushrooms
 		local pool = part({ Shape = CYL, Size = Vector3.new(0.3, 22, 22), CFrame = CFrame.new(-42, 0.12, 40) * UP, Material = Enum.Material.Glass,
 			Color = Color3.fromRGB(60, 200, 220), Transparency = 0.3, Reflectance = 0.2, CanCollide = false, Parent = F })
-		make("PointLight", { Range = 18, Brightness = 1.2, Color = Color3.fromRGB(80, 220, 255), Parent = pool })
+		Perf.light({ Range = 18, Brightness = 1.2, Color = Color3.fromRGB(80, 220, 255), Parent = pool })
 		for i = 1, 9 do
 			local a = i / 9 * math.pi * 2
 			local p = Vector3.new(-42 + math.cos(a) * 13, 0, 40 + math.sin(a) * 13)
@@ -3288,7 +3468,7 @@ do
 		-- dust motes + bats near the ceiling
 		fireflies(F, Vector3.new(0, 12, 0), Vector3.new(130, 16, 130), Color3.fromRGB(255, 220, 160), 6)
 		local bats = part({ Size = Vector3.new(120, 2, 120), Position = Vector3.new(0, 40, 0), Transparency = 1, CanCollide = false, CanQuery = false, CanTouch = false, Parent = F })
-		make("ParticleEmitter", { Rate = 2, Lifetime = NumberRange.new(4, 6), Speed = NumberRange.new(6, 10), SpreadAngle = Vector2.new(180, 20), Rotation = NumberRange.new(0, 360),
+		Perf.fx({ Rate = 2, Lifetime = NumberRange.new(4, 6), Speed = NumberRange.new(6, 10), SpreadAngle = Vector2.new(180, 20), Rotation = NumberRange.new(0, 360),
 			Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.6), NumberSequenceKeypoint.new(0.5, 0.2), NumberSequenceKeypoint.new(1, 0.6) }),
 			Color = ColorSequence.new(Color3.fromRGB(20, 16, 22)), Parent = bats })
 		-- minecart + rails by the shop
@@ -3340,7 +3520,7 @@ do
 				part({ Size = Vector3.new(14 - i * 2, 0.6, 2), CFrame = cc * CFrame.new(0, 0.3 + i * 0.6, 12 - i * 1.4), Material = Enum.Material.Slate, Color = st, Parent = F })
 			end
 			local glow = part({ Size = Vector3.new(2, 2, 2), CFrame = cc * CFrame.new(0, 12, 9.4), Material = Enum.Material.Neon, Color = Color3.fromRGB(150, 80, 255), CanCollide = false, Parent = F })
-			make("PointLight", { Range = 34, Brightness = 2.4, Color = glow.Color, Parent = glow })
+			Perf.light({ Range = 34, Brightness = 2.4, Color = glow.Color, Key = true, Parent = glow })
 			sign(F, cc * CFrame.new(0, 21.5, 0.5), Vector3.new(14, 3, 0.5), "THE CRYPT", nil, Color3.fromRGB(40, 36, 44), Color3.fromRGB(200, 140, 255))
 		end
 		-- iron fence around the yard + the big gate
@@ -3368,7 +3548,7 @@ do
 		for _, x in ipairs({ -9.5, 9.5 }) do
 			part({ Size = Vector3.new(2.6, 12, 2.6), Position = Vector3.new(O.X + x, 6, fz), Material = Enum.Material.Cobblestone, Color = Color3.fromRGB(96, 94, 100), Parent = F })
 			local l = part({ Size = Vector3.new(1.4, 1.6, 1.4), Position = Vector3.new(O.X + x, 13, fz), Material = Enum.Material.Neon, Color = Color3.fromRGB(130, 255, 140), CanCollide = false, Parent = F })
-			make("PointLight", { Range = 18, Brightness = 1.6, Color = l.Color, Parent = l })
+			Perf.light({ Range = 18, Brightness = 1.6, Color = l.Color, Parent = l })
 		end
 		local gate = { doors = {} }
 		for _, sx in ipairs({ -1, 1 }) do
@@ -3457,14 +3637,19 @@ do
 				part({ Size = Vector3.new(4, 2.2, 2.6), CFrame = cf * CFrame.new(0.4, 2.2, 0) * CFrame.Angles(0, 0.4, 0), Material = Enum.Material.Grass, Color = Color3.fromRGB(205, 176, 88), Parent = F })
 			end
 		end
+		local stalk = 0
 		for _, c in ipairs(L.corn) do
 			for x = -c.w / 2, c.w / 2, 2.6 do
 				for z = -c.d / 2, c.d / 2, 2.6 do
 					local h = vr:NextNumber(5, 7.5)
-					part({ Size = Vector3.new(0.25, h, 0.25), CFrame = CFrame.new(c.x + x + vr:NextNumber(-0.4, 0.4), h / 2, c.z + z) * CFrame.Angles(vr:NextNumber(-0.1, 0.1), 0, vr:NextNumber(-0.1, 0.1)),
-						Material = Enum.Material.Grass, Color = Color3.fromRGB(176, 150, 82), CanCollide = false, CastShadow = false, Parent = F })
-					part({ Size = Vector3.new(1.6, 0.1, 0.5), CFrame = CFrame.new(c.x + x, h * 0.6, c.z + z) * CFrame.Angles(0, vr:NextNumber(0, 3), 0.5), Material = Enum.Material.Grass,
-						Color = Color3.fromRGB(150, 140, 70), CanCollide = false, CastShadow = false, Parent = F })
+					local jx, ax, az, la = vr:NextNumber(-0.4, 0.4), vr:NextNumber(-0.1, 0.1), vr:NextNumber(-0.1, 0.1), vr:NextNumber(0, 3)
+					stalk += 1
+					if Perf.keep(stalk) then
+						part({ Size = Vector3.new(0.25, h, 0.25), CFrame = CFrame.new(c.x + x + jx, h / 2, c.z + z) * CFrame.Angles(ax, 0, az),
+							Material = Enum.Material.Grass, Color = Color3.fromRGB(176, 150, 82), CanCollide = false, CastShadow = false, Parent = F })
+						part({ Size = Vector3.new(1.6, 0.1, 0.5), CFrame = CFrame.new(c.x + x, h * 0.6, c.z + z) * CFrame.Angles(0, la, 0.5), Material = Enum.Material.Grass,
+							Color = Color3.fromRGB(150, 140, 70), CanCollide = false, CastShadow = false, Parent = F })
+					end
 				end
 			end
 		end
@@ -3481,7 +3666,7 @@ do
 		fog(F, O + Vector3.new(0, 0.8, -110), Vector3.new(300, 1, 200), Color3.fromRGB(170, 150, 200), 9)
 		fireflies(F, O + Vector3.new(0, 4, 90), Vector3.new(360, 6, 150), Color3.fromRGB(255, 200, 90), 8)
 		local bats = part({ Size = Vector3.new(300, 4, 300), Position = O + Vector3.new(0, 45, -60), Transparency = 1, CanCollide = false, CanQuery = false, CanTouch = false, Parent = F })
-		make("ParticleEmitter", { Rate = 4, Lifetime = NumberRange.new(5, 8), Speed = NumberRange.new(8, 14), SpreadAngle = Vector2.new(180, 25), Rotation = NumberRange.new(0, 360),
+		Perf.fx({ Rate = 4, Lifetime = NumberRange.new(5, 8), Speed = NumberRange.new(8, 14), SpreadAngle = Vector2.new(180, 25), Rotation = NumberRange.new(0, 360),
 			Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0.3), NumberSequenceKeypoint.new(1, 1) }),
 			Color = ColorSequence.new(Color3.fromRGB(14, 10, 16)), Parent = bats })
 		-- a huge Halloween moon
@@ -3506,7 +3691,7 @@ do
 				part({ Size = Vector3.new(0.4, 6, 0.4), Position = p + Vector3.new(0, 3, 0), Material = Enum.Material.Wood, Color = Color3.fromRGB(70, 52, 40), Parent = F })
 				local lamp = part({ Size = Vector3.new(1.2, 1.4, 1.2), Position = p + Vector3.new(0, 6.4, 0), Material = Enum.Material.Neon, Color = Color3.fromRGB(150, 220, 255),
 					CanCollide = false, Parent = F })
-				if lz % 64 == 8 then make("PointLight", { Range = 16, Brightness = 1.2, Color = lamp.Color, Shadows = false, Parent = lamp }) end
+				if lz % 64 == 8 then Perf.light({ Range = 16, Brightness = 1.2, Color = lamp.Color, Shadows = false, Parent = lamp }) end
 			end
 		end
 		-- frozen lake
@@ -3565,7 +3750,7 @@ do
 				main = main or cp
 			end
 			part({ Size = Vector3.new(0.5, 4 * c.s, 0.5), CFrame = CFrame.new(c.x, 2 * c.s, c.z), Material = Enum.Material.Neon, Color = col, CanCollide = false, Parent = F })
-			if c.light then make("PointLight", { Range = 14, Brightness = 1.2, Color = col, Shadows = false, Parent = main }) end
+			if c.light then Perf.light({ Range = 14, Brightness = 1.2, Color = col, Shadows = false, Parent = main }) end
 		end
 		for _, r in ipairs(L.rocks) do
 			local cf = CFrame.new(r.x, r.s * 0.25, r.z) * CFrame.Angles(r.t, r.a, r.t * 0.5)
@@ -3630,7 +3815,7 @@ do
 		water.Name = "River"
 		local fall = part({ Size = Vector3.new(26, 70, 2), Position = O + Vector3.new(-222, 35, -236), Material = Enum.Material.Glass, Color = Color3.fromRGB(180, 230, 240),
 			Transparency = 0.35, CanCollide = false, Parent = F })
-		make("ParticleEmitter", { Texture = "rbxasset://textures/particles/smoke_main.dds", Rate = 14, Lifetime = NumberRange.new(1.5, 2.5), Speed = NumberRange.new(3, 6),
+		Perf.fx({ Texture = "rbxasset://textures/particles/smoke_main.dds", Rate = 14, Lifetime = NumberRange.new(1.5, 2.5), Speed = NumberRange.new(3, 6),
 			SpreadAngle = Vector2.new(60, 20), Size = NumberSequence.new(5, 10), Color = ColorSequence.new(Color3.fromRGB(240, 250, 255)),
 			Transparency = NumberSequence.new(0.6, 1), EmissionDirection = Enum.NormalId.Bottom, Parent = fall })
 		Build.waterfall = fall
@@ -3646,8 +3831,8 @@ do
 			part({ Size = Vector3.new(14, 2, 2), CFrame = tc * CFrame.new(0, 1 + i * 2, 22 - i * 1.15), Material = Enum.Material.Slate, Color = stoneC:Lerp(WHITE, 0.08), Parent = F })
 		end
 		local altar = part({ Size = Vector3.new(8, 4, 8), CFrame = tc * CFrame.new(0, 34, 0), Material = Enum.Material.Neon, Color = Color3.fromRGB(140, 255, 60), Transparency = 0.2, Parent = F })
-		make("PointLight", { Range = 40, Brightness = 2.5, Color = altar.Color, Parent = altar })
-		make("ParticleEmitter", { Rate = 12, Lifetime = NumberRange.new(1.5, 3), Speed = NumberRange.new(3, 7), SpreadAngle = Vector2.new(20, 20),
+		Perf.light({ Range = 40, Brightness = 2.5, Color = altar.Color, Key = true, Parent = altar })
+		Perf.fx({ Rate = 12, Lifetime = NumberRange.new(1.5, 3), Speed = NumberRange.new(3, 7), SpreadAngle = Vector2.new(20, 20),
 			Size = NumberSequence.new(0.5, 0), Color = ColorSequence.new(Color3.fromRGB(140, 255, 60)), LightEmission = 1, Parent = altar })
 		for _, x in ipairs({ -1, 1 }) do torch(F, (tc * CFrame.new(x * 9, 1, 26)).Position + Vector3.new(0, 1, 0), true) end
 		local A = L.arena
@@ -3695,10 +3880,12 @@ do
 					Position = p + Vector3.new(vr:NextNumber(-5, 5) * s, h + vr:NextNumber(-2, 3) * s, vr:NextNumber(-5, 5) * s),
 					Material = Enum.Material.LeafyGrass, Color = leafC[(k % 3) + 1], CanCollide = false, Parent = F })
 			end
-			for _ = 1, t.vines do
-				local vl = vr:NextNumber(8, 16) * s
-				part({ Size = Vector3.new(0.2, vl, 0.2), Position = p + Vector3.new(vr:NextNumber(-6, 6) * s, h - vl / 2, vr:NextNumber(-6, 6) * s), Material = Enum.Material.Grass,
-					Color = Color3.fromRGB(60, 110, 40), CanCollide = false, CastShadow = false, Parent = F })
+			for vi = 1, t.vines do
+				local vl, vx, vz = vr:NextNumber(8, 16) * s, vr:NextNumber(-6, 6) * s, vr:NextNumber(-6, 6) * s
+				if Perf.keep(vi) then
+					part({ Size = Vector3.new(0.2, vl, 0.2), Position = p + Vector3.new(vx, h - vl / 2, vz), Material = Enum.Material.Grass,
+						Color = Color3.fromRGB(60, 110, 40), CanCollide = false, CastShadow = false, Parent = F })
+				end
 			end
 		end
 		for _, t in ipairs(L.palms) do
@@ -3720,9 +3907,9 @@ do
 			end
 		end
 		-- ferns + flowers (looks only)
-		for _ = 1, 90 do
+		for i = 1, 90 do
 			local lx, lz = vr:NextNumber(-184, 184), vr:NextNumber(-160, 160)
-			if not L.blocked(lx, lz, 1) then
+			if not L.blocked(lx, lz, 1) and Perf.keep(i) then
 				local p = O + Vector3.new(lx, 0, lz)
 				for k = 0, 2 do
 					wedge({ Size = Vector3.new(0.1, 1.6, 3.2), CFrame = CFrame.new(p) * CFrame.Angles(0, k * 2.1 + lx, 0) * CFrame.new(0, 0.8, -1.4) * CFrame.Angles(math.rad(20), 0, 0),
@@ -3731,9 +3918,9 @@ do
 			end
 		end
 		local flowerC = { Color3.fromRGB(255, 80, 120), Color3.fromRGB(255, 200, 40), Color3.fromRGB(200, 90, 255), Color3.fromRGB(255, 120, 40) }
-		for _ = 1, 60 do
+		for i = 1, 60 do
 			local lx, lz = vr:NextNumber(-184, 184), vr:NextNumber(-160, 160)
-			if not L.blocked(lx, lz, 0) then
+			if not L.blocked(lx, lz, 0) and Perf.keep(i) then
 				part({ Shape = BALL, Size = Vector3.new(0.9, 0.5, 0.9), Position = O + Vector3.new(lx, 0.6, lz), Material = Enum.Material.SmoothPlastic, Color = vpick(flowerC),
 					CanCollide = false, CastShadow = false, Parent = F })
 			end
@@ -3742,9 +3929,9 @@ do
 		for i, pl in ipairs(L.pools) do
 			local pool = part({ Shape = CYL, Size = Vector3.new(0.3, pl.r * 2, pl.r * 2), CFrame = CFrame.new(pl.x, 0.1, pl.z) * UP, Material = Enum.Material.Neon,
 				Color = Color3.fromRGB(110, 230, 50), Transparency = 0.25, CanCollide = false, Parent = F })
-			make("ParticleEmitter", { Rate = 3, Lifetime = NumberRange.new(0.6, 1.2), Speed = NumberRange.new(1, 2), SpreadAngle = Vector2.new(15, 15),
+			Perf.fx({ Rate = 3, Lifetime = NumberRange.new(0.6, 1.2), Speed = NumberRange.new(1, 2), SpreadAngle = Vector2.new(15, 15),
 				Size = NumberSequence.new(0.4, 0), Color = ColorSequence.new(Color3.fromRGB(160, 255, 80)), LightEmission = 0.6, Parent = pool })
-			if i % 2 == 1 then make("PointLight", { Range = 14, Brightness = 1.2, Color = pool.Color, Shadows = false, Parent = pool }) end
+			if i % 2 == 1 then Perf.light({ Range = 14, Brightness = 1.2, Color = pool.Color, Shadows = false, Parent = pool }) end
 		end
 		for _, b in ipairs(L.barrels) do
 			local cf = CFrame.new(b.x, b.tipped and 0.9 or 1.4, b.z) * CFrame.Angles(0, b.a, b.tipped and 0 or math.pi / 2)
@@ -3862,11 +4049,14 @@ local HUD = {}
 do
 	local root = make("Frame", { Name = "Root", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = hudGui })
 	HUD.root = root
-	-- top right: coins / candies / kills
-	local tr = make("Frame", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, 10), Size = UDim2.fromOffset(200, 150), BackgroundTransparency = 1, Parent = root })
-	make("UIListLayout", { Padding = UDim.new(0, 8), HorizontalAlignment = Enum.HorizontalAlignment.Right, SortOrder = Enum.SortOrder.LayoutOrder, Parent = tr })
+	-- TOP CENTRE, Grow-a-Garden style: coins · candy · kills, then the event + boss timer, then the boss bar.
+	-- (2.01: Roblox's chat lives top-left and the leaderboard top-right, so the HUD stays out of their way.)
+	local tc = make("Frame", { AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 6), Size = UDim2.fromOffset(560, 150), BackgroundTransparency = 1, Parent = root })
+	local row1 = make("Frame", { Size = UDim2.new(1, 0, 0, 42), BackgroundTransparency = 1, Parent = tc })
+	make("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Center, Padding = UDim.new(0, 8),
+		SortOrder = Enum.SortOrder.LayoutOrder, Parent = row1 })
 	local function stat(order, emoji, col, width)
-		local p = UI.pill(tr, UDim2.fromOffset(width or 190, 42), UDim2.new())
+		local p = UI.pill(row1, UDim2.fromOffset(width or 180, 42), UDim2.new())
 		p.LayoutOrder = order
 		UI.icon(p, emoji, col, 34)
 		local l = UI.text({ Text = "0", Position = UDim2.fromOffset(46, 5), Size = UDim2.new(1, -54, 1, -10), TextXAlignment = Enum.TextXAlignment.Left, Stroke = 2.4, Parent = p })
@@ -3878,19 +4068,22 @@ do
 	UI.corner(cbar, 3)
 	HUD.candyFill = make("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = CANDY, Parent = cbar })
 	UI.corner(HUD.candyFill, 3)
-	HUD.killPill, HUD.killLabel, HUD.killScale = stat(3, "💀", Color3.fromRGB(200, 200, 210), 150)
+	HUD.killPill, HUD.killLabel, HUD.killScale = stat(3, "💀", Color3.fromRGB(200, 200, 210), 140)
 
-	-- top centre: 🎃 2X event banner + boss timer + boss health
-	local tc = make("Frame", { AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 6), Size = UDim2.fromOffset(330, 140), BackgroundTransparency = 1, Parent = root })
-	local banner = UI.pill(tc, UDim2.fromOffset(300, 38), UDim2.new(0.5, 0, 0, 0), Vector2.new(0.5, 0))
+	local row2 = make("Frame", { Position = UDim2.fromOffset(0, 50), Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, Parent = tc })
+	make("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Center, Padding = UDim.new(0, 8),
+		VerticalAlignment = Enum.VerticalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder, Parent = row2 })
+	local banner = UI.pill(row2, UDim2.fromOffset(290, 34), UDim2.new())
+	banner.LayoutOrder = 1
 	banner.BackgroundColor3 = Color3.fromRGB(30, 18, 8)
 	HUD.bannerText = UI.text({ Text = "🎃 2X HALLOWEEN EVENT 🎃", Size = UDim2.new(1, -16, 1, -8), Position = UDim2.fromOffset(8, 4), TextColor3 = Color3.fromRGB(255, 160, 40),
 		Stroke = 2.4, Parent = banner })
 	HUD.bannerScale = make("UIScale", { Parent = banner })
-	local bt = UI.pill(tc, UDim2.fromOffset(220, 30), UDim2.new(0.5, 0, 0, 44), Vector2.new(0.5, 0))
+	local bt = UI.pill(row2, UDim2.fromOffset(230, 34), UDim2.new())
+	bt.LayoutOrder = 2
 	HUD.bossTimer = UI.text({ Text = "👹 Boss in 10:00", Size = UDim2.new(1, -12, 1, -6), Position = UDim2.fromOffset(6, 3), Stroke = 2, Parent = bt })
 	HUD.bossTimerPill = bt
-	local bb = UI.panel({ AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 82), Size = UDim2.fromOffset(330, 50), Visible = false, Parent = tc })
+	local bb = UI.panel({ AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 92), Size = UDim2.fromOffset(340, 50), Visible = false, Parent = tc })
 	HUD.bossName = UI.text({ Text = "BOSS", Size = UDim2.new(1, -16, 0, 20), Position = UDim2.fromOffset(8, 3), Stroke = 2.4, Parent = bb })
 	local bback = make("Frame", { Position = UDim2.fromOffset(10, 26), Size = UDim2.new(1, -20, 0, 16), BackgroundColor3 = UI.INK, Parent = bb })
 	UI.corner(bback, 8)
@@ -3900,14 +4093,15 @@ do
 	HUD.bossHpText = UI.text({ Text = "", Size = UDim2.fromScale(1, 1), Stroke = 1.6, ZIndex = 3, Parent = bback })
 	HUD.bossBar = bb
 
-	-- top left: where you are + menu buttons
-	local tl = make("Frame", { Position = UDim2.fromOffset(12, 10), Size = UDim2.fromOffset(240, 300), BackgroundTransparency = 1, Parent = root })
+	-- LEFT SIDE (middle): where you are + big menu buttons stacked like Grow a Garden
+	local tl = make("Frame", { AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 12, 0.56, 0), Size = UDim2.fromOffset(240, 262), BackgroundTransparency = 1, Parent = root })
+	HUD.leftCol = tl
 	local wp = UI.pill(tl, UDim2.fromOffset(230, 36), UDim2.new())
 	HUD.worldLabel = UI.text({ Text = "🕯 THE CAVE", Size = UDim2.new(1, -14, 1, -8), Position = UDim2.fromOffset(7, 4), TextXAlignment = Enum.TextXAlignment.Left, Stroke = 2.2, Parent = wp })
 	HUD.menuButtons = {}
 	local menus = { { "worlds", "🗺", "Worlds" }, { "swords", "⚔", "Swords" }, { "settings", "⚙", "Settings" } }
 	for i, m in ipairs(menus) do
-		local face, label = UI.button({ Text = "", Size = UDim2.fromOffset(64, 64), Position = UDim2.fromOffset((i - 1) * 72, 46), Color = UI.PANEL, Parent = tl })
+		local face, label = UI.button({ Text = "", Size = UDim2.fromOffset(66, 66), Position = UDim2.fromOffset(0, 46 + (i - 1) * 72), Color = UI.PANEL, Parent = tl })
 		label.Text = m[2]
 		label.Size = UDim2.new(1, -12, 0.62, 0)
 		UI.text({ Text = m[3], Size = UDim2.new(1, -4, 0.3, 0), Position = UDim2.new(0, 2, 0.66, 0), Stroke = 2, MaxText = 14, Parent = face })
@@ -3934,7 +4128,7 @@ do
 		TextColor3 = Color3.fromRGB(230, 230, 235), Stroke = 1.6, MaxText = 14, Parent = root })
 
 	-- toasts
-	HUD.toasts = make("Frame", { AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0.2, 0), Size = UDim2.fromOffset(460, 220), BackgroundTransparency = 1, Parent = root })
+	HUD.toasts = make("Frame", { AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0.27, 0), Size = UDim2.fromOffset(460, 220), BackgroundTransparency = 1, Parent = root })
 	make("UIListLayout", { Padding = UDim.new(0, 6), HorizontalAlignment = Enum.HorizontalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder, Parent = HUD.toasts })
 end
 
@@ -4032,7 +4226,7 @@ do
 	make("UIGradient", { Rotation = 90, Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(190, 190, 200)), Parent = Intro.title })
 	local ver = UI.pill(box, UDim2.fromOffset(84, 34), UDim2.new(0.5, 0, 0.17, 0), Vector2.new(0.5, 0))
 	ver.Rotation = -4
-	UI.text({ Text = "2.0", Size = UDim2.new(1, -10, 1, -6), Position = UDim2.fromOffset(5, 3), TextColor3 = GOLD, Stroke = 2.4, Parent = ver })
+	UI.text({ Text = VERSION, Size = UDim2.new(1, -10, 1, -6), Position = UDim2.fromOffset(5, 3), TextColor3 = GOLD, Stroke = 2.4, Parent = ver })
 	local ev = UI.text({ Text = "🎃 HALLOWEEN 2X EVENT 🎃", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0.26), Size = UDim2.fromScale(0.8, 0.07),
 		TextColor3 = Color3.fromRGB(255, 150, 40), Stroke = 3, Parent = box })
 	Intro.event = ev
@@ -4157,7 +4351,7 @@ end)
 local S = {
 	coins = 0, candies = 0, kills = 0, owned = { rusty = true }, equipped = "rusty",
 	levels = { damage = 0, speed = 0, range = 0, health = 0 }, pumpkin = false,
-	music = true, sfx = true, gfx = "high", talked = false,
+	music = true, sfx = true, gfx = GFX.high and "high" or "low", gfxSet = false, talked = false,
 	hp = 100, lagHP = 1, dead = false, playing = false, talking = false, lastHurt = -10, iframes = 0,
 	world = "cave", traveling = false, sprint = false, dashUntil = 0, dashCool = 0,
 	chillUntil = 0, burnUntil = 0, burnTick = 0, burnDmg = 0, sickUntil = 0, sickTick = 0, sickDmg = 0,
@@ -4183,7 +4377,7 @@ local function markDirty() S.dirty = true end
 
 local function profileOut()
 	return { coins = S.coins, candies = S.candies, kills = S.kills, owned = S.owned, equipped = S.equipped, levels = S.levels,
-		pumpkin = S.pumpkin, music = S.music, sfx = S.sfx, gfx = S.gfx, talked = S.talked }
+		pumpkin = S.pumpkin, music = S.music, sfx = S.sfx, gfx = S.gfx, gfxSet = S.gfxSet, talked = S.talked }
 end
 
 ------------------------------------------------------------------------------------------------
@@ -4207,7 +4401,7 @@ do
 		local h = On[msg]
 		if h then
 			local ok, err = pcall(h, ...)
-			if not ok then warn("[Forest Hunt 2.0] " .. tostring(msg) .. ": " .. tostring(err)) end
+			if not ok then warn("[Forest Hunt " .. VERSION .. "] " .. tostring(msg) .. ": " .. tostring(err)) end
 		end
 	end
 	if Link.coop then
@@ -4274,11 +4468,23 @@ function FX.shockwave(pos, radius, color, dur)
 	tween(ring, dur, { Size = Vector3.new(0.2, radius * 2, radius * 2), Transparency = 1 }, Enum.EasingStyle.Quart)
 	Debris:AddItem(ring, dur + 0.1)
 end
+-- hit flashes reuse a small pool of Highlights (Roblox only draws a limited number, and each one costs)
+local flashPool, flashI = {}, 0
 function FX.flash(model, color, strength)
-	local h = model:FindFirstChild("FH_Flash")
+	if not model or not model.Parent then return end
+	local h
+	for _, x in ipairs(flashPool) do
+		if x.Adornee == model then h = x break end
+	end
 	if not h then
-		h = make("Highlight", { Name = "FH_Flash", FillColor = WHITE, FillTransparency = 1, OutlineTransparency = 1,
-			DepthMode = Enum.HighlightDepthMode.Occluded, Adornee = model, Parent = model })
+		flashI = flashI % 6 + 1
+		h = flashPool[flashI]
+		if not h then
+			h = make("Highlight", { Name = "FH_Flash", FillColor = WHITE, FillTransparency = 1, OutlineTransparency = 1,
+				DepthMode = Enum.HighlightDepthMode.Occluded, Parent = fxFolder })
+			flashPool[flashI] = h
+		end
+		h.Adornee = model
 	end
 	h.FillColor = color or WHITE
 	h.FillTransparency = strength or 0.1
@@ -4318,12 +4524,25 @@ end
 ------------------------------------------------------------------------------------------------
 local Player = {}
 local CA -- character animator (defined below)
+local Views -- monster views (defined in the MONSTERS section)
 do
 	local function pulseCoins()
 		HUD.coinScale.Scale = 1.22
 		tween(HUD.coinScale, 0.28, { Scale = 1 }, Enum.EasingStyle.Back)
 	end
 	Player.pulseCoins = pulseCoins
+
+	-- HIGH ↔ FAST graphics. byPlayer = picked in Settings, so it's remembered (and the FPS watchdog leaves it alone)
+	function Player.setGraphics(high, byPlayer)
+		S.gfx = high and "high" or "low"
+		if byPlayer then S.gfxSet = true end
+		if GFX.high ~= high then
+			GFX.high = high
+			Look.apply(S.world)
+			Perf.apply()
+		end
+		markDirty()
+	end
 
 	function Player.addCoins(n, at)
 		S.coins += n
@@ -4472,8 +4691,10 @@ do
 end
 
 ------------------------------------------------------------------------------------------------
--- CHARACTER ANIMATION: custom run / sprint / idle / jump / sword swings / zombie mode
+-- CHARACTER ANIMATION: custom run / sprint / idle / jump / landing / dash / sword swings / zombie mode
 -- Runs for YOU and for every other player near you (so you see their swings too).
+-- 2.01: poses are written in RunService.PreSimulation, which comes AFTER Roblox's own animator,
+-- so they always show instead of being replaced by the default walk/idle animations.
 ------------------------------------------------------------------------------------------------
 CA = { list = {} }
 do
@@ -4502,6 +4723,9 @@ do
 		return { Ru = Ru, Rf = Rf, Rh = Rh, twist = k.twist or 0, lean = k.lean or 0 }
 	end
 	local CARRY = pose({ up = V(0.3, -1, -0.15), fo = V(0.12, -0.1, -1), bl = V(0.2, 0.78, -0.6), face = V(1, 0, 0) })
+	-- sprinting: the blade trails behind you · dashing: tucked in close
+	local RUNCARRY = pose({ up = V(0.25, -0.95, 0.45), fo = V(0.15, -0.55, 0.85), bl = V(0.1, 0.45, 0.9), face = V(1, 0, 0) })
+	local DASHCARRY = pose({ up = V(0.35, -0.6, 0.75), fo = V(0.2, -0.3, 0.95), bl = V(0.05, 0.2, 1), face = V(1, 0, 0) })
 	local KEYS = {
 		slash = {
 			{ 0.00, CARRY },
@@ -4598,6 +4822,7 @@ do
 		if not hum or not root then return nil end
 		local J, r15 = Rigs.charJoints(char)
 		local ca = { plr = plr, char = char, hum = hum, root = root, r15 = r15, J = J, phase = 0, walk = 0, air = 0, t = 0,
+			landT = 0, airTime = 0, fallW = 0, dashW = 0, idleT = 0, twirlT = -1, lookY = 0,
 			hand = char:FindFirstChild(r15 and "RightHand" or "Right Arm"), swing = { active = false, t = 0, dur = 0.4, kind = "slash" } }
 		ca.ok = ca.hand ~= nil and J.ShoulderR ~= nil
 		CA.list[plr] = ca
@@ -4616,6 +4841,7 @@ do
 		ca.swing.active, ca.swing.kind, ca.swing.t = true, kind, 0
 		ca.swing.dur = sw.dur / math.clamp(speed or 1, 0.4, 4)
 		ca.swing.sound, ca.swing.hit = false, false
+		ca.idleT, ca.twirlT = 0, -1
 	end
 
 	function CA.startZombie(plr, at)
@@ -4674,6 +4900,25 @@ do
 		setJ(J, "KneeR", CFrame.Angles(-0.2 - math.max(0, -shuffle), 0, 0))
 	end
 
+	-- your head turns toward the closest monster
+	local function lookYaw(ca)
+		if not Views then return 0 end
+		local root = ca.root
+		local rp = flat(root.Position)
+		local best, bd = nil, 28
+		for _, v in pairs(Views.list) do
+			if v.alive and not v.rising then
+				local d = (v.pos - rp).Magnitude
+				if d < bd then best, bd = v, d end
+			end
+		end
+		if not best or bd < 0.5 then return 0 end
+		local to = best.pos - rp
+		local look = flat(root.CFrame.LookVector)
+		if look.Magnitude < 0.01 then return 0 end
+		return math.clamp(angDiff(yawOf(look.X, look.Z), yawOf(to.X, to.Z)), -0.75, 0.75)
+	end
+
 	function CA.update(ca, dt, now)
 		if not ca.ok or not ca.char.Parent then return end
 		local hum, root, J = ca.hum, ca.root, ca.J
@@ -4683,30 +4928,46 @@ do
 		end
 		if hum.Health <= 0 then return end
 		ca.t += dt
+		local isMe = ca.plr == player
 		local vel = root.AssemblyLinearVelocity
 		local spd = Vector2.new(vel.X, vel.Z).Magnitude
 		local grounded
-		if ca.plr == player then
+		if isMe then
 			grounded = hum.FloorMaterial ~= Enum.Material.Air
 		else
 			grounded = math.abs(vel.Y) < 3
 		end
+		-- landing squash after a jump or a fall
+		if grounded then
+			if ca.airTime > 0.3 then ca.landT = math.min(1, 0.5 + ca.airTime * 0.6) end
+			ca.airTime = 0
+		else
+			ca.airTime += dt
+		end
+		ca.landT = math.max(0, ca.landT - dt * 3.5)
+		local land = ca.landT
 		ca.air += ((grounded and 0 or 1) - ca.air) * math.min(1, dt * 10)
+		ca.fallW += (((not grounded and vel.Y < -16) and 1 or 0) - ca.fallW) * math.min(1, dt * 6)
+		local dashing = (isMe and now < S.dashUntil) or ((not isMe) and spd > 48)
+		ca.dashW += ((dashing and 1 or 0) - ca.dashW) * math.min(1, dt * 18)
+		local dash, air, fall = ca.dashW, ca.air, ca.fallW
+		local hurtK = isMe and math.max(0, 1 - (now - S.lastHurt) / 0.3) or 0
 		local wantWalk = math.clamp(spd / 4, 0, 1)
 		ca.walk += (wantWalk - ca.walk) * math.min(1, dt * 8)
-		local w = ca.walk * (1 - ca.air)
+		local w = ca.walk * (1 - air) * (1 - dash)
 		local sprintK = math.clamp((spd - 18) / 8, 0, 1)
 		local stride = 5.2 + spd * 0.13
 		ca.phase = (ca.phase + dt * spd / stride * math.pi) % (math.pi * 2)
 		local sn, cs = math.sin(ca.phase), math.cos(ca.phase)
 		local A = 0.62 + 0.3 * sprintK
 		local breathe = math.sin(ca.t * 1.8) * 0.025
+		local jump = air * (1 - fall)
 
-		-- legs
-		local hipL = A * sn * w + ca.air * 0.65
-		local hipR = -A * sn * w - ca.air * 0.25
-		local kneeL = -(0.12 + 1.25 * math.max(0, cs)) * w - ca.air * 1.0 - 0.04
-		local kneeR = -(0.12 + 1.25 * math.max(0, -cs)) * w - ca.air * 0.45 - 0.04
+		-- legs: run cycle + jump tuck + fall + landing squash + dash lunge
+		local hipL = A * sn * w + jump * 0.65 + fall * 0.2 + 0.45 * land + 0.55 * dash
+		local hipR = -A * sn * w - jump * 0.25 - fall * 0.15 + 0.45 * land - 0.65 * dash
+		local kneeL = -(0.12 + 1.25 * math.max(0, cs)) * w - jump * 1.0 - fall * 0.35 - 0.04 - 0.75 * land - 0.5 * dash
+		local kneeR = -(0.12 + 1.25 * math.max(0, -cs)) * w - jump * 0.45 - fall * 0.2 - 0.04 - 0.75 * land - 0.95 * dash
 		setJ(J, "HipL", CFrame.Angles(hipL, 0, 0))
 		setJ(J, "HipR", CFrame.Angles(hipR, 0, 0))
 		setJ(J, "KneeL", CFrame.Angles(kneeL, 0, 0))
@@ -4726,18 +4987,44 @@ do
 			twist, lean = lerp(pa.twist, pb.twist, u), lerp(pa.lean, pb.lean, u)
 			if sw.kind == "spin" then spinA = -math.pi * 2 * smooth((sw.t - 0.15) / 0.65) end
 			if sw.kind == "thrust" then step = math.sin(math.clamp((sw.t - 0.2) / 0.55, 0, 1) * math.pi) * 0.9 end
+			step += math.sin(math.clamp(sw.t / 0.6, 0, 1) * math.pi) * 0.3 -- every swing steps into the hit
 		else
-			local bob = math.sin(ca.phase * 2) * 0.05 * w
-			Ru, Rf, Rh = CFrame.Angles(bob, 0, 0) * CARRY.Ru, CFrame.Angles(bob, 0, 0) * CARRY.Rf, CFrame.Angles(bob, 0, 0) * CARRY.Rh
+			-- ready stance → blade trailing while sprinting → tucked in while dashing
+			local rk = sprintK * w
+			Ru, Rf, Rh = CARRY.Ru:Lerp(RUNCARRY.Ru, rk), CARRY.Rf:Lerp(RUNCARRY.Rf, rk), CARRY.Rh:Lerp(RUNCARRY.Rh, rk)
+			if dash > 0.01 then
+				Ru, Rf, Rh = Ru:Lerp(DASHCARRY.Ru, dash), Rf:Lerp(DASHCARRY.Rf, dash), Rh:Lerp(DASHCARRY.Rh, dash)
+			end
+			local bob = CFrame.Angles(math.sin(ca.phase * 2) * 0.05 * w + breathe * 0.6, 0, 0)
+			Ru, Rf, Rh = bob * Ru, bob * Rf, bob * Rh
+			-- stand still for a while and you twirl your sword
+			if isMe then
+				if ca.walk < 0.1 and grounded and dash < 0.05 then ca.idleT += dt else ca.idleT = 0 end
+				if ca.idleT > 7 and ca.twirlT < 0 then
+					ca.twirlT = 0
+					playSfx("swing", root, { pitch = 1.4, vol = 0.35 })
+				end
+			end
+			if ca.twirlT >= 0 then
+				ca.twirlT += dt / 0.9
+				if ca.twirlT >= 1 or ca.walk > 0.3 then
+					ca.twirlT, ca.idleT = -1, 0
+				else
+					Rh = Rh * CFrame.Angles(0, smooth(ca.twirlT) * math.pi * 4, 0)
+				end
+			end
 		end
-		local bobY = (math.abs(cs) - 0.6) * 0.2 * w
+		local bobY = (math.abs(cs) - 0.6) * 0.2 * w - 0.35 * land - 0.25 * dash
 		setJ(J, "Root", CFrame.new(0, bobY, -step) * CFrame.Angles(0, sn * 0.07 * w + spinA, 0))
-		setJ(J, "Waist", CFrame.Angles(-(0.06 + 0.16 * sprintK) * w + breathe + lean, -sn * 0.12 * w + twist, 0))
-		setJ(J, "Neck", CFrame.Angles(0.04 * w, sn * 0.06 * w - twist * 0.4, 0))
+		setJ(J, "Waist", CFrame.Angles(-(0.06 + 0.16 * sprintK) * w + breathe + lean - 0.2 * land - 0.45 * dash + 0.3 * hurtK, -sn * 0.12 * w + twist, 0))
+		local wantLook = (isMe and not sw.active) and lookYaw(ca) or 0
+		ca.lookY += (wantLook - ca.lookY) * math.min(1, dt * 6)
+		setJ(J, "Neck", CFrame.Angles(0.04 * w + 0.25 * hurtK + 0.15 * land, sn * 0.06 * w - twist * 0.4 + ca.lookY, 0))
 
-		-- free (left) arm pumps while running
-		setJ(J, "ShoulderL", CFrame.Angles(-A * 1.05 * sn * w + 0.08 + ca.air * 0.9, 0, -0.08 - ca.air * 0.3))
-		setJ(J, "ElbowL", CFrame.Angles(0.2 + 0.9 * w, 0, 0))
+		-- free (left) arm pumps while running, flies up when falling, swings back in a dash
+		setJ(J, "ShoulderL", CFrame.Angles(-A * 1.05 * sn * w + 0.08 + jump * 0.9 + fall * 2.4 - 1.0 * dash - 0.3 * land, 0,
+			-0.08 - jump * 0.3 - fall * 0.5 - 0.15 * dash))
+		setJ(J, "ElbowL", CFrame.Angles(0.2 + 0.9 * w + 0.3 * dash, 0, 0))
 
 		-- sword arm
 		if ca.r15 then
@@ -4752,20 +5039,20 @@ do
 				local sweep = R6SWEEP[sw.kind] or 0
 				R = CFrame.Angles(0, sweep * (1 - 2 * smooth(sw.t / 0.7)), 0) * R
 			else
-				R = CFrame.Angles(math.sin(ca.phase) * 0.15 * w, 0, 0) * R6KEYS[1][3]
+				R = CFrame.Angles(math.sin(ca.phase) * 0.15 * w - 0.6 * dash, 0, 0) * R6KEYS[1][3]
 			end
 			setJ(J, "ShoulderR", R)
 		end
 		-- trail on during the swing
 		if ca.swordInfo and ca.swordInfo.trail and ca.swordInfo.trail.Parent then
-			ca.swordInfo.trail.Enabled = sw.active and sw.t > 0.12 and sw.t < 0.82
+			ca.swordInfo.trail.Enabled = (sw.active and sw.t > 0.12 and sw.t < 0.82) or ca.twirlT >= 0
 		end
 		if sw.active then
 			sw.t += dt / sw.dur
 			if not sw.sound and sw.t >= 0.18 then
 				sw.sound = true
-				local s = SWINGS[sw.kind] or SWINGS.slash
-				playSfx(s.sound, root, { vary = 0.08, pitch = (sw.kind == "chop" or sw.kind == "spin") and 0.85 or 1, vol = ca.plr == player and 1 or 0.6 })
+				local sdef = SWINGS[sw.kind] or SWINGS.slash
+				playSfx(sdef.sound, root, { vary = 0.08, pitch = (sw.kind == "chop" or sw.kind == "spin") and 0.85 or 1, vol = isMe and 1 or 0.6 })
 			end
 			if ca.onImpact and not sw.hit and sw.t >= (SWINGS[sw.kind] or SWINGS.slash).impact then
 				sw.hit = true
@@ -4791,7 +5078,6 @@ end
 -- SWINGING YOUR SWORD (combos are different for every sword)
 ------------------------------------------------------------------------------------------------
 local Swing = { combo = 0, lastEnd = -10, queued = false }
-local Views -- filled in by the monster views section
 do
 	local function myCA() return CA.list[player] end
 
@@ -4902,7 +5188,18 @@ end
 ------------------------------------------------------------------------------------------------
 local Input = {}
 do
-	pcall(function() player.DevEnableMouseLock = false end) -- Shift is for sprinting, not shift-lock
+	-- Shift is for sprinting: we grab it before Roblox's shift-lock does (and sink it)
+	pcall(function() player.DevEnableMouseLock = false end)
+	pcall(function()
+		game:GetService("ContextActionService"):BindActionAtPriority("FH2_Sprint", function(_, state)
+			if state == Enum.UserInputState.Begin then
+				S.sprint = true
+			elseif state == Enum.UserInputState.End or state == Enum.UserInputState.Cancel then
+				S.sprint = false
+			end
+			return Enum.ContextActionResult.Sink
+		end, false, Enum.ContextActionPriority.High.Value + 50, Enum.KeyCode.LeftShift, Enum.KeyCode.RightShift, Enum.KeyCode.ButtonL3)
+	end)
 
 	function Input.dash()
 		if not S.playing or S.dead or S.talking or S.traveling then return end
@@ -4921,12 +5218,7 @@ do
 		S.fov = 86
 		playSfx("whoosh", root, { pitch = 1.35, vol = 0.8 })
 		FX.burst(FX.dust, root.Position - Vector3.new(0, 2.5, 0), 8)
-		local h = player.Character and make("Highlight", { FillColor = Color3.fromRGB(180, 230, 255), FillTransparency = 0.5, OutlineTransparency = 1,
-			DepthMode = Enum.HighlightDepthMode.Occluded, Parent = player.Character })
-		if h then
-			tween(h, 0.35, { FillTransparency = 1 })
-			Debris:AddItem(h, 0.4)
-		end
+		FX.flash(player.Character, Color3.fromRGB(180, 230, 255), 0.5)
 	end
 
 	function Input.equipSlot(i)
@@ -4936,7 +5228,6 @@ do
 
 	UserInputService.InputBegan:Connect(function(input, processed)
 		local kc = input.KeyCode
-		if kc == Enum.KeyCode.LeftShift or kc == Enum.KeyCode.RightShift or kc == Enum.KeyCode.ButtonL3 then S.sprint = true end
 		if processed then return end
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or kc == Enum.KeyCode.F or kc == Enum.KeyCode.ButtonR2 or kc == Enum.KeyCode.ButtonX then
 			Swing.request()
@@ -4951,10 +5242,6 @@ do
 		elseif kc == Enum.KeyCode.G and Menu.toggle then Menu.toggle("swords")
 		elseif kc == Enum.KeyCode.H and Player.goHome then Player.goHome()
 		end
-	end)
-	UserInputService.InputEnded:Connect(function(input)
-		local kc = input.KeyCode
-		if kc == Enum.KeyCode.LeftShift or kc == Enum.KeyCode.RightShift then S.sprint = false end
 	end)
 	UserInputService.TouchTap:Connect(function(_, processed)
 		if processed then return end
@@ -5001,24 +5288,89 @@ do
 	end)
 	RunService.Heartbeat:Connect(function()
 		local touch = UserInputService.TouchEnabled and (not UserInputService.KeyboardEnabled or UserInputService.LastInputType == Enum.UserInputType.Touch)
-		Input.touch = touch
+		if touch ~= Input.touch then
+			Input.touch = touch
+			-- phones: menu column sits a bit higher so it never covers the thumbstick
+			HUD.leftCol.Position = UDim2.new(0, 12, touch and 0.47 or 0.56, 0)
+		end
 		gui.Enabled = touch and S.playing and not S.dead and not S.talking
 		HUD.keys.Visible = not touch and S.playing
 	end)
 end
-
 ------------------------------------------------------------------------------------------------
--- MONSTERS ON YOUR SCREEN: models, smooth movement, hand-made animations, hits, deaths
+-- MONSTERS ON YOUR SCREEN: models, smooth movement, hand-made animations, hits, deaths.
+-- 2.01: each monster is a baked skeleton (see RIGS) posed right before the frame is drawn.
+-- Walking and attacking blend smoothly, every monster type moves its own way, hits push them
+-- back from the side you hit, and they die in different ways.
 ------------------------------------------------------------------------------------------------
 local Pickups = {} -- coins + candy (filled in later)
 local Unlocks = {} -- world unlock checks (filled in later)
 Views = { list = {} }
 do
 	local setJ = Rigs.setJ
+	local TAU = math.pi * 2
+	local SIDES = { "L", "R" }
 	local DOG_LEGS = { "FL", "FR", "HL", "HR" }
 	local DOG_GALLOP = { FL = 0, FR = -0.7, HL = math.pi, HR = math.pi - 0.7 }
 	local DOG_TROT = { FL = 0, HR = 0, FR = math.pi, HL = math.pi }
 	local function has(flags, bit) return bit32.band(flags or 0, bit) ~= 0 end
+	-- how each monster walks
+	local GAIT = { zombie = "shamble", avatar = "shamble", giant = "stomp", frozen = "stiff", thrower = "thrower", yeti = "stomp",
+		monkey = "gallop", kongo = "gallop", gas = "carry", toxic = "wobble", gravekeeper = "stomp", titan = "stomp" }
+
+	------------------------------------------------------------------------------------------ pose tables (x, y, z rotation per joint + body offset)
+	local JN = { "Root", "Waist", "Neck", "ShoulderL", "ElbowL", "WristL", "ShoulderR", "ElbowR", "WristR",
+		"HipL", "KneeL", "AnkleL", "HipR", "KneeR", "AnkleR", "Tail1", "Tail2" }
+	local function newPose()
+		local p = { ty = 0, tz = 0 }
+		for _, n in ipairs(JN) do p[n] = { 0, 0, 0 } end
+		return p
+	end
+	local function zeroPose(p)
+		for _, n in ipairs(JN) do
+			local a = p[n]
+			a[1], a[2], a[3] = 0, 0, 0
+		end
+		p.ty, p.tz = 0, 0
+	end
+	local function copyPose(dst, src)
+		for _, n in ipairs(JN) do
+			local a, b = dst[n], src[n]
+			a[1], a[2], a[3] = b[1], b[2], b[3]
+		end
+		dst.ty, dst.tz = src.ty, src.tz
+	end
+	local function blendPose(dst, a, b, w)
+		for _, n in ipairs(JN) do
+			local d, x, y = dst[n], a[n], b[n]
+			d[1] = x[1] + (y[1] - x[1]) * w
+			d[2] = x[2] + (y[2] - x[2]) * w
+			d[3] = x[3] + (y[3] - x[3]) * w
+		end
+		dst.ty = a.ty + (b.ty - a.ty) * w
+		dst.tz = a.tz + (b.tz - a.tz) * w
+	end
+	local function setR(p, n, x, y, z)
+		local a = p[n]
+		a[1], a[2], a[3] = x, y or 0, z or 0
+	end
+	local function addR(p, n, x, y, z)
+		local a = p[n]
+		a[1] += x
+		a[2] += y or 0
+		a[3] += z or 0
+	end
+	local function applyPose(v, p)
+		local J = v.J
+		for _, n in ipairs(JN) do
+			if J[n] then
+				local a = p[n]
+				local cf = CFrame.Angles(a[1], a[2], a[3])
+				if n == "Root" then cf = CFrame.new(0, p.ty, p.tz) * cf end
+				setJ(J, n, cf)
+			end
+		end
+	end
 
 	------------------------------------------------------------------------------------------ create / destroy
 	local function makeBar(v)
@@ -5053,21 +5405,31 @@ do
 		if not model then
 			local ok, m, p, j, rh, sc, rr = pcall(Rigs.build, kind == "avatar" and "zombie" or kind, id)
 			if not ok then
-				warn("[Forest Hunt 2.0] couldn't build " .. kind .. ": " .. tostring(m))
+				warn("[Forest Hunt " .. VERSION .. "] couldn't build " .. kind .. ": " .. tostring(m))
 				failed[id] = true
 				return nil
 			end
 			model, P, J, rootH, s, r = m, p, j, rh, sc, rr
 		end
+		local okB, sk = pcall(Rigs.bake, model, P.root, J, avatar)
+		if not okB then
+			warn("[Forest Hunt " .. VERSION .. "] couldn't set up " .. kind .. ": " .. tostring(sk))
+			model:Destroy()
+			failed[id] = true
+			return nil
+		end
 		local plr = userId and Players:GetPlayerByUserId(userId)
 		local v = {
-			id = id, kind = kind, def = def, model = model, P = P, J = J, rootH = rootH, s = s, avatar = avatar,
+			id = id, kind = kind, def = def, model = model, P = P, J = J, rootH = rootH, s = s, avatar = avatar, sk = sk,
 			name = plr and (plr.DisplayName .. "'s Zombie") or nil,
 			pos = Vector3.zero, yaw = 0, extraY = 0, vis = 0, phase = r:NextNumber(0, 6.28), seed = r:NextNumber(0, 100),
-			hurtT = 0, freeze = 0, twitch = 0, twitchDir = 0, alive = true, state = "idle", atkT = 0, flags = 0, hpFrac = 1, t0 = 0,
+			hurtT = 0, hurtDir = 1, hurtSide = 0, freeze = 0, twitch = 0, twitchDir = 0, lurch = 0, cough = 0,
+			alive = true, state = "idle", atkT = 0, flags = 0, hpFrac = 1, t0 = 0, atkCount = 0, atkVar = 1,
 			limp = (def.ai == "melee" and r:NextNumber() < 0.45) and ((r:NextNumber() < 0.5) and "L" or "R") or nil,
 			arms = (def.ai == "melee") and ({ "reach", "reach", "drag", "limp" })[r:NextInteger(1, 4)] or "reach",
 			hunch = def.rig == "monkey" and 0.75 or r:NextNumber(0.2, 0.45),
+			gait = GAIT[kind] or "shamble", lowLeg = P.lowLeg or rootH * 0.41,
+			lp = newPose(), ap = newPose(), fp = newPose(), actW = 0, acc = 0, camD = 0,
 			nextSound = os.clock() + r:NextNumber(2, 7), fresh = true, frame = r:NextInteger(0, 3), liftT = 0,
 		}
 		makeBar(v)
@@ -5085,15 +5447,28 @@ do
 		for _, v in pairs(Views.list) do destroy(v) end
 	end
 
+	local function rootCF(v, extra)
+		return CFrame.new(v.pos.X, v.rootH + v.extraY + extra, v.pos.Z) * CFrame.Angles(0, v.yaw, 0)
+	end
+	local function riseExtra(v)
+		if v.state ~= "rise" then return 0 end
+		return -(v.rootH + 3.3 * v.s) * (1 - easeOut(v.atkT))
+	end
+
 	------------------------------------------------------------------------------------------ incoming data
 	local function setTarget(v, x, z, yaw, state, atkT, extraY, flags, hpFrac, exact)
+		local now = os.clock()
 		if v.fresh then
-			v.pos, v.yaw = Vector3.new(x, 0, z), yaw
 			v.fresh = false
+			v.pos, v.yaw, v.extraY = Vector3.new(x, 0, z), yaw, extraY
+			v.state, v.atkT = state, atkT
+			v.t0 = now - atkT * stateDur(v.def, state)
+			-- place it right away so it never pops in at the middle of the map
+			Rigs.pose(v.sk, rootCF(v, riseExtra(v)))
+			if Views.onState then Views.onState(v, nil, state) end
 		end
 		v.tpos, v.tyaw, v.textraY = Vector3.new(x, 0, z), yaw, extraY
 		v.flags, v.hpFrac = flags, hpFrac
-		local now = os.clock()
 		if state ~= v.state then
 			local old = v.state
 			v.state = state
@@ -5144,18 +5519,24 @@ do
 		end
 	end
 
-	------------------------------------------------------------------------------------------ sounds when monsters change what they're doing
+	------------------------------------------------------------------------------------------ sounds (and attack choice) when monsters change what they're doing
 	function Views.onState(v, _old, st)
 		local head = v.P.head
 		if not head or not head.Parent then return end
 		local def, kind = v.def, v.kind
+		if st == "attack" then
+			v.atkCount += 1
+			v.atkVar = (v.atkCount + v.id) % 3 + 1
+		end
 		if st == "notice" then
 			if def.boss then
 				playSfx("roar", head, { pitch = 0.6, vol = 1.2, range = 220 })
 				shake(0.35, 0.8)
 			elseif def.rig == "dog" then playSfx("dogGrowl", head, { vary = 0.1 })
 			elseif def.rig == "monkey" then playSfx("dogBark", head, { pitch = 2.1, vol = 0.9, vary = 0.1 })
-			elseif def.ai == "slam" then playSfx("roar", head, { vary = 0.05, pitch = kind == "yeti" and 0.8 or 1, range = 170 }); shake(0.15, 0.6)
+			elseif def.ai == "slam" then
+				playSfx("roar", head, { vary = 0.05, pitch = kind == "yeti" and 0.8 or 1, range = 170 })
+				shake(0.15, 0.6)
 			else playSfx("zGroan", head, { vary = 0.15 }) end
 		elseif st == "attack" then
 			if def.rig == "dog" then playSfx("dogGrowl", head, { vary = 0.1, pitch = 1.2 })
@@ -5179,190 +5560,476 @@ do
 		end
 	end
 
-	------------------------------------------------------------------------------------------ animations
-	local function animBiped(v, dt, now)
-		local J, s, def = v.J, v.s, v.def
-		if v.freeze > 0 then
-			v.freeze -= dt
-			return
-		end
-		local monkey = def.rig == "monkey"
-		local st, a = v.state, v.atkT
+	-- heavy walkers shake the ground
+	function Views.footstep(v, right)
+		if v.camD > 95 then return end
+		local foot = v.P[right and "footR" or "footL"]
+		local pos = (foot and foot.Parent) and foot.Position or v.pos
+		local boss = v.def.boss
+		FX.burst(FX.dust, Vector3.new(pos.X, 0.3, pos.Z), boss and 6 or 3)
+		playSfx("stomp", Vector3.new(pos.X, 1, pos.Z), { vol = boss and 1 or 0.6, vary = 0.1, range = 140 })
+		if v.camD < 38 then shake((boss and 0.22 or 0.1) * (1 - v.camD / 38), 0.18) end
+	end
+
+	------------------------------------------------------------------------------------------ walking styles
+	local function loco(v, p, dt, now)
+		local def, s = v.def, v.s
+		local gait = v.gait
 		local spd = v.vis
-		local ignited = has(v.flags, 16)
-		local run = (has(v.flags, 32) or ignited or def.boss or monkey) and spd > 8.5
-		local stride = (run and (monkey and 5.5 or 4.6) or 3) * s
-		v.phase = (v.phase + dt * spd / stride * math.pi) % (math.pi * 2)
+		local f = v.flags
+		local aggro = has(f, 1)
+		if (gait == "shamble" or gait == "stiff" or gait == "wobble" or gait == "thrower") and has(f, 32) and spd > 8.5 then gait = "run" end
+		if gait == "carry" and has(f, 16) then gait = "flail" end
+		local monkey = gait == "gallop"
+		local heavy = gait == "stomp"
+		local runLike = gait == "run" or gait == "flail"
+		local cycle = runLike and 4.6 or (heavy and 5 or (monkey and 5.5 or 3))
+		v.phase = (v.phase + dt * spd / (cycle * s) * math.pi) % TAU
+		local ph = v.phase
+		if gait == "stiff" then -- frozen joints: a jerky, stop-motion walk
+			local q = math.pi / 4
+			ph = math.floor(ph / q) * q * 0.75 + ph * 0.25
+		end
 		local walk = math.clamp(spd / (2.2 * s), 0, 1)
 		local idle = 1 - walk
-		local ph = v.phase
 		local sn, cs = math.sin(ph), math.cos(ph)
 		local t = now + v.seed
-		v.hurtT = math.max(0, v.hurtT - dt * 3.5)
-		local hurt = def.boss and v.hurtT * 0.3 or v.hurtT
+		-- twitches and lurches
 		v.twitch = math.max(0, v.twitch - dt * 5)
-		if rng:NextNumber() < dt * 0.4 then v.twitch, v.twitchDir = 1, rng:NextNumber(-1, 1) end
-		local tw = v.twitch * v.twitch * v.twitchDir * (def.boss and 0.3 or 1)
-		local heavy = def.ai == "slam" or def.boss
+		if not heavy and rng:NextNumber() < dt * 0.35 then v.twitch, v.twitchDir = 1, rng:NextNumber(-1, 1) end
+		local tw = v.twitch * v.twitch * v.twitchDir
+		v.lurch = math.max(0, v.lurch - dt * 2.2)
+		if gait == "shamble" and walk > 0.5 and rng:NextNumber() < dt * 0.12 then v.lurch = 1 end
+		local lurch = math.sin(v.lurch * math.pi)
 
-		-- what the arms / body are doing for actions
-		local armL, armR, elL, elR, lean, crouch, spin, armZ, headX = nil, nil, 0.3, 0.3, 0, 0, 0, 0, 0
-		if st == "attack" then
-			local wind, strike, rec = smooth(a / 0.42), smooth((a - 0.42) / 0.12), smooth((a - 0.62) / 0.38)
-			if heavy or monkey then
-				armL = lerp(lerp(1.3, 3.0, wind), 0.15, strike)
-				lean = lerp(lerp(0, 0.35, wind), -0.8, strike)
-				crouch = 0.5 * strike * (1 - rec)
-				armR = armL
-			else
-				-- claw swipe: right arm first, left arm follows
-				armR = lerp(lerp(1.4, 2.8, wind), 0.45, strike)
-				armL = lerp(lerp(1.3, 2.4, smooth(a / 0.5)), 0.5, smooth((a - 0.5) / 0.12))
-				lean = lerp(lerp(0, 0.3, wind), -0.6, strike)
-			end
-			armL, armR = lerp(armL, 1.4, rec), lerp(armR, 1.4, rec)
-			lean *= (1 - rec)
-			elL, elR = lerp(0.6, 0.1, strike), lerp(0.6, 0.1, strike)
-		elseif st == "throw" then
-			local wind, rel = smooth(a / 0.45), smooth((a - 0.45) / 0.15)
-			armR = lerp(lerp(0.3, 3.1, wind), 1.2, rel)
-			elR = lerp(lerp(0.2, 1.4, wind), 0.1, rel)
-			armL, elL = 0.9, 0.5
-			lean = lerp(lerp(0, 0.25, wind), -0.35, rel) * (1 - smooth((a - 0.75) / 0.25))
-		elseif st == "spit" then
-			local wind, rel = smooth(a / 0.45), smooth((a - 0.45) / 0.12)
-			lean = lerp(lerp(0, 0.45, wind), -0.5, rel) * (1 - smooth((a - 0.7) / 0.3))
-			armL, armR, elL, elR = 0.4 + wind * 0.4, 0.4 + wind * 0.4, 1.2, 1.2
-			headX = lerp(lerp(0, 0.5, wind), -0.6, rel)
-		elseif st == "ignite" then
-			local sh = math.sin(now * 40) * 0.25
-			armL, armR, elL, elR = 2.6 + sh, 2.6 - sh, 0.6, 0.6
-			lean = 0.25 + sh * 0.3
-		elseif st == "notice" and (def.boss or monkey) then
-			-- big roar / chest pound
-			if monkey then
-				local beat = math.sin(now * 18)
-				armL, armR, elL, elR = 1.2 + beat * 0.3, 1.2 - beat * 0.3, 2.1, 2.1
-				lean = 0.35
-			else
-				armL, armR, elL, elR, lean, armZ = 2.8, 2.8, 0.4, 0.4, 0.3, 0.5
-			end
-		elseif st == "slam" or st == "spikes" then
-			local wind, strike, rec = smooth(a / 0.5), smooth((a - 0.5) / 0.08), smooth((a - 0.7) / 0.3)
-			armL = lerp(lerp(1.2, 3.1, wind), 0.1, strike)
-			lean = lerp(lerp(0, 0.4, wind), -0.9, strike)
-			crouch = 0.6 * strike * (1 - rec)
-			armL = lerp(armL, 1.2, rec)
-			lean *= (1 - rec)
-			armR, elL, elR = armL, 0.3, 0.3
-		elseif st == "sweep" then
-			local wind = smooth(a / 0.4)
-			spin = -math.pi * 2 * smooth((a - 0.4) / 0.3)
-			armL, armR, elL, elR = 1.6, 1.6, 0.1, 0.1
-			armZ = 1.2 * wind * (1 - smooth((a - 0.8) / 0.2))
-			crouch = 0.3 * wind
-		elseif st == "summon" or st == "roar" then
-			local up = smooth(a / 0.3) * (1 - smooth((a - 0.85) / 0.15))
-			armL, armR = lerp(0.4, 3.0, up), lerp(0.4, 3.0, up)
-			armZ, elL, elR = 0.6 * up, 0.3, 0.3
-			lean = 0.35 * up + math.sin(now * 30) * 0.04 * up
-		elseif st == "barrel" or st == "boulder" then
-			local wind, rel = smooth(a / 0.48), smooth((a - 0.48) / 0.12)
-			armL = lerp(lerp(0.5, 3.0, wind), 1.0, rel)
-			armR = armL
-			elL, elR = lerp(0.3, 1.0, wind), lerp(0.3, 1.0, wind)
-			lean = lerp(lerp(0, 0.4, wind), -0.5, rel) * (1 - smooth((a - 0.75) / 0.25))
-		elseif st == "leap" then
-			if a < 0.25 then
-				crouch = smooth(a / 0.25) * 0.8
-				armL, armR = 0.2, 0.2
-			elseif a < 0.75 then
-				armL, armR, elL, elR, lean = 2.9, 2.9, 0.3, 0.3, 0.2
-			else
-				local u = smooth((a - 0.75) / 0.25)
-				crouch = (1 - u) * 0.9
-				armL, armR = lerp(0.2, 1, u), lerp(0.2, 1, u)
-				lean = -0.4 * (1 - u)
-			end
+		-- legs
+		local A, kA = 0.45, 0.8
+		if runLike then A, kA = 0.85, 1.3 elseif heavy then A, kA = 0.5, 0.95 elseif monkey then A, kA = 0.7, 1.0 end
+		A *= walk
+		kA *= walk
+		local la, ra = 1, 1
+		if gait == "shamble" then
+			la, ra = (v.limp == "L") and 0.5 or 1, (v.limp == "R") and 0.5 or 1
 		end
-
-		-- legs: shuffle with a limp (zombies), stomp (giants), gallop (monkeys)
-		local legA = (run and 0.85 or 0.45) * walk
-		local la, ra = (v.limp == "L") and 0.5 or 1, (v.limp == "R") and 0.5 or 1
-		local hipL, hipR = legA * sn * la, -legA * sn * ra
-		local kA = (run and 1.25 or 0.8) * walk
-		local kneeL = -kA * math.max(0, cs) * la - 0.06 - 0.12 * idle - crouch
-		local kneeR = -kA * math.max(0, -cs) * ra - 0.06 - 0.12 * idle - crouch
+		local hipL, hipR = A * sn * la, -A * sn * ra
+		local kneeL = -kA * math.max(0, cs) * la - 0.06 - 0.12 * idle
+		local kneeR = -kA * math.max(0, -cs) * ra - 0.06 - 0.12 * idle
+		local squat = monkey and 0.5 or (heavy and 0.12 or 0)
 		local shift = math.sin(t * 0.8) * 0.05 * idle
-		local mk = monkey and 0.5 or 0 -- monkeys squat
-		setJ(J, "HipL", CFrame.Angles(hipL + 0.05 + crouch * 0.5 + mk, 0, -0.04 + shift))
-		setJ(J, "HipR", CFrame.Angles(hipR + 0.05 + crouch * 0.5 + mk, 0, 0.04 + shift))
-		setJ(J, "KneeL", CFrame.Angles(kneeL - mk * 1.2, 0, 0))
-		setJ(J, "KneeR", CFrame.Angles(kneeR - mk * 1.2, 0, 0))
-		setJ(J, "AnkleL", CFrame.Angles(-(hipL + kneeL) * 0.7 + ((v.limp == "L") and -0.3 * walk or 0) + mk * 0.7, 0, 0))
-		setJ(J, "AnkleR", CFrame.Angles(-(hipR + kneeR) * 0.7 + ((v.limp == "R") and -0.3 * walk or 0) + mk * 0.7, 0, 0))
+		local dragL = (gait == "shamble" and v.limp == "L") and -0.3 * walk or 0
+		local dragR = (gait == "shamble" and v.limp == "R") and -0.3 * walk or 0
+		setR(p, "HipL", hipL + 0.05 + squat, 0, -0.04 + shift)
+		setR(p, "HipR", hipR + 0.05 + squat, 0, 0.04 + shift)
+		setR(p, "KneeL", kneeL - squat * 1.6)
+		setR(p, "KneeR", kneeR - squat * 1.6)
+		setR(p, "AnkleL", -(hipL + kneeL) * 0.65 + dragL + squat * 0.9 + 0.25 * math.max(0, cs) * walk)
+		setR(p, "AnkleR", -(hipR + kneeR) * 0.65 + dragR + squat * 0.9 + 0.25 * math.max(0, -cs) * walk)
 
-		-- body: bob, sway, limp dip, hunch
+		-- body: bob, sway, limp dip, hunch, breathing
+		local hunch = runLike and 0.5 or (monkey and (spd > 8 and 0.95 or 0.75) or v.hunch)
 		local bob = -0.12 * s * walk * sn * sn
-		if heavy then bob *= 1.6 end
+		if heavy then bob = -0.2 * s * walk * math.abs(sn) ^ 1.5 end
+		if runLike then bob = -0.16 * s * walk * math.abs(sn) end
 		local dip = 0
-		if v.limp == "L" then dip = -0.1 * s * walk * math.max(0, -sn) elseif v.limp == "R" then dip = -0.1 * s * walk * math.max(0, sn) end
-		local limpRoll = ((v.limp == "L") and 0.06 or ((v.limp == "R") and -0.06 or 0)) * walk
-		local mkDown = monkey and -0.35 * s or 0
-		setJ(J, "Root", CFrame.new(0, bob + dip - crouch * 0.4 * s + mkDown, 0) * CFrame.Angles(0, sn * 0.12 * walk + spin, sn * 0.07 * walk + limpRoll))
-		local hunch = run and (monkey and 0.95 or 0.5) or v.hunch
-		setJ(J, "Waist", CFrame.Angles(-hunch - 0.08 * walk + hurt * 0.55 + lean, -sn * 0.16 * walk + tw * 0.25, -sn * 0.1 * walk + math.sin(t * 0.7) * 0.05))
-		local roll = math.sin(t * 0.9) * (def.boss and 0.06 or 0.22) + tw * 0.75
-		local nod = hunch * 0.7 + 0.1 + math.sin(t * 1.3) * 0.08 + hurt * 0.6 - (has(v.flags, 1) and 0.1 or 0) + headX
-		setJ(J, "Neck", CFrame.Angles(nod, math.sin(t * 0.6) * 0.3 * idle, roll))
+		if gait == "shamble" then
+			if v.limp == "L" then dip = -0.1 * s * walk * math.max(0, -sn) elseif v.limp == "R" then dip = -0.1 * s * walk * math.max(0, sn) end
+		end
+		local roll = sn * 0.07 * walk
+		if gait == "shamble" then roll += ((v.limp == "L") and 0.06 or ((v.limp == "R") and -0.06 or 0)) * walk end
+		if heavy then roll = sn * 0.1 * walk end
+		if gait == "wobble" then roll += math.sin(t * 1.7) * 0.16 end
+		p.ty = bob + dip - (monkey and 0.35 * s or 0) - lurch * 0.15 * s
+		p.tz = -lurch * 0.4 * s
+		setR(p, "Root", 0, sn * 0.12 * walk, roll)
+		local wx = -hunch - 0.08 * walk - lurch * 0.3 + math.sin(t * (heavy and 1.2 or 1.8)) * (heavy and 0.035 or 0.02) * idle
+		local wy = -sn * (heavy and 0.22 or 0.16) * walk + tw * 0.25
+		local wz = -sn * (heavy and 0.14 or 0.1) * walk + math.sin(t * 0.7) * 0.05
+		if monkey then wx += math.sin(ph * 2) * 0.12 * walk end
+		if gait == "wobble" then wz += math.sin(t * 1.7 + 0.5) * 0.12 end
+		setR(p, "Waist", wx, wy, wz)
+		local loll = math.sin(t * 0.9) * ((heavy or def.boss) and 0.06 or 0.22) + tw * 0.75
+		local nx = hunch * 0.7 + 0.1 + math.sin(t * 1.3) * 0.08 - (aggro and 0.1 or 0)
+		local ny = math.sin(t * 0.6) * 0.35 * idle * (aggro and 0.3 or 1)
+		if gait == "wobble" then loll += math.sin(t * 1.7 + 1) * 0.2 end
+		if gait == "stiff" then nx += math.sin(t * 43) * 0.025 end
+		if runLike then
+			nx = hunch * 0.6 + 0.05
+			loll *= 0.3
+		end
+		if gait == "flail" then
+			ny = math.sin(t * 19) * 0.35
+			nx = 0.4
+		end
+		setR(p, "Neck", nx, ny, loll)
 
 		-- arms
 		local sway = math.sin(t * 2.1) * 0.08
 		local abob = math.sin(ph * 2) * 0.07 * walk
-		for _, side in ipairs({ "L", "R" }) do
+		for _, side in ipairs(SIDES) do
 			local sx = side == "R" and 1 or -1
-			local style = v.arms
-			if style == "drag" then style = (side == "L") and "limp" or "reach" end
-			local sh, el
-			local act = (side == "L") and armL or armR
-			if act then
-				sh = CFrame.Angles(act + hunch * 0.6 + sway * 0.3, 0, sx * (0.18 + armZ))
-				el = CFrame.Angles((side == "L") and elL or elR, 0, 0)
-			elseif monkey then
-				-- knuckle-walk: long arms swing like front legs
-				local g = run and 1 or walk
-				sh = CFrame.Angles(0.55 + hunch * 0.8 + (run and 0.9 or 0.5) * g * math.sin(ph + (sx > 0 and math.pi or 0)), 0, sx * 0.15)
-				el = CFrame.Angles(0.3 + 0.4 * math.max(0, math.cos(ph + (sx > 0 and math.pi or 0))) * g, 0, 0)
-			elseif run then
-				sh = CFrame.Angles(0.75 + hunch * 0.5 + sn * sx * 0.9, 0, sx * 0.28)
-				el = CFrame.Angles(1.25, 0, 0)
-			elseif style == "reach" then
-				sh = CFrame.Angles(1.3 + hunch * 0.8 + sway * sx + abob, 0, sx * 0.12)
-				el = CFrame.Angles(0.2 + math.sin(t * 3 + sx) * 0.08, 0, 0)
+			local shx, shz, el = 0.12, sx * 0.1, 0.15
+			if gait == "flail" then -- on fire: arms waving over the head in panic
+				shx = 2.5 + math.sin(t * 13 + sx) * 0.5
+				shz = sx * (0.35 + math.sin(t * 9 + sx * 2) * 0.3)
+				el = 0.5 + math.sin(t * 17 + sx) * 0.4
+			elseif runLike then
+				shx, shz, el = 0.75 + hunch * 0.5 + sn * sx * 0.9, sx * 0.28, 1.25
+			elseif monkey then -- knuckle-walk: long arms swing like front legs
+				local g = (spd > 8) and 1 or walk
+				local ap = ph + (sx > 0 and math.pi or 0)
+				shx = 0.55 + hunch * 0.8 + ((spd > 8) and 0.9 or 0.5) * g * math.sin(ap)
+				shz = sx * 0.15
+				el = 0.3 + 0.4 * math.max(0, math.cos(ap)) * g
+			elseif heavy then -- big shoulders roll with each stomp
+				shx = -sx * sn * 0.35 * walk + 0.15 + hunch * 0.3 + sway * 0.4
+				shz = sx * (def.boss and 0.28 or 0.18)
+				el = 0.3 + 0.15 * walk
 			else
-				sh = CFrame.Angles(-sn * sx * 0.38 * walk + 0.12 + hunch * 0.3 + sway * 0.5, 0, sx * 0.1)
-				el = CFrame.Angles(0.15 + 0.1 * walk, 0, 0)
+				local style = v.arms
+				if style == "drag" then style = (side == "L") and "limp" or "reach" end
+				if gait == "stiff" then style = "reach" end
+				if gait == "carry" and side == "L" then style = "carry" end
+				if gait == "thrower" and side == "R" then style = "chunk" end
+				if gait == "wobble" and side == "L" then style = "belly" end
+				if style == "reach" then
+					shx = 1.3 + hunch * 0.8 + sway * sx + abob
+					shz = sx * 0.12
+					el = (gait == "stiff") and 0.05 or (0.2 + math.sin(t * 3 + sx) * 0.08)
+				elseif style == "carry" then -- heavy gas can swinging at the side
+					shx, shz, el = 0.12 + sn * 0.12 * walk, sx * 0.16, 0.08
+				elseif style == "chunk" then -- ice chunk ready to throw, tossed up and down
+					local toss = (aggro and idle > 0.5) and math.max(0, math.sin(t * 5)) or 0
+					shx, shz, el = 1.1 + toss * 0.3, sx * 0.2, 1.5 - toss * 0.6
+				elseif style == "belly" then -- holding its sick stomach
+					shx, shz, el = 0.55, sx * 0.05, 1.7
+				else -- limp, dangling
+					shx = -sn * sx * 0.38 * walk + 0.12 + hunch * 0.3 + sway * 0.5
+					el = 0.15 + 0.1 * walk
+				end
+				if gait == "stiff" then shx += math.sin(t * 41 + sx) * 0.03 end
 			end
-			if hurt > 0 then sh = CFrame.Angles(-0.7 * hurt, 0, sx * 0.4 * hurt) * sh end
-			setJ(J, "Shoulder" .. side, sh)
-			setJ(J, "Elbow" .. side, el)
+			setR(p, "Shoulder" .. side, shx, 0, shz)
+			setR(p, "Elbow" .. side, el)
 		end
-		if J.Tail1 then
-			setJ(J, "Tail1", CFrame.Angles(0.5 + math.sin(t * 2) * 0.2, math.sin(t * 1.4) * 0.5, 0))
-			setJ(J, "Tail2", CFrame.Angles(0.4 + math.sin(t * 2 - 0.6) * 0.3, math.sin(t * 1.4 - 0.8) * 0.5, 0))
+		setR(p, "Tail1", 0.5 + math.sin(t * 2) * 0.2 - ((spd > 8) and 0.3 or 0), math.sin(t * 1.4) * 0.5)
+		setR(p, "Tail2", 0.4 + math.sin(t * 2 - 0.6) * 0.3, math.sin(t * 1.4 - 0.8) * 0.5)
+		-- toxic zombies cough now and then
+		if gait == "wobble" then
+			v.cough = math.max(0, v.cough - dt * 2.5)
+			if rng:NextNumber() < dt * 0.15 then
+				v.cough = 1
+				if v.camD < 60 and v.P.head and v.P.head.Parent then playSfx("splat", v.P.head, { pitch = 0.45, vol = 0.9 }) end
+			end
+			local c = math.sin(v.cough * math.pi)
+			addR(p, "Waist", -0.4 * c)
+			addR(p, "Neck", -0.5 * c)
+		end
+		-- footsteps for the big ones
+		if heavy and walk > 0.35 then
+			local sg = sn >= 0
+			if v.lastStep ~= nil and sg ~= v.lastStep then Views.footstep(v, sg) end
+			v.lastStep = sg
 		end
 	end
 
-	local function animRise(v, now)
-		local J = v.J
+	------------------------------------------------------------------------------------------ actions (attacks, throws, roars...)
+	local ACT = {}
+	ACT.attack = function(v, p, a)
+		local s = v.s
+		local wind, strike, rec = smooth(a / 0.42), smooth((a - 0.42) / 0.12), smooth((a - 0.62) / 0.38)
+		if v.gait == "stomp" then -- two-handed ground smash: rises up, then crashes down
+			local arm = lerp(lerp(1.2, 3.05, wind), 0.15, strike)
+			arm = lerp(arm, 1.0, rec)
+			local k = strike * (1 - rec)
+			setR(p, "ShoulderL", arm, 0, -0.3 + 0.18 * strike)
+			setR(p, "ShoulderR", arm, 0, 0.3 - 0.18 * strike)
+			setR(p, "ElbowL", lerp(0.7, 0.1, strike))
+			setR(p, "ElbowR", lerp(0.7, 0.1, strike))
+			local lean = lerp(lerp(0, 0.35, wind), -0.85, strike) * (1 - rec)
+			addR(p, "Waist", lean)
+			addR(p, "Neck", -lean * 0.4)
+			p.ty += (0.25 * wind * (1 - strike) - 0.55 * k) * s
+			addR(p, "KneeL", -0.75 * k)
+			addR(p, "KneeR", -0.75 * k)
+			addR(p, "HipL", 0.45 * k)
+			addR(p, "HipR", 0.45 * k)
+			return
+		end
+		if v.gait == "gallop" then -- monkeys: double-fist smash
+			local arm = lerp(lerp(0.9, 3.0, wind), 0.3, strike)
+			arm = lerp(arm, 1.0, rec)
+			setR(p, "ShoulderL", arm, 0, -0.35)
+			setR(p, "ShoulderR", arm, 0, 0.35)
+			setR(p, "ElbowL", lerp(0.9, 0.1, strike))
+			setR(p, "ElbowR", lerp(0.9, 0.1, strike))
+			addR(p, "Waist", lerp(lerp(0, 0.5, wind), -0.7, strike) * (1 - rec))
+			addR(p, "Neck", 0.4 * wind * (1 - strike))
+			return
+		end
+		local var = v.atkVar
+		if var == 1 then -- claw swipe across the body
+			local sh = lerp(lerp(1.3, 2.6, wind), 0.7, strike)
+			sh = lerp(sh, 1.3, rec)
+			setR(p, "ShoulderR", sh, 0, lerp(lerp(0.15, 0.85, wind), -0.55, strike) * (1 - rec) + 0.12 * rec)
+			setR(p, "ElbowR", lerp(lerp(0.4, 1.0, wind), 0.15, strike))
+			setR(p, "ShoulderL", 1.25, 0, -0.2)
+			setR(p, "ElbowL", 0.5)
+			addR(p, "Waist", lerp(lerp(0, 0.18, wind), -0.4, strike) * (1 - rec), lerp(lerp(0, 0.45, wind), -0.45, strike) * (1 - rec), 0)
+			addR(p, "Neck", 0, -lerp(lerp(0, 0.3, wind), -0.3, strike) * (1 - rec), 0)
+		elseif var == 2 then -- lunge forward to grab and bite
+			local reach = lerp(lerp(1.4, 1.9, wind), 1.55, strike)
+			setR(p, "ShoulderL", reach, 0, lerp(-0.45, -0.05, strike))
+			setR(p, "ShoulderR", reach, 0, lerp(0.45, 0.05, strike))
+			setR(p, "ElbowL", lerp(0.2, 1.1, strike))
+			setR(p, "ElbowR", lerp(0.2, 1.1, strike))
+			local k = strike * (1 - rec)
+			addR(p, "Waist", lerp(lerp(0, 0.2, wind), -0.65, strike) * (1 - rec))
+			addR(p, "Neck", lerp(lerp(0, 0.35, wind), -0.45, strike) * (1 - rec))
+			p.tz -= 0.9 * k * s
+			addR(p, "HipL", 0.4 * k)
+			addR(p, "KneeL", -0.2 * k)
+			addR(p, "HipR", -0.3 * k)
+			addR(p, "KneeR", -0.5 * k)
+		else -- both fists hammer down
+			local arm = lerp(lerp(1.4, 2.9, wind), 0.4, strike)
+			arm = lerp(arm, 1.4, rec)
+			setR(p, "ShoulderL", arm, 0, -0.18)
+			setR(p, "ShoulderR", arm, 0, 0.18)
+			setR(p, "ElbowL", lerp(0.6, 0.1, strike))
+			setR(p, "ElbowR", lerp(0.6, 0.1, strike))
+			addR(p, "Waist", lerp(lerp(0, 0.3, wind), -0.6, strike) * (1 - rec))
+			p.ty -= 0.2 * strike * (1 - rec) * s
+		end
+	end
+	ACT.pounce = function(v, p, a) -- monkeys leap with their arms out
+		if a < 0.28 then
+			local c = smooth(a / 0.28)
+			p.ty -= 0.5 * c * v.s
+			addR(p, "KneeL", -0.9 * c)
+			addR(p, "KneeR", -0.9 * c)
+			addR(p, "HipL", 0.5 * c)
+			addR(p, "HipR", 0.5 * c)
+			addR(p, "Waist", -0.3 * c)
+			setR(p, "ShoulderL", 0.2, 0, -0.3)
+			setR(p, "ShoulderR", 0.2, 0, 0.3)
+		elseif a < 0.7 then
+			setR(p, "ShoulderL", 2.2, 0, -0.35)
+			setR(p, "ShoulderR", 2.2, 0, 0.35)
+			setR(p, "ElbowL", 0.4)
+			setR(p, "ElbowR", 0.4)
+			addR(p, "HipL", -0.6)
+			addR(p, "HipR", -0.6)
+			addR(p, "KneeL", -0.8)
+			addR(p, "KneeR", -0.8)
+			addR(p, "Waist", 0.15)
+			addR(p, "Neck", 0.3)
+		else
+			local c = 1 - smooth((a - 0.7) / 0.3)
+			p.ty -= 0.5 * c * v.s
+			addR(p, "KneeL", -0.8 * c)
+			addR(p, "KneeR", -0.8 * c)
+			addR(p, "HipL", 0.4 * c)
+			addR(p, "HipR", 0.4 * c)
+			setR(p, "ShoulderL", 0.6 + 0.4 * c, 0, -0.2)
+			setR(p, "ShoulderR", 0.6 + 0.4 * c, 0, 0.2)
+		end
+	end
+	ACT.throw = function(v, p, a) -- step back, wind up overhead, hurl the ice chunk
+		local wind, rel = smooth(a / 0.45), smooth((a - 0.45) / 0.15)
+		local back = 1 - smooth((a - 0.75) / 0.25)
+		setR(p, "ShoulderR", lerp(lerp(0.9, 3.1, wind), 1.1, rel), 0, 0.25)
+		setR(p, "ElbowR", lerp(lerp(1.4, 1.3, wind), 0.1, rel))
+		setR(p, "ShoulderL", lerp(0.4, 1.3, rel), 0, -0.3)
+		setR(p, "ElbowL", 0.4)
+		addR(p, "Waist", lerp(lerp(0, 0.25, wind), -0.4, rel) * back, lerp(lerp(0, 0.55, wind), -0.5, rel) * back, 0)
+		addR(p, "HipR", -0.35 * wind * (1 - rel))
+		addR(p, "HipL", 0.3 * rel * back)
+		addR(p, "KneeL", -0.3 * rel * back)
+	end
+	ACT.spit = function(_v, p, a) -- rear back, then thrust the head forward
+		local wind, rel = smooth(a / 0.45), smooth((a - 0.45) / 0.12)
+		local back = 1 - smooth((a - 0.7) / 0.3)
+		addR(p, "Waist", lerp(lerp(0, 0.45, wind), -0.55, rel) * back)
+		addR(p, "Neck", lerp(lerp(0, 0.5, wind), -0.65, rel) * back)
+		setR(p, "ShoulderL", 0.3 + wind * 0.3 - rel * 0.6, 0, -0.5)
+		setR(p, "ShoulderR", 0.3 + wind * 0.3 - rel * 0.6, 0, 0.5)
+		setR(p, "ElbowL", 1.1)
+		setR(p, "ElbowR", 1.1)
+	end
+	ACT.ignite = function(_v, p, a, now) -- shakes, then bursts into flames
+		local sh = math.sin(now * 40)
+		local burst = smooth((a - 0.75) / 0.25)
+		setR(p, "ShoulderL", 2.6 + sh * 0.25, 0, -0.3 - 0.9 * burst)
+		setR(p, "ShoulderR", 2.6 - sh * 0.25, 0, 0.3 + 0.9 * burst)
+		setR(p, "ElbowL", 0.6)
+		setR(p, "ElbowR", 0.6)
+		addR(p, "Waist", 0.25 + sh * 0.06 + 0.2 * burst)
+		addR(p, "Neck", 0.45 * burst + sh * 0.1)
+		addR(p, "Root", 0, 0, sh * 0.05)
+	end
+	ACT.notice = function(v, p, a, now)
+		if v.def.boss or v.gait == "stomp" then -- huge roar
+			local up = smooth(a / 0.25) * (1 - smooth((a - 0.8) / 0.2))
+			setR(p, "ShoulderL", lerp(0.4, 2.0, up), 0, -0.2 - 0.9 * up)
+			setR(p, "ShoulderR", lerp(0.4, 2.0, up), 0, 0.2 + 0.9 * up)
+			setR(p, "ElbowL", 0.5)
+			setR(p, "ElbowR", 0.5)
+			addR(p, "Waist", 0.4 * up + math.sin(now * 30) * 0.03 * up)
+			addR(p, "Neck", 0.5 * up)
+		elseif v.gait == "gallop" then -- chest pound
+			local beat = math.sin(now * 18)
+			setR(p, "ShoulderL", 1.2 + beat * 0.3, 0, -0.2)
+			setR(p, "ShoulderR", 1.2 - beat * 0.3, 0, 0.2)
+			setR(p, "ElbowL", 2.1)
+			setR(p, "ElbowR", 2.1)
+			addR(p, "Waist", 0.45)
+			addR(p, "Neck", 0.35)
+		else -- startled: head snaps up, arms jerk out
+			local k = math.sin(math.clamp(a, 0, 1) * math.pi)
+			addR(p, "Neck", 0.35 * k)
+			addR(p, "ShoulderL", 0.5 * k, 0, -0.3 * k)
+			addR(p, "ShoulderR", 0.5 * k, 0, 0.3 * k)
+			addR(p, "Waist", 0.15 * k)
+		end
+	end
+	ACT.slam = function(v, p, a)
+		local wind, strike, rec = smooth(a / 0.5), smooth((a - 0.5) / 0.08), smooth((a - 0.7) / 0.3)
+		local arm = lerp(lerp(1.2, 3.1, wind), 0.1, strike)
+		arm = lerp(arm, 1.2, rec)
+		local k = strike * (1 - rec)
+		setR(p, "ShoulderL", arm, 0, -0.25)
+		setR(p, "ShoulderR", arm, 0, 0.25)
+		setR(p, "ElbowL", 0.3)
+		setR(p, "ElbowR", 0.3)
+		addR(p, "Waist", lerp(lerp(0, 0.4, wind), -0.9, strike) * (1 - rec))
+		p.ty += (0.3 * wind * (1 - strike) - 0.6 * k) * v.s
+		addR(p, "KneeL", -0.8 * k)
+		addR(p, "KneeR", -0.8 * k)
+		addR(p, "HipL", 0.5 * k)
+		addR(p, "HipR", 0.5 * k)
+	end
+	ACT.spikes = ACT.slam
+	ACT.sweep = function(v, p, a)
+		local wind = smooth(a / 0.4)
+		local out = wind * (1 - smooth((a - 0.8) / 0.2))
+		setR(p, "ShoulderL", 1.6, 0, -0.18 - 1.2 * out)
+		setR(p, "ShoulderR", 1.6, 0, 0.18 + 1.2 * out)
+		setR(p, "ElbowL", 0.1)
+		setR(p, "ElbowR", 0.1)
+		local r = p.Root
+		r[2] = -TAU * smooth((a - 0.4) / 0.3) + 0.5 * wind * (1 - smooth((a - 0.4) / 0.1))
+		p.ty -= 0.3 * wind * v.s
+		addR(p, "KneeL", -0.4 * wind)
+		addR(p, "KneeR", -0.4 * wind)
+	end
+	ACT.summon = function(_v, p, a, now)
+		local up = smooth(a / 0.3) * (1 - smooth((a - 0.85) / 0.15))
+		setR(p, "ShoulderL", lerp(0.4, 3.0, up), 0, -0.18 - 0.6 * up)
+		setR(p, "ShoulderR", lerp(0.4, 3.0, up), 0, 0.18 + 0.6 * up)
+		setR(p, "ElbowL", 0.3)
+		setR(p, "ElbowR", 0.3)
+		addR(p, "Waist", 0.35 * up + math.sin(now * 30) * 0.04 * up)
+		addR(p, "Neck", 0.5 * up)
+	end
+	ACT.roar = ACT.summon
+	ACT.barrel = function(v, p, a)
+		local wind, rel = smooth(a / 0.48), smooth((a - 0.48) / 0.12)
+		local back = 1 - smooth((a - 0.75) / 0.25)
+		local arm = lerp(lerp(0.5, 3.0, wind), 1.0, rel)
+		setR(p, "ShoulderL", arm, 0, -0.2)
+		setR(p, "ShoulderR", arm, 0, 0.2)
+		setR(p, "ElbowL", lerp(0.3, 1.0, wind))
+		setR(p, "ElbowR", lerp(0.3, 1.0, wind))
+		addR(p, "Waist", lerp(lerp(0, 0.4, wind), -0.5, rel) * back)
+		p.ty -= 0.25 * wind * (1 - rel) * v.s
+	end
+	ACT.boulder = ACT.barrel
+	ACT.leap = function(v, p, a)
+		if a < 0.25 then
+			local c = smooth(a / 0.25)
+			p.ty -= 0.8 * c * v.s
+			addR(p, "KneeL", -1.0 * c)
+			addR(p, "KneeR", -1.0 * c)
+			addR(p, "HipL", 0.6 * c)
+			addR(p, "HipR", 0.6 * c)
+			setR(p, "ShoulderL", -0.4 * c, 0, -0.2)
+			setR(p, "ShoulderR", -0.4 * c, 0, 0.2)
+			addR(p, "Waist", -0.4 * c)
+		elseif a < 0.75 then
+			setR(p, "ShoulderL", 2.9, 0, -0.4)
+			setR(p, "ShoulderR", 2.9, 0, 0.4)
+			setR(p, "ElbowL", 0.3)
+			setR(p, "ElbowR", 0.3)
+			addR(p, "Waist", 0.2)
+			addR(p, "KneeL", -0.9)
+			addR(p, "KneeR", -0.4)
+			addR(p, "HipL", 0.7)
+		else
+			local u = smooth((a - 0.75) / 0.25)
+			local c = 1 - u
+			p.ty -= 0.9 * c * v.s
+			addR(p, "KneeL", -1.1 * c)
+			addR(p, "KneeR", -1.1 * c)
+			addR(p, "HipL", 0.7 * c)
+			addR(p, "HipR", 0.7 * c)
+			setR(p, "ShoulderL", lerp(0.2, 1, u), 0, -0.3)
+			setR(p, "ShoulderR", lerp(0.2, 1, u), 0, 0.3)
+			addR(p, "Waist", -0.45 * c)
+		end
+	end
+
+	-- getting hit: flinch AWAY from where the hit came from
+	local function hurtOverlay(v, p, dt)
+		v.hurtT = math.max(0, v.hurtT - dt * 4)
+		if v.hurtT <= 0 then return end
+		local h = v.hurtT * v.hurtT * (v.def.boss and 0.25 or ((v.gait == "stomp") and 0.5 or 1))
+		local d, sd = v.hurtDir, v.hurtSide
+		addR(p, "Waist", 0.5 * h * d, 0.25 * h * sd, 0)
+		addR(p, "Neck", 0.45 * h * d, 0.3 * h * sd, 0)
+		addR(p, "ShoulderL", -0.6 * h, 0, -0.35 * h)
+		addR(p, "ShoulderR", -0.6 * h, 0, 0.35 * h)
+		addR(p, "KneeL", -0.25 * h)
+		addR(p, "KneeR", -0.25 * h)
+		p.tz += 0.3 * v.s * h * d
+	end
+
+	local function animBiped(v, dt, now)
+		if v.freeze > 0 then -- tiny hit-stop: hold the pose for a moment
+			v.freeze -= dt
+			return
+		end
+		local lo, ac, fp = v.lp, v.ap, v.fp
+		zeroPose(lo)
+		loco(v, lo, dt, now)
+		local act = ACT[v.state]
+		if act then
+			copyPose(ac, lo)
+			act(v, ac, v.atkT, now)
+		end
+		v.actW += ((act and 1 or 0) - v.actW) * math.min(1, dt * (act and 16 or 6))
+		blendPose(fp, lo, ac, v.actW)
+		hurtOverlay(v, fp, dt)
+		applyPose(v, fp)
+	end
+
+	local function animRise(v, now) -- clawing out of the ground
+		local fp = v.fp
+		zeroPose(fp)
 		local t = now + v.seed
 		local claw = math.sin(t * 9)
-		setJ(J, "ShoulderL", CFrame.Angles(2.9 + claw * 0.25, 0, -0.25))
-		setJ(J, "ShoulderR", CFrame.Angles(2.9 - claw * 0.25, 0, 0.25))
-		setJ(J, "ElbowL", CFrame.Angles(0.3 + claw * 0.2, 0, 0))
-		setJ(J, "ElbowR", CFrame.Angles(0.3 - claw * 0.2, 0, 0))
-		setJ(J, "Waist", CFrame.Angles(-0.25 + math.sin(t * 4) * 0.08, 0, math.sin(t * 5) * 0.1))
-		setJ(J, "Neck", CFrame.Angles(0.4, 0, math.sin(t * 3) * 0.3))
+		local pull = smooth((v.atkT - 0.55) / 0.45)
+		setR(fp, "ShoulderL", lerp(2.9 + claw * 0.25, 1.4, pull), 0, -0.25)
+		setR(fp, "ShoulderR", lerp(2.9 - claw * 0.25, 1.4, pull), 0, 0.25)
+		setR(fp, "ElbowL", 0.3 + claw * 0.2)
+		setR(fp, "ElbowR", 0.3 - claw * 0.2)
+		setR(fp, "Waist", -0.25 - 0.35 * pull + math.sin(t * 4) * 0.08, math.sin(t * 3) * 0.15, math.sin(t * 5) * 0.1)
+		setR(fp, "Neck", 0.4 - 0.3 * pull, 0, math.sin(t * 3) * 0.3)
+		setR(fp, "HipL", 0.6 * pull)
+		setR(fp, "KneeL", -0.6 * pull)
+		applyPose(v, fp)
+		copyPose(v.lp, fp)
+		copyPose(v.ap, fp)
+		v.actW = 0
 	end
 
 	local function animDog(v, dt, now)
@@ -5374,7 +6041,7 @@ do
 		local spd = v.vis
 		local gallop = spd > 8
 		local stride = (gallop and 5.2 or 2.4) * s
-		v.phase = (v.phase + dt * spd / stride * math.pi) % (math.pi * 2)
+		v.phase = (v.phase + dt * spd / stride * math.pi) % TAU
 		local walk = math.clamp(spd / (1.5 * s), 0, 1)
 		local idle = 1 - walk
 		local ph = v.phase
@@ -5414,8 +6081,9 @@ do
 		local bob = (gallop and math.abs(math.sin(ph)) * 0.25 or math.abs(math.sin(ph)) * 0.07 * walk) * s
 		local flex = gallop and math.sin(ph) * 0.14 or 0
 		local cr = -crouch * 0.35 * s
-		setJ(J, "Spine1", CFrame.new(0, bob + cr, 0) * CFrame.Angles(flex + leapPitch + hurt * 0.2, 0, hurt * 0.25))
-		setJ(J, "Spine2", CFrame.new(0, bob + cr * 1.2, 0) * CFrame.Angles(-flex + leapPitch * 0.6, 0, -hurt * 0.15))
+		local push = hurt * 0.3 * v.hurtDir * s
+		setJ(J, "Spine1", CFrame.new(0, bob + cr, push) * CFrame.Angles(flex + leapPitch + hurt * 0.2 * v.hurtDir, 0, hurt * 0.25))
+		setJ(J, "Spine2", CFrame.new(0, bob + cr * 1.2, push) * CFrame.Angles(-flex + leapPitch * 0.6, 0, -hurt * 0.15))
 		local aggro = has(v.flags, 1)
 		local growl = (aggro and walk < 0.3 and st ~= "pounce") and 1 or 0
 		local sniff = (not aggro) and idle or 0
@@ -5433,9 +6101,17 @@ do
 		setJ(J, "Tail2", CFrame.Angles(0.2, math.sin(t * wag - 0.8) * 0.4, 0))
 	end
 
-	local function animDeadPose(v, u)
-		local J = v.J
+	------------------------------------------------------------------------------------------ deaths (fall back / fall forward / buckle to the knees)
+	local function deathUpdate(v, dt)
+		v.deadT += dt
+		local t = v.deadT
+		local slow = v.def.boss and 1.7 or 1
+		local cf
 		if v.def.rig == "dog" then
+			local u = math.min(1, t / 0.55)
+			local fall = u * u
+			cf = v.deathCF * CFrame.new(0, lerp(v.rootH, 0.75 * v.s, fall), 0) * CFrame.Angles(0, 0, math.rad(88) * fall)
+			local J = v.J
 			setJ(J, "LegFL", CFrame.Angles(0.5 * u, 0, 0))
 			setJ(J, "LegFR", CFrame.Angles(0.35 * u, 0, 0))
 			setJ(J, "LegHL", CFrame.Angles(-0.4 * u, 0, 0))
@@ -5443,129 +6119,163 @@ do
 			setJ(J, "Neck", CFrame.Angles(-0.3 * u, 0, 0))
 			setJ(J, "Jaw", CFrame.Angles(-0.45 * u, 0, 0))
 		else
-			setJ(J, "ShoulderL", CFrame.Angles(lerp(1.2, 0.4, u), 0, -0.6 * u))
-			setJ(J, "ShoulderR", CFrame.Angles(lerp(1.2, 0.2, u), 0, 0.7 * u))
-			setJ(J, "ElbowL", CFrame.Angles(0.3, 0, 0))
-			setJ(J, "ElbowR", CFrame.Angles(0.5, 0, 0))
-			setJ(J, "Neck", CFrame.Angles(0.3 * u, 0, 0.5 * u))
-			setJ(J, "Waist", CFrame.Angles(0, 0, 0.1 * u))
-			setJ(J, "KneeL", CFrame.Angles(-0.3 * u, 0, 0))
-			setJ(J, "KneeR", CFrame.new())
-			setJ(J, "Root", CFrame.new())
+			local fp = v.fp
+			zeroPose(fp)
+			if v.deathKind == "knees" then
+				local u1 = smooth(t / (0.35 * slow))
+				local u2 = smooth((t - 0.35 * slow) / (0.55 * slow))
+				setR(fp, "HipL", 0.08 * u1, 0, -0.1 * u1)
+				setR(fp, "HipR", 0.12 * u1, 0, 0.1 * u1)
+				setR(fp, "KneeL", -1.55 * u1)
+				setR(fp, "KneeR", -1.5 * u1)
+				setR(fp, "AnkleL", 0.65 * u1)
+				setR(fp, "AnkleR", 0.6 * u1)
+				fp.ty = -v.lowLeg * u1
+				setR(fp, "Waist", -0.25 * u1 * (1 - u2) - 0.15 * u2, 0, 0.08 * u1)
+				setR(fp, "Neck", -0.35 * u1 + 0.5 * u2, 0, 0.35 * u2)
+				local drop = lerp(1.2, 0.15, u1)
+				setR(fp, "ShoulderL", drop + 2.3 * u2, 0, -0.25 - 0.3 * u2)
+				setR(fp, "ShoulderR", drop + 2.0 * u2, 0, 0.3 + 0.3 * u2)
+				setR(fp, "ElbowL", 0.3)
+				setR(fp, "ElbowR", 0.45)
+				applyPose(v, fp)
+				local kneeH = 0.32 * v.s
+				cf = v.deathCF * CFrame.new(0, kneeH, 0) * CFrame.Angles(-1.3 * u2, 0, 0) * CFrame.new(0, v.rootH - kneeH, 0)
+			else
+				local u = math.min(1, t / (0.55 * slow))
+				local fall = u * u
+				local sgn = v.fallSign or 1
+				local ang = math.rad(86) * fall * sgn
+				cf = v.deathCF * CFrame.Angles(ang, 0, 0) * CFrame.new(0, v.rootH, 0) + Vector3.new(0, 0.5 * v.s * math.abs(math.sin(ang)), 0)
+				local after = t - 0.55 * slow
+				local land = (after > 0) and math.exp(-after * 7) * math.sin(after * 22) or 0
+				local fling = sgn * 1.4 * fall
+				setR(fp, "ShoulderL", lerp(1.2, 0.6, u) + fling + land * 0.3, 0, -0.5 * fall)
+				setR(fp, "ShoulderR", lerp(1.2, 0.4, u) + fling * 0.85 - land * 0.3, 0, 0.6 * fall)
+				setR(fp, "ElbowL", 0.3 + 0.4 * fall)
+				setR(fp, "ElbowR", 0.5)
+				setR(fp, "HipL", 0.35 * fall * sgn + land * 0.2)
+				setR(fp, "HipR", -0.1 * fall)
+				setR(fp, "KneeL", -0.45 * fall)
+				setR(fp, "KneeR", -0.15 * fall)
+				setR(fp, "Neck", 0.4 * u * sgn, 0, 0.5 * u)
+				setR(fp, "Waist", 0.15 * u * sgn, 0, 0.1 * u)
+				applyPose(v, fp)
+			end
 		end
+		if t > 2.4 * slow then cf -= Vector3.new(0, math.min(1, (t - 2.4 * slow) / 1.3) * 2.6 * v.s, 0) end
+		Rigs.pose(v.sk, cf)
+		if t > 3.8 * slow then destroy(v) end
 	end
 
 	------------------------------------------------------------------------------------------ status visuals (on fire, poisoned, frozen, ignited gas zombie)
 	local function statusFx(v)
 		local f = v.flags
 		local chest = v.P.chest or v.P.root
-		local burning = has(f, 4) or has(f, 16)
+		local burning, ignited = has(f, 4) or has(f, 16), has(f, 16)
 		if burning and not v.fire then
-			v.fire = make("Fire", { Size = (has(f, 16) and 5 or 3) * v.s, Heat = 7, Color = Color3.fromRGB(255, 140, 40), SecondaryColor = Color3.fromRGB(255, 60, 20), Parent = chest })
-			if has(f, 16) then
-				v.fireLight = make("PointLight", { Range = 16, Brightness = 2, Color = Color3.fromRGB(255, 140, 50), Parent = chest })
-				if v.P.head then v.headFire = make("Fire", { Size = 3 * v.s, Heat = 9, Color = Color3.fromRGB(255, 150, 40), SecondaryColor = Color3.fromRGB(255, 70, 20), Parent = v.P.head }) end
-				if v.P.uArmL then make("Fire", { Size = 2 * v.s, Heat = 6, Parent = v.P.uArmL }) end
-				if v.P.uArmR then make("Fire", { Size = 2 * v.s, Heat = 6, Parent = v.P.uArmR }) end
-			end
+			v.fire = make("Fire", { Size = 3 * v.s, Heat = 7, Color = Color3.fromRGB(255, 140, 40), SecondaryColor = Color3.fromRGB(255, 60, 20), Parent = chest })
 		elseif not burning and v.fire then
 			v.fire:Destroy()
 			v.fire = nil
 		end
+		-- a gas zombie that caught fire: big flames on the body, head and arms (even if a fire sword lit it first)
+		if ignited and not v.ignited then
+			v.ignited = true
+			if v.fire then v.fire.Size = 5 * v.s end
+			if GFX.high then v.fireLight = make("PointLight", { Range = 16, Brightness = 2, Color = Color3.fromRGB(255, 140, 50), Shadows = false, Parent = chest }) end
+			if v.P.head then v.headFire = make("Fire", { Size = 3 * v.s, Heat = 9, Color = Color3.fromRGB(255, 150, 40), SecondaryColor = Color3.fromRGB(255, 70, 20), Parent = v.P.head }) end
+			if GFX.high and v.P.uArmL then make("Fire", { Size = 2 * v.s, Heat = 6, Parent = v.P.uArmL }) end
+			if GFX.high and v.P.uArmR then make("Fire", { Size = 2 * v.s, Heat = 6, Parent = v.P.uArmR }) end
+		end
 		local poisoned = has(f, 8)
 		if poisoned and not v.poisonFx then
-			v.poisonFx = make("ParticleEmitter", { Rate = 12, Lifetime = NumberRange.new(0.5, 1), Speed = NumberRange.new(1, 2.5),
+			v.poisonFx = make("ParticleEmitter", { Rate = GFX.high and 12 or 5, Lifetime = NumberRange.new(0.5, 1), Speed = NumberRange.new(1, 2.5),
 				Size = NumberSequence.new(0.25, 0), Color = ColorSequence.new(Color3.fromRGB(130, 255, 80)), LightEmission = 0.5, Parent = chest })
 		elseif v.poisonFx then
 			v.poisonFx.Enabled = poisoned
 		end
 		local slow = has(f, 2)
 		if slow and not v.frostFx then
-			v.frostFx = make("ParticleEmitter", { Rate = 14, Lifetime = NumberRange.new(0.6, 1.1), Speed = NumberRange.new(0.5, 1.5), SpreadAngle = Vector2.new(180, 180),
+			v.frostFx = make("ParticleEmitter", { Rate = GFX.high and 14 or 5, Lifetime = NumberRange.new(0.6, 1.1), Speed = NumberRange.new(0.5, 1.5), SpreadAngle = Vector2.new(180, 180),
 				Size = NumberSequence.new(0.2, 0), Color = ColorSequence.new(Color3.fromRGB(200, 240, 255)), LightEmission = 0.6, Parent = chest })
 		elseif v.frostFx then
 			v.frostFx.Enabled = slow
 		end
 	end
 
-	------------------------------------------------------------------------------------------ per-frame update
-	local function rootCF(v, extra)
-		local cf = CFrame.new(v.pos.X, v.rootH + v.extraY + extra, v.pos.Z) * CFrame.Angles(0, v.yaw, 0)
-		local st, a = v.state, v.atkT
-		if st == "attack" and v.def.rig ~= "dog" then
-			local lunge = ((v.def.ai == "slam" or v.def.boss) and 0.6 or 1) * v.s * math.max(0, math.sin(math.clamp((a - 0.35) / 0.45, 0, 1) * math.pi))
-			cf = cf * CFrame.new(0, 0, -lunge)
-		end
-		return cf
-	end
-
-	function Views.update(dt, now, camPos)
+	------------------------------------------------------------------------------------------ every frame, right before drawing
+	function Views.update(dt, now, cam)
+		local camCF = cam and cam.CFrame
+		local camPos = camCF and camCF.Position or Vector3.zero
+		local look = camCF and camCF.LookVector or Vector3.new(0, 0, -1)
+		local low = not GFX.high
+		local nearD, midD = low and 70 or 110, low and 140 or 200
 		for _, v in pairs(Views.list) do
 			if v.removed then continue end
 			if not v.model.Parent then
 				destroy(v)
 				continue
 			end
-			if not v.alive then
-				v.deadT += dt
-				local t = v.deadT
-				local u = math.min(1, t / 0.55)
-				local fall = u * u
-				local cf
-				if v.def.rig == "dog" then
-					cf = v.deathCF * CFrame.new(0, lerp(v.rootH, 0.75 * v.s, fall), 0) * CFrame.Angles(0, 0, math.rad(88) * fall)
-				else
-					local ang = math.rad(86) * fall * v.fallSign
-					cf = v.deathCF * CFrame.Angles(ang, 0, 0) * CFrame.new(0, v.rootH, 0) + Vector3.new(0, 0.5 * v.s * math.abs(math.sin(ang)), 0)
+			if v.alive then
+				-- follow the brain's position (snaps in solo, glides between network updates in multiplayer)
+				local before = v.pos
+				if v.tpos then
+					if v.exact then
+						v.pos, v.yaw, v.extraY = v.tpos, v.tyaw, v.textraY
+					else
+						local k = 1 - math.exp(-dt * 14)
+						v.pos = v.pos:Lerp(v.tpos, k)
+						v.yaw += angDiff(v.yaw, v.tyaw) * k
+						v.extraY = lerp(v.extraY, v.textraY, 1 - math.exp(-dt * 20))
+					end
 				end
-				if t > 2.4 then cf -= Vector3.new(0, math.min(1, (t - 2.4) / 1.3) * 2.6 * v.s, 0) end
-				v.P.root.CFrame = cf
-				animDeadPose(v, u)
-				if t > 3.8 then destroy(v) end
-				continue
+				if not v.exact then v.atkT = math.clamp((now - v.t0) / stateDur(v.def, v.state), 0, 1) end
+				local moved = flat(v.pos - before).Magnitude / math.max(dt, 1e-3)
+				if v.state == "pounce" or v.state == "leap" then moved = 0 end
+				v.vis += (math.min(moved, 30) - v.vis) * math.min(1, dt * 8)
+				v.rising = v.state == "rise"
+				v.liftT = math.max(0, v.liftT - dt * 2.5)
 			end
-			-- follow the brain's position
-			local before = v.pos
-			if v.tpos then
-				if v.exact then
-					v.pos, v.yaw, v.extraY = v.tpos, v.tyaw, v.textraY
-				else
-					local k = 1 - math.exp(-dt * 14)
-					v.pos = v.pos:Lerp(v.tpos, k)
-					v.yaw += angDiff(v.yaw, v.tyaw) * k
-					v.extraY = lerp(v.extraY, v.textraY, 1 - math.exp(-dt * 20))
-				end
+			-- level of detail: far away or behind the camera = update less often
+			local off = v.pos - camPos
+			local d = off.Magnitude
+			v.camD = d
+			local every = 1
+			if d > 30 and off:Dot(look) < -0.25 * d then
+				every = 6
+			elseif d > midD then
+				every = 4
+			elseif d > nearD then
+				every = 2
 			end
-			if not v.exact then v.atkT = math.clamp((now - v.t0) / stateDur(v.def, v.state), 0, 1) end
-			local moved = flat(v.pos - before).Magnitude / math.max(dt, 1e-3)
-			if v.state == "pounce" or v.state == "leap" then moved = 0 end
-			v.vis += (math.min(moved, 30) - v.vis) * math.min(1, dt * 8)
-			v.rising = v.state == "rise"
-			local d = camPos and (v.pos - camPos).Magnitude or 0
+			if not v.alive then every = math.min(every, 2) end
 			v.frame += 1
-			-- level of detail: far monsters animate less often
-			local every = d > 200 and 4 or (d > 110 and 2 or 1)
-			local extra = 0
-			if v.rising then extra = -(v.rootH + 3.3 * v.s) * (1 - easeOut(v.atkT)) end
-			v.liftT = math.max(0, v.liftT - dt * 2.5)
-			extra += math.sin(v.liftT * math.pi) * 2.2
-			v.P.root.CFrame = rootCF(v, extra)
+			v.acc += dt
 			if v.frame % every == 0 then
-				local adt = dt * every
-				if v.rising then
-					animRise(v, now)
-					if rng:NextNumber() < dt * 10 then FX.burst(FX.dust, Vector3.new(v.pos.X, 0.3, v.pos.Z), 2) end
-				elseif v.def.rig == "dog" then
-					animDog(v, adt, now)
+				local adt = math.min(v.acc, 0.25)
+				v.acc = 0
+				if v.alive then
+					local extra = riseExtra(v) + math.sin(v.liftT * math.pi) * 2.2
+					if v.rising then
+						animRise(v, now)
+						if rng:NextNumber() < adt * 10 then FX.burst(FX.dust, Vector3.new(v.pos.X, 0.3, v.pos.Z), 2) end
+					elseif v.def.rig == "dog" then
+						animDog(v, adt, now)
+					else
+						animBiped(v, adt, now)
+					end
+					Rigs.pose(v.sk, rootCF(v, extra))
+					statusFx(v)
+					if v.bar then
+						v.bar.Enabled = (v.hpFrac < 0.999 or v.kind == "avatar") and d < 90
+						v.barFill.Size = UDim2.fromScale(v.hpFrac, 1)
+					end
 				else
-					animBiped(v, adt, now)
-				end
-				statusFx(v)
-				if v.bar then
-					v.bar.Enabled = v.hpFrac < 0.999 or v.kind == "avatar"
-					v.barFill.Size = UDim2.fromScale(v.hpFrac, 1)
+					deathUpdate(v, adt)
 				end
 			end
+			if v.removed or not v.alive then continue end
 			-- groans and growls now and then
 			if now > v.nextSound and d < 90 then
 				local aggro = has(v.flags, 1)
@@ -5585,8 +6295,17 @@ do
 		if not v.alive or v.rising then return end
 		dmg = math.max(1, math.floor(dmg + 0.5))
 		local flags = (o.crit and 1 or 0) + (o.finisher and 2 or 0) + (o.lift and 4 or 0)
-		local head = (v.P.head and v.P.head.Position) or v.pos + Vector3.new(0, 4, 0)
+		local head = (v.P.head and v.P.head.Parent and v.P.head.Position) or v.pos + Vector3.new(0, 4, 0)
 		v.hurtT, v.freeze = 1, 0.07
+		if o.from then
+			local toA = flat(o.from - v.pos)
+			if toA.Magnitude > 0.1 then
+				local fwd = Vector3.new(-math.sin(v.yaw), 0, -math.cos(v.yaw))
+				local u = toA.Unit
+				v.hurtDir = (fwd:Dot(u) >= 0) and 1 or -1
+				v.hurtSide = math.clamp(fwd:Cross(u).Y, -1, 1)
+			end
+		end
 		if o.lift and not v.def.boss then v.liftT = 1 end
 		FX.flash(v.model, WHITE)
 		FX.burst(FX.spark, head, 9, o.color or WHITE)
@@ -5595,8 +6314,10 @@ do
 			playSfx("hit", head, { vary = 0.12 })
 			playSfx("splat", head, { vary = 0.2 })
 		end
-		FX.pop(head + Vector3.new(0, 1.4 * v.s, 0), o.crit and ("CRIT " .. commas(dmg) .. "!") or commas(dmg),
-			o.crit and Color3.fromRGB(255, 140, 40) or (o.finisher and GOLD or (o.splash and Color3.fromRGB(255, 160, 60) or WHITE)), o.crit or o.finisher)
+		if not (o.splash and not GFX.high) then
+			FX.pop(head + Vector3.new(0, 1.4 * v.s, 0), o.crit and ("CRIT " .. commas(dmg) .. "!") or commas(dmg),
+				o.crit and Color3.fromRGB(255, 140, 40) or (o.finisher and GOLD or (o.splash and Color3.fromRGB(255, 160, 60) or WHITE)), o.crit or o.finisher)
+		end
 		if o.effect == "frost" then
 			FX.burst(FX.magic, head, 12, Color3.fromRGB(150, 230, 255))
 			playSfx("frost", head)
@@ -5619,12 +6340,20 @@ do
 		if attacker == player.UserId then return end
 		local v = Views.list[id]
 		if not v or not v.alive then return end
-		local head = (v.P.head and v.P.head.Position) or v.pos
+		local head = (v.P.head and v.P.head.Parent and v.P.head.Position) or v.pos
 		if style == 2 then
-			FX.pop(head + Vector3.new(0, 1, 0), tostring(amount), has(v.flags, 4) and Color3.fromRGB(255, 150, 50) or Color3.fromRGB(140, 255, 90))
+			if GFX.high then FX.pop(head + Vector3.new(0, 1, 0), tostring(amount), has(v.flags, 4) and Color3.fromRGB(255, 150, 50) or Color3.fromRGB(140, 255, 90)) end
 			return
 		end
 		v.hurtT, v.freeze = 1, 0.05
+		local ap = Players:GetPlayerByUserId(attacker)
+		local ar = ap and ap.Character and ap.Character:FindFirstChild("HumanoidRootPart")
+		if ar then
+			local toA = flat(ar.Position - v.pos)
+			if toA.Magnitude > 0.1 then
+				v.hurtDir = (Vector3.new(-math.sin(v.yaw), 0, -math.cos(v.yaw)):Dot(toA.Unit) >= 0) and 1 or -1
+			end
+		end
 		FX.flash(v.model, WHITE)
 		FX.burst(FX.spark, head, 6, WHITE)
 		playSfx("hit", head, { vary = 0.12, vol = 0.6 })
@@ -5639,13 +6368,21 @@ do
 		if v and v.alive then
 			v.alive = false
 			v.deadT = 0
+			v.acc = 0
 			v.fallSign = fall
 			v.state = "dead"
+			if def.rig == "dog" then
+				v.deathKind = "dog"
+			elseif def.boss then
+				v.deathKind = "knees"
+			else
+				v.deathKind = ((v.id * 37) % 10 < 4) and "knees" or "fall"
+			end
 			v.deathCF = CFrame.new(v.pos.X, 0, v.pos.Z) * CFrame.Angles(0, v.yaw, 0)
 			if v.bar then v.bar.Enabled = false end
 			if v.fire then v.fire.Enabled = false end
 			if v.poisonFx then v.poisonFx.Enabled = false end
-			local head = (v.P.head and v.P.head.Position) or pos
+			local head = (v.P.head and v.P.head.Parent and v.P.head.Position) or pos
 			FX.burst(FX.goo, head, 12)
 			FX.burst(FX.dust, Vector3.new(x, 0.6, z), def.ai == "slam" and 16 or 6)
 			if def.rig == "dog" then
@@ -5799,7 +6536,7 @@ do
 			Color = Color3.fromRGB(226, 156, 22), Anchored = false, Massless = true, CanCollide = false, CanQuery = false, CanTouch = false, CastShadow = false,
 			CFrame = CFrame.new(pos), Parent = outer })
 		weld(outer, inner)
-		if not dropped then make("Sparkles", { SparkleColor = Color3.fromRGB(255, 240, 150), Parent = outer }) end
+		if not dropped and GFX.high then make("Sparkles", { SparkleColor = Color3.fromRGB(255, 240, 150), Parent = outer }) end
 		local c = { part = outer, value = value, dropped = dropped, base = pos, phase = rng:NextNumber(0, 6), born = os.clock(), magnet = false, kind = "coin", world = S.world }
 		table.insert(list, c)
 		return c
@@ -5819,7 +6556,7 @@ do
 				CFrame = CFrame.new(pos) * CFrame.new(sx * 1.1, 0, 0) * CFrame.Angles(0, sx > 0 and math.pi / 2 or -math.pi / 2, 0), Parent = ball })
 			weld(ball, w)
 		end
-		make("PointLight", { Range = 8, Brightness = 1.2, Color = col, Shadows = false, Parent = ball })
+		if GFX.high then make("PointLight", { Range = 8, Brightness = 1.2, Color = col, Shadows = false, Parent = ball }) end
 		local c = { part = ball, value = 1, dropped = dropped, base = pos, phase = rng:NextNumber(0, 6), born = os.clock(), magnet = false, kind = "candy", world = S.world }
 		table.insert(list, c)
 		return c
@@ -6268,11 +7005,7 @@ do
 			end
 			toggleRow(1, "🎵 Music", function() return S.music end, function(v) S.music = v; Groups.music.Volume = v and 0.6 or 0 end, "ON", "OFF")
 			toggleRow(2, "🔊 Sounds", function() return S.sfx end, function(v) S.sfx = v; Groups.sfx.Volume = v and 1 or 0; Groups.amb.Volume = v and 1 or 0 end, "ON", "OFF")
-			toggleRow(3, "✨ Graphics", function() return S.gfx == "high" end, function(v)
-				S.gfx = v and "high" or "low"
-				GFX.high = v
-				Look.apply(S.world)
-			end, "HIGH", "FAST")
+			toggleRow(3, "✨ Graphics", function() return S.gfx == "high" end, function(v) Player.setGraphics(v, true) end, "HIGH", "FAST")
 			local row = Menu.row(m.list, 64, 4)
 			UI.text({ Text = S.canSave and "💾 Your progress is being SAVED" or (Link.coop and "💾 Saving is off (turn on API Services)" or "💾 Solo mode: progress resets when you leave"),
 				Position = UDim2.fromOffset(16, 10), Size = UDim2.new(1, -32, 1, -20), TextXAlignment = Enum.TextXAlignment.Left, Stroke = 2, MaxText = 20, Parent = row })
@@ -6391,7 +7124,7 @@ do
 			fp(Vector3.new(1.2, 0.2, 0.3), CFrame.new(x, 3.8, 7.25), Color3.fromRGB(60, 42, 28))
 			if def.id == "pumpkin" then
 				local case = fp(Vector3.new(2.4, 8, 1.4), CFrame.new(x, 4.6, 6.9), Color3.fromRGB(200, 230, 255), Enum.Material.Glass, { Transparency = 0.7, CanCollide = false })
-				make("PointLight", { Range = 10, Brightness = 1.6, Color = Color3.fromRGB(255, 150, 50), Parent = case })
+				Perf.light({ Range = 10, Brightness = 1.6, Color = Color3.fromRGB(255, 150, 50), Parent = case })
 				Build.sign(F, cf * CFrame.new(x, 9, 6.7), Vector3.new(2.6, 1, 0.2), "🍬 100", nil, Color3.fromRGB(30, 20, 10), CANDY)
 			end
 		end
@@ -6400,7 +7133,7 @@ do
 		Build.pumpkin(F, (cf * CFrame.new(7.4, 0.6, -6.2)).Position, 2.6, -0.3, true, false, 2)
 		Build.pumpkin(F, (cf * CFrame.new(-8.6, 0.6, -6.4)).Position, 2.2, 0.2, false, false, 3)
 		local lantern = fp(Vector3.new(0.9, 1.2, 0.9), CFrame.new(5.5, 4.75, -3.4), Color3.fromRGB(255, 200, 120), Enum.Material.Neon, { CanCollide = false })
-		make("PointLight", { Range = 20, Brightness = 1.8, Color = Color3.fromRGB(255, 190, 110), Parent = lantern })
+		Perf.light({ Range = 20, Brightness = 1.8, Color = Color3.fromRGB(255, 190, 110), Key = true, Parent = lantern })
 		local gem = fp(Vector3.new(0.8, 1.6, 0.8), CFrame.new(2.2, 4.95, -3.3) * CFrame.Angles(0.3, 0.6, 0.2), Color3.fromRGB(170, 90, 255), Enum.Material.Neon, { CanCollide = false })
 		gem.Name = "CounterGem"
 		Gus.anvilPos = (cf * CFrame.new(0, 4.4, -3.4)).Position
@@ -6434,7 +7167,7 @@ do
 		local helmet = ex(model, h, Vector3.new(1.3, 0.6, 1.3) * s, CFrame.new(0, 0.66 * s, 0), Color3.fromRGB(250, 196, 30), Enum.Material.SmoothPlastic, Enum.PartType.Ball)
 		ex(model, h, Vector3.new(1.5, 0.1, 1.5) * s, CFrame.new(0, 0.5 * s, 0), Color3.fromRGB(230, 176, 20))
 		local lamp = ex(model, helmet, Vector3.new(0.34, 0.34, 0.2) * s, CFrame.new(0, 0.1 * s, -0.66 * s), Color3.fromRGB(255, 250, 210), Enum.Material.Neon)
-		make("SpotLight", { Range = 26, Brightness = 2.5, Angle = 50, Face = Enum.NormalId.Front, Color = Color3.fromRGB(255, 245, 210), Parent = lamp })
+		Perf.light({ Class = "SpotLight", Range = 26, Brightness = 2.5, Angle = 50, Face = Enum.NormalId.Front, Color = Color3.fromRGB(255, 245, 210), Parent = lamp })
 		for _, x in ipairs({ -0.22, 0.22 }) do
 			ex(model, helmet, Vector3.new(0.3, 0.3, 0.12) * s, CFrame.new(x * s, -0.12 * s, -0.62 * s), Color3.fromRGB(120, 220, 255), Enum.Material.Glass)
 		end
@@ -6455,11 +7188,12 @@ do
 		end
 		-- lantern in the left hand
 		local lan = ex(model, P.handL, Vector3.new(0.6, 0.8, 0.6) * s, CFrame.new(0, -0.7 * s, 0), Color3.fromRGB(255, 190, 90), Enum.Material.Neon)
-		make("PointLight", { Range = 14, Brightness = 1.4, Color = Color3.fromRGB(255, 180, 90), Parent = lan })
+		Perf.light({ Range = 14, Brightness = 1.4, Color = Color3.fromRGB(255, 180, 90), Parent = lan })
 		ex(model, lan, Vector3.new(0.7, 0.12, 0.7) * s, CFrame.new(0, 0.46 * s, 0), Color3.fromRGB(40, 40, 40), Enum.Material.Metal)
 
 		Gus.home = cf * CFrame.new(0, 0.6 + rootH, 1.6)
 		Gus.yaw = yawOf(Gus.home.LookVector.X, Gus.home.LookVector.Z)
+		Gus.sk = Rigs.bake(model, P.root, J)
 		model:PivotTo(Gus.home)
 		model.Parent = F
 		Gus.model, Gus.P, Gus.J, Gus.root = model, P, J, P.root
@@ -6912,19 +7646,23 @@ do
 
 	------------------------------------------------------------------------------------------ Gus comes alive: bouncy idle, waves, looks around nervously, hops when you buy
 	local setJ = Rigs.setJ
-	function Gus.update(dt, now, rp)
-		if not Gus.root or not Gus.root.Parent or S.world ~= "cave" then return end
+	function Gus.update(dt, now, rp, camPos)
+		if not Gus.root or not Gus.root.Parent or S.world ~= "cave" or not Gus.sk then return end
 		local J = Gus.J
 		local pos = Gus.home.Position
 		local dist = rp and (rp - pos).Magnitude or math.huge
+		if Gus.talking and dist > 18 then Gus.close(false) end
+		if camPos and (camPos - pos).Magnitude > 140 then return end -- too far to see: skip the work
 		local near = dist < 26 and S.playing
-		local face = (Gus.talking or near) and rp or (Gus.anvilPos + Vector3.new(math.sin(now * 0.4) * 10, 0, 0))
+		-- idle routine: polish a sword on the counter, then peek nervously at the tunnels
+		local polishing = not near and not Gus.talking and (now % 12) < 6
+		local face = (Gus.talking or near) and rp or (polishing and Gus.anvilPos or (Gus.anvilPos + Vector3.new(math.sin(now * 0.4) * 10, 0, 0)))
 		local d = flat(face - pos)
 		if d.Magnitude > 0.1 then Gus.yaw += angDiff(Gus.yaw, yawOf(d.X, d.Z)) * math.min(1, dt * 5) end
 		local hop = 0
 		local ht = now - Gus.hopAt
 		if ht < 0.5 then hop = math.sin(ht / 0.5 * math.pi) * 1.4 end
-		Gus.root.CFrame = CFrame.new(pos + Vector3.new(0, hop, 0)) * CFrame.Angles(0, Gus.yaw, 0)
+		local rootCF = CFrame.new(pos + Vector3.new(0, hop, 0)) * CFrame.Angles(0, Gus.yaw, 0)
 		if near and not Gus.talking and now - Gus.lastGreet > 25 then
 			Gus.lastGreet = now
 			Gus.waveAt = now
@@ -6935,23 +7673,34 @@ do
 			Gus.mark.StudsOffsetWorldSpace = Vector3.new(0, 5 + math.sin(now * 3) * 0.3, 0)
 		end
 		local bounce = math.abs(math.sin(now * 3.2)) * 0.06
-		local shR, elR, shL, elL, lean, look, turn = 0.15, 0.2, 0.35, 0.6, 0, 0, 0
+		local shR, elR, shL, elL, lean, look, turn, zR = 0.15, 0.2, 0.35, 0.6, 0, 0, 0, 0.12
 		if Gus.talking then
+			-- talks with both hands
 			shR = 0.5 + math.sin(now * 3.4) * 0.45
 			elR = 1 + math.sin(now * 3.4 + 1) * 0.35
+			shL = 0.45 + math.sin(now * 2.7 + 2) * 0.3
+			elL = 0.9 + math.sin(now * 2.7) * 0.3
 			look = math.sin(now * 4.5) * 0.06
 			lean = math.sin(now * 2) * 0.04
+		elseif polishing then
+			-- rubs the counter in little circles, humming
+			shR = 0.95 + math.sin(now * 7) * 0.12
+			elR = 0.9 + math.cos(now * 7) * 0.15
+			zR = 0.12 + math.sin(now * 7) * 0.12
+			lean = -0.22
+			look = -0.35
+			bounce *= 0.4
 		elseif not near then
 			-- nervous: peeks left and right at the tunnels
 			turn = math.sin(now * 0.9) * 0.6
 			look = 0.1
 		end
 		local wv = now - Gus.waveAt
-		if wv < 1.6 then shR, elR = 2.8, 0.4 + math.sin(wv * 12) * 0.35 end
+		if wv < 1.6 then shR, elR, zR = 2.8, 0.4 + math.sin(wv * 12) * 0.35, 0.12 end
 		local nd = now - Gus.nodAt
 		if nd < 0.9 then look -= math.abs(math.sin(nd * 7)) * 0.35 end
 		setJ(J, "Root", CFrame.new(0, bounce, 0))
-		setJ(J, "ShoulderR", CFrame.Angles(shR, 0, 0.12))
+		setJ(J, "ShoulderR", CFrame.Angles(shR, 0, zR))
 		setJ(J, "ElbowR", CFrame.Angles(elR, 0, 0))
 		setJ(J, "ShoulderL", CFrame.Angles(shL, 0, -0.12))
 		setJ(J, "ElbowL", CFrame.Angles(elL, 0, 0))
@@ -6959,7 +7708,7 @@ do
 		setJ(J, "Neck", CFrame.Angles(look, turn * 0.7, math.sin(now * 0.7) * 0.06))
 		setJ(J, "KneeL", CFrame.Angles(-bounce * 2, 0, 0))
 		setJ(J, "KneeR", CFrame.Angles(-bounce * 2, 0, 0))
-		if Gus.talking and dist > 18 then Gus.close(false) end
+		Rigs.pose(Gus.sk, rootCF)
 	end
 end
 
@@ -6976,14 +7725,21 @@ On.profile = function(data, canSave)
 		S.levels = data.levels or S.levels
 		S.pumpkin = data.pumpkin == true
 		if S.pumpkin then S.owned.pumpkin = true end
-		S.music, S.sfx, S.gfx, S.talked = data.music ~= false, data.sfx ~= false, data.gfx or "high", data.talked == true
+		S.music, S.sfx, S.talked = data.music ~= false, data.sfx ~= false, data.talked == true
+		-- graphics: what you picked in Settings, otherwise what suits this device (phones start on FAST)
+		S.gfxSet = data.gfxSet == true
+		if S.gfxSet or data.gfx == "low" then S.gfx = (data.gfx == "low") and "low" or "high" end
 		S.shownCoins = S.coins
 	end
 	S.canSave = canSave == true
 	Groups.music.Volume = S.music and 0.6 or 0
 	Groups.sfx.Volume = S.sfx and 1 or 0
 	Groups.amb.Volume = S.sfx and 1 or 0
-	GFX.high = S.gfx ~= "low"
+	if GFX.high ~= (S.gfx ~= "low") then
+		GFX.high = S.gfx ~= "low"
+		Look.apply(S.world)
+		Perf.apply()
+	end
 	S.hp = maxHP()
 	local ca = CA.list[player]
 	if ca then CA.attachSword(ca, S.equipped) end
@@ -7101,11 +7857,13 @@ local function safe(name, fn, ...)
 	local ok, err = pcall(fn, ...)
 	if not ok and not loopErrors[name] then
 		loopErrors[name] = true
-		warn("[Forest Hunt 2.0] " .. name .. " error: " .. tostring(err))
+		warn("[Forest Hunt " .. VERSION .. "] " .. name .. " error: " .. tostring(err))
 	end
 end
 
-RunService.Stepped:Connect(function(_, dt)
+-- PreSimulation runs AFTER Roblox's animator: the monster brain thinks here (solo), and every
+-- player's custom pose is written here so the default walk/idle animations can't overwrite it.
+RunService.PreSimulation:Connect(function(dt)
 	if not worldReady then return end
 	local now = os.clock()
 	local root = getRoot()
@@ -7118,7 +7876,14 @@ RunService.Stepped:Connect(function(_, dt)
 		safe("monsters", Sim.update, math.min(dt, 0.1), now, hunters)
 		if not S.traveling then safe("views", Views.syncSolo) end
 	end
-	safe("gus", Gus.update, dt, now, root and root.Position)
+	for plr, ca in pairs(CA.list) do
+		if plr == player then
+			if not S.dead or ca.zombieAt then safe("anim", CA.update, ca, dt, now) end
+		elseif plr.Parent and (plr:GetAttribute("FH_World") or "cave") == S.world and ca.root and ca.root.Parent
+			and (not root or (ca.root.Position - root.Position).Magnitude < 160) then
+			safe("anim2", CA.update, ca, dt, now)
+		end
+	end
 end)
 
 local function updateHUD(dt)
@@ -7148,11 +7913,40 @@ local function updateHUD(dt)
 	HUD.bannerScale.Scale = 1 + math.sin(os.clock() * 3) * 0.03
 end
 
+-- FPS watchdog: if HIGH graphics stays slow for 6 seconds in a row, switch to FAST once
+-- (never when you picked HIGH yourself in Settings, and never while the game window is in the background)
+local fpsWatch = { t = 0, n = 0, bad = 0, done = false, focused = true }
+pcall(function()
+	UserInputService.WindowFocusReleased:Connect(function() fpsWatch.focused = false end)
+	UserInputService.WindowFocused:Connect(function() fpsWatch.focused = true; fpsWatch.t, fpsWatch.n, fpsWatch.bad = 0, 0, 0 end)
+end)
+local function watchFps(dt)
+	if fpsWatch.done or not GFX.high or S.gfxSet or not S.playing or S.traveling or S.dead or not fpsWatch.focused then
+		fpsWatch.t, fpsWatch.n = 0, 0
+		return
+	end
+	fpsWatch.t += dt
+	fpsWatch.n += 1
+	if fpsWatch.t < 1 then return end
+	local fps = fpsWatch.n / fpsWatch.t
+	fpsWatch.t, fpsWatch.n = 0, 0
+	fpsWatch.bad = (fps < 38) and fpsWatch.bad + 1 or 0
+	if fpsWatch.bad >= 6 then
+		fpsWatch.done = true
+		Player.setGraphics(false, false)
+		toast("✨ Switched to FAST graphics to keep things smooth (⚙ Settings to change)", WHITE, 5)
+	end
+end
+
 RunService.RenderStepped:Connect(function(dt)
 	local now = os.clock()
 	local cam = workspace.CurrentCamera
+	watchFps(dt)
 	if worldReady then
-		safe("views", Views.update, dt, now, cam and cam.CFrame.Position)
+		-- monsters + Gus are posed right before the frame is drawn (smooth, no lag behind)
+		safe("views", Views.update, dt, now, cam)
+		local root = getRoot()
+		safe("gus", Gus.update, dt, now, root and root.Position, cam and cam.CFrame.Position)
 		safe("pickups", Pickups.update, dt, now)
 	end
 	safe("hud", updateHUD, dt)
@@ -7174,20 +7968,7 @@ RunService.RenderStepped:Connect(function(dt)
 	end
 end)
 
--- animations run AFTER Roblox's own, so swings and runs are never overwritten
-RunService:BindToRenderStep("FH2_Anim", Enum.RenderPriority.Last.Value, function(dt)
-	if not worldReady then return end
-	local now = os.clock()
-	local myRoot = getRoot()
-	for plr, ca in pairs(CA.list) do
-		if plr == player then
-			if not S.dead or ca.zombieAt then safe("anim", CA.update, ca, dt, now) end
-		elseif plr.Parent and (plr:GetAttribute("FH_World") or "cave") == S.world and ca.root and ca.root.Parent
-			and (not myRoot or (ca.root.Position - myRoot.Position).Magnitude < 160) then
-			safe("anim2", CA.update, ca, dt, now)
-		end
-	end
-end)
+-- (2.01: player poses moved to PreSimulation above — RenderStepped was too early and got overwritten)
 
 local rigCheck, saveT, lockMsgAt, auroraT = 0, 0, 0, 0
 local snow
@@ -7331,7 +8112,7 @@ local function buildEverything()
 	for i, st in ipairs(steps) do
 		Intro.status.Text = st[1]
 		local ok, err = pcall(st[2])
-		if not ok then warn("[Forest Hunt 2.0] build step failed (" .. st[1] .. "): " .. tostring(err)) end
+		if not ok then warn("[Forest Hunt " .. VERSION .. "] build step failed (" .. st[1] .. "): " .. tostring(err)) end
 		if i == 2 then
 			Folders.cave.Parent = worldRoot
 			for _, d in ipairs(workspace:GetDescendants()) do
