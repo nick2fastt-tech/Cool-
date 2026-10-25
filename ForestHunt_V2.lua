@@ -1,15 +1,19 @@
 --[[
-	⚔️🎃  FOREST HUNT 2.01  —  HALLOWEEN 2X EVENT  —  ONE SCRIPT
+	⚔️🎃  FOREST HUNT 2.05  —  HALLOWEEN 2X EVENT  —  ONE SCRIPT
 	=====================================================================
 	The WHOLE game is this one file. It works in two places:
 
-	STEP 1  (required)  — the game itself
-	  Explorer → StarterPlayer → StarterPlayerScripts → click ➕ → LocalScript
-	  Delete the "print" line inside it, paste this whole file in, press Play.
-	  You can already play solo after this step.
+	It's ONE file. The server copy runs the game for everyone (monsters, bosses, saving);
+	the player copy draws your screen. Roblox only lets LocalScripts show UI and read your
+	keys/touches, so the same file goes in two places:
 
-	STEP 2  (for multiplayer + saving)  — paste the SAME file a second time
-	  Explorer → ServerScriptService → click ➕ → Script → paste this exact same file.
+	STEP 1  — the server (everyone plays together + progress SAVES on PC and phones)
+	  Explorer → ServerScriptService → click ➕ → Script → paste this whole file.
+
+	STEP 2  — the screen
+	  Explorer → StarterPlayer → StarterPlayerScripts → click ➕ → LocalScript
+	  Delete the "print" line inside it, paste this exact same file.
+	  (Without step 1 it still runs, but solo and without saving.)
 	  Now everybody in a server fights the SAME zombies and bosses, sees each other's
 	  swords and animations, can team up on bosses, and progress SAVES.
 	  (Saving in Studio: Home → Game Settings → Security → "Enable Studio Access to API Services")
@@ -21,6 +25,18 @@
 	           E = talk to Gus  ·  1-5 = switch sword  ·  M = worlds  ·  G = sword bag  ·  H = go home to the cave
 	  Mobile : ⚔ swing button · 💨 dash button · 🏃 sprint toggle · walk up to Gus and tap "Talk"
 	  Chat   : stand near Gus and type ("hi gus", "upgrade", "sword", "boss", "candy", "joke"...)
+
+	WHAT'S NEW IN 2.05
+	  • ⚔ NEW: BATTLE WORLD (500 kills, 5X coins) — packed with Battle Zombies, Metal Battle
+	    Zombies and Jungle Minibosses, plus THE WARRIOR BOSS (10,000 health).
+	  • ⛪ When a boss rises, everyone in that world is pulled into the CHURCH to watch it dig
+	    out of the floor and roar. Bosses have 5,500 health.
+	  • Pumpkin Overnight Sword now hits for 800. Ice World unlocks at 150 kills, Jungle at 300.
+	  • Clean screen: only Swords, Settings, your Health and the Boss Timer (coins, candy and
+	    kills are at the top of the Swords menu). Walk through the cave tunnels to change worlds.
+	  • Swords sit in your hand (Roblox's grip point) and have more detail.
+	  • The 2X Halloween event ends November 1st (after that: normal coins, no candy drops).
+	  • Progress saves on PC and phones whenever the server copy is installed.
 
 	WHAT'S NEW IN 2.01
 	  • Custom animations really play now. Your character's poses run AFTER Roblox's own
@@ -62,7 +78,7 @@ local RunService        = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local IS_SERVER = RunService:IsServer()
-local VERSION = "2.01"
+local VERSION = "2.05"
 local NET_NAME = "ForestHunt2_Net"
 
 ------------------------------------------------------------------------------------------------
@@ -94,7 +110,14 @@ end
 ------------------------------------------------------------------------------------------------
 -- GAME CONFIG
 ------------------------------------------------------------------------------------------------
-local EVENT_MULT = 2            -- 🎃 2X Halloween event: every coin counts double
+-- 🎃 2X Halloween event: every coin counts double until it ends on November 1st (midnight US Pacific)
+local EVENT_END = 1793516400    -- 2026-11-01 00:00 PDT (07:00 UTC)
+local function nowUnix()
+	local ok, t = pcall(function() return workspace:GetServerTimeNow() end)
+	return (ok and t and t > 1e9) and t or os.time()
+end
+local function eventOn() return nowUnix() < EVENT_END end
+local EVENT_MULT = eventOn() and 2 or 1 -- refreshed every few seconds by the main loops
 local CANDY_GOAL = 100          -- candies needed for the Pumpkin Overnight Sword
 local BOSS_EVERY = 600          -- a boss rises in every world every 10 minutes
 local GRAVE_GATE_KILLS = 120    -- the graveyard gates open at 120 kills
@@ -103,12 +126,14 @@ local WORLDS = {
 	cave   = { id = "cave", name = "The Cave", icon = "🕯", origin = Vector3.new(0, 0, 0), mult = 0, need = 0 },
 	grave  = { id = "grave", name = "Graveyard", icon = "⚰", origin = Vector3.new(1600, 0, 0), mult = 1, need = 0,
 		color = Color3.fromRGB(255, 150, 60), boss = "gravekeeper", minion = "zombie" },
-	ice    = { id = "ice", name = "Ice World", icon = "❄", origin = Vector3.new(3200, 0, 0), mult = 3, need = 500,
+	ice    = { id = "ice", name = "Ice World", icon = "❄", origin = Vector3.new(3200, 0, 0), mult = 3, need = 150,
 		color = Color3.fromRGB(120, 210, 255), boss = "titan", minion = "frozen" },
-	jungle = { id = "jungle", name = "Jungle", icon = "🌴", origin = Vector3.new(4800, 0, 0), mult = 4, need = 800,
+	jungle = { id = "jungle", name = "Jungle", icon = "🌴", origin = Vector3.new(4800, 0, 0), mult = 4, need = 300,
 		color = Color3.fromRGB(120, 230, 90), boss = "kongo", minion = "monkey" },
+	battle = { id = "battle", name = "Battle World", icon = "⚔", origin = Vector3.new(6400, 0, 0), mult = 5, need = 500,
+		color = Color3.fromRGB(255, 90, 70), boss = "warrior", minion = "battle" },
 }
-local WORLD_ORDER = { "grave", "ice", "jungle" }
+local WORLD_ORDER = { "grave", "ice", "jungle", "battle" }
 
 -- state names ↔ numbers (sent over the network)
 local STATES = { "idle", "wander", "chase", "attack", "pounce", "notice", "rise", "dead",
@@ -144,22 +169,34 @@ local MOBS = {
 	avatar  = { name = "Zombie", rig = "avatar", look = "avatar", ai = "melee", hp = 160, dmg = 12, speed = 8, runSpeed = 13, runner = 0.5,
 		reach = 4.3, atk = 0.85, cd = 1.1, reward = 25, radius = 1.2, aggro = 60, scale = 1, turn = 3.6 },
 	-- 👹 BOSSES
-	gravekeeper = { boss = true, name = "The Gravekeeper", rig = "biped", look = "gravekeeper", ai = "boss", hp = 6000, dmg = 30, speed = 7.5,
+	gravekeeper = { boss = true, name = "The Gravekeeper", rig = "biped", look = "gravekeeper", ai = "boss", hp = 5500, dmg = 30, speed = 7.5,
 		reach = 9, atk = 1.2, cd = 1.1, reward = 1000, candy = 10, radius = 3.2, aggro = 130, scale = 2.5, turn = 2.4,
 		moves = { "slam", "sweep", "summon", "slam", "sweep" } },
-	titan   = { boss = true, name = "Frost Titan", rig = "biped", look = "titan", ai = "boss", hp = 16000, dmg = 45, speed = 8,
+	titan   = { boss = true, name = "Frost Titan", rig = "biped", look = "titan", ai = "boss", hp = 5500, dmg = 45, speed = 8,
 		reach = 10, atk = 1.2, cd = 1.0, reward = 2500, candy = 15, radius = 3.6, aggro = 140, scale = 2.9, turn = 2.4, effect = "chill",
 		moves = { "slam", "boulder", "spikes", "sweep", "boulder" } },
-	kongo   = { boss = true, name = "King Kongo", rig = "monkey", look = "kongo", ai = "boss", hp = 32000, dmg = 55, speed = 11,
+	kongo   = { boss = true, name = "King Kongo", rig = "monkey", look = "kongo", ai = "boss", hp = 5500, dmg = 55, speed = 11,
 		reach = 9.5, atk = 1.1, cd = 0.9, reward = 5000, candy = 20, radius = 3.6, aggro = 150, scale = 2.9, turn = 3.2, effect = "sick",
 		moves = { "leap", "barrel", "slam", "summon", "barrel", "leap" } },
+	warrior = { boss = true, name = "The Warrior Boss", rig = "biped", look = "warrior", ai = "boss", hp = 10000, dmg = 60, speed = 9.5,
+		reach = 10, atk = 1.0, cd = 0.85, reward = 10000, candy = 25, radius = 3.4, aggro = 160, scale = 2.7, turn = 3,
+		moves = { "sweep", "slam", "leap", "summon", "sweep", "slam" } },
+	-- ⚔ BATTLE WORLD
+	battle  = { name = "Battle Zombie", rig = "biped", look = "battle", ai = "melee", hp = 900, dmg = 28, speed = 9, runSpeed = 15, runner = 0.45,
+		reach = 4.6, atk = 0.75, cd = 0.9, reward = 18, radius = 1.3, aggro = 75, scale = 1.05, turn = 4 },
+	metal   = { name = "Metal Battle Zombie", rig = "biped", look = "metal", ai = "melee", hp = 2200, dmg = 36, speed = 7.5, runSpeed = 11, runner = 0.25,
+		reach = 4.8, atk = 0.9, cd = 1.0, reward = 30, radius = 1.4, aggro = 70, scale = 1.15, turn = 3.2 },
+	miniboss = { name = "Jungle Miniboss", rig = "monkey", look = "kongo", ai = "slam", hp = 3500, dmg = 44, speed = 10, reach = 7.5, slamR = 10,
+		atk = 1.3, cd = 1.8, reward = 90, radius = 2.2, aggro = 80, scale = 1.6, turn = 3.2, effect = "sick" },
 }
 for id, d in pairs(MOBS) do d.id = id end
 
 -- how long each action takes (the client uses the same numbers so animations line up)
 local MOVE_DUR = { slam = 1.5, sweep = 1.3, summon = 1.6, leap = 1.7, barrel = 1.3, boulder = 1.4, spikes = 1.5, roar = 1.6,
 	throw = 1.1, spit = 0.9, ignite = 1.0, notice = 0.6, rise = 2.4 }
+local BOSS_RISE = 5 -- bosses take longer to dig their way out of the ground
 local function stateDur(def, st)
+	if st == "rise" then return def.boss and BOSS_RISE or MOVE_DUR.rise end
 	if st == "attack" then return def.atk end
 	if st == "pounce" then return def.atk end
 	if st == "notice" then return def.boss and 1.6 or (def.rig == "dog" and 0.45 or (def.ai == "slam" and 0.9 or 0.6)) end
@@ -178,6 +215,9 @@ local SPAWNS = {
 	jungle = { zones = {
 		wild = { rect = { -186, 186, -204, 160 }, max = 13, kinds = { { "monkey", 0.4 }, { "gas", 0.3 }, { "toxic", 0.3 } } },
 	}, bossZone = "wild" },
+	battle = { zones = { -- a LOT of zombies in here
+		field = { rect = { -186, 186, -204, 160 }, max = 22, kinds = { { "battle", 0.55 }, { "metal", 0.3 }, { "miniboss", 0.15, false, 3 } } },
+	}, bossZone = "field" },
 }
 
 ------------------------------------------------------------------------------------------------
@@ -204,7 +244,7 @@ local SWORDS = {
 	  bladeC = Color3.fromRGB(42, 32, 32), bladeM = Enum.Material.Basalt, edgeC = Color3.fromRGB(255, 120, 30), edgeNeon = true,
 	  guardC = Color3.fromRGB(40, 28, 28), gripC = Color3.fromRGB(60, 20, 20), wrapC = Color3.fromRGB(255, 120, 40), gem = Color3.fromRGB(255, 50, 30),
 	  trail = Color3.fromRGB(255, 120, 40), glow = Color3.fromRGB(255, 110, 40), desc = "Uppercuts and spins. Sets monsters on fire." },
-	{ id = "pumpkin", name = "Pumpkin Overnight Sword", price = -1, candy = CANDY_GOAL, dmg = 420, speed = 1.3, reach = 11, effect = "pumpkin",
+	{ id = "pumpkin", name = "Pumpkin Overnight Sword", price = -1, candy = CANDY_GOAL, dmg = 800, speed = 1.3, reach = 11, effect = "pumpkin",
 	  combo = { "slash", "spin", "thrust", "chop" },
 	  len = 4.8, width = 0.66, thick = 0.15, grip = 1.3, guard = "pumpkin",
 	  bladeC = Color3.fromRGB(38, 20, 70), bladeM = Enum.Material.Glass, edgeC = Color3.fromRGB(255, 140, 20), edgeNeon = true,
@@ -531,6 +571,80 @@ do
 		end)
 		LAYOUT.jungle = L
 	end
+
+	------------------------------------------------------------------ ⚔ BATTLE WORLD
+	do
+		local L = mk("battle")
+		local wr = Random.new(5101)
+		local O = L.o
+		L.boss = O + Vector3.new(0, 0, -150)
+		L.arena = { x = O.X, z = O.Z - 150, r = 34 }
+		local function blocked(lx, lz, pad)
+			pad = pad or 0
+			if outside(lx, lz, pad) then return true end
+			if lz > 160 - pad and math.abs(lx) < 48 + pad then return true end
+			if math.abs(lx) < 40 + pad and lz < -110 + pad and lz > -190 - pad then return true end -- church
+			if math.abs(lx) < 9 + pad and lz > -110 and lz < 170 then return true end -- the road
+			return false
+		end
+		L.blocked = blocked
+		local function place(n, rad, pad, fn)
+			local made = 0
+			for _ = 1, n * 6 do
+				if made >= n then break end
+				local lx, lz = wr:NextNumber(-184, 184), wr:NextNumber(-208, 194)
+				if not blocked(lx, lz, pad) and circleFree(O.X + lx, O.Z + lz, rad + pad) then
+					made += 1
+					fn(lx, lz)
+				end
+			end
+		end
+		L.rocks, L.barricades, L.tents, L.towers, L.racks, L.braziers = {}, {}, {}, {}, {}, {}
+		place(8, 9, 4, function(lx, lz)
+			addOb(O.X + lx, O.Z + lz, 7)
+			table.insert(L.towers, { x = O.X + lx, z = O.Z + lz, h = wr:NextNumber(10, 22), a = wr:NextNumber(0, 6.28) })
+		end)
+		place(10, 5, 3, function(lx, lz)
+			addOb(O.X + lx, O.Z + lz, 4)
+			table.insert(L.tents, { x = O.X + lx, z = O.Z + lz, a = wr:NextNumber(0, 6.28), red = wr:NextNumber() < 0.5 })
+		end)
+		place(26, 3, 2, function(lx, lz)
+			addOb(O.X + lx, O.Z + lz, 2.6)
+			table.insert(L.barricades, { x = O.X + lx, z = O.Z + lz, a = wr:NextNumber(0, 6.28) })
+		end)
+		place(24, 3, 2, function(lx, lz)
+			local s = wr:NextNumber(3, 7)
+			addOb(O.X + lx, O.Z + lz, s * 0.5)
+			table.insert(L.rocks, { x = O.X + lx, z = O.Z + lz, s = s, a = wr:NextNumber(0, 6.28), t = wr:NextNumber(0, 0.4) })
+		end)
+		place(12, 1.5, 2, function(lx, lz)
+			addOb(O.X + lx, O.Z + lz, 1.4)
+			table.insert(L.racks, { x = O.X + lx, z = O.Z + lz, a = wr:NextNumber(0, 6.28) })
+		end)
+		for lz = 150, -90, -40 do
+			for _, sx in ipairs({ -1, 1 }) do table.insert(L.braziers, { x = O.X + sx * 13, z = O.Z + lz }) end
+		end
+		LAYOUT.battle = L
+	end
+
+	------------------------------------------------------------------ ⛪ THE CHURCH (every world): bosses dig out of its floor
+	for _, wid in ipairs(WORLD_ORDER) do
+		local L = LAYOUT[wid]
+		local A = L.arena
+		local C = { x = A.x, z = A.z, hw = 30, hd = 30, door = 8 }
+		-- walls are solid for monsters too (the front has a wide open door)
+		for t = -C.hw, C.hw, 3 do
+			addOb(C.x + t, C.z - C.hd, 2)
+			if math.abs(t) > C.door then addOb(C.x + t, C.z + C.hd, 2) end
+		end
+		for t = -C.hd, C.hd, 3 do
+			addOb(C.x - C.hw, C.z + t, 2)
+			addOb(C.x + C.hw, C.z + t, 2)
+		end
+		-- where everyone gets teleported when the boss rises: inside, facing the altar
+		C.inside = CFrame.lookAt(Vector3.new(C.x, 3.5, C.z + C.hd - 8), Vector3.new(C.x, 3.5, C.z))
+		L.church = C
+	end
 end
 
 local function zoneOf(wid, x, z)
@@ -554,8 +668,8 @@ for _, wid in ipairs(WORLD_ORDER) do
 	Sim.worlds[wid] = { id = wid, mobs = {}, spawnT = {}, projs = {}, hazards = {}, timers = {}, boss = nil, idleT = 0, hunters = {} }
 end
 
-local AVATAR_MULT = { grave = 1, ice = 3, jungle = 5 }
-local MOB_KINDS = { "zombie", "dog", "giant", "frozen", "thrower", "yeti", "monkey", "gas", "toxic", "avatar", "gravekeeper", "titan", "kongo" }
+local AVATAR_MULT = { grave = 1, ice = 3, jungle = 5, battle = 7 }
+local MOB_KINDS = { "zombie", "dog", "giant", "frozen", "thrower", "yeti", "monkey", "gas", "toxic", "avatar", "gravekeeper", "titan", "kongo", "battle", "metal", "miniboss", "warrior" }
 local KIND_NUM = {}
 for i, k in ipairs(MOB_KINDS) do KIND_NUM[k] = i end
 
@@ -688,7 +802,8 @@ do
 		local L = LAYOUT[wid]
 		local n = math.max(1, #W.hunters)
 		local kind = WORLDS[wid].boss
-		local b = Sim.spawn(wid, kind, L.boss, { rise = true, zone = SPAWNS[wid].bossZone, hpMult = 1 + 0.6 * (n - 1), yaw = 0 })
+		local _ = n -- (2.05: bosses have a fixed amount of health)
+		local b = Sim.spawn(wid, kind, L.boss, { rise = true, zone = SPAWNS[wid].bossZone, hpMult = 1, yaw = 0 })
 		if b then
 			W.boss = b
 			Sim.out("all", "boss", "spawn", wid, kind)
@@ -1132,7 +1247,7 @@ do
 	local function updateMob(W, m, dt, now, hs)
 		local def = m.def
 		if m.state == "rise" then
-			m.atkT += dt / MOVE_DUR.rise
+			m.atkT += dt / stateDur(def, "rise")
 			if m.atkT >= 1 then
 				m.state, m.stateT, m.atkT = "idle", 0.3, 0
 				if def.boss then
@@ -1924,7 +2039,7 @@ local fxFolder   = make("Folder", { Name = "FH2_FX", Parent = workspace })
 local mobFolder  = make("Folder", { Name = "FH2_Mobs", Parent = workspace })
 local pickFolder = make("Folder", { Name = "FH2_Pickups", Parent = workspace })
 local Folders = {} -- one folder per world, only the one you're in is in the workspace
-for _, wid in ipairs({ "cave", "grave", "ice", "jungle" }) do
+for _, wid in ipairs({ "cave", "grave", "ice", "jungle", "battle" }) do
 	Folders[wid] = make("Folder", { Name = "World_" .. wid })
 end
 
@@ -2135,6 +2250,9 @@ do
 	Lighting.GlobalShadows = true
 
 	Look.presets = {
+		battle = { clock = 18.2, bright = 2, amb = Color3.fromRGB(110, 76, 66), out = Color3.fromRGB(150, 104, 90), exp = 0.05,
+			density = 0.42, offset = 0.15, haze = 2.4, glare = 0.6, color = Color3.fromRGB(255, 170, 130), decay = Color3.fromRGB(140, 70, 56),
+			tint = Color3.fromRGB(255, 236, 220), sat = 0.12, con = 0.12, bloom = 0.6, rays = 0.1 },
 		cave = { clock = 0, bright = 1.2, amb = Color3.fromRGB(58, 46, 60), out = Color3.fromRGB(64, 52, 70), exp = 0.25,
 			density = 0.42, offset = 0, haze = 1.4, glare = 0, color = Color3.fromRGB(70, 50, 60), decay = Color3.fromRGB(30, 20, 30),
 			tint = Color3.fromRGB(255, 236, 220), sat = 0.12, con = 0.08, bloom = 0.7, rays = 0 },
@@ -2508,6 +2626,71 @@ do
 		return model, P, J, rootH
 	end
 	function LOOKS.giant(s, r) return LOOKS.zombie(s, r, true) end
+
+	-- ⚔ BATTLE WORLD: soldiers who never stopped fighting
+	local STEEL, DARK = Color3.fromRGB(150, 154, 162), Color3.fromRGB(60, 62, 68)
+	local function armSword(model, hand, s, len, col)
+		local blade = extra(model, hand, Vector3.new(0.18, len, 0.5) * s, CFrame.new(0, -0.2 * s, -(len / 2 + 0.3) * s) * CFrame.Angles(math.rad(-90), 0, 0), col, Enum.Material.Metal)
+		extra(model, blade, Vector3.new(0.3, 0.2, 1.3) * s, CFrame.new(0, -len / 2 * s, 0), DARK, Enum.Material.Metal)
+		extra(model, blade, Vector3.new(0.06, len * 0.9, 0.08) * s, CFrame.new(0, 0, 0.22 * s), Color3.fromRGB(200, 200, 206), Enum.Material.Metal)
+		return blade
+	end
+	function LOOKS.battle(s, r)
+		local skin = Color3.fromRGB(120 + r:NextInteger(-10, 10), 150 + r:NextInteger(-10, 10), 100)
+		local tunic = ({ Color3.fromRGB(140, 36, 36), Color3.fromRGB(40, 60, 120), Color3.fromRGB(90, 70, 40) })[r:NextInteger(1, 3)]
+		local model, P, J, rootH = Rigs.boy({ name = "BattleZombie", scale = s, skin = skin, shirt = tunic, pants = Color3.fromRGB(60, 50, 40),
+			sleeveL = skin, shoes = Color3.fromRGB(50, 40, 34) })
+		zFace(model, P.head, s, Color3.fromRGB(255, 70, 40), {})
+		tornClothes(model, P, s, tunic, skin, r)
+		-- dented helmet, leather chest strap, shoulder guard, rusty sword + round shield
+		extra(model, P.head, Vector3.new(1.18, 0.5, 1.12) * s, CFrame.new(0, 0.42 * s, 0), STEEL, Enum.Material.CorrodedMetal, Enum.PartType.Ball)
+		extra(model, P.head, Vector3.new(0.14, 0.5, 0.1) * s, CFrame.new(0, 0.05 * s, -0.6 * s), STEEL, Enum.Material.CorrodedMetal)
+		extra(model, P.chest, Vector3.new(0.3, 2.2, 1.08) * s, CFrame.new(0, 0, 0) * CFrame.Angles(0, 0, math.rad(35)), Color3.fromRGB(90, 60, 36), Enum.Material.Leather)
+		extra(model, P.uArmR, Vector3.new(1.15, 0.5, 1.15) * s, CFrame.new(0, 0.45 * s, 0), STEEL, Enum.Material.CorrodedMetal)
+		armSword(model, P.handR, s, 3, Color3.fromRGB(150, 120, 96))
+		local shield = extra(model, P.lArmL, Vector3.new(0.25, 2.4, 2.4) * s, CFrame.new(-0.6 * s, -0.1 * s, 0), Color3.fromRGB(120, 80, 46), Enum.Material.WoodPlanks, Enum.PartType.Cylinder)
+		extra(model, shield, Vector3.new(0.3, 0.7, 0.7) * s, CFrame.new(0, 0, 0), STEEL, Enum.Material.Metal, Enum.PartType.Cylinder)
+		return model, P, J, rootH
+	end
+	function LOOKS.metal(s, r)
+		local skin = Color3.fromRGB(110, 140, 96)
+		local model, P, J, rootH = Rigs.boy({ name = "MetalBattleZombie", scale = s, skin = skin, shirt = DARK, pants = DARK, forearm = STEEL, hands = DARK,
+			shoes = DARK, bulk = 1.1, cloth = Enum.Material.Metal })
+		-- full plate armor: helmet with a glowing visor slit, chest plate, pauldrons, knee + arm guards
+		extra(model, P.head, Vector3.new(1.25, 1.3, 1.25) * s, CFrame.new(0, 0.05 * s, 0), STEEL, Enum.Material.Metal)
+		extra(model, P.head, Vector3.new(0.9, 0.12, 0.08) * s, CFrame.new(0, 0.12 * s, -0.64 * s), Color3.fromRGB(255, 60, 30), Enum.Material.Neon)
+		extra(model, P.head, Vector3.new(0.12, 0.5, 1.3) * s, CFrame.new(0, 0.8 * s, 0), Color3.fromRGB(150, 30, 30), Enum.Material.Fabric)
+		extra(model, P.chest, Vector3.new(2.3, 1.7, 1.25) * s, CFrame.new(0, 0.05 * s, 0), STEEL, Enum.Material.Metal)
+		extra(model, P.chest, Vector3.new(0.2, 1.5, 0.08) * s, CFrame.new(0, 0, -0.65 * s), Color3.fromRGB(200, 204, 212), Enum.Material.Metal)
+		for _, side in ipairs({ "L", "R" }) do
+			local sx = side == "R" and 1 or -1
+			extra(model, P["uArm" .. side], Vector3.new(1.4, 0.7, 1.35) * s, CFrame.new(0.1 * sx * s, 0.45 * s, 0) * CFrame.Angles(0, 0, sx * 0.25), STEEL, Enum.Material.Metal)
+			extra(model, P["lLeg" .. side], Vector3.new(1.05, 0.5, 1.05) * s, CFrame.new(0, 0.45 * s, -0.05 * s), STEEL, Enum.Material.Metal)
+			for k = 0, 2 do -- rivets
+				extra(model, P["uArm" .. side], Vector3.new(0.15, 0.15, 0.15) * s, CFrame.new((0.3 * k - 0.3) * s, 0.7 * s, -0.66 * s), DARK, Enum.Material.Metal, Enum.PartType.Ball)
+			end
+		end
+		armSword(model, P.handR, s, 3.6, Color3.fromRGB(190, 196, 206))
+		return model, P, J, rootH
+	end
+	function LOOKS.warrior(s, r)
+		local model, P, J, rootH = LOOKS.metal(s, r)
+		model.Name = "WarriorBoss"
+		local gold = Color3.fromRGB(230, 180, 60)
+		-- horned crown-helmet, glowing eyes, gold trim, red cape, a GIANT greatsword
+		for _, sx in ipairs({ -1, 1 }) do
+			local horn = extra(model, P.head, Vector3.new(0.3, 1.3, 0.3) * s, CFrame.new(sx * 0.62 * s, 0.75 * s, 0) * CFrame.Angles(0, 0, -sx * 0.6), Color3.fromRGB(235, 225, 200), Enum.Material.Marble)
+			extra(model, horn, Vector3.new(0.2, 0.7, 0.2) * s, CFrame.new(0, 0.85 * s, 0) * CFrame.Angles(0, 0, sx * 0.5), Color3.fromRGB(235, 225, 200), Enum.Material.Marble)
+		end
+		extra(model, P.head, Vector3.new(1.3, 0.18, 1.3) * s, CFrame.new(0, 0.62 * s, 0), gold, Enum.Material.Metal)
+		extra(model, P.chest, Vector3.new(2.35, 0.2, 1.3) * s, CFrame.new(0, 0.8 * s, 0), gold, Enum.Material.Metal)
+		extra(model, P.chest, Vector3.new(0.7, 0.7, 0.1) * s, CFrame.new(0, 0.2 * s, -0.68 * s) * CFrame.Angles(0, 0, math.rad(45)), Color3.fromRGB(255, 50, 40), Enum.Material.Neon)
+		extra(model, P.chest, Vector3.new(2.2, 3.4, 0.12) * s, CFrame.new(0, -0.9 * s, 0.7 * s) * CFrame.Angles(math.rad(8), 0, 0), Color3.fromRGB(150, 20, 24), Enum.Material.Fabric)
+		local big = armSword(model, P.handR, s, 6.5, Color3.fromRGB(70, 70, 80))
+		extra(model, big, Vector3.new(0.08, 6, 0.12) * s, CFrame.new(0, 0.2 * s, 0.24 * s), Color3.fromRGB(255, 70, 40), Enum.Material.Neon)
+		make("PointLight", { Range = 18, Brightness = 2, Color = Color3.fromRGB(255, 80, 50), Parent = big })
+		return model, P, J, rootH
+	end
 
 	function LOOKS.frozen(s, r)
 		local skin = Color3.fromRGB(150 + r:NextInteger(-10, 10), 190 + r:NextInteger(-10, 10), 220)
@@ -3120,6 +3303,18 @@ local function buildSword(def, extraLen, sharp)
 		make("ParticleEmitter", { Rate = 10, Lifetime = NumberRange.new(0.6, 1.2), Speed = NumberRange.new(0.4, 1.5), SpreadAngle = Vector2.new(180, 180),
 			Size = NumberSequence.new(0.14, 0), Color = ColorSequence.new(Color3.fromRGB(255, 160, 40), Color3.fromRGB(170, 80, 255)), LightEmission = 1, Parent = body })
 	end
+	-- 2.05 detail: fuller groove + ricasso plate on both faces, bevelled edges, rivets on the guard
+	local dark = def.bladeC:Lerp(Color3.new(0, 0, 0), 0.4)
+	for _, sz in ipairs({ -1, 1 }) do
+		sp(Vector3.new(W * 0.16, BB * 0.7, 0.02), CFrame.new(0, y0 + BB * 0.42, sz * (T / 2 + 0.006)), dark, def.bladeM)
+		sp(Vector3.new(W * 0.62, 0.24, 0.02), CFrame.new(0, y0 + 0.14, sz * (T / 2 + 0.008)), def.guardC, Enum.Material.Metal)
+		for _, sx in ipairs({ -1, 1 }) do
+			sp(Vector3.new(0.1, 0.1, 0.06), CFrame.new(sx * 0.3, yG, sz * 0.18), def.wrapC, Enum.Material.Metal, BALL)
+		end
+	end
+	for _, sx in ipairs({ -1, 1 }) do
+		sp(Vector3.new(0.05, BB * 0.92, T * 0.55), CFrame.new(sx * (W / 2 - 0.03), y0 + BB * 0.48, 0), def.edgeC, edgeMat)
+	end
 	if def.glow then make("PointLight", { Range = 8, Brightness = 1.2, Color = def.glow, Shadows = false, Parent = body }) end
 
 	local a0 = make("Attachment", { Name = "TrailBase", Position = Vector3.new(0, y0 + 0.4, 0), Parent = handle })
@@ -3135,7 +3330,7 @@ end
 ------------------------------------------------------------------------------------------------
 local Build = { locks = {}, tunnels = {}, gate = nil }
 local CAVE_SPAWN = CFrame.lookAt(Vector3.new(0, 3.5, 36), Vector3.new(0, 3.5, 0))
-local TUNNEL_DIR = { grave = Vector3.new(0, 0, -1), ice = Vector3.new(-1, 0, 0), jungle = Vector3.new(1, 0, 0) }
+local TUNNEL_DIR = { grave = Vector3.new(0, 0, -1), ice = Vector3.new(-1, 0, 0), jungle = Vector3.new(1, 0, 0), battle = Vector3.new(0, 0, 1) }
 do
 	local CYL, BALL = Enum.PartType.Cylinder, Enum.PartType.Ball
 	local UP = CFrame.Angles(0, 0, math.pi / 2) -- turns a cylinder upright
@@ -3380,8 +3575,9 @@ do
 		-- tunnels to the three worlds
 		local info = {
 			grave = { "⚰ GRAVEYARD", "Pumpkin Patch · gates open at 120 kills", Color3.fromRGB(255, 150, 60) },
-			ice = { "❄ ICE WORLD", "500 kills · 3X COINS", Color3.fromRGB(130, 210, 255) },
-			jungle = { "🌴 JUNGLE", "800 kills · 4X COINS · HARDEST", Color3.fromRGB(130, 235, 90) },
+			ice = { "❄ ICE WORLD", "150 kills · 3X COINS", Color3.fromRGB(130, 210, 255) },
+			jungle = { "🌴 JUNGLE", "300 kills · 4X COINS", Color3.fromRGB(130, 235, 90) },
+			battle = { "⚔ BATTLE WORLD", "500 kills · 5X COINS · HARDEST", Color3.fromRGB(255, 100, 80) },
 		}
 		for wid, d in pairs(TUNNEL_DIR) do
 			local side = Vector3.new(-d.Z, 0, d.X)
@@ -3948,6 +4144,154 @@ do
 		fireflies(F, O + Vector3.new(0, 5, 0), Vector3.new(360, 8, 360), Color3.fromRGB(220, 255, 120), 10)
 		fog(F, O + Vector3.new(0, 0.8, -40), Vector3.new(340, 1, 320), Color3.fromRGB(190, 230, 170), 6)
 	end
+
+	------------------------------------------------------------------------------------------ ⛪ THE CHURCH (in every world)
+	function Build.church(wid)
+		local F, L = Folders[wid], LAYOUT[wid]
+		local C = L.church
+		if not F or not C then return end
+		local stoneC = ({ grave = Color3.fromRGB(110, 106, 116), ice = Color3.fromRGB(196, 214, 232), jungle = Color3.fromRGB(120, 124, 100),
+			battle = Color3.fromRGB(120, 100, 92) })[wid] or Color3.fromRGB(110, 106, 116)
+		local mat = (wid == "ice") and Enum.Material.Glacier or Enum.Material.Brick
+		local cx, cz, hw, hd = C.x, C.z, C.hw, C.hd
+		local H = 20
+		local function wall(cf, size) part({ Size = size, CFrame = cf, Material = mat, Color = stoneC, Parent = F }) end
+		-- floor + aisle carpet
+		part({ Size = Vector3.new(hw * 2, 0.4, hd * 2), CFrame = CFrame.new(cx, 0.1, cz), Material = Enum.Material.Marble, Color = Color3.fromRGB(70, 66, 74), CanCollide = false, Parent = F })
+		part({ Size = Vector3.new(7, 0.45, hd * 2 - 6), CFrame = CFrame.new(cx, 0.12, cz + 3), Material = Enum.Material.Fabric, Color = Color3.fromRGB(130, 24, 34), CanCollide = false, Parent = F })
+		-- walls (front has a wide door)
+		wall(CFrame.new(cx, H / 2, cz - hd), Vector3.new(hw * 2 + 2, H, 2))
+		wall(CFrame.new(cx - hw, H / 2, cz), Vector3.new(2, H, hd * 2))
+		wall(CFrame.new(cx + hw, H / 2, cz), Vector3.new(2, H, hd * 2))
+		local side = hw - C.door
+		wall(CFrame.new(cx - C.door - side / 2, H / 2, cz + hd), Vector3.new(side, H, 2))
+		wall(CFrame.new(cx + C.door + side / 2, H / 2, cz + hd), Vector3.new(side, H, 2))
+		wall(CFrame.new(cx, H - 3, cz + hd), Vector3.new(C.door * 2, 6, 2))
+		-- gabled roof (high, so the camera has room) + front gable + bell tower with a cross
+		for _, sx in ipairs({ -1, 1 }) do
+			part({ Size = Vector3.new(hw * 1.2, 1.5, hd * 2 + 6), CFrame = CFrame.new(cx + sx * hw * 0.5, H + 8, cz) * CFrame.Angles(0, 0, sx * -0.5),
+				Material = Enum.Material.Slate, Color = Color3.fromRGB(56, 44, 48), Parent = F })
+		end
+		local tower = CFrame.new(cx, 0, cz + hd + 4)
+		part({ Size = Vector3.new(12, 38, 8), CFrame = tower * CFrame.new(0, 19 + 4, 0), Material = mat, Color = stoneC:Lerp(Color3.new(0, 0, 0), 0.08), Parent = F })
+		part({ Size = Vector3.new(C.door * 2, 4, 9), CFrame = tower * CFrame.new(0, 2, 0), Transparency = 1, CanCollide = false, Parent = F })
+		wedge({ Size = Vector3.new(12, 8, 8), CFrame = tower * CFrame.new(0, 46, 0), Material = Enum.Material.Slate, Color = Color3.fromRGB(56, 44, 48), Parent = F })
+		part({ Size = Vector3.new(0.8, 6, 0.8), CFrame = tower * CFrame.new(0, 53, 0), Material = Enum.Material.Metal, Color = GOLD, Parent = F })
+		part({ Size = Vector3.new(3.2, 0.8, 0.8), CFrame = tower * CFrame.new(0, 54, 0), Material = Enum.Material.Metal, Color = GOLD, Parent = F })
+		local bell = part({ Shape = BALL, Size = Vector3.new(4, 4, 4), CFrame = tower * CFrame.new(0, 33, 0), Material = Enum.Material.Metal, Color = Color3.fromRGB(190, 150, 70), CanCollide = false, Parent = F })
+		bell.Name = "ChurchBell"
+		-- stained glass windows
+		local glassC = { Color3.fromRGB(255, 80, 80), Color3.fromRGB(80, 160, 255), Color3.fromRGB(255, 200, 60), Color3.fromRGB(150, 80, 255) }
+		for i = -2, 2 do
+			for _, sx in ipairs({ -1, 1 }) do
+				part({ Size = Vector3.new(0.4, 8, 4), CFrame = CFrame.new(cx + sx * (hw - 1.05), 11, cz + i * 11), Material = Enum.Material.Neon, Color = glassC[(i + sx + 5) % 4 + 1],
+					Transparency = 0.25, CanCollide = false, CastShadow = false, Parent = F })
+			end
+		end
+		local rose = part({ Shape = CYL, Size = Vector3.new(0.4, 9, 9), CFrame = CFrame.new(cx, 13, cz - hd + 1.05) * CFrame.Angles(0, math.pi / 2, 0),
+			Material = Enum.Material.Neon, Color = Color3.fromRGB(200, 90, 255), Transparency = 0.2, CanCollide = false, CastShadow = false, Parent = F })
+		Perf.light({ Range = 40, Brightness = 2, Color = Color3.fromRGB(220, 160, 255), Key = true, Parent = rose })
+		-- altar + candles
+		part({ Size = Vector3.new(10, 3, 4), CFrame = CFrame.new(cx, 1.5, cz - hd + 5), Material = Enum.Material.Marble, Color = Color3.fromRGB(230, 226, 220), Parent = F })
+		part({ Size = Vector3.new(10.4, 0.3, 4.4), CFrame = CFrame.new(cx, 3.1, cz - hd + 5), Material = Enum.Material.Fabric, Color = Color3.fromRGB(150, 30, 40), CanCollide = false, Parent = F })
+		for k = -2, 2 do
+			local cnd = part({ Size = Vector3.new(0.4, 1.2, 0.4), CFrame = CFrame.new(cx + k * 2, 3.8, cz - hd + 5), Material = Enum.Material.SmoothPlastic, Color = Color3.fromRGB(245, 240, 220), Parent = F })
+			part({ Size = Vector3.new(0.25, 0.4, 0.25), CFrame = cnd.CFrame * CFrame.new(0, 0.8, 0), Material = Enum.Material.Neon, Color = Color3.fromRGB(255, 190, 80), CanCollide = false, Parent = F })
+		end
+		-- pews (looks only: the boss fight needs room)
+		for row = 0, 3 do
+			for _, sx in ipairs({ -1, 1 }) do
+				local pz = cz + hd - 12 - row * 5
+				part({ Size = Vector3.new(11, 1.2, 2), CFrame = CFrame.new(cx + sx * 15, 1.2, pz), Material = Enum.Material.WoodPlanks, Color = Color3.fromRGB(96, 62, 40), CanCollide = false, Parent = F })
+				part({ Size = Vector3.new(11, 2.4, 0.4), CFrame = CFrame.new(cx + sx * 15, 2.4, pz + 1), Material = Enum.Material.WoodPlanks, Color = Color3.fromRGB(86, 56, 36), CanCollide = false, Parent = F })
+			end
+		end
+		-- the cracked spot where the boss digs out
+		for k = 0, 7 do
+			local a = k / 8 * math.pi * 2
+			part({ Size = Vector3.new(0.5, 0.12, 6), CFrame = CFrame.new(cx + math.cos(a) * 3, 0.36, cz + math.sin(a) * 3) * CFrame.Angles(0, -a + math.pi / 2, 0),
+				Material = Enum.Material.Neon, Color = Color3.fromRGB(255, 80, 40), CanCollide = false, CastShadow = false, Parent = F })
+		end
+		for _, sx in ipairs({ -1, 1 }) do torch(F, Vector3.new(cx + sx * 11, 4, cz + hd + 1.5), true) end
+		sign(F, CFrame.new(cx, 22.5, cz + hd + 1.2), Vector3.new(16, 3, 0.5), "⛪ THE CHURCH", "bosses rise here", Color3.fromRGB(40, 32, 30), Color3.fromRGB(255, 220, 160))
+	end
+
+	------------------------------------------------------------------------------------------ ⚔ BATTLE WORLD
+	function Build.battle()
+		local F, L = Folders.battle, LAYOUT.battle
+		local O = L.o
+		edges(F, O, { rock = Color3.fromRGB(96, 70, 60), ground = Color3.fromRGB(122, 96, 70), groundMat = Enum.Material.Ground })
+		-- scorched ground patches + the road to the church
+		part({ Size = Vector3.new(18, 0.2, 280), Position = O + Vector3.new(0, 0.08, 30), Material = Enum.Material.Cobblestone, Color = Color3.fromRGB(100, 92, 88), CanCollide = false, Parent = F })
+		for i = 1, 30 do
+			local x, z, s = vr:NextNumber(-180, 180), vr:NextNumber(-200, 160), vr:NextNumber(8, 22)
+			if Perf.keep(i) then
+				part({ Size = Vector3.new(s, 0.2, s * 0.8), CFrame = CFrame.new(O.X + x, 0.06, O.Z + z) * CFrame.Angles(0, vr:NextNumber(0, 3), 0), Material = Enum.Material.Sand,
+					Color = Color3.fromRGB(70, 56, 46), CanCollide = false, CastShadow = false, Parent = F })
+			end
+		end
+		-- broken watch towers
+		for _, t in ipairs(L.towers) do
+			local cf = CFrame.new(t.x, 0, t.z) * CFrame.Angles(0, t.a, 0)
+			part({ Size = Vector3.new(10, t.h, 10), CFrame = cf * CFrame.new(0, t.h / 2, 0), Material = Enum.Material.Cobblestone, Color = Color3.fromRGB(110, 104, 100), Parent = F })
+			for k = 0, 3 do
+				part({ Size = Vector3.new(2.6, 3, 2.6), CFrame = cf * CFrame.Angles(0, k * math.pi / 2, 0) * CFrame.new(3.8, t.h + 1.5, 3.8), Material = Enum.Material.Cobblestone,
+					Color = Color3.fromRGB(100, 94, 90), Parent = F })
+			end
+			part({ Size = Vector3.new(0.4, 8, 0.4), CFrame = cf * CFrame.new(0, t.h + 4, 0), Material = Enum.Material.Wood, Color = Color3.fromRGB(70, 50, 36), Parent = F })
+			part({ Size = Vector3.new(0.1, 3, 5), CFrame = cf * CFrame.new(0, t.h + 6.4, 2.5), Material = Enum.Material.Fabric, Color = Color3.fromRGB(170, 30, 30), CanCollide = false, Parent = F })
+		end
+		-- army tents
+		for _, t in ipairs(L.tents) do
+			local cf = CFrame.new(t.x, 0, t.z) * CFrame.Angles(0, t.a, 0)
+			local col = t.red and Color3.fromRGB(150, 40, 36) or Color3.fromRGB(196, 180, 140)
+			for _, sx in ipairs({ -1, 1 }) do
+				part({ Size = Vector3.new(0.3, 6.4, 8), CFrame = cf * CFrame.new(sx * 2.2, 2.6, 0) * CFrame.Angles(0, 0, sx * 0.6), Material = Enum.Material.Fabric, Color = col, Parent = F })
+			end
+			part({ Size = Vector3.new(0.4, 5.6, 0.4), CFrame = cf * CFrame.new(0, 2.8, 4), Material = Enum.Material.Wood, Color = Color3.fromRGB(80, 56, 36), Parent = F })
+		end
+		-- spiked wooden barricades
+		for _, b in ipairs(L.barricades) do
+			local cf = CFrame.new(b.x, 0, b.z) * CFrame.Angles(0, b.a, 0)
+			part({ Size = Vector3.new(6, 0.6, 0.6), CFrame = cf * CFrame.new(0, 1.2, 0), Material = Enum.Material.Wood, Color = Color3.fromRGB(96, 70, 44), Parent = F })
+			for k = -1, 1 do
+				for _, sx in ipairs({ -1, 1 }) do
+					part({ Size = Vector3.new(0.4, 4, 0.4), CFrame = cf * CFrame.new(k * 2.4, 1.6, 0) * CFrame.Angles(sx * 0.7, 0, 0), Material = Enum.Material.Wood,
+						Color = Color3.fromRGB(110, 80, 50), Parent = F })
+				end
+			end
+		end
+		for _, r in ipairs(L.rocks) do
+			part({ Size = Vector3.new(r.s, r.s * 0.7, r.s * 1.1), CFrame = CFrame.new(r.x, r.s * 0.25, r.z) * CFrame.Angles(r.t, r.a, r.t * 0.5), Material = Enum.Material.Slate,
+				Color = Color3.fromRGB(104, 92, 86), Parent = F })
+		end
+		-- weapon racks with old swords + shields
+		for _, w in ipairs(L.racks) do
+			local cf = CFrame.new(w.x, 0, w.z) * CFrame.Angles(0, w.a, 0)
+			part({ Size = Vector3.new(3, 0.3, 0.3), CFrame = cf * CFrame.new(0, 2.6, 0), Material = Enum.Material.Wood, Color = Color3.fromRGB(80, 56, 36), Parent = F })
+			for _, sx in ipairs({ -1.4, 1.4 }) do
+				part({ Size = Vector3.new(0.3, 3, 0.3), CFrame = cf * CFrame.new(sx, 1.5, 0), Material = Enum.Material.Wood, Color = Color3.fromRGB(80, 56, 36), Parent = F })
+			end
+			for k = -1, 1 do
+				part({ Size = Vector3.new(0.3, 3.2, 0.08), CFrame = cf * CFrame.new(k * 0.8, 2.2, 0.25) * CFrame.Angles(0, 0, 0.12 * k), Material = Enum.Material.Metal,
+					Color = Color3.fromRGB(170, 170, 176), CanCollide = false, Parent = F })
+			end
+			part({ Shape = CYL, Size = Vector3.new(0.3, 2.2, 2.2), CFrame = cf * CFrame.new(0, 1.2, -0.4) * CFrame.Angles(0, math.pi / 2, 0), Material = Enum.Material.Metal,
+				Color = Color3.fromRGB(140, 40, 36), CanCollide = false, Parent = F })
+		end
+		-- fire braziers along the road
+		for i, b in ipairs(L.braziers) do
+			part({ Size = Vector3.new(0.6, 4, 0.6), Position = Vector3.new(b.x, 2, b.z), Material = Enum.Material.Metal, Color = Color3.fromRGB(50, 46, 44), Parent = F })
+			local bowl = part({ Shape = CYL, Size = Vector3.new(1, 2.4, 2.4), CFrame = CFrame.new(b.x, 4.4, b.z) * UP, Material = Enum.Material.Metal, Color = Color3.fromRGB(60, 54, 50), Parent = F })
+			make("Fire", { Size = 3.5, Heat = 8, Color = Color3.fromRGB(255, 140, 40), SecondaryColor = Color3.fromRGB(255, 60, 20), Parent = bowl })
+			if i % 3 == 1 then Perf.light({ Range = 22, Brightness = 1.8, Color = Color3.fromRGB(255, 150, 70), Parent = bowl }) end
+		end
+		sign(F, CFrame.new(O + Vector3.new(16, 4, 172)) * CFrame.Angles(0, math.rad(-20), 0), Vector3.new(11, 3.6, 0.4), "⚔ BATTLE WORLD", "5X coins · stay sharp!",
+			Color3.fromRGB(60, 30, 26), Color3.fromRGB(255, 120, 90))
+		part({ Size = Vector3.new(0.4, 4, 0.4), CFrame = CFrame.new(O + Vector3.new(16, 2, 172.4)), Material = Enum.Material.Wood, Color = Color3.fromRGB(80, 56, 36), Parent = F })
+		fog(F, O + Vector3.new(0, 0.8, -40), Vector3.new(340, 1, 320), Color3.fromRGB(150, 110, 100), 5)
+		fireflies(F, O + Vector3.new(0, 5, 0), Vector3.new(360, 8, 360), Color3.fromRGB(255, 130, 60), 8)
+	end
 end
 
 ------------------------------------------------------------------------------------------------
@@ -4069,8 +4413,9 @@ do
 	HUD.candyFill = make("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = CANDY, Parent = cbar })
 	UI.corner(HUD.candyFill, 3)
 	HUD.killPill, HUD.killLabel, HUD.killScale = stat(3, "💀", Color3.fromRGB(200, 200, 210), 140)
+	row1.Visible = false -- 2.05: a clean screen (coins, candy + kills live in the ⚔ Swords menu)
 
-	local row2 = make("Frame", { Position = UDim2.fromOffset(0, 50), Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, Parent = tc })
+	local row2 = make("Frame", { Position = UDim2.fromOffset(0, 4), Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, Parent = tc })
 	make("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Center, Padding = UDim.new(0, 8),
 		VerticalAlignment = Enum.VerticalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder, Parent = row2 })
 	local banner = UI.pill(row2, UDim2.fromOffset(290, 34), UDim2.new())
@@ -4079,11 +4424,12 @@ do
 	HUD.bannerText = UI.text({ Text = "🎃 2X HALLOWEEN EVENT 🎃", Size = UDim2.new(1, -16, 1, -8), Position = UDim2.fromOffset(8, 4), TextColor3 = Color3.fromRGB(255, 160, 40),
 		Stroke = 2.4, Parent = banner })
 	HUD.bannerScale = make("UIScale", { Parent = banner })
+	banner.Visible = false
 	local bt = UI.pill(row2, UDim2.fromOffset(230, 34), UDim2.new())
 	bt.LayoutOrder = 2
 	HUD.bossTimer = UI.text({ Text = "👹 Boss in 10:00", Size = UDim2.new(1, -12, 1, -6), Position = UDim2.fromOffset(6, 3), Stroke = 2, Parent = bt })
 	HUD.bossTimerPill = bt
-	local bb = UI.panel({ AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 92), Size = UDim2.fromOffset(340, 50), Visible = false, Parent = tc })
+	local bb = UI.panel({ AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 46), Size = UDim2.fromOffset(340, 50), Visible = false, Parent = tc })
 	HUD.bossName = UI.text({ Text = "BOSS", Size = UDim2.new(1, -16, 0, 20), Position = UDim2.fromOffset(8, 3), Stroke = 2.4, Parent = bb })
 	local bback = make("Frame", { Position = UDim2.fromOffset(10, 26), Size = UDim2.new(1, -20, 0, 16), BackgroundColor3 = UI.INK, Parent = bb })
 	UI.corner(bback, 8)
@@ -4097,6 +4443,7 @@ do
 	local tl = make("Frame", { AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 12, 0.56, 0), Size = UDim2.fromOffset(240, 262), BackgroundTransparency = 1, Parent = root })
 	HUD.leftCol = tl
 	local wp = UI.pill(tl, UDim2.fromOffset(230, 36), UDim2.new())
+	wp.Visible = false
 	HUD.worldLabel = UI.text({ Text = "🕯 THE CAVE", Size = UDim2.new(1, -14, 1, -8), Position = UDim2.fromOffset(7, 4), TextXAlignment = Enum.TextXAlignment.Left, Stroke = 2.2, Parent = wp })
 	HUD.menuButtons = {}
 	local menus = { { "worlds", "🗺", "Worlds" }, { "swords", "⚔", "Swords" }, { "settings", "⚙", "Settings" } }
@@ -4106,6 +4453,8 @@ do
 		label.Size = UDim2.new(1, -12, 0.62, 0)
 		UI.text({ Text = m[3], Size = UDim2.new(1, -4, 0.3, 0), Position = UDim2.new(0, 2, 0.66, 0), Stroke = 2, MaxText = 14, Parent = face })
 		HUD.menuButtons[m[1]] = face
+		-- 2.05: only Swords + Settings on screen (walk through the cave tunnels to change worlds)
+		if m[1] == "worlds" then face.Visible = false else face.Position = UDim2.fromOffset(0, 46 + (i - 2) * 72) end
 	end
 
 	-- bottom centre: health bar + status icons
@@ -4125,7 +4474,7 @@ do
 	-- bottom left: PC keys
 	HUD.keys = UI.text({ Text = "🖱 Click / F  Swing   ·   Shift  Sprint   ·   Q  Dash   ·   E  Talk\n1-5  Swords   ·   M  Worlds   ·   G  Sword bag   ·   H  Home",
 		AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 12, 1, -10), Size = UDim2.fromOffset(420, 38), TextXAlignment = Enum.TextXAlignment.Left,
-		TextColor3 = Color3.fromRGB(230, 230, 235), Stroke = 1.6, MaxText = 14, Parent = root })
+		TextColor3 = Color3.fromRGB(230, 230, 235), Stroke = 1.6, MaxText = 14, Visible = false, Parent = root })
 
 	-- toasts
 	HUD.toasts = make("Frame", { AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0.27, 0), Size = UDim2.fromOffset(460, 220), BackgroundTransparency = 1, Parent = root })
@@ -4809,8 +5158,11 @@ do
 		local def = SWORD_BY_ID[id] or SWORDS[1]
 		local isMe = ca.plr == player
 		local model, handle, info = buildSword(def, isMe and S.levels.range * 0.12 or 0, isMe and S.levels.damage >= 5)
-		local offsetY = ca.r15 and -(hand.Size.Y * 0.15) or -1
-		make("Weld", { Name = "FH_SwordGrip", Part0 = hand, Part1 = handle, C0 = CFrame.new(0, offsetY, 0) * CFrame.Angles(math.rad(-90), 0, 0),
+		-- 2.05: the grip sits exactly where Roblox tools are held (the hand's grip attachment), so the sword is IN your hand
+		local att = hand:FindFirstChild("RightGripAttachment")
+		local gripPos = (att and att:IsA("Attachment")) and att.Position or Vector3.new(0, ca.r15 and -(hand.Size.Y * 0.15) or -1, 0)
+		gripPos = Vector3.new(0, math.clamp(gripPos.Y, -hand.Size.Y / 2, hand.Size.Y / 2), 0)
+		make("Weld", { Name = "FH_SwordGrip", Part0 = hand, Part1 = handle, C0 = CFrame.new(gripPos) * CFrame.Angles(math.rad(-90), 0, 0),
 			C1 = CFrame.new(), Parent = handle })
 		model.Parent = ca.char
 		ca.sword, ca.swordInfo = model, info
@@ -5294,7 +5646,7 @@ do
 			HUD.leftCol.Position = UDim2.new(0, 12, touch and 0.47 or 0.56, 0)
 		end
 		gui.Enabled = touch and S.playing and not S.dead and not S.talking
-		HUD.keys.Visible = not touch and S.playing
+		HUD.keys.Visible = false
 	end)
 end
 ------------------------------------------------------------------------------------------------
@@ -5316,7 +5668,8 @@ do
 	local function has(flags, bit) return bit32.band(flags or 0, bit) ~= 0 end
 	-- how each monster walks
 	local GAIT = { zombie = "shamble", avatar = "shamble", giant = "stomp", frozen = "stiff", thrower = "thrower", yeti = "stomp",
-		monkey = "gallop", kongo = "gallop", gas = "carry", toxic = "wobble", gravekeeper = "stomp", titan = "stomp" }
+		monkey = "gallop", kongo = "gallop", gas = "carry", toxic = "wobble", gravekeeper = "stomp", titan = "stomp",
+		battle = "shamble", metal = "stiff", miniboss = "gallop", warrior = "stomp" }
 
 	------------------------------------------------------------------------------------------ pose tables (x, y, z rotation per joint + body offset)
 	local JN = { "Root", "Waist", "Neck", "ShoulderL", "ElbowL", "WristL", "ShoulderR", "ElbowR", "WristR",
@@ -6006,6 +6359,7 @@ do
 			copyPose(ac, lo)
 			act(v, ac, v.atkT, now)
 		end
+		if not act then blendPose(ac, ac, lo, math.min(1, dt * 10)) end -- the old move melts back into walking
 		v.actW += ((act and 1 or 0) - v.actW) * math.min(1, dt * (act and 16 or 6))
 		blendPose(fp, lo, ac, v.actW)
 		hurtOverlay(v, fp, dt)
@@ -6606,7 +6960,7 @@ do
 		if def.boss then
 			S.kills += 1
 			S.coins += def.reward
-			S.candies += def.candy or 0
+			S.candies += (EVENT_MULT > 1) and (def.candy or 0) or 0
 			markDirty()
 			Player.pulseCoins()
 			Celebrate.show("🏆 " .. string.upper(def.name) .. " DEFEATED!", "+" .. commas(def.reward) .. " coins  ·  +" .. (def.candy or 0) .. " 🍬 candy", GOLD, 5)
@@ -6620,7 +6974,7 @@ do
 			local mult = (WORLDS[S.world] and WORLDS[S.world].mult or 1) * EVENT_MULT
 			Pickups.dropCoins(pos, math.max(1, def.reward * mult))
 			local chance = (def.id == "avatar") and 1 or ((def.ai == "slam") and 0.6 or 0.3)
-			if rng:NextNumber() < chance then Pickups.dropCandy(pos, 1) end
+			if EVENT_MULT > 1 and rng:NextNumber() < chance then Pickups.dropCandy(pos, 1) end
 			HUD.killScale.Scale = 1.2
 			tween(HUD.killScale, 0.25, { Scale = 1 }, Enum.EasingStyle.Back)
 		end
@@ -6705,7 +7059,7 @@ do
 				if not L.blocked(lx, lz, 2) and circleFree(O.X + lx, O.Z + lz, 2) then
 					local wantGate = S.world ~= "grave" or lz > 0 or S.kills >= GRAVE_GATE_KILLS
 					if wantGate then
-						if candies < 2 and rng:NextNumber() < 0.25 then
+						if candies < 2 and EVENT_MULT > 1 and rng:NextNumber() < 0.25 then
 							makeCandy(O + Vector3.new(lx, 3, lz), false)
 						elseif coins < 10 then
 							makeCoin(O + Vector3.new(lx, 3, lz), 5 * WORLDS[S.world].mult * EVENT_MULT, false)
@@ -6719,7 +7073,7 @@ do
 end
 
 ------------------------------------------------------------------------------------------------
--- 🔓 UNLOCKING WORLDS (120 kills: graveyard gates · 500: Ice World · 800: Jungle)
+-- 🔓 UNLOCKING WORLDS (120 kills: graveyard gates · 150: Ice World · 300: Jungle · 500: Battle World)
 ------------------------------------------------------------------------------------------------
 do
 	local seen = {}
@@ -6885,6 +7239,7 @@ do
 		grave  = { mCave = 0, mWorld = 0.4, day = 0, night = 0.45, ghost = 0.3, wind = 0.2 },
 		ice    = { mCave = 0, mWorld = 0.32, day = 0, night = 0, ghost = 0.05, wind = 0.6 },
 		jungle = { mCave = 0, mWorld = 0.34, day = 0.55, night = 0.15, ghost = 0, wind = 0.08 },
+		battle = { mCave = 0, mWorld = 0.42, day = 0, night = 0.2, ghost = 0.1, wind = 0.35 },
 	}
 	Amb.boss = false
 	function Amb.set(wid)
@@ -6930,7 +7285,7 @@ do
 			for _, wid in ipairs(WORLD_ORDER) do
 				local w = WORLDS[wid]
 				local info = (wid == "grave") and ("Free! · Graveyard gates at " .. GRAVE_GATE_KILLS .. " kills · coins x" .. w.mult)
-					or (w.need .. " kills · coins x" .. w.mult .. (wid == "jungle" and " · HARDEST" or ""))
+					or (w.need .. " kills · coins x" .. w.mult .. (wid == "battle" and " · HARDEST" or ""))
 				table.insert(rows, { wid, w.name, info, w.need })
 			end
 			for i, r in ipairs(rows) do
@@ -6960,6 +7315,9 @@ do
 				end)
 			end
 		elseif name == "swords" then
+			local top = Menu.row(m.list, 44, 0)
+			UI.text({ Text = "💰 " .. commas(S.coins) .. "     🍬 " .. S.candies .. " / " .. CANDY_GOAL .. "     💀 " .. commas(S.kills) .. " kills",
+				Position = UDim2.fromOffset(12, 6), Size = UDim2.new(1, -24, 1, -12), Stroke = 2.4, Parent = top })
 			for i, def in ipairs(SWORDS) do
 				local owned, equipped = S.owned[def.id], S.equipped == def.id
 				local row = Menu.row(m.list, 78, i)
@@ -7072,7 +7430,7 @@ local LINES = {
 	huh = { "Huh? Say that again, my headlamp was buzzing.", "Hehe, okay!", "Interesting... anyway, wanna buy a sword?",
 		"I have no idea what that means but I like your energy." },
 	who = "I'm Gus! I used to hunt zombies, but one chewed on my backpack and I got SCARED. So now I sell swords to brave people like YOU. Way safer!",
-	worlds = "Three tunnels, three worlds! The Graveyard is north — the Pumpkin Patch is free, its gates open at 120 kills. Ice World needs 500 kills and pays 3X. The Jungle needs 800 kills and pays 4X... but it's NASTY out there.",
+	worlds = "Four tunnels, four worlds! The Graveyard is north — the Pumpkin Patch is free, its gates open at 120 kills. Ice World needs 150 kills and pays 3X. The Jungle needs 300 kills and pays 4X. Battle World needs 500 kills and pays 5X... and it's PACKED with zombies.",
 	boss = "Every 10 minutes a BOSS rises in every world! The Gravekeeper, the Frost Titan, and King Kongo in the Jungle. Kongo pays 5,000 coins! Bring friends — everybody who helps gets paid.",
 	tips = { "Click fast for a full combo! Every sword swings differently.", "Press Q to dash — nothing can hit you mid-dash!",
 		"Hold Shift to sprint. Zombies are slow... mostly.", "Toxic zombies make you SICK. Come back to the cave to feel better!",
@@ -7750,13 +8108,59 @@ On.profile = function(data, canSave)
 	profileReady = true
 end
 
+-- ⛪ a boss rises: everyone in that world is pulled into the church to watch it dig out of the floor and ROAR
+local function bossCutscene(wid)
+	local C = LAYOUT[wid] and LAYOUT[wid].church
+	if not C or not S.playing or S.dead or S.traveling or S.world ~= wid then return end
+	S.cutscene = true
+	S.iframes = math.max(S.iframes, os.clock() + BOSS_RISE + 3)
+	if Gus.talking then Gus.close(false) end
+	Player.placeAt(C.inside * CFrame.new(rng:NextNumber(-7, 7), 0, rng:NextNumber(-2, 2)))
+	local root = getRoot()
+	if root then root.Anchored = true end
+	local cam = workspace.CurrentCamera
+	if cam then cam.CameraType = Enum.CameraType.Scriptable end
+	local bossPos = Vector3.new(C.x, 0, C.z)
+	local t0, nextShake = os.clock(), 0
+	local total = BOSS_RISE + 2
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local t = os.clock() - t0
+		local u = math.clamp(t / total, 0, 1)
+		cam = workspace.CurrentCamera
+		if cam then
+			local swing = math.sin(u * 1.4 - 0.7)
+			cam.CFrame = CFrame.lookAt(bossPos + Vector3.new(swing * 22, 6 + u * 7, 26 - u * 6), bossPos + Vector3.new(0, 2 + u * 10, 0))
+		end
+		if t < BOSS_RISE and t > nextShake then -- the floor cracks and shakes while it digs
+			nextShake = t + 0.35
+			shake(0.12 + 0.25 * (t / BOSS_RISE), 0.3)
+			FX.burst(FX.dust, bossPos + Vector3.new(rng:NextNumber(-3, 3), 0.5, rng:NextNumber(-3, 3)), 8)
+			if rng:NextNumber() < 0.5 then playSfx("dirt", bossPos, { vol = 0.8, vary = 0.2 }) end
+		end
+		if t >= total or S.world ~= wid or S.dead then
+			conn:Disconnect()
+			S.cutscene = false
+			cam = workspace.CurrentCamera
+			if cam then
+				cam.CameraType = Enum.CameraType.Custom
+				local hum = getHum()
+				if hum then cam.CameraSubject = hum end
+			end
+			local r = getRoot()
+			if r then r.Anchored = false end
+		end
+	end)
+end
+
 On.boss = function(phase, wid, kind)
 	local def = MOBS[kind]
 	local w = WORLDS[wid]
 	if not def or not w then return end
 	if phase == "spawn" then
 		if wid == S.world then
-			Celebrate.show("👹 " .. string.upper(def.name) .. " HAS RISEN!", "Beat it (with friends!) for " .. commas(def.reward) .. " coins + candy", Color3.fromRGB(255, 80, 70), 4)
+			task.spawn(bossCutscene, wid)
+			Celebrate.show("👹 " .. string.upper(def.name) .. " HAS RISEN!", "⛪ Into the church! Beat it (with friends!) for " .. commas(def.reward) .. " coins", Color3.fromRGB(255, 80, 70), 4)
 			playSfx("roar", nil, { pitch = 0.55, vol = 1.2 })
 			shake(0.4, 1)
 		else
@@ -7972,7 +8376,13 @@ end)
 
 local rigCheck, saveT, lockMsgAt, auroraT = 0, 0, 0, 0
 local snow
+local eventT = 0
 RunService.Heartbeat:Connect(function(dt)
+	eventT -= dt
+	if eventT <= 0 then -- 🎃 the Halloween event ends on November 1st
+		eventT = 5
+		EVENT_MULT = eventOn() and 2 or 1
+	end
 	if not worldReady or not S.playing then return end
 	local now = os.clock()
 	local root, hum = getRoot(), getHum()
@@ -8108,6 +8518,8 @@ local function buildEverything()
 		{ "Carving pumpkins...", Build.grave },
 		{ "Freezing Ice World...", Build.ice },
 		{ "Growing the jungle...", Build.jungle },
+		{ "Raising the battlefield...", Build.battle },
+		{ "Building the churches...", function() for _, wid in ipairs(WORLD_ORDER) do Build.church(wid) end end },
 	}
 	for i, st in ipairs(steps) do
 		Intro.status.Text = st[1]
