@@ -1,7 +1,7 @@
 # Cool-
 Wow
 
-## ⚔️🎃 Forest Hunt 2.05 — Halloween 2X Event (Roblox)
+## ⚔️🎃 Forest Hunt 2.06 — Halloween 2X Event (Roblox)
 
 The whole game is one file: [`ForestHunt_V2.lua`](ForestHunt_V2.lua).
 
@@ -22,11 +22,19 @@ Delete any old Forest Hunt 1.0 scripts first.
 | E — talk to Gus | tap "Talk" |
 | 1–5 — switch sword · M — worlds · G — sword bag · H — go home | menu buttons, top left |
 
+### What's new in 2.06
+- **Your sword stays in your hand.** Every piece is held with exact welds, the sword is placed in your palm before it's attached, leftover copies are cleared, and a loose sword re-attaches itself.
+- **A brand-new detailed church** for every boss fight: bell tower with clock and spire, stained glass, rose window, pillars, chandeliers, organ pipes, pews, altar, banners (frosty in Ice World, mossy in the Jungle, red in Battle World).
+- **More detailed zombies and bosses**, and the **Jungle Miniboss** has its own silverback look (bone crown, war paint, bone club).
+- **A bigger, brighter cave:** lantern posts, hanging lanterns, light shafts, mine supports, crates and barrels, a stream with a bridge, glowing mushrooms, a cooking pot and a tunnel signpost.
+- **Coins** (and candy during the event), **Travel** and the **Boss Timer** are back on screen.
+- **New main menu:** event countdown, your avatar and progress, Updates / Worlds / Controls tabs.
+- Fixes: the church bell tower no longer blocks the door; trees and statues no longer grow in front of church doors.
+
 ### What's new in 2.05
 - **⚔ Battle World** (500 kills, **5X coins**): packed with Battle Zombies, Metal Battle Zombies and Jungle Minibosses, plus **the Warrior Boss (10,000 health)**.
 - **⛪ Boss church:** when a boss rises, everyone in that world is pulled into the church to watch it dig out of the floor and roar. Bosses have **5,500 health**.
 - **Pumpkin Overnight Sword hits for 800.** Ice World unlocks at **150** kills, Jungle at **300**.
-- **Clean screen:** only Swords, Settings, Health and the Boss Timer. Coins, candy and kills are at the top of the Swords menu; walk through the cave tunnels to change worlds.
 - Swords sit in your hand (Roblox's grip point) and have more detail. Monster moves blend back into walking more smoothly.
 - The 2X Halloween event **ends November 1st**.
 

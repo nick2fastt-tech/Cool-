@@ -1,5 +1,5 @@
 --[[
-	⚔️🎃  FOREST HUNT 2.05  —  HALLOWEEN 2X EVENT  —  ONE SCRIPT
+	⚔️🎃  FOREST HUNT 2.06  —  HALLOWEEN 2X EVENT  —  ONE SCRIPT
 	=====================================================================
 	The WHOLE game is this one file. It works in two places:
 
@@ -26,14 +26,25 @@
 	  Mobile : ⚔ swing button · 💨 dash button · 🏃 sprint toggle · walk up to Gus and tap "Talk"
 	  Chat   : stand near Gus and type ("hi gus", "upgrade", "sword", "boss", "candy", "joke"...)
 
+	WHAT'S NEW IN 2.06
+	  • Your sword stays IN your hand: every piece is held with exact welds, the sword is placed
+	    in your palm before it's attached, old copies are cleared, and a loose sword re-attaches.
+	  • A brand-new, super detailed church for every boss fight (bell tower with a clock and
+	    spire, stained glass, rose window, pillars, chandeliers, organ, pews, altar, banners).
+	  • More detailed zombies + bosses, and the Jungle Miniboss has its own silverback look.
+	  • A bigger, brighter cave: lantern posts, hanging lanterns, light shafts, mine supports,
+	    crates, a stream with a bridge, glowing mushrooms, a cooking pot and a tunnel signpost.
+	  • Coins (+ candy during the event), Travel and the Boss Timer are back on screen.
+	  • A new main menu: event countdown, your avatar + progress, Updates/Worlds/Controls tabs.
+	  • Fixes: the church bell tower no longer blocks the door, and trees/statues no longer
+	    grow in front of the church doors.
+
 	WHAT'S NEW IN 2.05
 	  • ⚔ NEW: BATTLE WORLD (500 kills, 5X coins) — packed with Battle Zombies, Metal Battle
 	    Zombies and Jungle Minibosses, plus THE WARRIOR BOSS (10,000 health).
 	  • ⛪ When a boss rises, everyone in that world is pulled into the CHURCH to watch it dig
 	    out of the floor and roar. Bosses have 5,500 health.
 	  • Pumpkin Overnight Sword now hits for 800. Ice World unlocks at 150 kills, Jungle at 300.
-	  • Clean screen: only Swords, Settings, your Health and the Boss Timer (coins, candy and
-	    kills are at the top of the Swords menu). Walk through the cave tunnels to change worlds.
 	  • Swords sit in your hand (Roblox's grip point) and have more detail.
 	  • The 2X Halloween event ends November 1st (after that: normal coins, no candy drops).
 	  • Progress saves on PC and phones whenever the server copy is installed.
@@ -78,7 +89,7 @@ local RunService        = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local IS_SERVER = RunService:IsServer()
-local VERSION = "2.05"
+local VERSION = "2.06"
 local NET_NAME = "ForestHunt2_Net"
 
 ------------------------------------------------------------------------------------------------
@@ -186,7 +197,7 @@ local MOBS = {
 		reach = 4.6, atk = 0.75, cd = 0.9, reward = 18, radius = 1.3, aggro = 75, scale = 1.05, turn = 4 },
 	metal   = { name = "Metal Battle Zombie", rig = "biped", look = "metal", ai = "melee", hp = 2200, dmg = 36, speed = 7.5, runSpeed = 11, runner = 0.25,
 		reach = 4.8, atk = 0.9, cd = 1.0, reward = 30, radius = 1.4, aggro = 70, scale = 1.15, turn = 3.2 },
-	miniboss = { name = "Jungle Miniboss", rig = "monkey", look = "kongo", ai = "slam", hp = 3500, dmg = 44, speed = 10, reach = 7.5, slamR = 10,
+	miniboss = { name = "Jungle Miniboss", rig = "monkey", look = "minikong", ai = "slam", hp = 3500, dmg = 44, speed = 10, reach = 7.5, slamR = 10,
 		atk = 1.3, cd = 1.8, reward = 90, radius = 2.2, aggro = 80, scale = 1.6, turn = 3.2, effect = "sick" },
 }
 for id, d in pairs(MOBS) do d.id = id end
@@ -330,6 +341,8 @@ do
 	end
 	local function near(lx, lz, cx, cz, r) return (lx - cx) ^ 2 + (lz - cz) ^ 2 < r * r end
 	local function outside(lx, lz, pad) return math.abs(lx) > 186 - pad or lz < -210 + pad or lz > 196 - pad end
+	-- 2.06: the church (around the boss spot at local z = az) and the open ground in front of its doors stay clear
+	local function churchZone(lx, lz, az, pad) return math.abs(lx) < 44 + pad and lz > az - 34 - pad and lz < az + 64 + pad end
 
 	------------------------------------------------------------------ ⚰ GRAVEYARD
 	do
@@ -341,6 +354,7 @@ do
 		local function blocked(lx, lz, pad)
 			pad = pad or 0
 			if outside(lx, lz, pad) then return true end
+			if churchZone(lx, lz, -150, pad) then return true end
 			if math.abs(lx) < 10 + pad and lz > -8 then return true end                        -- road
 			if lz > 160 - pad and math.abs(lx) < 48 + pad then return true end                  -- cave mouth
 			if math.abs(lz + 5) < 7 + pad and math.abs(lx) < 166 then return true end           -- fence (south side)
@@ -442,6 +456,7 @@ do
 			pad = pad or 0
 			if outside(lx, lz, pad) then return true end
 			if lz > 160 - pad and math.abs(lx) < 48 + pad then return true end
+			if churchZone(lx, lz, -150, pad) then return true end
 			if near(lx, lz, 0, -150, 40 + pad) then return true end
 			if near(lx, lz, -95, -35, 45 + pad) then return true end
 			if math.abs(lx - 10 * math.sin(lz / 30)) < 7 + pad and lz > -110 and lz < 170 then return true end -- trail
@@ -513,6 +528,7 @@ do
 			pad = pad or 0
 			if outside(lx, lz, pad) then return true end
 			if lz > 160 - pad and math.abs(lx) < 48 + pad then return true end
+			if churchZone(lx, lz, -138, pad) then return true end
 			if near(lx, lz, 0, -138, 40 + pad) then return true end
 			if lx > -40 - pad and lx < 40 + pad and lz < -168 + pad then return true end -- temple
 			if math.abs(lx - pathX(lz)) < 8 + pad and lz > -110 and lz < 170 then return true end
@@ -583,7 +599,7 @@ do
 			pad = pad or 0
 			if outside(lx, lz, pad) then return true end
 			if lz > 160 - pad and math.abs(lx) < 48 + pad then return true end
-			if math.abs(lx) < 40 + pad and lz < -110 + pad and lz > -190 - pad then return true end -- church
+			if churchZone(lx, lz, -150, pad) then return true end -- church
 			if math.abs(lx) < 9 + pad and lz > -110 and lz < 170 then return true end -- the road
 			return false
 		end
@@ -631,7 +647,7 @@ do
 	for _, wid in ipairs(WORLD_ORDER) do
 		local L = LAYOUT[wid]
 		local A = L.arena
-		local C = { x = A.x, z = A.z, hw = 30, hd = 30, door = 8 }
+		local C = { x = A.x, z = A.z, hw = 30, hd = 28, door = 8 }
 		-- walls are solid for monsters too (the front has a wide open door)
 		for t = -C.hw, C.hw, 3 do
 			addOb(C.x + t, C.z - C.hd, 2)
@@ -641,6 +657,17 @@ do
 			addOb(C.x - C.hw, C.z + t, 2)
 			addOb(C.x + C.hw, C.z + t, 2)
 		end
+		-- two rows of stone pillars inside (monsters walk around them too)
+		C.pillars = {}
+		for _, sx in ipairs({ -1, 1 }) do
+			for _, pz in ipairs({ -16, -4, 8, 20 }) do
+				addOb(C.x + sx * 19, C.z + pz, 1.6)
+				table.insert(C.pillars, Vector3.new(C.x + sx * 19, 0, C.z + pz))
+			end
+		end
+		-- the bell tower stands on the front-left corner, outside, so it never blocks the door
+		C.tower = Vector3.new(C.x - C.hw - 5, 0, C.z + C.hd - 5)
+		addOb(C.tower.X, C.tower.Z, 6)
 		-- where everyone gets teleported when the boss rises: inside, facing the altar
 		C.inside = CFrame.lookAt(Vector3.new(C.x, 3.5, C.z + C.hd - 8), Vector3.new(C.x, 3.5, C.z))
 		L.church = C
@@ -2253,8 +2280,8 @@ do
 		battle = { clock = 18.2, bright = 2, amb = Color3.fromRGB(110, 76, 66), out = Color3.fromRGB(150, 104, 90), exp = 0.05,
 			density = 0.42, offset = 0.15, haze = 2.4, glare = 0.6, color = Color3.fromRGB(255, 170, 130), decay = Color3.fromRGB(140, 70, 56),
 			tint = Color3.fromRGB(255, 236, 220), sat = 0.12, con = 0.12, bloom = 0.6, rays = 0.1 },
-		cave = { clock = 0, bright = 1.2, amb = Color3.fromRGB(58, 46, 60), out = Color3.fromRGB(64, 52, 70), exp = 0.25,
-			density = 0.42, offset = 0, haze = 1.4, glare = 0, color = Color3.fromRGB(70, 50, 60), decay = Color3.fromRGB(30, 20, 30),
+		cave = { clock = 0, bright = 2.2, amb = Color3.fromRGB(110, 94, 104), out = Color3.fromRGB(116, 100, 112), exp = 0.5,
+			density = 0.3, offset = 0, haze = 0.8, glare = 0, color = Color3.fromRGB(96, 74, 80), decay = Color3.fromRGB(50, 36, 44),
 			tint = Color3.fromRGB(255, 236, 220), sat = 0.12, con = 0.08, bloom = 0.7, rays = 0 },
 		grave = { clock = 0.3, bright = 1.6, amb = Color3.fromRGB(78, 62, 104), out = Color3.fromRGB(118, 96, 150), exp = 0.15,
 			density = 0.4, offset = 0.2, haze = 2.2, glare = 0.4, color = Color3.fromRGB(196, 130, 180), decay = Color3.fromRGB(96, 52, 112),
@@ -2603,6 +2630,56 @@ do
 		end
 	end
 
+	-- 2.06: more detail on every zombie: angry brows, nose, ears, a neck bite, bandages, a bone poking out, dirt
+	local BONE = Color3.fromRGB(232, 222, 196)
+	local function zDetails(model, P, s, r, skin, o)
+		o = o or {}
+		local h = P.head
+		local dark = skin:Lerp(BLACK, 0.38)
+		if not o.noHead then
+			for _, x in ipairs({ -1, 1 }) do
+				extra(model, h, Vector3.new(0.36, 0.08, 0.06) * s, CFrame.new(x * 0.24 * s, 0.31 * s, -0.62 * s) * CFrame.Angles(0, 0, math.rad(x * 18)), dark)
+				if not Perf.mobile then extra(model, h, Vector3.new(0.12, 0.32, 0.24) * s, CFrame.new(x * 0.63 * s, 0.04 * s, 0.02 * s), skin) end
+			end
+			extra(model, h, Vector3.new(0.16, 0.2, 0.12) * s, CFrame.new(0, -0.02 * s, -0.66 * s), skin:Lerp(BLACK, 0.12))
+		end
+		-- bite on the neck with a drip
+		extra(model, P.chest, Vector3.new(0.32, 0.22, 0.06) * s, CFrame.new(-0.36 * s, 0.68 * s, -0.53 * s), Color3.fromRGB(110, 24, 26))
+		if not Perf.mobile then extra(model, P.chest, Vector3.new(0.06, 0.3, 0.05) * s, CFrame.new(-0.3 * s, 0.45 * s, -0.54 * s), Color3.fromRGB(110, 24, 26)) end
+		-- dirty bandage wrapped around an arm or a leg
+		local limb = ({ P.lArmL, P.lArmR, P.lLegL, P.uArmR })[r:NextInteger(1, 4)]
+		if limb then
+			for k = -1, 1 do
+				extra(model, limb, Vector3.new(limb.Size.X + 0.06 * s, 0.14 * s, limb.Size.Z + 0.06 * s), CFrame.new(0, k * 0.2 * s, 0) * CFrame.Angles(0, 0, math.rad(k * 6)),
+					Color3.fromRGB(214, 204, 176), Enum.Material.Fabric)
+			end
+		end
+		-- a bone poking out of a forearm
+		if not Perf.mobile and r:NextNumber() < 0.5 then
+			local arm = (r:NextNumber() < 0.5) and P.lArmL or P.lArmR
+			if arm then
+				local b = extra(model, arm, Vector3.new(0.5, 0.16, 0.16) * s, CFrame.new(0, 0.1 * s, -0.5 * s) * CFrame.Angles(0, math.rad(90), math.rad(25)), BONE, Enum.Material.SmoothPlastic, Enum.PartType.Cylinder)
+				extra(model, b, Vector3.new(0.22, 0.22, 0.22) * s, CFrame.new(0.25 * s, 0, 0), BONE, Enum.Material.SmoothPlastic, Enum.PartType.Ball)
+			end
+		end
+		-- mud + rips on the trousers
+		if not Perf.mobile then
+			for _, side in ipairs({ "L", "R" }) do
+				local leg = P["uLeg" .. side]
+				if leg and r:NextNumber() < 0.6 then
+					extra(model, leg, Vector3.new(0.5, 0.4, 0.05) * s, CFrame.new(r:NextNumber(-0.2, 0.2) * s, r:NextNumber(-0.3, 0.2) * s, -0.5 * s), Color3.fromRGB(60, 46, 34))
+				end
+			end
+		end
+	end
+
+	-- a glowing aura around a boss
+	local function bossAura(part, color, rate)
+		make("ParticleEmitter", { Rate = (GFX.high and 1 or 0.4) * (rate or 10), Lifetime = NumberRange.new(1, 1.8), Speed = NumberRange.new(1, 3), SpreadAngle = Vector2.new(180, 180),
+			Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.7), NumberSequenceKeypoint.new(1, 0) }), Color = ColorSequence.new(color), LightEmission = 1,
+			Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.3), NumberSequenceKeypoint.new(1, 1) }), Name = "BossAura", Parent = part })
+	end
+
 	------------------------------------------------------------------------------------------ the monster looks
 	local LOOKS = {}
 
@@ -2615,6 +2692,7 @@ do
 		zFace(model, P.head, s, giant and Color3.fromRGB(255, 150, 30) or Color3.fromRGB(255, 50, 40), { stitch = r:NextNumber() < 0.4 })
 		hairOrHat(model, P.head, s, r)
 		tornClothes(model, P, s, shirt, skin, r)
+		zDetails(model, P, s, r, skin)
 		if giant then
 			extra(model, P.chest, Vector3.new(2.6, 0.55, 1.35) * s, CFrame.new(0, 0.3 * s, 0), Color3.fromRGB(60, 45, 35), Enum.Material.Fabric)
 			for _, x in ipairs({ -1, 1 }) do
@@ -2642,6 +2720,12 @@ do
 			sleeveL = skin, shoes = Color3.fromRGB(50, 40, 34) })
 		zFace(model, P.head, s, Color3.fromRGB(255, 70, 40), {})
 		tornClothes(model, P, s, tunic, skin, r)
+		zDetails(model, P, s, r, skin)
+		-- quiver of broken arrows stuck in its back + a war belt
+		for k = -1, 1 do
+			extra(model, P.chest, Vector3.new(0.08, 1.2, 0.08) * s, CFrame.new(k * 0.35 * s, 0.2 * s, 0.75 * s) * CFrame.Angles(math.rad(-30), 0, math.rad(k * 12)), Color3.fromRGB(120, 90, 60), Enum.Material.Wood)
+		end
+		extra(model, P.pelvis, Vector3.new(2.1, 0.3, 1.12) * s, CFrame.new(0, 0.05 * s, 0), Color3.fromRGB(70, 46, 30), Enum.Material.Leather)
 		-- dented helmet, leather chest strap, shoulder guard, rusty sword + round shield
 		extra(model, P.head, Vector3.new(1.18, 0.5, 1.12) * s, CFrame.new(0, 0.42 * s, 0), STEEL, Enum.Material.CorrodedMetal, Enum.PartType.Ball)
 		extra(model, P.head, Vector3.new(0.14, 0.5, 0.1) * s, CFrame.new(0, 0.05 * s, -0.6 * s), STEEL, Enum.Material.CorrodedMetal)
@@ -2689,6 +2773,26 @@ do
 		local big = armSword(model, P.handR, s, 6.5, Color3.fromRGB(70, 70, 80))
 		extra(model, big, Vector3.new(0.08, 6, 0.12) * s, CFrame.new(0, 0.2 * s, 0.24 * s), Color3.fromRGB(255, 70, 40), Enum.Material.Neon)
 		make("PointLight", { Range = 18, Brightness = 2, Color = Color3.fromRGB(255, 80, 50), Parent = big })
+		-- 2.06: spiked pauldrons + gauntlets, chainmail skirt, skull buckle, ember aura
+		for _, side in ipairs({ "L", "R" }) do
+			local sx = side == "R" and 1 or -1
+			for k = -1, 1 do
+				extra(model, P["uArm" .. side], Vector3.new(0.22, 0.75, 0.22) * s, CFrame.new((0.25 * sx + k * 0.05) * s, 1.0 * s, k * 0.38 * s) * CFrame.Angles(0, 0, -sx * 0.35),
+					Color3.fromRGB(40, 40, 46), Enum.Material.Metal)
+			end
+			local g = extra(model, P["lArm" .. side], Vector3.new(1.2, 0.6, 1.2) * s, CFrame.new(0, -0.3 * s, 0), Color3.fromRGB(70, 70, 80), Enum.Material.Metal)
+			extra(model, g, Vector3.new(0.18, 0.5, 0.18) * s, CFrame.new(sx * 0.55 * s, 0, 0) * CFrame.Angles(0, 0, -sx * math.pi / 2), Color3.fromRGB(40, 40, 46), Enum.Material.Metal)
+		end
+		for k = 0, 7 do
+			local a = k / 8 * math.pi * 2
+			extra(model, P.pelvis, Vector3.new(0.5, 1.3, 0.12) * s, CFrame.new(math.sin(a) * 1.05 * s, -0.7 * s, math.cos(a) * 0.6 * s) * CFrame.Angles(0, a, 0),
+				Color3.fromRGB(110, 112, 120), Enum.Material.DiamondPlate)
+		end
+		local skull = extra(model, P.pelvis, Vector3.new(0.6, 0.6, 0.6) * s, CFrame.new(0, 0.05 * s, -0.62 * s), BONE, Enum.Material.SmoothPlastic, Enum.PartType.Ball)
+		for _, ex in ipairs({ -0.13, 0.13 }) do
+			extra(model, skull, Vector3.new(0.14, 0.14, 0.05) * s, CFrame.new(ex * s, 0.05 * s, -0.28 * s), Color3.fromRGB(255, 60, 30), Enum.Material.Neon)
+		end
+		bossAura(P.chest, Color3.fromRGB(255, 120, 40), 12)
 		return model, P, J, rootH
 	end
 
@@ -2699,6 +2803,7 @@ do
 			sleeveL = r:NextNumber() < 0.4 and skin or nil, shoes = Color3.fromRGB(80, 70, 60) })
 		zFace(model, P.head, s, Color3.fromRGB(120, 230, 255), {})
 		tornClothes(model, P, s, jacket, skin, r)
+		zDetails(model, P, s, r, skin)
 		local ice, frost = Color3.fromRGB(190, 235, 255), Color3.fromRGB(240, 250, 255)
 		-- scarf + frost + icicles
 		local scarf = ({ Color3.fromRGB(200, 40, 40), Color3.fromRGB(240, 240, 240), Color3.fromRGB(40, 120, 200) })[r:NextInteger(1, 3)]
@@ -2724,6 +2829,7 @@ do
 			shoes = Color3.fromRGB(60, 50, 44), arm = 1.08 })
 		zFace(model, P.head, s, Color3.fromRGB(150, 240, 255), { stitch = true })
 		tornClothes(model, P, s, coat, skin, r)
+		zDetails(model, P, s, r, skin, { noHead = true })
 		-- striped beanie with pompom
 		local c1, c2 = Color3.fromRGB(220, 60, 60), Color3.fromRGB(245, 245, 245)
 		extra(model, P.head, Vector3.new(1.1, 0.3, 1.1) * s, CFrame.new(0, 0.5 * s, 0), c1, Enum.Material.Fabric)
@@ -2771,6 +2877,10 @@ do
 			shoes = Color3.fromRGB(40, 34, 30) })
 		zFace(model, P.head, s, Color3.fromRGB(255, 170, 40), { stitch = r:NextNumber() < 0.5 })
 		tornClothes(model, P, s, suit, skin, r)
+		zDetails(model, P, s, r, skin)
+		-- scorched hands + a lighter in the shirt pocket
+		extra(model, P.handR, Vector3.new(1.0, 0.32, 1.0) * s, CFrame.new(0, 0, 0), Color3.fromRGB(40, 32, 28))
+		extra(model, P.chest, Vector3.new(0.2, 0.32, 0.1) * s, CFrame.new(0.55 * s, 0.35 * s, -0.56 * s), Color3.fromRGB(230, 60, 40), Enum.Material.Metal)
 		-- glossy gasoline stains
 		for _ = 1, 4 do
 			local p = extra(model, P.chest, Vector3.new(r:NextNumber(0.3, 0.6), r:NextNumber(0.3, 0.7), 0.06) * s,
@@ -2797,6 +2907,11 @@ do
 		local glow = Color3.fromRGB(140, 255, 60)
 		zFace(model, P.head, s, glow, {})
 		tornClothes(model, P, s, suit, skin, r)
+		zDetails(model, P, s, r, skin)
+		-- hazard stripes on the suit
+		for k = -1, 1 do
+			extra(model, P.chest, Vector3.new(0.18, 0.6, 0.05) * s, CFrame.new(k * 0.45 * s - 0.35 * s, -0.35 * s, -0.54 * s) * CFrame.Angles(0, 0, math.rad(30)), Color3.fromRGB(30, 30, 30))
+		end
 		for _ = 1, 4 do -- glowing toxic boils
 			local bp = ({ P.head, P.chest, P.uArmL, P.lArmL })[r:NextInteger(1, 4)]
 			extra(model, bp, Vector3.new(0.28, 0.28, 0.28) * s, CFrame.new(r:NextNumber(-0.4, 0.4) * s, r:NextNumber(-0.3, 0.3) * s, -0.5 * s), glow, Enum.Material.Neon, Enum.PartType.Ball)
@@ -2841,6 +2956,32 @@ do
 		local shaft = extra(model, P.handR, Vector3.new(0.25, 5.5, 0.25) * s, CFrame.new(0, -0.2 * s, -1.0 * s) * CFrame.Angles(math.rad(-90), 0, 0),
 			Color3.fromRGB(90, 64, 40), Enum.Material.Wood)
 		extra(model, shaft, Vector3.new(1.6, 1.8, 0.12) * s, CFrame.new(0, 3.4 * s, 0), Color3.fromRGB(90, 90, 96), Enum.Material.CorrodedMetal)
+		-- 2.06: skull pauldrons, a chain across the chest, a ragged cape, keys on the belt, glowing runes, purple aura
+		for _, side in ipairs({ "L", "R" }) do
+			local sx = side == "R" and 1 or -1
+			local sk = extra(model, P["uArm" .. side], Vector3.new(1.0, 0.95, 1.0) * s, CFrame.new(sx * 0.12 * s, 0.55 * s, 0), BONE, Enum.Material.SmoothPlastic, Enum.PartType.Ball)
+			for _, ex in ipairs({ -0.2, 0.2 }) do
+				extra(model, sk, Vector3.new(0.2, 0.2, 0.06) * s, CFrame.new(ex * s, 0.05 * s, -0.47 * s), Color3.fromRGB(20, 16, 22))
+			end
+			extra(model, sk, Vector3.new(0.45, 0.14, 0.06) * s, CFrame.new(0, -0.25 * s, -0.43 * s), Color3.fromRGB(60, 54, 50))
+		end
+		for k = 0, 5 do
+			extra(model, P.chest, Vector3.new(0.3, 0.16, 0.08) * s, CFrame.new((-0.75 + k * 0.3) * s, (0.6 - k * 0.22) * s, -0.57 * s) * CFrame.Angles(0, 0, math.rad(-36)),
+				Color3.fromRGB(70, 70, 76), Enum.Material.Metal)
+		end
+		for k = -1, 1 do
+			local len = 2.4 + math.abs(k) * 0.5
+			extra(model, P.chest, Vector3.new(0.75, len, 0.1) * s, CFrame.new(k * 0.72 * s, (-0.3 - len / 2 + 0.9) * s, 0.58 * s) * CFrame.Angles(math.rad(6), 0, math.rad(k * 5)),
+				Color3.fromRGB(46, 30, 60), Enum.Material.Fabric)
+		end
+		local ring = extra(model, P.pelvis, Vector3.new(0.12, 0.5, 0.5) * s, CFrame.new(0.8 * s, -0.1 * s, -0.5 * s), GOLD, Enum.Material.Metal, Enum.PartType.Cylinder)
+		for k = -1, 1, 2 do
+			extra(model, ring, Vector3.new(0.08, 0.5, 0.16) * s, CFrame.new(0, -0.35 * s, k * 0.12 * s), GOLD, Enum.Material.Metal)
+		end
+		for k = 0, 2 do
+			extra(model, P.chest, Vector3.new(0.14, 0.42, 0.05) * s, CFrame.new((0.25 + k * 0.22) * s, -0.15 * s, -0.56 * s) * CFrame.Angles(0, 0, math.rad(k * 25 - 20)), eye, Enum.Material.Neon)
+		end
+		bossAura(P.chest, Color3.fromRGB(170, 90, 255), 10)
 		return model, P, J, rootH
 	end
 
@@ -2867,6 +3008,21 @@ do
 		make("PointLight", { Range = 20, Brightness = 2, Color = Color3.fromRGB(120, 220, 255), Parent = P.chest })
 		make("ParticleEmitter", { Rate = 12, Lifetime = NumberRange.new(1, 2), Speed = NumberRange.new(0.5, 2), SpreadAngle = Vector2.new(180, 180),
 			Size = NumberSequence.new(0.3, 0), Color = ColorSequence.new(Color3.fromRGB(220, 250, 255)), LightEmission = 0.6, Parent = P.chest })
+		-- 2.06: glowing frost core, ice spikes down the back, an icicle beard, ice gauntlets + belt
+		local core = extra(model, P.chest, Vector3.new(0.9, 0.9, 0.9) * s, CFrame.new(0, 0.15 * s, -0.72 * s), Color3.fromRGB(120, 235, 255), Enum.Material.Neon, Enum.PartType.Ball)
+		extra(model, core, Vector3.new(0.2, 1.4, 1.4) * s, CFrame.new(0, 0, 0.1 * s) * CFrame.Angles(0, math.pi / 2, 0), Color3.fromRGB(200, 245, 255), Enum.Material.Ice, Enum.PartType.Cylinder)
+		for k = 0, 4 do
+			extra(model, P.chest, Vector3.new(0.3, 1.2 - k * 0.12, 0.3) * s, CFrame.new(0, (0.7 - k * 0.38) * s, 0.75 * s) * CFrame.Angles(math.rad(-40), 0, 0),
+				Color3.fromRGB(210, 245, 255), Enum.Material.Ice)
+		end
+		for k = -1, 1 do
+			extra(model, P.head, Vector3.new(0.16, 0.6 - math.abs(k) * 0.15, 0.16) * s, CFrame.new(k * 0.2 * s, -0.75 * s, -0.45 * s), Color3.fromRGB(200, 240, 255), Enum.Material.Ice)
+		end
+		for _, side in ipairs({ "L", "R" }) do
+			extra(model, P["lArm" .. side], Vector3.new(1.2, 0.8, 1.2) * s, CFrame.new(0, -0.15 * s, 0), Color3.fromRGB(190, 235, 255), Enum.Material.Ice)
+		end
+		extra(model, P.pelvis, Vector3.new(2.7, 0.4, 1.4) * s, CFrame.new(0, 0.1 * s, 0), Color3.fromRGB(150, 210, 245), Enum.Material.Ice)
+		bossAura(P.chest, Color3.fromRGB(150, 230, 255), 8)
 		return model, P, J, rootH
 	end
 
@@ -2915,10 +3071,66 @@ do
 			for i = -1, 1 do -- gas cans on the belt
 				extra(model, P.pelvis, Vector3.new(0.5, 0.7, 0.35) * s, CFrame.new(i * 0.75 * s, -0.2 * s, -0.65 * s), Color3.fromRGB(200, 30, 30), Enum.Material.Metal)
 			end
+			-- 2.06: bone necklace, green war paint, gold arm bands, toxic aura
+			for k = 0, 6 do
+				local a = math.rad(-60 + k * 20)
+				extra(model, P.chest, Vector3.new(0.14, 0.45, 0.14) * s, CFrame.new(math.sin(a) * 0.9 * s, 0.62 * s, -math.cos(a) * 0.62 * s) * CFrame.Angles(math.rad(-15), 0, 0), BONE)
+			end
+			for _, x in ipairs({ -1, 1 }) do
+				extra(model, P.head, Vector3.new(0.3, 0.07, 0.05) * s, CFrame.new(x * 0.3 * s, -0.08 * s, -0.63 * s) * CFrame.Angles(0, 0, math.rad(x * 15)), glow, Enum.Material.Neon)
+				extra(model, P["uArm" .. (x > 0 and "R" or "L")], Vector3.new(1.06, 0.3, 1.06) * s, CFrame.new(0, -0.1 * s, 0), GOLD, Enum.Material.Metal)
+			end
+			bossAura(P.chest, glow, 9)
 		end
 		return model, P, J, rootH
 	end
 	function LOOKS.kongo(s, r) return LOOKS.monkey(s, r, true) end
+
+	-- 🦍 JUNGLE MINIBOSS: a scarred silverback zombie with war paint, a bone crown, leaf armor and a giant bone club
+	function LOOKS.minikong(s, r)
+		local model, P, J, rootH = LOOKS.monkey(s, r, false)
+		model.Name = "JungleMiniboss"
+		local fur0, fur = P.chest.Color, Color3.fromRGB(58, 52, 50)
+		for _, d in ipairs(model:GetDescendants()) do
+			if d:IsA("BasePart") and d.Color == fur0 then d.Color = fur end
+		end
+		local glow = Color3.fromRGB(150, 255, 70)
+		-- silver saddle on the back
+		extra(model, P.chest, Vector3.new(2.05, 1.3, 0.2) * s, CFrame.new(0, 0, 0.5 * s), Color3.fromRGB(170, 170, 176), Enum.Material.Fabric)
+		extra(model, P.pelvis, Vector3.new(2.05, 0.35, 0.2) * s, CFrame.new(0, 0.05 * s, 0.5 * s), Color3.fromRGB(150, 150, 156), Enum.Material.Fabric)
+		-- glowing eyes + red war paint + a crown of bone spikes
+		for _, x in ipairs({ -1, 1 }) do
+			extra(model, P.head, Vector3.new(0.22, 0.2, 0.08) * s, CFrame.new(x * 0.24 * s, 0.12 * s, -0.66 * s), glow, Enum.Material.Neon)
+			extra(model, P.head, Vector3.new(0.08, 0.36, 0.05) * s, CFrame.new(x * 0.36 * s, -0.12 * s, -0.63 * s), Color3.fromRGB(200, 30, 30), Enum.Material.Neon)
+		end
+		for k = -2, 2 do
+			extra(model, P.head, Vector3.new(0.16, 0.5 - math.abs(k) * 0.08, 0.16) * s, CFrame.new(k * 0.22 * s, 0.82 * s, 0.05 * s) * CFrame.Angles(0, 0, math.rad(-k * 12)), BONE)
+		end
+		-- leaf shoulder armor + vine wraps
+		for _, side in ipairs({ "L", "R" }) do
+			local sx = side == "R" and 1 or -1
+			for k = 0, 1 do
+				extra(model, P["uArm" .. side], Vector3.new(1.3, 0.12, 0.9) * s, CFrame.new(sx * 0.15 * s, (0.5 - k * 0.22) * s, (k - 0.5) * 0.3 * s) * CFrame.Angles(0, 0, -sx * 0.4),
+					Color3.fromRGB(60, 140, 50), Enum.Material.LeafyGrass)
+			end
+			for k = -1, 1, 2 do
+				extra(model, P["lArm" .. side], Vector3.new(1.05, 0.12, 1.05) * s, CFrame.new(0, k * 0.25 * s, 0) * CFrame.Angles(0, 0, math.rad(k * 10)), Color3.fromRGB(50, 110, 40), Enum.Material.Grass)
+			end
+		end
+		-- necklace of teeth
+		for k = 0, 4 do
+			local a = math.rad(-50 + k * 25)
+			extra(model, P.chest, Vector3.new(0.12, 0.3, 0.12) * s, CFrame.new(math.sin(a) * 0.8 * s, 0.55 * s, -math.cos(a) * 0.58 * s), WHITE)
+		end
+		-- giant bone club
+		local club = extra(model, P.handR, Vector3.new(0.35, 4.2, 0.35) * s, CFrame.new(0, -0.2 * s, -1.6 * s) * CFrame.Angles(math.rad(-90), 0, 0), BONE)
+		extra(model, club, Vector3.new(1.2, 1.2, 1.2) * s, CFrame.new(0, 2.1 * s, 0), BONE, Enum.Material.SmoothPlastic, Enum.PartType.Ball)
+		for k = 0, 2 do
+			extra(model, club, Vector3.new(0.18, 0.55, 0.18) * s, CFrame.new(0, 2.1 * s, 0) * CFrame.Angles(k * 2.1, 0, 1.2) * CFrame.new(0, 0.6 * s, 0), Color3.fromRGB(80, 70, 60))
+		end
+		bossAura(P.chest, glow, 5)
+		return model, P, J, rootH
+	end
 
 	------------------------------------------------------------------------------------------ zombie dog (4 legs)
 	function LOOKS.dog(s, r)
@@ -3163,7 +3375,9 @@ local function buildSword(def, extraLen, sharp)
 			CanQuery = false, CanTouch = false, Massless = true, CastShadow = false, Parent = model }
 		if shape then props.Shape = shape end
 		local p = part(props, cls)
-		weld(handle, p)
+		-- 2.06: a real Weld with the exact offset written in (a WeldConstraint made outside the world can
+		-- pick up the wrong offset, which left the blade floating away from your hand)
+		make("Weld", { Name = "SwordWeld", Part0 = handle, Part1 = p, C0 = handle.CFrame:ToObjectSpace(p.CFrame), Parent = p })
 		return p
 	end
 	local sr = Random.new(#def.id * 977 + 5)
@@ -3679,6 +3893,149 @@ do
 			part({ Size = Vector3.new(1.4, 1, 1.4), CFrame = CFrame.new(58 + vr:NextNumber(-1.2, 1.2), 3.9, 8 + vr:NextNumber(-2, 2)) * CFrame.Angles(i, i * 2, 0),
 				Material = Enum.Material.Neon, Color = crystalC[i % 3 + 1], CanCollide = false, Parent = F })
 		end
+		------------------------------------------------------------------ 2.06: a bigger, brighter, more detailed cave
+		local warm = Color3.fromRGB(255, 196, 120)
+		local woodC, darkC, ironC = Color3.fromRGB(112, 78, 48), Color3.fromRGB(76, 52, 34), Color3.fromRGB(52, 52, 58)
+		-- lantern posts around the middle (some stay lit even on FAST graphics)
+		for i, deg in ipairs({ 60, 120, 150, 210, 240, 300, 330 }) do
+			local a = math.rad(deg)
+			local base = Vector3.new(math.cos(a) * 46, 0, math.sin(a) * 46)
+			local toC = -base.Unit
+			part({ Size = Vector3.new(1.4, 0.8, 1.4), Position = base + Vector3.new(0, 0.4, 0), Material = Enum.Material.Slate, Color = Color3.fromRGB(80, 74, 76), Parent = F })
+			part({ Size = Vector3.new(0.5, 9, 0.5), Position = base + Vector3.new(0, 5, 0), Material = Enum.Material.Wood, Color = darkC, Parent = F })
+			part({ Size = Vector3.new(0.3, 0.3, 2.4), CFrame = CFrame.lookAt(base + Vector3.new(0, 9.2, 0) + toC * 1.1, base + Vector3.new(0, 9.2, 0) + toC * 3), Material = Enum.Material.Metal,
+				Color = ironC, CanCollide = false, Parent = F })
+			local lp = base + Vector3.new(0, 8.1, 0) + toC * 2
+			local lan = part({ Size = Vector3.new(0.9, 1.2, 0.9), Position = lp, Material = Enum.Material.Neon, Color = warm, CanCollide = false, CastShadow = false, Parent = F })
+			part({ Size = Vector3.new(1.2, 0.25, 1.2), Position = lp + Vector3.new(0, 0.72, 0), Material = Enum.Material.Metal, Color = ironC, CanCollide = false, Parent = F })
+			part({ Size = Vector3.new(1.1, 0.2, 1.1), Position = lp - Vector3.new(0, 0.7, 0), Material = Enum.Material.Metal, Color = ironC, CanCollide = false, Parent = F })
+			Perf.light({ Range = 26, Brightness = 1.7, Color = warm, Key = (i % 2 == 1), Parent = lan })
+		end
+		-- lanterns hanging from the ceiling on long chains
+		for i, p in ipairs({ Vector3.new(16, 0, -16), Vector3.new(-18, 0, -10), Vector3.new(-6, 0, 22) }) do
+			part({ Size = Vector3.new(0.25, 21.5, 0.25), Position = p + Vector3.new(0, 36.9, 0), Material = Enum.Material.Metal, Color = ironC, CanCollide = false, CastShadow = false, Parent = F })
+			local lan = part({ Size = Vector3.new(1.4, 1.8, 1.4), Position = p + Vector3.new(0, 25, 0), Material = Enum.Material.Neon, Color = warm, CanCollide = false, CastShadow = false, Parent = F })
+			part({ Size = Vector3.new(1.8, 0.3, 1.8), Position = p + Vector3.new(0, 26.05, 0), Material = Enum.Material.Metal, Color = ironC, CanCollide = false, Parent = F })
+			Perf.light({ Range = 34, Brightness = 1.5, Color = warm, Key = (i == 1), Parent = lan })
+		end
+		-- soft light shafts coming down from cracks in the ceiling
+		for _, p in ipairs({ Vector3.new(-26, 0, -30), Vector3.new(30, 0, -34), Vector3.new(-30, 0, 18) }) do
+			part({ Size = Vector3.new(6, 46, 6), Position = p + Vector3.new(0, 23, 0), Material = Enum.Material.Neon, Color = Color3.fromRGB(255, 236, 200), Transparency = 0.93,
+				CanCollide = false, CastShadow = false, Parent = F })
+			part({ Shape = CYL, Size = Vector3.new(0.1, 9, 9), CFrame = CFrame.new(p + Vector3.new(0, 0.06, 0)) * UP, Material = Enum.Material.Neon, Color = Color3.fromRGB(255, 230, 180),
+				Transparency = 0.82, CanCollide = false, CastShadow = false, Parent = F })
+		end
+		-- wooden mine supports against the walls
+		for k = 0, 3 do
+			local a = math.rad(45 + k * 90)
+			local d = Vector3.new(math.cos(a), 0, math.sin(a))
+			local side = Vector3.new(-d.Z, 0, d.X)
+			local c = d * 77
+			for _, sx in ipairs({ -1, 1 }) do
+				part({ Size = Vector3.new(1, 15, 1), Position = c + side * sx * 5 + Vector3.new(0, 7.5, 0), Material = Enum.Material.Wood, Color = woodC, Parent = F })
+				part({ Size = Vector3.new(0.6, 5, 0.6), CFrame = CFrame.lookAt(c + side * sx * 3.6 + Vector3.new(0, 13.4, 0), c + side * sx * 5 + Vector3.new(0, 11.5, 0)) * CFrame.Angles(math.pi / 2, 0, 0),
+					Material = Enum.Material.Wood, Color = darkC, CanCollide = false, Parent = F })
+			end
+			part({ Size = Vector3.new(1.2, 1.2, 12), CFrame = CFrame.lookAt(c + Vector3.new(0, 15.3, 0), c + side + Vector3.new(0, 15.3, 0)), Material = Enum.Material.Wood, Color = woodC, Parent = F })
+			local l = part({ Size = Vector3.new(0.8, 1, 0.8), Position = c + Vector3.new(0, 13.9, 0) - d * 0.6, Material = Enum.Material.Neon, Color = warm, CanCollide = false, CastShadow = false, Parent = F })
+			if not Perf.mobile then Perf.light({ Range = 18, Brightness = 1.2, Color = warm, Parent = l }) end
+		end
+		-- crates, barrels, a pickaxe and a shovel
+		local function crate(p, s, ang)
+			local cf = CFrame.new(p + Vector3.new(0, s / 2, 0)) * CFrame.Angles(0, ang, 0)
+			part({ Size = Vector3.new(s, s, s), CFrame = cf, Material = Enum.Material.WoodPlanks, Color = woodC, Parent = F })
+			for _, sz in ipairs({ -1, 1 }) do
+				part({ Size = Vector3.new(s * 1.02, 0.25, 0.25), CFrame = cf * CFrame.new(0, 0, sz * s / 2) * CFrame.Angles(0, 0, math.rad(42)), Material = Enum.Material.Wood, Color = darkC,
+					CanCollide = false, Parent = F })
+			end
+		end
+		local function barrel(p)
+			local cf = CFrame.new(p + Vector3.new(0, 1.5, 0)) * UP
+			part({ Shape = CYL, Size = Vector3.new(3, 2.3, 2.3), CFrame = cf, Material = Enum.Material.WoodPlanks, Color = Color3.fromRGB(126, 86, 52), Parent = F })
+			for _, y in ipairs({ -1, 1 }) do
+				part({ Shape = CYL, Size = Vector3.new(0.3, 2.42, 2.42), CFrame = CFrame.new(p + Vector3.new(0, 1.5 + y * 0.9, 0)) * UP, Material = Enum.Material.Metal, Color = ironC,
+					CanCollide = false, Parent = F })
+			end
+		end
+		crate(Vector3.new(52, 0, -16), 3, 0.2)
+		crate(Vector3.new(55.2, 0, -14), 2.4, -0.3)
+		crate(Vector3.new(53, 3, -16), 2, 0.6)
+		barrel(Vector3.new(49, 0, -19))
+		barrel(Vector3.new(-30, 0, -50))
+		barrel(Vector3.new(-27.2, 0, -51))
+		crate(Vector3.new(-33, 0, -47), 3, 0.1)
+		part({ Size = Vector3.new(0.25, 4.2, 0.25), CFrame = CFrame.new(50.4, 2, -13.6) * CFrame.Angles(0, 0, math.rad(-18)), Material = Enum.Material.Wood, Color = woodC, CanCollide = false, Parent = F })
+		part({ Size = Vector3.new(2, 0.3, 0.35), CFrame = CFrame.new(51.05, 3.95, -13.6) * CFrame.Angles(0, 0, math.rad(-8)), Material = Enum.Material.Metal, Color = Color3.fromRGB(150, 150, 156),
+			CanCollide = false, Parent = F })
+		part({ Size = Vector3.new(0.25, 4, 0.25), CFrame = CFrame.new(-35, 2, -45.6) * CFrame.Angles(math.rad(14), 0, 0), Material = Enum.Material.Wood, Color = woodC, CanCollide = false, Parent = F })
+		part({ Size = Vector3.new(1, 1.2, 0.15), CFrame = CFrame.new(-35, 0.6, -46.1) * CFrame.Angles(math.rad(14), 0, 0), Material = Enum.Material.Metal, Color = Color3.fromRGB(150, 150, 156),
+			CanCollide = false, Parent = F })
+		-- an underground stream from the glowing pool to the west wall, with a little bridge
+		local pts = { Vector3.new(-50, 0, 44), Vector3.new(-57, 0, 48), Vector3.new(-63, 0, 46), Vector3.new(-70, 0, 50), Vector3.new(-78, 0, 52) }
+		for k = 1, #pts - 1 do
+			local a, b = pts[k], pts[k + 1]
+			part({ Size = Vector3.new(4.5, 0.2, (b - a).Magnitude + 2), CFrame = CFrame.lookAt((a + b) / 2 + Vector3.new(0, 0.08, 0), b + Vector3.new(0, 0.08, 0)), Material = Enum.Material.Glass,
+				Color = Color3.fromRGB(70, 190, 220), Transparency = 0.3, Reflectance = 0.2, CanCollide = false, Parent = F })
+		end
+		do
+			local mid = (pts[2] + pts[3]) / 2
+			local dir = (pts[3] - pts[2]).Unit
+			local across = Vector3.new(-dir.Z, 0, dir.X)
+			for k = -2, 2 do
+				part({ Size = Vector3.new(1.1, 0.3, 7), CFrame = CFrame.lookAt(mid + dir * k * 1.2 + Vector3.new(0, 0.55, 0), mid + dir * k * 1.2 + across + Vector3.new(0, 0.55, 0)),
+					Material = Enum.Material.WoodPlanks, Color = woodC, Parent = F })
+			end
+			for _, sx in ipairs({ -1, 1 }) do
+				part({ Size = Vector3.new(0.3, 0.3, 6.4), CFrame = CFrame.lookAt(mid + across * sx * 3.2 + Vector3.new(0, 1.6, 0), mid + across * sx * 3.2 + dir + Vector3.new(0, 1.6, 0)),
+					Material = Enum.Material.Wood, Color = darkC, CanCollide = false, Parent = F })
+			end
+		end
+		-- glowing mushroom patches near the walls
+		local shroomC = { Color3.fromRGB(80, 230, 255), Color3.fromRGB(255, 100, 210), Color3.fromRGB(160, 255, 120) }
+		for i, deg in ipairs({ 33.75, 123.75, 213.75, 303.75 }) do
+			local a = math.rad(deg)
+			local c = Vector3.new(math.cos(a) * 75, 0, math.sin(a) * 75)
+			local col = shroomC[i % 3 + 1]
+			local cap0
+			for _ = 1, 5 do
+				local p = c + Vector3.new(vr:NextNumber(-3, 3), 0, vr:NextNumber(-3, 3))
+				local s = vr:NextNumber(0.7, 1.5)
+				part({ Shape = CYL, Size = Vector3.new(1.6 * s, 0.45 * s, 0.45 * s), CFrame = CFrame.new(p + Vector3.new(0, 0.8 * s, 0)) * UP, Color = Color3.fromRGB(230, 225, 210),
+					CanCollide = false, Parent = F })
+				local cap = part({ Shape = BALL, Size = Vector3.new(2, 1.1, 2) * s, Position = p + Vector3.new(0, 1.7 * s, 0), Material = Enum.Material.Neon, Color = col, CanCollide = false, Parent = F })
+				cap0 = cap0 or cap
+			end
+			Perf.light({ Range = 18, Brightness = 1.3, Color = col, Parent = cap0 })
+		end
+		-- small crystals hanging from the ceiling
+		for k = 1, 12 do
+			local p = Vector3.new(vr:NextNumber(-62, 62), 0, vr:NextNumber(-62, 62))
+			if Perf.keep(k) then
+				part({ Size = Vector3.new(0.9, vr:NextNumber(2, 4.5), 0.9), CFrame = CFrame.new(p + Vector3.new(0, 45.5, 0)) * CFrame.Angles(vr:NextNumber(-0.3, 0.3), vr:NextNumber(0, 3), 0),
+					Material = Enum.Material.Neon, Color = crystalC[k % 3 + 1], Transparency = 0.1, CanCollide = false, CastShadow = false, Parent = F })
+			end
+		end
+		-- a cooking pot over the campfire, steaming
+		do
+			local c = Vector3.new(0, 0, 6)
+			for k = 0, 2 do
+				local a = k / 3 * math.pi * 2
+				local foot = c + Vector3.new(math.cos(a) * 2.6, 0, math.sin(a) * 2.6)
+				part({ Size = Vector3.new(0.3, 6.2, 0.3), CFrame = CFrame.lookAt((foot + c + Vector3.new(0, 5.6, 0)) / 2, c + Vector3.new(0, 5.6, 0)) * CFrame.Angles(math.pi / 2, 0, 0),
+					Material = Enum.Material.Wood, Color = darkC, CanCollide = false, Parent = F })
+			end
+			part({ Size = Vector3.new(0.12, 1.4, 0.12), Position = c + Vector3.new(0, 4.9, 0), Material = Enum.Material.Metal, Color = ironC, CanCollide = false, Parent = F })
+			local pot = part({ Shape = BALL, Size = Vector3.new(2.6, 2, 2.6), Position = c + Vector3.new(0, 3.5, 0), Material = Enum.Material.Metal, Color = Color3.fromRGB(40, 40, 44), CanCollide = false, Parent = F })
+			part({ Shape = CYL, Size = Vector3.new(0.2, 1.9, 1.9), CFrame = CFrame.new(c + Vector3.new(0, 4.25, 0)) * UP, Material = Enum.Material.SmoothPlastic, Color = Color3.fromRGB(140, 200, 90),
+				CanCollide = false, Parent = F })
+			Perf.fx({ Texture = "rbxasset://textures/particles/smoke_main.dds", Rate = 3, Lifetime = NumberRange.new(2, 3), Speed = NumberRange.new(1, 2), SpreadAngle = Vector2.new(10, 10),
+				Size = NumberSequence.new(1, 3), Color = ColorSequence.new(Color3.fromRGB(240, 240, 240)), Transparency = NumberSequence.new(0.7, 1), EmissionDirection = Enum.NormalId.Top, Parent = pot })
+		end
+		-- signpost by the spawn: which tunnel goes where
+		sign(F, CFrame.new(-9, 5, 28), Vector3.new(11, 3.6, 0.4), "🗺 TUNNELS", "⚰ ahead · ❄ left · 🌴 right · ⚔ behind", Color3.fromRGB(70, 50, 34), WHITE)
+		for _, x in ipairs({ -13, -5 }) do
+			part({ Size = Vector3.new(0.4, 5, 0.4), Position = Vector3.new(x, 2.5, 28), Material = Enum.Material.Wood, Color = darkC, Parent = F })
+		end
 	end
 
 	------------------------------------------------------------------------------------------ ⚰ GRAVEYARD + 🎃 PUMPKIN PATCH
@@ -3696,11 +4053,6 @@ do
 		local A = L.arena
 		part({ Shape = CYL, Size = Vector3.new(0.3, A.r * 2, A.r * 2), CFrame = CFrame.new(A.x, 0.12, A.z) * UP, Material = Enum.Material.Cobblestone,
 			Color = Color3.fromRGB(78, 74, 80), CanCollide = false, Parent = F })
-		for k = 0, 23 do
-			local a = k / 24 * math.pi * 2
-			part({ Size = Vector3.new(0.6, 0.1, 5.6), CFrame = CFrame.new(A.x + math.cos(a) * (A.r - 3), 0.3, A.z + math.sin(a) * (A.r - 3)) * CFrame.Angles(0, -a, 0),
-				Material = Enum.Material.Neon, Color = Color3.fromRGB(150, 70, 230), CanCollide = false, CastShadow = false, Parent = F })
-		end
 		-- crypt (the Gravekeeper's lair)
 		do
 			local cc = CFrame.new(O + Vector3.new(0, 0, -194))
@@ -3903,6 +4255,7 @@ do
 		part({ Shape = CYL, Size = Vector3.new(0.4, A.r * 2, A.r * 2), CFrame = CFrame.new(A.x, 0.12, A.z) * UP, Material = Enum.Material.Glacier,
 			Color = Color3.fromRGB(170, 210, 240), CanCollide = false, Parent = F })
 		for _, p in ipairs(L.pillars) do
+			if Build.inChurch("ice", p.x, p.z) then continue end -- the church stands here now
 			local h = p.broken and p.h * 0.5 or p.h
 			part({ Size = Vector3.new(4, h, 4), CFrame = CFrame.new(p.x, h / 2, p.z) * CFrame.Angles(0, vr:NextNumber(0, 1), p.broken and 0.12 or 0), Material = Enum.Material.Glacier,
 				Color = Color3.fromRGB(150, 190, 225), Parent = F })
@@ -4035,6 +4388,7 @@ do
 		part({ Shape = CYL, Size = Vector3.new(0.3, A.r * 2, A.r * 2), CFrame = CFrame.new(A.x, 0.12, A.z) * UP, Material = Enum.Material.Cobblestone,
 			Color = Color3.fromRGB(110, 110, 92), CanCollide = false, Parent = F })
 		for _, r in ipairs(L.ruins) do
+			if Build.inChurch("jungle", r.x, r.z) then continue end -- the church stands here now
 			local h = r.broken and r.h * 0.55 or r.h
 			part({ Size = Vector3.new(3.2, h, 3.2), CFrame = CFrame.new(r.x, h / 2, r.z) * CFrame.Angles(0, r.a, r.broken and 0.1 or 0), Material = Enum.Material.Cobblestone,
 				Color = stoneC, Parent = F })
@@ -4146,74 +4500,347 @@ do
 	end
 
 	------------------------------------------------------------------------------------------ ⛪ THE CHURCH (in every world)
+	-- is a spot inside (or right next to) this world's church? (old arena decorations skip those spots)
+	function Build.inChurch(wid, x, z, padX, padZ)
+		local C = LAYOUT[wid] and LAYOUT[wid].church
+		if not C then return false end
+		return math.abs(x - C.x) < C.hw + (padX or 12) and math.abs(z - C.z) < C.hd + (padZ or 4)
+	end
+
+	local CHURCH_STYLE = {
+		grave = { wall = Color3.fromRGB(112, 108, 118), wallM = Enum.Material.Brick, trim = Color3.fromRGB(154, 150, 160), roof = Color3.fromRGB(58, 46, 56),
+			tileA = Color3.fromRGB(196, 192, 186), tileB = Color3.fromRGB(62, 58, 66), banner = Color3.fromRGB(96, 40, 136) },
+		ice = { wall = Color3.fromRGB(214, 226, 240), wallM = Enum.Material.Marble, trim = Color3.fromRGB(166, 198, 230), roof = Color3.fromRGB(236, 243, 250),
+			tileA = Color3.fromRGB(222, 236, 250), tileB = Color3.fromRGB(116, 156, 198), banner = Color3.fromRGB(40, 90, 170), snow = true },
+		jungle = { wall = Color3.fromRGB(118, 124, 98), wallM = Enum.Material.Cobblestone, trim = Color3.fromRGB(150, 156, 126), roof = Color3.fromRGB(62, 84, 52),
+			tileA = Color3.fromRGB(172, 170, 142), tileB = Color3.fromRGB(80, 90, 66), banner = Color3.fromRGB(40, 112, 52), vines = true },
+		battle = { wall = Color3.fromRGB(120, 100, 92), wallM = Enum.Material.Brick, trim = Color3.fromRGB(162, 142, 130), roof = Color3.fromRGB(86, 40, 36),
+			tileA = Color3.fromRGB(172, 152, 142), tileB = Color3.fromRGB(58, 40, 40), banner = Color3.fromRGB(156, 30, 30) },
+	}
+	local GLASS = { Color3.fromRGB(255, 80, 80), Color3.fromRGB(80, 160, 255), Color3.fromRGB(255, 200, 60), Color3.fromRGB(150, 80, 255), Color3.fromRGB(90, 220, 120) }
+
 	function Build.church(wid)
 		local F, L = Folders[wid], LAYOUT[wid]
-		local C = L.church
+		local C = L and L.church
 		if not F or not C then return end
-		local stoneC = ({ grave = Color3.fromRGB(110, 106, 116), ice = Color3.fromRGB(196, 214, 232), jungle = Color3.fromRGB(120, 124, 100),
-			battle = Color3.fromRGB(120, 100, 92) })[wid] or Color3.fromRGB(110, 106, 116)
-		local mat = (wid == "ice") and Enum.Material.Glacier or Enum.Material.Brick
+		local st = CHURCH_STYLE[wid] or CHURCH_STYLE.grave
 		local cx, cz, hw, hd = C.x, C.z, C.hw, C.hd
-		local H = 20
-		local function wall(cf, size) part({ Size = size, CFrame = cf, Material = mat, Color = stoneC, Parent = F }) end
-		-- floor + aisle carpet
-		part({ Size = Vector3.new(hw * 2, 0.4, hd * 2), CFrame = CFrame.new(cx, 0.1, cz), Material = Enum.Material.Marble, Color = Color3.fromRGB(70, 66, 74), CanCollide = false, Parent = F })
-		part({ Size = Vector3.new(7, 0.45, hd * 2 - 6), CFrame = CFrame.new(cx, 0.12, cz + 3), Material = Enum.Material.Fabric, Color = Color3.fromRGB(130, 24, 34), CanCollide = false, Parent = F })
-		-- walls (front has a wide door)
-		wall(CFrame.new(cx, H / 2, cz - hd), Vector3.new(hw * 2 + 2, H, 2))
-		wall(CFrame.new(cx - hw, H / 2, cz), Vector3.new(2, H, hd * 2))
-		wall(CFrame.new(cx + hw, H / 2, cz), Vector3.new(2, H, hd * 2))
-		local side = hw - C.door
-		wall(CFrame.new(cx - C.door - side / 2, H / 2, cz + hd), Vector3.new(side, H, 2))
-		wall(CFrame.new(cx + C.door + side / 2, H / 2, cz + hd), Vector3.new(side, H, 2))
-		wall(CFrame.new(cx, H - 3, cz + hd), Vector3.new(C.door * 2, 6, 2))
-		-- gabled roof (high, so the camera has room) + front gable + bell tower with a cross
+		local H, door, doorH = 20, C.door, 14
+		local wood, darkWood, iron = Color3.fromRGB(104, 68, 44), Color3.fromRGB(70, 46, 30), Color3.fromRGB(40, 40, 44)
+		local phone = Perf.mobile
+		local function blk(size, cf, color, mat, props)
+			local p = { Size = size, CFrame = cf, Color = color, Material = mat or st.wallM, Parent = F }
+			if props then for k, v in pairs(props) do p[k] = v end end
+			return part(p)
+		end
+		local function deco(size, cf, color, mat, props) -- looks only: no collisions
+			props = props or {}
+			props.CanCollide = false
+			return blk(size, cf, color, mat, props)
+		end
+
+		---------------------------------------------------------------- floor: checkered tiles, carpet aisle, porch + path
+		local tw, td = (hw * 2) / 6, (hd * 2) / 6
+		for i = 0, 5 do
+			for k = 0, 5 do
+				deco(Vector3.new(tw, 0.3, td), CFrame.new(cx - hw + (i + 0.5) * tw, 0.3, cz - hd + (k + 0.5) * td), ((i + k) % 2 == 0) and st.tileA or st.tileB, Enum.Material.Marble)
+			end
+		end
+		local runStart = cz - hd + 11
+		local runLen = (cz + hd) - runStart
+		deco(Vector3.new(7, 0.12, runLen), CFrame.new(cx, 0.5, runStart + runLen / 2), Color3.fromRGB(130, 24, 34), Enum.Material.Fabric)
 		for _, sx in ipairs({ -1, 1 }) do
-			part({ Size = Vector3.new(hw * 1.2, 1.5, hd * 2 + 6), CFrame = CFrame.new(cx + sx * hw * 0.5, H + 8, cz) * CFrame.Angles(0, 0, sx * -0.5),
-				Material = Enum.Material.Slate, Color = Color3.fromRGB(56, 44, 48), Parent = F })
+			deco(Vector3.new(0.4, 0.14, runLen), CFrame.new(cx + sx * 3.3, 0.52, runStart + runLen / 2), GOLD, Enum.Material.Fabric)
 		end
-		local tower = CFrame.new(cx, 0, cz + hd + 4)
-		part({ Size = Vector3.new(12, 38, 8), CFrame = tower * CFrame.new(0, 19 + 4, 0), Material = mat, Color = stoneC:Lerp(Color3.new(0, 0, 0), 0.08), Parent = F })
-		part({ Size = Vector3.new(C.door * 2, 4, 9), CFrame = tower * CFrame.new(0, 2, 0), Transparency = 1, CanCollide = false, Parent = F })
-		wedge({ Size = Vector3.new(12, 8, 8), CFrame = tower * CFrame.new(0, 46, 0), Material = Enum.Material.Slate, Color = Color3.fromRGB(56, 44, 48), Parent = F })
-		part({ Size = Vector3.new(0.8, 6, 0.8), CFrame = tower * CFrame.new(0, 53, 0), Material = Enum.Material.Metal, Color = GOLD, Parent = F })
-		part({ Size = Vector3.new(3.2, 0.8, 0.8), CFrame = tower * CFrame.new(0, 54, 0), Material = Enum.Material.Metal, Color = GOLD, Parent = F })
-		local bell = part({ Shape = BALL, Size = Vector3.new(4, 4, 4), CFrame = tower * CFrame.new(0, 33, 0), Material = Enum.Material.Metal, Color = Color3.fromRGB(190, 150, 70), CanCollide = false, Parent = F })
-		bell.Name = "ChurchBell"
-		-- stained glass windows
-		local glassC = { Color3.fromRGB(255, 80, 80), Color3.fromRGB(80, 160, 255), Color3.fromRGB(255, 200, 60), Color3.fromRGB(150, 80, 255) }
-		for i = -2, 2 do
-			for _, sx in ipairs({ -1, 1 }) do
-				part({ Size = Vector3.new(0.4, 8, 4), CFrame = CFrame.new(cx + sx * (hw - 1.05), 11, cz + i * 11), Material = Enum.Material.Neon, Color = glassC[(i + sx + 5) % 4 + 1],
-					Transparency = 0.25, CanCollide = false, CastShadow = false, Parent = F })
+		deco(Vector3.new(22, 0.4, 6), CFrame.new(cx, 0.2, cz + hd + 4), st.trim, Enum.Material.Slate)
+		deco(Vector3.new(9, 0.25, 22), CFrame.new(cx, 0.12, cz + hd + 18), Color3.fromRGB(110, 104, 100), Enum.Material.Cobblestone)
+
+		---------------------------------------------------------------- walls, base trim, cornice
+		blk(Vector3.new(hw * 2 + 2, H, 2), CFrame.new(cx, H / 2, cz - hd), st.wall)
+		for _, sx in ipairs({ -1, 1 }) do
+			blk(Vector3.new(2, H, hd * 2), CFrame.new(cx + sx * hw, H / 2, cz), st.wall)
+			local segW = hw - door
+			blk(Vector3.new(segW, H, 2), CFrame.new(cx + sx * (door + segW / 2), H / 2, cz + hd), st.wall)
+		end
+		blk(Vector3.new(door * 2, H - doorH, 2), CFrame.new(cx, doorH + (H - doorH) / 2, cz + hd), st.wall)
+		local trimM = Enum.Material.Slate
+		deco(Vector3.new(hw * 2 + 4, 1.2, 3), CFrame.new(cx, 0.6, cz - hd), st.trim, trimM)
+		deco(Vector3.new(hw * 2 + 4, 0.9, 3.2), CFrame.new(cx, H + 0.2, cz - hd), st.trim, trimM)
+		deco(Vector3.new(hw * 2 + 4, 0.9, 3.2), CFrame.new(cx, H + 0.2, cz + hd), st.trim, trimM)
+		for _, sx in ipairs({ -1, 1 }) do
+			deco(Vector3.new(3, 1.2, hd * 2 + 4), CFrame.new(cx + sx * hw, 0.6, cz), st.trim, trimM)
+			deco(Vector3.new(3.2, 0.9, hd * 2 + 4), CFrame.new(cx + sx * hw, H + 0.2, cz), st.trim, trimM)
+			deco(Vector3.new(hw - door, 1.2, 3), CFrame.new(cx + sx * (door + (hw - door) / 2), 0.6, cz + hd), st.trim, trimM)
+		end
+
+		---------------------------------------------------------------- buttresses along both sides
+		for _, sx in ipairs({ -1, 1 }) do
+			for _, bz in ipairs({ -24, -12, 0, 12, 24 }) do
+				local x = cx + sx * (hw + 2.5)
+				blk(Vector3.new(3, 13, 4), CFrame.new(x, 6.5, cz + bz), st.trim:Lerp(st.wall, 0.5))
+				wedge({ Size = Vector3.new(4, 4, 3), CFrame = CFrame.new(x, 15, cz + bz) * CFrame.Angles(0, sx > 0 and -math.pi / 2 or math.pi / 2, 0),
+					Material = st.wallM, Color = st.trim:Lerp(st.wall, 0.5), Parent = F })
 			end
 		end
-		local rose = part({ Shape = CYL, Size = Vector3.new(0.4, 9, 9), CFrame = CFrame.new(cx, 13, cz - hd + 1.05) * CFrame.Angles(0, math.pi / 2, 0),
-			Material = Enum.Material.Neon, Color = Color3.fromRGB(200, 90, 255), Transparency = 0.2, CanCollide = false, CastShadow = false, Parent = F })
-		Perf.light({ Range = 40, Brightness = 2, Color = Color3.fromRGB(220, 160, 255), Key = true, Parent = rose })
-		-- altar + candles
-		part({ Size = Vector3.new(10, 3, 4), CFrame = CFrame.new(cx, 1.5, cz - hd + 5), Material = Enum.Material.Marble, Color = Color3.fromRGB(230, 226, 220), Parent = F })
-		part({ Size = Vector3.new(10.4, 0.3, 4.4), CFrame = CFrame.new(cx, 3.1, cz - hd + 5), Material = Enum.Material.Fabric, Color = Color3.fromRGB(150, 30, 40), CanCollide = false, Parent = F })
-		for k = -2, 2 do
-			local cnd = part({ Size = Vector3.new(0.4, 1.2, 0.4), CFrame = CFrame.new(cx + k * 2, 3.8, cz - hd + 5), Material = Enum.Material.SmoothPlastic, Color = Color3.fromRGB(245, 240, 220), Parent = F })
-			part({ Size = Vector3.new(0.25, 0.4, 0.25), CFrame = cnd.CFrame * CFrame.new(0, 0.8, 0), Material = Enum.Material.Neon, Color = Color3.fromRGB(255, 190, 80), CanCollide = false, Parent = F })
-		end
-		-- pews (looks only: the boss fight needs room)
-		for row = 0, 3 do
-			for _, sx in ipairs({ -1, 1 }) do
-				local pz = cz + hd - 12 - row * 5
-				part({ Size = Vector3.new(11, 1.2, 2), CFrame = CFrame.new(cx + sx * 15, 1.2, pz), Material = Enum.Material.WoodPlanks, Color = Color3.fromRGB(96, 62, 40), CanCollide = false, Parent = F })
-				part({ Size = Vector3.new(11, 2.4, 0.4), CFrame = CFrame.new(cx + sx * 15, 2.4, pz + 1), Material = Enum.Material.WoodPlanks, Color = Color3.fromRGB(86, 56, 36), CanCollide = false, Parent = F })
+
+		---------------------------------------------------------------- stained glass windows with pointed stone frames
+		for _, sx in ipairs({ -1, 1 }) do
+			local wx = cx + sx * hw
+			for wi, wz0 in ipairs({ -18, -6, 6, 18 }) do
+				local wz = cz + wz0
+				local col = GLASS[(wi + (sx > 0 and 2 or 0)) % #GLASS + 1]
+				for _, face in ipairs({ -1, 1 }) do
+					deco(Vector3.new(0.3, 9, 4), CFrame.new(wx + face * 1.05, 10, wz), col, Enum.Material.Neon, { Transparency = 0.18, CastShadow = false })
+				end
+				deco(Vector3.new(2.6, 10, 0.6), CFrame.new(wx, 10.2, wz - 2.3), st.trim, trimM)
+				deco(Vector3.new(2.6, 10, 0.6), CFrame.new(wx, 10.2, wz + 2.3), st.trim, trimM)
+				deco(Vector3.new(2.9, 0.6, 5.4), CFrame.new(wx, 5.3, wz), st.trim, trimM)
+				for _, sz in ipairs({ -1, 1 }) do
+					deco(Vector3.new(2.6, 0.6, 3.1), CFrame.new(wx, 15.6, wz + sz * 1.15) * CFrame.Angles(-sz * math.rad(35), 0, 0), st.trim, trimM)
+				end
+				if not phone then
+					local inner = wx - sx * 1.25
+					deco(Vector3.new(0.2, 9, 0.22), CFrame.new(inner, 10, wz), iron, Enum.Material.Metal, { CastShadow = false })
+					deco(Vector3.new(0.2, 0.22, 4), CFrame.new(inner, 11.2, wz), iron, Enum.Material.Metal, { CastShadow = false })
+				end
+				deco(Vector3.new(0.4, 1.5, 1.5), CFrame.new(wx - sx * 1.1, 17.7, wz), col:Lerp(WHITE, 0.3), Enum.Material.Neon, { Shape = BALL, CastShadow = false })
 			end
 		end
-		-- the cracked spot where the boss digs out
+
+		---------------------------------------------------------------- rose window above the altar
+		local roseCF = CFrame.new(cx, 13, cz - hd) * CFrame.Angles(0, math.pi / 2, 0)
+		deco(Vector3.new(2.6, 11.5, 11.5), roseCF, st.trim, trimM, { Shape = CYL })
+		local rose = deco(Vector3.new(2.8, 9.4, 9.4), roseCF, Color3.fromRGB(190, 90, 255), Enum.Material.Neon, { Shape = CYL, Transparency = 0.15, CastShadow = false })
+		for k = 0, 3 do
+			deco(Vector3.new(0.3, 9.4, 0.25), CFrame.new(cx, 13, cz - hd + 1.5) * CFrame.Angles(0, 0, k * math.pi / 4), iron, Enum.Material.Metal, { CastShadow = false })
+		end
+		deco(Vector3.new(1.6, 1.6, 1.6), CFrame.new(cx, 13, cz - hd + 1.55), GOLD, Enum.Material.Metal, { Shape = BALL })
+		Perf.light({ Range = 42, Brightness = 2, Color = Color3.fromRGB(220, 165, 255), Key = true, Parent = rose })
+
+		---------------------------------------------------------------- roof (30° pitch), gables, ridge, trusses
+		local pitch = math.rad(30)
+		local run = hw + 1.5
+		local rise = run * math.tan(pitch)
+		local slab = run / math.cos(pitch) + 2.4
+		for _, sx in ipairs({ -1, 1 }) do
+			local along = slab / 2 - 0.2
+			local cxr = cx + sx * (math.cos(pitch) * along + math.sin(pitch) * 0.6)
+			local cyr = H + rise - math.sin(pitch) * along + math.cos(pitch) * 0.6
+			local roofM = (wid == "ice") and Enum.Material.Snow or Enum.Material.Slate
+			blk(Vector3.new(slab, 1.2, hd * 2 + 8), CFrame.new(cxr, cyr, cz) * CFrame.Angles(0, 0, -sx * pitch), st.roof, roofM)
+			-- gable triangles (front + back)
+			for _, gz in ipairs({ -1, 1 }) do
+				wedge({ Size = Vector3.new(2, rise, run - 0.5), CFrame = CFrame.new(cx + sx * (run - 0.5) / 2, H + rise / 2, cz + gz * hd)
+					* CFrame.Angles(0, sx > 0 and -math.pi / 2 or math.pi / 2, 0), Material = st.wallM, Color = st.wall, Parent = F })
+			end
+		end
+		deco(Vector3.new(1.8, 1.2, hd * 2 + 8), CFrame.new(cx, H + rise + 0.9, cz), st.roof:Lerp(BLACK, 0.3), Enum.Material.Slate)
+		for _, gz in ipairs({ -1, 1 }) do -- little crosses on both ends of the ridge
+			deco(Vector3.new(0.5, 3, 0.5), CFrame.new(cx, H + rise + 3, cz + gz * (hd + 3)), GOLD, Enum.Material.Metal)
+			deco(Vector3.new(1.8, 0.5, 0.5), CFrame.new(cx, H + rise + 3.6, cz + gz * (hd + 3)), GOLD, Enum.Material.Metal)
+		end
+		for _, tz in ipairs({ -16, -4, 8, 20 }) do -- wooden trusses under the roof
+			deco(Vector3.new(hw * 2, 1, 1), CFrame.new(cx, H - 0.5, cz + tz), darkWood, Enum.Material.Wood)
+			deco(Vector3.new(0.8, rise - 1, 0.8), CFrame.new(cx, H + (rise - 1) / 2, cz + tz), darkWood, Enum.Material.Wood)
+		end
+		if st.snow then -- snow on the eaves + icicles
+			for _, sx in ipairs({ -1, 1 }) do
+				for k = -6, 6 do
+					deco(Vector3.new(0.3, vr:NextNumber(1, 2.6), 0.3), CFrame.new(cx + sx * (hw + 2.2), H - 0.8, cz + k * 4.4), Color3.fromRGB(200, 236, 255), Enum.Material.Ice,
+						{ CastShadow = false })
+				end
+			end
+		end
+
+		---------------------------------------------------------------- front: arched doorway, open doors, round window, gargoyles, torches, sign
+		local fz = cz + hd
+		for _, sx in ipairs({ -1, 1 }) do
+			deco(Vector3.new(1.6, doorH + 0.5, 3), CFrame.new(cx + sx * (door + 0.8), doorH / 2, fz), st.trim, trimM)
+			deco(Vector3.new(10, 1.2, 3), CFrame.new(cx + sx * 4.3, doorH + 1.8, fz) * CFrame.Angles(0, 0, -sx * math.rad(32)), st.trim, trimM)
+			-- big wooden door leaf, swung open outward
+			local hinge = Vector3.new(cx + sx * door, doorH / 2 - 0.2, fz + 1.1)
+			local open = math.rad(72)
+			local dir = Vector3.new(-sx * math.cos(open), 0, math.sin(open))
+			local leafCF = CFrame.fromMatrix(hinge + dir * 3.9, dir, Vector3.yAxis)
+			deco(Vector3.new(7.8, doorH - 0.6, 0.5), leafCF, wood, Enum.Material.WoodPlanks)
+			for _, by in ipairs({ -4, 0, 4 }) do
+				deco(Vector3.new(7.9, 0.4, 0.65), leafCF * CFrame.new(0, by, 0), iron, Enum.Material.Metal, { CastShadow = false })
+			end
+			deco(Vector3.new(0.6, 0.6, 0.6), leafCF * CFrame.new(2.8, 0, 0.45), GOLD, Enum.Material.Metal, { Shape = BALL })
+			-- stone gargoyle on the front corner
+			local g = CFrame.new(cx + sx * (hw + 0.5), H + 1.6, fz + 1.2)
+			deco(Vector3.new(1.4, 1.6, 2), g, Color3.fromRGB(80, 78, 84), Enum.Material.Slate)
+			deco(Vector3.new(1, 1, 1.2), g * CFrame.new(0, 0.6, 1.3), Color3.fromRGB(80, 78, 84), Enum.Material.Slate)
+			deco(Vector3.new(0.18, 0.18, 0.1), g * CFrame.new(0.25, 0.75, 1.92), Color3.fromRGB(255, 60, 40), Enum.Material.Neon)
+			deco(Vector3.new(0.18, 0.18, 0.1), g * CFrame.new(-0.25, 0.75, 1.92), Color3.fromRGB(255, 60, 40), Enum.Material.Neon)
+			wedge({ Size = Vector3.new(0.3, 1.8, 1.6), CFrame = g * CFrame.new(sx * 0.9, 0.6, -0.2) * CFrame.Angles(0, 0, -sx * 0.5), Material = Enum.Material.Slate,
+				Color = Color3.fromRGB(70, 68, 74), CanCollide = false, Parent = F })
+			torch(F, Vector3.new(cx + sx * 12.2, 4, fz + 1.6), true)
+		end
+		local ring = CFrame.new(cx, H + 6, fz + 0.2) * CFrame.Angles(0, math.pi / 2, 0)
+		deco(Vector3.new(2.4, 5.6, 5.6), ring, st.trim, trimM, { Shape = CYL })
+		deco(Vector3.new(2.6, 4.4, 4.4), ring, Color3.fromRGB(255, 160, 50), Enum.Material.Neon, { Shape = CYL, Transparency = 0.15, CastShadow = false })
+		sign(F, CFrame.new(cx, H + 1.4, fz + 1.75), Vector3.new(13, 2.2, 0.4), "⛪ THE CHURCH", nil, Color3.fromRGB(40, 32, 30), Color3.fromRGB(255, 220, 160))
+
+		---------------------------------------------------------------- bell tower with belfry, bell, clock and spire (front-left corner)
+		do
+			local T = C.tower
+			local tx, tz = T.X, T.Z
+			local tH = 30
+			blk(Vector3.new(9, tH, 9), CFrame.new(tx, tH / 2, tz), st.wall)
+			for _, ox in ipairs({ -4.4, 4.4 }) do
+				for _, oz in ipairs({ -4.4, 4.4 }) do
+					deco(Vector3.new(1.4, tH, 1.4), CFrame.new(tx + ox, tH / 2, tz + oz), st.trim, trimM)
+					deco(Vector3.new(1.6, 9, 1.6), CFrame.new(tx + ox, tH + 5, tz + oz), st.trim, trimM)
+				end
+			end
+			deco(Vector3.new(10.4, 1, 10.4), CFrame.new(tx, tH + 0.5, tz), st.trim, trimM)
+			deco(Vector3.new(10.4, 1, 10.4), CFrame.new(tx, tH + 10, tz), st.trim, trimM)
+			local bell = deco(Vector3.new(3.4, 3.8, 3.8), CFrame.new(tx, tH + 5, tz) * UP, Color3.fromRGB(196, 150, 64), Enum.Material.Metal, { Shape = CYL })
+			bell.Name = "ChurchBell"
+			deco(Vector3.new(4.2, 4.2, 4.2), CFrame.new(tx, tH + 3.3, tz), Color3.fromRGB(196, 150, 64), Enum.Material.Metal, { Shape = BALL })
+			deco(Vector3.new(0.3, 2.4, 0.3), CFrame.new(tx, tH + 2.2, tz), iron, Enum.Material.Metal)
+			for k = 0, 5 do -- stepped spire
+				local w = 8 - k * 1.3
+				deco(Vector3.new(2.6, w, w), CFrame.new(tx, tH + 11.8 + k * 2.4, tz) * UP, st.roof, Enum.Material.Slate, { Shape = CYL })
+			end
+			deco(Vector3.new(0.5, 4, 0.5), CFrame.new(tx, tH + 26.9, tz), GOLD, Enum.Material.Metal)
+			deco(Vector3.new(2.2, 0.5, 0.5), CFrame.new(tx, tH + 27.7, tz), GOLD, Enum.Material.Metal)
+			-- clock facing the path
+			local clock = CFrame.new(tx, tH - 6, tz + 4.7) * CFrame.Angles(0, math.pi / 2, 0)
+			deco(Vector3.new(0.6, 5.4, 5.4), clock, GOLD, Enum.Material.Metal, { Shape = CYL })
+			deco(Vector3.new(0.7, 4.6, 4.6), clock, Color3.fromRGB(245, 240, 225), Enum.Material.SmoothPlastic, { Shape = CYL })
+			deco(Vector3.new(0.25, 1.9, 0.12), CFrame.new(tx, tH - 5.2, tz + 5.1), iron, Enum.Material.Metal)
+			deco(Vector3.new(1.4, 0.25, 0.12), CFrame.new(tx + 0.6, tH - 6, tz + 5.1), iron, Enum.Material.Metal)
+			for _, wy in ipairs({ 8, 16 }) do -- narrow tower windows
+				deco(Vector3.new(1, 3.2, 0.3), CFrame.new(tx, wy, tz + 4.55), Color3.fromRGB(255, 190, 90), Enum.Material.Neon, { Transparency = 0.2, CastShadow = false })
+			end
+		end
+
+		---------------------------------------------------------------- inside: pillars, altar, organ, pews, chandeliers, sconces, banners
+		for _, pp in ipairs(C.pillars) do
+			blk(Vector3.new(2.8, 1, 2.8), CFrame.new(pp.X, 0.95, pp.Z), st.trim, trimM)
+			blk(Vector3.new(H - 3, 1.8, 1.8), CFrame.new(pp.X, 1.45 + (H - 3) / 2, pp.Z) * UP, st.trim:Lerp(WHITE, 0.15), Enum.Material.Marble, { Shape = CYL })
+			blk(Vector3.new(2.8, 1, 2.8), CFrame.new(pp.X, H - 1.05, pp.Z), st.trim, trimM)
+		end
+		local az = cz - hd + 6 -- altar dais (two steps)
+		deco(Vector3.new(24, 0.4, 10), CFrame.new(cx, 0.65, az), st.tileB, Enum.Material.Marble)
+		deco(Vector3.new(18, 0.4, 7), CFrame.new(cx, 1.05, az - 1.5), st.tileA, Enum.Material.Marble)
+		deco(Vector3.new(6, 0.1, 10), CFrame.new(cx, 0.9, az), Color3.fromRGB(130, 24, 34), Enum.Material.Fabric)
+		local altarY = 1.25
+		blk(Vector3.new(10, 3, 4), CFrame.new(cx, altarY + 1.5, az - 1), Color3.fromRGB(232, 228, 222), Enum.Material.Marble)
+		deco(Vector3.new(10.4, 0.25, 4.4), CFrame.new(cx, altarY + 3.1, az - 1), Color3.fromRGB(150, 26, 36), Enum.Material.Fabric)
+		deco(Vector3.new(3, 2.8, 0.15), CFrame.new(cx, altarY + 1.7, az + 1.05), Color3.fromRGB(150, 26, 36), Enum.Material.Fabric)
+		deco(Vector3.new(0.5, 0.5, 0.2), CFrame.new(cx, altarY + 2, az + 1.15), GOLD, Enum.Material.Metal)
+		deco(Vector3.new(0.4, 3, 0.4), CFrame.new(cx, altarY + 4.7, az - 2), GOLD, Enum.Material.Metal) -- standing cross
+		deco(Vector3.new(1.8, 0.4, 0.4), CFrame.new(cx, altarY + 5.5, az - 2), GOLD, Enum.Material.Metal)
+		for _, sx in ipairs({ -1, 1 }) do -- open book + candles on the altar
+			deco(Vector3.new(1.1, 0.12, 1.4), CFrame.new(cx + sx * 0.55, altarY + 3.35, az - 0.3) * CFrame.Angles(0, 0, sx * 0.18), Color3.fromRGB(245, 240, 225), Enum.Material.SmoothPlastic)
+			for k = 1, 2 do
+				local x = cx + sx * (2.2 + k * 1.2)
+				deco(Vector3.new(0.35, 1.1, 0.35), CFrame.new(x, altarY + 3.8, az - 1.2), Color3.fromRGB(245, 240, 220), Enum.Material.SmoothPlastic)
+				deco(Vector3.new(0.22, 0.35, 0.22), CFrame.new(x, altarY + 4.55, az - 1.2), Color3.fromRGB(255, 190, 80), Enum.Material.Neon, { CastShadow = false })
+			end
+			-- tall candelabra beside the altar
+			local cbx = cx + sx * 7.5
+			deco(Vector3.new(0.35, 6, 0.35), CFrame.new(cbx, altarY + 3, az - 1), GOLD, Enum.Material.Metal)
+			deco(Vector3.new(2.6, 0.25, 0.25), CFrame.new(cbx, altarY + 5.6, az - 1), GOLD, Enum.Material.Metal)
+			for k = -1, 1 do
+				deco(Vector3.new(0.3, 0.9, 0.3), CFrame.new(cbx + k * 1.15, altarY + 6.15, az - 1), Color3.fromRGB(245, 240, 220), Enum.Material.SmoothPlastic)
+				deco(Vector3.new(0.2, 0.32, 0.2), CFrame.new(cbx + k * 1.15, altarY + 6.75, az - 1), Color3.fromRGB(255, 190, 80), Enum.Material.Neon, { CastShadow = false })
+			end
+			-- organ pipes against the back wall
+			local ox = cx + sx * 17.5
+			deco(Vector3.new(8.6, 2.6, 2.6), CFrame.new(ox, 1.3, cz - hd + 2.4), darkWood, Enum.Material.WoodPlanks)
+			local pipes = phone and 4 or 7
+			for k = 1, pipes do
+				local u = (k - 0.5) / pipes
+				local h = 6 + math.sin(u * math.pi) * 5
+				deco(Vector3.new(h, 0.85, 0.85), CFrame.new(ox - 3.6 + u * 7.2, 2.6 + h / 2, cz - hd + 2.2) * UP, Color3.fromRGB(196, 198, 206), Enum.Material.Metal, { Shape = CYL })
+			end
+		end
+		local glowC = Color3.fromRGB(255, 190, 110)
+		local altarGlow = deco(Vector3.new(0.4, 0.4, 0.4), CFrame.new(cx, altarY + 6, az - 1), glowC, Enum.Material.Neon, { Transparency = 1 })
+		Perf.light({ Range = 22, Brightness = 1.6, Color = glowC, Parent = altarGlow })
+		-- pews facing the altar (looks only, so nobody gets stuck during the boss fight)
+		for row = 0, 4 do
+			local pz = cz + hd - 7 - row * 4.2
+			for _, sx in ipairs({ -1, 1 }) do
+				local px = cx + sx * 10.5
+				deco(Vector3.new(11, 0.5, 2), CFrame.new(px, 1.5, pz), wood, Enum.Material.WoodPlanks)
+				deco(Vector3.new(11, 2.3, 0.35), CFrame.new(px, 2.6, pz + 0.95), darkWood, Enum.Material.WoodPlanks)
+				for _, ex in ipairs({ -5.5, 5.5 }) do
+					deco(Vector3.new(0.4, 2.8, 2.2), CFrame.new(px + ex, 1.4, pz + 0.1), darkWood, Enum.Material.Wood)
+				end
+			end
+		end
+		-- candle chandeliers hanging from the trusses
+		for ci, chz in ipairs({ -10, 12 }) do
+			local cy = 14.5
+			local center = Vector3.new(cx, cy, cz + chz)
+			deco(Vector3.new(0.25, H + rise - cy - 1, 0.25), CFrame.new(cx, (cy + H + rise - 1) / 2, cz + chz), iron, Enum.Material.Metal, { CastShadow = false })
+			deco(Vector3.new(0.4, 5.6, 5.6), CFrame.new(center) * UP, iron, Enum.Material.Metal, { Shape = CYL, Transparency = 0.5, CastShadow = false })
+			local hub = deco(Vector3.new(1.2, 1.2, 1.2), CFrame.new(center), iron, Enum.Material.Metal, { Shape = BALL })
+			for k = 0, 7 do
+				local a = k / 8 * math.pi * 2
+				local p = center + Vector3.new(math.cos(a) * 2.8, 0.5, math.sin(a) * 2.8)
+				deco(Vector3.new(0.3, 0.8, 0.3), CFrame.new(p), Color3.fromRGB(245, 240, 220), Enum.Material.SmoothPlastic, { CastShadow = false })
+				deco(Vector3.new(0.2, 0.3, 0.2), CFrame.new(p + Vector3.new(0, 0.55, 0)), Color3.fromRGB(255, 190, 80), Enum.Material.Neon, { CastShadow = false })
+			end
+			Perf.light({ Range = 34, Brightness = 1.7, Color = glowC, Key = ci == 1, Parent = hub })
+		end
+		-- wall sconces + banners between the windows
+		for _, sx in ipairs({ -1, 1 }) do
+			local inner = cx + sx * (hw - 1.3)
+			for si, sz0 in ipairs({ -12, 0, 12 }) do
+				local z = cz + sz0
+				deco(Vector3.new(0.6, 0.3, 0.6), CFrame.new(inner, 7.4, z), iron, Enum.Material.Metal, { CastShadow = false })
+				deco(Vector3.new(0.35, 1, 0.35), CFrame.new(inner, 8.1, z), Color3.fromRGB(245, 240, 220), Enum.Material.SmoothPlastic, { CastShadow = false })
+				local fl = deco(Vector3.new(0.24, 0.36, 0.24), CFrame.new(inner, 8.8, z), Color3.fromRGB(255, 190, 80), Enum.Material.Neon, { CastShadow = false })
+				if si == 2 then Perf.light({ Range = 16, Brightness = 1.3, Color = glowC, Parent = fl }) end
+				-- banner with a glowing pumpkin emblem
+				local bx = cx + sx * (hw - 1.15)
+				deco(Vector3.new(0.2, 5.6, 3.2), CFrame.new(bx, 13.6, z), st.banner, Enum.Material.Fabric, { CastShadow = false })
+				deco(Vector3.new(0.3, 0.3, 3.8), CFrame.new(bx - sx * 0.05, 16.5, z), GOLD, Enum.Material.Metal, { CastShadow = false })
+				deco(Vector3.new(0.25, 1.4, 1.4), CFrame.new(bx - sx * 0.1, 13.9, z), Color3.fromRGB(255, 140, 30), Enum.Material.Neon, { Shape = BALL, CastShadow = false })
+				wedge({ Size = Vector3.new(0.2, 1, 1.6), CFrame = CFrame.new(bx, 10.3, z) * CFrame.Angles(math.pi, 0, 0), Material = Enum.Material.Fabric, Color = st.banner,
+					CanCollide = false, CastShadow = false, Parent = F })
+			end
+		end
+		-- cobwebs in the corners (it IS Halloween)
+		if not phone then
+			for _, sx in ipairs({ -1, 1 }) do
+				for _, sz in ipairs({ -1, 1 }) do
+					local corner = Vector3.new(cx + sx * (hw - 1.1), H - 1.2, cz + sz * (hd - 1.1))
+					for k = 0, 3 do
+						local a = math.rad(15 + k * 20)
+						local d = Vector3.new(-sx * math.cos(a), -math.sin(a) * 0.8, -sz * math.cos(a) * 0.6)
+						deco(Vector3.new(0.06, 0.06, 4.5), CFrame.lookAt(corner + d * 2.2, corner + d * 4.4), Color3.fromRGB(230, 230, 236), Enum.Material.Neon,
+							{ Transparency = 0.45, CastShadow = false })
+					end
+				end
+			end
+		end
+		-- jungle vines / battle scorch marks outside
+		if st.vines then
+			for k = 1, 10 do
+				local sx = (k % 2 == 0) and 1 or -1
+				local vz = cz - hd + 4 + (k - 1) * 5.4
+				local vl = vr:NextNumber(5, 12)
+				deco(Vector3.new(0.3, vl, 0.3), CFrame.new(cx + sx * (hw + 1.15), H - vl / 2, vz), Color3.fromRGB(60, 120, 40), Enum.Material.Grass, { CastShadow = false })
+			end
+		end
+
+		---------------------------------------------------------------- the cracked floor where the boss digs out
 		for k = 0, 7 do
 			local a = k / 8 * math.pi * 2
-			part({ Size = Vector3.new(0.5, 0.12, 6), CFrame = CFrame.new(cx + math.cos(a) * 3, 0.36, cz + math.sin(a) * 3) * CFrame.Angles(0, -a + math.pi / 2, 0),
-				Material = Enum.Material.Neon, Color = Color3.fromRGB(255, 80, 40), CanCollide = false, CastShadow = false, Parent = F })
+			deco(Vector3.new(0.5, 0.12, 6), CFrame.new(cx + math.cos(a) * 3, 0.5, cz + math.sin(a) * 3) * CFrame.Angles(0, -a + math.pi / 2, 0),
+				Color3.fromRGB(255, 80, 40), Enum.Material.Neon, { CastShadow = false })
 		end
-		for _, sx in ipairs({ -1, 1 }) do torch(F, Vector3.new(cx + sx * 11, 4, cz + hd + 1.5), true) end
-		sign(F, CFrame.new(cx, 22.5, cz + hd + 1.2), Vector3.new(16, 3, 0.5), "⛪ THE CHURCH", "bosses rise here", Color3.fromRGB(40, 32, 30), Color3.fromRGB(255, 220, 160))
+		for k = 1, 6 do
+			local a = k / 6 * math.pi * 2 + 0.3
+			deco(Vector3.new(1.2, 0.7, 1), CFrame.new(cx + math.cos(a) * 6.5, 0.6, cz + math.sin(a) * 6.5) * CFrame.Angles(a, a * 2, 0), Color3.fromRGB(70, 64, 60), Enum.Material.Slate)
+		end
 	end
 
 	------------------------------------------------------------------------------------------ ⚔ BATTLE WORLD
@@ -4406,16 +5033,16 @@ do
 		local l = UI.text({ Text = "0", Position = UDim2.fromOffset(46, 5), Size = UDim2.new(1, -54, 1, -10), TextXAlignment = Enum.TextXAlignment.Left, Stroke = 2.4, Parent = p })
 		return p, l, make("UIScale", { Parent = p })
 	end
-	HUD.coinPill, HUD.coinLabel, HUD.coinScale = stat(1, "💰", GOLD)
+	HUD.coinPill, HUD.coinLabel, HUD.coinScale = stat(1, "💰", GOLD, 210)
 	HUD.candyPill, HUD.candyLabel, HUD.candyScale = stat(2, "🍬", CANDY)
 	local cbar = make("Frame", { AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 46, 1, -5), Size = UDim2.new(1, -56, 0, 5), BackgroundColor3 = UI.INK, Parent = HUD.candyPill })
 	UI.corner(cbar, 3)
 	HUD.candyFill = make("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = CANDY, Parent = cbar })
 	UI.corner(HUD.candyFill, 3)
 	HUD.killPill, HUD.killLabel, HUD.killScale = stat(3, "💀", Color3.fromRGB(200, 200, 210), 140)
-	row1.Visible = false -- 2.05: a clean screen (coins, candy + kills live in the ⚔ Swords menu)
+	HUD.killPill.Visible = false -- 2.06: coins (+ candy during the event) up top; kills are in the Travel + Swords menus
 
-	local row2 = make("Frame", { Position = UDim2.fromOffset(0, 4), Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, Parent = tc })
+	local row2 = make("Frame", { Position = UDim2.fromOffset(0, 50), Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, Parent = tc })
 	make("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Center, Padding = UDim.new(0, 8),
 		VerticalAlignment = Enum.VerticalAlignment.Center, SortOrder = Enum.SortOrder.LayoutOrder, Parent = row2 })
 	local banner = UI.pill(row2, UDim2.fromOffset(290, 34), UDim2.new())
@@ -4425,11 +5052,11 @@ do
 		Stroke = 2.4, Parent = banner })
 	HUD.bannerScale = make("UIScale", { Parent = banner })
 	banner.Visible = false
-	local bt = UI.pill(row2, UDim2.fromOffset(230, 34), UDim2.new())
+	local bt = UI.pill(row2, UDim2.fromOffset(260, 34), UDim2.new())
 	bt.LayoutOrder = 2
 	HUD.bossTimer = UI.text({ Text = "👹 Boss in 10:00", Size = UDim2.new(1, -12, 1, -6), Position = UDim2.fromOffset(6, 3), Stroke = 2, Parent = bt })
 	HUD.bossTimerPill = bt
-	local bb = UI.panel({ AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 46), Size = UDim2.fromOffset(340, 50), Visible = false, Parent = tc })
+	local bb = UI.panel({ AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 92), Size = UDim2.fromOffset(340, 50), Visible = false, Parent = tc })
 	HUD.bossName = UI.text({ Text = "BOSS", Size = UDim2.new(1, -16, 0, 20), Position = UDim2.fromOffset(8, 3), Stroke = 2.4, Parent = bb })
 	local bback = make("Frame", { Position = UDim2.fromOffset(10, 26), Size = UDim2.new(1, -20, 0, 16), BackgroundColor3 = UI.INK, Parent = bb })
 	UI.corner(bback, 8)
@@ -4446,15 +5073,13 @@ do
 	wp.Visible = false
 	HUD.worldLabel = UI.text({ Text = "🕯 THE CAVE", Size = UDim2.new(1, -14, 1, -8), Position = UDim2.fromOffset(7, 4), TextXAlignment = Enum.TextXAlignment.Left, Stroke = 2.2, Parent = wp })
 	HUD.menuButtons = {}
-	local menus = { { "worlds", "🗺", "Worlds" }, { "swords", "⚔", "Swords" }, { "settings", "⚙", "Settings" } }
+	local menus = { { "worlds", "🗺", "Travel" }, { "swords", "⚔", "Swords" }, { "settings", "⚙", "Settings" } }
 	for i, m in ipairs(menus) do
 		local face, label = UI.button({ Text = "", Size = UDim2.fromOffset(66, 66), Position = UDim2.fromOffset(0, 46 + (i - 1) * 72), Color = UI.PANEL, Parent = tl })
 		label.Text = m[2]
 		label.Size = UDim2.new(1, -12, 0.62, 0)
 		UI.text({ Text = m[3], Size = UDim2.new(1, -4, 0.3, 0), Position = UDim2.new(0, 2, 0.66, 0), Stroke = 2, MaxText = 14, Parent = face })
 		HUD.menuButtons[m[1]] = face
-		-- 2.05: only Swords + Settings on screen (walk through the cave tunnels to change worlds)
-		if m[1] == "worlds" then face.Visible = false else face.Position = UDim2.fromOffset(0, 46 + (i - 2) * 72) end
 	end
 
 	-- bottom centre: health bar + status icons
@@ -4561,51 +5186,197 @@ local function textFade(l, to, t)
 	if st then tween(st, t, { Transparency = to }) end
 end
 
------------------------------------------------------------------------------------------------- intro screen
+------------------------------------------------------------------------------------------------ intro screen = MAIN MENU
+-- 2.06: the cave flyover plays behind a soft shade; title + event countdown + your card + PLAY on the
+-- left, and an info panel with UPDATES / WORLDS / CONTROLS tabs on the right. Halloween bits float up.
 local introGui = make("ScreenGui", { Name = "FH2_Intro", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 50, ZIndexBehavior = Enum.ZIndexBehavior.Sibling, Parent = playerGui })
 local Intro = {}
 do
+	local ORANGE = Color3.fromRGB(255, 150, 40)
 	local bg = make("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.fromRGB(14, 14, 16), Parent = introGui })
-	make("UIGradient", { Rotation = 90, Color = ColorSequence.new(Color3.fromRGB(60, 60, 66), Color3.fromRGB(8, 8, 10)), Parent = bg })
+	make("UIGradient", { Rotation = 90, Color = ColorSequence.new(Color3.fromRGB(56, 56, 62), Color3.fromRGB(8, 8, 10)), Parent = bg })
 	Intro.bg = bg
-	local box = make("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(0.94, 0.94), BackgroundTransparency = 1, Parent = bg })
-	make("UISizeConstraint", { MaxSize = Vector2.new(680, 470), Parent = box })
+	-- shading that stays after loading so the text is always easy to read over the 3D scene
+	local shadeL = make("Frame", { Size = UDim2.fromScale(0.72, 1), BackgroundColor3 = BLACK, Parent = introGui })
+	make("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(0.65, 0.55), NumberSequenceKeypoint.new(1, 1) }), Parent = shadeL })
+	local shadeB = make("Frame", { AnchorPoint = Vector2.new(0, 1), Position = UDim2.fromScale(0, 1), Size = UDim2.fromScale(1, 0.3), BackgroundColor3 = BLACK, Parent = introGui })
+	make("UIGradient", { Rotation = -90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.3), NumberSequenceKeypoint.new(1, 1) }), Parent = shadeB })
+	local floaters = make("Frame", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = introGui })
+
+	local box = make("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(0.95, 0.92), BackgroundTransparency = 1, Parent = introGui })
+	make("UISizeConstraint", { MaxSize = Vector2.new(1000, 560), Parent = box })
 	Intro.box = box
-	Intro.title = UI.text({ Text = "FOREST HUNT", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0), Size = UDim2.fromScale(0.86, 0.18), Stroke = 5, Parent = box })
-	make("UIGradient", { Rotation = 90, Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(190, 190, 200)), Parent = Intro.title })
-	local ver = UI.pill(box, UDim2.fromOffset(84, 34), UDim2.new(0.5, 0, 0.17, 0), Vector2.new(0.5, 0))
-	ver.Rotation = -4
-	UI.text({ Text = VERSION, Size = UDim2.new(1, -10, 1, -6), Position = UDim2.fromOffset(5, 3), TextColor3 = GOLD, Stroke = 2.4, Parent = ver })
-	local ev = UI.text({ Text = "🎃 HALLOWEEN 2X EVENT 🎃", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0.26), Size = UDim2.fromScale(0.8, 0.07),
-		TextColor3 = Color3.fromRGB(255, 150, 40), Stroke = 3, Parent = box })
-	Intro.event = ev
-	local card = UI.panel({ AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0.35), Size = UDim2.fromScale(0.98, 0.36), Parent = box })
-	local news = {
-		"🕯 Start in a glowing cave, then head OUTSIDE to fight",
-		"⚰ Graveyard  ·  ❄ Ice World (3X)  ·  🌴 Jungle (4X)",
-		"🍬 Collect 100 candies → PUMPKIN OVERNIGHT SWORD",
-		"👹 A boss rises every 10 minutes — team up with friends!",
-		"🧟 If you die... YOU become a zombie",
-	}
-	local list = make("Frame", { Position = UDim2.fromScale(0.04, 0.08), Size = UDim2.fromScale(0.92, 0.84), BackgroundTransparency = 1, Parent = card })
-	make("UIListLayout", { Padding = UDim.new(0.02, 0), Parent = list })
-	for _, n in ipairs(news) do
-		UI.text({ Text = n, Size = UDim2.fromScale(1, 0.18), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = UI.DARK, Stroke = 0, MaxText = 22, Parent = list })
+
+	------------------------------------------------------------------ left: title, event, your card, PLAY
+	local left = make("Frame", { Size = UDim2.fromScale(0.52, 1), BackgroundTransparency = 1, Parent = box })
+	local title = UI.text({ Text = "FOREST HUNT", Position = UDim2.fromScale(0, 0.02), Size = UDim2.fromScale(1, 0.2), Stroke = 6, Parent = left })
+	make("UIGradient", { Rotation = 90, Color = ColorSequence.new(WHITE, Color3.fromRGB(190, 190, 202)), Parent = title })
+	Intro.title = title
+	local titleScale = make("UIScale", { Parent = title })
+	Intro.event = UI.text({ Text = "🎃 HALLOWEEN EVENT 🎃", Position = UDim2.fromScale(0.04, 0.215), Size = UDim2.fromScale(0.68, 0.075), TextColor3 = ORANGE, Stroke = 3, Parent = left })
+	local ver = UI.pill(left, UDim2.fromOffset(92, 34), UDim2.new(1, -6, 0.215, 0), Vector2.new(1, 0))
+	ver.Rotation = 5
+	UI.text({ Text = "v" .. VERSION, Size = UDim2.new(1, -10, 1, -6), Position = UDim2.fromOffset(5, 3), TextColor3 = GOLD, Stroke = 2.4, Parent = ver })
+	local cd = UI.pill(left, UDim2.new(0.9, 0, 0.075, 0), UDim2.fromScale(0.5, 0.31), Vector2.new(0.5, 0))
+	Intro.countdown = UI.text({ Text = "", Size = UDim2.new(1, -16, 1, -8), Position = UDim2.fromOffset(8, 4), TextColor3 = Color3.fromRGB(255, 214, 150), Stroke = 2,
+		MaxText = 22, Parent = cd })
+	-- your card: avatar picture, welcome, progress
+	local card = UI.panel({ AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0.415), Size = UDim2.fromScale(0.94, 0.19), Parent = left })
+	local pic = make("ImageLabel", { Size = UDim2.fromScale(0.8, 0.8), Position = UDim2.fromScale(0.035, 0.1), SizeConstraint = Enum.SizeConstraint.RelativeYY,
+		BackgroundColor3 = UI.DARK, Image = "", Parent = card })
+	UI.corner(pic, 12)
+	UI.stroke(pic, 2.5)
+	task.spawn(function()
+		local ok, img = pcall(function()
+			return Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+		end)
+		if ok and type(img) == "string" then pic.Image = img end
+	end)
+	local myName = tostring(player.DisplayName or player.Name or "hunter")
+	Intro.hello = UI.text({ Text = "Welcome, " .. myName .. "!", Position = UDim2.fromScale(0.27, 0.1), Size = UDim2.fromScale(0.7, 0.42), TextXAlignment = Enum.TextXAlignment.Left,
+		TextColor3 = UI.DARK, Stroke = 0, MaxText = 26, Parent = card })
+	Intro.stats = UI.text({ Text = "Loading your progress...", Position = UDim2.fromScale(0.27, 0.55), Size = UDim2.fromScale(0.7, 0.33), TextXAlignment = Enum.TextXAlignment.Left,
+		TextColor3 = Color3.fromRGB(70, 70, 80), Stroke = 0, MaxText = 20, Parent = card })
+	function Intro.setStats(text, hello)
+		Intro.stats.Text = text
+		if hello then Intro.hello.Text = hello end
 	end
-	local barBack = make("Frame", { AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0.75), Size = UDim2.new(0.66, 0, 0, 16), BackgroundColor3 = UI.DARK, Parent = box })
-	UI.corner(barBack, 8)
+	-- loading bar (swapped for the PLAY button when everything is built)
+	local barBack = make("Frame", { AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0.68), Size = UDim2.new(0.82, 0, 0, 18), BackgroundColor3 = UI.DARK, Parent = left })
+	UI.corner(barBack, 9)
 	UI.stroke(barBack, 2.5)
 	Intro.barBack = barBack
-	Intro.barFill = make("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = UI.PANEL, Parent = barBack })
-	UI.corner(Intro.barFill, 8)
-	Intro.status = UI.text({ Text = "Digging the cave...", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0.75, 20), Size = UDim2.new(0.7, 0, 0, 20),
-		TextColor3 = Color3.fromRGB(220, 220, 226), Stroke = 2, Parent = box })
-	local play, playLabel, playHolder = UI.button({ Text = "▶  PLAY", Size = UDim2.fromScale(0.42, 0.15), Position = UDim2.fromScale(0.5, 0.83), AnchorPoint = Vector2.new(0.5, 0),
-		Color = UI.PANEL, MaxText = 40, Parent = box })
+	Intro.barFill = make("Frame", { Size = UDim2.fromScale(0, 1), BackgroundColor3 = ORANGE, Parent = barBack })
+	UI.corner(Intro.barFill, 9)
+	make("UIGradient", { Rotation = 90, Color = ColorSequence.new(Color3.fromRGB(255, 205, 100), Color3.fromRGB(230, 110, 20)), Parent = Intro.barFill })
+	local play, playLabel, playHolder = UI.button({ Text = "▶  PLAY", Size = UDim2.fromScale(0.74, 0.15), Position = UDim2.fromScale(0.5, 0.64), AnchorPoint = Vector2.new(0.5, 0),
+		Color = UI.GREEN, MaxText = 46, Parent = left })
 	playHolder.Visible = false
 	playLabel.TextColor3 = WHITE
 	Intro.play, Intro.playHolder = play, playHolder
 	Intro.playScale = make("UIScale", { Parent = play })
+	Intro.status = UI.text({ Text = "Digging the cave...", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0.815), Size = UDim2.new(0.86, 0, 0, 22),
+		TextColor3 = Color3.fromRGB(232, 232, 238), Stroke = 2, Parent = left })
+	Intro.tip = UI.text({ Text = "", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0.9), Size = UDim2.new(0.98, 0, 0.06, 0),
+		TextColor3 = Color3.fromRGB(214, 214, 224), Stroke = 2, MaxText = 18, Parent = left })
+	function Intro.ready(text)
+		Intro.status.Text = text
+		tween(bg, 1.2, { BackgroundTransparency = 1 })
+		barBack.Visible = false
+		playHolder.Visible = true
+	end
+
+	------------------------------------------------------------------ right: UPDATES · WORLDS · CONTROLS
+	local right = UI.panel({ AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.fromScale(1, 0.5), Size = UDim2.fromScale(0.45, 0.86), Parent = box })
+	local tabs = make("Frame", { Position = UDim2.fromOffset(10, 10), Size = UDim2.new(1, -20, 0, 44), BackgroundTransparency = 1, Parent = right })
+	make("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = tabs })
+	local page = make("ScrollingFrame", { Position = UDim2.fromOffset(12, 64), Size = UDim2.new(1, -24, 1, -74), BackgroundTransparency = 1, BorderSizePixel = 0,
+		ScrollBarThickness = 5, ScrollBarImageColor3 = UI.DARK, CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollingDirection = Enum.ScrollingDirection.Y, Parent = right })
+	make("UIListLayout", { Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder, Parent = page })
+	local function line(text, order, h, color, stroke)
+		return UI.text({ Text = text, Size = UDim2.new(1, -8, 0, h or 26), TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = true,
+			TextColor3 = color or UI.DARK, Stroke = stroke or 0, MaxText = 20, LayoutOrder = order, Parent = page })
+	end
+	local NEWS = {
+		{ "📜 WHAT'S NEW IN " .. VERSION },
+		{ "🗡 Your sword stays firmly in your hand" },
+		{ "⛪ A brand-new, super detailed church for boss fights" },
+		{ "🧟 More detailed zombies, minibosses + bosses" },
+		{ "🦍 The Jungle Miniboss has its own look" },
+		{ "🕯 A bigger, brighter, more detailed cave" },
+		{ "💰 Coins, Travel + the Boss Timer are back on screen" },
+		{ "✨ This new main menu!" },
+		{ "📜 2.05" },
+		{ "⚔ Battle World: 5X coins + the Warrior Boss (10,000 HP)" },
+		{ "🎃 Pumpkin Overnight Sword hits for 800" },
+		{ "❄ Ice World at 150 kills · 🌴 Jungle at 300" },
+	}
+	local CONTROLS = {
+		{ "🖥 PC" },
+		{ "🖱 Click / F — swing your sword" }, { "⇧ Shift — sprint   ·   Q — dash" }, { "E — talk to Gus   ·   1-5 — switch sword" },
+		{ "M — travel   ·   G — sword bag   ·   H — go home" },
+		{ "📱 PHONE" },
+		{ "⚔ swing button (or tap the screen)" }, { "💨 dash button   ·   🏃 sprint toggle" }, { "Walk up to Gus and tap \"Talk\"" },
+	}
+	local tabBtns = {}
+	local function showTab(name)
+		for _, c in ipairs(page:GetChildren()) do
+			if c:IsA("GuiObject") then c:Destroy() end
+		end
+		for n, b in pairs(tabBtns) do b.BackgroundColor3 = (n == name) and UI.DARK or UI.PANEL2 end
+		page.CanvasPosition = Vector2.zero
+		if name == "new" or name == "controls" then
+			for i, n in ipairs(name == "new" and NEWS or CONTROLS) do
+				local head = n[1]:sub(1, 4) == "📜" or n[1] == "🖥 PC" or n[1] == "📱 PHONE"
+				line(n[1], i, head and 30 or 26, head and WHITE or UI.DARK, head and 2.4 or 0)
+			end
+		else
+			local rows = { "cave" }
+			for _, wid in ipairs(WORLD_ORDER) do table.insert(rows, wid) end
+			for i, wid in ipairs(rows) do
+				local w = WORLDS[wid]
+				local info
+				if wid == "cave" then
+					info = "Safe zone · Gus's shop · heal up"
+				else
+					local b = MOBS[w.boss]
+					info = ((w.need > 0) and (w.need .. " kills") or "Free") .. " · coins x" .. w.mult .. " · 👹 " .. (b and b.name or "?") .. " (" .. commas(b and b.hp or 0) .. " HP)"
+				end
+				line(w.icon .. " " .. string.upper(w.name), i * 2 - 1, 28, WHITE, 2.4)
+				line(info, i * 2, 24, Color3.fromRGB(60, 60, 70))
+			end
+		end
+	end
+	for i, t in ipairs({ { "new", "📜 UPDATES" }, { "worlds", "🗺 WORLDS" }, { "controls", "🎮 CONTROLS" } }) do
+		local b = UI.button({ Text = t[2], Size = UDim2.new(1 / 3, -4, 1, 0), Color = UI.PANEL2, MaxText = 18, LayoutOrder = i, Parent = tabs })
+		tabBtns[t[1]] = b
+		b.Activated:Connect(function()
+			playSfx("click")
+			showTab(t[1])
+		end)
+	end
+	showTab("new")
+
+	------------------------------------------------------------------ alive: countdown, tips, bobbing title, floating Halloween bits
+	local TIPS = {
+		"💡 Dashing (Q / 💨) makes you invincible for a moment",
+		"💡 Every sword has its own combo — try them all!",
+		"💡 A boss rises in EVERY world every 10 minutes",
+		"💡 Team up! Everyone who helps beat a boss gets paid",
+		"💡 Gus sells swords and upgrades — he's in the cave",
+		"💡 Candy gives bonus coins during the Halloween event",
+		"💡 If you die, your zombie twin waits for you outside...",
+	}
+	local function fmtLeft(sec)
+		local d, h, m = math.floor(sec / 86400), math.floor(sec % 86400 / 3600), math.floor(sec % 3600 / 60)
+		if d > 0 then return d .. "d " .. h .. "h" end
+		if h > 0 then return h .. "h " .. m .. "m" end
+		return math.max(1, m) .. "m"
+	end
+	task.spawn(function()
+		local beat = 0
+		while introGui.Parent and introGui.Enabled do
+			local secs = EVENT_END - nowUnix()
+			Intro.countdown.Text = (secs > 0) and ("🎃 2X COINS + CANDY · ends in " .. fmtLeft(secs)) or "🎃 The Halloween event is over — thanks for playing!"
+			if beat % 4 == 0 then Intro.tip.Text = TIPS[math.floor(beat / 4) % #TIPS + 1] end
+			tween(titleScale, 1, { Scale = (beat % 2 == 0) and 1.03 or 1 }, Enum.EasingStyle.Sine)
+			beat += 1
+			task.wait(1)
+		end
+	end)
+	task.spawn(function()
+		local EMO = { "🎃", "🦇", "🍬", "👻", "🕯", "🍭" }
+		while introGui.Parent and introGui.Enabled do
+			local x = rng:NextNumber(0.03, 0.97)
+			local e = UI.text({ Text = EMO[rng:NextInteger(1, #EMO)], AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(x, 1.08), Size = UDim2.fromOffset(34, 34),
+				Rotation = rng:NextNumber(-20, 20), TextTransparency = 0.2, Stroke = 0, Parent = floaters })
+			local dur = rng:NextNumber(9, 15)
+			tween(e, dur, { Position = UDim2.fromScale(x + rng:NextNumber(-0.08, 0.08), -0.1), Rotation = rng:NextNumber(-45, 45), TextTransparency = 0.65 }, Enum.EasingStyle.Linear)
+			Debris:AddItem(e, dur)
+			task.wait(rng:NextNumber(0.7, 1.3))
+		end
+	end)
 	Intro.fade = make("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = BLACK, BackgroundTransparency = 1, ZIndex = 20, Parent = introGui })
 end
 
@@ -4629,7 +5400,7 @@ do
 		local sc = make("UIScale", { Parent = p })
 		return { panel = p, list = list, close = close, scale = sc }
 	end
-	Menu.worlds = shell("🗺  WORLDS")
+	Menu.worlds = shell("🗺  TRAVEL")
 	Menu.swords = shell("⚔  SWORD BAG")
 	Menu.settings = shell("⚙  SETTINGS")
 	function Menu.row(list, height, order)
@@ -5151,7 +5922,13 @@ do
 	------------------------------------------------------------------------------------------ setup per character
 	function CA.attachSword(ca, id)
 		if ca.sword then ca.sword:Destroy() end
-		ca.sword, ca.swordInfo = nil, nil
+		-- also remove any older sword left in this character (e.g. from before your avatar finished loading)
+		if ca.char then
+			for _, d in ipairs(ca.char:GetChildren()) do
+				if d.Name == "FH_Sword" and d:IsA("Model") then d:Destroy() end
+			end
+		end
+		ca.sword, ca.swordInfo, ca.swordHandle = nil, nil, nil
 		ca.swordId = id
 		local hand = ca.hand
 		if not hand or not hand.Parent or not id then return end
@@ -5162,10 +5939,13 @@ do
 		local att = hand:FindFirstChild("RightGripAttachment")
 		local gripPos = (att and att:IsA("Attachment")) and att.Position or Vector3.new(0, ca.r15 and -(hand.Size.Y * 0.15) or -1, 0)
 		gripPos = Vector3.new(0, math.clamp(gripPos.Y, -hand.Size.Y / 2, hand.Size.Y / 2), 0)
-		make("Weld", { Name = "FH_SwordGrip", Part0 = hand, Part1 = handle, C0 = CFrame.new(gripPos) * CFrame.Angles(math.rad(-90), 0, 0),
-			C1 = CFrame.new(), Parent = handle })
+		local grip = CFrame.new(gripPos) * CFrame.Angles(math.rad(-90), 0, 0)
+		-- put the whole sword in the hand FIRST, then weld it: every piece starts exactly where it belongs
+		model.PrimaryPart = handle
+		model:PivotTo(hand.CFrame * grip)
+		make("Weld", { Name = "FH_SwordGrip", Part0 = hand, Part1 = handle, C0 = grip, C1 = CFrame.new(), Parent = handle })
 		model.Parent = ca.char
-		ca.sword, ca.swordInfo = model, info
+		ca.sword, ca.swordInfo, ca.swordHandle = model, info, handle
 	end
 
 	function CA.setup(plr, char)
@@ -5186,6 +5966,13 @@ do
 		if not ca.hand or ca.hand.Parent ~= ca.char then return true end
 		if ca.J.ShoulderR and not ca.J.ShoulderR.m.Parent then return true end
 		return false
+	end
+
+	-- true if a sword ever drifts away from its hand (then it simply gets attached again)
+	function CA.swordLoose(ca)
+		local h, hand = ca.swordHandle, ca.hand
+		if not h or not hand or not h.Parent or not hand.Parent or not h:IsDescendantOf(workspace) then return false end
+		return (h.Position - hand.Position).Magnitude > 6
 	end
 
 	function CA.startSwing(ca, kind, speed)
@@ -7281,6 +8068,9 @@ do
 		local m = Menu[name]
 		Menu.clear(m)
 		if name == "worlds" then
+			local top = Menu.row(m.list, 44, 0)
+			UI.text({ Text = "💀 " .. commas(S.kills) .. " kills  ·  walk into a cave tunnel or press TRAVEL", Position = UDim2.fromOffset(12, 6),
+				Size = UDim2.new(1, -24, 1, -12), Stroke = 2.4, MaxText = 22, Parent = top })
 			local rows = { { "cave", "The Cave", "Safe zone · Gus's shop · heal up", 0 } }
 			for _, wid in ipairs(WORLD_ORDER) do
 				local w = WORLDS[wid]
@@ -8314,7 +9104,7 @@ local function updateHUD(dt)
 	HUD.candyLabel.Text = S.pumpkin and (commas(S.candies) .. " 🎃") or (math.min(S.candies, CANDY_GOAL) .. " / " .. CANDY_GOAL)
 	HUD.candyFill.Size = UDim2.fromScale(math.clamp(S.candies / CANDY_GOAL, 0, 1), 1)
 	HUD.killLabel.Text = commas(S.kills)
-	HUD.bannerScale.Scale = 1 + math.sin(os.clock() * 3) * 0.03
+	HUD.candyPill.Visible = EVENT_MULT > 1 -- candy only matters while the Halloween event is on
 end
 
 -- FPS watchdog: if HIGH graphics stays slow for 6 seconds in a row, switch to FAST once
@@ -8467,8 +9257,22 @@ RunService.Heartbeat:Connect(function(dt)
 		if char and not S.dead and (not ca or CA.broken(ca)) then
 			local n = CA.setup(player, char)
 			if n then CA.attachSword(n, S.equipped) end
-		elseif ca and not S.dead and (not ca.sword or ca.sword.Parent ~= char) then
+		elseif ca and not S.dead and (not ca.sword or ca.sword.Parent ~= char or CA.swordLoose(ca)) then
 			CA.attachSword(ca, S.equipped)
+		end
+		-- everyone else's sword stays in their hand too (re-attached if their avatar reloads)
+		for plr, c in pairs(CA.list) do
+			if plr ~= player and plr.Parent and not c.zombieAt then
+				if CA.broken(c) then
+					local pc = plr.Character
+					if pc and pc:FindFirstChild("HumanoidRootPart") and (pc:FindFirstChild("RightHand") or pc:FindFirstChild("Right Arm")) then
+						local n = CA.setup(plr, plr.Character)
+						if n then CA.attachSword(n, plr:GetAttribute("FH_Sword") or "rusty") end
+					end
+				elseif not c.sword or c.sword.Parent ~= c.char or CA.swordLoose(c) then
+					CA.attachSword(c, plr:GetAttribute("FH_Sword") or "rusty")
+				end
+			end
 		end
 	end
 	-- snow falls around you in Ice World
@@ -8505,7 +9309,7 @@ end)
 ------------------------------------------------------------------------------------------------
 local function buildEverything()
 	building, builtCount = true, 0
-	local EST = 8500
+	local EST = 10500
 	task.spawn(function()
 		while building do
 			Intro.barFill.Size = UDim2.fromScale(math.clamp(builtCount / EST, 0.03, 0.97), 1)
@@ -8616,11 +9420,10 @@ task.spawn(function()
 	end
 	Unlocks.check(true)
 	Pickups.candyCheck(true)
-	Intro.status.Text = Link.coop and "Ready! 🌐 Multiplayer ON" or "Ready!"
-	tween(Intro.bg, 1.2, { BackgroundTransparency = 0.35 })
-	tween(Intro.barBack, 0.4, { BackgroundTransparency = 1 })
-	tween(Intro.barFill, 0.4, { BackgroundTransparency = 1 })
-	Intro.playHolder.Visible = true
+	Intro.ready(Link.coop and (S.canSave and "Ready! 🌐 Multiplayer ON · 💾 Saving ON" or "Ready! 🌐 Multiplayer ON") or "Ready! 👤 Solo mode")
+	Intro.setStats(string.format("💰 %s   💀 %s kills   %s", commas(S.coins), commas(S.kills),
+		S.pumpkin and "🎃 Pumpkin Sword!" or ("🍬 " .. math.min(S.candies, CANDY_GOAL) .. "/" .. CANDY_GOAL)),
+		((S.kills > 0) and "Welcome back, " or "Welcome, ") .. tostring(player.DisplayName or player.Name) .. "!")
 	while not S.playing do
 		tween(Intro.playScale, 0.6, { Scale = 1.07 }, Enum.EasingStyle.Sine)
 		task.wait(0.6)
