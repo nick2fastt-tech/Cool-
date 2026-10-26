@@ -1,90 +1,97 @@
-# Court Kings — Roblox basketball (one Luau file)
+# Court Kings — realistic 1v1 basketball for Roblox (one LocalScript)
 
-All of the game is in **`BasketballGame.lua`**: the gym, ball, shooting, dribbling, steals, builds, saving, menus, HUD, mobile buttons, and animation hookup.
+The whole game is in one file: **`CourtKings.lua`**.
 
-## Install in Roblox Studio (about 1 minute)
+## Install (one step)
 
-| # | Where in Studio | What to add | What goes in it |
-|---|---|---|---|
-| 1 | **ReplicatedStorage** | ModuleScript named `BasketballGame` | Paste all of `BasketballGame.lua` |
-| 2 | **ServerScriptService** | Script | `require(game:GetService("ReplicatedStorage"):WaitForChild("BasketballGame")).StartServer()` |
-| 3 | **StarterPlayer › StarterPlayerScripts** | LocalScript | `require(game:GetService("ReplicatedStorage"):WaitForChild("BasketballGame")).StartClient()` |
+1. In Roblox Studio, open **StarterPlayer › StarterPlayerScripts**.
+2. Click **+**, choose **LocalScript**, and paste all of `CourtKings.lua` into it.
+3. Press **Play**.
 
-Roblox can't run one script on both the server and each player's device, so steps 2 and 3 are one-line loaders. All of the game code is in the single ModuleScript.
+**For the best graphics (1 click, optional):** Explorer › **Lighting** › Properties › **Technology = Future**. Roblox doesn't let scripts change this one setting. The script sets everything else itself, including `LightingStyle = Realistic`, `PrioritizeLightingQuality`, bloom, color grading, haze, depth of field on the menus, and shadow-casting arena lights.
 
-**Studio settings**
-- Game Settings › Security › **Enable Studio Access to API Services**: ON. Builds won't save without it.
-- Lighting › Technology: **Future** (looks best).
-- Optional: Workspace › StreamingEnabled: off. The gym is already set to always load, so you don't have to change this.
+**To save builds forever (optional):** a LocalScript can't use DataStores (Roblox only allows that on the server). Without the server script, your build is kept for the session. To save it permanently:
+1. Copy the **OPTIONAL SERVER SAVE SCRIPT** from the bottom of `CourtKings.lua` into a Script in **ServerScriptService**.
+2. Turn on **Game Settings › Security › Enable Studio Access to API Services**.
+
+The LocalScript finds the server script automatically.
 
 ## Controls
 
 | Action | PC | Mobile | Gamepad |
 |---|---|---|---|
-| Sprint | Hold Shift | SPRINT (toggle) | L3 |
-| Shoot (with ball) | Hold LMB or F, release | Hold SHOOT, release | R2 |
-| Steal (no ball) | LMB or F | STEAL | R2 |
-| Guard (no ball) | Hold G | Hold GUARD | L2 |
-| Crossover / Between legs / Behind back | Q / E / R | CROSS / LEGS / BACK | X / Y / B |
+| Move / jump | WASD / Space | stick / jump button | left stick / A |
+| Sprint | hold Shift | SPRINT (toggle) | L3 (toggle) |
+| Shoot (with the ball) | hold Left Mouse or F, release | hold SHOOT, release | R2 |
+| Steal (without the ball) | Left Mouse or F | STEAL | R2 |
+| Guard stance | hold G | hold GUARD | L2 |
+| Crossover / between the legs / behind the back | Q / E / R | CROSS / LEGS / BACK | X / Y / B |
+| Camera (player / broadcast) | C | CAM button | D-pad up |
 
-## How the systems work
+## What's in the game
 
-- **Pickup:** walk into a loose ball, or grab rebounds. Taller builds can grab higher and from farther away. Only one player can hold the ball, and it's welded to that player while they hold it.
-- **Dribble:** the server moves the ball down to the floor and back with a bounce sound. Each of the 3 moves takes the ball on its own path (in front, under the legs, behind the back) and switches it to your other hand.
-- **Shooting:** holding the button charges the meter. The green zone shows the right power for your current distance. Your chance to score depends on:
-  - how close your charge is to the green zone
-  - your distance from the hoop
-  - your build: taller players finish better near the rim, shorter players shoot better from deep
-  - releasing near the top of your jump
-  - defenders guarding you
+- **Real-size arena:** 1 foot = 0.9 studs.
+  - 94 × 50 ft hardwood court with all the NBA markings: lane, blocks, hash marks, restricted area, the 23'9" three-point line with 22-ft corners, center circle and logo.
+  - Glass backboards with a shooter's square and a red LED buzzer strip, 32-segment breakaway rims, and diamond-mesh nets that swish.
+  - Padded stanchions, shot clocks above the glass, a center-hung jumbotron with live score, and LED ribbon boards.
+  - Seats with a crowd that jumps on big plays, a scorer's table, team benches, courtside seats, championship and retired-number banners, suites, rafters, and spotlights.
+- **Real physics:**
+  - Real gravity for this scale and a real-size ball (9.4 in) and rim (18 in).
+  - Missed shots bounce off the rim and glass, with backspin.
+  - Every shot comes in at about a 45° entry angle, like a real jump shot.
+  - Dribbles are timed by gravity and the ball's bounce.
+- **1v1 vs CPU to 21:**
+  - Rules: check ball, 24-second shot clock (14 after an offensive rebound off the rim), take-it-back after defensive rebounds and steals, out of bounds, goaltending.
+  - CPU opponents come in 5 archetypes and 3 levels: Rookie / Pro / All-Star. The CPU reacts with a delay, closes out, contests and blocks, pokes at loose dribbles, drives around you, does dribble moves, and predicts rebounds.
+- **Shootaround mode:** practice with an automatic rebounder and FG% tracking.
+- **Shooting:**
+  - **Meter:** a meter floats next to your player. Its green zone shows the right power for your distance.
+  - **What decides a make:** your charge accuracy, distance, release timing, how hard you're contested, and your build all count.
+  - **Layups and dunks:** layups happen automatically near the rim. Dunks happen if your build can reach the rim.
+- **Builds:** height 5'5"–7'3", weight 145–220 lb, and 10 skin tones.
+  - They change your real avatar: R15 height and width scaling, R6 overall scale.
+  - They also set your ratings: speed, strength, reach, shooting, handles, defense, vertical, and whether you can dunk.
+- **Animations for R15 and R6:** built in, with no uploads needed.
+  - The script poses your joints every frame on top of Roblox's walk and run.
+  - Built-in poses: dribble (the hand stays on the ball), crossover, between the legs, behind the back, set point, release and follow-through, defensive stance, contest, steal, sprint lean, celebration, and your head tracking the ball.
+  - Put your own animation IDs in `ANIMATIONS` and they replace the built-in ones.
+- **Optimized:**
+  - Decorative parts skip collisions, touch, raycasts and shadows.
+  - Only the 6 central lights cast shadows.
+  - The crowd fills in over a few frames, and crowd animation uses bulk moves.
+  - The UI only updates when values change.
+  - Everything is client-side, so there's no network lag.
 
-  Missed shots really hit the rim or backboard and bounce. Shots from behind the arc score 3.
-- **Steals:** your chance goes up when the ball is low or mid-move and when you're guarding. It goes down against a stronger (heavier) ball handler. A missed steal slows you for a moment.
-- **Builds:**
+## Things you can change at the top of the file
 
-  | Stat | Effect |
-  |---|---|
-  | Height (5'5"–7'3") | Body size, reach, rebounding, shooting range |
-  | Weight (145–220 lb) | Strength and ball protection, but slower, lower jump, more stamina used |
-  | Skin tone | 8 color options |
+- **`CONFIG`:**
+  - Win score, shot clock, default mode and difficulty.
+  - Crowd density, number of shadow lights, real gravity on/off.
+  - Hiding other players. Other people in the server play their own copy of the game.
+- **`ANIMATIONS`:** your uploaded animation IDs, a separate set for R15 and R6.
+- **`SOUNDS`:** sound IDs. Only the bounce sound is built in; the rest are empty until you add IDs.
 
-  Builds are saved with DataStoreService.
+## How it was tested
 
-## Assets you need to make (placeholders are in the script)
+I couldn't run Roblox Studio here, so I built a test Roblox in Luau:
+- **API checks:** it uses Roblox's current API definitions (Oct 2026). Any unknown property, wrong value type, read-only write, invalid enum or unknown method is an error.
+- **Physics:** it simulates characters, jumping, the ball, the rim and the backboard.
+- **Joints and animation:** it places joints from their transforms the way Roblox does, including the Animator overwriting joints every frame.
 
-Open the `ANIMATIONS` table near the top of the file. Make each animation **twice**, once on an R15 dummy and once on an R6 dummy (Avatar tab › Rig Builder › Animation Editor). Publish each one, then paste its ID in place of `rbxassetid://0`.
+The tests:
+- **Full games:** R15, R6 and touch, with an automated player driving the menus, Build screen, a full 1v1 game, shootaround, the camera toggle, a reset/respawn, and pressing Play before your avatar spawns. Result: **0 errors, 0 warnings.**
+- **Forced makes:** 30 shots from 2 to 30 feet with the make forced, on each rig. All 30 went through the rim.
+- **Make detection:** on normal shots, every shot that rolled a make went in.
 
-| Animation | Required | Notes |
-|---|---|---|
-| Shoot | yes | jump shot, ~0.8 s |
-| Crossover | yes | ~0.55 s |
-| BetweenLegs | yes | ~0.55 s |
-| BehindBack | yes | ~0.55 s |
-| Sprint | yes | looped |
-| SprintWithBall | yes | looped; uses Sprint if missing |
-| Dribble, Defense, Steal | optional | extras |
+The screenshots below are renders of the exact parts, lights, joint poses and GUI the script creates in that test run. They are not Roblox Studio captures. The blocky players are the test rigs standing in for your avatar.
 
-That's 12 required uploads (6 per rig). Until you add them the game still runs: it skips any missing animation and prints a warning in Output.
-
-**Sounds** (`SOUNDS` table):
-
-| Sound | Default |
-|---|---|
-| Bounce, Swish | Roblox built-in placeholder sounds |
-| Rim, Backboard, Steal, Crowd | none; add your own IDs |
-
-**Gym:** built automatically by script. To use your own model instead, set `CONFIG.BuildGym = false`. Your model needs this setup:
-- named `BasketballGym`, with a `Hoops` folder
-- each hoop has a part named `RimCenter`, its rim parts are named `Rim`, and it has a `Backboard`
-- optional: a `Scoreboard` with TextLabels and a `PlayerSpawn` part
-
-## Previews
-
-These are **not Roblox Studio screenshots**. They were rendered from the exact parts and GUI layout the script creates, after running it in a Luau runtime with a mock Roblox API. The blocky players are stand-ins.
+## Screenshots
 
 | | |
 |---|---|
-| ![](screenshots/01_gym_menu_view.png) | ![](screenshots/02_court_top_down.png) |
-| ![](screenshots/03_hoop_closeup.png) | ![](screenshots/04_main_menu.png) |
-| ![](screenshots/05_build_menu.png) | ![](screenshots/06_hud_shooting.png) |
-| ![](screenshots/07_hud_defense.png) | ![](screenshots/05b_build_menu_default.png) |
+| ![](screenshots/menu.png) | ![](screenshots/build.png) |
+| ![](screenshots/charging.png) | ![](screenshots/defense.png) |
+| ![](screenshots/shotflight.png) | ![](screenshots/dunk.png) |
+| ![](screenshots/mobile.png) | |
+
+![](screenshots/poses.png)
