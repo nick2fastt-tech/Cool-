@@ -287,3 +287,27 @@ export function metalFloorTex() {
     for (const [x, y] of [[12, 12], [w - 12, 12], [12, h - 12], [w - 12, h - 12], [w / 2 - 10, 12], [12, h / 2 - 10]]) { ctx.beginPath(); ctx.arc(x, y, 4, 0, 7); ctx.fill(); }
   }, { repeat: [6, 5] });
 }
+
+// A daytime city skyline seen through a window.
+export function cityViewTex(seed = 7) {
+  const r = rng(seed);
+  return canvasTex(512, 288, (ctx, w, h) => {
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, '#5f9fe0'); g.addColorStop(0.6, '#a9d4f5'); g.addColorStop(1, '#e4f3ff');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+    // far row (pale), then near row (darker, with windows)
+    for (const [shade, base, minH, maxH, win] of [['#8fb0cf', h, 70, 150, false], ['#3e5677', h, 40, 200, true]]) {
+      let x = -10;
+      while (x < w) {
+        const bw = 26 + r() * 46, bh = minH + r() * (maxH - minH);
+        ctx.fillStyle = shade; ctx.fillRect(x, base - bh, bw, bh);
+        if (win) {
+          for (let wy = base - bh + 8; wy < base - 8; wy += 14) for (let wx = x + 5; wx < x + bw - 8; wx += 11) {
+            ctx.fillStyle = r() < 0.3 ? '#ffe7a6' : '#6f8fb3'; ctx.fillRect(wx, wy, 6, 8);
+          }
+        }
+        x += bw + 2 + r() * 8;
+      }
+    }
+  });
+}

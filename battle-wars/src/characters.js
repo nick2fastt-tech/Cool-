@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mat, mk, grp, rng, clamp, lerp, smoothstep, noise1, canvasTex } from './util.js';
 import { emblemTex } from './textures.js';
+import { buildClayFigure } from './e6.js';
 
 // ---------------------------------------------------------------- pose model
 export const POSE_KEYS = ['y', 'lean', 'twist', 'tilt', 'spF', 'spT', 'spS', 'hdN', 'hdY', 'hdT',
@@ -186,6 +187,20 @@ export const ACTIONS = {
   raiseHand: { gest: false, f: (a) => { const k = smoothstep(0, 0.3, a); return { aRF: 2.85 * k, aRO: 0.15, eR: 0.15, aLO: 0.12, eL: 0.2, hdN: -0.05 }; } },
   powerFail: { f: (a, t) => { const k = smoothstep(0, 0.3, a); return { aLF: 1.2 * k, aRF: 1.2 * k, aLO: 0.5 * k, aRO: 0.5 * k, eL: 0.4, eR: 0.4, spF: 0.1, lLF: 0.3, lRF: -0.25, kL: 0.3, kR: 0.25, y: -0.04 + 0.006 * S(t * 30), hdN: -0.05 }; } },
   doubleOver: { f: (a, t) => ({ spF: 0.6, hdN: 0.25, aLF: 0.9, aRF: 0.9, aLT: 0.8, aRT: 0.8, eL: 0.5, eR: 0.5, lLF: 0.3, kL: 0.5, kR: 0.4, y: -0.1, lean: 0.12 + 0.03 * S(t * 3) }) },
+  // --- Episode 6 (The Power Returns)
+  ride: { sit: true, f: (a, t) => ({ y: -0.32, lLF: 1.2, lRF: 1.2, lLO: 0.45, lRO: 0.45, kL: 1.3, kR: 1.3, fL: 0.2, fR: 0.2, spF: 0.08 + 0.02 * S(t * 4), aLF: 0.7, aRF: 0.75, aLO: 0.1, aRO: 0.1, eL: 1.2, eR: 1.1, aLT: 0.4, aRT: 0.4, hdN: 0.05 }) },
+  mount: { f: (a) => { const k = smoothstep(0, 1.2, a); return { lLF: 1.6 * (1 - k) + 1.2 * k, kL: 1.9 * (1 - k) + 1.3 * k, lRF: -0.3 * (1 - k) + 1.2 * k, kR: 0.4 + 0.9 * k, lLO: 0.1 + 0.35 * k, lRO: 0.1 + 0.35 * k, y: -0.32 * k, aLF: 1.8 - 1.1 * k, aRF: 1.6 - 0.9 * k, eL: 0.6, eR: 0.6, spF: 0.3 - 0.2 * k, lean: 0.2 * (1 - k) }; } },
+  kneelPick: { f: (a, t) => { const k = smoothstep(0, 0.8, a); return { y: -0.45 * k, lLF: 1.45 * k, kL: 1.6 * k, lRF: -0.1 * k, kR: 2.1 * k, fR: 0.6 * k, spF: 0.5 * k, aRF: 0.9 * k, eR: 0.4, aRO: 0.0, aLF: 0.3 * k, eL: 0.9 * k, aLO: 0.12, hdN: 0.45 * k }; } },
+  studyHand: { f: (a, t) => ({ aRF: 0.75, eR: 1.25, aRT: -0.25, aRO: -0.1, aLO: 0.12, eL: 0.25, hdN: 0.45, spF: 0.1, hdY: 0.05 * Math.sin(t * 0.7) }) },
+  holdTable: { f: (a, t) => { const k = smoothstep(0, 0.4, a); return { aRF: 2.95 * k, aRO: 0.25, eR: 0.15, aLO: 0.5 * k, aLF: 0.3, eL: 0.6, lLF: 0.35, lRF: -0.25, kL: 0.3, kR: 0.2, y: -0.05 + 0.006 * S(t * 20), spF: -0.1 * k, hdN: -0.25 * k }; } },
+  flex: { f: (a, t) => { const k = smoothstep(0, 0.3, a); return { aLO: 1.35 * k, aRO: 1.35 * k, aLF: 0.1, aRF: 0.1, eL: 1.9 * k, eR: 1.9 * k, aLT: -1.2 * k, aRT: -1.2 * k, spF: -0.08, hdN: -0.1, y: 0.004 * S(t * 30), lLO: 0.15, lRO: 0.15 }; } },
+  spray: { upper: true, f: (a, t) => { const k = smoothstep(0, 0.25, a); return { aRF: 1.55 * k, aRO: 0.05, eR: 0.1, aLF: 0.9 * k, aLO: 0.25, eL: 1.4, spT: -0.15 * k, hdN: -0.05 }; } },
+  wristUp: { upper: true, gest: true, f: (a, t) => { const k = smoothstep(0, 0.3, a); return { aLF: 0.95 * k, aLT: 1.0 * k, eL: 1.25 * k, aLO: 0.15, aRO: 0.12, eR: 0.25, hdN: 0.35 * k, hdY: 0.25 * k }; } },
+  shieldUp: { f: (a, t) => { const k = smoothstep(0, 0.2, a); return { aLF: 1.5 * k, aLO: 0.05, eL: 0.25, aLT: 0.4, aRF: 0.5, aRO: 0.25, eR: 1.2, lLF: 0.4, kL: 0.35, lRF: -0.35, kR: 0.2, y: -0.05, lean: -0.06, spF: 0.05 }; } },
+  climbHead: { f: (a, t) => { const c = S(a * 7); return { lean: 0.95, spF: 0.2, aLF: 2.6 + 0.4 * c, aRF: 2.6 - 0.4 * c, aLO: 0.35, aRO: 0.35, eL: 0.5, eR: 0.5, lLF: 0.9 + 0.5 * c, lRF: 0.9 - 0.5 * c, kL: 1.3, kR: 1.3, y: -0.45, hdN: -0.9 }; } },
+  hang: { f: (a, t) => ({ aLF: 2.9, aRF: 2.8, aLO: 0.2, aRO: 0.25, eL: 0.15, eR: 0.2, lLF: 0.3 + 0.3 * S(t * 9), lRF: 0.1 - 0.3 * S(t * 9), kL: 0.5, kR: 0.6, hdN: -0.3, spF: -0.05 }) },
+  floatSit: { sit: true, gest: true, f: (a, t) => ({ ...sitLegs, spF: 0.05, aLO: 0.5, aRO: 0.5, aLF: 0.35, aRF: 0.35, eL: 0.4, eR: 0.4, hdN: -0.05 + 0.03 * S(t * 2) }) },
+  catchSide: { f: (a) => { const k = smoothstep(0, 0.15, a); return { aRF: 1.4 * k, aRO: 0.7 * k, eR: 0.5, aLO: 0.12, eL: 0.2, hdY: 0.2 }; } },
   pointMap: { gest: false, f: (a, t) => { const k = smoothstep(0, 0.4, a); return { lean: 0.05, spF: 0.3, aRF: 1.0 + 0.1 * k, aRO: 0.0, eR: 0.15, aLF: 0.85, aLO: 0.22, eL: 0.2, hdN: 0.2, lLO: 0.1, lRO: 0.1 }; } },
 };
 
@@ -659,6 +674,20 @@ function buildExtras(cfg, J, neck, hc, r) {
       const m = mk(new THREE.CircleGeometry(r0, 10), dirt, par, [x, y, z], [0, ry, 0], [1.4, 1, 1], false); m.visible = false; ex.scuffs.push(m);
     }
   }
+  if (has('wideHat')) {
+    const h = grp(head, 0, hc + r * 0.86, 0.01); h.rotation.set(0.12, 0, 0);
+    const felt = mat(0x2a1c12, { r: 0.85 });
+    mk(new THREE.CylinderGeometry(0.42, 0.42, 0.02, 30), felt, h, [0, 0, 0], [0, 0, 0], [1, 1, 0.92]);
+    mk(new THREE.CylinderGeometry(0.15, 0.18, 0.2, 22), felt, h, [0, 0.1, 0]);
+    mk(new THREE.SphereGeometry(0.16, 16, 8, 0, P * 2, 0, P / 2), felt, h, [0, 0.19, 0], [0, 0, 0], [1, 0.35, 1.05]);
+    mk(new THREE.CylinderGeometry(0.182, 0.182, 0.04, 22), mat(0x0a0806, { r: 0.6 }), h, [0, 0.03, 0]);
+    for (const sd of [1, -1]) mk(new THREE.CylinderGeometry(0.42, 0.42, 0.02, 30, 1, false, sd > 0 ? 0 : P, P), felt, h, [sd * 0.0, 0.03, 0], [0, P / 2, sd * 0.18]);
+  }
+  if (has('faceShadow')) {
+    // the face stays hidden in the hat's shadow
+    mk(new THREE.SphereGeometry(r * 1.04, 22, 14, 0, P, 0, P * 0.8), new THREE.MeshBasicMaterial({ color: 0x050407 }), head, [0, hc - 0.005, 0.015], [0, 0, 0], [0.98, 1.08, 1.04], false);
+    mk(new THREE.BoxGeometry(0.34, 0.12, 0.14), mat(0x3a1a12, { r: 0.9 }), head, [0, hc - r * 0.62, r * 0.42], [0.2, 0, 0]);
+  }
   if (has('milkStain')) {
     ex.milk = grp(J.spine, 0.03, 0.27, 0.142);
     for (const [x, y, r] of [[0, 0, 0.07], [0.05, -0.06, 0.04], [-0.04, -0.08, 0.035], [0.02, -0.12, 0.025], [-0.06, 0.03, 0.03]]) mk(new THREE.CircleGeometry(r, 14), mat(0xf8f8ff, { r: 0.25 }), ex.milk, [x, y, 0.002], [0, 0, 0], null, false);
@@ -1044,6 +1073,22 @@ export function buildProp(kind) {
     mk(new THREE.CylinderGeometry(0.018, 0.012, 0.16, 10), mat(0x1a1a22, { r: 0.3, m: 0.6 }), g, [0, 0, 0]);
     mk(new THREE.SphereGeometry(0.03, 12, 10), mat(0x9a9aa8, { r: 0.3, m: 0.8 }), g, [0, 0.09, 0]);
     g.position.set(0, -0.06, 0.04); g.rotation.set(-0.3, 0, 0);
+  } else if (kind === 'canister') {
+    mk(new THREE.CylinderGeometry(0.032, 0.032, 0.14, 12), mat(0x3fb0ff, { r: 0.3, m: 0.5 }), g, [0, 0, 0]);
+    mk(new THREE.CylinderGeometry(0.02, 0.028, 0.03, 10), mat(0xd8d8e0, { m: 0.7 }), g, [0, 0.085, 0]);
+    mk(new THREE.BoxGeometry(0.025, 0.02, 0.02), mat(0x222228), g, [0, 0.105, 0.01]);
+    g.position.set(0, -0.08, 0.04); g.rotation.set(-1.4, 0, 0);
+  } else if (kind === 'table') {
+    mk(new THREE.BoxGeometry(2.0, 0.08, 0.9), mat(0x7a5232), g, [0, 0, 0]);
+    for (const [x, z] of [[-0.9, -0.35], [0.9, -0.35], [-0.9, 0.35], [0.9, 0.35]]) mk(new THREE.BoxGeometry(0.07, 0.4, 0.07), mat(0x5a3a22), g, [x, 0.2, z]);
+    g.position.set(0, -0.1, 0); g.rotation.set(P, 0, 0);
+  } else if (kind === 'controller') {
+    mk(new RoundedBoxGeometry(0.2, 0.05, 0.11, 2, 0.02), mat(0x222831, { r: 0.4 }), g, [0, 0, 0]);
+    for (const sd of [1, -1]) mk(new THREE.CylinderGeometry(0.012, 0.012, 0.02, 8), mat(sd > 0 ? 0xff4040 : 0x40a0ff), g, [sd * 0.05, 0.03, 0]);
+    g.position.set(0.07, -0.09, 0.05); g.rotation.set(0, 0, 0.3);
+  } else if (kind === 'clay') {
+    g.add(buildClayFigure(0.9, true));
+    g.position.set(0, -0.11, 0.06); g.rotation.set(1.8, 0, 0);
   } else if (kind === 'clock') {
     mk(new RoundedBoxGeometry(0.16, 0.08, 0.09, 2, 0.02), mat(0x1a1a22, { r: 0.4 }), g, [0, 0, 0]);
     g.position.set(0, -0.08, 0.06);
@@ -1138,5 +1183,6 @@ export const CAST = {
   leon: { name: 'leon', seed: 5, scale: 0.93, hair: 'spiky', hairColor: 0x2a211c, streakColor: 0xb8b8bc, browColor: 0x1e1612, skin: 0xd9a07a, skinDark: 0xc98e68, eyeColor: 0x3a2412, suit: 0x18215e, suitDark: 0x0e133a, accent: 0xf2b632, accentGlow: 0x7a4a00, pad: 0x1f2f8a, boot: 0x1a2a7a },
   greg: { name: 'greg', seed: 6, face: 'greg', skin: 0xf2f2f4, skinDark: 0xe6e6ea, eyeColor: 0x000000, casual: true, emblem: false, shirt: 0x141418, pants: 0x101014, boot: 0x0c0c10, glove: 0xf2f2f4, coat: 0x18181c, coatDark: 0x0a0a0c, belt: 0x0a0a0a },
   newark: { name: 'newark', seed: 11, scale: 0.9, hair: 'wavy', hairColor: 0x15100c, browColor: 0x15100c, skin: 0xa8734f, skinDark: 0x966442, eyeColor: 0x2a1a10, casual: true, emblem: false, shirt: 0xff7a1a, pants: 0x141418, boot: 0x0e0e12, belt: 0x0e0e12, coat: 0x16161a, coatDark: 0xff7a1a, coatTrim: 0xff8a2a, bareHands: true, extras: ['topHat', 'bowtie'] },
+  cowboy: { name: 'cowboy', seed: 12, scale: 0.95, hair: 'wavy', hairColor: 0x2a1a10, browColor: 0x1a0e08, skin: 0xb98a66, skinDark: 0xa87a58, eyeColor: 0x1a100a, casual: true, emblem: false, shirt: 0x2a2a30, pants: 0x1e2a3a, boot: 0x3a2214, belt: 0x2a160c, glove: 0x2a1a10, coat: 0x4a3222, coatDark: 0x2a1a10, extras: ['wideHat', 'faceShadow'] },
   barista: { name: 'barista', seed: 4, hair: 'wavy', hairColor: 0x2b1d14, skin: 0xc98d68, skinDark: 0xb87d5a, eyeColor: 0x2d1a10, casual: true, emblem: false, shirt: 0xf4f1ea, pants: 0x4a3a2c, apron: 0x2f7d4f, boot: 0x2a2420, bareHands: true, sleeves: 'short' },
 };

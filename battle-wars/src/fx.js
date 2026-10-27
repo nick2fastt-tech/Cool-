@@ -346,6 +346,49 @@ export function buildFX(parent) {
             const u = ((t * 0.8 + hash(j * 3.7)) % 1);
             addS(cx + (hash(j * 1.9) - 0.5) * 0.5, cy + 1.6 * (1 - u) * (0.4 + 0.6 * hash(j * 5.3)), cz + (hash(j * 2.7) - 0.5) * 0.4, 0.025 * (1 - u * 0.5), 0x9a40e0);
           }
+        } else if (e.kind === 'breath' && a >= 0 && a <= e.dur) {
+          // a stream of fire from the mouth toward a target
+          const k = Math.min(1, a / 0.15, (e.dur - a) / 0.25);
+          const rate = 260 * k, life = 0.55;
+          const i0 = Math.floor((t - life) * rate), i1 = Math.floor(t * rate);
+          for (let i = i0; i <= i1; i++) {
+            const ag = t - i / rate; if (ag < 0 || ag > life || i / rate < e.t) continue;
+            const u = ag / life, h1 = hash(i * 1.7), h2 = hash(i * 3.3), h3 = hash(i * 5.9);
+            const sp = (e.spread ?? 0.6) * u;
+            addG(lerp(e.from[0], e.to[0], u) + (h1 - 0.5) * sp, lerp(e.from[1], e.to[1], u) + (h2 - 0.5) * sp + u * u * 0.6, lerp(e.from[2], e.to[2], u) + (h3 - 0.5) * sp, (e.size ?? 0.25) * (0.4 + u * 1.1) * (1 - u * 0.5), FIRE[Math.min(3, Math.floor(u * 4))]);
+          }
+          light(lerp(e.from[0], e.to[0], 0.5), lerp(e.from[1], e.to[1], 0.5), lerp(e.from[2], e.to[2], 0.5), 0xff8a30, 25 * k, 14);
+        } else if (e.kind === 'goo' && a >= 0 && a <= e.dur + 0.5) {
+          // sticky spray from Aaron's canister
+          const hp = X.hand(e.who, e.side ?? 'R');
+          const rate = 90, life = 0.45;
+          const i0 = Math.floor((t - life) * rate), i1 = Math.floor(Math.min(t, e.t + e.dur) * rate);
+          for (let i = i0; i <= i1; i++) {
+            const ag = t - i / rate; if (ag < 0 || ag > life || i / rate < e.t) continue;
+            const u = ag / life, h1 = hash(i * 2.1), h2 = hash(i * 4.7);
+            addG(lerp(hp.x, e.to[0], u) + (h1 - 0.5) * 0.25 * u, lerp(hp.y, e.to[1], u) + Math.sin(u * Math.PI) * 0.3 + (h2 - 0.5) * 0.2 * u, lerp(hp.z, e.to[2], u) + (h2 - 0.5) * 0.25 * u, 0.05 + 0.04 * h1, h2 < 0.3 ? 0xd0ffc0 : 0x7aff6a);
+          }
+        } else if (e.kind === 'pillar' && a >= 0 && a <= e.dur) {
+          // a column of blue light shooting into the sky
+          const k = Math.min(1, a / 0.3, (e.dur - a) / 0.6), top = (e.height ?? 60) * Math.min(1, a / 0.8);
+          for (let j = 0; j < 160; j++) {
+            const h1 = hash(j * 1.3), h2 = hash(j * 7.1);
+            const y = e.y + ((h1 + t * 1.5) % 1) * top, th = h2 * Math.PI * 2 + t * 4, r = (e.radius ?? 0.7) * (0.3 + 0.7 * hash(j * 3.9));
+            addG(e.x + Math.cos(th) * r, y, e.z + Math.sin(th) * r, (0.12 + 0.12 * hash(j + Math.floor(t * 20))) * k * (e.size ?? 1), j % 4 ? (e.color ?? 0x4ab0ff) : 0xffffff);
+          }
+          addG(e.x, e.y, e.z, 0.8 * k * (e.size ?? 1), 0xffffff);
+          light(e.x, e.y + 2, e.z, e.color ?? 0x4ab0ff, 60 * k, 30);
+        } else if (e.kind === 'behDissolve' && a >= 0 && a <= e.dur) {
+          // Behemoth breaking apart into glowing particles
+          const rig = X.rig(); if (!rig) continue;
+          const k = Math.min(1, a / 0.4, (e.dur - a) / 0.8);
+          for (let j = 0; j < 260; j++) {
+            const h1 = hash(j * 2.7 + e.t), h2 = hash(j * 5.3 + e.t), h3 = hash(j * 8.9 + e.t);
+            const p = rig.pts[Math.floor(h1 * rig.pts.length)], r = rig.rad[Math.floor(h1 * rig.pts.length)];
+            const life = 1.4, ag = (t * 0.9 + h2 * life) % life;
+            addG(p[0] + (h2 - 0.5) * r * 2.5 + Math.sin(ag * 3 + j) * 0.3, p[1] + (h3 - 0.3) * r * 2 + ag * 2.5, p[2] + (h3 - 0.5) * r * 2.5, (0.06 + 0.08 * h3) * k * (1 - ag / life) * (e.size ?? 1), j % 5 ? 0x4ab0ff : 0xffffff);
+          }
+          light(rig.head[0], rig.head[1], rig.head[2], 0x4ab0ff, 40 * k, 20);
         } else if (e.kind === 'sparks') sparkBurst(e, t);
         else if (e.kind === 'debris') debris(e, t);
         else if (e.kind === 'smoke') smoke(e, t);

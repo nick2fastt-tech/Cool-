@@ -428,9 +428,25 @@ export function buildHQExterior() {
 function tvGame() {
   const tex = canvasTex(512, 288, () => {});
   const { ctx } = tex.userData;
-  tex.draw = (t, win, off, boss = 0, hp = 0.1, paused = 0, hit = 0) => {
+  tex.draw = (t, win, off, boss = 0, hp = 0.1, paused = 0, hit = 0, fall = -1) => {
     const w = 512, h = 288;
     if (off) { ctx.fillStyle = '#05070c'; ctx.fillRect(0, 0, w, h); tex.needsUpdate = true; return; }
+    if (fall >= 0) {
+      // a platformer: the hero runs to a cliff edge... and falls
+      const sky = ctx.createLinearGradient(0, 0, 0, h); sky.addColorStop(0, '#5ac8ff'); sky.addColorStop(1, '#c8f0ff');
+      ctx.fillStyle = sky; ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#ffffff'; for (let i = 0; i < 4; i++) { const cx = ((i * 150 - t * 15) % 600 + 600) % 600 - 50; ctx.beginPath(); ctx.arc(cx, 50 + (i % 2) * 20, 22, 0, 7); ctx.arc(cx + 24, 46 + (i % 2) * 20, 18, 0, 7); ctx.fill(); }
+      ctx.fillStyle = '#3aa84a'; ctx.fillRect(0, 200, 300, 14); ctx.fillStyle = '#8a5a2e'; ctx.fillRect(0, 214, 300, 80);
+      ctx.fillStyle = '#3aa84a'; ctx.fillRect(400, 200, 112, 14); ctx.fillStyle = '#8a5a2e'; ctx.fillRect(400, 214, 112, 80);
+      ctx.fillStyle = '#ffd040'; for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(430 + i * 25, 170, 8, 0, 7); ctx.fill(); }
+      const run = Math.min(1, fall * 2.2), drop = Math.max(0, fall * 2.2 - 1);
+      const px = 60 + run * 255, py = 176 + drop * drop * 260;
+      ctx.fillStyle = '#b07a44'; ctx.fillRect(px - 12, py, 24, 24); ctx.beginPath(); ctx.arc(px, py - 8, 12, 0, 7); ctx.fill();
+      ctx.fillStyle = '#6dd86a'; ctx.fillRect(px - 6, py - 12, 4, 4); ctx.fillRect(px + 3, py - 12, 4, 4);
+      ctx.fillStyle = '#fff'; ctx.font = `26px ${TX.FONT}`; ctx.fillText('LEVEL 9  ·  LIVES 1', 14, 30);
+      if (fall > 0.75) { ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(0, 0, w, h); ctx.fillStyle = '#ff4a4a'; ctx.font = `64px ${TX.FONT}`; ctx.textAlign = 'center'; ctx.fillText('GAME OVER', w / 2, h / 2 + 22); ctx.textAlign = 'left'; }
+      tex.needsUpdate = true; return;
+    }
     if (boss > 0.5) {
       // SLAUGHTER: a cartoon knight vs. a giant armored boss
       const bg = ctx.createLinearGradient(0, 0, 0, h); bg.addColorStop(0, '#3a0a14'); bg.addColorStop(1, '#120408');
@@ -493,6 +509,23 @@ function cityMap() {
   const hyd = [[180, 120], [300, 360], [520, 220], [700, 140], [820, 380], [430, 430], [620, 300], [260, 230]];
   tex.draw = (t, mode, zoom, blip) => {
     const w = 1024, h = 512;
+    if (mode >= 2) {
+      // security camera grid
+      ctx.fillStyle = '#04070f'; ctx.fillRect(0, 0, w, h);
+      const names = ['CAM 01  CITY CENTER', 'CAM 02  PARK', 'CAM 03  HQ ENTRANCE', 'CAM 04  DOWNTOWN', 'CAM 05  BRIDGE', 'CAM 06  ALLEY 7'];
+      for (let i = 0; i < 6; i++) {
+        const cx = 12 + (i % 3) * 337, cy = 12 + Math.floor(i / 3) * 250, cw = 325, ch = 238;
+        const gr = ctx.createLinearGradient(0, cy, 0, cy + ch); gr.addColorStop(0, i === 5 ? '#0a0c18' : '#2a3a5a'); gr.addColorStop(1, i === 5 ? '#050608' : '#1a2230');
+        ctx.fillStyle = gr; ctx.fillRect(cx, cy, cw, ch);
+        const R = (k) => { const x = Math.sin((i * 13 + k) * 12.9898) * 43758.5453; return x - Math.floor(x); };
+        for (let b = 0; b < 7; b++) { ctx.fillStyle = i === 5 ? '#14101a' : '#3a4a6a'; const bh = 60 + R(b) * 120; ctx.fillRect(cx + b * 48, cy + ch - bh, 40, bh); }
+        ctx.fillStyle = 'rgba(255,255,255,0.05)'; for (let y = cy; y < cy + ch; y += 4) ctx.fillRect(cx, y + ((t * 60) % 4), cw, 1);
+        ctx.fillStyle = '#9fd0ff'; ctx.font = `16px ${TX.UI_FONT}`; ctx.fillText(names[i], cx + 10, cy + 22);
+        if (Math.sin(t * 4 + i) > 0) { ctx.fillStyle = '#ff3b3b'; ctx.beginPath(); ctx.arc(cx + cw - 22, cy + 17, 6, 0, 7); ctx.fill(); ctx.fillText('REC', cx + cw - 62, cy + 22); }
+        ctx.strokeStyle = '#2f8cff'; ctx.lineWidth = 2; ctx.strokeRect(cx, cy, cw, ch);
+      }
+      tex.needsUpdate = true; return;
+    }
     ctx.save();
     ctx.fillStyle = '#04122b'; ctx.fillRect(0, 0, w, h);
     const z = 1 + zoom * 1.4;
@@ -626,7 +659,9 @@ export function buildLiving() {
   box(g, 15, 0.12, 0.25, 0, [0, 0.06, -4.68], { material: mat(0x1d2a7a) });
   box(g, 15, 0.08, 0.22, 0, [0, 2.6, -4.68], { material: mat(0x7fd4ff, { e: 0x2f8cff, ei: 0.7 }) });
   // window on left wall
-  const win = plane(g, 3.2, 1.8, new THREE.MeshStandardMaterial({ color: 0xbfe6ff, emissive: 0xbfe6ff, emissiveIntensity: 0.8 }), [-7.08, 1.8, -1.5], [0, P / 2, 0], false);
+  const cityView = TX.cityViewTex();
+  const win = plane(g, 3.2, 1.8, new THREE.MeshStandardMaterial({ color: 0xffffff, map: cityView, emissive: 0xffffff, emissiveMap: cityView, emissiveIntensity: 0.8 }), [-7.08, 1.8, -1.5], [0, P / 2, 0], false);
+  for (const [y, h, z, d] of [[2.72, 0.08, -1.5, 3.36], [0.88, 0.08, -1.5, 3.36], [1.8, 1.9, -3.14, 0.08], [1.8, 1.9, 0.14, 0.08], [1.8, 1.84, -1.5, 0.05]]) box(g, 0.06, h, d, 0x2a3550, [-7.04, y, z]);
   // TV
   box(g, 3.5, 2.0, 0.12, 0x0b0d12, [0, 1.75, -4.62], { round: 0.03 });
   const tv = tvGame();
@@ -635,8 +670,9 @@ export function buildLiving() {
   // couch, table, rug
   couch(g, 0, 0.75, P);
   mk(new THREE.CylinderGeometry(2.6, 2.6, 0.02, 32), mat(0x9a4f4f, { r: 1 }), g, [0, 0.01, -0.4], [0, 0, 0], [1, 1, 0.7]);
-  box(g, 2.0, 0.08, 0.9, 0x7a5232, [0, 0.42, -0.85], { round: 0.03 });
-  for (const [x, z] of [[-0.9, -1.2], [0.9, -1.2], [-0.9, -0.5], [0.9, -0.5]]) box(g, 0.07, 0.4, 0.07, 0x5a3a22, [x, 0.2, z]);
+  const ctable = grp(g);
+  box(ctable, 2.0, 0.08, 0.9, 0x7a5232, [0, 0.42, -0.85], { round: 0.03 });
+  for (const [x, z] of [[-0.9, -1.2], [0.9, -1.2], [-0.9, -0.5], [0.9, -0.5]]) box(ctable, 0.07, 0.4, 0.07, 0x5a3a22, [x, 0.2, z]);
   // posters
   for (const [x, t, c1, c2] of [[-4.2, 'TEAMWORK', '#2f6dff', '#0b1440'], [4.0, 'BE READY!', '#ff8a3d', '#5a1a0a']]) {
     mk(new THREE.PlaneGeometry(1.0, 1.4), new THREE.MeshStandardMaterial({ map: TX.posterTex(t, c1, c2), roughness: 0.8 }), g, [x, 2.0, -4.68], [0, 0, 0], null, false);
@@ -722,9 +758,10 @@ export function buildLiving() {
       L.hemi.intensity = night ? 0.45 : eve > 0.5 ? 0.55 : 0.95;
       lamp.intensity = night ? 11 : eve > 0.5 ? 9 : 0;
       ceil.intensity = night ? 9 : 0;
-      win.material.emissive.set(night ? 0x0c1838 : eve > 0.5 ? 0xff9a6a : 0xbfe6ff);
+      win.material.emissive.set(night ? 0x1a2a50 : eve > 0.5 ? 0xffb08a : 0xeef6ff);
       steel.visible = v('steelTable', 0) > 0.5;
-      tv.draw(t, v('tv.win', 0), v('tv.off', 0) > 0.5, v('tv.boss', 0), v('tv.hp', 0.12), v('tv.paused', 0) > 0.5, v('tv.hit', 0) > 0.5);
+      ctable.visible = v('table.held', 0) < 0.5;
+      tv.draw(t, v('tv.win', 0), v('tv.off', 0) > 0.5, v('tv.boss', 0), v('tv.hp', 0.12), v('tv.paused', 0) > 0.5, v('tv.hit', 0) > 0.5, v('tv.fall', -1));
       const hal = v('halloween', 0) > 0.5;
       hw.visible = hal; kit.visible = v('kitchen', 0) > 0.5;
       if (hal) { lamp.color.set(0xff8a30); hwLights.forEach((m, i) => { m.emissiveIntensity = 1.1 + 0.7 * Math.sin(t * 2.5 + i); }); ghost.position.y = 2.75 + 0.06 * Math.sin(t * 1.4); ghost.rotation.z = 0.05 * Math.sin(t * 0.9); }

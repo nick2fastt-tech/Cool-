@@ -19,6 +19,7 @@ export const SPEAKERS = {
   skeleton: { name: 'SKELETON', color: '#f2eee0' },
   crowd: { name: 'CROWD', color: '#ffb35a' },
   everyone: { name: 'EVERYONE', color: '#ffe066' },
+  citizen: { name: 'CITIZEN', color: '#ffb35a' },
   behemoth: { name: 'BEHEMOTH', color: '#c78bff' },
 };
 
@@ -262,6 +263,8 @@ export function drawOverlay(ctx, W, H, t, T, val) {
   if (fr > 0) { ctx.fillStyle = `rgba(255,40,60,${clamp(fr)})`; ctx.fillRect(0, 0, W, H); }
   const fv = val('flashViolet', 0);
   if (fv > 0) { ctx.fillStyle = `rgba(170,80,255,${clamp(fv)})`; ctx.fillRect(0, 0, W, H); }
+  const fb = val('flashBlue', 0);
+  if (fb > 0) { ctx.fillStyle = `rgba(90,190,255,${clamp(fb)})`; ctx.fillRect(0, 0, W, H); }
   const flash = val('flash', 0);
   if (flash > 0) { ctx.fillStyle = `rgba(255,255,255,${clamp(flash)})`; ctx.fillRect(0, 0, W, H); }
   const locCard = T.cards.some((c) => c.kind === 'location' && t >= c.t0 && t <= c.t1) ? 1 : 0;

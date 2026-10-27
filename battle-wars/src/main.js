@@ -8,10 +8,11 @@ import { soulSymbolTex } from './textures.js';
 import { buildBedroom, buildStore, buildNewarkExt, buildParty } from './halloween.js';
 import { buildBehemoth, buildCrown, buildUFO, buildTiger, buildGregRoom, buildDowntown, buildParkRuin } from './behemoth.js';
 import { behemothRig, behParams } from './behemothRig.js';
+import { buildHorse, buildCat, buildLair, buildAlley } from './e6.js';
 import { buildFX } from './fx.js';
 import { evalTrack, evalStep, buildGaitTables, gaitAt } from './director.js';
 import { drawOverlay } from './overlay.js';
-import { clamp, lerp, smoothstep, noise1, mk, mat } from './util.js';
+import { clamp, lerp, smoothstep, noise1, mk, mat, canvasTex } from './util.js';
 
 const P = Math.PI;
 const LEG_KEYS = ['y', 'lean', 'lLF', 'lLO', 'kL', 'fL', 'lRF', 'lRO', 'kR', 'fR'];
@@ -48,6 +49,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     city: buildCity(fx), coffee: buildCoffee(), hqExt: buildHQExterior(), living: buildLiving(), control: buildControl(), title: buildTitle(font, TextGeometry), reactor: buildReactor(), cavern: buildCavern(), tunnel: buildTunnels(), machines: buildMachineRoom(), platform: buildPlatform(), chamber: buildDiamondChamber(), park: buildPark(),
     ...(META?.halloween ? { bedroom: buildBedroom(), store: buildStore(), newarkExt: buildNewarkExt(), party: buildParty() } : {}),
     ...(META?.behemoth ? { gregRoom: buildGregRoom(), downtown: buildDowntown(), parkRuin: buildParkRuin() } : {}),
+    ...(META?.e6 ? { lair: buildLair(), alley: buildAlley() } : {}),
     black: { name: 'black', group: new THREE.Group(), bg: new THREE.Color(0x000000), update() {} },
   };
   for (const s of Object.values(SETS)) { s.group.visible = false; scene.add(s.group); }
@@ -55,7 +57,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   // cast
   // each hero can have outfit variants (pajamas, party costumes); the `${name}.outfit` track picks one per frame
   const heroes = {}, heroSets = {};
-  const HERO_NAMES = ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark'];
+  const HERO_NAMES = ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy'];
   for (const n of HERO_NAMES) {
     const extras = [...(CAST[n].extras ?? []), ...(META?.extras?.[n] ?? [])];
     heroSets[n] = { base: buildHero({ ...CAST[n], ...(costume[n] ?? {}), extras }) };
@@ -66,7 +68,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   const handAttached = [];
   const onHand = (n, side, obj) => { handAttached.push({ n, side, obj }); return obj; };
   // generic hand props: `${name}.propR` / `${name}.propL` tracks pick one by name
-  const PROP_KINDS = ['notebook', 'pen', 'scanner', 'pipe', 'case', 'diamond', 'bar', 'buzzer', 'phone', 'bowl', 'towels', 'capeFold', 'dinoPack', 'maskHeld', 'candy', 'plate', 'pizza', 'mic', 'clock'];
+  const PROP_KINDS = ['notebook', 'pen', 'scanner', 'pipe', 'case', 'diamond', 'bar', 'buzzer', 'phone', 'bowl', 'towels', 'capeFold', 'dinoPack', 'maskHeld', 'candy', 'plate', 'pizza', 'mic', 'clock', 'canister', 'table', 'clay', 'controller'];
   const handProps = {};
   for (const n of Object.keys(heroes)) for (const side of ['L', 'R']) for (const k of PROP_KINDS) {
     const m = buildProp(k); m.visible = false; heroes[n].J.hand[side].add(m); handProps[`${n}.${side}.${k}`] = onHand(n, side, m);
@@ -84,6 +86,43 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   const ufo = META?.behemoth ? buildUFO() : null;
   const tiger = META?.behemoth ? buildTiger() : null;
   for (const o of [beh, crown, ufo, tiger]) if (o) { o.root.visible = false; scene.add(o.root); }
+  // Episode 6: horse, Eric's cat form, a thrown object, Aaron's wrist hologram + shield
+  const horse = META?.e6 ? buildHorse() : null;
+  const cat = META?.e6 ? buildCat() : null;
+  for (const o of [horse, cat]) if (o) { o.root.visible = false; scene.add(o.root); }
+  const flyObj = {};
+  if (META?.e6) {
+    flyObj.pizza = buildProp('pizza'); flyObj.pizza.position.set(0, 0, 0); flyObj.pizza.rotation.set(0, 0, 0);
+    flyObj.rock = mk(new THREE.DodecahedronGeometry(0.16, 0), mat(0x8a8378, { r: 0.9 }), null);
+    for (const o of Object.values(flyObj)) { o.visible = false; scene.add(o); }
+  }
+  const gadget = {};
+  if (META?.e6) {
+    const holoTex = canvasTex(256, 160, (c, w, h) => {
+      c.clearRect(0, 0, w, h); c.strokeStyle = '#7fe8ff'; c.lineWidth = 4; c.strokeRect(6, 6, w - 12, h - 12);
+      c.fillStyle = 'rgba(80,200,255,0.25)'; c.fillRect(6, 6, w - 12, h - 12);
+      c.fillStyle = '#bff4ff'; c.font = 'bold 26px sans-serif'; c.fillText('TECH ASSIST', 22, 44);
+      for (let i = 0; i < 4; i++) { c.fillStyle = i === 1 ? '#ffe36a' : '#7fe8ff'; c.fillRect(22 + i * 56, 70, 44, 44); }
+      c.fillStyle = '#7fe8ff'; c.fillRect(22, 128, 200 * 0.7, 10);
+    });
+    const hexTex = canvasTex(256, 256, (c, w, h) => {
+      c.clearRect(0, 0, w, h);
+      const g2 = c.createRadialGradient(128, 128, 20, 128, 128, 128); g2.addColorStop(0, 'rgba(90,200,255,0.25)'); g2.addColorStop(1, 'rgba(90,200,255,0.55)');
+      c.fillStyle = g2; c.beginPath(); c.arc(128, 128, 124, 0, 7); c.fill();
+      c.strokeStyle = 'rgba(190,240,255,0.9)'; c.lineWidth = 2;
+      for (let y = -6; y <= 6; y++) for (let x = -6; x <= 6; x++) {
+        const cx = 128 + x * 22 + (y % 2 ? 11 : 0), cy = 128 + y * 19;
+        if (Math.hypot(cx - 128, cy - 128) > 112) continue;
+        c.beginPath(); for (let k = 0; k <= 6; k++) { const a = (k / 6) * Math.PI * 2 + Math.PI / 6; c[k ? 'lineTo' : 'moveTo'](cx + Math.cos(a) * 11, cy + Math.sin(a) * 11); } c.stroke();
+      }
+      c.lineWidth = 6; c.beginPath(); c.arc(128, 128, 122, 0, 7); c.stroke();
+    });
+    const addMat = (map) => new THREE.MeshBasicMaterial({ map, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+    gadget.holo = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.21), addMat(holoTex));
+    gadget.ring = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.008, 6, 24), new THREE.MeshBasicMaterial({ color: 0x7fe8ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    gadget.shield = new THREE.Mesh(new THREE.CircleGeometry(0.75, 40), addMat(hexTex));
+    for (const o of Object.values(gadget)) { o.visible = false; scene.add(o); }
+  }
   let rig = null;
   // Greg's stretchy arms: a chain of sleeve beads from each hand out to a target point
   const stretchArms = {};
@@ -118,7 +157,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     slices[n] = onHand(n, 'R', attachProp(heroes[n], 'R', m, [0, -0.12, 0.08], [0.4, 0, 0]));
   }
 
-  const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'water', 'dog', 'birddog', 'tiger']);
+  const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy', 'water', 'dog', 'birddog', 'tiger', 'horse', 'cat']);
   const val = (name, d = 0) => { const v = evalTrack(T.tracks[name], curT); return v === undefined ? d : v; };
   let curT = 0;
   const X = { T, scene, val: (n, d = 0) => val(n, d), hand: (n, side = 'R') => { const v = new THREE.Vector3(); heroes[n].J.hand[side].getWorldPosition(v); return v; }, rig: () => rig, crownPos: () => crown ? crown.root.position.clone() : new THREE.Vector3() };
@@ -146,8 +185,9 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     const vis = val(`${name}.vis`, 0) > 0.5;
     h.root.visible = vis;
     if (!vis) return;
-    h.root.position.set(val(`${name}.x`), val(`${name}.y`), val(`${name}.z`));
-    h.root.rotation.y = val(`${name}.ry`);
+    const roll = val(`${name}.roll`);
+    h.root.position.set(val(`${name}.x`), val(`${name}.y`) + (1 - Math.cos(roll)) * 0.8, val(`${name}.z`));
+    h.root.rotation.set(0, val(`${name}.ry`), roll);
     const st = evalStep(T.tracks[`${name}.act`], t);
     const cur = ACTIONS[st.v] ?? ACTIONS.idle, prev = ACTIONS[st.prev] ?? ACTIONS.idle;
     const ctx = { seed: h.seed };
@@ -238,6 +278,8 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     if (name === 'beh') { const r = rig ?? behemothRig(behParams((n, tt, d) => { const v = evalTrack(T.tracks[n], tt); return v === undefined ? d : v; }, curT)); return new THREE.Vector3(r.head[0], r.head[1], r.head[2]); }
     if (name === 'tiger') { tiger.headG.getWorldPosition(tmpV); return tmpV.clone(); }
     if (name === 'ufo') return new THREE.Vector3(val('ufo.x'), val('ufo.y'), val('ufo.z'));
+    if (name === 'horse') { horse.head.getWorldPosition(tmpV); return tmpV.clone(); }
+    if (name === 'cat') { cat.headG.getWorldPosition(tmpV); return tmpV.clone(); }
     if (name === 'crown') return crown.root.position.clone();
     if (!heroes[name]) return new THREE.Vector3(0, 1.5, 0);
     heroes[name].J.head.getWorldPosition(tmpV);
@@ -321,20 +363,21 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
       const vis = val('beh.vis', 0) > 0.5;
       beh.root.visible = vis;
       rig = vis ? behemothRig(behParams((n, tt, d) => { const v = evalTrack(T.tracks[n], tt); return v === undefined ? d : v; }, t)) : null;
-      if (vis) beh.update({ t, rig, jaw: val('beh.jaw', 0), plates: val('beh.plates', 0), dark: val('beh.dark', 0), cracks: val('beh.cracks', 0), eyesRed: val('beh.eyesRed', 0), eyes: val('beh.eyes', 1), crest: val('beh.crest', 0), bolts: val('beh.bolts', 0), claws: val('beh.claws', 1) });
+      if (vis) beh.update({ t, rig, jaw: val('beh.jaw', 0), plates: val('beh.plates', 0), dark: val('beh.dark', 0), cracks: val('beh.cracks', 0), eyesRed: val('beh.eyesRed', 0), eyes: val('beh.eyes', 1), crest: val('beh.crest', 0), bolts: val('beh.bolts', 0), claws: val('beh.claws', 1), goo: val('beh.goo', 0), blue: val('beh.blue', 0), dissolve: val('beh.dissolve', 0), flickerBlue: val('beh.flickerBlue', 0) });
       const mode = evalStep(T.tracks['crown.mode'], t).v ?? 'head';
-      const cs = { t, vis: false, x: 0, y: 0, z: 0, size: 1, glow: val('crown.glow', 0.3) };
+      const cs = { t, vis: false, x: 0, y: 0, z: 0, size: 1, glow: val('crown.glow', 0.3), blue: val('crown.blue', 0) };
       if (mode === 'head' && vis) {
         const lift = val('crown.lift', 0);
         Object.assign(cs, { vis: true, x: rig.crown[0], y: rig.crown[1] + lift * rig.s * 0.05, z: rig.crown[2], yaw: rig.yaw, pitch: -rig.pitch * 0.6 + lift * 0.4, size: 0.028 * rig.s });
-      } else if (mode === 'leon' && heroes.leon.root.visible) {
-        heroes.leon.root.updateMatrixWorld(true);
-        const a = X.hand('leon', 'L'), b = X.hand('leon', 'R');
+      } else if (heroes[mode] && heroes[mode].root.visible) {
+        heroes[mode].root.updateMatrixWorld(true);
+        const a = X.hand(mode, 'L'), b = X.hand(mode, 'R');
         const sz = val('crown.size', 0.5);
-        Object.assign(cs, { vis: true, x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 0.04, z: (a.z + b.z) / 2, yaw: val('leon.ry'), pitch: 0, size: sz });
+        Object.assign(cs, { vis: true, x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 0.04, z: (a.z + b.z) / 2, yaw: val(`${mode}.ry`), pitch: 0, size: sz });
       } else if (mode === 'world') {
         Object.assign(cs, { vis: true, x: val('crown.x'), y: val('crown.y'), z: val('crown.z'), yaw: val('crown.ry'), pitch: val('crown.rx'), size: val('crown.size', 0.5) });
       }
+      if (val('crown.gone', 0) > 0.5) cs.vis = false;
       crown.update(cs);
       ufo.update({ t, vis: val('ufo.vis', 0) > 0.5, x: val('ufo.x'), y: val('ufo.y', 70), z: val('ufo.z'), size: val('ufo.size', 60), hatch: val('ufo.hatch', 0), beam: val('ufo.beam', 0) });
       tiger.root.visible = val('tiger.vis', 0) > 0.5;
@@ -368,6 +411,38 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
           b.scale.setScalar(0.06 * (1 + 0.1 * Math.sin(t * 7 + i)));
         });
         A.hand.position.copy(end);
+      }
+    }
+    if (horse) {
+      horse.root.visible = val('horse.vis', 0) > 0.5;
+      if (horse.root.visible) {
+        horse.root.position.set(val('horse.x'), val('horse.y'), val('horse.z')); horse.root.rotation.set(0, val('horse.ry'), 0);
+        const st = evalStep(T.tracks['horse.act'], t), g = gaitAt(gait.horse, t);
+        horse.update({ t, act: st.v, a: st.since, speed: g.speed, phase: g.phase * 0.9 });
+      }
+      cat.root.visible = val('cat.vis', 0) > 0.5;
+      if (cat.root.visible) {
+        const roll = val('cat.spin', 0);
+        cat.root.position.set(val('cat.x'), val('cat.y'), val('cat.z')); cat.root.rotation.set(0, val('cat.ry') + roll, 0);
+        const st = evalStep(T.tracks['cat.act'], t), g = gaitAt(gait.cat, t);
+        cat.update({ t, act: st.v, a: st.since, speed: g.speed, phase: g.phase, talk: talkAmount('eric', t), pizza: val('cat.pizza', 0) });
+      }
+      const fk = evalStep(T.tracks['fly.kind'], t).v ?? 'none';
+      for (const [k, o] of Object.entries(flyObj)) {
+        o.visible = k === fk;
+        if (o.visible) { o.position.set(val('fly.x'), val('fly.y'), val('fly.z')); o.rotation.set(t * 9, t * 5, 0); }
+      }
+      const ho = val('aaron.holo', 0), sh = val('aaron.shield', 0);
+      gadget.holo.visible = gadget.ring.visible = ho > 0.01 && heroes.aaron.root.visible;
+      gadget.shield.visible = sh > 0.01 && heroes.aaron.root.visible;
+      if (gadget.holo.visible || gadget.shield.visible) {
+        heroes.aaron.root.updateMatrixWorld(true);
+        const hp = X.hand('aaron', 'L'), ry = val('aaron.ry');
+        gadget.ring.position.copy(hp); gadget.ring.rotation.set(Math.PI / 2, 0, t * 3); gadget.ring.scale.setScalar(ho);
+        gadget.holo.position.set(hp.x + Math.sin(ry) * 0.16 + Math.cos(ry) * 0.12, hp.y + 0.1 * ho, hp.z + Math.cos(ry) * 0.16 - Math.sin(ry) * 0.12); gadget.holo.rotation.set(-0.6, ry, 0); gadget.holo.scale.setScalar(Math.max(0.01, ho) * 0.85);
+        gadget.holo.material.opacity = ho * (0.85 + 0.15 * Math.sin(t * 20));
+        gadget.shield.position.set(hp.x + Math.sin(ry) * 0.35, hp.y + 0.05, hp.z + Math.cos(ry) * 0.35); gadget.shield.rotation.set(0, ry, 0); gadget.shield.scale.setScalar(Math.max(0.01, sh) * (1 + 0.03 * Math.sin(t * 9)));
+        gadget.shield.material.opacity = Math.min(1, sh) * (0.8 + 0.2 * Math.sin(t * 13));
       }
     }
     bigShadow.root.visible = val('shadow.vis', 0) > 0.5;

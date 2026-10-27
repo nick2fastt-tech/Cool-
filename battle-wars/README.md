@@ -13,6 +13,7 @@ Every episode is delivered as one **1080p MP4** (1920×1080) with stereo sound a
 | `s1e3-soul-stealers-secret` | Season 1, Episode 3: "THE SOUL STEALER'S SECRET" | 10:45 |
 | `s1e4-spooky-halloween-party` | Season 1, Episode 4: "SPOOKY HALLOWEEN PARTY" (Halloween special) | 9:24 |
 | `s1e5-behemoth-awakens` | Season 1, Episode 5: "BEHEMOTH AWAKENS" | 12:31 |
+| `s1e6-the-power-returns` | Season 1, Episode 6: "THE POWER RETURNS" | 10:19 |
 | `s1-red-diamonds` | Early Red Diamonds teaser scene (blue suits) | 1:02 |
 
 Finished videos go to `output/<episode-id>/` (not stored in git — GitHub's 100 MB file limit).
@@ -33,10 +34,12 @@ Finished videos go to `output/<episode-id>/` (not stored in git — GitHub's 100
 | **Newark** | the team's friend and party host: wavy hair, black coat with orange trim, top hat and bow tie | purple |
 | **Behemoth** (villain) | a worm-like metal dragon with glowing eyes, armor plates, tiny claws and a crown that controls its size (from tiny to taller than the buildings) | purple |
 | **Tiger Eric** | Eric's tiger transformation | — |
+| **Cat Eric** | Eric's newest transformation: a small orange tabby cat that loves pizza and video games | — |
+| **The Cowboy** (mystery) | long coat, wide-brimmed hat, face always hidden in shadow; rides a dark horse | — |
 
 ## Locations
 
-Aetherfall City streets · Aetherfall City Park · Aetherfall Coffee · Battle Wars HQ (outside, living room on floor 1, Controller Room on floor 3, hidden reactor room below) · Red Team HQ (with a lounge couch and TV) · abandoned subway tunnels, lower machine chamber and platform · the ancient diamond chamber · the Soul Stealer's crystal cavern (red or violet) · title card (blue, red "electric", or orange-and-purple Halloween style) · Flare and Aaron's bedroom · the Halloween store · Newark's house (outside at night, and the party room with stage and dance floor). Halloween episodes also decorate the living room and add pajama and costume outfits. Episode 5 adds Greg's HQ bedroom, a downtown intersection with a city-center plaza, a damaged city park, the UFO, and upgraded blue uniforms with armor.
+Aetherfall City streets · Aetherfall City Park · Aetherfall Coffee · Battle Wars HQ (outside, living room on floor 1, Controller Room on floor 3, hidden reactor room below) · Red Team HQ (with a lounge couch and TV) · abandoned subway tunnels, lower machine chamber and platform · the ancient diamond chamber · the Soul Stealer's crystal cavern (red or violet) · title card (blue, red "electric", or orange-and-purple Halloween style) · Flare and Aaron's bedroom · the Halloween store · Newark's house (outside at night, and the party room with stage and dance floor). Halloween episodes also decorate the living room and add pajama and costume outfits. Episode 5 adds Greg's HQ bedroom, a downtown intersection with a city-center plaza, a damaged city park, the UFO, and upgraded blue uniforms with armor. Episode 6 adds the Soul Stealer's lair with the Behemoth's cage, a dark city alley at night, a city view from the living-room window, and a little clay Behemoth figure.
 
 ## How it's made
 

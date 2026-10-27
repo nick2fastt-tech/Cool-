@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mat, mk, grp, rng, hash, canvasTex, clamp, lerp, smoothstep, noise1 } from './util.js';
+import { buildHero, pose, locomotion, EXPRESSIONS } from './characters.js';
 import { lights, box, plane, streetLamp, tree, building, buildCar } from './sets.js';
 import { BEH_N } from './behemothRig.js';
 import * as TX from './textures.js';
@@ -77,6 +78,12 @@ export function buildBehemoth() {
     glow.position.set(sd * 0.03, 0.016, 0.058); head.add(glow);
     eyes.push({ e, glow });
   }
+  // sticky goo Aaron sprays over its eyes (Episode 6)
+  const gooM = new THREE.MeshStandardMaterial({ color: 0x7aff6a, roughness: 0.15, metalness: 0.1, emissive: 0x1a6a10, emissiveIntensity: 0.5 });
+  const goo = grp(head);
+  for (const [x, y, z, r] of [[0.028, 0.016, 0.056, 0.016], [-0.028, 0.016, 0.056, 0.016], [0.0, 0.022, 0.06, 0.012], [0.04, 0.005, 0.05, 0.01], [-0.04, 0.008, 0.05, 0.011], [0.015, 0.0, 0.062, 0.008], [-0.012, 0.003, 0.063, 0.009]]) mk(new THREE.SphereGeometry(r, 10, 8), gooM, goo, [x, y, z], [0, 0, 0], [1.3, 0.8, 0.7], false);
+  for (const [x, z] of [[0.03, 0.058], [-0.026, 0.058]]) mk(new THREE.SphereGeometry(0.004, 6, 5), gooM, goo, [x, -0.004, z], [0, 0, 0], [1, 2.6, 1], false);
+  goo.visible = false;
   // crest horns (they glow purple when the crown is gone)
   const crestM = new THREE.MeshStandardMaterial({ color: 0x3a3048, metalness: 0.6, roughness: 0.3, emissive: 0xb040ff, emissiveIntensity: 0 });
   for (const [x, y, z, rx] of [[0.022, 0.035, -0.04, -0.9], [-0.022, 0.035, -0.04, -0.9], [0.012, 0.03, -0.058, -1.2], [-0.012, 0.03, -0.058, -1.2]]) mk(new THREE.ConeGeometry(0.008, 0.045, 6), crestM, head, [x, y, z], [rx, 0, x * 8]);
@@ -88,6 +95,7 @@ export function buildBehemoth() {
   const bodyLight = new THREE.PointLight(0xb040ff, 0, 30, 1.4); root.add(bodyLight);
   const fw = new THREE.Vector3(), tmp = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
   const cyan = new THREE.Color(0x7ff0ff), red = new THREE.Color(0xff2a2a), col = new THREE.Color();
+  const seamPurple = new THREE.Color(0xb040ff), seamBlue = new THREE.Color(0x3aa8ff);
   return {
     root, head,
     // st: { t, rig, jaw, plates, dark, cracks, eyesRed, eyes, crest, bolts, claws }
@@ -96,7 +104,11 @@ export function buildBehemoth() {
       const s = rig.s;
       metal.color.copy(BASE.metal).lerp(DARK.metal, st.dark);
       plateM.color.copy(BASE.plate).lerp(DARK.plate, st.dark);
-      seamM.emissiveIntensity = st.cracks * (2.2 + 0.8 * Math.sin(t * 7));
+      const fb = st.flickerBlue ?? 0, bl = Math.max(st.blue ?? 0, fb);
+      seamM.emissive.copy(seamPurple).lerp(seamBlue, bl);
+      seamM.emissiveIntensity = Math.max(st.cracks, bl * 0.8) * (2.2 + 0.8 * Math.sin(t * 7)) * (fb > 0 ? (Math.sin(t * 29) * Math.sin(t * 11) > 0 ? 1.6 : 0.2) : 1);
+      goo.visible = (st.goo ?? 0) > 0.5;
+      const dz = st.dissolve ?? 0;
       for (let i = 0; i < BEH_N; i++) {
         const S = segs[i], p = rig.pts[i], r = rig.rad[i];
         const q = rig.pts[Math.min(BEH_N - 1, i + 1)], b = rig.pts[Math.max(0, i - 1)];
@@ -104,7 +116,8 @@ export function buildBehemoth() {
         S.g.position.set(p[0], p[1], p[2]);
         tmp.set(p[0] + fw.x, p[1] + fw.y, p[2] + fw.z);
         S.g.lookAt(tmp);
-        S.g.scale.setScalar(r);
+        const dk = clamp((dz * 1.3 - (i / BEH_N) * 0.3) / 1.0);
+        S.g.scale.setScalar(r * (1 - dk)); S.g.visible = dk < 0.98;
         const pl = st.plates;
         S.spike.scale.set(1, 0.5 + 1.1 * pl * (0.6 + 0.4 * Math.sin(i * 1.7) ** 2) * (i > BEH_N - 3 ? 0.3 : 1), 1);
         S.top.scale.set(1 + 0.12 * pl, 1, 1.25 + 0.15 * pl);
@@ -122,7 +135,8 @@ export function buildBehemoth() {
       }
       head.position.set(rig.head[0], rig.head[1], rig.head[2]);
       head.rotation.set(-rig.pitch, rig.yaw, 0);
-      head.scale.setScalar(s);
+      head.scale.setScalar(s * (1 - smoothstep(0.75, 1, dz))); head.visible = dz < 0.99;
+      for (const L of legs) L.g.visible = L.g.visible && dz < 0.5;
       jaw.rotation.x = st.jaw * 0.85;
       throat.visible = st.jaw > 0.15;
       throatM.color.setRGB(0.45 + 0.3 * Math.sin(t * 6), 0.1, 0.65);
@@ -153,7 +167,8 @@ export function buildBehemoth() {
       bolts.visible = n > 0;
       const mid = rig.pts[Math.floor(BEH_N * 0.6)];
       bodyLight.position.set(mid[0], mid[1] + rig.rad[10] * 2, mid[2]);
-      bodyLight.intensity = (st.cracks * 0.5 + bk * (hash(Math.floor(t * 14)) > 0.4 ? 1 : 0.2)) * s * 0.06;
+      bodyLight.color.copy(seamPurple).lerp(seamBlue, bl);
+      bodyLight.intensity = (Math.max(st.cracks, bl) * 0.5 + bk * (hash(Math.floor(t * 14)) > 0.4 ? 1 : 0.2)) * s * 0.06;
       bodyLight.distance = 2.5 * s;
     },
   };
@@ -182,6 +197,8 @@ export function buildCrown() {
       root.rotation.set(st.pitch ?? 0, st.yaw ?? 0, st.roll ?? 0);
       root.scale.setScalar(Math.max(0.001, st.size));
       const g = st.glow;
+      runeM.emissive.setRGB(lerp(0.69, 0.23, st.blue ?? 0), lerp(0.25, 0.66, st.blue ?? 0), 1);
+      light.color.copy(runeM.emissive);
       runeM.emissiveIntensity = 0.4 + g * (2.2 + 0.8 * Math.sin(st.t * 9));
       light.intensity = Math.min(g, 2.5) * 2.2 * Math.min(4, st.size * 3);
       light.distance = 2 + st.size * 3;
@@ -598,6 +615,41 @@ export function buildDowntown() {
   const mark = plane(g, 1, 1, new THREE.MeshBasicMaterial({ map: markTex(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, color: 0xc070ff }), [0, 0.03, 0]);
   const cracks = plane(g, 1, 1, new THREE.MeshStandardMaterial({ map: crackTex(), transparent: true, depthWrite: false, roughness: 1 }), [0, 0.02, 0]);
   const barrier = buildJersey(g, 0, 0, 6);
+  // Episode 6: citizens running for safety
+  const CIT = [
+    { shirt: 0xd04a3a, pants: 0x2a3a5a, hair: 'wavy', hairColor: 0x2a1a10, skin: 0xe0ac86 }, { shirt: 0x3a8a5a, pants: 0x1a1a22, hair: 'spiky', hairColor: 0x6a3a1e, skin: 0xc48a62 },
+    { shirt: 0xf0c040, pants: 0x3a2a1a, hair: 'tall', hairColor: 0x15100c, skin: 0x8a5a3c }, { shirt: 0x8a5ad0, pants: 0x2a2a3a, hair: 'wavy', hairColor: 0x8a3a1a, skin: 0xf2c4a0 },
+    { shirt: 0x3a9ad0, pants: 0x1a2a3a, hair: 'spiky', hairColor: 0x15151a, skin: 0xa8734f }, { shirt: 0xe07a2a, pants: 0x2a2a2a, hair: 'wavy', hairColor: 0x4a2a14, skin: 0xe8b28c },
+    { shirt: 0xd0d0d8, pants: 0x3a3a50, hair: 'tall', hairColor: 0x2a1a10, skin: 0xd8a07a }, { shirt: 0xc03a7a, pants: 0x1a1a1a, hair: 'spiky', hairColor: 0xb0b0b8, skin: 0xf0c4a0 },
+  ];
+  const citizens = CIT.map((look, i) => {
+    const h = buildHero({ name: `cit${i}`, seed: 40 + i, scale: 0.78 + 0.06 * (i % 3), browColor: 0x1a120c, eyeColor: 0x2a1a10, casual: true, emblem: false, bareHands: true, boot: 0x1a1a1a, belt: 0x1a1a1a, skinDark: look.skin, ...look });
+    h.root.visible = false; g.add(h.root);
+    const a0 = (i / CIT.length) * P * 2;
+    return { h, x0: -6 + (i % 4) * 4 + Math.sin(i * 2.1), z0: 4.5 + (i % 3) * 1.2, dx: Math.sin(i * 1.9) * 0.35, dz: 1, speed: 3.4 + (i % 3) * 0.5, delay: i * 0.45, len: 34 };
+  });
+  // street signs that get knocked over, abandoned construction barriers, crown shards
+  const signs = [];
+  for (const [x, z] of [[-6.2, 6.0], [6.2, 6.0], [-6.2, -6.0]]) {
+    const sg = grp(g, x, 0, z);
+    mk(new THREE.CylinderGeometry(0.05, 0.05, 2.8, 8), mat(0x8a929e, { m: 0.6 }), sg, [0, 1.4, 0]);
+    mk(new THREE.BoxGeometry(0.9, 0.22, 0.03), mat(0x2a8a3a, { r: 0.5 }), sg, [0, 2.7, 0]);
+    mk(new THREE.CylinderGeometry(0.32, 0.32, 0.03, 8), mat(0xd02a2a, { r: 0.5 }), sg, [0, 2.25, 0.03], [P / 2, 0, 0]);
+    signs.push(sg);
+  }
+  const cons = grp(g, 2, 0, 18);
+  const consPieces = [];
+  for (let i = 0; i < 5; i++) {
+    const b = grp(cons, -4 + i * 2.0, 0, 0);
+    box(b, 1.8, 0.25, 0.08, 0xff7a1a, [0, 0.95, 0]); box(b, 1.8, 0.25, 0.08, 0xffffff, [0, 0.62, 0]);
+    for (const sx2 of [-0.8, 0.8]) box(b, 0.08, 1.1, 0.5, 0x2a2a30, [sx2, 0.55, 0]);
+    consPieces.push(b);
+  }
+  const shards = grp(g); shards.visible = false;
+  const shardM = new THREE.MeshStandardMaterial({ color: 0x8a7a8a, metalness: 0.75, roughness: 0.3, emissive: 0x2a8aff, emissiveIntensity: 0.4 });
+  for (let i = 0; i < 9; i++) mk(new THREE.ConeGeometry(0.06 + 0.04 * (i % 3), 0.25, 5), shardM, shards, [Math.cos(i * 2.3) * 0.5 * (0.4 + (i % 3) * 0.3), 0.06, Math.sin(i * 2.3) * 0.45], [P / 2, i, 0.4 * i]);
+  const spring = grp(g); spring.visible = false;
+  for (let i = 0; i < 8; i++) mk(new THREE.TorusGeometry(0.28, 0.025, 6, 20), mat(0xc8c8d0, { m: 0.8, r: 0.3 }), spring, [0, 0.06 + i * 0.07, 0], [P / 2, 0, 0]);
   const skyDay = TX.skyTex('#3f8fe0', '#9fd0f5', '#e8f4ff');
   const skyShade = TX.skyTex('#33405a', '#5d6d88', '#8e9db4');
   const skyDark = TX.skyTex('#07040e', '#1d0b33', '#3a1a55');
@@ -637,7 +689,10 @@ export function buildDowntown() {
       rubble.visible = fb;
       // trash can
       can.visible = v('can.vis', 1) > 0.5;
-      can.position.set(v('can.x', -6.2), 0, v('can.z', 5.6));
+      can.position.set(v('can.x', -6.2), v('can.y', 0), v('can.z', 5.6));
+      can.scale.set(1, v('can.sq', 1), 1);
+      const sp = v('can.spring', 0); spring.visible = sp > 0.01 && can.visible; spring.position.set(can.position.x, 0, can.position.z); spring.scale.set(1, sp, 1);
+      if (spring.visible) can.position.y += sp * 0.6;
       const roll = v('can.roll', 0);
       can.rotation.set(0, v('can.ry', 0), 0);
       canBody.rotation.set(roll * P / 2, 0, 0);
@@ -656,6 +711,27 @@ export function buildDowntown() {
       cracks.visible = ck > 0.01;
       cracks.position.set(v('cracks.x', 0), 0.02, v('cracks.z', 0));
       cracks.scale.setScalar(Math.max(0.01, ck * v('cracks.size', 10)));
+      // citizens
+      const con = v('citizens.on', 0) > 0.5, ct0 = v('citizens.t0', 0);
+      for (const c of citizens) {
+        const tt = t - ct0 - c.delay, d = tt * c.speed;
+        const vis = con && tt > 0 && d < c.len;
+        c.h.root.visible = vis;
+        if (!vis) continue;
+        const nx = c.dx, nz = c.dz, ln = Math.hypot(nx, nz);
+        c.h.root.position.set(c.x0 + (nx / ln) * d, 0, c.z0 + (nz / ln) * d);
+        c.h.root.rotation.y = Math.atan2(nx, nz);
+        const p = locomotion(d / 2.6 * P * 2, 1);
+        p.aLF = 2.4 + 0.4 * Math.sin(tt * 13); p.aRF = 2.2 - 0.4 * Math.sin(tt * 13); p.aLO = 0.6; p.aRO = 0.6; p.eL = 0.4; p.eR = 0.4;
+        c.h.applyPose(pose(p));
+        c.h.applyFace(EXPRESSIONS.shocked, 0.3 + 0.3 * Math.abs(Math.sin(tt * 9)), 0, { x: 0, y: 0 });
+      }
+      signs.forEach((sg, i) => { const f = v(`sign${i}.fall`, 0); sg.rotation.set(0, 0, f * 1.45 * (i % 2 ? 1 : -1)); });
+      const sm = v('cons.smash', 0);
+      cons.visible = v('cons.vis', 0) > 0.5; cons.position.set(v('cons.x', 2), 0, v('cons.z', 18)); cons.rotation.y = v('cons.ry', 0);
+      consPieces.forEach((b, i) => { b.position.y = sm > 0.5 ? -5 : 0; });
+      shards.visible = v('shards', 0) > 0.5; shards.position.set(v('shards.x', 0), 0, v('shards.z', 0));
+      shardM.emissiveIntensity = 0.3 + 0.3 * Math.sin(t * 3);
       barrier.visible = v('barrier.vis', 0) > 0.5;
       barrier.position.set(v('barrier.x', 0), 0, v('barrier.z', 0));
       barrier.rotation.y = v('barrier.ry', 0);
