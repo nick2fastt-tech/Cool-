@@ -1,7 +1,7 @@
 // ============================================================================
 // Settings — defaults, persistence (localStorage), change notifications
 // ============================================================================
-const SETTINGS_KEY = 'humantest3d.settings.v2';
+const SETTINGS_KEY = 'humantest3d.settings.v3';
 
 const DEFAULT_SETTINGS = {
   graphics: {
@@ -28,8 +28,8 @@ const DEFAULT_SETTINGS = {
   },
   gore: { level: 'extreme', dismember: true, gibs: true, pools: true, screenBlood: true, blood: 1.0 },
   weapons: {
-    enabled: { pistol: true, sniper: true, knife: true, grenade: true, hand: true, move: true },
-    infiniteAmmo: false, autoReload: true, damageScale: 1.0, simulatedDamage: true,
+    enabled: { pistol: true, sniper: true, knife: true, grenade: true, bazooka: true, hand: true, move: true },
+    infiniteAmmo: true, autoReload: true, damageScale: 1.0, simulatedDamage: true,
     pistolAuto: false, grenadeFuse: 3.0, grenadeRadius: 7.5, bulletPenetration: true,
     pistolMag: 15, sniperMag: 5, reserveMags: 6
   },

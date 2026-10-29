@@ -31,6 +31,7 @@ const GORE_CUTS = {};
 ].forEach(([id, bone, joint, rp, rc, regions, side]) => {
   GORE_CUTS[id] = { id, bone, joint, rp, rc, regions, side, sub: boneSubtree(bone), ragSub: ragSubtree(rc), isLeg: id.startsWith('leg') || id.startsWith('shin') || id.startsWith('foot'), isArm: id.startsWith('arm') || id.startsWith('forearm') || id.startsWith('hand') };
 });
+GORE_CUTS.waist = { id: 'waist', bone: B.spine, joint: 0, rp: RAG.PELVIS, rc: RAG.SPINE, regions: [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11], side: -1, sub: boneSubtree(B.spine), ragSub: ragSubtree(RAG.SPINE), isLeg: false, isArm: false, isWaist: true };
 const REGION_CUT = ['head', 'head', null, null, null, null, 'armL', 'forearmL', 'handL', 'armR', 'forearmR', 'handR', 'legL', 'shinL', 'footL', 'legR', 'shinR', 'footR'];
 const LIMB_CUTS = ['armL', 'armR', 'legL', 'legR', 'forearmL', 'forearmR', 'shinL', 'shinR', 'handL', 'handR', 'footL', 'footR'];
 const _gv1 = new V3(), _gv2 = new V3(), _gv3 = new V3(), _gv4 = new V3(), _gv5 = new V3(), _gv6 = new V3(), _gv7 = new V3(), _gq1 = new QT();
@@ -111,7 +112,7 @@ function makeBloodAtlas() {
 }
 
 // --- instanced blood decals ---------------------------------------------------------------
-const DECAL_TILES = { splat: [0, 4], spray: [4, 4], pool: [8, 4], drop: [12, 4] };
+const DECAL_TILES = { splat: [0, 4], spray: [4, 4], pool: [8, 4], drop: [12, 4], smear: [15, 1] };
 class BloodDecals {
   constructor(game, max) {
     this.game = game; this.max = max; this.next = 0; this.used = 0;
@@ -158,7 +159,7 @@ class BloodDecals {
       }
     }
     q.multiply(_gq1.setFromAxisAngle(FWD, ang));
-    const sx = size * (kind === 'spray' ? 1.7 : 1), sy = size;
+    const sx = size * (kind === 'spray' ? 1.7 : kind === 'smear' ? 1.5 : 1), sy = size * (kind === 'smear' ? 0.7 : 1);
     const pos = this._p.copy(p).addScaledVector(n, 0.003 + Math.random() * 0.002);
     const grow = opts && opts.grow;
     this._m.compose(pos, q, this._s.set(grow ? sx * 0.08 : sx, grow ? sy * 0.08 : sy, 1));
@@ -275,6 +276,10 @@ class BloodDrops {
 // --- gibs: instanced chunks with simple rigid physics ----------------------------------------
 const GIB_COLORS = {
   flesh: [[0.42, 0.04, 0.035], [0.55, 0.09, 0.07], [0.3, 0.02, 0.02]],
+  gut: [[0.78, 0.45, 0.45], [0.7, 0.36, 0.38]],
+  eye: [[0.92, 0.9, 0.86]],
+  tooth: [[0.95, 0.93, 0.85]],
+  dirt: [[0.32, 0.29, 0.25], [0.24, 0.22, 0.2]],
   bone: [[0.86, 0.81, 0.7], [0.92, 0.88, 0.8]],
   brain: [[0.74, 0.55, 0.55], [0.66, 0.45, 0.47]],
   organ: [[0.38, 0.06, 0.1], [0.5, 0.12, 0.16], [0.6, 0.3, 0.32]],
@@ -306,6 +311,8 @@ class Gibs {
     gb.p.copy(p); gb.v.copy(v); gb.q.setFromEuler(new THREE.Euler(Math.random() * 6, Math.random() * 6, Math.random() * 6));
     gb.w.set((Math.random() - 0.5) * 24, (Math.random() - 0.5) * 24, (Math.random() - 0.5) * 24);
     gb.s = size; gb.rest = false; gb.splat = false; gb.t = 0;
+    gb.sx = type === 'gut' ? 2.8 : 1; gb.sy = type === 'gut' ? 0.8 : (type === 'tooth' ? 0.6 : 1); gb.sz = type === 'gut' ? 0.9 : 1;
+    if (type === 'eye') gb.s = Math.min(size, 0.013); if (type === 'tooth') gb.s = Math.min(size, 0.006);
     const pal = GIB_COLORS[type] || GIB_COLORS.flesh;
     const c = color || pal[Math.floor(Math.random() * pal.length)];
     this._c.setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace);
@@ -343,12 +350,84 @@ class Gibs {
         const d = pl.n.dot(gb.p) - pl.d - gb.s;
         if (d < 0) { gb.p.addScaledVector(pl.n, -d); const vn = gb.v.dot(pl.n); if (vn < 0) gb.v.addScaledVector(pl.n, -vn * 1.3); if (!gb.splat && vn < -2) { gb.splat = true; gore.decals.add(_gv2.copy(gb.p).addScaledVector(pl.n, -gb.s), pl.n, 0.1 + gb.s * 5, 'splat'); } }
       }
-      this._m.compose(gb.p, gb.q, this._s.set(gb.s, gb.s, gb.s));
+      this._m.compose(gb.p, gb.q, this._s.set(gb.s * (gb.sx || 1), gb.s * (gb.sy || 1), gb.s * (gb.sz || 1)));
       this.mesh.setMatrixAt(gb.idx, this._m);
     }
     if (any) this.mesh.instanceMatrix.needsUpdate = true;
   }
   clear() { this.list.length = 0; this.next = 0; this.mesh.count = 0; }
+}
+
+// --- intestines: verlet rope strands anchored to a wound, rendered as instanced segments ---------
+class GutStrands {
+  constructor(game, maxStrands) {
+    this.game = game; this.list = []; this.max = maxStrands; this.maxSeg = 16;
+    const geo = new THREE.CylinderGeometry(1, 1, 1, 8, 1, false); geo.rotateX(Math.PI / 2); // along +Z
+    const mat = new THREE.MeshStandardMaterial({ color: 0xc9787a, roughness: 0.22, metalness: 0 });
+    mat.onBeforeCompile = (sh) => {
+      sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n diffuseColor.rgb *= 0.78 + 0.32 * sin(vViewPosition.x * 90.0 + vViewPosition.y * 70.0);');
+    };
+    mat.customProgramCacheKey = () => 'ht3d-guts';
+    this.mesh = new THREE.InstancedMesh(geo, mat, maxStrands * this.maxSeg);
+    this.mesh.count = 0; this.mesh.castShadow = true; this.mesh.frustumCulled = false; this.mesh.name = 'guts';
+    game.scene.add(this.mesh);
+    this._m = new M4(); this._q = new QT(); this._s = new V3(); this._p = new V3();
+  }
+  add(npc, vi, n, opts = {}) {
+    if (!Settings.data.gore.gibs || Settings.data.gore.level !== 'extreme') return;
+    if (this.list.length >= this.max) this.list.shift();
+    const a = npc.skinVertexWorld(vi, new V3());
+    const seg = 0.045 + Math.random() * 0.01, pts = [], prev = [];
+    const dir = new V3((Math.random() - 0.5), -0.3 - Math.random() * 0.4, (Math.random() - 0.5)).normalize();
+    for (let i = 0; i < n; i++) { const p = a.clone().addScaledVector(dir, seg * i * 0.6); pts.push(p); prev.push(p.clone().addScaledVector(dir, -0.02 + Math.random() * 0.01)); }
+    this.list.push({ npc, vi, pts, prev, seg, r: 0.013 + Math.random() * 0.006, free: false });
+  }
+  update(dt) {
+    if (!this.list.length) { this.mesh.count = 0; return; }
+    const env = this.game.env, h = Math.min(dt, 1 / 30);
+    let k = 0;
+    for (let si = this.list.length - 1; si >= 0; si--) {
+      const st = this.list[si], P = st.pts, Q = st.prev, n = P.length;
+      if (st.npc && st.npc.removed) { st.free = true; st.npc = null; }
+      // integrate
+      for (let i = 0; i < n; i++) {
+        const p = P[i], q = Q[i];
+        const vx = (p.x - q.x) * 0.985, vy = (p.y - q.y) * 0.985, vz = (p.z - q.z) * 0.985;
+        q.copy(p);
+        p.x += vx; p.y += vy - 9.8 * h * h; p.z += vz;
+      }
+      // pin to the wound
+      if (!st.free && st.npc) st.npc.skinVertexWorld(st.vi, P[0]);
+      // length constraints + ground
+      for (let it = 0; it < 6; it++) {
+        for (let i = 1; i < n; i++) {
+          const a = P[i - 1], b = P[i];
+          const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+          const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-6, diff = (d - st.seg) / d;
+          const wa = (i === 1 && !st.free) ? 0 : 0.5, wb = (i === 1 && !st.free) ? 1 : 0.5;
+          a.x += dx * diff * wa; a.y += dy * diff * wa; a.z += dz * diff * wa;
+          b.x -= dx * diff * wb; b.y -= dy * diff * wb; b.z -= dz * diff * wb;
+        }
+        for (let i = 0; i < n; i++) {
+          const p = P[i], gy = env.groundHeight(p.x, p.z) + st.r;
+          if (p.y < gy) { p.y = gy; const q = Q[i]; q.x = lerp(q.x, p.x, 0.4); q.z = lerp(q.z, p.z, 0.4); }
+        }
+      }
+      // draw segments
+      for (let i = 1; i < n && k < this.mesh.count + 9999 && k < this.max * this.maxSeg; i++) {
+        const a = P[i - 1], b = P[i];
+        this._p.addVectors(a, b).multiplyScalar(0.5);
+        const len = a.distanceTo(b) + st.r * 1.6;
+        _gv1.subVectors(b, a); if (_gv1.lengthSq() < 1e-10) _gv1.set(0, 0, 1);
+        this._q.setFromUnitVectors(FWD, _gv1.normalize());
+        const rr = st.r * (0.9 + 0.2 * Math.sin(i * 1.7));
+        this._m.compose(this._p, this._q, this._s.set(rr, rr, len));
+        this.mesh.setMatrixAt(k++, this._m);
+      }
+    }
+    this.mesh.count = k; this.mesh.instanceMatrix.needsUpdate = true;
+  }
+  clear() { this.list.length = 0; this.mesh.count = 0; }
 }
 
 // --- screen blood (2D overlay) -----------------------------------------------------------------
@@ -408,6 +487,7 @@ function makeFleshMaterial() {
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvCap = aCap;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vCap;\nfloat fhH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }')
       .replace('#include <color_fragment>', `#include <color_fragment>
+        if (vCap.z < 0.0) { diffuseColor.rgb = vec3(0.86, 0.81, 0.68); } else {
         float R = max(vCap.z, 0.005);
         float cr = length(vCap.xy); float rm = cr * R; float an = atan(vCap.y, vCap.x);
         float wob = 0.035 * sin(an * 7.0) + 0.025 * sin(an * 13.0 + 1.3);
@@ -420,7 +500,7 @@ function makeFleshMaterial() {
         float fat = smoothstep(0.0015, 0.003, edge) * (1.0 - smoothstep(0.004 + wob * 0.05, 0.007 + wob * 0.05, edge));
         fc = mix(fc, vec3(0.82, 0.68, 0.4), fat);
         fc = mix(fc, vec3(0.25, 0.015, 0.015), 1.0 - smoothstep(0.0, 0.0018, edge));
-        diffuseColor.rgb = fc;`);
+        diffuseColor.rgb = fc; }`);
   };
   m.customProgramCacheKey = () => 'ht3d-flesh';
   return m;
@@ -435,6 +515,7 @@ class GoreSystem {
     this.drops = new BloodDrops(game, low ? 700 : 1800);
     this.gibs = new Gibs(game, low ? 90 : 240);
     this.screen = new ScreenBlood();
+    this.guts = new GutStrands(game, low ? 10 : 24);
     this.capMat = makeFleshMaterial();
     this.soundT = 0;
   }
@@ -604,7 +685,7 @@ class GoreSystem {
     const pb = BONE_PARENT[cut.bone], rig = npc.rig;
     const axisV = cut.side < 0 ? new V3(0, 1, 0) : (cut.isArm ? rig.armDir[cut.side].clone() : new V3(0, -1, cut.id.startsWith('foot') ? 0.3 : 0).normalize());
     const jointB = rig.bindPos[cut.bone];
-    const limbR = cut.side < 0 ? 0.05 * rig.H / 1.75 : npc.rag.defs[cut.rc].r * (cut.isLeg ? 1.05 : 1.15);
+    const limbR = cut.isWaist ? npc.rag.defs[RAG.SPINE].r * 1.6 : (cut.side < 0 ? 0.05 * rig.H / 1.75 : npc.rag.defs[cut.rc].r * (cut.isLeg ? 1.05 : 1.15));
     const bodyLoops = this.makeLoops(P, bodyE, pb);
     let limbLoops = explode ? [] : this.makeLoops(P, limbE, cut.bone);
     // separate limb surfaces: close the severed tube's open end, add a flesh disc on the body
@@ -663,6 +744,23 @@ class GoreSystem {
   }
   afterSever(npc, cut, explode, o) {
     const G = npc.gore;
+    if (cut.isWaist) {
+      npc.criticalHead = npc.criticalHead || false;
+      if (npc.lifeState === 'alive') npc.die({ weapon: o.weapon || 'gore' });
+      else if (npc.lifeState === 'zombie') { npc.health = 0; npc.destroyZombie({ weapon: o.weapon || 'gore' }); }
+      if (npc.physMode !== 'ragdoll') npc.goRagdoll('Ragdoll (Cut in Half)', true);
+      npc.reinc.state = 'ineligible'; npc.reinc.reason = 'Body cut in half'; npc.criticalHead = true;
+      npc.lastReaction = 'Cut in Half';
+      // spill guts from both halves
+      const up = this.nearestVertex(npc, npc.boneWPos[B.spine], [REGION.ABDOMEN, REGION.TORSO]);
+      const lo = this.nearestVertex(npc, npc.boneWPos[B.hips], [REGION.PELVIS, REGION.ABDOMEN]);
+      if (up >= 0) for (let k = 0; k < 3; k++) this.guts.add(npc, up, 9 + Math.floor(Math.random() * 6));
+      if (lo >= 0) for (let k = 0; k < 2; k++) this.guts.add(npc, lo, 7 + Math.floor(Math.random() * 5));
+      if (Settings.data.gore.gibs) { const c = npc.boneWPos[B.spine]; this.gibs.burst(c, _gv1.set(0, 1, 0), 8, 'organ', 3.5, 1, 1.2); this.gibs.burst(c, _gv1.set(0, 1, 0), 5, 'gut', 3, 1, 1.3); }
+      this.splatAt(npc.boneWPos[B.spine], 1.4, 'splat');
+      this.sound(npc.boneWPos[B.spine], 'gib', 1);
+      return;
+    }
     if (cut.id === 'head') {
       npc.criticalHead = true;
       if (npc.lifeState === 'alive') npc.die({ weapon: o.weapon || 'gore' });
@@ -761,7 +859,7 @@ class GoreSystem {
   rebuildCaps(npc) {
     const G = npc.gore, src = npc.mesh.geometry;
     const P = src.attributes.position.array, SI = src.attributes.skinIndex.array, SW = src.attributes.skinWeight.array;
-    let tris = 0; for (const L of G.capLoops) tris += L.pts ? L.pts.length - 1 : L.edges.length / 2;
+    let tris = 0; for (const L of G.capLoops) tris += (L.pts ? L.pts.length - 1 : L.edges.length / 2) + 18;
     if (!tris) return;
     const nv = tris * 3;
     const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), cap = new Float32Array(nv * 3), sI = new Uint16Array(nv * 4), sW = new Float32Array(nv * 4);
@@ -779,6 +877,18 @@ class GoreSystem {
         else { sI[v * 4] = L.bone; sW[v * 4] = 1; }
         v++;
       };
+      // a short bone stub sticking out of the stump
+      {
+        const br = clamp(R * 0.24, 0.007, 0.016), len = 0.018 + R * 0.25;
+        const c0 = _gv4.copy(L.center).addScaledVector(N, -0.004), c1 = _gv5.copy(L.center).addScaledVector(N, len);
+        const ring = (c, i, out) => { const a = i / 6 * TAU, rr = br * (0.85 + 0.25 * Math.sin(i * 2.3 + R * 40)); return out.copy(c).addScaledVector(U, Math.cos(a) * rr).addScaledVector(Vv, Math.sin(a) * rr); };
+        const putB = (p) => { pos[v * 3] = p.x; pos[v * 3 + 1] = p.y; pos[v * 3 + 2] = p.z; nor[v * 3] = N.x; nor[v * 3 + 1] = N.y; nor[v * 3 + 2] = N.z; cap[v * 3] = 0; cap[v * 3 + 1] = 0; cap[v * 3 + 2] = -1; sI[v * 4] = L.bone; sW[v * 4] = 1; v++; };
+        for (let i = 0; i < 6; i++) {
+          const a0 = ring(c0, i, new V3()), a1 = ring(c0, i + 1, new V3()), b0 = ring(c1, i, new V3()), b1 = ring(c1, i + 1, new V3());
+          putB(a0); putB(a1); putB(b1); putB(a0); putB(b1); putB(b0);
+          putB(b0); putB(b1); putB(c1);
+        }
+      }
       if (L.pts) {
         for (let i = 0; i < L.pts.length - 1; i++) {
           const a = L.pts[i], b = L.pts[i + 1];
@@ -821,7 +931,8 @@ class GoreSystem {
       this.gibs.burst(hp, d, 10, 'brain', 4.5 * power, 1.0, 1.0);
       this.gibs.burst(hp, d, 10, 'flesh', 5 * power, 1.0, 1.0);
       if (scalp) this.gibs.burst(hp, d, 4, 'flesh', 4 * power, 0.9, 1.3, scalp);
-      this.gibs.burst(hp, d, 2, 'bone', 3, 0.9, 0.55, [0.95, 0.95, 0.93]);
+      this.gibs.burst(hp, d, 2, 'eye', 3.5, 0.9, 1);
+      this.gibs.burst(hp, d, 5, 'tooth', 4, 1.0, 1);
     }
     this.spray(hp, d, 70, 6 * power, 0.7, 1.3, 0.55);
     this.spray(hp, _gv2.set(0, 1, 0), 24, 3.5, 0.9, 1.0, 0.5);
@@ -855,6 +966,7 @@ class GoreSystem {
         this.mist(exitP, dir, sn ? 12 : 5, sn ? 0.55 : 0.3);
         this.wallSplat(exitP, dir, sn ? 1.3 : 0.75, sn ? 3.2 : 2.2);
         if (sn && !head && Settings.data.gore.gibs && this.extreme) this.gibs.burst(exitP, dir, 4, 'flesh', 5, 0.4);
+        if (sn && this.extreme && (hit.region === REGION.ABDOMEN || hit.region === REGION.PELVIS) && Math.random() < 0.7) this.guts.add(npc, vi2, 7 + Math.floor(Math.random() * 6));
       }
     }
     if (this.extreme) {
@@ -893,8 +1005,9 @@ class GoreSystem {
     this.screenNear(hit.point, 0.5);
     return true;
   }
-  onBlast(npc, center, f, res) {
+  onBlast(npc, center, f, res, o = {}) {
     if (!this.on) return;
+    if (o.big) f = Math.min(1, f * 1.15);
     const G = this.state(npc);
     const vi = this.nearestVertex(npc, center, null);
     if (vi >= 0) { this.vertexBind(npc, vi, _gv6, _gv7); this.addWound(npc, WOUND.BLAST, _gv6, _gv7, 0.06 + f * 0.1, { vi, bleed: npc.lifeState === 'alive' ? 1.5 * f : 0.2, k: 0.4 + f * 0.4 }); }
@@ -913,6 +1026,18 @@ class GoreSystem {
     if (!this.extreme || !Settings.data.gore.dismember) return;
     const imp = (k) => away.clone().multiplyScalar(k).add(_gv3.set((Math.random() - 0.5) * 2, 2 + Math.random() * 3, (Math.random() - 0.5) * 2));
     const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+    if (o.direct || (o.big && f > 0.8)) { // rocket: the body is blown apart
+      for (const id of ['armL', 'armR', 'legL', 'legR']) if (Math.random() < (o.direct ? 0.95 : 0.7)) this.sever(npc, id, { impulse: imp(18 + Math.random() * 12), weapon: 'bazooka' });
+      if (o.direct || Math.random() < 0.6) this.explodeHead(npc, c, away, 1.3); else this.sever(npc, 'head', { impulse: imp(14), weapon: 'bazooka' });
+      this.sever(npc, 'waist', { impulse: imp(16 + Math.random() * 10), weapon: 'bazooka' });
+      if (Settings.data.gore.gibs) { this.gibs.burst(c, away, 22, 'flesh', 9, 1.0, 1.3); this.gibs.burst(c, away, 10, 'organ', 8, 1.0, 1.3); this.gibs.burst(c, away, 8, 'gut', 7, 1.0, 1.4); this.gibs.burst(c, away, 8, 'bone', 8, 1.0, 1.0); }
+      this.mist(c, away, 30, 1.0);
+      this.splatAt(c, 2.2, 'splat'); this.splatAt(_gv1.copy(c).addScaledVector(away, 1.2), 1.5, 'spray', away);
+      for (let i = 0; i < 4; i++) this.wallSplat(c, _gv3.set(away.x + (Math.random() - 0.5), away.y + Math.random() * 0.4, away.z + (Math.random() - 0.5)).normalize(), 2.0, 6);
+      this.sound(c, 'gib', 1.0);
+      return;
+    }
+    const halve = o.big && f > 0.55 && Math.random() < 0.5;
     if (f > 0.86) { // body torn apart
       for (const id of ['armL', 'armR', 'legL', 'legR']) if (Math.random() < 0.85) this.sever(npc, id, { impulse: imp(14 + Math.random() * 10), weapon: 'grenade' });
       if (Math.random() < 0.6) this.explodeHead(npc, c, away, 1.1); else this.sever(npc, 'head', { impulse: imp(10), weapon: 'grenade' });
@@ -929,6 +1054,7 @@ class GoreSystem {
     } else if (f > 0.32 && Math.random() < 0.55) {
       this.sever(npc, pick(['handL', 'handR', 'footL', 'footR', 'forearmL', 'forearmR', 'shinL', 'shinR']), { impulse: imp(7), weapon: 'grenade' });
     }
+    if (halve) this.sever(npc, 'waist', { impulse: imp(12 + Math.random() * 8), weapon: 'bazooka' });
   }
   // zombie bite: ragged wound, spurting, mouth smeared
   onBite(victim, zombie, regionList) {
@@ -959,7 +1085,10 @@ class GoreSystem {
       const vi = this.nearestVertex(corpse, corpse.boneWPos[B.spine], [REGION.ABDOMEN, REGION.TORSO]);
       if (vi >= 0) { this.vertexBind(corpse, vi, _gv6, _gv7); G.gaping = this.addWound(corpse, WOUND.GAPING, _gv6, _gv7, 0.05, { vi, bleed: 0.8, k: 0.2 }); }
     }
-    if (G.gaping) { G.gaping.r = Math.min(this.extreme ? 0.17 : 0.1, G.gaping.r + dt * 0.006); G.gaping.k = Math.min(0.99, G.gaping.k + dt * 0.03); G.dirty = true; }
+    if (G.gaping) {
+      G.gaping.r = Math.min(this.extreme ? 0.17 : 0.1, G.gaping.r + dt * 0.006); G.gaping.k = Math.min(0.99, G.gaping.k + dt * 0.03); G.dirty = true;
+      if (bite && G.gaping.r > 0.08 && (G.gutsOut || 0) < 3 && Math.random() < 0.45 && G.gaping.vi >= 0) { G.gutsOut = (G.gutsOut || 0) + 1; this.guts.add(corpse, G.gaping.vi, 8 + Math.floor(Math.random() * 6)); }
+    }
     if (bite) {
       const p = _gv1.copy(zombie.boneWPos[B.jaw]);
       this.spray(p, _gv2.set(0, 0.6, 0), 10, 1.4, 0.8, 0.9, 0.5);
@@ -984,6 +1113,7 @@ class GoreSystem {
     this.decals.update(dt);
     this.drops.update(dt, this);
     this.gibs.update(dt, this);
+    this.guts.update(dt);
     this.screen.update(dt);
     if (!this.on) return;
     for (const npc of g.npcs.list) {
@@ -1023,6 +1153,21 @@ class GoreSystem {
         G.pool = this.decals.add(_gv1.set(c.x, g.env.groundHeight(c.x, c.z), c.z), g.env.groundNormal(c.x, c.z, _gv2), sz, 'pool', null, { grow: 10 + sz * 6 });
         if (G.headGone) { const hp = npc.rag.bodies[RAG.CHEST].pos; this.decals.add(_gv1.set(hp.x, g.env.groundHeight(hp.x, hp.z), hp.z), g.env.groundNormal(hp.x, hp.z, _gv2), 0.9, 'pool', null, { grow: 9 }); }
       }
+      // smeared blood trails: crawling or dragged bloody bodies
+      if (G.wounds.length || G.anyCut) {
+        let tp = null, moving = false;
+        if (npc.physMode === 'ragdoll') { const b = npc.rag.bodies[RAG.CHEST]; if (b.pos.y < g.env.groundHeight(b.pos.x, b.pos.z) + 0.3 && b.vel.lengthSq() > 0.16) { tp = b.pos; moving = true; } }
+        else if (npc.anim.crawl && npc.anim.speed > 0.08) { tp = npc.root.pos; moving = true; }
+        if (moving) {
+          if (!G.trail) G.trail = tp.clone();
+          const d = Math.hypot(tp.x - G.trail.x, tp.z - G.trail.z);
+          if (d > 0.28) {
+            _gv3.set(tp.x - G.trail.x, 0, tp.z - G.trail.z);
+            this.decals.add(_gv1.set(tp.x, g.env.groundHeight(tp.x, tp.z), tp.z), g.env.groundNormal(tp.x, tp.z, _gv2), 0.32 + Math.random() * 0.12, 'smear', _gv3);
+            G.trail.copy(tp);
+          }
+        } else if (G.trail) G.trail = null;
+      }
       // bleeding out
       if (alive && G.bleed > 0) {
         npc.health -= G.bleed * dt * 0.6;
@@ -1038,6 +1183,6 @@ class GoreSystem {
     const U = npc.material.userData.u; if (U.uWN) { U.uWN.value = 0; U.uBlood.value = 0; }
     npc.gore = null;
   }
-  clear() { this.decals.clear(); this.drops.clear(); this.gibs.clear(); this.screen.clear(); }
+  clear() { this.decals.clear(); this.drops.clear(); this.gibs.clear(); this.screen.clear(); this.guts.clear(); }
 }
 HT.GoreSystem = GoreSystem;

@@ -7,6 +7,7 @@ const TOOL_DEFS = [
   { id: 'sniper', name: 'Sniper Rifle', short: 'SNIPER', isGun: true, magKey: 'sniperMag', reload: 2.7, rate: 1.3, damage: 150, spread: 0.03, adsSpread: 0.0002, speed: 880, impulse: 46, zoom: 6.5, recoil: 0.11, knock: 1.0, tracer: true, pen: 1, scope: true },
   { id: 'knife', name: 'Combat Knife', short: 'KNIFE', melee: true, rate: 0.55, damage: 46, range: 1.95, impulse: 5 },
   { id: 'grenade', name: 'Frag Grenade', short: 'GRENADE', throwable: true, rate: 0.9, damage: 165, impulse: 14 },
+  { id: 'bazooka', name: 'Bazooka', short: 'BAZOOKA', launcher: true, rate: 1.5, damage: 320, impulse: 34, speed: 42, radius: 9.5, zoom: 1.6 },
   { id: 'hand', name: 'Physics Hand', short: 'GRAB', grab: true },
   { id: 'move', name: 'Move Tool', short: 'MOVE', move: true }
 ];
@@ -15,6 +16,7 @@ const TOOL_ICONS = {
   sniper: '<svg viewBox="0 0 40 24" fill="currentColor"><path d="M1 13h4l3-2h20l3-1h8v2h-8l-3 1-2 2h-4l-2 4h-3l1-4H11l-3 3H3l-2-3z"/><rect x="14" y="6" width="12" height="3" rx="1.5"/></svg>',
   knife: '<svg viewBox="0 0 40 24" fill="currentColor"><path d="M2 14h13v-3h2v8h-2v-3H2z"/><path d="M17 11l18-2 3 3-21 5z"/></svg>',
   grenade: '<svg viewBox="0 0 40 24" fill="currentColor"><ellipse cx="20" cy="15" rx="7" ry="8"/><rect x="17" y="3" width="6" height="5" rx="1"/><path d="M23 4l7 4-1 2-6-3z"/><circle cx="14" cy="5" r="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>',
+  bazooka: '<svg viewBox="0 0 40 24" fill="currentColor"><rect x="4" y="9" width="26" height="6" rx="2"/><path d="M30 8.5l8 3.5-8 3.5z"/><rect x="1" y="7.5" width="4" height="9" rx="1"/><rect x="11" y="15" width="3" height="6" rx="1"/><rect x="19" y="15" width="3" height="4.5" rx="1"/><rect x="14" y="5" width="6" height="3" rx="1"/></svg>',
   hand: '<svg viewBox="0 0 40 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 21v-9M18 20V6M22 20V5M26 20V7M30 20v-9M14 13l-3-3M14 21h16"/></svg>',
   move: '<svg viewBox="0 0 40 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 2v20M10 12h20M20 2l-3 3M20 2l3 3M20 22l-3-3M20 22l3-3M10 12l3-3M10 12l3 3M30 12l-3-3M30 12l-3 3"/></svg>'
 };
@@ -25,7 +27,7 @@ class Weapons {
     this.tools = TOOL_DEFS.map(d => Object.assign({}, d));
     this.byId = {}; for (const t of this.tools) this.byId[t.id] = t;
     this.current = this.byId.pistol; this.index = 0;
-    this.projectiles = []; this.grenades = [];
+    this.projectiles = []; this.grenades = []; this.rockets = [];
     this.cooldown = 0; this.reloading = 0; this.equipT = 0; this.swingT = 0; this.throwT = 0; this.charge = 0; this.charging = false;
     this.grab = null; this.moving = null; this.moveRing = null;
     this.ammo = {};
@@ -37,7 +39,8 @@ class Weapons {
     this.ammo = {
       pistol: { mag: W.pistolMag, reserve: W.pistolMag * W.reserveMags },
       sniper: { mag: W.sniperMag, reserve: W.sniperMag * W.reserveMags },
-      grenade: { mag: 1, reserve: 8 }
+      grenade: { mag: 1, reserve: 8 },
+      bazooka: { mag: 1, reserve: 6 }
     };
   }
   magSize(t) { return t.magKey ? Settings.data.weapons[t.magKey] : 1; }
@@ -148,6 +151,39 @@ class Weapons {
       m.userData.hip = new V3(0.21, -0.19, -0.44); m.userData.ads = m.userData.hip;
       models.grenade = m;
     }
+    // BAZOOKA -----------------------------------------------------------
+    {
+      const m = new THREE.Group();
+      M.olive2 = new THREE.MeshStandardMaterial({ color: 0x3f4a2a, metalness: 0.25, roughness: 0.55 });
+      M.warhead = new THREE.MeshStandardMaterial({ color: 0x4d5534, metalness: 0.35, roughness: 0.45 });
+      M.tip = new THREE.MeshStandardMaterial({ color: 0x1d1f1a, metalness: 0.6, roughness: 0.35 });
+      const tube = cyl(0.05, 0.05, 1.0, M.olive2, 20); tube.rotation.x = Math.PI / 2; tube.position.set(0, 0.0, -0.18); m.add(tube);
+      const rear = cyl(0.068, 0.05, 0.16, M.olive2, 20); rear.rotation.x = Math.PI / 2; rear.position.set(0, 0.0, 0.39); m.add(rear);
+      const band1 = cyl(0.054, 0.054, 0.03, M.metal2, 20); band1.rotation.x = Math.PI / 2; band1.position.set(0, 0, -0.66); m.add(band1);
+      const band2 = cyl(0.054, 0.054, 0.025, M.metal2, 20); band2.rotation.x = Math.PI / 2; band2.position.set(0, 0, 0.06); m.add(band2);
+      const grip = box(0.03, 0.1, 0.045, M.poly); grip.position.set(0, -0.08, 0.0); grip.rotation.x = 0.25; m.add(grip);
+      const grip2 = box(0.03, 0.085, 0.04, M.poly); grip2.position.set(0, -0.075, -0.32); m.add(grip2);
+      const sight = box(0.018, 0.06, 0.03, M.metal); sight.position.set(-0.065, 0.06, -0.24); m.add(sight);
+      const sightArm = box(0.03, 0.012, 0.03, M.metal); sightArm.position.set(-0.045, 0.035, -0.24); m.add(sightArm);
+      const war = new THREE.Group();
+      const wb = cyl(0.045, 0.045, 0.1, M.warhead, 16); wb.rotation.x = Math.PI / 2; war.add(wb);
+      const wc = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.16, 16), M.warhead); wc.rotation.x = -Math.PI / 2; wc.position.z = -0.13; war.add(wc);
+      const wt = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6), M.tip); wt.position.z = -0.21; war.add(wt);
+      war.position.set(0, 0, -0.73); m.add(war); m.userData.warhead = war;
+      const ra = arm(1); ra.position.set(0.0, -0.13, 0.05); ra.rotation.set(-0.15, 0, 0); m.add(ra);
+      const la = arm(-1); la.position.set(-0.01, -0.12, -0.28); la.rotation.set(-0.1, 0, 0.35); m.add(la); m.userData.leftArm = la; m.userData.leftHome = la.position.clone();
+      const fl = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.3), M.flash); fl.position.set(0, 0, -0.95); m.add(fl); m.userData.flash = fl;
+      const fl2 = fl.clone(); fl2.rotation.y = Math.PI / 2; fl.add(fl2);
+      m.userData.hip = new V3(0.17, -0.13, -0.36); m.userData.ads = new V3(0.065, -0.115, -0.3);
+      models.bazooka = m;
+      // flying rocket template
+      const rk = new THREE.Group();
+      const rb = cyl(0.04, 0.04, 0.32, M.warhead, 12); rb.rotation.x = Math.PI / 2; rk.add(rb);
+      const rc = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.16, 12), M.warhead); rc.rotation.x = Math.PI / 2; rc.position.z = 0.24; rk.add(rc);
+      for (let k = 0; k < 4; k++) { const fin = box(0.004, 0.06, 0.07, M.olive2); fin.position.z = -0.15; fin.rotation.z = k * Math.PI / 2; fin.position.x = Math.cos(k * Math.PI / 2) * 0.045; fin.position.y = Math.sin(k * Math.PI / 2) * 0.045; rk.add(fin); }
+      rk.traverse(o => { if (o.isMesh) o.castShadow = true; });
+      this.rocketTpl = rk;
+    }
     // HAND + MOVE -------------------------------------------------------
     for (const id of ['hand', 'move']) {
       const m = new THREE.Group();
@@ -212,14 +248,14 @@ class Weapons {
     this._touchFirePrev = inp.touch.fire;
     const aimHeld = !uiBlock && ((inp.locked && inp.mouse.down[2]) || inp.touch.aimHold);
     // tool selection keys
-    for (let k = 0; k < 6; k++) if (inp.wasPressed('Digit' + (k + 1))) this.select(k);
-    if (inp.wasPressed('KeyG') && t.id !== 'grenade') { this.select(3); }
+    for (let k = 0; k < this.tools.length && k < 9; k++) if (inp.wasPressed('Digit' + (k + 1))) this.select(k);
+    if (inp.wasPressed('KeyG') && t.id !== 'grenade') { this.select(this.tools.indexOf(this.byId.grenade)); }
     if (inp.touch.next) { this.cycle(1); inp.touch.next = false; }
     if (inp.mouse.wheel !== 0 && !this.grab && !this.moving && !(t.isGun && this.game.player.aiming)) this.cycle(inp.mouse.wheel > 0 ? 1 : -1);
     if (inp.wasPressed('KeyR') || inp.touch.reload) { inp.touch.reload = false; if (t.isGun) this.startReload(); else if (t.move && this.moving) this.rotateMoved(Math.PI / 4); }
     if (inp.wasPressed('KeyF') || inp.touch.select) { inp.touch.select = false; this.selectAtCrosshair(); }
     // aiming
-    if (t.isGun && this.reloading <= 0) { g.player.aiming = aimHeld; g.player.zoom = t.zoom; }
+    if ((t.isGun || t.launcher) && this.reloading <= 0) { g.player.aiming = aimHeld; g.player.zoom = t.zoom; }
     else { g.player.aiming = false; }
     g.ui.setScope(!!(t.scope && g.player.aiming && g.player.cam.fov < Settings.data.controls.fov / 2.2));
     // reload progress
@@ -241,6 +277,9 @@ class Weapons {
         if ((auto ? fireHeld : firePressed) && this.cooldown <= 0 && this.reloading <= 0) this.fireGun(t);
       } else if (t.melee) {
         if (firePressed && this.cooldown <= 0) this.knifeAttack(t);
+      } else if (t.launcher) {
+        const a = this.ammo.bazooka;
+        if (firePressed && this.cooldown <= 0 && (a.mag > 0 || W.infiniteAmmo)) this.fireRocket(t);
       } else if (t.throwable) {
         const a = this.ammo.grenade;
         if (fireHeld && this.cooldown <= 0 && (a.mag > 0 || W.infiniteAmmo)) { this.charging = true; this.charge = Math.min(1, this.charge + dt / 1.1); }
@@ -260,6 +299,7 @@ class Weapons {
     if (this.moving) this.updateMove(dt);
     this.updateProjectiles(dt);
     this.updateGrenades(dt);
+    this.updateRockets(dt);
     this.updateViewmodel(dt);
   }
   // --- guns -------------------------------------------------------------------------
@@ -495,12 +535,74 @@ class Weapons {
     g.scene.remove(gr.mesh); gr.mesh.traverse(o => { if (o.geometry) o.geometry.dispose(); });
     g.physics.removeBody(gr.body); g.physics.removeOwner(gr.owner);
   }
-  explode(pos) {
-    const g = this.game, W = Settings.data.weapons, t = this.byId.grenade;
-    const R = W.grenadeRadius;
+  // --- bazooka -----------------------------------------------------------------------
+  fireRocket(t) {
+    const g = this.game, W = Settings.data.weapons, a = this.ammo.bazooka;
+    if (!W.infiniteAmmo) { a.mag--; if (a.reserve > 0) { a.reserve--; a.mag = 1; } }
+    this.cooldown = t.rate;
+    const cam = g.camera, dir = cam.getWorldDirection(new V3()), right = g.player.right(new V3());
+    const start = cam.position.clone().addScaledVector(dir, 0.95).addScaledVector(right, g.player.aiming ? 0.06 : 0.15).add(_v1.set(0, -0.08, 0));
+    const mesh = this.rocketTpl.clone(); mesh.position.copy(start); mesh.quaternion.setFromUnitVectors(FWD, dir);
+    g.scene.add(mesh);
+    this.rockets.push({ pos: start.clone(), vel: dir.clone().multiplyScalar(t.speed), mesh, t: 0, trailT: 0 });
+    // backblast and recoil
+    g.fx.flash(start, 10, 0.12, 0xffb060);
+    const back = cam.position.clone().addScaledVector(dir, -0.6);
+    for (let i = 0; i < 22; i++) {
+      const d = _v2.copy(dir).negate().add(_v3.set((Math.random() - 0.5) * 0.7, (Math.random() - 0.3) * 0.5, (Math.random() - 0.5) * 0.7)).normalize();
+      const sp = 2 + Math.random() * 6;
+      g.fx.smoke.emit(back.x, back.y - 0.1, back.z, d.x * sp, d.y * sp, d.z * sp, 1.2 + Math.random() * 1.2, 0.25, 1.4, 0.72, 0.71, 0.7, 0.5, -0.15, 2.2);
+    }
+    for (let i = 0; i < 10; i++) g.fx.glow.emit(start.x, start.y, start.z, dir.x * 3 + (Math.random() - 0.5) * 2, dir.y * 3 + (Math.random() - 0.5) * 2, dir.z * 3 + (Math.random() - 0.5) * 2, 0.12, 0.25, 0.05, 1, 0.75, 0.35, 1, 0, 3);
+    g.player.recoil += 0.12; g.player.addShake(0.4);
+    this.vmKick = 1.6; this.flashT = 0.07; this.vmLight.intensity = 3.5;
+    g.audio.play('rocketLaunch', { gain: 1, pos: start });
+    g.ai.emit('gunshot', start, { threatPos: start, radius: 40 });
+  }
+  updateRockets(dt) {
+    const g = this.game;
+    for (let i = this.rockets.length - 1; i >= 0; i--) {
+      const r = this.rockets[i];
+      r.t += dt;
+      r.vel.y -= 1.2 * dt;
+      const speed = r.vel.length(), dir = _v4.copy(r.vel).multiplyScalar(1 / speed), seg = speed * dt;
+      const npcHit = g.hits.raycastNPCs(r.pos, dir, seg, null);
+      const propHit = g.physics.raycast(r.pos, dir, seg, b => b.tag === 'prop' || b.tag === 'grenade');
+      const envHit = this.rayEnv(r.pos, dir, seg);
+      let best = null, bd = seg;
+      if (npcHit && npcHit.dist < bd) { best = npcHit; bd = npcHit.dist; }
+      if (propHit && propHit.dist < bd) { best = propHit; bd = propHit.dist; }
+      if (envHit && envHit.dist < bd) { best = envHit; bd = envHit.dist; }
+      if (best || r.t > 7) {
+        const p = r.pos.clone().addScaledVector(dir, Math.max(0, bd - 0.1));
+        g.scene.remove(r.mesh);
+        this.rockets.splice(i, 1);
+        this.explode(p, { tool: this.byId.bazooka, direct: best && best.npc ? best.npc : null, dir: dir.clone() });
+        continue;
+      }
+      r.pos.addScaledVector(dir, seg);
+      r.mesh.position.copy(r.pos); r.mesh.quaternion.setFromUnitVectors(FWD, dir);
+      // smoke trail and exhaust flame
+      r.trailT -= dt;
+      while (r.trailT <= 0) {
+        r.trailT += 0.014;
+        const k = Math.random() * seg;
+        const x = r.pos.x - dir.x * (0.25 + k), y = r.pos.y - dir.y * (0.25 + k), z = r.pos.z - dir.z * (0.25 + k);
+        const sh = 0.62 + Math.random() * 0.15;
+        g.fx.smoke.emit(x, y, z, (Math.random() - 0.5) * 0.4, (Math.random() - 0.3) * 0.3, (Math.random() - 0.5) * 0.4, 1.6 + Math.random() * 1.2, 0.08, 0.7 + Math.random() * 0.4, sh, sh, sh, 0.55, -0.1, 0.8);
+      }
+      g.fx.glow.emit(r.pos.x - dir.x * 0.3, r.pos.y - dir.y * 0.3, r.pos.z - dir.z * 0.3, -dir.x * 3, -dir.y * 3, -dir.z * 3, 0.06, 0.22, 0.06, 1, 0.72, 0.32, 1, 0, 1);
+    }
+  }
+  explode(pos, opts = {}) {
+    const g = this.game, W = Settings.data.weapons, t = opts.tool || this.byId.grenade;
+    const big = t.id === 'bazooka';
+    const R = big ? t.radius : W.grenadeRadius;
     const strength = t.impulse * Settings.data.physics.forceScale;
     g.fx.explosion(pos, R);
-    g.audio.play('explosion', { pos, gain: 1.0 });
+    if (big) g.fx.bigExplosion && g.fx.bigExplosion(pos, R);
+    g.audio.play('explosion', { pos, gain: 1.0, rate: big ? 0.8 : 1, important: true });
+    if (big) g.audio.play('gib', { pos, gain: 0.9 });
     const dCam = g.camera.position.distanceTo(pos);
     g.player.addShake(clamp(1.4 - dCam / (R * 3), 0.1, 1.4));
     g.ai.emit('explosion', pos, { threatPos: pos });
@@ -511,22 +613,23 @@ class Weapons {
       let dmin = 1e9;
       for (const b of npc.rag.bodies) dmin = Math.min(dmin, b.pos.distanceTo(pos) - b.shape.r);
       if (dmin > R) continue;
-      const f = Math.pow(clamp(1 - Math.max(0, dmin) / R, 0, 1), 1.4);
+      let f = Math.pow(clamp(1 - Math.max(0, dmin) / R, 0, 1), big ? 1.1 : 1.4);
+      if (opts.direct === npc) f = 1;
       const region = g.hits.closestRegion(npc, pos);
       const dir = _v1.subVectors(npc.boneWPos[B.chest], pos).normalize();
-      const res = npc.applyHit({ region, damage: t.damage * f / REGION_DAMAGE_MUL[region], weapon: 'grenade', dir: dir.clone(), point: pos.clone(), force: strength * f, threatPos: pos.clone() });
+      const res = npc.applyHit({ region, damage: t.damage * f / REGION_DAMAGE_MUL[region], weapon: t.id, dir: dir.clone(), point: pos.clone(), force: strength * f, threatPos: pos.clone() });
       if (f > 0.12 || res.killed || npc.physMode === 'ragdoll') {
         if (npc.physMode !== 'ragdoll') npc.goRagdoll(res.killed ? 'Ragdoll (Deceased)' : 'Knockdown (Blast)', npc.lifeState !== 'alive' && npc.lifeState !== 'zombie');
         npc.downTimer = Math.max(npc.downTimer, 2 + f * 2);
       } else {
         g.ai.onHit(npc, { region, dir: dir.clone(), force: 6, threatPos: pos.clone() });
       }
-      g.gore.onBlast(npc, pos, f, res);
+      g.gore.onBlast(npc, pos, f, res, { big, direct: opts.direct === npc });
       affected.push({ npc, res, region, f });
     }
     g.physics.explosion(pos, R, strength * 0.85);
     for (const a of affected) {
-      const ev = g.hits.report(a.npc, a.region, a.res, 'Grenade Blast (' + (a.f * 100).toFixed(0) + '%)', pos);
+      const ev = g.hits.report(a.npc, a.region, a.res, (big ? 'Rocket Blast (' : 'Grenade Blast (') + (a.f * 100).toFixed(0) + '%)', pos);
       if (a.res.killed) g.ai.emit('death', a.npc.root.pos, { source: a.npc, threatPos: pos });
     }
     for (const gr of this.grenades) { if (gr.body.pos.distanceTo(pos) < 1.5 && gr.fuse > 0.2) gr.fuse = 0.15; }
@@ -673,8 +776,14 @@ class Weapons {
     pos.x += Math.sin(bobT * 0.5) * 0.008 * sp * (1 - aw * 0.8);
     pos.y += Math.abs(Math.cos(bobT * 0.5)) * 0.006 * sp * (1 - aw * 0.8) + Math.sin(this.vmTime * 1.6) * 0.0015;
     this.vmKick = damp(this.vmKick, 0, 14, dt);
-    pos.z += this.vmKick * (t.id === 'sniper' ? 0.08 : 0.045);
-    let rx = this.vmKick * (t.id === 'sniper' ? 0.12 : 0.18), ry = 0, rz = 0;
+    pos.z += this.vmKick * (t.id === 'sniper' ? 0.08 : t.launcher ? 0.07 : 0.045);
+    let rx = this.vmKick * (t.id === 'sniper' ? 0.12 : t.launcher ? 0.1 : 0.18), ry = 0, rz = 0;
+    if (t.launcher) {
+      const reloadK = this.cooldown > 0.25 ? Math.sin(Math.PI * clamp(1 - (this.cooldown - 0.25) / (t.rate - 0.25), 0, 1)) : 0;
+      pos.y -= reloadK * 0.09; rz += reloadK * 0.35;
+      m.userData.warhead.visible = this.cooldown < 0.55;
+      const la = m.userData.leftArm; la.position.copy(m.userData.leftHome); la.position.z -= reloadK * 0.25; la.position.y += reloadK * 0.05;
+    }
     // equip
     if (this.equipT > 0) { const e = this.equipT / 0.35; pos.y -= e * e * 0.25; rx -= e * 0.6; }
     // reload
@@ -749,6 +858,8 @@ class Weapons {
     renderer.autoClear = true;
   }
   clearAll() {
+    for (const r of this.rockets) this.game.scene.remove(r.mesh);
+    this.rockets.length = 0;
     for (const gr of this.grenades) this.removeGrenade(gr);
     this.grenades.length = 0; this.projectiles.length = 0;
     if (this.grab) this.releaseGrab(false);

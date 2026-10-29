@@ -5,6 +5,7 @@ const CROSSHAIRS = {
   gun: '<svg viewBox="0 0 30 30" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" style="filter:drop-shadow(0 0 1px #000)"><path d="M15 4v6M15 20v6M4 15h6M20 15h6"/><circle cx="15" cy="15" r="1" fill="#fff"/></svg>',
   knife: '<svg viewBox="0 0 30 30" fill="none" stroke="#fff" stroke-width="1.6" style="filter:drop-shadow(0 0 1px #000)"><circle cx="15" cy="15" r="5"/></svg>',
   grenade: '<svg viewBox="0 0 30 30" fill="none" stroke="#fff" stroke-width="1.6" style="filter:drop-shadow(0 0 1px #000)"><path d="M15 9v12M9 15h12"/><path d="M8 24l14-0" stroke-dasharray="2 2"/></svg>',
+  launcher: '<svg viewBox="0 0 30 30" fill="none" stroke="#fff" stroke-width="1.6" style="filter:drop-shadow(0 0 1px #000)"><circle cx="15" cy="15" r="8"/><path d="M15 3v5M15 22v5M3 15h5M22 15h5"/><circle cx="15" cy="15" r="1.2" fill="#fff"/></svg>',
   hand: '<svg viewBox="0 0 30 30" fill="none" stroke="#4fd1ff" stroke-width="1.8" style="filter:drop-shadow(0 0 1px #000)"><circle cx="15" cy="15" r="7"/><circle cx="15" cy="15" r="1.4" fill="#4fd1ff"/></svg>',
   move: '<svg viewBox="0 0 30 30" fill="none" stroke="#4fd1ff" stroke-width="1.8" style="filter:drop-shadow(0 0 1px #000)"><path d="M15 6v18M6 15h18M15 6l-3 3M15 6l3 3M15 24l-3-3M15 24l3-3M6 15l3-3M6 15l3 3M24 15l-3-3M24 15l-3 3"/></svg>'
 };
@@ -16,7 +17,7 @@ const DIAGRAM = [ // region rects (front view; character's left on viewer's righ
   ['r', 36, 98, 13, 40, 6], ['r', 37, 138, 11, 38, 5], ['r', 34, 176, 14, 8, 3]
 ];
 const TIPS = [
-  'Tap a weapon on the bar (or press <b>1-6</b>) to equip it: Pistol, Sniper, Knife, Grenade, Grab, Move.',
+  'Tap a weapon on the bar (or press <b>1-7</b>) to equip it: Pistol, Sniper, Knife, Grenade, Bazooka, Grab, Move.',
   'Hold <b>right mouse</b> (or AIM) to aim. A sniper headshot destroys the head.',
   'Open the <b>Sandbox</b> menu to spawn a man or a woman. Every body and height is random.',
   'Zombies grab and bite. Survivors who break free are infected and will turn.',
@@ -96,7 +97,7 @@ class UI {
     el.classList.remove('hidden');
     el.innerHTML = inp.lockFailed
       ? '<kbd>Right-drag</kbd> look &nbsp; <kbd>WASD</kbd> move &nbsp; <kbd>Left click</kbd> use weapon &nbsp; <kbd>Tab</kbd> sandbox &nbsp; <kbd>O</kbd> settings'
-      : '<b>Click to look around</b><br><kbd>WASD</kbd> move &nbsp; <kbd>Space</kbd>/<kbd>C</kbd> up/down &nbsp; <kbd>Shift</kbd> fast &nbsp; <kbd>1-6</kbd> weapons<br><kbd>LMB</kbd> fire &nbsp; <kbd>RMB</kbd> aim &nbsp; <kbd>R</kbd> reload &nbsp; <kbd>Tab</kbd> sandbox &nbsp; <kbd>O</kbd> settings &nbsp; <kbd>Esc</kbd> release mouse';
+      : '<b>Click to look around</b><br><kbd>WASD</kbd> move &nbsp; <kbd>Space</kbd>/<kbd>C</kbd> up/down &nbsp; <kbd>Shift</kbd> fast &nbsp; <kbd>1-7</kbd> weapons<br><kbd>LMB</kbd> fire &nbsp; <kbd>RMB</kbd> aim &nbsp; <kbd>R</kbd> reload &nbsp; <kbd>Tab</kbd> sandbox &nbsp; <kbd>O</kbd> settings &nbsp; <kbd>Esc</kbd> release mouse';
   }
   toggleDrawer(v, mode) {
     if (mode) this.mode = mode;
@@ -116,10 +117,10 @@ class UI {
   }
   updateTool(t) {
     this.slots.forEach((s, i) => { const tt = this.game.weapons.tools[i]; s.classList.toggle('sel', tt === t); s.classList.toggle('off', !this.game.weapons.enabled(tt)); });
-    const ch = t.isGun ? 'gun' : t.melee ? 'knife' : t.throwable ? 'grenade' : t.grab ? 'hand' : 'move';
+    const ch = t.isGun ? 'gun' : t.launcher ? 'launcher' : t.melee ? 'knife' : t.throwable ? 'grenade' : t.grab ? 'hand' : 'move';
     this.$('crosshair').innerHTML = CROSSHAIRS[ch];
     this.$('ammoName').textContent = t.name.toUpperCase();
-    this.$('tFire').textContent = t.isGun ? 'FIRE' : t.melee ? 'SLASH' : t.throwable ? 'THROW' : t.grab ? 'GRAB' : 'MOVE';
+    this.$('tFire').textContent = t.isGun || t.launcher ? 'FIRE' : t.melee ? 'SLASH' : t.throwable ? 'THROW' : t.grab ? 'GRAB' : 'MOVE';
     this.$('tAim').textContent = t.grab ? 'THROW' : 'AIM';
     this.$('tReload').textContent = t.move ? 'ROT' : 'RLD';
   }
@@ -150,8 +151,9 @@ class UI {
       // ammo
       const t = g.weapons.current, W = Settings.data.weapons;
       let txt = '', st = '';
-      if (t.isGun) { const am = g.weapons.ammo[t.id]; txt = `${am.mag}<small> / ${W.infiniteAmmo ? '∞' : am.reserve}</small>`; if (g.weapons.reloading > 0) st = 'RELOADING...'; else if (am.mag === 0) st = 'EMPTY - PRESS R'; }
+      if (t.isGun) { const am = g.weapons.ammo[t.id]; txt = W.infiniteAmmo ? '∞' : `${am.mag}<small> / ${am.reserve}</small>`; if (g.weapons.reloading > 0) st = 'RELOADING...'; else if (am.mag === 0) st = 'EMPTY - PRESS R'; }
       else if (t.throwable) { const am = g.weapons.ammo.grenade; txt = W.infiniteAmmo ? '∞' : `${am.mag + am.reserve}`; if (g.weapons.charging) st = 'POWER ' + Math.round(g.weapons.charge * 100) + '%'; }
+      else if (t.launcher) { const am = g.weapons.ammo.bazooka; txt = W.infiniteAmmo ? '∞' : `${am.mag + am.reserve}`; if (g.weapons.cooldown > 0.55) st = 'RELOADING...'; }
       else if (t.grab) { txt = ''; st = g.weapons.grab ? 'HOLDING · RMB THROW · WHEEL DIST' : 'LMB GRAB'; }
       else if (t.move) { txt = ''; st = g.weapons.moving ? 'WHEEL/R ROTATE · RELEASE TO PLACE' : 'LMB PICK UP SUBJECT'; }
       else txt = '';
@@ -349,7 +351,7 @@ class UI {
     this.note(s, 'Each person gets a random body, height, face and outfit. They appear where you are aiming.');
     s = this.sec(b, 'Weapons');
     const cards = document.createElement('div'); cards.className = 'wcards';
-    const desc = { pistol: 'Semi-auto, 15 rounds', sniper: 'Scoped, blows limbs off', knife: 'Slash and cut', grenade: 'Hold to throw farther', hand: 'Grab and throw bodies', move: 'Pick up and place' };
+    const desc = { pistol: 'Semi-auto pistol', sniper: 'Scoped, blows limbs off', knife: 'Slash and cut', grenade: 'Hold to throw farther', bazooka: 'Rockets tear bodies apart', hand: 'Grab and throw bodies', move: 'Pick up and place' };
     W.tools.forEach((t, i) => {
       if (!W.enabled(t)) return;
       const c = document.createElement('button'); c.className = 'wcard' + (W.current === t ? ' sel' : '');
@@ -434,7 +436,7 @@ class UI {
     this.toggle(s, 'Invert Y', 'controls.invertY');
     this.select(s, 'Touch controls', [['auto', 'Auto'], ['on', 'On'], ['off', 'Off']], Settings.data.controls.touch, v => Settings.set('controls.touch', v));
     this.toggle(s, 'Control hints', 'ui.hints', () => this.updatePlayHint());
-    this.note(s, 'PC: WASD move, mouse look, left click fire, right click aim, R reload, 1-6 weapons, Tab sandbox, O settings.<br>Phone: left thumb moves, right thumb looks, buttons fire/aim/reload, tap the weapon bar to switch.');
+    this.note(s, 'PC: WASD move, mouse look, left click fire, right click aim, R reload, 1-7 weapons, Tab sandbox, O settings.<br>Phone: left thumb moves, right thumb looks, buttons fire/aim/reload, tap the weapon bar to switch.');
   }
   set_gameplay(b) {
     const g = this.game;

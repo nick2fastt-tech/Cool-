@@ -75,6 +75,7 @@ class ReincarnationSystem {
     if (!npc.setLife('reanimating', 'reincarnation')) return false;
     r.state = 'rising';
     npc.isZombie = true; npc.health = 100; npc.maxHealth = 100;
+    npc.anim.zstyle = pickZombieGait(); npc.anim.zMirror = Math.random() < 0.5 ? 1 : 0;
     npc.zombieTarget = null;
     if (npc.physMode !== 'ragdoll') npc.goRagdoll('Reanimating', true);
     npc.startGetUp(true);

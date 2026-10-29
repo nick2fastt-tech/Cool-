@@ -25,7 +25,7 @@ All humans, textures, sounds and environments are generated procedurally at load
   - Bitten survivors who break free are infected: they turn pale, limp, cough, collapse, convulse, and rise as zombies.
   - A destroyed head stops a body from rising. Zombies never target the player.
 - **Physics**: custom XPBD rigid-body solver with 16-body ragdolls, joint limits and anatomical mass distribution.
-- **Weapons**: pistol, sniper rifle, knife, grenade, grab hand and move tool.
+- **Weapons**: pistol, sniper rifle, knife, grenade, bazooka, grab hand and move tool. Ammo is infinite by default (toggle in Settings).
 - **Graphics**: PBR materials, soft shadows, optional SSAO, and LOW/HIGH/ULTRA presets. Phones default to LOW.
 - **Audio**: synthesized weapons, impacts, gore, screams, zombie voices, footsteps and ambience.
 
@@ -36,7 +36,7 @@ All humans, textures, sounds and environments are generated procedurally at load
 | Click | Capture the mouse |
 | WASD / Space / C / Shift | Fly (move, up, down, fast) |
 | Left / right mouse | Fire / aim |
-| 1-6 or the weapon bar | Choose a weapon |
+| 1-7 or the weapon bar | Choose a weapon |
 | R | Reload |
 | Tab | Sandbox menu |
 | O | Settings |

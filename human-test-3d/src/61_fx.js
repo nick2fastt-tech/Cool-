@@ -186,6 +186,23 @@ class FX {
     this.shockwave(_v1.set(pos.x, g, pos.z), radius * 0.9);
     this.decal(_v1.set(pos.x, g + 0.005, pos.z), UP, radius * 0.45, 'scorch');
   }
+  // rocket blast: bigger fireball, smoke column and flying debris
+  bigExplosion(pos, radius) {
+    this.flash(_v1.copy(pos).setY(pos.y + 1), 120, 0.5, 0xffa040);
+    for (let i = 0; i < 70; i++) {
+      const d = _v2.set(Math.random() - 0.5, Math.random() * 1.1, Math.random() - 0.5).normalize();
+      const sp = 4 + Math.random() * 12;
+      this.glow.emit(pos.x, pos.y + 0.3, pos.z, d.x * sp, d.y * sp, d.z * sp, 0.35 + Math.random() * 0.45, 0.9, 2.6, 1.0, 0.5 + Math.random() * 0.3, 0.15, 1, 1.5, 3.5);
+    }
+    for (let i = 0; i < 45; i++) {
+      const d = _v2.set((Math.random() - 0.5) * 0.6, 0.6 + Math.random() * 0.8, (Math.random() - 0.5) * 0.6).normalize();
+      const sp = 1.5 + Math.random() * 4;
+      const sh = 0.16 + Math.random() * 0.14;
+      this.smoke.emit(pos.x, pos.y + 0.5, pos.z, d.x * sp, d.y * sp, d.z * sp, 3.5 + Math.random() * 3, 1.0, 4 + Math.random() * 2.5, sh, sh * 0.96, sh * 0.92, 0.75, -0.35, 0.9);
+    }
+    const gore = this.game.gore;
+    if (gore) gore.gibs.burst(pos, UP, 18, 'dirt', 9, 1.2, 1.1);
+  }
   muzzle(pos, dir) {
     this.flash(pos, 6, 0.06, 0xffc070);
   }

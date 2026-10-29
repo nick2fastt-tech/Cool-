@@ -363,8 +363,29 @@ class AISystem {
     b.groanT -= dt;
     if (b.groanT <= 0) { b.groanT = 3 + Math.random() * 6; if (Z.vocalize) Events.emit('zombieGroan', npc); anim.jawTarget = 0.3; setTimeout(() => { if (anim) anim.jawTarget = 0.08; }, 700); }
     anim.setPosture('zombie');
-    const zspeed = 0.85 * Z.speed * npc.personality.zombieSpeed * (anim.zstyle ? anim.zstyle.speed : 1) * (anim.crawl ? 0.38 : 1);
+    const zst = anim.zstyle || {};
+    const zspeed = 0.85 * Z.speed * npc.personality.zombieSpeed * (zst.speed || 1) * (anim.crawl ? 0.38 : 1);
     b.zspeed = zspeed;
+    // style quirks: weaving, tripping, spasms
+    b.destOff = b.destOff || new V3();
+    if (zst.wobble) { const a = b.t * 1.05 + npc.id; b.destOff.set(Math.cos(npc.root.yaw), 0, -Math.sin(npc.root.yaw)).multiplyScalar(Math.sin(a) * zst.wobble + Math.sin(a * 2.3) * 0.4); } else b.destOff.set(0, 0, 0);
+    if (zst.stumble && anim.speed > 0.45 && !anim.crawl && b.state !== 'zGrab' && b.state !== 'zFeed' && Math.random() < zst.stumble * dt) {
+      npc.goRagdoll('Stumbled', false);
+      const fw = _v1.set(Math.sin(npc.root.yaw), 0.2, Math.cos(npc.root.yaw)).multiplyScalar(2.2);
+      for (const bd of npc.rag.bodies) if (!npc.rag.detached[bd.index]) bd.vel.add(fw);
+      npc.downTimer = 0.8 + Math.random() * 0.8;
+      return;
+    }
+    if (zst.twitch) {
+      b.twitchT = (b.twitchT || 0) - dt;
+      if (b.twitchT <= 0) {
+        b.twitchT = 0.12 + Math.random() * 0.75;
+        const bones = [B.head, B.neck, B.chest, B.upperarm_L, B.upperarm_R, B.spine];
+        anim.kick(bones[Math.floor(Math.random() * bones.length)], _v1.set((Math.random() - 0.5) * 14, (Math.random() - 0.5) * 14, (Math.random() - 0.5) * 10));
+        if (Math.random() < 0.25) b.burstT = 0.35 + Math.random() * 0.4;
+      }
+    }
+    b.burstT = Math.max(0, (b.burstT || 0) - dt);
     if (b.state === 'zGrab') { this.zombieGrab(npc, b, dt, Z); return; }
     if (b.state === 'zFeed' && this.zombieFeed(npc, b, dt, Z)) return;
     // target selection
@@ -383,8 +404,8 @@ class AISystem {
       const canGrab = !anim.crawl && tgt.physMode === 'anim' && !tgt.grabbedBy && b.grabCooldown <= 0;
       if (d > (canGrab ? 0.78 : (anim.crawl ? 0.7 : 0.95))) {
         b.state = 'zChase'; b.dest.copy(tgt.root.pos);
-        // lunge at close range
-        b.speed = d < 1.7 && !anim.crawl ? Math.max(zspeed * 1.5, 2.3) : zspeed * (d < 3 ? 1.25 : 1);
+        // lunge at close range; runners sprint, twitchers lurch in bursts
+        b.speed = d < 1.7 && !anim.crawl ? Math.max(zspeed * 1.5, 2.3) : zspeed * (d < 3 ? 1.25 : 1) * (zst.chase || 1) * (b.burstT > 0 ? 2.2 : 1);
       } else if (canGrab) {
         this.startGrab(npc, b, tgt);
       } else {
@@ -608,6 +629,7 @@ class AISystem {
     if (b.speed > 0.01) {
       let spd = npc.anim.crawl ? Math.min(b.speed, 0.38) : b.speed;
       desired.subVectors(b.dest, root.pos); desired.y = 0;
+      if (b.destOff && desired.lengthSq() > 1) desired.add(b.destOff);
       const d = desired.length();
       if (d > 0.05) {
         // people slow down to change direction sharply instead of side-stepping

@@ -275,6 +275,14 @@ class AudioEngine {
       this.synthVoice('scream1', { dur: 1.1, f0: 255, slide: 0.35, jitter: 0.1, breath: 0.3, formants: ah, drive: 3.5, seed: 12, norm: 0.8 });
       this.synthVoice('scream2', { dur: 1.5, f0: 330, slide: -0.2, jitter: 0.12, breath: 0.3, formants: eh, drive: 3.2, seed: 13, norm: 0.8 });
       this.synthVoice('pain0', { dur: 0.6, f0: 180, slide: -0.3, jitter: 0.15, breath: 0.5, formants: eh, drive: 2.0, seed: 14, norm: 0.6 });
+      { const b = this.buf(1.6), L = b.L; const lp = new Biquad('lp', 300, 0.8, sr); let ph = 0;
+        for (let i = 0; i < L.length; i++) { const t = i / sr, n = this.noise();
+          if (i % 64 === 0) this._wbp = new Biquad('bp', 900 + 1600 * Math.exp(-t * 1.6), 1.1, sr);
+          ph += TAU * (70 + 50 * Math.exp(-t / 0.05)) / sr;
+          const thump = Math.sin(ph) * Math.exp(-t / 0.09) * 1.5 + lp.p(n) * Math.exp(-t / 0.08) * 2.0;
+          const hiss = this._wbp.p(n) * Math.exp(-t / 0.7) * (1 - Math.exp(-t / 0.02)) * 1.3;
+          L[i] = Math.tanh((thump + hiss) * 1.4); }
+        this.finish('rocketLaunch', b, 0.9); }
       this.synthVoice('gurgle', { dur: 0.9, f0: 90, slide: -0.2, jitter: 0.6, breath: 0.9, formants: [[400, 3, 1], [900, 4, 0.5], [2200, 5, 0.2]], drive: 2.5, seed: 15, norm: 0.55 });
     }
   }

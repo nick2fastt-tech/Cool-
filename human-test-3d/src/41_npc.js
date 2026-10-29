@@ -249,7 +249,7 @@ class NPC {
     if (this.downTimer <= 0 && this.settleTimer > 0.5 && Settings.data.ai.enabled !== false) this.startGetUp(this.lifeState === 'zombie');
   }
   startGetUp(asZombie) {
-    if (this.gore && this.gore.lostLegs > 0) return this.startCrawl(asZombie);
+    if ((this.gore && this.gore.lostLegs > 0) || (this.isZombie && this.anim.zstyle && this.anim.zstyle.crawl)) return this.startCrawl(asZombie);
     const rag = this.rag;
     const pel = rag.bodies[RAG.PELVIS], head = rag.bodies[RAG.HEAD];
     // chest facing

@@ -129,11 +129,28 @@ function gaitKneeStance(st, run) {
 // Zombie gait styles: per-leg drag/stiffness (index 0 = "bad" leg before mirroring), limp, hunch,
 // torso roll, lateral lurch, head loll, arm style, stride and cadence irregularity.
 const ZOMBIE_GAITS = [
-  { name: 'shambler', drag: [0.9, 0.1], stiff: [0.75, 0.05], limp: 0.45, hunch: 0.36, roll: 0.16, lurch: 0.05, headLoll: 0.5, arms: 'hang', stride: 0.72, jitter: 0.22, width: 1.35, toeOut: 0.22, speed: 0.75 },
-  { name: 'reacher', drag: [0.25, 0.25], stiff: [0.3, 0.3], limp: 0.1, hunch: 0.22, roll: 0.05, lurch: 0.035, headLoll: 0.3, arms: 'reach', stride: 0.8, jitter: 0.14, width: 1.25, toeOut: 0.12, speed: 0.95 },
-  { name: 'limper', drag: [1.0, 0.0], stiff: [0.9, 0.0], limp: 0.7, hunch: 0.3, roll: -0.14, lurch: 0.08, headLoll: 0.4, arms: 'one', stride: 0.7, jitter: 0.2, width: 1.4, toeOut: 0.25, speed: 0.7 },
-  { name: 'lurcher', drag: [0.15, 0.15], stiff: [0.2, 0.2], limp: 0.05, hunch: 0.5, roll: 0.0, lurch: 0.065, headLoll: 0.25, arms: 'claw', stride: 0.85, jitter: 0.3, width: 1.2, toeOut: 0.1, speed: 1.15 }
+  { name: 'shambler', w: 18, drag: [0.9, 0.1], stiff: [0.75, 0.05], limp: 0.45, hunch: 0.36, roll: 0.16, lurch: 0.05, headLoll: 0.5, arms: 'hang', stride: 0.72, jitter: 0.22, width: 1.35, toeOut: 0.22, speed: 0.75 },
+  { name: 'reacher', w: 15, drag: [0.25, 0.25], stiff: [0.3, 0.3], limp: 0.1, hunch: 0.22, roll: 0.05, lurch: 0.035, headLoll: 0.3, arms: 'reach', stride: 0.8, jitter: 0.14, width: 1.25, toeOut: 0.12, speed: 0.95 },
+  { name: 'limper', w: 11, drag: [1.0, 0.0], stiff: [0.9, 0.0], limp: 0.7, hunch: 0.3, roll: -0.14, lurch: 0.08, headLoll: 0.4, arms: 'one', stride: 0.7, jitter: 0.2, width: 1.4, toeOut: 0.25, speed: 0.7 },
+  { name: 'lurcher', w: 11, drag: [0.15, 0.15], stiff: [0.2, 0.2], limp: 0.05, hunch: 0.5, roll: 0.0, lurch: 0.065, headLoll: 0.25, arms: 'claw', stride: 0.85, jitter: 0.3, width: 1.2, toeOut: 0.1, speed: 1.15 },
+  // sprinting infected: leans in, arms flailing, sprints at prey
+  { name: 'runner', w: 12, drag: [0.05, 0.05], stiff: [0.08, 0.08], limp: 0.0, hunch: 0.42, roll: 0.0, lurch: 0.035, headLoll: 0.12, arms: 'flail', stride: 0.95, jitter: 0.22, width: 1.1, toeOut: 0.08, speed: 1.15, chase: 3.0 },
+  // staggering, weaving, sometimes trips and falls
+  { name: 'drunk', w: 10, drag: [0.3, 0.3], stiff: [0.15, 0.15], limp: 0.15, hunch: 0.22, roll: 0.1, lurch: 0.15, headLoll: 0.65, arms: 'hang', stride: 0.75, jitter: 0.38, width: 1.65, toeOut: 0.2, speed: 0.8, wobble: 1.1, stumble: 0.06 },
+  // broken leg dragged sideways behind
+  { name: 'dragger', w: 9, drag: [1.0, 0.0], stiff: [1.0, 0.1], limp: 0.85, hunch: 0.42, roll: 0.22, lurch: 0.09, headLoll: 0.45, arms: 'one', stride: 0.6, jitter: 0.15, width: 1.45, toeOut: 0.2, twist: [1.25, 0], speed: 0.6 },
+  // drags itself along the floor
+  { name: 'crawler', w: 6, drag: [1, 1], stiff: [1, 1], limp: 0, hunch: 0.3, roll: 0, lurch: 0, headLoll: 0.3, arms: 'hang', stride: 0.7, jitter: 0.2, width: 1.2, toeOut: 0.1, speed: 1.0, crawl: true },
+  // spasms, head snaps, sudden lurches
+  { name: 'twitcher', w: 8, drag: [0.2, 0.4], stiff: [0.2, 0.3], limp: 0.2, hunch: 0.3, roll: 0.06, lurch: 0.05, headLoll: 0.35, arms: 'claw', stride: 0.8, jitter: 0.45, width: 1.25, toeOut: 0.15, speed: 0.9, twitch: 1 }
 ];
+if (HT.dev) HT.dev.ZOMBIE_GAITS = ZOMBIE_GAITS;
+function pickZombieGait() {
+  let tot = 0; for (const z of ZOMBIE_GAITS) tot += z.w;
+  let r = Math.random() * tot;
+  for (const z of ZOMBIE_GAITS) { r -= z.w; if (r <= 0) return z; }
+  return ZOMBIE_GAITS[0];
+}
 const _qa = new QT(), _va = new V3();
 
 
@@ -224,7 +241,7 @@ class Animator {
     this.limp = [0, 0];
     this.zombie = 0; // 0..1 zombie motion style
     const zg = hash32(npc.app.seed, 4141);
-    this.zstyle = ZOMBIE_GAITS[zg % ZOMBIE_GAITS.length]; this.zMirror = (zg >>> 8) & 1;
+    this.zstyle = ZOMBIE_GAITS[zg % 5]; this.zMirror = (zg >>> 8) & 1;
     this.moving = false; this.jitT = 0; this.jitK = 1; this.hipY = 0; this.hipYInit = false;
     this.crawl = 0; this.action = null;
     // hair spring
@@ -403,7 +420,7 @@ class Animator {
           const p0 = f.fromPitch != null ? f.fromPitch : toP;
           f.pitch = lerp(p0, hsP, smoothstep(0.06, 0.86, sw));
           if (drag > 0.01) f.pitch = lerp(f.pitch, 0.42 + 0.1 * Math.sin(sw * 9), drag); // toes scrape the floor
-          f.yaw = angleDamp(f.yaw, yaw + sg * toeOut, 10, dt);
+          f.yaw = angleDamp(f.yaw, yaw + sg * (toeOut + (zs && zs.twist ? zs.twist[zi] * zomb : 0)), 10, dt);
           f.pivotOff = 0;
         } else { // stance
           const st = ph / duty;
@@ -414,7 +431,7 @@ class Animator {
           else if (st > 0.6) pch = lerp(0, toP, smooth01((st - 0.6) / 0.4));
           if (drag > 0.01) pch = lerp(pch, 0.12, drag * 0.6);
           f.pitch = pch;
-          f.yaw = angleDamp(f.yaw, yaw + sg * toeOut, 3, dt);
+          f.yaw = angleDamp(f.yaw, yaw + sg * (toeOut + (zs && zs.twist ? zs.twist[zi] * zomb : 0)), 3, dt);
         }
       } else {
         // idle: finish swings and step when far from the ideal stance
@@ -469,7 +486,8 @@ class Animator {
     const rollA = (lerp(0.055, 0.03, run) * (1 + fem * 0.35) + lurch * 0.9) * wk;
     const pelRoll = Math.sin(TAU * (ph - 0.06)) * rollA;
     const swayA = (lerp(0.024, 0.01, run) * (1 + fem * 0.2) + lurch * 0.55) * wk;
-    const sway = moving ? Math.sin(TAU * (ph - 0.04)) * swayA : this.weightShift * 0.035;
+    let sway = moving ? Math.sin(TAU * (ph - 0.04)) * swayA : this.weightShift * 0.035;
+    if (zs && !moving) sway += Math.sin(this.time * 1.25 + mirror) * 0.03 * zomb * (zs.wobble ? 1.8 : 1);
     const hunch = zs ? zs.hunch * zomb : 0;
     const lean = (0.035 + 0.13 * run) * pers.leanMul + hunch * 0.25;
     const zRoll = zs ? zs.roll * zomb * (mirror ? -1 : 1) : 0;
@@ -574,7 +592,16 @@ class Animator {
       const swc = moving ? (s === 0 ? -1 : 1) * Math.cos(TAU * ph) : 0; // +1 = arm forward
       let st = armStyle;
       if (st === 'one') st = (s ^ mirror) ? 'reach' : 'hang';
-      if (st === 'reach' || st === 'claw') {
+      if (st === 'flail') {
+        const base = this.armPose('claw', s);
+        const k = Math.sin(TAU * ph + (s ? Math.PI : 0)) * clamp(spd / 2, 0.3, 1);
+        base.pos.y += (0.18 + 0.2 * k) * this.L + hunch * 0.4 * this.L;
+        base.pos.z += (0.02 + 0.14 * k) * this.L;
+        base.pos.x += sg * (0.04 + 0.05 * Math.sin(this.time * 6.5 + s * 2)) * this.L;
+        base.flex = 0.05; base.fing = 0.7 + 0.25 * Math.sin(this.time * 9 + s); base.thumb = 0.5;
+        P.hand[s].copy(base);
+        P.clav[s].set(0.15, 0, 0.12);
+      } else if (st === 'reach' || st === 'claw') {
         const base = this.armPose(st === 'claw' ? 'claw' : 'reach', s);
         base.pos.y += (st === 'claw' ? 0.16 : 0.12) * this.L + hunch * 0.5 * this.L + Math.sin(TAU * ph + s * 1.7) * 0.05 * this.L * wk + Math.sin(this.time * 1.3 + s) * 0.03 * this.L;
         base.pos.z -= 0.05 * this.L - swc * 0.06 * this.L * wk;
