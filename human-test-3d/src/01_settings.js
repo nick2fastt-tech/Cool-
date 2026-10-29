@@ -1,7 +1,7 @@
 // ============================================================================
 // Settings — defaults, persistence (localStorage), change notifications
 // ============================================================================
-const SETTINGS_KEY = 'humantest3d.settings.v1';
+const SETTINGS_KEY = 'humantest3d.settings.v2';
 
 const DEFAULT_SETTINGS = {
   graphics: {
@@ -12,7 +12,7 @@ const DEFAULT_SETTINGS = {
     fpsCap: 60,                // 30 | 60 | 0 (unlimited)
     ssao: false,
     antialias: true,
-    showFps: true,
+    showFps: false,
     characterDetail: 'high'    // low | high | ultra
   },
   audio: { master: 0.8, effects: 0.9, ambience: 0.55, ui: 0.6, muted: false },
@@ -22,17 +22,18 @@ const DEFAULT_SETTINGS = {
   },
   ai: { enabled: true, reactions: true, flee: true, wander: true, lookAt: true, reactionVariance: 1.0, wanderRate: 0.5 },
   zombies: {
-    reincarnation: false, delayPreset: 'medium', delay: 15, headTraumaPrevents: true,
+    reincarnation: true, delayPreset: 'short', delay: 5, headTraumaPrevents: true,
     aggression: true, targetNPCs: true, detection: 18, speed: 1.0, targetMode: 'nearest',
-    attackDamage: 18, vocalize: true
+    attackDamage: 18, vocalize: true, infection: true, infectionTime: 12, feeding: true, biteDamage: 24
   },
+  gore: { level: 'extreme', dismember: true, gibs: true, pools: true, screenBlood: true, blood: 1.0 },
   weapons: {
     enabled: { pistol: true, sniper: true, knife: true, grenade: true, hand: true, move: true },
     infiniteAmmo: false, autoReload: true, damageScale: 1.0, simulatedDamage: true,
     pistolAuto: false, grenadeFuse: 3.0, grenadeRadius: 7.5, bulletPenetration: true,
     pistolMag: 15, sniperMag: 5, reserveMags: 6
   },
-  diagnostics: { labels: true, hitOverlay: true, debugPanel: false, colliders: false, eventLog: true, npcNames: true },
+  diagnostics: { labels: false, hitOverlay: true, debugPanel: false, colliders: false, eventLog: false, npcNames: false },
   environment: {
     current: 'room',
     room: { width: 32, depth: 32, height: 9, grid: true, markers: true, light: 1.0, colorTemp: 5600 },

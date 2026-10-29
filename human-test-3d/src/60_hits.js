@@ -66,7 +66,7 @@ class HitSystem {
     const A = new V3(P[ia * 3], P[ia * 3 + 1], P[ia * 3 + 2]), Bv = new V3(P[ib * 3], P[ib * 3 + 1], P[ib * 3 + 2]), Cv = new V3(P[ic * 3], P[ic * 3 + 1], P[ic * 3 + 2]);
     const normal = new V3().subVectors(Bv, A).cross(_v1.subVectors(Cv, A)).normalize();
     if (normal.dot(d) > 0) normal.negate();
-    return { npc, dist: bestT, point, normal, region, tri: bt / 3 };
+    return { npc, dist: bestT, point, normal, region, tri: bt / 3, u: bu, v: bv };
   }
   // closest body part of an npc to a world point (blast diagnostics)
   closestRegion(npc, p) {

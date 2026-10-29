@@ -393,7 +393,7 @@ class Weapons {
     const wasAlive = npc.lifeState === 'alive', wasZombie = npc.lifeState === 'zombie';
     const res = npc.applyHit({ region: hit.region, damage: t.damage * pr.dmgMul, weapon: t.id, dir: dir.clone(), point: hit.point, force, threatPos: g.camera.position.clone() });
     this.physicalReaction(npc, hit.region, dir, hit.point, force, t.knock, res);
-    g.fx.fabricPuff(hit.point, hit.normal);
+    if (!g.gore.onBullet(npc, hit, dir, t, res)) g.fx.fabricPuff(hit.point, hit.normal);
     g.audio.play(hit.region === REGION.HEAD ? 'hitHead' : 'hitBody', { pos: hit.point, gain: 0.9 });
     g.hits.report(npc, hit.region, res, t.name, hit.point);
     g.ui.hitMarker(res.killed);
@@ -441,7 +441,7 @@ class Weapons {
         const force = t.impulse * Settings.data.physics.forceScale;
         const res = npc.applyHit({ region: best.region, damage: t.damage, weapon: 'knife', dir: best.dir, point: best.point, force, threatPos: o });
         this.physicalReaction(npc, best.region, best.dir, best.point, force, 0.08, res);
-        g.fx.fabricPuff(best.point, best.normal);
+        if (!g.gore.onKnife(npc, best, best.dir, res, r.clone().multiplyScalar(this.swingDir || 1))) g.fx.fabricPuff(best.point, best.normal);
         g.audio.play('stab', { pos: best.point, gain: 0.9 });
         g.hits.report(npc, best.region, res, t.name, best.point);
         g.ui.hitMarker(res.killed);
@@ -521,6 +521,7 @@ class Weapons {
       } else {
         g.ai.onHit(npc, { region, dir: dir.clone(), force: 6, threatPos: pos.clone() });
       }
+      g.gore.onBlast(npc, pos, f, res);
       affected.push({ npc, res, region, f });
     }
     g.physics.explosion(pos, R, strength * 0.85);

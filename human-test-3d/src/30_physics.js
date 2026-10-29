@@ -359,7 +359,7 @@ class PhysicsWorld {
       const A = owners[i];
       // self collision
       if (A._anyDyn && A.selfPairs && this.selfCollisions) {
-        for (const pr of A.selfPairs) { const b0 = A.bodies[pr[0]], b1 = A.bodies[pr[1]]; if (aabbOverlap(b0, b1)) pairs.push(b0, b1); }
+        for (const pr of A.selfPairs) { const b0 = A.bodies[pr[0]], b1 = A.bodies[pr[1]]; const d0 = !b0.kinematic && !b0.sleeping, d1 = !b1.kinematic && !b1.sleeping; if ((d0 || d1) && !b0.noCollide && !b1.noCollide && aabbOverlap(b0, b1)) { if (d0) pairs.push(b0, b1); else pairs.push(b1, b0); } }
       }
       for (let k = i + 1; k < owners.length; k++) {
         const Bo = owners[k];

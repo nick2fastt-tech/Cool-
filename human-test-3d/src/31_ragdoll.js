@@ -32,7 +32,7 @@ class Ragdoll {
   constructor(npc) {
     this.npc = npc; this.physKind = 'npc';
     this.bodies = []; this.joints = []; this.canSleep = true; this.asleep = false; this.sleepTimer = 0;
-    this.dynamic = false;
+    this.dynamic = false; this.detached = new Uint8Array(RAG_COUNT);
     const rig = npc.rig, H = rig.H, P = rig.bindPos, S = rig.sHead;
     const bd = npc.app.body;
     const mk = new V3();
@@ -148,6 +148,7 @@ class Ragdoll {
   // bone world transform -> body target (kinematic)
   setFromBones(boneWPos, boneWRot, teleport) {
     for (let i = 0; i < RAG_COUNT; i++) {
+      if (this.detached[i]) continue; // severed parts simulate freely
       const bi = RAG_BONE[i];
       const q = _q1.multiplyQuaternions(boneWRot[bi], this.bindRot[i]);
       const p = _v1.copy(this.boneOff[i]).applyQuaternion(boneWRot[bi]).add(boneWPos[bi]);
@@ -169,13 +170,14 @@ class Ragdoll {
       if (on) {
         if (b.kinematic) { b.vel.copy(b.kinVel); b.omega.copy(b.kinOmega); b.kinematic = false; }
         b.sleeping = false;
-      } else { b.kinematic = true; b.sleeping = false; b.vel.set(0, 0, 0); b.omega.set(0, 0, 0); }
+      } else if (!this.detached[b.index]) { b.kinematic = true; b.sleeping = false; b.vel.set(0, 0, 0); b.omega.set(0, 0, 0); }
     }
     this.asleep = false; this.sleepTimer = 0;
     const tone = Settings.data.physics.muscleTone;
     for (const j of this.joints) {
-      j.enabled = on;
-      j.rotDamping = j.baseDamp * (deadDamping ? 0.35 + tone * 0.5 : 0.7 + tone * 1.4);
+      const free = this.detached[j.b0.index] && this.detached[j.b1.index];
+      j.enabled = (on || free) && !j.broken;
+      j.rotDamping = j.baseDamp * (deadDamping || free ? 0.35 + tone * 0.5 : 0.7 + tone * 1.4);
     }
   }
   applyImpulseAt(i, impulse, point) {

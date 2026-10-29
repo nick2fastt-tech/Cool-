@@ -231,6 +231,51 @@ class AudioEngine {
       this.synthLoop('drone', 6, (b) => { for (const [arr, dt] of [[b.L, 0], [b.R, 0.7]]) { const lp = new Biquad('lp', 500, 1.2, sr); let p1 = 0, p2 = 0, p3 = 0; for (let i = 0; i < arr.length; i++) { const t = i / sr; p1 = (p1 + 55 / sr) % 1; p2 = (p2 + (55.4 + dt * 0.3) / sr) % 1; p3 = (p3 + 82.5 / sr) % 1; arr[i] = lp.p((p1 * 2 - 1) + (p2 * 2 - 1) * 0.8 + (p3 * 2 - 1) * 0.4) * (0.7 + 0.3 * Math.sin(t * TAU / 6 + dt)); } } }, true);
       // bird chirps
       for (let k = 0; k < 4; k++) { const b = this.buf(0.6), L = b.L; let ph = 0; const n = 2 + k; for (let i = 0; i < L.length; i++) { const t = i / sr; const seg = Math.floor(t / 0.11); const u = (t % 0.11) / 0.11; if (seg >= n) { L[i] = 0; continue; } const f = 2600 + k * 400 + Math.sin(u * Math.PI) * 1500 * (seg % 2 ? -0.5 : 1); ph += TAU * f / sr; L[i] = Math.sin(ph) * Math.sin(Math.PI * u) ** 2; } this.finish('bird' + k, b, 0.35); }
+    } else if (group === 6) {
+      // gore: wet splats, bone cracks, bites, chewing, arterial gush, screams
+      const wet = (name, o) => {
+        const b = this.buf(o.dur), L = b.L;
+        const lp = new Biquad('lp', o.lp, 0.9, sr), bp = new Biquad('bp', o.bp, 1.2, sr), lp2 = new Biquad('lp', 30, 0.7, sr);
+        let ph = 0;
+        for (let i = 0; i < L.length; i++) {
+          const t = i / sr, n = this.noise();
+          const am = lp2.p(this.noise()) * 30;
+          ph += TAU * (o.f * (1 + 0.5 * Math.exp(-t / 0.02))) / sr;
+          const thump = Math.sin(ph) * Math.exp(-t / o.tT) * o.thump;
+          const body = lp.p(n) * Math.exp(-t / o.t) * (0.6 + 0.4 * Math.min(1, Math.abs(am))) * 1.6;
+          const squish = bp.p(n) * Math.exp(-t / (o.t * 1.6)) * (0.5 + Math.max(0, Math.sin(t * o.gurgle * TAU)) * 0.8) * o.sq;
+          const crack = this.rng.next() < o.crackle * Math.exp(-t / 0.05) ? this.noise() * 1.5 : 0;
+          L[i] = Math.tanh((thump + body + squish + crack) * 1.4) * (1 - Math.exp(-t / 0.0015));
+        }
+        this.finish(name, b, o.norm || 0.85);
+      };
+      wet('splat0', { dur: 0.35, lp: 900, bp: 1400, f: 70, tT: 0.05, thump: 0.9, t: 0.06, sq: 0.8, gurgle: 23, crackle: 0.02 });
+      wet('splat1', { dur: 0.4, lp: 1200, bp: 1900, f: 85, tT: 0.04, thump: 0.7, t: 0.07, sq: 1.0, gurgle: 31, crackle: 0.03 });
+      wet('splat2', { dur: 0.3, lp: 700, bp: 1100, f: 60, tT: 0.06, thump: 1.1, t: 0.05, sq: 0.7, gurgle: 17, crackle: 0.015 });
+      wet('squelch', { dur: 0.7, lp: 600, bp: 900, f: 50, tT: 0.1, thump: 0.5, t: 0.22, sq: 1.3, gurgle: 9, crackle: 0.01 });
+      wet('gib', { dur: 0.9, lp: 700, bp: 1300, f: 48, tT: 0.12, thump: 1.6, t: 0.16, sq: 1.2, gurgle: 14, crackle: 0.08 });
+      { const b = this.buf(0.3), L = b.L; const bp = new Biquad('bp', 2600, 3, sr), hp = new Biquad('hp', 3000, 0.7, sr), lp = new Biquad('lp', 500, 0.8, sr);
+        for (let i = 0; i < L.length; i++) { const t = i / sr, n = this.noise(), t2 = t - 0.012;
+          L[i] = hp.p(n) * Math.exp(-t / 0.004) * 1.8 + bp.p(n) * Math.exp(-t / 0.025) * 1.4 + (t2 > 0 ? hp.p(this.noise()) * Math.exp(-t2 / 0.003) : 0) + lp.p(n) * Math.exp(-t / 0.04) * 1.2; }
+        this.finish('crack', b, 0.8); }
+      { const b = this.buf(0.6), L = b.L; const bp = new Biquad('bp', 1800, 1.5, sr), lp = new Biquad('lp', 800, 0.8, sr);
+        for (let i = 0; i < L.length; i++) { const t = i / sr, n = this.noise(); const grain = this.rng.next() < 0.25 * Math.exp(-t / 0.15) ? 1 : 0.15;
+          L[i] = bp.p(n) * grain * Math.exp(-t / 0.18) * 1.5 + lp.p(n) * Math.exp(-t / 0.05) * 1.6 + (t > 0.15 ? lp.p(n) * Math.exp(-(t - 0.15) / 0.2) * (0.5 + Math.sin(t * 40) * 0.5) : 0); }
+        this.finish('bite', b, 0.85); }
+      { const b = this.buf(1.4), L = b.L; const bp = new Biquad('bp', 900, 1.2, sr), lp = new Biquad('lp', 500, 0.8, sr);
+        for (let i = 0; i < L.length; i++) { const t = i / sr, ph = (t * 3.2) % 1; const env = Math.exp(-ph / 0.12) * (1 - Math.exp(-ph / 0.01)); const n = this.noise();
+          L[i] = (bp.p(n) * 1.2 + lp.p(n) * 1.5) * env * (0.6 + 0.4 * Math.sin(t * 7)); }
+        this.finish('chew', b, 0.7); }
+      { const b = this.buf(0.6), L = b.L; const hp = new Biquad('hp', 1200, 0.7, sr), bp = new Biquad('bp', 700, 1, sr);
+        for (let i = 0; i < L.length; i++) { const t = i / sr; const env = Math.exp(-t / 0.25) * (1 - Math.exp(-t / 0.02)); const n = this.noise();
+          L[i] = (hp.p(n) * 0.8 + bp.p(n) * 0.9 * (0.5 + 0.5 * Math.sin(t * 60))) * env; }
+        this.finish('gush', b, 0.6); }
+      const ah = [[850, 5, 1], [1250, 6, 0.6], [2800, 7, 0.35]], eh = [[600, 5, 1], [1900, 6, 0.55], [2700, 7, 0.3]];
+      this.synthVoice('scream0', { dur: 1.3, f0: 390, slide: 0.25, jitter: 0.08, breath: 0.25, formants: ah, drive: 3.0, seed: 11, norm: 0.8 });
+      this.synthVoice('scream1', { dur: 1.1, f0: 255, slide: 0.35, jitter: 0.1, breath: 0.3, formants: ah, drive: 3.5, seed: 12, norm: 0.8 });
+      this.synthVoice('scream2', { dur: 1.5, f0: 330, slide: -0.2, jitter: 0.12, breath: 0.3, formants: eh, drive: 3.2, seed: 13, norm: 0.8 });
+      this.synthVoice('pain0', { dur: 0.6, f0: 180, slide: -0.3, jitter: 0.15, breath: 0.5, formants: eh, drive: 2.0, seed: 14, norm: 0.6 });
+      this.synthVoice('gurgle', { dur: 0.9, f0: 90, slide: -0.2, jitter: 0.6, breath: 0.9, formants: [[400, 3, 1], [900, 4, 0.5], [2200, 5, 0.2]], drive: 2.5, seed: 15, norm: 0.55 });
     }
   }
   // --- playback -------------------------------------------------------------------------

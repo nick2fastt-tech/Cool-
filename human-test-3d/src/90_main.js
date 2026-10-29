@@ -51,7 +51,7 @@ class Game {
       ['Starting XPBD physics engine', 'Physics', () => this.initPhysics()],
       ['Synthesizing weapon audio', 'Sound Effects', () => this.initAudio(0)],
       ['Synthesizing mechanical & impact audio', 'Sound Effects', () => { this.audio.synthesizeGroup(1); this.audio.synthesizeGroup(2); }],
-      ['Synthesizing vocal & ambient audio', 'Sound Effects', () => { this.audio.synthesizeGroup(3); this.audio.synthesizeGroup(4); this.audio.synthesizeGroup(5); this.audio.startLoadingDrone && this.audio.unlocked && this.audio.startLoadingDrone(); }],
+      ['Synthesizing vocal & ambient audio', 'Sound Effects', () => { this.audio.synthesizeGroup(3); this.audio.synthesizeGroup(4); this.audio.synthesizeGroup(5); this.audio.synthesizeGroup(6); this.audio.startLoadingDrone && this.audio.unlocked && this.audio.startLoadingDrone(); }],
       ['Building weapon models & viewmodels', 'Weapons', () => this.initWeapons()],
       ['Building environment', 'Environment', () => this.initEnvironment()],
       ['Generating test subjects (procedural humans)', '3D Models', () => this.initNPCs()],
@@ -133,6 +133,7 @@ class Game {
     this.hits = new HitSystem(this);
     this.props = new Props(this); this.props.build();
     this.weapons = new Weapons(this); this.weapons.build();
+    this.gore = new GoreSystem(this);
   }
   initEnvironment() {
     this.env = new EnvironmentManager(this);
@@ -237,7 +238,7 @@ class Game {
       this.camera.position.y = Math.max(this.camera.position.y, this.env.groundHeight(this.camera.position.x, this.camera.position.z) + 1.4);
       this.audio.setEnvironment(kind);
       if (this.ui && this.ui.drawerOpen) this.ui.renderDrawer();
-      this.fx.clear();
+      this.fx.clear(); if (this.gore) this.gore.clear();
     }
   }
   // --- scene control ------------------------------------------------------------------
@@ -248,6 +249,13 @@ class Game {
   }
   stepOnce() { this.pendingStep = true; }
   revive(npc) {
+    if (npc.gore && (npc.gore.anyCut || npc.gore.headGone)) {
+      const n2 = this.npcs.regenerate(npc, {});
+      if (n2) HT.log('sys', `${n2.idStr} ${n2.name} rebuilt`);
+      return n2;
+    }
+    if (npc.gore) this.gore.releaseNPC(npc);
+    npc.infection = null; npc.anim.crawl = 0; npc.anim.setAction(null);
     if (npc.lifeState !== 'alive') {
       if (npc.lifeState === 'reanimating') npc.lifeState = 'dead';
       npc.setLife('alive', 'revived');
@@ -260,12 +268,15 @@ class Game {
     if (npc.physMode === 'ragdoll') npc.startGetUp(false);
     npc.lastReaction = 'Revived';
     HT.log('sys', `${npc.idStr} ${npc.name} revived`);
+    return npc;
   }
   resetPhysics() {
     // restore all subjects to their original spawn state and props to rest
     this.weapons.clearAll();
-    for (const n of this.npcs.list) {
-      if (n.lifeState !== 'alive') this.revive(n);
+    for (const n0 of this.npcs.list.slice()) {
+      let n = n0;
+      if (n.lifeState !== 'alive' || n.gore) n = this.revive(n) || n;
+      if (n !== n0) { n.spawn.pos.copy(n0.spawn.pos); n.spawn.yaw = n0.spawn.yaw; }
       n.health = 100; n.regionDamage.fill(0); n.hitCounts.fill(0);
       n.anim.clip = null; n.anim.snapshot = null;
       if (n.physMode !== 'anim') { n.rag.setDynamic(false); n.physMode = 'anim'; }
@@ -275,13 +286,13 @@ class Game {
       n.update(0.016); n.computeWorldBones(); n.rag.setFromBones(n.boneWPos, n.boneWRot, true);
     }
     this.physics.wakeAll();
-    this.hits.clear();
+    this.hits.clear(); this.gore.clear();
     HT.log('sys', 'Physics reset: all subjects restored to their original state');
     HT.toast('Physics reset');
   }
   resetScene() {
     this.weapons.clearAll();
-    this.npcs.removeAll(); this.props.clear(); this.fx.clear(); this.hits.clear();
+    this.npcs.removeAll(); this.props.clear(); this.fx.clear(); this.hits.clear(); this.gore.clear();
     this.weapons.resetAmmo(); this.timeScale = 1;
     if (Settings.data.physics.paused) Settings.set('physics.paused', false);
     this.spawnDefaultSet();
@@ -354,6 +365,7 @@ class Game {
     P.begin('fx');
     this.weapons.update(rdt);
     this.fx.update(dt);
+    this.gore.update(dt);
     this.hits.update(rdt);
     this.env.update(dt, this.camera);
     this.audio.update(rdt, this.camera);

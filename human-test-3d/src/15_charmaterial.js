@@ -7,7 +7,8 @@ const CharShared = { uTime: { value: 0 }, uDetail: { value: 1 } };
 
 const GLSL_HT_COMMON = /* glsl */`
 uniform float uZombie; uniform float uFlash; uniform float uHighlight; uniform float uWet; uniform float uTime; uniform float uDetail;
-varying vec4 vMat; varying vec3 vColor2; varying vec2 vUvP;
+uniform vec4 uWA[16]; uniform vec4 uWB[16]; uniform int uWN; uniform float uBlood;
+varying vec4 vMat; varying vec3 vColor2; varying vec2 vUvP; varying vec3 vRest;
 float htHash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float htNoise(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
   return mix(mix(htHash(i), htHash(i + vec2(1.0, 0.0)), u.x), mix(htHash(i + vec2(0.0, 1.0)), htHash(i + vec2(1.0, 1.0)), u.x), u.y); }
@@ -158,6 +159,100 @@ const GLSL_HT_ALBEDO = /* glsl */`
   }
   if (isCloth && uZombie > 0.0) base = mix(base, base * vec3(0.72, 0.7, 0.62), uZombie * 0.45);
   if (uWet > 0.0 && mT != 7) { base *= 1.0 - uWet * 0.25; htRough *= 1.0 - uWet * 0.45; }
+  // ---- wounds & blood (bind space: they move with the skinned surface) ----
+  if (uWN > 0 || uBlood > 0.0) {
+    float gBl = 0.0, gFl = 0.0, gHo = 0.0, gGu = 0.0, gSo = 0.0, gTu = 1.0;
+    for (int i = 0; i < 16; i++) {
+      if (i >= uWN) break;
+      vec4 wA = uWA[i]; vec4 wB = uWB[i];
+      vec3 wd = vRest - wA.xyz;
+      float wr = wA.w;
+      float wdist = length(wd);
+      float wt = floor(wB.w + 0.001);
+      float wk = fract(wB.w);
+      if (wdist > wr * (wt == 6.0 ? 2.6 : 9.0) + 0.14 * wk + 0.03) continue;
+      vec3 wn = wB.xyz;
+      float wz1 = htNoise(vRest.xy * 230.0 + vRest.z * 170.0 + float(i) * 13.1);
+      float wz2 = htFbm(vRest.xz * 60.0 + vRest.y * 40.0 + float(i) * 3.7);
+      float wfront = (wt == 5.0 || wt == 3.0 || wt == 7.0) ? 1.0 : smoothstep(-wr * 2.5, 0.0, dot(wd, wn) + wr);
+      // blood soaking outward with a ragged edge
+      float sR = wt == 5.0 ? wr * 1.15 + 0.015 + 0.05 * wk : wr * (wt == 7.0 ? 1.0 : 2.0) + (0.015 + 0.085 * wk) * (isCloth ? 1.4 : 1.0) * (wt == 6.0 ? 1.6 : 1.0);
+      gBl = max(gBl, (1.0 - smoothstep(0.55, 1.0, wdist / sR * (0.75 + 0.5 * wz2))) * wfront);
+      // drips running down the body
+      float wdy = wA.y - vRest.y;
+      if (wdy > 0.0 && wt != 7.0 && wt != 5.0 && wdy < 0.32) {
+        vec3 tg = wt == 3.0 ? wn : normalize(cross(vec3(0.0, 1.0, 0.0), wn) + vec3(1e-4, 0.0, 0.0));
+        float sx = dot(wd, tg);
+        float nearS = wt == 3.0 ? 1.0 : smoothstep(-wr * 1.5, 0.0, dot(wd, wn) + wr * 0.5);
+        for (int j = 0; j < 3; j++) {
+          float hj = htHash(vec2(float(i) * 7.0 + float(j), 3.1));
+          float off = (hj - 0.5) * wr * 3.0;
+          float len = min((wr * (5.0 + 14.0 * hj) + 0.04) * (0.25 + wk), 0.3);
+          float wdt = wr * (0.22 + 0.25 * hj) * (1.0 - 0.6 * clamp(wdy / len, 0.0, 1.0)) * (1.0 + 0.3 * sin(wdy * 90.0 + hj * 6.0));
+          float dr = (1.0 - smoothstep(wdt * 0.6, wdt, abs(sx - off))) * (1.0 - smoothstep(len * 0.85, len, wdy));
+          gBl = max(gBl, dr * nearS);
+        }
+      }
+      float q = wdist / wr * (0.82 + 0.36 * wz1);
+      if (wt == 1.0) {
+        gHo = max(gHo, 1.0 - smoothstep(0.42, 0.6, q));
+        gFl = max(gFl, (1.0 - smoothstep(0.75, 1.05, q)) * 0.85);
+      } else if (wt == 2.0 || wt == 4.0) {
+        float ang = atan(wd.y, wd.x + wd.z);
+        float rq = q * (wt == 4.0 ? (0.85 + 0.3 * sin(ang * 9.0)) : 1.0);
+        gHo = max(gHo, (1.0 - smoothstep(0.28, 0.5, rq)) * 0.9);
+        gFl = max(gFl, 1.0 - smoothstep(0.85, 1.12, rq));
+        if (wt == 4.0) gHo = max(gHo, (1.0 - smoothstep(0.05, 0.12, abs(rq - 1.25))) * step(0.5, fract(ang * 2.5)) * 0.8);
+      } else if (wt == 3.0) {
+        float along = dot(wd, wn);
+        float sl = wr * 6.0;
+        vec3 perp = wd - wn * clamp(along, -sl, sl);
+        float pq = length(perp) / wr * (0.8 + 0.4 * wz1);
+        float taper = 1.0 - smoothstep(sl * 0.6, sl, abs(along));
+        gHo = max(gHo, (1.0 - smoothstep(0.2, 0.42, pq)) * taper);
+        gFl = max(gFl, (1.0 - smoothstep(0.55, 1.0, pq)) * taper);
+        gBl = max(gBl, (1.0 - smoothstep(1.0, 2.6, pq)) * (1.0 - smoothstep(sl, sl * 1.4, abs(along))));
+      } else if (wt == 5.0) {
+        float pd = abs(dot(wd, wn));
+        float band = wr * (0.22 + 0.42 * wz2);
+        float rim = 1.0 - smoothstep(wr * 1.05, wr * 1.35, wdist);
+        gFl = max(gFl, (1.0 - smoothstep(band * 0.7, band, pd)) * rim);
+        gBl = max(gBl, (1.0 - smoothstep(band * 2.5, band * 5.5, pd)) * rim);
+        float axd = length(wd - wn * dot(wd, wn));
+        gTu = min(gTu, 1.0 - (1.0 - smoothstep(wr * 0.22, wr * 0.3, axd)) * (1.0 - smoothstep(band * 0.6, band, pd)));
+      } else if (wt == 6.0) {
+        float inner = 1.0 - smoothstep(0.68, 0.9, q);
+        gGu = max(gGu, inner);
+        gFl = max(gFl, 1.0 - smoothstep(0.88, 1.1, q));
+        gTu = min(gTu, abs(sin(htFbm(vRest.xz * 26.0 + vRest.y * 19.0 + float(i)) * 30.0)));
+      } else if (wt == 8.0) {
+        float sootR = wr * 1.8;
+        gSo = max(gSo, (1.0 - smoothstep(0.4, 1.0, wdist / sootR * (0.7 + 0.6 * wz2))) * wfront);
+        float spk = step(0.7 - 0.25 * wk, htNoise(vRest.xy * 70.0 + vRest.zy * 55.0 + float(i))) * (1.0 - smoothstep(0.5, 1.2, wdist / sootR));
+        gFl = max(gFl, spk * wfront);
+      }
+    }
+    if (uBlood > 0.0) {
+      float sp = htNoise(vRest.xy * 75.0 + vRest.zx * 48.0);
+      float sp2 = htNoise(vRest.yz * 160.0 + 9.0);
+      gBl = max(gBl, step(1.0 - uBlood * 0.45, sp) * 0.9);
+      gBl = max(gBl, step(1.0 - uBlood * 0.3, sp2) * 0.8);
+    }
+    vec3 bloodC = (isCloth ? vec3(0.16, 0.008, 0.008) : vec3(0.3, 0.012, 0.01)) * (0.75 + 0.35 * htNoise(vRest.xy * 300.0));
+    base = mix(base, bloodC, clamp(gBl, 0.0, 1.0) * 0.94);
+    vec3 fleshC = mix(vec3(0.42, 0.04, 0.035), vec3(0.62, 0.15, 0.12), htFbm(vRest.xy * 180.0 + vRest.z * 77.0));
+    base = mix(base, fleshC, gFl);
+    vec3 gutC = mix(vec3(0.55, 0.22, 0.24), vec3(0.76, 0.42, 0.4), htNoise(vRest.xz * 95.0 + vRest.y * 60.0));
+    gutC = mix(gutC * 0.3, gutC, smoothstep(0.15, 0.6, gTu));
+    base = mix(base, gutC, gGu);
+    base = mix(base, vec3(0.86, 0.8, 0.68), (1.0 - gTu) * (1.0 - gGu));
+    base = mix(base, vec3(0.03, 0.025, 0.02), gSo * 0.85);
+    base = mix(base, vec3(0.045, 0.0, 0.0), gHo);
+    float wetW = max(max(gBl, gFl), gGu);
+    htRough = mix(htRough, isCloth ? 0.42 : 0.16, wetW);
+    htMetal = 0.0;
+    htH -= gHo * 1.5 + gGu * (1.0 - gTu) * 0.9; htBump = max(htBump, (gHo + gGu * 0.8 + gFl * 0.4) * 0.9);
+  }
   diffuseColor.rgb = base;
 `;
 
@@ -165,14 +260,16 @@ function createCharacterMaterial() {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0.0, envMapIntensity: 0.8 });
   const U = {
     uZombie: { value: 0 }, uFlash: { value: 0 }, uHighlight: { value: 0 }, uWet: { value: 0 },
-    uTime: CharShared.uTime, uDetail: CharShared.uDetail
+    uTime: CharShared.uTime, uDetail: CharShared.uDetail,
+    uWA: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) }, uWB: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) },
+    uWN: { value: 0 }, uBlood: { value: 0 }
   };
   m.userData.u = U;
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, U);
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec4 aMat;\nattribute vec3 aColor2;\nvarying vec4 vMat;\nvarying vec3 vColor2;\nvarying vec2 vUvP;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMat = aMat; vColor2 = aColor2; vUvP = uv;');
+      .replace('#include <common>', '#include <common>\nattribute vec4 aMat;\nattribute vec3 aColor2;\nvarying vec4 vMat;\nvarying vec3 vColor2;\nvarying vec2 vUvP;\nvarying vec3 vRest;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMat = aMat; vColor2 = aColor2; vUvP = uv; vRest = position;');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\n' + GLSL_HT_COMMON)
       .replace('#include <color_fragment>', '#include <color_fragment>\n' + GLSL_HT_ALBEDO)
@@ -193,7 +290,7 @@ function createCharacterMaterial() {
           if (uZombie > 0.0) totalEmissiveRadiance += vec3(0.02, 0.04, 0.0) * rim * uZombie;
         }`);
   };
-  m.customProgramCacheKey = () => 'ht3d-char-v1';
+  m.customProgramCacheKey = () => 'ht3d-char-v2';
   return m;
 }
 

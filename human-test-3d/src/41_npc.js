@@ -42,7 +42,7 @@ class NPC {
     this.brain = null; this.zombieTarget = null; this.isZombie = false;
     this.deathTime = 0; this.removed = false; this.carried = false;
     this.spawn = { pos: new V3(), yaw: 0 };
-    this.kills = 0; this.label = null;
+    this.kills = 0; this.label = null; this.gore = null; this.infection = null;
   }
   setupMesh(shell) {
     const geo = buildCharacterGeometry(this.app, this.rig, this.quality);
@@ -54,7 +54,7 @@ class NPC {
       this.mesh.updateMatrixWorld(true);
       this.mesh.skeleton.calculateInverses();
       this.mesh.bind(this.mesh.skeleton);
-      const u = this.material.userData.u; u.uZombie.value = 0; u.uFlash.value = 0; u.uHighlight.value = 0; u.uWet.value = 0;
+      const u = this.material.userData.u; u.uZombie.value = 0; u.uFlash.value = 0; u.uHighlight.value = 0; u.uWet.value = 0; if (u.uWN) { u.uWN.value = 0; u.uBlood.value = 0; }
     } else {
       const bones = [];
       for (let b = 0; b < NUM_BONES; b++) {
@@ -110,6 +110,7 @@ class NPC {
     if (this.physMode === 'anim' || this.physMode === 'getup') {
       this.anim.update(dt, this.root, env);
       this.computeWorldBones();
+      if (this.gore && this.gore.anyCut) this.syncDetached();
       this.rag.setFromBones(this.boneWPos, this.boneWRot, false);
     }
     // fx decay
@@ -153,7 +154,7 @@ class NPC {
       const ri = BONE_TO_RAG[i];
       if (ri >= 0) {
         rag.boneWorldFromBody(ri, _v1, Q[i]);
-        if (i === B.hips) W[i].copy(_v1);
+        if (i === B.hips || rag.detached[ri]) W[i].copy(_v1);
         else W[i].copy(off[i]).applyQuaternion(Q[p]).add(W[p]);
       } else {
         if (i === B.neck) Q[i].slerpQuaternions(Q[B.chest], _q2.copy(Q[B.chest]), 0); // provisional
@@ -167,18 +168,55 @@ class NPC {
       // neck: halfway between chest and head (head is driven after neck in order, fix below)
     }
     // fix neck to halfway and recompute head position chain
-    Q[B.neck].slerpQuaternions(Q[B.chest], Q[B.head], 0.5);
+    const headFree = rag.detached[RAG.HEAD];
+    Q[B.neck].slerpQuaternions(Q[B.chest], headFree ? Q[B.chest] : Q[B.head], 0.5);
     W[B.neck].copy(off[B.neck]).applyQuaternion(Q[B.chest]).add(W[B.chest]);
-    // head's position from neck
-    W[B.head].copy(off[B.head]).applyQuaternion(Q[B.neck]).add(W[B.neck]);
+    // head's position from neck (unless the head is severed and simulates on its own)
+    if (!headFree) W[B.head].copy(off[B.head]).applyQuaternion(Q[B.neck]).add(W[B.neck]);
     for (const c of [B.jaw, B.eye_L, B.eye_R, B.lid_L, B.lid_R, B.hair]) W[c].copy(off[c]).applyQuaternion(Q[B.head]).add(W[B.head]);
     // locals
     for (let i = 1; i < NUM_BONES; i++) {
       const p = BONE_PARENT[i];
       _q3.copy(Q[p]).invert();
       bones[i].quaternion.multiplyQuaternions(_q3, Q[i]);
+      const ri = BONE_TO_RAG[i];
+      if (ri >= 0 && rag.detached[ri] && i !== B.hips) bones[i].position.copy(W[i]).sub(W[p]).applyQuaternion(_q3);
     }
     bones[B.hips].position.copy(W[B.hips]);
+  }
+  // severed parts follow their own (dynamic) ragdoll bodies while the rest is animated
+  syncDetached() {
+    const G = this.gore, rag = this.rag, W = this.boneWPos, Q = this.boneWRot, bones = this.bones, off = this.rig.localOffset;
+    for (let i = 1; i < NUM_BONES; i++) {
+      if (!G.boneDetached[i]) continue;
+      const p = BONE_PARENT[i], ri = BONE_TO_RAG[i];
+      if (ri >= 0 && rag.detached[ri]) rag.boneWorldFromBody(ri, W[i], Q[i]);
+      else { Q[i].multiplyQuaternions(Q[p], bones[i].quaternion); W[i].copy(off[i]).applyQuaternion(Q[p]).add(W[p]); }
+    }
+    for (let i = 1; i < NUM_BONES; i++) {
+      if (!G.boneDetached[i]) continue;
+      const ri = BONE_TO_RAG[i];
+      if (ri < 0 || !rag.detached[ri]) continue;
+      const p = BONE_PARENT[i];
+      _q3.copy(Q[p]).invert();
+      bones[i].quaternion.multiplyQuaternions(_q3, Q[i]);
+      bones[i].position.copy(W[i]).sub(W[p]).applyQuaternion(_q3);
+    }
+  }
+  // world position of one vertex with the current skinning matrices
+  skinVertexWorld(vi, out) {
+    const g = this.mesh.geometry, pos = g.attributes.position.array, si = g.attributes.skinIndex.array, sw = g.attributes.skinWeight.array;
+    const bm = this.mesh.skeleton.boneMatrices;
+    const x = pos[vi * 3], y = pos[vi * 3 + 1], z = pos[vi * 3 + 2];
+    let ox = 0, oy = 0, oz = 0;
+    for (let k = 0; k < 4; k++) {
+      const w = sw[vi * 4 + k]; if (w === 0) continue;
+      const o = si[vi * 4 + k] * 16;
+      ox += w * (bm[o] * x + bm[o + 4] * y + bm[o + 8] * z + bm[o + 12]);
+      oy += w * (bm[o + 1] * x + bm[o + 5] * y + bm[o + 9] * z + bm[o + 13]);
+      oz += w * (bm[o + 2] * x + bm[o + 6] * y + bm[o + 10] * z + bm[o + 14]);
+    }
+    return out.set(ox, oy, oz);
   }
   updateBounds() {
     const bs = this.mesh.boundingSphere;
@@ -205,6 +243,7 @@ class NPC {
     if (this.downTimer <= 0 && this.settleTimer > 0.5 && Settings.data.ai.enabled !== false) this.startGetUp(this.lifeState === 'zombie');
   }
   startGetUp(asZombie) {
+    if (this.gore && this.gore.lostLegs > 0) return this.startCrawl();
     const rag = this.rag;
     const pel = rag.bodies[RAG.PELVIS], head = rag.bodies[RAG.HEAD];
     // chest facing
@@ -240,6 +279,31 @@ class NPC {
     this.rag.setDynamic(false);
     this.physMode = 'getup';
     this.lastReaction = asZombie ? 'Reanimating' : 'Recovering (Get Up)';
+    Events.emit('npcGetUp', this);
+  }
+  // legs severed: blend from the ragdoll pose into a prone crawl
+  startCrawl() {
+    const rag = this.rag, pel = rag.bodies[RAG.PELVIS], ch = rag.bodies[RAG.CHEST];
+    const axis = _v3.subVectors(ch.pos, pel.pos); axis.y = 0;
+    if (axis.lengthSq() < 1e-6) axis.set(0, 0, 1);
+    axis.normalize();
+    const yaw = Math.atan2(axis.x, axis.z);
+    const env = this.game.env;
+    const rp = _v4.set(pel.pos.x, 0, pel.pos.z);
+    env.clampToBounds(rp, 0.5); rp.y = env.groundHeight(rp.x, rp.z);
+    this.root.pos.copy(rp); this.root.yaw = yaw;
+    this.bones[0].position.copy(rp); this.bones[0].quaternion.setFromAxisAngle(UP, yaw);
+    _q2.setFromAxisAngle(UP, -yaw);
+    const hw = this.boneWPos[B.hips].clone().sub(rp).applyQuaternion(_q2);
+    this.bones[B.hips].position.copy(hw);
+    this.bones[B.hips].quaternion.premultiply(_q2);
+    this.anim.takeSnapshot(0.7);
+    this.anim.resetFeet(rp, yaw, env); this.anim.prevRootPos.copy(rp);
+    this.anim.crawl = 1; this.anim.crawlState = null; this.anim.clip = null;
+    this.rag.setDynamic(false);
+    this.physMode = 'anim';
+    this.lastReaction = this.lifeState === 'zombie' ? 'Crawling (Legs Lost)' : 'Crawling (Leg Severed)';
+    if (this.brain) this.brain.state = this.lifeState === 'zombie' ? 'zIdle' : 'flee';
     Events.emit('npcGetUp', this);
   }
   // --- damage -----------------------------------------------------------------------
@@ -392,6 +456,7 @@ class NPCManager {
     if (this.selected === npc) this.select(null);
     this.game.scene.remove(npc.mesh);
     this.game.ai.detach(npc);
+    if (this.game.gore) this.game.gore.releaseNPC(npc);
     Events.emit('npcRemoved', npc);
     npc.dispose();
     this.shellPool.push({ mesh: npc.mesh, bones: npc.bones, material: npc.material });
