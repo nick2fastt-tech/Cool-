@@ -176,7 +176,7 @@ const GLSL_HT_ALBEDO = /* glsl */`
       float wz2 = htFbm(vRest.xz * 60.0 + vRest.y * 40.0 + float(i) * 3.7);
       float wfront = (wt == 5.0 || wt == 3.0 || wt == 7.0) ? 1.0 : smoothstep(-wr * 2.5, 0.0, dot(wd, wn) + wr);
       // blood soaking outward with a ragged edge
-      float sR = wt == 5.0 ? wr * 1.15 + 0.015 + 0.05 * wk : wr * (wt == 7.0 ? 1.0 : 2.0) + (0.015 + 0.085 * wk) * (isCloth ? 1.4 : 1.0) * (wt == 6.0 ? 1.6 : 1.0);
+      float sR = wt == 5.0 ? wr * 1.15 + 0.015 + 0.05 * wk : (wt == 7.0 ? wr * 0.8 + 0.008 + 0.02 * wk : wr * 2.0 + (0.015 + 0.085 * wk) * (isCloth ? 1.4 : 1.0) * (wt == 6.0 ? 1.6 : 1.0));
       gBl = max(gBl, (1.0 - smoothstep(0.55, 1.0, wdist / sR * (0.75 + 0.5 * wz2))) * wfront);
       // drips running down the body
       float wdy = wA.y - vRest.y;

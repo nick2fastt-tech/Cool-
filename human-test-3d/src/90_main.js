@@ -392,7 +392,8 @@ class Game {
         // a kinematic (animated) NPC struck by something heavy and fast -> knockdown
         if (b.kinematic && b.tag === 'npc' && imp > 3.2 && b.impactOther && !b.impactOther.kinematic && b.impactOther.mass > 4) {
           const npc = b.owner.npc;
-          if ((npc.lifeState === 'alive' || npc.lifeState === 'zombie') && npc.physMode === 'anim') {
+          const busy = npc.brain && (npc.brain.victim || npc.brain.corpse || npc.grabbedBy);
+          if ((npc.lifeState === 'alive' || npc.lifeState === 'zombie') && npc.physMode === 'anim' && !busy) {
             const m = b.impactOther.mass * imp;
             if (m > 70 * npc.personality.toughness) {
               npc.goRagdoll('Knockdown (Impact)');

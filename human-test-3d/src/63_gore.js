@@ -947,7 +947,7 @@ class GoreSystem {
     this.mist(wp, out, 3, 0.25);
     const G = this.state(victim); G.blood = Math.min(1, G.blood + 0.06); G.dirty = true;
     if (regs.indexOf(REGION.NECK) >= 0 && vi >= 0) G.spurts.push({ vi, t: 0, dur: 7, beat: 0 });
-    this.smear(zombie, B.jaw, 0.045);
+    this.smear(zombie, B.jaw, 0.03);
     this.sound(wp, 'bite', 0.95);
     this.screenNear(wp, 0.5);
   }
@@ -964,7 +964,7 @@ class GoreSystem {
       const p = _gv1.copy(zombie.boneWPos[B.jaw]);
       this.spray(p, _gv2.set(0, 0.6, 0), 10, 1.4, 0.8, 0.9, 0.5);
       if (this.extreme && Settings.data.gore.gibs && Math.random() < 0.45) this.gibs.burst(p, _gv2.set(0, 0.5, 0), 1 + Math.floor(Math.random() * 2), Math.random() < 0.6 ? 'organ' : 'flesh', 1.6, 0.8, 0.9);
-      this.smear(zombie, B.jaw, 0.06); this.smear(zombie, B.hand_L, 0.05); this.smear(zombie, B.hand_R, 0.05);
+      this.smear(zombie, B.jaw, 0.035); this.smear(zombie, B.hand_L, 0.04); this.smear(zombie, B.hand_R, 0.04);
       this.sound(p, Math.random() < 0.5 ? 'chew' : 'squelch', 0.75);
       // the body bleeds into a pool
       if (!G.pool) G.pool = this.decals.add(_gv2.copy(corpse.boneWPos[B.spine]).setY(this.game.env.groundHeight(corpse.boneWPos[B.spine].x, corpse.boneWPos[B.spine].z)), this.game.env.groundNormal(corpse.boneWPos[B.spine].x, corpse.boneWPos[B.spine].z, _gv3), 1.5 + Math.random() * 0.5, 'pool', null, { grow: 16 });

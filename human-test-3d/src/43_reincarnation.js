@@ -28,7 +28,8 @@ class ReincarnationSystem {
     for (const npc of this.game.npcs.list) {
       const r = npc.reinc;
       if (npc.lifeState !== 'dead') continue;
-      if (!Z.reincarnation) {
+      const infected = !!(npc.infection && Z.infection);   // bitten bodies always turn
+      if (!Z.reincarnation && !infected) {
         if (r.state === 'pending') { r.state = 'cancelled'; HT.log('zombie', `${npc.idStr} reincarnation cancelled (mode disabled)`); }
         continue;
       }
@@ -36,8 +37,11 @@ class ReincarnationSystem {
         const e = this.checkEligible(npc);
         r.eligible = e.ok; r.reason = e.reason;
         if (e.ok) {
-          r.state = 'pending'; r.delay = this.delay() * (0.85 + Math.random() * 0.3); r.timer = r.delay;
-          HT.log('zombie', `${npc.idStr} ${npc.name}: reincarnation scheduled in ${r.timer.toFixed(1)}s`);
+          const inf = npc.infection;
+          r.state = 'pending';
+          r.delay = infected ? (inf.t >= inf.dur ? 2.5 + Math.random() * 1.5 : clamp(inf.dur - inf.t, 4, 14)) : this.delay() * (0.85 + Math.random() * 0.3);
+          r.timer = r.delay; r.infected = infected;
+          HT.log('zombie', `${npc.idStr} ${npc.name}: ${infected ? 'infection will turn them' : 'reincarnation scheduled'} in ${r.timer.toFixed(1)}s`);
         } else if (r.state !== 'ineligible') {
           r.state = 'ineligible';
           HT.log('zombie', `${npc.idStr} not eligible: ${e.reason}`);
@@ -47,6 +51,17 @@ class ReincarnationSystem {
         const e = this.checkEligible(npc);
         if (!e.ok) { r.state = 'ineligible'; r.reason = e.reason; r.eligible = false; HT.log('zombie', `${npc.idStr} reincarnation revoked: ${e.reason}`); continue; }
         r.timer -= dt;
+        // the body seizes before it turns
+        if (r.timer < 2.6 && r.timer > 0.45 && npc.physMode === 'ragdoll' && !npc.carried) {
+          r.twitchT = (r.twitchT || 0) - dt;
+          if (r.twitchT <= 0) {
+            r.twitchT = 0.07 + Math.random() * 0.12;
+            const rag = npc.rag, bi = [RAG.HEAD, RAG.CHEST, RAG.HAND_L, RAG.HAND_R, RAG.FARM_L, RAG.FARM_R, RAG.FOOT_L, RAG.FOOT_R, RAG.SHIN_L, RAG.SHIN_R][Math.floor(Math.random() * 10)];
+            const b = rag.bodies[bi];
+            if (rag.world && !rag.detached[bi]) { if (rag.asleep) rag.world.wakeOwner(rag); rag.world.applyImpulse(b, _v1.set((Math.random() - 0.5), Math.random() * 0.9, (Math.random() - 0.5)).multiplyScalar(b.mass * (0.9 + Math.random() * 1.1)), null); }
+            if (!r.gurgled) { r.gurgled = true; this.game.audio.play('gurgle', { pos: npc.rag.bodies[RAG.HEAD].pos.clone(), gain: 0.9 }); }
+          }
+        }
         if (r.timer <= 0) {
           const settled = npc.physMode !== 'ragdoll' || npc.rag.asleep || npc.rag.maxSpeed() < 0.7;
           if (settled && !npc.carried) this.rise(npc);

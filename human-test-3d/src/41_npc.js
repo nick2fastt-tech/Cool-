@@ -113,6 +113,12 @@ class NPC {
       if (this.gore && this.gore.anyCut) this.syncDetached();
       this.rag.setFromBones(this.boneWPos, this.boneWRot, false);
     }
+    // overlapping pairs (grapples / feeding) collide again once apart
+    const nc = this.rag.noCollideWith;
+    if (nc && !(this.brain && (this.brain.victim || this.brain.corpse)) && !this.grabbedBy) {
+      const o = nc.npc;
+      if (!o || o.removed || o.root.pos.distanceTo(this.root.pos) > 1.3) this.rag.noCollideWith = null;
+    }
     // fx decay
     this.flash = Math.max(0, this.flash - dt * 4);
     const u = this.material.userData.u;
@@ -318,7 +324,7 @@ class NPC {
     const before = this.health;
     if (this.lifeState === 'alive' || this.lifeState === 'zombie') this.health = Math.max(0, this.health - dmg);
     if ((region === REGION.HEAD) && (info.weapon === 'sniper' || this.regionDamage[REGION.HEAD] >= 70 || (info.weapon === 'pistol' && dmg >= 60))) this.criticalHead = true;
-    this.flash = 1;
+    this.flash = Settings.data.gore.level === 'off' ? 1 : 0.25;
     this.lastHit = { region, regionName: REGION_NAMES[region], damage: dmg, weapon: info.weapon, time: this.game.time, point: info.point ? info.point.clone() : null };
     let killed = false;
     if (before > 0 && this.health <= 0) {
