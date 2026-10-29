@@ -172,8 +172,8 @@ const GLSL_HT_ALBEDO = /* glsl */`
       float wk = fract(wB.w);
       if (wdist > wr * (wt == 6.0 ? 2.6 : 9.0) + 0.14 * wk + 0.03) continue;
       vec3 wn = wB.xyz;
-      float wz1 = htNoise(vRest.xy * 230.0 + vRest.z * 170.0 + float(i) * 13.1);
-      float wz2 = htFbm(vRest.xz * 60.0 + vRest.y * 40.0 + float(i) * 3.7);
+      float wz1 = mix(0.5, htNoise(vRest.xy * 110.0 + vRest.z * 83.0 + float(i) * 13.1), htAA(110.0, vRest.xy));
+      float wz2 = mix(0.5, htFbm(vRest.xz * 45.0 + vRest.y * 31.0 + float(i) * 3.7), htAA(45.0, vRest.xz));
       float wfront = (wt == 5.0 || wt == 3.0 || wt == 7.0) ? 1.0 : smoothstep(-wr * 2.5, 0.0, dot(wd, wn) + wr);
       // blood soaking outward with a ragged edge
       float sR = wt == 5.0 ? wr * 1.15 + 0.015 + 0.05 * wk : (wt == 7.0 ? wr * 0.8 + 0.008 + 0.02 * wk : wr * 2.0 + (0.015 + 0.085 * wk) * (isCloth ? 1.4 : 1.0) * (wt == 6.0 ? 1.6 : 1.0));
@@ -224,25 +224,30 @@ const GLSL_HT_ALBEDO = /* glsl */`
         float inner = 1.0 - smoothstep(0.68, 0.9, q);
         gGu = max(gGu, inner);
         gFl = max(gFl, 1.0 - smoothstep(0.88, 1.1, q));
-        gTu = min(gTu, abs(sin(htFbm(vRest.xz * 26.0 + vRest.y * 19.0 + float(i)) * 30.0)));
+        float coil = htFbm(vRest.xz * 16.0 + vRest.y * 12.0 + float(i)) * 14.0;
+        gTu = min(gTu, mix(0.55, abs(sin(coil)), clamp(1.0 - fwidth(coil) * 0.9, 0.0, 1.0)));
       } else if (wt == 8.0) {
         float sootR = wr * 1.8;
         gSo = max(gSo, (1.0 - smoothstep(0.4, 1.0, wdist / sootR * (0.7 + 0.6 * wz2))) * wfront);
-        float spk = step(0.7 - 0.25 * wk, htNoise(vRest.xy * 70.0 + vRest.zy * 55.0 + float(i))) * (1.0 - smoothstep(0.5, 1.2, wdist / sootR));
+        float spn = htNoise(vRest.xy * 38.0 + vRest.zy * 29.0 + float(i)); float spw = fwidth(spn) + 0.04;
+        float spk = smoothstep(0.72 - 0.25 * wk - spw, 0.72 - 0.25 * wk + spw, spn) * (1.0 - smoothstep(0.5, 1.2, wdist / sootR));
         gFl = max(gFl, spk * wfront);
       }
     }
     if (uBlood > 0.0) {
-      float sp = htNoise(vRest.xy * 75.0 + vRest.zx * 48.0);
-      float sp2 = htNoise(vRest.yz * 160.0 + 9.0);
-      gBl = max(gBl, step(1.0 - uBlood * 0.45, sp) * 0.9);
-      gBl = max(gBl, step(1.0 - uBlood * 0.3, sp2) * 0.8);
+      float sp = htFbm(vRest.xy * 16.0 + vRest.zx * 11.0);
+      float spw = fwidth(sp) * 1.2 + 0.025;
+      float th = 1.0 - uBlood * 0.42;
+      gBl = max(gBl, smoothstep(th - spw, th + spw, sp) * 0.88);
+      float sp2 = htNoise(vRest.yz * 34.0 + 9.0);
+      float sw2 = fwidth(sp2) * 1.2 + 0.03;
+      gBl = max(gBl, smoothstep(1.0 - uBlood * 0.25 - sw2, 1.0 - uBlood * 0.25 + sw2, sp2) * 0.7 * htAA(34.0, vRest.yz));
     }
-    vec3 bloodC = (isCloth ? vec3(0.16, 0.008, 0.008) : vec3(0.3, 0.012, 0.01)) * (0.75 + 0.35 * htNoise(vRest.xy * 300.0));
+    vec3 bloodC = (isCloth ? vec3(0.16, 0.008, 0.008) : vec3(0.3, 0.012, 0.01)) * (0.85 + 0.25 * mix(0.5, htNoise(vRest.xy * 120.0), htAA(120.0, vRest.xy)));
     base = mix(base, bloodC, clamp(gBl, 0.0, 1.0) * 0.94);
-    vec3 fleshC = mix(vec3(0.42, 0.04, 0.035), vec3(0.62, 0.15, 0.12), htFbm(vRest.xy * 180.0 + vRest.z * 77.0));
+    vec3 fleshC = mix(vec3(0.42, 0.04, 0.035), vec3(0.62, 0.15, 0.12), mix(0.5, htFbm(vRest.xy * 70.0 + vRest.z * 41.0), htAA(70.0, vRest.xy)));
     base = mix(base, fleshC, gFl);
-    vec3 gutC = mix(vec3(0.55, 0.22, 0.24), vec3(0.76, 0.42, 0.4), htNoise(vRest.xz * 95.0 + vRest.y * 60.0));
+    vec3 gutC = mix(vec3(0.55, 0.22, 0.24), vec3(0.76, 0.42, 0.4), mix(0.5, htNoise(vRest.xz * 48.0 + vRest.y * 30.0), htAA(48.0, vRest.xz)));
     gutC = mix(gutC * 0.3, gutC, smoothstep(0.15, 0.6, gTu));
     base = mix(base, gutC, gGu);
     base = mix(base, vec3(0.86, 0.8, 0.68), (1.0 - gTu) * (1.0 - gGu));

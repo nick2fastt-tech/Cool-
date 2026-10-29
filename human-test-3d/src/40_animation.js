@@ -144,6 +144,8 @@ function solveTwoBone(root, target, pole, L1, L2, bindDir, bindHinge, q1, q2, mi
   let dist = _ikD.length();
   if (dist < 1e-6) { _ikD.set(0, -1, 0); dist = 1e-6; } else _ikD.multiplyScalar(1 / dist);
   const maxR = (L1 + L2) * (1 - 0.0005 - minBend * 0.01), minR = Math.abs(L1 - L2) + 0.01;
+  const ds = maxR * 0.94;
+  if (dist > ds) dist = ds + (maxR - ds) * (1 - Math.exp(-(dist - ds) / (maxR - ds)));
   dist = clamp(dist, minR, maxR);
   _ikP.copy(pole).addScaledVector(_ikD, -pole.dot(_ikD));
   if (_ikP.lengthSq() < 1e-8) { _ikP.set(0, 0, 1).addScaledVector(_ikD, -_ikD.z); if (_ikP.lengthSq() < 1e-8) _ikP.set(1, 0, 0); }
@@ -342,7 +344,9 @@ class Animator {
     const zs = this.zombie > 0.01 ? this.zstyle : null;
     const zomb = zs ? this.zombie : 0;
     const spd = this.speed;
-    const run = zs ? smoothstep(1.7, 2.9, spd) * 0.85 : smoothstep(2.0, 3.8, spd);
+    const runT = zs ? smoothstep(1.7, 2.9, spd) * 0.85 : smoothstep(2.0, 3.8, spd);
+    this.runBlend = damp(this.runBlend != null ? this.runBlend : runT, runT, 4.5, dt);
+    const run = this.runBlend;
     const wasMoving = this.moving;
     const moving = this.moving = spd > (wasMoving ? 0.07 : 0.15);
     const lg = rig.legLen;
@@ -354,10 +358,15 @@ class Animator {
       if (this.jitT <= 0) { this.jitT = 0.3 + Math.random() * 0.6; this.jitK = 1 + (Math.random() * 2 - 1) * zs.jitter; }
       freq *= lerp(1, this.jitK, zomb);
     }
+    // step faster while turning so planted feet don't get left behind (no crossed legs)
+    freq = Math.max(freq, 1.25 * clamp(Math.abs(this.yawRate || 0) / 1.6, 0, 1));
     const duty0 = lerp(0.61, 0.36, run);
     if (moving) this.phase = (this.phase + freq * dt) % 1;
     const yaw = root.yaw, cy = Math.cos(yaw), sy = Math.sin(yaw);
     const T = 1 / freq;
+    const yr = wrapAngle(yaw - (this.prevYaw != null ? this.prevYaw : yaw)) / Math.max(dt, 1e-4);
+    this.prevYaw = yaw;
+    this.yawRate = damp(this.yawRate || 0, clamp(yr, -6, 6), 12, dt);
     const H = rig.H, ha = rig.ankleY - rig.sole, db = 0.07 * H, dh = 0.024 * H, dtoe = 0.1 * H;
     const toeOut = zs ? lerp(0.07, zs.toeOut, zomb) : 0.075;
     const mirror = this.zMirror;
@@ -369,7 +378,7 @@ class Animator {
       const drag = zs ? zs.drag[zi] * zomb : 0, stiff = zs ? zs.stiff[zi] * zomb : 0;
       const duty = clamp(duty0 + (zs ? (zi ? -1 : 1) * zs.limp * 0.1 * zomb : 0) - this.limp[s] * 0.08 + this.limp[1 - s] * 0.05, 0.3, 0.78);
       f.duty = duty; f.drag = drag; f.stiff = stiff;
-      const lat = this.stance * 0.5 * lerp(0.66, 0.42, run) * (zs ? lerp(1, zs.width, zomb) : 1);
+      const lat = this.stance * 0.5 * lerp(0.66, 0.42, run) * (zs ? lerp(1, zs.width, zomb) : (npc.app.male ? 1 : 0.8));
       const idealX = root.pos.x + cy * sg * lat, idealZ = root.pos.z - sy * sg * lat;
       const hsP = lerp(-0.26, -0.1, run) * (1 - drag) * (1 - stiff * 0.6);
       const toP = lerp(0.6, 0.8, run) * (1 - drag * 0.55);
@@ -381,7 +390,8 @@ class Animator {
           const sw = (ph - duty) / (1 - duty);
           if (!f.swing) { f.swing = true; f.idleStep = false; f.from.copy(f.pos); f.from.y = env.groundHeight(f.from.x, f.from.z); f.fromPitch = f.pitch; f.fromOff = f.pivotOff || 0; }
           const tLand = (1 - sw) * (1 - duty) * T + duty * T * 0.5;
-          f.to.set(idealX + this.vel.x * tLand, 0, idealZ + this.vel.z * tLand);
+          const yl = yaw + this.yawRate * tLand * 0.8;
+          f.to.set(root.pos.x + Math.cos(yl) * sg * lat + this.vel.x * tLand, 0, root.pos.z - Math.sin(yl) * sg * lat + this.vel.z * tLand);
           f.to.y = env.groundHeight(f.to.x, f.to.z);
           const e = smoothstep(0.0, 0.94, sw);
           f.pos.lerpVectors(f.from, f.to, e);
@@ -448,19 +458,24 @@ class Animator {
     this.weightTimer -= dt;
     if (this.weightTimer <= 0) { this.weightShiftTarget = (Math.random() - 0.5) * 2 * pers.fidget; this.weightTimer = 3 + Math.random() * 6; }
     this.weightShift = damp(this.weightShift, moving ? 0 : this.weightShiftTarget, 1.5, dt);
-    const rotA = lerp(0.075, 0.12, run) * wk * (zs ? lerp(1, 0.55, zomb) : 1);
+    const fem = npc.app.male ? 0 : 1;
+    const accel = (spd - (this.prevSpd != null ? this.prevSpd : spd)) / Math.max(dt, 1e-4);
+    this.prevSpd = spd;
+    this.accLean = damp(this.accLean || 0, clamp(accel * 0.035, -0.12, 0.16), 6, dt);
+    this.bank = damp(this.bank || 0, clamp(-(this.yawRate || 0) * spd * 0.035, -0.16, 0.16), 6, dt);
+    const rotA = lerp(0.075, 0.12, run) * wk * (zs ? lerp(1, 0.55, zomb) : 1) * (1 + fem * 0.15);
     const pelYaw = -Math.cos(TAU * ph) * rotA;
     const lurch = zs ? zs.lurch * zomb : 0;
-    const rollA = (lerp(0.055, 0.03, run) + lurch * 0.9) * wk;
+    const rollA = (lerp(0.055, 0.03, run) * (1 + fem * 0.35) + lurch * 0.9) * wk;
     const pelRoll = Math.sin(TAU * (ph - 0.06)) * rollA;
-    const swayA = (lerp(0.024, 0.01, run) + lurch * 0.55) * wk;
+    const swayA = (lerp(0.024, 0.01, run) * (1 + fem * 0.2) + lurch * 0.55) * wk;
     const sway = moving ? Math.sin(TAU * (ph - 0.04)) * swayA : this.weightShift * 0.035;
     const hunch = zs ? zs.hunch * zomb : 0;
     const lean = (0.035 + 0.13 * run) * pers.leanMul + hunch * 0.25;
     const zRoll = zs ? zs.roll * zomb * (mirror ? -1 : 1) : 0;
     P.hipsOff.set(sway, 0, 0);
-    P.hipsRot.set(lean * 0.5 + 0.02, pelYaw, pelRoll + (moving ? 0 : -this.weightShift * 0.05) + zRoll * 0.4);
-    P.spine.set(lean * 0.35 + pers.slouch * 0.5 + hunch * 0.45, -pelYaw * 0.85, -pelRoll * 0.6 + zRoll * 0.4);
+    P.hipsRot.set(lean * 0.5 + 0.02 + this.accLean * 0.5, pelYaw, pelRoll + (moving ? 0 : -this.weightShift * 0.05) + zRoll * 0.4 + this.bank * 0.5);
+    P.spine.set(lean * 0.35 + pers.slouch * 0.5 + hunch * 0.45 + this.accLean * 0.35, -pelYaw * 0.85, -pelRoll * 0.6 + zRoll * 0.4 + this.bank * 0.3);
     P.chest.set(lean * 0.2 + pers.slouch * 0.4 + hunch * 0.45, -pelYaw * 0.85, -pelRoll * 0.4 + zRoll * 0.3 - lurch * Math.sin(TAU * (ph - 0.1)) * 0.8 * wk);
     // head: stabilised for the living, lolling for the dead
     const trunkPitch = P.hipsRot.x + P.spine.x + P.chest.x;
@@ -492,6 +507,9 @@ class Animator {
         else if (pp < 0) { offY = ha * (Math.cos(pp) - 1) - dh * Math.sin(pp); offZ = ha * Math.sin(pp) + dh * (Math.cos(pp) - 1); }
         offY += f.lift || 0;
         f.pivotOff = offZ;
+      } else {
+        const sw = f.sw || 0, hs = f.hsP || 0;
+        offZ = (f.fromOff || 0) * (1 - smoothstep(0, 0.35, sw)) + (ha * Math.sin(hs) + dh * (Math.cos(hs) - 1)) * smoothstep(0.75, 1, sw);
       }
       fp.pos.x += Math.sin(fp.yaw) * offZ; fp.pos.z += Math.cos(fp.yaw) * offZ; fp.pos.y += offY;
       fp.pole.set(Math.sin(fp.yaw) + SIDE_SIGN[s] * 0.12, 0, Math.cos(fp.yaw));
@@ -514,13 +532,14 @@ class Animator {
         th = run > 0 ? lerp(gaitKneeStance(Math.min(st, 0.62), 0), gaitKneeStance(st, 1), run) : gaitKneeStance(Math.min(st, 0.62), 0);
         th = Math.max(th, f.stiff ? 0 : 0) + this.limp[s] * 0.15;
       }
-      const hx = f.hjx - fp.pos.x, hz = f.hjz - fp.pos.z;
+      const hx = f.hjx - fp.pos.x, hz = f.hjz - fp.pos.z, h2 = hx * hx + hz * hz;
       const D = dist(th);
-      const v = D * D - hx * hx - hz * hz;
-      const b = (v > 0 ? fp.pos.y + Math.sqrt(v) : fp.pos.y) - f.hjOffY;
+      let v = D * D - h2;
+      if (v <= 0) { const Dm = lg * 0.995; v = Dm * Dm - h2; if (v <= 0) continue; } // out of reach: this foot can't carry the pelvis
+      const b = fp.pos.y + Math.sqrt(v) - f.hjOffY;
       bound = Math.min(bound, lerp(Math.max(hipY, b), b, load));
     }
-    if (bound < hipY) hipY = bound;
+    if (bound < hipY) hipY = Math.max(bound, standY - lg * 0.22);
     if (!this.hipYInit) { this.hipY = hipY; this.hipYInit = true; }
     this.hipY = damp(this.hipY, hipY, moving ? 22 : 10, dt);
     P.hipsOff.y = this.hipY - standY;
@@ -530,19 +549,16 @@ class Animator {
         const f = this.feet[s], fp = P.foot[s];
         if (!f.swing) continue;
         const sw = f.sw || 0;
-        const hjY = this.hipY + f.hjOffY;
-        const hx = f.hjx - fp.pos.x, hz = f.hjz - fp.pos.z;
-        const th = gaitKneeSwing(sw, run) * (1 - f.stiff * 0.82) * (1 - f.drag * 0.6) * (zs ? lerp(1, 0.8, zomb) : 1);
-        const D = dist(th);
-        const v = D * D - hx * hx - hz * hz;
-        let y = v > 0 ? hjY - Math.sqrt(v) : hjY - D;
-        // blend from the toe-off position and into the heel strike position
-        const gyFrom = f.from.y - root.pos.y + rig.ankleY, gyTo = f.to.y - root.pos.y + rig.ankleY;
+        // lift curve above the ground path (walk ~17% of leg length early in swing, run ~42% heel kick);
+        // the IK turns it into the natural knee bend (~60 deg walking, ~110 deg running)
+        const peak = lerp(0.33, 0.42, run);
+        const bump = sw < peak ? smooth01(sw / peak) : 1 - smooth01((sw - peak) / (1 - peak));
+        const Hl = lg * lerp(0.17, 0.36, run) * pers.stepLift * (1 - f.drag * 0.88) * (1 - f.stiff * 0.7) * (1 - 0.45 * this.limp[s]) * (zs ? lerp(1, 0.75, zomb) : 1);
         const pTo = f.fromPitch != null ? f.fromPitch : f.toP;
-        const yOff0 = gyFrom + ha * (Math.cos(pTo) - 1) + db * Math.sin(Math.max(0, pTo));
-        const yLand = gyTo + ha * (Math.cos(f.hsP) - 1) - dh * Math.sin(Math.min(0, f.hsP));
-        y = lerp(y, yOff0, 1 - smoothstep(0.0, 0.28, sw));
-        y = lerp(y, yLand, smoothstep(0.78, 1.0, sw));
+        const offFrom = ha * (Math.cos(pTo) - 1) + db * Math.sin(Math.max(0, pTo));
+        const offLand = ha * (Math.cos(f.hsP) - 1) - dh * Math.sin(Math.min(0, f.hsP));
+        const gNow = f.pos.y - root.pos.y + rig.ankleY;
+        let y = gNow + lerp(offFrom, offLand, smoothstep(0.0, 0.94, sw)) + Hl * bump;
         // never let the toe or heel go through the ground
         const pp = f.pitch;
         const lowRel = Math.min(-ha * Math.cos(pp) - dtoe * Math.sin(pp), -ha * Math.cos(pp) + dh * Math.sin(pp));

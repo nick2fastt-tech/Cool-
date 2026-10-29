@@ -604,11 +604,18 @@ class AISystem {
     const game = this.game, root = npc.root;
     const desired = _v4.set(0, 0, 0);
     const isZ = npc.lifeState === 'zombie';
+    let wantYaw = null;
     if (b.speed > 0.01) {
-      const spd = npc.anim.crawl ? Math.min(b.speed, 0.38) : b.speed;
+      let spd = npc.anim.crawl ? Math.min(b.speed, 0.38) : b.speed;
       desired.subVectors(b.dest, root.pos); desired.y = 0;
       const d = desired.length();
-      if (d > 0.05) desired.multiplyScalar(Math.min(spd, spd * d / 0.9) / d); else desired.set(0, 0, 0);
+      if (d > 0.05) {
+        // people slow down to change direction sharply instead of side-stepping
+        wantYaw = Math.atan2(desired.x, desired.z);
+        const off = Math.abs(wrapAngle(wantYaw - root.yaw));
+        spd = Math.min(spd, spd * d / 0.9) * clamp(1.2 - off / 1.7, 0.12, 1);
+        desired.multiplyScalar(spd / d);
+      } else desired.set(0, 0, 0);
     }
     // separation
     const list = game.npcs.list;
@@ -644,10 +651,11 @@ class AISystem {
     const sp = Math.hypot(b.vel.x, b.vel.z);
     let targetYaw = null;
     if (b.faceTarget && b.speed < 0.05) { targetYaw = Math.atan2(b.faceTarget.x - root.pos.x, b.faceTarget.z - root.pos.z); }
+    else if (wantYaw !== null && b.stagger.lengthSq() < 0.04) targetYaw = wantYaw;
     else if (sp > 0.25 && b.speed > 0.01) targetYaw = Math.atan2(b.vel.x, b.vel.z);
     else if (b.state === 'handsUp') targetYaw = Math.atan2(game.camera.position.x - root.pos.x, game.camera.position.z - root.pos.z);
     if (targetYaw !== null) {
-      const maxTurn = (b.speed > 2.5 ? 6 : 3.2) * dt * (isZ ? 0.6 : 1);
+      const maxTurn = (b.speed > 2.5 ? 4.0 : 1.9) * dt * (isZ ? 0.6 : 1);
       root.yaw += clamp(wrapAngle(targetYaw - root.yaw), -maxTurn, maxTurn);
     }
     if (b.speed < 0.05) b.faceTarget = b.state === 'zAttack' || b.state === 'fight' ? b.faceTarget : null;
