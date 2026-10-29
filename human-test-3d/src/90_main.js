@@ -315,6 +315,7 @@ class Game {
   // --- main loop ------------------------------------------------------------------------
   loop(now) {
     requestAnimationFrame((t) => this.loop(t));
+    if (this.manual) { this.lastT = now; return; } // externally stepped (tests / capture)
     const cap = Settings.data.graphics.fpsCap;
     if (cap > 0 && now - this.lastT < 1000 / cap - 2) return;
     let rdt = Math.min((now - this.lastT) / 1000, 0.1);

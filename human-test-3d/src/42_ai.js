@@ -342,13 +342,13 @@ class AISystem {
     if ((!tgt || b.retarget <= 0) && Z.aggression && Z.targetNPCs) { tgt = this.selectTarget(npc, Z); b.retarget = 2.5; }
     if (!Z.aggression || !Z.targetNPCs) tgt = null;
     if (tgt !== npc.zombieTarget) { npc.zombieTarget = tgt; if (tgt) Events.emit('zombieTarget', { npc, target: tgt }); }
-    const zspeed = 0.85 * Z.speed * npc.personality.zombieSpeed;
+    const zspeed = 0.85 * Z.speed * npc.personality.zombieSpeed * (npc.anim.zstyle ? npc.anim.zstyle.speed : 1) * (npc.anim.crawl ? 0.38 : 1);
     if (tgt) {
       const d = tgt.root.pos.distanceTo(npc.root.pos);
       anim.lookAt(tgt.boneWPos[B.head], 1);
       if (d > 0.95) {
         b.state = 'zChase'; b.dest.copy(tgt.root.pos); b.speed = zspeed * (d < 3 ? 1.25 : 1);
-        anim.setUpper('reach');
+        anim.setUpper('hang'); // style arms from the zombie gait (reach / claw / limp)
       } else {
         b.state = 'zAttack'; b.speed = 0; b.faceTarget = tgt.root.pos;
         b.attackT -= dt;
@@ -362,7 +362,7 @@ class AISystem {
     } else {
       // shamble around
       if (b.state !== 'zIdle' && b.state !== 'zInvestigate') { b.state = 'zIdle'; b.t = 0; this.pickWander(npc, b); }
-      anim.setUpper(b.t % 9 < 5 ? 'reach' : 'hang');
+      anim.setUpper('hang');
       b.speed = b.state === 'zInvestigate' ? zspeed : (b.t % 8 < 4 ? zspeed * 0.6 : 0);
       if (npc.root.pos.distanceTo(b.dest) < 0.7) { this.pickWander(npc, b); b.state = 'zIdle'; }
       anim.clearLook();
