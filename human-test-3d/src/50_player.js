@@ -116,8 +116,6 @@ class Input {
     hold('tFire', 'fire'); hold('tAim', 'aimHold'); hold('tUp', 'up'); hold('tDown', 'down');
     const tap = (id, fn) => { const b = el(id); b.addEventListener('touchstart', (e) => { fn(); e.preventDefault(); }, { passive: false }); b.addEventListener('click', fn); };
     tap('tReload', () => { T.reload = true; });
-    tap('tNext', () => { T.next = true; });
-    tap('tSelect', () => { T.select = true; });
   }
 }
 

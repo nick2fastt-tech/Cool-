@@ -309,7 +309,8 @@ class Game {
       if (!this.loaded) return;
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
       const k = e.code;
-      if (k === 'Tab') this.ui.toggleDrawer();
+      if (k === 'Tab') { e.preventDefault(); this.ui.toggleDrawer(this.ui.drawerOpen && this.ui.mode === 'sandbox' ? false : true, 'sandbox'); }
+      else if (k === 'KeyO') this.ui.toggleDrawer(this.ui.drawerOpen && this.ui.mode === 'settings' ? false : true, 'settings');
       else if (k === 'Escape' && this.ui.drawerOpen) this.ui.toggleDrawer(false);
       else if (k === 'KeyP') this.togglePause();
       else if (k === 'KeyL') Settings.set('diagnostics.labels', !Settings.data.diagnostics.labels);

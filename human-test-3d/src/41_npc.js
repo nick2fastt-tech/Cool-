@@ -249,7 +249,7 @@ class NPC {
     if (this.downTimer <= 0 && this.settleTimer > 0.5 && Settings.data.ai.enabled !== false) this.startGetUp(this.lifeState === 'zombie');
   }
   startGetUp(asZombie) {
-    if (this.gore && this.gore.lostLegs > 0) return this.startCrawl();
+    if (this.gore && this.gore.lostLegs > 0) return this.startCrawl(asZombie);
     const rag = this.rag;
     const pel = rag.bodies[RAG.PELVIS], head = rag.bodies[RAG.HEAD];
     // chest facing
@@ -288,7 +288,7 @@ class NPC {
     Events.emit('npcGetUp', this);
   }
   // legs severed: blend from the ragdoll pose into a prone crawl
-  startCrawl() {
+  startCrawl(asZombie) {
     const rag = this.rag, pel = rag.bodies[RAG.PELVIS], ch = rag.bodies[RAG.CHEST];
     const axis = _v3.subVectors(ch.pos, pel.pos); axis.y = 0;
     if (axis.lengthSq() < 1e-6) axis.set(0, 0, 1);
@@ -309,8 +309,9 @@ class NPC {
     this.rag.setDynamic(false);
     this.physMode = 'anim';
     this.lastReaction = this.lifeState === 'zombie' ? 'Crawling (Legs Lost)' : 'Crawling (Leg Severed)';
-    if (this.brain) this.brain.state = this.lifeState === 'zombie' ? 'zIdle' : 'flee';
+    if (this.brain) this.brain.state = this.lifeState === 'zombie' || asZombie ? 'zIdle' : 'flee';
     Events.emit('npcGetUp', this);
+    if (asZombie || this.lifeState === 'reanimating') Events.emit('zombieRisen', this);
   }
   // --- damage -----------------------------------------------------------------------
   applyHit(info) {
