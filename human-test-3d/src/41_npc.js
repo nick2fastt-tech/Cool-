@@ -239,7 +239,10 @@ class NPC {
     this.settleTimer = 0;
     this.downTimer = 1.4 + Math.random() * 1.2;
     this.lastReaction = reason || 'Ragdoll';
-    if (this.brain) this.brain.state = 'down';
+    // interaction poses (bite, swipe, struggle, feeding) end when the body goes limp
+    if (this.lifeState === 'zombie' && this.brain && this.game.ai) { this.game.ai.endGrab(this); this.game.ai.endFeed(this); }
+    this.anim.action = null; this.anim.reachW = 0; this.anim.reachTarget = 0; this.anim.crawlAttack = 0;
+    if (this.brain) { this.brain.state = 'down'; this.brain.victim2 = null; this.brain.plan = null; }
   }
   handleDowned(dt) {
     if ((this.lifeState !== 'alive' && this.lifeState !== 'zombie') || this.carried) return;
@@ -248,11 +251,10 @@ class NPC {
     if (v < 0.35) this.settleTimer += dt; else this.settleTimer = 0;
     if (this.downTimer <= 0 && this.settleTimer > 0.5 && Settings.data.ai.enabled !== false) this.startGetUp(this.lifeState === 'zombie');
   }
-  startGetUp(asZombie) {
-    if ((this.gore && this.gore.lostLegs > 0) || (this.isZombie && this.anim.zstyle && this.anim.zstyle.crawl)) return this.startCrawl(asZombie);
+  // place the animation root under the lying ragdoll (no teleport): returns whether it lies face down
+  rootFromRagdoll() {
     const rag = this.rag;
-    const pel = rag.bodies[RAG.PELVIS], head = rag.bodies[RAG.HEAD];
-    // chest facing
+    const pel = rag.bodies[RAG.PELVIS], head = rag.bodies[this.gore && this.gore.boneDetached[B.head] ? RAG.CHEST : RAG.HEAD];
     rag.boneWorldFromBody(RAG.CHEST, _v1, _q1);
     const fwd = _v2.set(0, 0, 1).applyQuaternion(_q1);
     const faceDown = fwd.y < 0;
@@ -264,23 +266,41 @@ class NPC {
     const rp = _v4.set(pel.pos.x, 0, pel.pos.z);
     env.clampToBounds(rp, 0.5);
     rp.y = env.groundHeight(rp.x, rp.z);
-    // set the new root, then express current pose relative to it
     this.root.pos.copy(rp); this.root.yaw = yaw;
     this.bones[0].position.copy(rp); this.bones[0].quaternion.setFromAxisAngle(UP, yaw);
     _q2.setFromAxisAngle(UP, -yaw);
     const hw = this.boneWPos[B.hips].clone().sub(rp).applyQuaternion(_q2);
     this.bones[B.hips].position.copy(hw);
     this.bones[B.hips].quaternion.premultiply(_q2);
-    this.anim.takeSnapshot(asZombie ? 0.8 : 0.5);
     this.anim.resetFeet(rp, yaw, env);
     this.anim.prevRootPos.copy(rp);
+    return faceDown;
+  }
+  // transformation: slow zombie rise from the ground, finishing when the sequence ends
+  startTransformRise(duration) {
+    if ((this.gore && this.gore.lostLegs > 0) || (this.anim.zstyle && this.anim.zstyle.crawl)) { this.startCrawl(false); return; }
+    const faceDown = this.rootFromRagdoll();
+    this.anim.takeSnapshot(1.4);
+    const keys = zombieRiseKeys(faceDown);
+    this.anim.playClip('zombieTransform', keys, () => { if (this.physMode === 'getup') this.physMode = 'anim'; Events.emit('transformRisen', this); });
+    this.anim.clip.speed = keys[keys.length - 1].t / Math.max(2.8, duration);
+    this.anim.clip.zombie = true; this.anim.clip.transform = true;
+    this.rag.setDynamic(false);
+    this.physMode = 'getup';
+    this.lastReaction = 'Transforming (Rising)';
+  }
+  startGetUp(asZombie) {
+    if ((this.gore && this.gore.lostLegs > 0) || (this.isZombie && this.anim.zstyle && this.anim.zstyle.crawl)) return this.startCrawl(asZombie);
+    const faceDown = this.rootFromRagdoll();
+    const rp = this.root.pos, env = this.game.env;
+    this.anim.takeSnapshot(asZombie ? 0.8 : 0.5);
     const keys = getUpKeys(faceDown);
     this.anim.playClip(asZombie ? 'zombieRise' : 'getUp', keys, () => {
       if (this.physMode === 'getup') this.physMode = 'anim';
       if (asZombie) Events.emit('zombieRisen', this);
       if (this.brain) this.brain.state = 'idle';
     });
-    this.anim.clip.speed = asZombie ? 0.55 : this.personality.animSpeed;
+    this.anim.clip.speed = asZombie ? 0.75 : this.personality.animSpeed;
     this.anim.clip.zombie = asZombie;
     this.rag.setDynamic(false);
     this.physMode = 'getup';
@@ -311,7 +331,7 @@ class NPC {
     this.lastReaction = this.lifeState === 'zombie' ? 'Crawling (Legs Lost)' : 'Crawling (Leg Severed)';
     if (this.brain) this.brain.state = this.lifeState === 'zombie' || asZombie ? 'zIdle' : 'flee';
     Events.emit('npcGetUp', this);
-    if (asZombie || this.lifeState === 'reanimating') Events.emit('zombieRisen', this);
+    if (asZombie) Events.emit('zombieRisen', this);
   }
   // --- damage -----------------------------------------------------------------------
   applyHit(info) {
@@ -346,6 +366,8 @@ class NPC {
   }
   destroyZombie(info) {
     if (!this.setLife('destroyed', 'zombie killed')) return false;
+    if (this.game.ai) { this.game.ai.endGrab(this); this.game.ai.endFeed(this); } // let go of any victim / meal
+    this.zombieTarget = null;
     this.deathTime = this.game.time;
     this.goRagdoll('Ragdoll (Destroyed)', true);
     Events.emit('npcDied', { npc: this, info, zombie: true });
@@ -376,6 +398,7 @@ class NPC {
     const n = pos.length / 3;
     if (!this.skinned || this.skinned.length !== pos.length) this.skinned = new Float32Array(pos.length);
     const out = this.skinned;
+    this.mesh.updateMatrixWorld(true); // bone world matrices are otherwise refreshed only when rendering
     this.mesh.skeleton.update();
     const bm = this.mesh.skeleton.boneMatrices;
     // boneMatrices = boneWorld * boneInverse (mesh at identity)

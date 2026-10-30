@@ -115,24 +115,24 @@ function makeBloodAtlas() {
 const DECAL_TILES = { splat: [0, 4], spray: [4, 4], pool: [8, 4], drop: [12, 4], smear: [15, 1] };
 class BloodDecals {
   constructor(game, max) {
-    this.game = game; this.max = max; this.next = 0; this.used = 0;
+    this.game = game; this.max = max; this.next = 0; this.used = 0; this.lastAdd = 0;
     const geo = new THREE.PlaneGeometry(1, 1);
     this.aTile = new THREE.InstancedBufferAttribute(new Float32Array(max), 1);
     this.aBirth = new THREE.InstancedBufferAttribute(new Float32Array(max), 1);
     geo.setAttribute('aTile', this.aTile); geo.setAttribute('aBirth', this.aBirth);
-    this.uTime = { value: 0 };
+    this.uTime = { value: 0 }; this.uLife = { value: 120 };
     const mat = new THREE.MeshStandardMaterial({ map: makeBloodAtlas(), color: 0x5a0807, roughness: 0.15, metalness: 0, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6 });
     mat.onBeforeCompile = (sh) => {
-      sh.uniforms.uTime = this.uTime;
+      sh.uniforms.uTime = this.uTime; sh.uniforms.uLife = this.uLife;
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aTile; attribute float aBirth; uniform float uTime; varying float vAge;')
         .replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_MAP\n vMapUv = vMapUv * 0.25 + vec2(mod(aTile, 4.0), 3.0 - floor(aTile / 4.0)) * 0.25;\n#endif\n vAge = uTime - aBirth;');
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vAge;')
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vAge; uniform float uLife;')
         .replace('#include <map_fragment>', `#include <map_fragment>
           float htDry = smoothstep(6.0, 80.0, vAge);
           diffuseColor.rgb *= mix(vec3(1.0), vec3(0.5, 0.42, 0.42), htDry);
           float htMin = max(length(dFdx(vMapUv)), length(dFdy(vMapUv))) * 1024.0;
           float htA = min(1.0, diffuseColor.a * (1.0 + 0.9 * log2(max(htMin, 1.0))));
-          diffuseColor.a = smoothstep(0.02, 0.3, htA) * smoothstep(0.0, 0.08, vAge);`)
+          diffuseColor.a = smoothstep(0.02, 0.3, htA) * smoothstep(0.0, 0.08, vAge) * (1.0 - smoothstep(uLife - 12.0, uLife, vAge));`)
         .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n roughnessFactor = mix(0.08, 0.55, htDry);');
     };
     mat.customProgramCacheKey = () => 'ht3d-blood-decal';
@@ -165,7 +165,7 @@ class BloodDecals {
     this._m.compose(pos, q, this._s.set(grow ? sx * 0.08 : sx, grow ? sy * 0.08 : sy, 1));
     this.mesh.setMatrixAt(slot, this._m);
     this.aTile.array[slot] = k[0] + Math.floor(Math.random() * k[1]);
-    this.aBirth.array[slot] = this.game.time;
+    this.aBirth.array[slot] = this.game.time; this.lastAdd = this.game.time;
     this.aTile.needsUpdate = true; this.aBirth.needsUpdate = true; this.mesh.instanceMatrix.needsUpdate = true;
     this.mesh.count = this.used;
     if (grow) this.growing.push({ slot, t: 0, dur: opts.grow, sx, sy, pos: pos.clone(), q: q.clone() });
@@ -173,6 +173,8 @@ class BloodDecals {
   }
   update(dt) {
     this.uTime.value = this.game.time;
+    // temporary: once every decal has faded out the pool is reset
+    if (this.used && this.game.time - this.lastAdd > this.uLife.value + 1) { this.mesh.count = 0; this.used = 0; this.next = 0; }
     if (!this.growing.length) return;
     for (let i = this.growing.length - 1; i >= 0; i--) {
       const gr = this.growing[i];
@@ -303,14 +305,16 @@ class Gibs {
     this.mesh.setColorAt(0, new THREE.Color(1, 1, 1));
     game.scene.add(this.mesh);
     this._m = new M4(); this._c = new THREE.Color(); this._s = new V3();
+    this.free = []; this.life = 60;
   }
   spawn(p, v, size, type, color) {
     let gb;
-    if (this.list.length < this.max) { gb = { p: new V3(), v: new V3(), q: new QT(), w: new V3(), s: 1, rest: false, splat: false, idx: this.list.length }; this.list.push(gb); }
+    if (this.free.length) gb = this.list[this.free.pop()];
+    else if (this.list.length < this.max) { gb = { p: new V3(), v: new V3(), q: new QT(), w: new V3(), s: 1, rest: false, splat: false, idx: this.list.length }; this.list.push(gb); }
     else { gb = this.list[this.next]; this.next = (this.next + 1) % this.max; }
     gb.p.copy(p); gb.v.copy(v); gb.q.setFromEuler(new THREE.Euler(Math.random() * 6, Math.random() * 6, Math.random() * 6));
     gb.w.set((Math.random() - 0.5) * 24, (Math.random() - 0.5) * 24, (Math.random() - 0.5) * 24);
-    gb.s = size; gb.rest = false; gb.splat = false; gb.t = 0;
+    gb.s = size; gb.rest = false; gb.splat = false; gb.t = 0; gb.restT = 0; gb.dead = false;
     gb.sx = type === 'gut' ? 2.8 : 1; gb.sy = type === 'gut' ? 0.8 : (type === 'tooth' ? 0.6 : 1); gb.sz = type === 'gut' ? 0.9 : 1;
     if (type === 'eye') gb.s = Math.min(size, 0.013); if (type === 'tooth') gb.s = Math.min(size, 0.006);
     const pal = GIB_COLORS[type] || GIB_COLORS.flesh;
@@ -333,7 +337,17 @@ class Gibs {
     const env = this.game.env, planes = this.game.physics.planes;
     let any = false;
     for (const gb of this.list) {
-      if (gb.rest) continue;
+      if (gb.dead) continue;
+      if (gb.rest) { // temporary: settled chunks shrink away after a while
+        gb.restT += dt;
+        if (gb.restT > this.life) {
+          const f = 1 - (gb.restT - this.life) / 2;
+          if (f <= 0) { gb.dead = true; this.free.push(gb.idx); this._m.makeScale(0, 0, 0); }
+          else this._m.compose(gb.p, gb.q, this._s.set(gb.s * (gb.sx || 1) * f, gb.s * (gb.sy || 1) * f, gb.s * (gb.sz || 1) * f));
+          this.mesh.setMatrixAt(gb.idx, this._m); any = true;
+        }
+        continue;
+      }
       any = true; gb.t += dt;
       gb.v.y -= 9.8 * dt;
       gb.p.addScaledVector(gb.v, dt);
@@ -355,7 +369,7 @@ class Gibs {
     }
     if (any) this.mesh.instanceMatrix.needsUpdate = true;
   }
-  clear() { this.list.length = 0; this.next = 0; this.mesh.count = 0; }
+  clear() { this.list.length = 0; this.next = 0; this.mesh.count = 0; this.free.length = 0; }
 }
 
 // --- intestines: verlet rope strands anchored to a wound, rendered as instanced segments ---------
@@ -389,6 +403,7 @@ class GutStrands {
     for (let si = this.list.length - 1; si >= 0; si--) {
       const st = this.list[si], P = st.pts, Q = st.prev, n = P.length;
       if (st.npc && st.npc.removed) { st.free = true; st.npc = null; }
+      if (st.free) { st.age = (st.age || 0) + dt; if (st.age > 20) { this.list.splice(si, 1); continue; } }
       // integrate
       for (let i = 0; i < n; i++) {
         const p = P[i], q = Q[i];
@@ -748,7 +763,9 @@ class GoreSystem {
       npc.criticalHead = npc.criticalHead || false;
       if (npc.lifeState === 'alive') npc.die({ weapon: o.weapon || 'gore' });
       else if (npc.lifeState === 'zombie') { npc.health = 0; npc.destroyZombie({ weapon: o.weapon || 'gore' }); }
+      else if (npc.lifeState === 'reanimating' && npc.game.zombies) npc.game.zombies.failTransform(npc, 'Body cut in half');
       if (npc.physMode !== 'ragdoll') npc.goRagdoll('Ragdoll (Cut in Half)', true);
+      if (npc.lifeState === 'reanimating') npc.setLife('dead', 'cut in half');
       npc.reinc.state = 'ineligible'; npc.reinc.reason = 'Body cut in half'; npc.criticalHead = true;
       npc.lastReaction = 'Cut in Half';
       // spill guts from both halves
@@ -1005,6 +1022,22 @@ class GoreSystem {
     this.screenNear(hit.point, 0.5);
     return true;
   }
+  // zombie claw: slash at the contact vertex, spray along the swipe
+  onClaw(npc, zombie, vi, p, dir) {
+    if (!this.on) { this.game.fx.fabricPuff(p, dir.clone().negate()); return; }
+    this.vertexBind(npc, vi, _gv6, _gv7);
+    const region = npc.mesh.geometry.attributes.aRegion.array[vi] | 0;
+    const sd = _gv3.copy(dir).applyQuaternion(_gq1.copy(npc.boneWRot[REGION_BONE[region]]).invert());
+    sd.addScaledVector(_gv7, -sd.dot(_gv7)); if (sd.lengthSq() < 1e-6) sd.set(1, 0, 0); sd.normalize();
+    for (let k = 0; k < 3; k++) { // three raking claw marks
+      const off = _gv4.crossVectors(_gv7, sd).normalize().multiplyScalar((k - 1) * 0.012);
+      this.addWound(npc, WOUND.SLASH, _gv5.copy(_gv6).add(off), sd, 0.005 + Math.random() * 0.002, { vi, bleed: npc.lifeState === 'alive' ? 0.35 : 0.05, k: 0.12 });
+    }
+    this.spray(p, _gv1.copy(dir).add(_gv2.set(0, 0.25, 0)).normalize(), 14, 2.4, 0.35, 0.8, 0.5);
+    this.mist(p, dir, 2, 0.2);
+    this.sound(p, 'splat', 0.6);
+    this.screenNear(p, 0.35);
+  }
   onBlast(npc, center, f, res, o = {}) {
     if (!this.on) return;
     if (o.big) f = Math.min(1, f * 1.15);
@@ -1058,10 +1091,14 @@ class GoreSystem {
   }
   // zombie bite: ragged wound, spurting, mouth smeared
   onBite(victim, zombie, regionList) {
-    if (!this.on) return;
     const regs = regionList || [REGION.NECK, REGION.UPPER_CHEST];
     const mouth = _gv4.copy(zombie.boneWPos[B.jaw]).add(_gv5.set(0, -0.02, 0));
     const vi = this.nearestVertex(victim, mouth, regs);
+    if (!this.on) { // non-graphic: a cloth puff where the teeth meet the body
+      if (vi >= 0) { const wp = victim.skinVertexWorld(vi, new V3()); this.game.fx.fabricPuff(wp, _gv3.subVectors(wp, victim.boneWPos[B.chest]).normalize()); }
+      this.sound(mouth, 'bite', 0.7);
+      return;
+    }
     let wp = mouth.clone();
     if (vi >= 0) {
       this.vertexBind(victim, vi, _gv6, _gv7);
@@ -1110,6 +1147,9 @@ class GoreSystem {
   // --- per frame -------------------------------------------------------------------------------
   update(dt) {
     const g = this.game;
+    // decals and chunks are temporary; extreme keeps them longer
+    this.decals.uLife.value = this.extreme ? 240 : 100;
+    this.gibs.life = this.extreme ? 120 : 45;
     this.decals.update(dt);
     this.drops.update(dt, this);
     this.gibs.update(dt, this);

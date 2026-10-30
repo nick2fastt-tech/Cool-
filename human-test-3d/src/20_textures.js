@@ -26,10 +26,11 @@ const Tex = {
   // white tile with grout lines; tiles x tiles per texture
   tile(kind) {
     const S = this.size(512);
-    const tiles = kind === 'floor' ? 1 : 2;
+    const panel = kind === 'panel'; // large wall panels: fine seams on two edges only
+    const tiles = kind === 'floor' || panel ? 1 : 2;
     return {
       map: this.make('tile-' + kind, S, S, (g, w, h) => {
-        const base = kind === 'ceiling' ? 236 : kind === 'wall' ? 240 : 238;
+        const base = kind === 'ceiling' ? 236 : kind === 'wall' || panel ? 240 : 238;
         g.fillStyle = `rgb(${base},${base},${base + 1})`; g.fillRect(0, 0, w, h);
         // subtle mottling
         const img = g.getImageData(0, 0, w, h), d = img.data;
@@ -38,6 +39,16 @@ const Tex = {
           const i = (y * w + x) * 4; d[i] += n; d[i + 1] += n; d[i + 2] += n;
         }
         g.putImageData(img, 0, 0);
+        if (panel) {
+          const sw = Math.max(1.2, w / 400);
+          g.strokeStyle = 'rgba(168,171,177,0.75)'; g.lineWidth = sw;
+          g.beginPath(); g.moveTo(sw / 2, 0); g.lineTo(sw / 2, h); g.stroke();
+          g.beginPath(); g.moveTo(0, sw / 2); g.lineTo(w, sw / 2); g.stroke();
+          g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 1;
+          g.beginPath(); g.moveTo(sw + 1, 0); g.lineTo(sw + 1, h); g.stroke();
+          g.beginPath(); g.moveTo(0, sw + 1); g.lineTo(w, sw + 1); g.stroke();
+          return;
+        }
         const step = w / tiles, gw = Math.max(1.5, w / 300);
         g.strokeStyle = 'rgba(150,154,160,0.85)'; g.lineWidth = gw;
         for (let i = 0; i <= tiles; i++) {
@@ -48,13 +59,14 @@ const Tex = {
         for (let i = 0; i <= tiles; i++) { g.beginPath(); g.moveTo(i * step + gw, 0); g.lineTo(i * step + gw, h); g.stroke(); }
       }),
       rough: this.make('tileR-' + kind, S / 2, S / 2, (g, w, h) => {
-        g.fillStyle = kind === 'floor' ? 'rgb(70,70,70)' : 'rgb(150,150,150)'; g.fillRect(0, 0, w, h);
+        g.fillStyle = kind === 'floor' ? 'rgb(70,70,70)' : panel ? 'rgb(165,165,165)' : 'rgb(150,150,150)'; g.fillRect(0, 0, w, h);
         const img = g.getImageData(0, 0, w, h), d = img.data;
         for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
           const n = (fbm2(x / w * 9 + 3, y / h * 9, 3) - 0.5) * 40;
           const i = (y * w + x) * 4; d[i] += n; d[i + 1] += n; d[i + 2] += n;
         }
         g.putImageData(img, 0, 0);
+        if (panel) { g.strokeStyle = 'rgb(225,225,225)'; g.lineWidth = Math.max(1.5, w / 200); g.beginPath(); g.moveTo(0, 0); g.lineTo(0, h); g.moveTo(0, 0); g.lineTo(w, 0); g.stroke(); return; }
         const step = w / tiles; g.strokeStyle = 'rgb(235,235,235)'; g.lineWidth = Math.max(2, w / 150);
         for (let i = 0; i <= tiles; i++) {
           g.beginPath(); g.moveTo(i * step, 0); g.lineTo(i * step, h); g.stroke();
@@ -67,13 +79,15 @@ const Tex = {
     const S = this.size(512);
     return this.make('grassGround', S, S, (g, w, h) => {
       const img = g.createImageData(w, h), d = img.data;
+      // fine detail only (clumps, soil specks): large dry/lush patches are added per pixel in world space
+      // by the ground shader, so nothing big repeats with the texture
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-        const n = fbm2(x / w * 8, y / h * 8, 4), n2 = hash2(x * 3, y * 7);
-        const dry = smoothstep(0.55, 0.8, fbm2(x / w * 3 + 9, y / h * 3, 3));
+        const n = fbm2(x / w * 8, y / h * 8, 4), n2 = hash2(x * 3, y * 7), n3 = fbm2(x / w * 24 + 5, y / h * 24, 2);
+        const soil = smoothstep(0.62, 0.8, n3) * 0.5;
         const i = (y * w + x) * 4;
-        d[i] = lerp(52, 112, dry) + n * 30 + n2 * 18;
-        d[i + 1] = lerp(92, 110, dry) + n * 40 + n2 * 22;
-        d[i + 2] = lerp(34, 52, dry) + n * 12 + n2 * 8;
+        d[i] = lerp(58 + n * 26 + n2 * 16, 92, soil);
+        d[i + 1] = lerp(96 + n * 34 + n2 * 20, 84, soil);
+        d[i + 2] = lerp(36 + n * 10 + n2 * 7, 52, soil);
         d[i + 3] = 255;
       }
       g.putImageData(img, 0, 0);

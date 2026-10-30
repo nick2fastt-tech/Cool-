@@ -386,7 +386,27 @@ class AISystem {
       }
     }
     b.burstT = Math.max(0, (b.burstT || 0) - dt);
+    b.attackCD = Math.max(0, (b.attackCD || 0) - dt);
+    if (!anim.zvar) anim.zvar = makeZombieVariation();
+    const zv = anim.zvar;
+    anim.reachTarget = 0;
+    // occasional balance corrections while walking (not for sprinting / weaving / crawling styles)
+    if (!anim.crawl && !zst.wobble && !zst.chase && anim.speed > 0.4 && anim.speed < 2 && !anim.action && b.state !== 'zGrab' && b.state !== 'zFeed') {
+      b.balT = (b.balT == null ? zv.balanceT : b.balT) - dt;
+      if (b.balT <= 0) {
+        b.balT = zv.balanceT * (0.7 + Math.random() * 0.8) / (1 + (zst.lurch || 0) * 6);
+        const dir = Math.random() < 0.5 ? 1 : -1;
+        anim.setAction('balance', { dur: 0.75 + Math.random() * 0.2, dir, inT: 0.12, outT: 0.3 });
+        b.stagger.add(_v1.set(Math.cos(npc.root.yaw), 0, -Math.sin(npc.root.yaw)).multiplyScalar(dir * 0.9 * zv.intensity));
+      }
+    }
     if (b.state === 'zGrab') { this.zombieGrab(npc, b, dt, Z); return; }
+    if (b.state === 'zScratch') { this.zombieScratch(npc, b, dt, Z); return; }
+    if (b.state === 'zRecover') {
+      b.speed = 0; b.recT -= dt;
+      if (b.recT <= 0) { b.state = npc.zombieTarget && npc.zombieTarget.lifeState === 'alive' ? 'zChase' : 'zIdle'; b.t = 0; }
+      return;
+    }
     if (b.state === 'zFeed' && this.zombieFeed(npc, b, dt, Z)) return;
     // target selection
     let tgt = npc.zombieTarget;
@@ -394,38 +414,158 @@ class AISystem {
     b.retarget = (b.retarget || 0) - dt;
     if ((!tgt || b.retarget <= 0) && Z.aggression && Z.targetNPCs) { tgt = this.selectTarget(npc, Z); b.retarget = 2.5; }
     if (!Z.aggression || !Z.targetNPCs) tgt = null;
-    if (tgt !== npc.zombieTarget) { npc.zombieTarget = tgt; if (tgt) Events.emit('zombieTarget', { npc, target: tgt }); }
+    if (tgt !== npc.zombieTarget) {
+      const was = npc.zombieTarget; npc.zombieTarget = tgt; b.plan = null;
+      if (tgt) {
+        Events.emit('zombieTarget', { npc, target: tgt });
+        // noticing new prey: stop, head snaps round, a growl, then go
+        if (!was && (b.state === 'zIdle' || b.state === 'zInvestigate' || b.state === 'zChase') && !anim.crawl) {
+          b.state = 'zNotice'; b.noticeT = (0.35 + Math.random() * 0.55) / zv.headRate; b.t = 0;
+          anim.setAction('notice', { dur: b.noticeT + 0.15, inT: 0.1, outT: 0.3 });
+          anim.kick(B.head, _v1.set(-2, (Math.random() - 0.5) * 6, 0));
+          if (Z.vocalize) this.game.audio.play('growl', { pos: npc.boneWPos[B.head].clone(), gain: 0.7 });
+        }
+      }
+    }
+    if (b.state === 'zNotice') {
+      b.speed = 0; b.noticeT -= dt;
+      if (tgt) { b.faceTarget = tgt.root.pos; anim.lookAt(tgt.boneWPos[B.head], 1); }
+      if (b.noticeT <= 0 || !tgt) { b.state = tgt ? 'zChase' : 'zIdle'; b.t = 0; }
+      return;
+    }
     if (tgt) {
       const d = tgt.root.pos.distanceTo(npc.root.pos);
       anim.lookAt(tgt.boneWPos[B.head], 1);
       anim.setUpper('hang'); // style arms from the zombie gait (reach / claw / limp)
+      // arms come up as the zombie closes in
+      if (!anim.crawl) anim.reachTarget = smoothstep(2.8, 1.1, d) * (zst.arms === 'flail' ? 0.4 : 1);
       // a living victim on the ground gets eaten where it lies
       if (tgt.physMode === 'ragdoll' && Z.feeding && !anim.crawl && (tgt.feeders || 0) < 2) { this.startFeed(npc, b, tgt); return; }
-      const canGrab = !anim.crawl && tgt.physMode === 'anim' && !tgt.grabbedBy && b.grabCooldown <= 0;
-      if (d > (canGrab ? 0.78 : (anim.crawl ? 0.7 : 0.95))) {
+      if (anim.crawl) {
+        if (d > 0.7) { b.state = 'zChase'; b.dest.copy(tgt.root.pos); b.speed = zspeed; }
+        else {
+          b.state = 'zAttack'; b.speed = 0; b.faceTarget = tgt.root.pos;
+          b.attackT -= dt;
+          if (b.attackT <= 0) { b.attackT = 1.2 + Math.random() * 0.8; anim.crawlAttack = 0.55; this.zombieAttack(npc, tgt); }
+        }
+        return;
+      }
+      // pick how to attack once in range: grab-and-bite or a swipe (re-planned after every attack)
+      const grabbable = tgt.physMode === 'anim' && !tgt.grabbedBy && b.grabCooldown <= 0;
+      if (!b.plan && d < 1.8) {
+        const weak = tgt.brain && (tgt.brain.state === 'hurt' || tgt.health < 50);
+        b.plan = grabbable && Math.random() < (weak ? 0.75 : 0.42) ? 'grab' : 'scratch';
+      }
+      if (b.plan === 'grab' && !grabbable) b.plan = 'scratch';
+      const range = b.plan === 'grab' ? 0.78 : 0.98;
+      if (d > range || b.attackCD > 0) {
         b.state = 'zChase'; b.dest.copy(tgt.root.pos);
         // lunge at close range; runners sprint, twitchers lurch in bursts
-        b.speed = d < 1.7 && !anim.crawl ? Math.max(zspeed * 1.5, 2.3) : zspeed * (d < 3 ? 1.25 : 1) * (zst.chase || 1) * (b.burstT > 0 ? 2.2 : 1);
-      } else if (canGrab) {
-        this.startGrab(npc, b, tgt);
-      } else {
-        b.state = 'zAttack'; b.speed = 0; b.faceTarget = tgt.root.pos;
-        b.attackT -= dt;
-        if (b.attackT <= 0) {
-          b.attackT = 1.1 + Math.random() * 0.6;
-          if (!anim.crawl) { anim.setUpper('claw'); anim.jawTarget = 0.35; setTimeout(() => { if (!npc.removed && npc.lifeState === 'zombie') { anim.setUpper('hang'); anim.jawTarget = 0.1; } }, 450); }
-          this.zombieAttack(npc, tgt);
-        }
-      }
+        // lunge into a grab; a swipe needs room, so the last steps slow down instead
+        b.speed = d < 1.7 ? (b.plan === 'scratch' ? Math.max(zspeed, 0.9) * (d < 1.25 ? 0.75 : 1) : Math.max(zspeed * 1.5, 2.3))
+          : zspeed * (d < 3 ? 1.25 : 1) * (zst.chase || 1) * (b.burstT > 0 ? 2.2 : 1) * zv.cadence;
+        if (b.attackCD > 0 && d < 0.85) b.speed = 0;
+      } else if (b.plan === 'grab') this.startGrab(npc, b, tgt);
+      else this.startScratch(npc, b, tgt);
     } else {
-      // nothing alive nearby: find a body to eat, else shamble around
+      // nothing alive nearby: find a body to eat, else shamble around looking about
       if (Z.feeding && !anim.crawl) { const c = this.findCorpse(npc, 14); if (c) { this.startFeed(npc, b, c); return; } }
       if (b.state !== 'zIdle' && b.state !== 'zInvestigate') { b.state = 'zIdle'; b.t = 0; this.pickWander(npc, b); }
       anim.setUpper('hang');
-      b.speed = b.state === 'zInvestigate' ? zspeed : (b.t % 8 < 4 ? zspeed * 0.6 : 0);
+      b.speed = b.state === 'zInvestigate' ? zspeed : (b.t % 8 < 4 ? zspeed * 0.6 * zv.cadence : 0);
       if (npc.root.pos.distanceTo(b.dest) < 0.7) { this.pickWander(npc, b); b.state = 'zIdle'; }
-      anim.clearLook();
+      b.lookT = (b.lookT || 0) - dt;
+      if (b.lookT <= 0) {
+        b.lookT = (1.2 + Math.random() * 2.6) / zv.headRate;
+        const a = npc.root.yaw + (Math.random() - 0.5) * 2.6;
+        b.lookPos = b.lookPos || new V3();
+        b.lookPos.set(npc.root.pos.x + Math.sin(a) * 4, npc.rig.eyeY + (Math.random() - 0.6) * 1.2, npc.root.pos.z + Math.cos(a) * 4);
+        anim.kick(B.head, _v1.set((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 7, (Math.random() - 0.5) * 3));
+      }
+      if (b.lookPos && b.speed < 0.3) anim.lookAt(b.lookPos, 0.7); else anim.clearLook();
     }
+  }
+  // --- scratches: keyframed swipes with contact detection at the hit frame ----------------
+  startScratch(z, b, v) {
+    const anim = z.anim, zst = anim.zstyle || {};
+    let clip = SCRATCH_NAMES[Math.floor(Math.random() * SCRATCH_NAMES.length)];
+    if (zst.arms === 'claw' && Math.random() < 0.4) clip = 'double';
+    const side = Math.random() < 0.5 ? 0 : 1;
+    const C = SCRATCH_CLIPS[clip];
+    const dur = C.dur * (0.85 + Math.random() * 0.3) / ((anim.zvar && anim.zvar.cadence) || 1);
+    anim.setAction('scratch', { clip, side, dur, target: v, hitDone: false, inT: 0.1, outT: 0.25 });
+    b.state = 'zScratch'; b.victim2 = v; b.t = 0; b.speed = 0; b.plan = null;
+    z.lastReaction = 'Attacking (Scratch)';
+    if (Math.random() < 0.6 && Settings.data.zombies.vocalize) this.game.audio.play('growl', { pos: z.boneWPos[B.head].clone(), gain: 0.6 });
+  }
+  zombieScratch(z, b, dt, Z) {
+    const v = b.victim2, a = z.anim.action;
+    if (!a || a.type !== 'scratch' || a.ending) { this.endScratch(z, b, false); return; }
+    if (!v || v.removed || v.lifeState !== 'alive') { this.endScratch(z, b, false); return; }
+    const d = v.root.pos.distanceTo(z.root.pos);
+    const C = SCRATCH_CLIPS[a.clip];
+    const u = a.t / a.dur;
+    // keep a striking distance while facing the target: step in during the wind-up only, never crowd after contact
+    b.faceTarget = v.root.pos;
+    if (d > 0.95 && u < C.hit * 0.8) { b.dest.copy(v.root.pos); b.speed = 0.7; }
+    else if (d < 0.66) { b.dest.copy(z.root.pos).addScaledVector(_v1.subVectors(z.root.pos, v.root.pos).setY(0).normalize(), 0.5); b.speed = 0.6; }
+    else b.speed = 0;
+    z.root.yaw = angleDamp(z.root.yaw, Math.atan2(v.root.pos.x - z.root.pos.x, v.root.pos.z - z.root.pos.z), u < C.hit ? 6 : 2, dt);
+    // contact is swept over a short window around the strike: it lands where the claw actually touches
+    if (!a.hitDone && u >= C.hit - 0.1) {
+      const last = u >= C.hit + 0.16;
+      if (this.scratchContact(z, v, a, last) || last) a.hitDone = true;
+    }
+    if (u >= 1) this.endScratch(z, b, true);
+  }
+  endScratch(z, b, finished) {
+    if (z.anim.action && z.anim.action.type === 'scratch') z.anim.setAction(null);
+    const v = b.victim2; b.victim2 = null;
+    // chain another swipe now and then, otherwise a short recovery
+    if (finished && v && !v.removed && v.lifeState === 'alive' && v.physMode === 'anim' && v.root.pos.distanceTo(z.root.pos) < 1.0 && Math.random() < 0.35) { this.startScratch(z, b, v); return; }
+    b.state = 'zRecover'; b.recT = 0.3 + Math.random() * 0.45; b.attackCD = 0.25 + Math.random() * 0.5;
+    z.anim.setAction('recover', { dur: b.recT + 0.2, inT: 0.15, outT: 0.3 });
+  }
+  // the swing connects only if the claw actually reaches the body; effects start at the contact point
+  scratchContact(z, v, a, last) {
+    const g = this.game, Z = Settings.data.zombies;
+    const C = SCRATCH_CLIPS[a.clip] || SCRATCH_CLIPS.jab;
+    let vi = -1, bd = 0.16, hs = a.side;
+    for (let k = 0; k < (C.both ? 2 : 1); k++) {
+      const s = k === 0 ? a.side : 1 - a.side, hand = z.boneWPos[SB('fingers1', s)];
+      // cheap reject before the per-vertex search
+      if (hand.distanceTo(v.boneWPos[B.chest]) > 0.8 && hand.distanceTo(v.boneWPos[B.head]) > 0.5 && hand.distanceTo(v.boneWPos[B.hips]) > 0.6) continue;
+      const i = g.gore.nearestVertex(v, hand, null);
+      if (i < 0) continue;
+      const S = v.skinnedPositions();
+      const dd = Math.hypot(S[i * 3] - hand.x, S[i * 3 + 1] - hand.y, S[i * 3 + 2] - hand.z);
+      if (dd < bd) { bd = dd; vi = i; hs = s; }
+    }
+    if (vi < 0) { if (last) g.audio.play('swing', { pos: z.boneWPos[SB('hand', a.side)].clone(), gain: 0.5 }); return false; }
+    const S = v.skinnedPositions();
+    const p = new V3(S[vi * 3], S[vi * 3 + 1], S[vi * 3 + 2]);
+    const region = v.mesh.geometry.attributes.aRegion.array[vi] | 0;
+    const toV = _v2.subVectors(v.root.pos, z.root.pos).setY(0).normalize();
+    const side = _v3.set(Math.cos(z.root.yaw), 0, -Math.sin(z.root.yaw)).multiplyScalar(SIDE_SIGN[hs] * (a.clip === 'backhand' ? -0.5 : (a.clip === 'overhead' ? -0.3 : 0)));
+    const dir = toV.clone().add(side).normalize();
+    // a raised guard takes the swipe on the forearms
+    const up = v.anim.upper && v.anim.upper.cur;
+    const blocked = (up === 'guard' || up === 'push' || up === 'cover') && (region === REGION.L_FOREARM || region === REGION.R_FOREARM || region === REGION.L_HAND || region === REGION.R_HAND);
+    const res = v.applyHit({ region, damage: Z.attackDamage * (0.8 + Math.random() * 0.4) * (blocked ? 0.45 : 1) / REGION_DAMAGE_MUL[region], weapon: 'zombie', dir: dir.clone(), point: p.clone(), force: 5, threatPos: z.root.pos.clone() });
+    g.gore.onClaw(v, z, vi, p, dir);
+    g.hits.report(v, region, res, 'Zombie Scratch', p);
+    if (Z.infection && !v.infection && Math.random() < 0.5) v.infection = { t: 0, dur: Z.infectionTime * (0.8 + Math.random() * 0.4), src: z.idStr };
+    if (v.lifeState === 'alive') {
+      // the reaction depends on where the claw lands and what the victim was doing
+      const running = v.anim.speed > 2.2;
+      this.onHit(v, { region, dir: dir.clone(), force: blocked ? 2.5 : (running ? 5.5 : 4.2), threatPos: z.root.pos.clone() });
+      if (blocked) v.lastReaction = 'Blocked Swipe';
+      if ((v.health < 22 && Math.random() < 0.5) || (running && Math.random() < 0.3)) {
+        v.goRagdoll(running ? 'Tripped (Zombie Swipe)' : 'Knockdown (Zombie)');
+        v.rag.bodies[RAG.CHEST].vel.addScaledVector(dir, running ? 1.6 : 2.4);
+      }
+    } else if (res.killed) z.kills++;
+    return true;
   }
   selectTarget(npc, Z) {
     const cands = [];
@@ -450,12 +590,16 @@ class AISystem {
   }
   // --- grapple & bite ---------------------------------------------------------------------
   startGrab(z, b, v) {
-    b.state = 'zGrab'; b.t = 0; b.victim = v; b.biteT = 0.32; b.bites = 0; b.grabDur = 2.2 + Math.random() * 2.2;
+    b.state = 'zGrab'; b.t = 0; b.victim = v; b.bites = 0; b.grabDur = 2.2 + Math.random() * 2.2; b.plan = null;
     v.grabbedBy = z;
     z.rag.noCollideWith = v.rag; v.rag.noCollideWith = z.rag;
     if (v.brain) { v.brain.state = 'grabbed'; v.brain.t = 0; v.brain.screamT = 0; }
-    z.anim.setUpper('hang'); z.anim.setAction('bite', { target: v });
-    v.anim.setAction('struggle', { target: z, away: Math.random() < 0.5 ? 1 : -1 });
+    // a raised forearm gets bitten; otherwise neck or shoulder
+    const guarding = v.anim.upper && (v.anim.upper.cur === 'guard' || v.anim.upper.cur === 'cover' || v.anim.upper.cur === 'push');
+    const variant = guarding && Math.random() < 0.7 ? 'arm' : (Math.random() < 0.55 ? 'neck' : 'shoulder');
+    b.biteVariant = variant;
+    z.anim.setUpper('hang'); z.anim.setAction('bite', { target: v, variant, inT: 0.25, outT: 0.35 });
+    v.anim.setAction('struggle', { target: z, away: Math.random() < 0.5 ? 1 : -1, forceMode: variant === 'arm' ? 'block' : null });
     v.anim.setUpper('hang'); v.fear = 1; v.lastReaction = 'Grabbed by Zombie';
     z.lastReaction = 'Biting';
     Events.emit('zombieAttack', { npc: z, target: v });
@@ -473,23 +617,27 @@ class AISystem {
     // hold both at biting distance, facing each other
     const dir = _v1.subVectors(v.root.pos, z.root.pos); dir.y = 0;
     let d = dir.length(); if (d < 1e-4) { dir.set(0, 0, 1); d = 1e-4; } else dir.multiplyScalar(1 / d);
-    const want = 0.37 * (z.rig.H + v.rig.H) / 3.5;
+    const want = 0.41 * (z.rig.H + v.rig.H) / 3.5;
     const corr = (d - want) * Math.min(1, dt * 7) * 0.5;
     z.root.pos.addScaledVector(dir, corr); v.root.pos.addScaledVector(dir, -corr);
     z.brain.vel.multiplyScalar(0.8); if (v.brain) v.brain.vel.multiplyScalar(0.8);
     z.root.yaw = angleDamp(z.root.yaw, Math.atan2(dir.x, dir.z), 9, dt);
     v.root.yaw = angleDamp(v.root.yaw, Math.atan2(-dir.x, -dir.z), 6, dt);
-    z.anim.lookAt(v.boneWPos[B.neck], 1);
-    b.biteT -= dt;
-    if (b.biteT <= 0) { b.biteT = 1 / 1.1; b.bites++; this.bite(z, v, b.bites); }
+    z.anim.clearLook();
+    // the victim tries to pull away: the pair drifts while it twists free
+    const sa = v.anim.action;
+    if (sa && sa.type === 'struggle' && sa.mode === 'pull') { z.root.pos.addScaledVector(dir, 0.12 * dt); v.root.pos.addScaledVector(dir, 0.12 * dt); }
+    // bites land on the animation's snap frame
+    const act = z.anim.action;
+    if (act && act.type === 'bite' && act.snapEvent) { act.snapEvent = false; b.bites++; this.bite(z, v, b.bites); }
     if (b.t > b.grabDur && v.lifeState === 'alive') {
       const chance = 0.25 + v.personality.bravery * 0.4 + clamp(v.health / 100, 0, 1) * 0.25;
       if (Math.random() < chance) this.breakFree(z, v); else b.grabDur += 1.3;
     }
   }
   bite(z, v, n) {
-    const Z = Settings.data.zombies;
-    const region = n === 1 || Math.random() < 0.55 ? REGION.NECK : (Math.random() < 0.6 ? REGION.UPPER_CHEST : (Math.random() < 0.5 ? REGION.L_UPPER_ARM : REGION.R_UPPER_ARM));
+    const Z = Settings.data.zombies, variant = z.brain && z.brain.biteVariant;
+    const region = variant === 'arm' ? REGION.R_FOREARM : variant === 'shoulder' ? (Math.random() < 0.6 ? REGION.UPPER_CHEST : REGION.R_UPPER_ARM) : (n === 1 || Math.random() < 0.7 ? REGION.NECK : REGION.UPPER_CHEST);
     const dir = _v2.subVectors(v.root.pos, z.root.pos).setY(0).normalize().clone();
     const res = v.applyHit({ region, damage: Z.biteDamage / REGION_DAMAGE_MUL[region], weapon: 'bite', dir, force: 2, threatPos: z.root.pos.clone() });
     this.game.gore.onBite(v, z, [region]);
@@ -498,6 +646,15 @@ class AISystem {
     v.anim.kick(B.neck, _v3.set(0.6, (Math.random() - 0.5) * 2, 0));
     v.anim.kick(B.chest, _v3.set(-0.8, 0, 0));
     if (res.killed) { z.kills++; HT.log('death', `${v.idStr} ${v.name} was killed by ${z.idStr}`); }
+    else if (v.lifeState === 'alive' && v.health < 32 && n > 1 && Math.random() < 0.45) {
+      // weakened victim is dragged to the ground (the zombie keeps eating where it falls)
+      v.goRagdoll('Pulled Down (Zombie)');
+      const side = _v3.set(Math.cos(z.root.yaw), 0, -Math.sin(z.root.yaw)).multiplyScalar(Math.random() < 0.5 ? 1 : -1);
+      v.rag.bodies[RAG.CHEST].vel.addScaledVector(dir, 0.6).addScaledVector(side, 0.9).y -= 1.2;
+      v.rag.bodies[RAG.PELVIS].vel.addScaledVector(dir, -0.5);
+      v.downTimer = Math.max(v.downTimer, 3);
+      v.lastReaction = 'Pulled Down (Zombie)';
+    }
   }
   breakFree(z, v) {
     this.endGrab(z);
@@ -514,6 +671,11 @@ class AISystem {
   endGrab(z) {
     const b = z.brain; if (!b) return;
     const v = b.victim;
+    if (v && z.physMode === 'anim' && z.lifeState === 'zombie') { // let go: stumble back, shake the head, chew
+      b.recT = 0.6 + Math.random() * 0.5;
+      z.anim.setAction('recover', { dur: b.recT + 0.2, inT: 0.2, outT: 0.35 });
+      b.stagger.add(_v1.subVectors(z.root.pos, v.root.pos).setY(0).normalize().multiplyScalar(0.8));
+    }
     if (v) {
       if (v.grabbedBy === z) v.grabbedBy = null;
       if (v.anim.action && v.anim.action.type === 'struggle') v.anim.setAction(null);
@@ -521,7 +683,7 @@ class AISystem {
     }
     b.victim = null;
     if (z.anim.action && z.anim.action.type === 'bite') z.anim.setAction(null);
-    if (b.state === 'zGrab') b.state = 'zIdle';
+    if (b.state === 'zGrab') { b.state = b.recT > 0 ? 'zRecover' : 'zIdle'; }
     b.grabCooldown = Math.max(b.grabCooldown || 0, 1.2);
   }
   // --- feeding --------------------------------------------------------------------------------
@@ -555,14 +717,15 @@ class AISystem {
       return true;
     }
     b.eating = true; b.speed = 0; b.faceTarget = tb.clone();
-    if (!z.anim.action || z.anim.action.type !== 'feed' || z.anim.action.ending) z.anim.setAction('feed', { target: c, point: new V3(), hand: Math.random() < 0.5 ? 0 : 1 });
-    z.anim.action.point.copy(tb); z.anim.action.point.y += 0.04;
-    z.anim.lookAt(tb, 0.6);
+    if (!z.anim.action || z.anim.action.type !== 'feed' || z.anim.action.ending) z.anim.setAction('feed', { target: c, point: new V3(), hand: Math.random() < 0.5 ? 0 : 1, outT: 0.9 });
+    const fa = z.anim.action;
+    fa.point.copy(tb); fa.point.y += 0.04;
+    if (fa.mode === 'chew') { b.lookT = (b.lookT || 0) - dt; if (b.lookT <= 0) { b.lookT = 0.8 + Math.random() * 1.2; b.lookPos = (b.lookPos || new V3()).set(z.root.pos.x + (Math.random() - 0.5) * 6, z.rig.eyeY * 0.6, z.root.pos.z + (Math.random() - 0.5) * 6); } z.anim.lookAt(b.lookPos, 0.7); }
+    else z.anim.lookAt(tb, 0.6);
     b.feedT += dt;
     this.game.gore.onFeed(c, z, dt, false);
-    b.biteT -= dt;
-    if (b.biteT <= 0) {
-      b.biteT = 1.9;
+    if (fa.biteEvent) {
+      fa.biteEvent = false;
       this.game.gore.onFeed(c, z, dt, true);
       if (c.lifeState === 'alive') {
         const res = c.applyHit({ region: REGION.ABDOMEN, damage: Z.biteDamage * 0.8 / REGION_DAMAGE_MUL[REGION.ABDOMEN], weapon: 'bite', force: 1 });

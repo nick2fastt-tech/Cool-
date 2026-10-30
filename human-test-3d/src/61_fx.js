@@ -126,6 +126,20 @@ class FX {
       this.glow.emit(p.x, p.y, p.z, d.x * sp, d.y * sp, d.z * sp, 0.12 + Math.random() * 0.15, 0.02, 0.005, 1.0, 0.75, 0.45, 0.9, 9.8, 1);
     }
   }
+  // soft dust where a falling body meets the ground (no sparks): dirt and grass bits outdoors, faint dust indoors
+  bodyDust(p, n, surface, k) {
+    const grass = surface === 'grass';
+    const c = grass ? [0.4, 0.35, 0.25] : [0.86, 0.86, 0.88];
+    const cnt = Math.round((grass ? 8 : 5) * k);
+    for (let i = 0; i < cnt; i++) {
+      const a = Math.random() * TAU, sp = 0.35 + Math.random() * 0.9 * k;
+      this.smoke.emit(p.x + Math.cos(a) * 0.05, p.y + 0.02, p.z + Math.sin(a) * 0.05, Math.cos(a) * sp, 0.15 + Math.random() * 0.35, Math.sin(a) * sp, 0.6 + Math.random() * 0.6, 0.05, (0.22 + Math.random() * 0.18) * (0.6 + k * 0.6), c[0], c[1], c[2], grass ? 0.45 : 0.22, 0.25, 2.2);
+    }
+    if (grass) for (let i = 0; i < Math.round(4 * k); i++) { // flicked grass blades
+      const a = Math.random() * TAU, sp = 0.8 + Math.random() * 1.4;
+      this.smoke.emit(p.x, p.y + 0.03, p.z, Math.cos(a) * sp, 1 + Math.random() * 1.5, Math.sin(a) * sp, 0.5 + Math.random() * 0.4, 0.012, 0.012, 0.22, 0.36, 0.12, 0.9, 6, 1.2);
+    }
+  }
   fabricPuff(p, n, color) {
     const c = color || new THREE.Color(0.7, 0.7, 0.72);
     for (let i = 0; i < 7; i++) {

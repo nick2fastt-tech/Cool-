@@ -110,7 +110,7 @@ class Game {
     canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); HT.toast && HT.toast('Graphics context lost - attempting recovery', 'bad'); reportError('WebGL context lost', 'renderer'); });
     canvas.addEventListener('webglcontextrestored', () => { HT.toast && HT.toast('Graphics context restored'); });
   }
-  initTextures() { Tex.tile('floor'); Tex.tile('wall'); Tex.tile('ceiling'); Tex.grass(); Tex.smoke(); Tex.bulletHole(); Tex.scorch(); for (let i = 0; i < 6; i++) Tex.cloud(i); }
+  initTextures() { Tex.tile('floor'); Tex.tile('panel'); Tex.tile('ceiling'); Tex.grass(); Tex.smoke(); Tex.bulletHole(); Tex.scorch(); for (let i = 0; i < 6; i++) Tex.cloud(i); }
   initPhysics() {
     this.physics = new PhysicsWorld();
     this.applyPhysicsSettings();
@@ -134,6 +134,7 @@ class Game {
     this.props = new Props(this); this.props.build();
     this.weapons = new Weapons(this); this.weapons.build();
     this.gore = new GoreSystem(this);
+    this.contact = new ContactShadows(this);
   }
   initEnvironment() {
     this.env = new EnvironmentManager(this);
@@ -229,6 +230,10 @@ class Game {
       // re-place everything onto the new ground
       for (const n of this.npcs.list) {
         const p = n.root.pos.clone(); this.env.clampToBounds(p, 0.6);
+        // a body in the middle of getting up (or turning) falls back to the ground and restarts safely
+        if (n.physMode === 'getup') { n.anim.clip = null; n.goRagdoll('Moved', n.lifeState !== 'alive' && n.lifeState !== 'zombie'); }
+        if (n.anim.action) n.anim.action = null;
+        if (n.brain) { this.ai.endGrab(n); this.ai.endFeed(n); }
         if (n.physMode === 'ragdoll') { const pel = n.rag.bodies[RAG.PELVIS].pos; const dy = this.env.groundHeight(pel.x, pel.z) + 0.4 - pel.y; for (const b of n.rag.bodies) { b.pos.y += Math.max(0, dy); b.prevPos.copy(b.pos); } }
         else n.teleport(p);
       }
@@ -255,6 +260,9 @@ class Game {
       return n2;
     }
     if (npc.gore) this.gore.releaseNPC(npc);
+    // release grapples / meals in both directions before the state reset
+    if (npc.brain) { this.ai.endGrab(npc); this.ai.endFeed(npc); }
+    if (npc.grabbedBy && npc.grabbedBy.brain) this.ai.endGrab(npc.grabbedBy);
     npc.infection = null; npc.anim.crawl = 0; npc.anim.setAction(null);
     if (npc.lifeState !== 'alive') {
       if (npc.lifeState === 'reanimating') npc.lifeState = 'dead';
@@ -367,6 +375,7 @@ class Game {
     this.weapons.update(rdt);
     this.fx.update(dt);
     this.gore.update(dt);
+    this.contact.update();
     this.hits.update(rdt);
     this.env.update(dt, this.camera);
     this.audio.update(rdt, this.camera);
@@ -387,7 +396,17 @@ class Game {
         const imp = b.impact;
         if (imp > 1.6 && !b.kinematic && (b.lastSound == null || this.time - b.lastSound > 0.25)) {
           b.lastSound = this.time;
-          if (b.tag === 'npc') this.audio.play(imp > 4 ? 'thud' : 'thudLight', { pos: b.impactPoint.clone(), gain: clamp(imp / 8, 0.15, 1) });
+          if (b.tag === 'npc') {
+            this.audio.play(imp > 4 ? 'thud' : 'thudLight', { pos: b.impactPoint.clone(), gain: clamp(imp / 8, 0.15, 1) });
+            // surface effect at the actual contact point when a body part hits the ground
+            const ip = b.impactPoint, gy = this.env.groundHeight(ip.x, ip.z);
+            if (imp > 2.6 && ip.y < gy + 0.15) {
+              const gn = this.env.groundNormal(ip.x, ip.z, _v3);
+              this.fx.bodyDust(_v2.set(ip.x, gy, ip.z), gn, this.env.current.surface, clamp((imp - 2) / 5, 0.3, 1));
+              const npc = b.owner && b.owner.npc, G = npc && npc.gore;
+              if (G && this.gore.on && G.blood > 0.3 && Settings.data.gore.pools && Math.random() < 0.6) this.gore.decals.add(_v2.set(ip.x, gy, ip.z), gn, 0.18 + Math.random() * 0.12, 'drop');
+            }
+          }
           else if (b.tag === 'prop') this.audio.play(b.owner.type === 'ball' ? 'thudLight' : 'hitWood', { pos: b.impactPoint.clone(), gain: clamp(imp / 8, 0.1, 0.8) });
         }
         // a kinematic (animated) NPC struck by something heavy and fast -> knockdown

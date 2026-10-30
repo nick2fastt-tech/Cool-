@@ -144,15 +144,94 @@ const ZOMBIE_GAITS = [
   // spasms, head snaps, sudden lurches
   { name: 'twitcher', w: 8, drag: [0.2, 0.4], stiff: [0.2, 0.3], limp: 0.2, hunch: 0.3, roll: 0.06, lurch: 0.05, headLoll: 0.35, arms: 'claw', stride: 0.8, jitter: 0.45, width: 1.25, toeOut: 0.15, speed: 0.9, twitch: 1 }
 ];
-if (HT.dev) HT.dev.ZOMBIE_GAITS = ZOMBIE_GAITS;
+if (HT.dev) { HT.dev.ZOMBIE_GAITS = ZOMBIE_GAITS; HT.dev.SB = SB; HT.dev.B = B; HT.dev.RAG = typeof RAG !== "undefined" ? RAG : null; }
 function pickZombieGait() {
   let tot = 0; for (const z of ZOMBIE_GAITS) tot += z.w;
   let r = Math.random() * tot;
   for (const z of ZOMBIE_GAITS) { r -= z.w; if (r <= 0) return z; }
   return ZOMBIE_GAITS[0];
 }
+// --- zombie attack clips -------------------------------------------------------------
+// Hand positions relative to the shoulder in arm-length units: x outward on that hand's side,
+// y up, z forward. a = attacking hand, s = other hand (both = mirrored two-handed attack).
+// ch/sp/hd = chest/spine/head [pitch, yaw toward the attacking side, roll]; hit = contact time.
+const SCRATCH_CLIPS = {
+  overhead: { dur: 1.0, hit: 0.55, keys: [
+    { t: 0.0, a: [0.12, -0.7, 0.32], s: [0.06, -0.85, 0.15], ch: [0.1, 0, 0], sp: [0.05, 0, 0], hd: [0.05, 0, 0], fa: 0.55, fs: 0.4, jaw: 0.12, hips: 0 },
+    { t: 0.3, a: [0.38, 0.42, -0.08], s: [0.12, -0.55, 0.32], ch: [-0.06, 0.32, 0.08], sp: [-0.03, 0.12, 0], hd: [-0.06, -0.12, 0], fa: 0.1, fs: 0.5, jaw: 0.38, hips: -0.02 },
+    { t: 0.45, a: [0.2, 0.28, 0.5], s: [0.1, -0.55, 0.3], ch: [0.1, 0.05, 0], sp: [0.04, 0.02, 0], hd: [0.05, 0, 0], fa: 0.5, fs: 0.5, jaw: 0.3, hips: 0.03 },
+    { t: 0.55, a: [-0.12, -0.22, 0.82], s: [0.18, -0.6, 0.12], ch: [0.26, -0.3, -0.07], sp: [0.1, -0.12, 0], hd: [0.16, 0.18, 0], fa: 0.92, fs: 0.5, jaw: 0.2, hips: 0.07 },
+    { t: 0.72, a: [-0.34, -0.58, 0.45], s: [0.18, -0.7, 0.05], ch: [0.18, -0.34, -0.04], sp: [0.08, -0.12, 0], hd: [0.1, 0.12, 0], fa: 0.8, fs: 0.45, jaw: 0.15, hips: 0.04 },
+    { t: 1.0, a: [0.12, -0.7, 0.32], s: [0.06, -0.85, 0.15], ch: [0.1, 0, 0], sp: [0.05, 0, 0], hd: [0.05, 0, 0], fa: 0.55, fs: 0.4, jaw: 0.12, hips: 0 }] },
+  backhand: { dur: 0.85, hit: 0.46, keys: [
+    { t: 0.0, a: [0.15, -0.6, 0.4], s: [0.1, -0.8, 0.2], ch: [0.08, 0, 0], sp: [0.04, 0, 0], hd: [0.04, 0, 0], fa: 0.5, fs: 0.45, jaw: 0.1, hips: 0 },
+    { t: 0.32, a: [0.72, 0.02, 0.18], s: [0.0, -0.55, 0.42], ch: [0.0, 0.38, -0.06], sp: [0.0, 0.15, 0], hd: [0.0, -0.2, 0.05], fa: 0.2, fs: 0.6, jaw: 0.3, hips: -0.02 },
+    { t: 0.46, a: [-0.2, -0.04, 0.78], s: [0.1, -0.62, 0.3], ch: [0.14, -0.32, 0.06], sp: [0.06, -0.14, 0], hd: [0.08, 0.2, -0.05], fa: 0.9, fs: 0.5, jaw: 0.22, hips: 0.05 },
+    { t: 0.66, a: [-0.52, -0.16, 0.4], s: [0.12, -0.72, 0.2], ch: [0.1, -0.4, 0.04], sp: [0.05, -0.15, 0], hd: [0.06, 0.15, 0], fa: 0.75, fs: 0.45, jaw: 0.15, hips: 0.03 },
+    { t: 1.0, a: [0.15, -0.6, 0.4], s: [0.1, -0.8, 0.2], ch: [0.08, 0, 0], sp: [0.04, 0, 0], hd: [0.04, 0, 0], fa: 0.5, fs: 0.45, jaw: 0.1, hips: 0 }] },
+  double: { dur: 1.1, hit: 0.52, both: true, keys: [
+    { t: 0.0, a: [0.1, -0.5, 0.55], ch: [0.12, 0, 0], sp: [0.06, 0, 0], hd: [0.05, 0, 0], fa: 0.55, jaw: 0.15, hips: 0 },
+    { t: 0.3, a: [0.28, 0.32, 0.12], ch: [-0.1, 0, 0], sp: [-0.06, 0, 0], hd: [-0.12, 0, 0], fa: 0.15, jaw: 0.45, hips: -0.05 },
+    { t: 0.52, a: [0.04, -0.12, 0.88], ch: [0.34, 0, 0], sp: [0.16, 0, 0], hd: [0.2, 0, 0], fa: 0.9, jaw: 0.25, hips: 0.12 },
+    { t: 0.75, a: [0.14, -0.45, 0.5], ch: [0.22, 0, 0], sp: [0.1, 0, 0], hd: [0.12, 0, 0], fa: 0.85, jaw: 0.15, hips: 0.06 },
+    { t: 1.0, a: [0.1, -0.5, 0.55], ch: [0.12, 0, 0], sp: [0.06, 0, 0], hd: [0.05, 0, 0], fa: 0.55, jaw: 0.15, hips: 0 }] },
+  jab: { dur: 0.7, hit: 0.4, keys: [
+    { t: 0.0, a: [0.1, -0.55, 0.45], s: [0.08, -0.8, 0.2], ch: [0.08, 0, 0], sp: [0.04, 0, 0], hd: [0.04, 0, 0], fa: 0.5, fs: 0.5, jaw: 0.12, hips: 0 },
+    { t: 0.25, a: [0.22, -0.05, 0.12], s: [0.12, -0.7, 0.3], ch: [-0.04, 0.18, 0], sp: [0, 0.08, 0], hd: [-0.05, -0.08, 0], fa: 0.3, fs: 0.5, jaw: 0.3, hips: -0.03 },
+    { t: 0.4, a: [0.02, 0.12, 0.95], s: [0.15, -0.68, 0.15], ch: [0.2, -0.12, 0], sp: [0.08, -0.06, 0], hd: [0.1, 0.06, 0], fa: 0.95, fs: 0.5, jaw: 0.4, hips: 0.08 },
+    { t: 0.62, a: [0.08, -0.3, 0.6], s: [0.1, -0.75, 0.2], ch: [0.12, -0.05, 0], sp: [0.05, 0, 0], hd: [0.06, 0, 0], fa: 0.8, fs: 0.5, jaw: 0.2, hips: 0.03 },
+    { t: 1.0, a: [0.1, -0.55, 0.45], s: [0.08, -0.8, 0.2], ch: [0.08, 0, 0], sp: [0.04, 0, 0], hd: [0.04, 0, 0], fa: 0.5, fs: 0.5, jaw: 0.12, hips: 0 }] }
+};
+const SCRATCH_NAMES = Object.keys(SCRATCH_CLIPS);
+// where each swipe is steered on the victim around the contact frame (motion warping):
+// bone (victim side mirrored), height offset, how far in front of the bone the hand stops, sideways bias
+const SCRATCH_AIM = {
+  overhead: { bone: 'clavicle', up: 0.05, back: 0.1, lat: 0 },
+  backhand: { bone: 'chest', up: 0.03, back: 0.16, lat: 0.07 },
+  double: { bone: 'upperarm', up: 0.03, back: 0.09, lat: 0 },
+  jab: { bone: 'chest', up: -0.07, back: 0.17, lat: 0 }
+};
+function crv(a, b, c, d, t) { // Catmull-Rom on one component
+  const t2 = t * t, t3 = t2 * t;
+  return 0.5 * ((2 * b) + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+}
+// sample a clip at normalised time u: returns { idx, f, k0, k1 } and fills out arrays via CR / smooth lerp
+function clipSample(keys, u, field, out) {
+  let i = 0; while (i < keys.length - 2 && keys[i + 1].t <= u) i++;
+  const k0 = keys[i], k1 = keys[i + 1], f = clamp((u - k0.t) / Math.max(1e-4, k1.t - k0.t), 0, 1);
+  const km = keys[Math.max(0, i - 1)], kp = keys[Math.min(keys.length - 1, i + 2)];
+  const A = km[field], Bq = k0[field], Cq = k1[field], D = kp[field];
+  if (Array.isArray(Bq)) { for (let j = 0; j < Bq.length; j++) out[j] = crv((A || Bq)[j], Bq[j], Cq[j], (D || Cq)[j], f); return out; }
+  return lerp(Bq, Cq, smooth01(f));
+}
+const _kca = [0, 0, 0], _kcb = [0, 0, 0], _kcc = [0, 0, 0], _kcd = [0, 0, 0], _kce = [0, 0, 0];
+
 const _qa = new QT(), _va = new V3();
 
+
+// --- transformation rise: lying -> pushing up -> knees -> crouch -> upright, zombie posture
+function zombieRiseKeys(faceDown) {
+  const stand = { t: 5.4, hy: 0.96, pitch: 0.12, sp: 0.12, ch: 0.08, hd: 0.22, feet: [[0.1, 0.0, 0.0], [-0.1, 0.0, 0.0]], knee: [0, 0, 1], hands: null, fing: 0.55 };
+  if (faceDown) return [
+    { t: 0.0, hy: 0.16, pitch: 1.5, sp: 0.0, ch: 0.0, hd: -0.25, feet: [[0.12, -0.95, 1.2], [-0.12, -0.95, 1.2]], knee: [0, -1, 0.2], hands: [[0.24, 0.02, 0.36], [-0.24, 0.02, 0.35]], fing: 0.25 },
+    { t: 0.8, hy: 0.16, pitch: 1.48, sp: 0.0, ch: -0.04, hd: -0.12, feet: [[0.12, -0.95, 1.2], [-0.13, -0.93, 1.2]], knee: [0, -1, 0.2], hands: [[0.18, 0.02, 0.34], [-0.17, 0.02, 0.33]], fing: 0.6 },
+    { t: 1.6, hy: 0.24, pitch: 1.12, sp: -0.1, ch: -0.12, hd: 0.35, feet: [[0.12, -0.9, 1.2], [-0.12, -0.88, 1.2]], knee: [0, -1, 0.25], hands: [[0.16, 0.02, 0.38], [-0.16, 0.02, 0.37]], fing: 0.3 },
+    { t: 2.5, hy: 0.33, pitch: 0.86, sp: 0.0, ch: 0.0, hd: 0.45, feet: [[0.12, -0.22, 1.0], [-0.12, -0.62, 1.2]], knee: [0, -0.3, 1], hands: [[0.15, 0.02, 0.32], [-0.15, 0.02, 0.33]], fing: 0.35 },
+    { t: 3.3, hy: 0.4, pitch: 0.7, sp: 0.1, ch: 0.08, hd: 0.5, feet: [[0.12, -0.45, 1.2], [-0.12, -0.45, 1.2]], knee: [0, -0.2, 1], hands: [[0.15, 0.02, 0.28], [-0.15, 0.02, 0.28]], fing: 0.45 },
+    { t: 4.1, hy: 0.55, pitch: 0.45, sp: 0.15, ch: 0.1, hd: 0.38, feet: [[0.11, 0.12, 0.0], [-0.11, -0.5, 1.1]], knee: [0, 0.2, 1], hands: [[0.16, 0.25, 0.18], [-0.16, 0.12, 0.2]], fing: 0.55 },
+    { t: 4.8, hy: 0.8, pitch: 0.34, sp: 0.2, ch: 0.15, hd: 0.3, feet: [[0.11, 0.08, 0.0], [-0.11, -0.18, 0.3]], knee: [0, 0, 1], hands: null, fing: 0.55 },
+    stand
+  ];
+  return [
+    { t: 0.0, hy: 0.15, pitch: -1.5, sp: 0.0, ch: 0.0, hd: 0.25, feet: [[0.12, 0.95, -0.2], [-0.12, 0.95, -0.2]], knee: [0, 1, 0.1], hands: [[0.26, 0.02, -0.02], [-0.26, 0.02, -0.02]], fing: 0.25 },
+    { t: 0.9, hy: 0.15, pitch: -1.46, sp: 0.02, ch: 0.04, hd: 0.12, feet: [[0.12, 0.94, -0.2], [-0.13, 0.92, -0.2]], knee: [0, 1, 0.1], hands: [[0.24, 0.02, -0.05], [-0.22, 0.02, -0.06]], fing: 0.62 },
+    { t: 1.9, hy: 0.15, pitch: -0.35, sp: 0.15, ch: 0.1, hd: 0.55, feet: [[0.13, 0.65, -0.1], [-0.13, 0.62, -0.1]], knee: [0, 1, 0.2], hands: [[0.18, 0.02, -0.12], [-0.18, 0.02, -0.14]], fing: 0.3 },
+    { t: 2.8, hy: 0.24, pitch: 0.3, sp: 0.25, ch: 0.2, hd: 0.45, feet: [[0.12, 0.25, 0.0], [-0.12, 0.42, 0.0]], knee: [0, 0.8, 0.6], hands: [[0.16, 0.02, 0.18], [-0.16, 0.02, 0.16]], fing: 0.35 },
+    { t: 3.6, hy: 0.42, pitch: 0.55, sp: 0.2, ch: 0.12, hd: 0.45, feet: [[0.12, 0.1, 0.0], [-0.12, -0.25, 0.9]], knee: [0, 0.3, 1], hands: [[0.15, 0.04, 0.25], [-0.15, 0.04, 0.24]], fing: 0.45 },
+    { t: 4.4, hy: 0.68, pitch: 0.4, sp: 0.2, ch: 0.12, hd: 0.35, feet: [[0.11, 0.06, 0.0], [-0.11, -0.12, 0.3]], knee: [0, 0, 1], hands: null, fing: 0.55 },
+    stand
+  ];
+}
 
 // --- two-bone IK ---------------------------------------------------------------------
 const _ikD = new V3(), _ikP = new V3(), _ikE = new V3(), _ikU1 = new V3(), _ikU2 = new V3(), _ikN = new V3(), _ikT = new V3();
@@ -370,6 +449,7 @@ class Animator {
     let stride = lg * (0.78 + 0.6 * Math.min(spd, 6));
     if (zs) stride *= lerp(1, zs.stride, zomb);
     let freq = Math.max(0.5, spd / Math.max(0.3, stride)) * pers.cadence;
+    if (zs && this.zvar) freq *= lerp(1, this.zvar.cadence, zomb);
     if (zs) {
       this.jitT -= dt;
       if (this.jitT <= 0) { this.jitT = 0.3 + Math.random() * 0.6; this.jitK = 1 + (Math.random() * 2 - 1) * zs.jitter; }
@@ -409,6 +489,12 @@ class Animator {
           const tLand = (1 - sw) * (1 - duty) * T + duty * T * 0.5;
           const yl = yaw + this.yawRate * tLand * 0.8;
           f.to.set(root.pos.x + Math.cos(yl) * sg * lat + this.vel.x * tLand, 0, root.pos.z - Math.sin(yl) * sg * lat + this.vel.z * tLand);
+          // side-stepping / staggering: the swing foot never lands across the planted one
+          const o = this.feet[1 - s];
+          if (!o.swing) {
+            const sepMin = lat * 0.9, rel = ((f.to.x - o.pos.x) * cy - (f.to.z - o.pos.z) * sy) * sg;
+            if (rel < sepMin) { const k = Math.min(sepMin - rel, 0.35) * sg; f.to.x += cy * k; f.to.z -= sy * k; }
+          }
           f.to.y = env.groundHeight(f.to.x, f.to.z);
           const e = smoothstep(0.0, 0.94, sw);
           f.pos.lerpVectors(f.from, f.to, e);
@@ -631,6 +717,21 @@ class Animator {
         P.clav[s].set(0, 0, 0);
       }
     }
+    if (zs && zomb > 0.5) {
+      const zv = this.zvar || { shoulder: 1, armPhase: 0, intensity: 1 };
+      for (let s = 0; s < 2; s++) { // shoulders roll with the steps, hands never quite still
+        P.clav[s].z += Math.sin(TAU * (ph + s * 0.5) + zv.armPhase) * 0.07 * zv.shoulder * wk + Math.sin(this.time * 0.7 + s * 2 + zv.armPhase) * 0.03;
+        P.clav[s].x += Math.sin(TAU * ph + s * Math.PI) * 0.05 * zv.shoulder * wk;
+        P.hand[s].fing = clamp(P.hand[s].fing + Math.sin(this.time * (1.1 + s * 0.37) + zv.armPhase) * 0.18, 0, 1);
+      }
+      // arms come up to grab as the zombie closes in on prey
+      this.reachW = damp(this.reachW || 0, this.reachTarget || 0, 4, dt);
+      if (this.reachW > 0.01) for (let s = 0; s < 2; s++) {
+        const rp = this.armPose('reach', s);
+        rp.pos.y += 0.08 * this.L + Math.sin(this.time * 3 + s * 1.9 + zv.armPhase) * 0.05 * this.L; rp.fing = 0.75 + 0.2 * Math.sin(this.time * 6 + s); rp.flex = 0.25;
+        P.hand[s].lerp(rp, this.reachW);
+      }
+    }
     P.jaw = zs ? 0.1 * zomb + Math.max(0, Math.sin(this.time * 1.7)) * 0.06 * zomb : 0;
     P.look = 1;
     if (moving) this.stateName = zs ? (run > 0.4 ? 'zombieRun' : 'zombieWalk') : (run > 0.5 ? 'run' : (spd > 1.7 ? 'jog' : 'walk'));
@@ -676,6 +777,7 @@ class Animator {
       const dx = wx - root.pos.x, dz = wz - root.pos.z;
       hp.posR.set(dx * cy - dz * sy, wy - root.pos.y, dx * sy + dz * cy);
       hp.space = 1; hp.pole.set(sg * 0.9, 0.4, -0.3); hp.pron = -1.3; hp.flex = -0.4; hp.fing = plant ? 0.6 : 0.3; hp.thumb = 0.4;
+      if (s === 1 && this.crawlAttack > 0) { const k = Math.sin(Math.PI * clamp(1 - this.crawlAttack / 0.55, 0, 1)); hp.posR.y += k * 0.28; hp.posR.z += k * 0.18; hp.fing = 0.9; }
       // legs drag behind (pointing back, knees down)
       const fp = P.foot[s];
       fp.pos.set(sg * rig.hipHalf * 1.3, rig.ankleY * 0.9, -rig.legLen * 0.97 + Math.sin((c.phase + s * 0.5) * TAU) * 0.03);
@@ -684,6 +786,7 @@ class Animator {
     }
     // keep the feet records near the body so standing up later is smooth
     for (let s = 0; s < 2; s++) { const f = this.feet[s]; f.pos.set(root.pos.x, env.groundHeight(root.pos.x, root.pos.z), root.pos.z); f.swing = false; }
+    if (this.crawlAttack > 0) this.crawlAttack -= dt;
     P.jaw = 0.15 + Math.max(0, Math.sin(this.time * 1.5)) * 0.1; P.look = 0.6;
     this.stateName = 'crawl';
   }
@@ -783,10 +886,21 @@ class Animator {
       else if (h0) { hp.posR.set(h0[0] * H, h0[1] * H + 0.02, h0[2] * H); hp.space = 1 - t; hp.pos.copy(this.armPose('hang', s).pos); }
       hp.pole.set(SIDE_SIGN[s] * 0.8, 0.2, -0.6); hp.pron = -1.2; hp.flex = -0.7; hp.fing = lerp(k0.fing, k1.fing, t); hp.thumb = 0.2;
     }
-    if (c.zombie) { Pc.head.z += Math.sin(c.t * 7) * 0.12; Pc.spine.y += Math.sin(c.t * 3.3) * 0.08; }
+    if (c.zombie && !c.transform) { Pc.head.z += Math.sin(c.t * 7) * 0.12; Pc.spine.y += Math.sin(c.t * 3.3) * 0.08; }
+    if (c.transform) {
+      // irregular head jerks and twitching hands, strongest in the middle of the rise
+      const k = clamp(c.t / c.dur, 0, 1), amp = 0.35 + 0.65 * Math.max(0, 1 - Math.abs(k - 0.5) * 1.7);
+      const jerk = Math.max(0, Math.sin(c.t * 2.7 + 1.3)) ** 6;
+      Pc.head.y += (Math.sin(c.t * 4.1) * 0.12 + jerk * 0.35 * Math.sign(Math.sin(c.t * 0.9))) * amp;
+      Pc.head.z += Math.sin(c.t * 2.9 + 1) * 0.14 * amp; Pc.neck.x += Math.sin(c.t * 1.7) * 0.08 * amp;
+      Pc.chest.z += Math.sin(c.t * 2.2) * 0.05 * amp; Pc.spine.y += Math.sin(c.t * 1.6 + 2) * 0.06 * amp;
+      for (let s = 0; s < 2; s++) { const hp = Pc.hand[s]; hp.fing = clamp(hp.fing + Math.sin(c.t * 6.3 + s * 2.1) * 0.35 * amp, 0, 1); hp.thumb = hp.fing * 0.8; }
+      Pc.jaw = 0.08 + Math.max(0, Math.sin(c.t * 3.3)) * 0.18 * amp;
+    }
     P.copy(Pc);
     if (c.t >= c.dur) {
       const done = c.onDone; this.clip = null;
+      this.takeSnapshot(c.transform ? 0.7 : 0.4); // blend into locomotion instead of popping
       if (done) done();
     }
   }
@@ -795,91 +909,235 @@ class Animator {
   setAction(type, opts) {
     if (!type) { if (this.action) this.action.ending = true; return; }
     const prev = this.action;
-    this.action = Object.assign({ type, t: 0, w: prev && !prev.ending ? prev.w : 0, ending: false }, opts || {});
+    this.action = Object.assign({ type, t: 0, w: prev && !prev.ending ? prev.w : 0, ending: false, inT: 0.22, outT: 0.35 }, opts || {});
   }
   toRoot(w, root, out) {
     const dx = w.x - root.pos.x, dz = w.z - root.pos.z, c = Math.cos(root.yaw), s = Math.sin(root.yaw);
     return out.set(dx * c - dz * s, w.y - root.pos.y, dx * s + dz * c);
   }
+  // point the face at a world position by turning chest, neck and head together (bite / feeding aim)
+  aimHead(P, root, target, weight) {
+    this.toRoot(target, root, _va);
+    _va.sub(this.csPos[B.neck]);
+    const yaw = Math.atan2(_va.x, _va.z), pitch = Math.atan2(-_va.y, Math.hypot(_va.x, _va.z) + 1e-4);
+    const trunk = P.hipsRot.x + P.spine.x + P.chest.x + P.neck.x + P.head.x;
+    const dp = clamp(pitch - trunk, -0.7, 1.1) * weight, dy = clamp(yaw, -1.1, 1.1) * weight;
+    P.chest.y += dy * 0.3; P.neck.y += dy * 0.3; P.head.y += dy * 0.4;
+    P.chest.x += dp * 0.2; P.neck.x += dp * 0.35; P.head.x += dp * 0.45;
+  }
   applyAction(P, dt, root, env) {
     const a = this.action;
     a.t += dt;
-    a.w = a.ending ? Math.max(0, a.w - dt / 0.35) : Math.min(1, a.w + dt / (a.type === 'feed' ? 0.6 : 0.22));
+    a.w = a.ending ? Math.max(0, a.w - dt / a.outT) : Math.min(1, a.w + dt / (a.type === 'feed' ? 0.6 : a.inT));
     if (a.ending && a.w <= 0) { this.action = null; return; }
     const Pc = this.Pc; Pc.copy(P);
-    if (a.type === 'bite') this.poseBite(Pc, a, root);
-    else if (a.type === 'struggle') this.poseStruggle(Pc, a, root);
-    else if (a.type === 'feed') this.poseFeed(Pc, a, root, env);
+    if (a.type === 'bite') this.poseBite(Pc, a, root, dt);
+    else if (a.type === 'scratch') this.poseScratch(Pc, a, root);
+    else if (a.type === 'struggle') this.poseStruggle(Pc, a, root, dt);
+    else if (a.type === 'feed') this.poseFeed(Pc, a, root, env, dt);
+    else if (a.type === 'recover') this.poseRecover(Pc, a, root);
+    else if (a.type === 'balance') this.poseBalance(Pc, a, root);
+    else if (a.type === 'notice') this.poseNotice(Pc, a, root);
     else if (a.type === 'convulse') this.poseConvulse(Pc, a, root);
     P.lerp(Pc, smooth01(a.w));
+    if (!a.ending && a.dur && a.t >= a.dur) a.ending = true;
   }
-  // zombie: hands clamp the victim's shoulders, lunges at the neck, bites and tears
-  poseBite(P, a, root) {
-    const v = a.target; if (!v || v.removed) return;
-    const cyc = (a.t * 1.1) % 1;
-    const lunge = cyc < 0.32 ? smooth01(cyc / 0.32) : (cyc < 0.55 ? 1 : 1 - smooth01((cyc - 0.55) / 0.45));
-    P.hipsRot.x += 0.06; P.spine.x += 0.1 + lunge * 0.08; P.chest.x += 0.1 + lunge * 0.14;
-    for (let s = 0; s < 2; s++) {
-      this.toRoot(v.boneWPos[SB('upperarm', 1 - s)], root, _va);
-      const hp = P.hand[s];
-      hp.posR.copy(_va); hp.posR.y -= 0.02; hp.posR.z -= 0.02; hp.space = 1;
-      hp.pole.set(SIDE_SIGN[s], -0.7, -0.25); hp.pron = -0.9; hp.flex = 0.55; hp.fing = 0.9; hp.thumb = 0.75;
+  // hand target from clip coordinates (shoulder-relative, outward-positive) into chest space
+  clipHand(hp, s, c, L) {
+    const sg = SIDE_SIGN[s], sc = this.shoulderC[s];
+    hp.pos.set(sc.x + c[0] * sg * L, sc.y + c[1] * L, sc.z + c[2] * L);
+    hp.space = 0;
+  }
+  // zombie swipes: keyframed shoulder/elbow/wrist/torso/head motion with a contact event
+  poseScratch(P, a, root) {
+    const C = SCRATCH_CLIPS[a.clip] || SCRATCH_CLIPS.overhead, K = C.keys, L = this.L;
+    const u = clamp(a.t / a.dur, 0, 1);
+    const side = a.side, so = 1 - side, sg = SIDE_SIGN[side];
+    const ha = P.hand[side], hs = P.hand[so];
+    this.clipHand(ha, side, clipSample(K, u, 'a', _kca), L);
+    ha.pole.set(sg * 1, -0.55, -0.45); ha.pron = -0.9; ha.flex = 0.15; ha.dev = 0;
+    ha.fing = clipSample(K, u, 'fa'); ha.thumb = ha.fing * 0.8;
+    if (C.both) { this.clipHand(hs, so, clipSample(K, u, 'a', _kcb), L); hs.fing = ha.fing; }
+    else { this.clipHand(hs, so, clipSample(K, u, 's', _kcb), L); hs.fing = clipSample(K, u, 'fs'); }
+    hs.pole.set(SIDE_SIGN[so] * 1, -0.55, -0.45); hs.pron = -0.6; hs.thumb = hs.fing * 0.8;
+    const ch = clipSample(K, u, 'ch', _kcc), sp = clipSample(K, u, 'sp', _kcd), hd = clipSample(K, u, 'hd', _kce);
+    const tw = C.both ? 0 : 1;
+    P.chest.x += ch[0]; P.chest.y += sg * ch[1] * tw; P.chest.z += sg * ch[2] * tw;
+    P.spine.x += sp[0]; P.spine.y += sg * sp[1] * tw;
+    P.head.x += hd[0]; P.head.y += sg * hd[1] * tw; P.head.z += sg * hd[2] * tw;
+    P.hipsOff.z += clipSample(K, u, 'hips'); P.hipsRot.x += clipSample(K, u, 'hips') * 0.8;
+    P.jaw = clipSample(K, u, 'jaw');
+    P.clav[side].set(0.15, 0, 0.1); P.clav[so].set(0.08, 0, 0);
+    const v = a.target;
+    if (v && !v.removed) {
+      this.aimHead(P, root, v.boneWPos[B.head], 0.35);
+      // motion warping: bend the strike toward the victim's body so the claw meets it at the contact frame
+      const w = v.physMode === 'anim' ? (u < C.hit ? smoothstep(C.hit - 0.24, C.hit, u) : 1 - smoothstep(C.hit + 0.04, C.hit + 0.26, u)) * 0.8 : 0;
+      if (w > 0.001) {
+        const aim = SCRATCH_AIM[a.clip] || SCRATCH_AIM.jab;
+        for (let k = 0; k < (C.both ? 2 : 1); k++) {
+          const s = k === 0 ? side : so;
+          this.toRoot(v.boneWPos[aim.bone === 'chest' ? B.chest : SB(aim.bone, 1 - s)], root, _va);
+          const hd = Math.hypot(_va.x, _va.z);
+          if (hd > 1e-3) { const back = Math.min(aim.back, hd * 0.5); _va.x -= _va.x / hd * back; _va.z -= _va.z / hd * back; }
+          _va.y += aim.up; _va.x += SIDE_SIGN[s] * aim.lat;
+          const hp = P.hand[s]; hp.posR.copy(_va); hp.space = w;
+        }
+      }
     }
-    P.jaw = cyc < 0.3 ? 0.42 : (cyc < 0.4 ? lerp(0.42, 0.02, (cyc - 0.3) / 0.1) : 0.04 + Math.max(0, Math.sin(a.t * 17)) * 0.05);
-    P.neck.x += 0.1 + lunge * 0.15; P.head.x += 0.12 + lunge * 0.18;
-    if (cyc > 0.4 && cyc < 0.68) { P.head.y += Math.sin(a.t * 38) * 0.14; P.chest.y += Math.sin(a.t * 38) * 0.05; }
-    P.look = 1;
+    P.look = 0;
   }
-  // victim: pushes against the attacker, leans and turns away, screaming
-  poseStruggle(P, a, root) {
+  // zombie bite: reach, clamp the shoulders, lunge and bite (event), tear, chew; aims at the bite point
+  poseBite(P, a, root, dt) {
+    const v = a.target; if (!v || v.removed) return;
+    // cycles: 'lunge' (bite lands on the snap frame), 'worry' (jaws locked, shaking), 'pause' (pull back, chew)
+    const mkCyc = (kind) => kind === 'lunge' ? { kind, t: 0, dur: 1.0 + Math.random() * 0.4, snap: 0.3 + Math.random() * 0.1, snapped: false }
+      : { kind, t: 0, dur: kind === 'worry' ? 0.8 + Math.random() * 0.4 : 0.7 + Math.random() * 0.4, snap: 99, snapped: true };
+    if (!a.cyc) a.cyc = mkCyc('lunge');
+    let c = a.cyc; c.t += dt;
+    if (c.t >= c.dur) { const r = Math.random(); a.cyc = c = mkCyc(c.kind !== 'lunge' ? (r < 0.75 ? 'lunge' : 'worry') : (r < 0.4 ? 'lunge' : r < 0.72 ? 'worry' : 'pause')); }
+    const cy = c.t / c.dur;
+    if (!c.snapped && c.t >= c.snap) { c.snapped = true; a.snapEvent = true; }
+    let lunge;
+    if (c.kind === 'lunge') lunge = cy < 0.3 ? smooth01(cy / 0.3) : (cy < 0.55 ? 1 : 1 - smooth01((cy - 0.55) / 0.45) * 0.6);
+    else if (c.kind === 'worry') lunge = 0.4 + 0.15 * Math.sin(cy * Math.PI);
+    else lunge = 0.4 * (1 - Math.sin(cy * Math.PI) * 0.9);
+    const reach = smooth01(Math.min(1, a.t / 0.28));
+    P.hipsRot.x += 0.05; P.spine.x += 0.08 + lunge * 0.06; P.chest.x += 0.08 + lunge * 0.1;
+    // hands: shoulders (front bite), shoulder + upper arm (side), or the raised forearm (arm bite)
+    for (let s = 0; s < 2; s++) {
+      let tb;
+      if (a.variant === 'arm') tb = s === 0 ? v.boneWPos[SB('forearm', 1)] : v.boneWPos[SB('hand', 1)];
+      else if (a.variant === 'shoulder') tb = s === 0 ? v.boneWPos[SB('upperarm', 1)] : v.boneWPos[SB('forearm', 1)];
+      else tb = v.boneWPos[SB('upperarm', 1 - s)];
+      this.toRoot(tb, root, _va);
+      const hp = P.hand[s];
+      const rest = this.armPose('reach', s);
+      hp.pos.copy(rest.pos); hp.posR.copy(_va); hp.posR.y -= 0.02; hp.posR.z -= 0.02; hp.space = reach;
+      hp.pole.set(SIDE_SIGN[s], -0.7, -0.25); hp.pron = -0.9; hp.flex = 0.55; hp.fing = lerp(0.5, 0.92, reach); hp.thumb = hp.fing * 0.8;
+    }
+    const bp = a.variant === 'arm' ? v.boneWPos[SB('forearm', 1)] : a.variant === 'shoulder' ? v.boneWPos[SB('clavicle', 1)] : v.boneWPos[B.neck];
+    this.aimHead(P, root, bp, 0.85);
+    if (c.kind === 'lunge') P.jaw = cy < 0.28 ? 0.45 : (cy < 0.38 ? lerp(0.45, 0.02, (cy - 0.28) / 0.1) : 0.04 + Math.max(0, Math.sin(a.t * 17)) * 0.05);
+    else if (c.kind === 'worry') P.jaw = 0.03 + Math.max(0, Math.sin(a.t * 11)) * 0.04;
+    else P.jaw = 0.06 + Math.max(0, Math.sin(a.t * 9)) * 0.2;
+    P.neck.x += lunge * 0.12; P.head.x += lunge * 0.14;
+    if (c.kind === 'lunge' && cy > 0.38 && cy < 0.66) { const sh = Math.sin(a.t * 36) * (1 - (cy - 0.38) / 0.28); P.head.y += sh * 0.16; P.chest.y += sh * 0.06; }
+    else if (c.kind === 'worry') { const sh = Math.sin(a.t * 24) * Math.sin(cy * Math.PI); P.head.y += sh * 0.2; P.chest.y += sh * 0.08; P.head.z += sh * 0.06; }
+    else if (c.kind === 'pause') { const k = Math.sin(cy * Math.PI); P.head.x -= k * 0.12; P.neck.x -= k * 0.06; P.head.y += Math.sin(a.t * 3.1) * 0.12 * k; }
+    P.look = 0;
+  }
+  // victim: pushes the attacker off, twists and pulls away, or blocks with a forearm
+  poseStruggle(P, a, root, dt) {
     const z = a.target; if (!z || z.removed) return;
     const t = a.t, away = a.away || 1;
-    P.spine.x -= 0.1; P.chest.x -= 0.16 + Math.sin(t * 7) * 0.04;
-    P.chest.z += Math.sin(t * 6.3) * 0.09; P.hipsRot.z += Math.sin(t * 5.1) * 0.04;
-    for (let s = 0; s < 2; s++) {
-      this.toRoot(s === 0 ? z.boneWPos[B.chest] : z.boneWPos[B.head], root, _va);
-      const hp = P.hand[s];
-      hp.posR.copy(_va); hp.posR.x += SIDE_SIGN[s] * 0.07; hp.posR.y += (s === 0 ? -0.04 : -0.1) + Math.sin(t * 9 + s * 2) * 0.03; hp.space = 1;
-      hp.pole.set(SIDE_SIGN[s], -0.8, -0.3); hp.pron = -1.4; hp.flex = -0.8; hp.fing = 0.15; hp.thumb = 0.2;
-    }
-    P.head.x -= 0.22; P.head.y += away * 0.55; P.neck.y += away * 0.3; P.head.z -= away * 0.12;
+    a.modeT = (a.modeT || 0) - dt;
+    if (a.modeT <= 0) { a.prevMode = a.mode || 'push'; a.mode = a.forceMode || ['push', 'pull', 'push', 'block'][Math.floor(Math.random() * 4)]; a.modeT = 0.7 + Math.random() * 0.8; a.mw = 0; }
+    a.mw = Math.min(1, (a.mw || 0) + dt / 0.3);
+    const base = P.spine.x, Pm = this.Pb; Pm.copy(P);
+    const mode = (m, Q) => {
+      Q.spine.x -= 0.1; Q.chest.x -= 0.16 + Math.sin(t * 7) * 0.04; Q.chest.z += Math.sin(t * 6.3) * 0.09; Q.hipsRot.z += Math.sin(t * 5.1) * 0.04;
+      for (let s = 0; s < 2; s++) {
+        const hp = Q.hand[s];
+        let tb = s === 0 ? z.boneWPos[B.chest] : z.boneWPos[B.head];
+        if (m === 'pull' && s === 1) tb = z.boneWPos[SB('upperarm', 0)];
+        this.toRoot(tb, root, _va);
+        hp.posR.copy(_va); hp.posR.x += SIDE_SIGN[s] * 0.07; hp.posR.y += (s === 0 ? -0.04 : -0.1) + Math.sin(t * 9 + s * 2) * 0.03; hp.space = 1;
+        hp.pole.set(SIDE_SIGN[s], -0.8, -0.3); hp.pron = -1.4; hp.flex = -0.8; hp.fing = 0.15; hp.thumb = 0.2;
+      }
+      if (m === 'pull') { Q.chest.y += away * 0.45; Q.spine.y += away * 0.25; Q.chest.x -= 0.12; Q.hipsOff.z -= 0.06; const hp = Q.hand[away > 0 ? 0 : 1]; hp.space = 0.3; }
+      if (m === 'block') { // forearm up between the faces
+        const hb = Q.hand[1]; hb.space = 0; hb.pos.copy(this.armPose('guard', 1).pos); hb.pos.z += 0.05; hb.pole.set(-1, -1, 0.2); hb.pron = -0.8; hb.fing = 0.75;
+        Q.head.x += 0.1; Q.chest.x -= 0.05;
+      }
+      Q.head.x -= 0.22; Q.head.y += away * 0.55; Q.neck.y += away * 0.3; Q.head.z -= away * 0.12;
+    };
+    mode(a.mode, P);
+    if (a.mw < 1 && a.prevMode && a.prevMode !== a.mode) { mode(a.prevMode, Pm); P.lerp(Pm, 1 - smooth01(a.mw)); }
     P.jaw = 0.36 + Math.sin(t * 13) * 0.06;
     P.look = 0;
   }
-  // zombie kneeling over a body: dips, bites, tears and chews; one hand pins, the other feeds
-  poseFeed(P, a, root, env) {
+  // zombie eating a body: dive-and-tear, two-handed pulling, sitting back to chew (pauses), leaning on one arm
+  poseFeed(P, a, root, env, dt) {
     const rig = this.rig, H = rig.H;
-    const t = a.t, cyc = (t / 1.9) % 1;
+    a.modeT = (a.modeT || 0) - dt;
+    if (a.modeT <= 0) {
+      a.prevMode = a.mode || 'dive';
+      const r = Math.random();
+      a.mode = a.prevMode === 'chew' ? (r < 0.6 ? 'dive' : 'tear') : (r < 0.38 ? 'dive' : r < 0.62 ? 'tear' : r < 0.85 ? 'chew' : 'lean');
+      a.modeT = a.mode === 'chew' ? 1.2 + Math.random() * 1.6 : 1.6 + Math.random() * 2.2;
+      a.mt = 0; a.mw = 0; a.cycle = 1.5 + Math.random() * 0.8;
+    }
+    a.mt = (a.mt || 0) + dt; a.mw = Math.min(1, (a.mw || 0) + dt / 0.45);
+    const Pm = this.Pb; Pm.copy(P);
+    this.feedMode(P, a, a.mode, a.mt, root);
+    if (a.mw < 1 && a.prevMode && a.prevMode !== a.mode) { this.feedMode(Pm, a, a.prevMode, a.mt + 2, root); P.lerp(Pm, 1 - smooth01(a.mw)); }
+    // bite event for the AI (blood, chunks, sound) at the deepest point of a dive / tear
+    const cyc = (a.mt / a.cycle) % 1;
+    if ((a.mode === 'dive' || a.mode === 'tear') && cyc > 0.32 && (a.lastCyc || 0) <= 0.32) a.biteEvent = true;
+    a.lastCyc = cyc;
+  }
+  feedMode(P, a, mode, t, root) {
+    const rig = this.rig, H = rig.H;
+    const cyc = (t / (a.cycle || 1.9)) % 1;
     const dip = cyc < 0.3 ? smooth01(cyc / 0.3) : (cyc < 0.5 ? 1 : 1 - smooth01((cyc - 0.5) / 0.5));
-    const hipJ = rig.thighLen * 0.82 + 0.07;
-    P.hipsOff.set(0, hipJ + 0.035 * H - rig.hipsHeight, -0.06);
-    P.hipsRot.set(0.45, 0, Math.sin(t * 0.9) * 0.04);
-    P.spine.set(0.42 + dip * 0.06, Math.sin(t * 0.7) * 0.05, 0); P.chest.set(0.38 + dip * 0.1, 0, Math.sin(t * 1.3) * 0.04);
-    P.neck.set(0.2 + dip * 0.2, 0, 0); P.head.set(0.2 + dip * 0.25, cyc > 0.3 && cyc < 0.5 ? Math.sin(t * 36) * 0.18 : 0, 0.1);
+    const sitBack = mode === 'chew' ? 1 : 0;
+    const hipJ = rig.thighLen * (0.82 - sitBack * 0.18) + 0.07;
+    P.hipsOff.set(0, hipJ + 0.035 * H - rig.hipsHeight, -0.06 - sitBack * 0.05);
+    P.hipsRot.set(0.45 - sitBack * 0.25, 0, Math.sin(t * 0.9) * 0.04);
+    const lean = mode === 'chew' ? 0.15 : mode === 'lean' ? 0.32 : 0.42;
+    P.spine.set(lean + dip * 0.06 * (1 - sitBack), Math.sin(t * 0.7) * 0.05, mode === 'lean' ? 0.12 : 0);
+    P.chest.set(lean - 0.04 + dip * 0.1 * (1 - sitBack), mode === 'chew' ? Math.sin(t * 0.8) * 0.15 : 0, Math.sin(t * 1.3) * 0.04);
+    P.neck.set(0.2 + dip * 0.2 * (1 - sitBack), 0, 0);
+    P.head.set(0.2 + dip * 0.25 * (1 - sitBack) - sitBack * 0.25, (cyc > 0.3 && cyc < 0.5 && mode !== 'chew') ? Math.sin(t * 36) * 0.18 : (mode === 'chew' ? Math.sin(t * 1.1) * 0.5 : 0), 0.1);
     for (let s = 0; s < 2; s++) {
       const sg = SIDE_SIGN[s], fp = P.foot[s];
       fp.pos.set(sg * rig.hipHalf * 1.15, rig.ankleY * 0.3 + 0.1, -rig.shinLen * 0.86);
       fp.pitch = 1.25; fp.yaw = 0; fp.roll = 0; fp.pole.set(sg * 0.15, -0.5, 1);
     }
-    const tgt = a.point;
+    const tgt = a.point, fh = a.hand || 0;
     for (let s = 0; s < 2; s++) {
       const hp = P.hand[s], sg = SIDE_SIGN[s];
-      const feeding = s === (a.hand || 0) && cyc > 0.42;
-      if (tgt && !feeding) {
+      let toMouth = 0;
+      if (mode === 'dive' && s === fh) toMouth = cyc > 0.42 ? smooth01((cyc - 0.42) / 0.18) * (1 - smooth01((cyc - 0.85) / 0.15)) : 0;
+      if (mode === 'tear') toMouth = cyc > 0.45 ? smooth01((cyc - 0.45) / 0.2) * (1 - smooth01((cyc - 0.85) / 0.15)) * 0.6 : 0;
+      if (mode === 'chew') toMouth = s === fh ? 0.9 : 0.15;
+      if (mode === 'lean' && s !== fh) toMouth = 0;
+      hp.pos.set(-sg * 0.03, 0.2, 0.17);
+      if (tgt) {
         this.toRoot(tgt, root, _va);
-        hp.posR.copy(_va); hp.posR.x += sg * 0.13; hp.posR.y += 0.04 + (s === (a.hand || 0) ? dip * 0.02 : 0); hp.space = 1;
-        hp.pole.set(sg, -0.5, -0.5); hp.pron = -1.2; hp.flex = 0.3; hp.fing = 0.8; hp.thumb = 0.6;
-      } else {
-        // hand to mouth (chest space)
-        const k = smooth01((cyc - 0.42) / 0.18) * (1 - smooth01((cyc - 0.85) / 0.15));
-        hp.pos.set(-sg * 0.03, 0.2, 0.17).lerp(this.armPose('reach', s).pos, 1 - k);
-        hp.space = tgt ? 1 - k : 0;
-        if (tgt) { this.toRoot(tgt, root, _va); hp.posR.copy(_va); hp.posR.y += 0.05; }
-        hp.pole.set(sg, -0.8, -0.2); hp.pron = -1.4; hp.flex = 0.7; hp.fing = 0.9; hp.thumb = 0.8;
-      }
+        hp.posR.copy(_va); hp.posR.x += sg * (mode === 'lean' && s !== fh ? 0.24 : 0.13); hp.posR.y += 0.04 + (mode === 'tear' ? smooth01(Math.max(0, cyc - 0.4) / 0.3) * 0.12 : 0);
+        if (mode === 'lean' && s !== fh) { hp.posR.z -= 0.15; hp.posR.y = 0.06 - root.pos.y + root.pos.y; }
+        hp.space = 1 - toMouth;
+      } else hp.space = 0;
+      hp.pole.set(sg, -0.5, -0.5); hp.pron = -1.2; hp.flex = toMouth > 0.5 ? 0.7 : 0.3; hp.fing = lerp(0.8, 0.95, toMouth); hp.thumb = 0.7;
     }
-    P.jaw = cyc < 0.3 ? 0.4 : (cyc < 0.5 ? 0.05 + Math.max(0, Math.sin(t * 22)) * 0.1 : 0.06 + Math.max(0, Math.sin(t * 15)) * 0.16);
-    P.look = 0.6;
+    P.jaw = mode === 'chew' ? 0.05 + Math.max(0, Math.sin(t * 9)) * 0.22 : (cyc < 0.3 ? 0.4 : (cyc < 0.5 ? 0.05 + Math.max(0, Math.sin(t * 22)) * 0.1 : 0.06 + Math.max(0, Math.sin(t * 15)) * 0.16));
+    P.look = mode === 'chew' ? 0.8 : 0.3;
+  }
+  // after an attack: half-step back, head shake, chewing
+  poseRecover(P, a, root) {
+    const u = clamp(a.t / (a.dur || 0.8), 0, 1), k = Math.sin(Math.PI * u);
+    P.hipsOff.z -= k * 0.06; P.chest.x -= k * 0.08; P.head.y += Math.sin(a.t * 14) * 0.14 * (1 - u); P.head.x += k * 0.1;
+    P.jaw = 0.06 + Math.max(0, Math.sin(a.t * 10)) * 0.2;
+    for (let s = 0; s < 2; s++) { const hp = P.hand[s]; hp.pos.y -= k * 0.06; hp.fing = 0.6 + 0.3 * Math.sin(a.t * 8 + s); }
+  }
+  // catching balance after a lurch: arms flung out, torso tilting the other way
+  poseBalance(P, a, root) {
+    const u = clamp(a.t / (a.dur || 0.8), 0, 1), k = Math.sin(Math.PI * u), d = a.dir || 1;
+    P.hipsRot.z += d * 0.08 * k; P.spine.z -= d * 0.12 * k; P.chest.z -= d * 0.1 * k; P.head.z += d * 0.15 * k;
+    for (let s = 0; s < 2; s++) {
+      const hp = P.hand[s], sg = SIDE_SIGN[s];
+      const arm = this.armPose('flail', s);
+      hp.pos.lerp(arm.pos, k * (sg === d ? 0.9 : 0.55)); hp.fing = lerp(hp.fing, 0.1, k);
+    }
+  }
+  // noticing prey: hunch, head snaps forward, arms twitch up
+  poseNotice(P, a, root) {
+    const u = clamp(a.t / (a.dur || 0.6), 0, 1), k = Math.sin(Math.PI * Math.min(1, u * 1.3));
+    P.chest.x += k * 0.1; P.neck.x -= k * 0.15; P.head.x -= k * 0.1; P.clav[0].z += k * 0.2; P.clav[1].z += k * 0.2;
+    P.jaw = 0.1 + k * 0.35;
+    for (let s = 0; s < 2; s++) { const hp = P.hand[s]; hp.pos.y += k * 0.08; hp.pos.z += k * 0.06; hp.fing = 0.4 + k * 0.5; }
   }
   // infected body seizing on the ground before it turns (used while ragdolled via springs too)
   poseConvulse(P, a, root) {
@@ -888,7 +1146,6 @@ class Animator {
     for (let s = 0; s < 2; s++) { const hp = P.hand[s]; hp.pos.y += Math.sin(t * 27 + s * 3) * 0.08; hp.fing = 0.5 + 0.5 * Math.sin(t * 19 + s); }
     P.jaw = 0.2 + Math.abs(Math.sin(t * 21)) * 0.25;
   }
-
   // --- solver -------------------------------------------------------------------------
   solve(P, root, dt) {
     const rig = this.rig, off = rig.localOffset;

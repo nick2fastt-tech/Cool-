@@ -2917,10 +2917,11 @@ const Tex = {
   // white tile with grout lines; tiles x tiles per texture
   tile(kind) {
     const S = this.size(512);
-    const tiles = kind === 'floor' ? 1 : 2;
+    const panel = kind === 'panel'; // large wall panels: fine seams on two edges only
+    const tiles = kind === 'floor' || panel ? 1 : 2;
     return {
       map: this.make('tile-' + kind, S, S, (g, w, h) => {
-        const base = kind === 'ceiling' ? 236 : kind === 'wall' ? 240 : 238;
+        const base = kind === 'ceiling' ? 236 : kind === 'wall' || panel ? 240 : 238;
         g.fillStyle = `rgb(${base},${base},${base + 1})`; g.fillRect(0, 0, w, h);
         // subtle mottling
         const img = g.getImageData(0, 0, w, h), d = img.data;
@@ -2929,6 +2930,16 @@ const Tex = {
           const i = (y * w + x) * 4; d[i] += n; d[i + 1] += n; d[i + 2] += n;
         }
         g.putImageData(img, 0, 0);
+        if (panel) {
+          const sw = Math.max(1.2, w / 400);
+          g.strokeStyle = 'rgba(168,171,177,0.75)'; g.lineWidth = sw;
+          g.beginPath(); g.moveTo(sw / 2, 0); g.lineTo(sw / 2, h); g.stroke();
+          g.beginPath(); g.moveTo(0, sw / 2); g.lineTo(w, sw / 2); g.stroke();
+          g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 1;
+          g.beginPath(); g.moveTo(sw + 1, 0); g.lineTo(sw + 1, h); g.stroke();
+          g.beginPath(); g.moveTo(0, sw + 1); g.lineTo(w, sw + 1); g.stroke();
+          return;
+        }
         const step = w / tiles, gw = Math.max(1.5, w / 300);
         g.strokeStyle = 'rgba(150,154,160,0.85)'; g.lineWidth = gw;
         for (let i = 0; i <= tiles; i++) {
@@ -2939,13 +2950,14 @@ const Tex = {
         for (let i = 0; i <= tiles; i++) { g.beginPath(); g.moveTo(i * step + gw, 0); g.lineTo(i * step + gw, h); g.stroke(); }
       }),
       rough: this.make('tileR-' + kind, S / 2, S / 2, (g, w, h) => {
-        g.fillStyle = kind === 'floor' ? 'rgb(70,70,70)' : 'rgb(150,150,150)'; g.fillRect(0, 0, w, h);
+        g.fillStyle = kind === 'floor' ? 'rgb(70,70,70)' : panel ? 'rgb(165,165,165)' : 'rgb(150,150,150)'; g.fillRect(0, 0, w, h);
         const img = g.getImageData(0, 0, w, h), d = img.data;
         for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
           const n = (fbm2(x / w * 9 + 3, y / h * 9, 3) - 0.5) * 40;
           const i = (y * w + x) * 4; d[i] += n; d[i + 1] += n; d[i + 2] += n;
         }
         g.putImageData(img, 0, 0);
+        if (panel) { g.strokeStyle = 'rgb(225,225,225)'; g.lineWidth = Math.max(1.5, w / 200); g.beginPath(); g.moveTo(0, 0); g.lineTo(0, h); g.moveTo(0, 0); g.lineTo(w, 0); g.stroke(); return; }
         const step = w / tiles; g.strokeStyle = 'rgb(235,235,235)'; g.lineWidth = Math.max(2, w / 150);
         for (let i = 0; i <= tiles; i++) {
           g.beginPath(); g.moveTo(i * step, 0); g.lineTo(i * step, h); g.stroke();
@@ -2958,13 +2970,15 @@ const Tex = {
     const S = this.size(512);
     return this.make('grassGround', S, S, (g, w, h) => {
       const img = g.createImageData(w, h), d = img.data;
+      // fine detail only (clumps, soil specks): large dry/lush patches are added per pixel in world space
+      // by the ground shader, so nothing big repeats with the texture
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-        const n = fbm2(x / w * 8, y / h * 8, 4), n2 = hash2(x * 3, y * 7);
-        const dry = smoothstep(0.55, 0.8, fbm2(x / w * 3 + 9, y / h * 3, 3));
+        const n = fbm2(x / w * 8, y / h * 8, 4), n2 = hash2(x * 3, y * 7), n3 = fbm2(x / w * 24 + 5, y / h * 24, 2);
+        const soil = smoothstep(0.62, 0.8, n3) * 0.5;
         const i = (y * w + x) * 4;
-        d[i] = lerp(52, 112, dry) + n * 30 + n2 * 18;
-        d[i + 1] = lerp(92, 110, dry) + n * 40 + n2 * 22;
-        d[i + 2] = lerp(34, 52, dry) + n * 12 + n2 * 8;
+        d[i] = lerp(58 + n * 26 + n2 * 16, 92, soil);
+        d[i + 1] = lerp(96 + n * 34 + n2 * 20, 84, soil);
+        d[i + 2] = lerp(36 + n * 10 + n2 * 7, 52, soil);
         d[i + 3] = 255;
       }
       g.putImageData(img, 0, 0);
@@ -3077,61 +3091,80 @@ class RoomEnvironment {
     const P = Settings.data.environment.room;
     const W = this.W = clamp(P.width, 12, 80), D = this.D = clamp(P.depth, 12, 80), Ht = this.Ht = clamp(P.height, 4, 20);
     const g = this.group;
-    const tiles = { floor: Tex.tile('floor'), wall: Tex.tile('wall'), ceiling: Tex.tile('ceiling') };
-    const mk = (kind, w, h, tileSize, rough) => {
+    const tiles = { floor: Tex.tile('floor'), wall: Tex.tile('panel'), ceiling: Tex.tile('ceiling') };
+    const mk = (kind, rx, ry, rough, envI) => {
       const t = tiles[kind];
-      const map = t.map.clone(); map.needsUpdate = true; map.repeat.set(w / tileSize, h / tileSize);
+      const map = t.map.clone(); map.needsUpdate = true; map.repeat.set(rx, ry);
       const rm = t.rough.clone(); rm.needsUpdate = true; rm.repeat.copy(map.repeat);
       map.anisotropy = rm.anisotropy = this.game.maxAniso || 4;
-      return new THREE.MeshStandardMaterial({ map, roughnessMap: rm, roughness: rough, metalness: 0, envMapIntensity: 0.55 });
+      return new THREE.MeshStandardMaterial({ map, roughnessMap: rm, roughness: rough, metalness: 0, envMapIntensity: envI, vertexColors: true });
     };
-    // floor
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, D), mk('floor', W, D, 2, 0.55));
-    floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; floor.name = 'floor';
+    // ceiling panel layout (also drives the baked light pools on the floor)
+    const nx = Math.max(2, Math.floor(W / 4)), nz = Math.max(2, Math.floor(D / 4));
+    const panelXZ = [];
+    for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) panelXZ.push([(i + 0.5) / nx * W - W / 2, (j + 0.5) / nz * D - D / 2]);
+    // baked shading: ambient occlusion where surfaces meet, soft light pools under the panels
+    const edgeAO = (d, k, r) => 1 - k * Math.exp(-d / r);
+    const shade = (geo, fn) => {
+      const p = geo.attributes.position, c = new Float32Array(p.count * 3);
+      for (let i = 0; i < p.count; i++) { const v = fn(p.getX(i), p.getY(i), p.getZ(i)); c[i * 3] = v; c[i * 3 + 1] = v; c[i * 3 + 2] = v * 1.004; }
+      geo.setAttribute('color', new THREE.BufferAttribute(c, 3));
+    };
+    // floor (glossy sealed tiles: soft reflections of the ceiling panels, no hard glints)
+    const floorGeo = new THREE.PlaneGeometry(W, D, Math.min(110, Math.round(W * 3)), Math.min(110, Math.round(D * 3)));
+    floorGeo.rotateX(-Math.PI / 2);
+    shade(floorGeo, (x, y, z) => {
+      const dx = Math.min(x + W / 2, W / 2 - x), dz = Math.min(z + D / 2, D / 2 - z);
+      let v = edgeAO(dx, 0.3, 0.3) * edgeAO(dz, 0.3, 0.3) * edgeAO(dx, 0.08, 1.8) * edgeAO(dz, 0.08, 1.8);
+      let pool = 0;
+      for (const q of panelXZ) pool += Math.exp(-((x - q[0]) ** 2 + (z - q[1]) ** 2) / 4.5);
+      return v * (0.9 + 0.1 * Math.min(1, pool));
+    });
+    const floorMat = mk('floor', W / 2, D / 2, 1.45, 0.85);
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.receiveShadow = true; floor.name = 'floor';
     g.add(floor);
-    // walls
-    const wallMat = mk('wall', W, Ht, 2, 1.0);
-    const wallMatD = mk('wall', D, Ht, 2, 1.0);
-    const addWall = (w, mat, x, z, ry) => {
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, Ht), mat);
+    // walls: large matte panels with fine seams; darker where they meet floor, ceiling and each other
+    const wallShade = (w) => (x, y) => {
+      const u = x + w / 2, v = y + Ht / 2, du = Math.min(u, w - u);
+      return edgeAO(du, 0.24, 0.42) * edgeAO(v, 0.3, 0.24) * edgeAO(Ht - v, 0.16, 0.32) * (0.92 + 0.08 * smoothstep(0, Ht * 0.7, v));
+    };
+    const addWall = (w, x, z, ry) => {
+      const geo = new THREE.PlaneGeometry(w, Ht, Math.min(96, Math.round(w * 2)), Math.max(8, Math.round(Ht * 3)));
+      shade(geo, wallShade(w));
+      const m = new THREE.Mesh(geo, mk('wall', w / 1.25, Ht / 2.5, 1.0, 0.45));
       m.position.set(x, Ht / 2, z); m.rotation.y = ry; m.receiveShadow = true; g.add(m);
     };
-    addWall(W, wallMat, 0, -D / 2, 0);
-    addWall(W, wallMat, 0, D / 2, Math.PI);
-    addWall(D, wallMatD, -W / 2, 0, Math.PI / 2);
-    addWall(D, wallMatD, W / 2, 0, -Math.PI / 2);
+    addWall(W, 0, -D / 2, 0);
+    addWall(W, 0, D / 2, Math.PI);
+    addWall(D, -W / 2, 0, Math.PI / 2);
+    addWall(D, W / 2, 0, -Math.PI / 2);
     // ceiling
-    const ceilMat = mk('ceiling', W, D, 2, 1.0);
+    const ceilMat = mk('ceiling', W / 2, D / 2, 1.0, 0.4);
     ceilMat.emissive = new THREE.Color(0xffffff); ceilMat.emissiveMap = ceilMat.map; ceilMat.emissiveIntensity = 0.42;
     this.ceilMat = ceilMat;
-    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(W, D), ceilMat);
+    const ceilGeo = new THREE.PlaneGeometry(W, D, Math.min(64, Math.round(W * 1.5)), Math.min(64, Math.round(D * 1.5)));
+    shade(ceilGeo, (x, y) => { const dx = Math.min(x + W / 2, W / 2 - x), dz = Math.min(y + D / 2, D / 2 - y); return edgeAO(dx, 0.25, 0.45) * edgeAO(dz, 0.25, 0.45); });
+    const ceil = new THREE.Mesh(ceilGeo, ceilMat);
     ceil.rotation.x = Math.PI / 2; ceil.position.y = Ht; g.add(ceil);
-    // skirting shadow strip (fake AO at wall base) + corner AO
-    const aoTex = Tex.make('aoStrip', 8, 64, (c, w, h) => {
-      const gr = c.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, 'rgba(0,0,0,0.32)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
-      c.fillStyle = gr; c.fillRect(0, 0, w, h);
-    }, { clamp: true });
-    const aoMat = new THREE.MeshBasicMaterial({ map: aoTex, transparent: true, depthWrite: false, toneMapped: false });
-    const addAO = (len, x, z, ry) => {
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(len, 0.9), aoMat);
-      m.rotation.order = 'YXZ'; m.rotation.y = ry; m.rotation.x = -Math.PI / 2; m.position.set(x, 0.003, z);
-      g.add(m);
-    };
-    addAO(W, 0, -D / 2 + 0.45, 0); addAO(W, 0, D / 2 - 0.45, Math.PI); addAO(D, -W / 2 + 0.45, 0, -Math.PI / 2); addAO(D, W / 2 - 0.45, 0, Math.PI / 2);
-    // light panels on ceiling
+    // skirting boards: a thin satin strip where walls meet the floor
+    const bbMat = new THREE.MeshStandardMaterial({ color: 0xe4e6e9, roughness: 0.32, metalness: 0, envMapIntensity: 0.7 });
+    const bbH = 0.11, bbT = 0.016;
+    const addBB = (len, x, z, ry) => { const m = new THREE.Mesh(new THREE.BoxGeometry(len, bbH, bbT), bbMat); m.position.set(x, bbH / 2, z); m.rotation.y = ry; m.receiveShadow = true; m.castShadow = false; g.add(m); };
+    addBB(W, 0, -D / 2 + bbT / 2, 0); addBB(W, 0, D / 2 - bbT / 2, 0); addBB(D - 2 * bbT, -W / 2 + bbT / 2, 0, Math.PI / 2); addBB(D - 2 * bbT, W / 2 - bbT / 2, 0, Math.PI / 2);
+    // light panels on the ceiling, each in a thin frame
     const lightCol = kelvinToRGB(P.colorTemp);
     const panelGeo = new THREE.PlaneGeometry(1.6, 0.5);
     const panelMat = new THREE.MeshBasicMaterial({ color: lightCol.clone().multiplyScalar(2.2 * clamp(P.light, 0.2, 2)), toneMapped: true });
     this.panelMat = panelMat;
-    const nx = Math.max(2, Math.floor(W / 4)), nz = Math.max(2, Math.floor(D / 4));
-    const panels = new THREE.InstancedMesh(panelGeo, panelMat, nx * nz);
-    let k = 0;
+    const panels = new THREE.InstancedMesh(panelGeo, panelMat, panelXZ.length);
+    const frames = new THREE.InstancedMesh(new THREE.PlaneGeometry(1.74, 0.64), new THREE.MeshStandardMaterial({ color: 0xc9ccd1, roughness: 0.45, metalness: 0.1 }), panelXZ.length);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion().setFromAxisAngle(LEFT, Math.PI / 2);
-    for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
-      const x = (i + 0.5) / nx * W - W / 2, z = (j + 0.5) / nz * D - D / 2;
-      m4.compose(new V3(x, Ht - 0.01, z), q, new V3(1, 1, 1)); panels.setMatrixAt(k++, m4);
-    }
-    g.add(panels);
+    panelXZ.forEach((pz, k) => {
+      m4.compose(new V3(pz[0], Ht - 0.012, pz[1]), q, new V3(1, 1, 1)); panels.setMatrixAt(k, m4);
+      m4.compose(new V3(pz[0], Ht - 0.006, pz[1]), q, new V3(1, 1, 1)); frames.setMatrixAt(k, m4);
+    });
+    g.add(frames); g.add(panels);
     // lights
     const L = clamp(P.light, 0.1, 2.0);
     this.hemi = new THREE.HemisphereLight(lightCol, 0xd6d8dc, 0.75 * L);
@@ -3285,7 +3318,8 @@ float htTerrain(vec2 p) {
 const SkyShader = {
   uniforms: {
     turbidity: { value: 2 }, rayleigh: { value: 1 }, mieCoefficient: { value: 0.005 }, mieDirectionalG: { value: 0.8 },
-    sunPosition: { value: new V3() }, up: { value: new V3(0, 1, 0) }, uCloud: { value: 0 }, uNight: { value: 0 }, uTime: { value: 0 }, uGain: { value: 1 }, uSat: { value: 1 }
+    sunPosition: { value: new V3() }, up: { value: new V3(0, 1, 0) }, uCloud: { value: 0 }, uNight: { value: 0 }, uTime: { value: 0 }, uGain: { value: 1 }, uSat: { value: 1 },
+    uFogCol: { value: new THREE.Color(0xc4d6ea) }, uHorizon: { value: 0.85 }, uDisk: { value: 1 }
   },
   vertexShader: /* glsl */`
     uniform vec3 sunPosition; uniform float rayleigh; uniform float turbidity; uniform float mieCoefficient; uniform vec3 up;
@@ -3316,6 +3350,7 @@ const SkyShader = {
   fragmentShader: /* glsl */`
     varying vec3 vWorldPosition; varying vec3 vSunDirection; varying float vSunfade; varying vec3 vBetaR; varying vec3 vBetaM; varying float vSunE;
     uniform float mieDirectionalG; uniform vec3 up; uniform float uCloud; uniform float uNight; uniform float uTime; uniform float uGain; uniform float uSat;
+    uniform vec3 uFogCol; uniform float uHorizon; uniform float uDisk;
     const float pi = 3.141592653589793238462643383279502884197169;
     const float rayleighZenithLength = 8.4E3;
     const float mieZenithLength = 1.25E3;
@@ -3341,7 +3376,7 @@ const SkyShader = {
       Lin *= mix(vec3(1.0), pow(vSunE * ((betaRTheta + betaMTheta) / (vBetaR + vBetaM)) * Fex, vec3(1.0 / 2.0)), clamp(pow(1.0 - dot(up, vSunDirection), 5.0), 0.0, 1.0));
       vec3 L0 = vec3(0.1) * Fex;
       float sundisk = smoothstep(sunAngularDiameterCos, sunAngularDiameterCos + 0.00002, cosTheta);
-      L0 += (vSunE * 19000.0 * Fex) * sundisk * (1.0 - uCloud * 0.95);
+      L0 += (vSunE * 19000.0 * Fex) * sundisk * (1.0 - uCloud * 0.95) * uDisk;
       vec3 texColor = (Lin + L0) * 0.04 + vec3(0.0, 0.0003, 0.00075);
       vec3 retColor = pow(texColor, vec3(1.0 / (1.2 + (1.2 * vSunfade))));
       retColor *= uGain;
@@ -3359,8 +3394,97 @@ const SkyShader = {
       gl_FragColor = vec4(retColor, 1.0);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
+      // the horizon dissolves into exactly the fog colour (applied where three applies fog)
+      float hz = 1.0 - smoothstep(-0.03, 0.2, direction.y);
+      gl_FragColor.rgb = mix(gl_FragColor.rgb, uFogCol, hz * hz * (3.0 - 2.0 * hz) * uHorizon);
     }`
 };
+
+// meadow patches shared by grass blades and ground: value noise, dry/lush patches, grass length
+const GLSL_FIELD = /* glsl */`
+float htHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+float htNoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(htHash(i), htHash(i + vec2(1.0, 0.0)), u.x), mix(htHash(i + vec2(0.0, 1.0)), htHash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+float htDry(vec2 p) { return smoothstep(0.56, 0.86, htNoise(p * 0.035 + 3.1) * 0.65 + htNoise(p * 0.11 + 7.7) * 0.35); }
+float htLen(vec2 p) { return 0.62 + 0.72 * smoothstep(0.3, 0.75, htNoise(p * 0.07 + 11.3) * 0.7 + htNoise(p * 0.29 + 2.0) * 0.3); }`;
+
+// --- vegetation geometry (merged, vertex coloured; displacement keyed on position so faces stay closed) ---
+function lumpyIco(radius, detail, seed, squash) {
+  const ico = new THREE.IcosahedronGeometry(radius, detail);
+  const p = ico.attributes.position, nrm = new Float32Array(p.count * 3);
+  for (let k = 0; k < p.count; k++) {
+    const x = p.getX(k), y = p.getY(k), z = p.getZ(k);
+    const h = hash2(Math.round(x * 41 + y * 13 + seed * 7 + 500), Math.round(z * 37 - y * 29 + seed * 3 + 500));
+    const n = 0.82 + 0.36 * h;
+    p.setXYZ(k, x * n, y * n * squash, z * n);
+    _v1.set(x, y / Math.max(0.3, squash), z).normalize(); nrm[k * 3] = _v1.x; nrm[k * 3 + 1] = _v1.y; nrm[k * 3 + 2] = _v1.z;
+  }
+  ico.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  return ico;
+}
+function shadeCrown(geo, col, y0, y1, cx, cz, rad) {
+  paintGeo(geo, col);
+  const c = geo.attributes.color, p = geo.attributes.position;
+  for (let k = 0; k < c.count; k++) { // darker underneath and toward the inside of the crown
+    const ao = (0.5 + 0.5 * smoothstep(y0, y1, p.getY(k))) * (0.75 + 0.25 * smoothstep(0, rad, Math.hypot(p.getX(k) - cx, p.getZ(k) - cz)));
+    c.setXYZ(k, c.getX(k) * ao, c.getY(k) * ao, c.getZ(k) * ao);
+  }
+}
+function makeBroadleaf(seed) {
+  const r = new RNG(seed), parts = [];
+  const trunk = new THREE.CylinderGeometry(0.15, 0.3, 4.2, 7, 2); trunk.translate(0, 2.1, 0);
+  paintGeo(trunk, new THREE.Color(0x4a3829)); parts.push(trunk);
+  const br = new THREE.CylinderGeometry(0.05, 0.11, 1.8, 5, 1); br.rotateZ(0.8); br.translate(0.55, 3.6, 0); paintGeo(br, new THREE.Color(0x4a3829)); parts.push(br);
+  const br2 = new THREE.CylinderGeometry(0.05, 0.1, 1.6, 5, 1); br2.rotateX(-0.75); br2.translate(0, 3.8, 0.5); paintGeo(br2, new THREE.Color(0x4a3829)); parts.push(br2);
+  for (let i = 0; i < 6; i++) {
+    const rad = (i === 0 ? 1.85 : r.range(1.05, 1.6));
+    const ico = lumpyIco(rad, 1, seed * 10 + i, 0.82);
+    const a = r.range(0, TAU), d = i === 0 ? 0 : r.range(0.9, 1.6), y = i === 0 ? 5.2 : r.range(4.3, 6.3);
+    ico.translate(Math.cos(a) * d, y, Math.sin(a) * d);
+    shadeCrown(ico, new THREE.Color().setHSL(0.25 + r.range(-0.02, 0.03), 0.48, r.range(0.17, 0.24)), 3.6, 6.8, 0, 0, 2.4);
+    parts.push(ico);
+  }
+  return mergeGeos(parts);
+}
+function makeConifer(seed) {
+  const r = new RNG(seed), parts = [];
+  const trunk = new THREE.CylinderGeometry(0.1, 0.22, 3.2, 6, 1); trunk.translate(0, 1.6, 0);
+  paintGeo(trunk, new THREE.Color(0x3d2e22)); parts.push(trunk);
+  const tiers = 5;
+  for (let i = 0; i < tiers; i++) {
+    const rad = lerp(2.1, 0.55, i / (tiers - 1)), h = lerp(2.4, 1.5, i / (tiers - 1));
+    const cone = new THREE.ConeGeometry(rad, h, 10, 1, false);
+    const p = cone.attributes.position;
+    for (let k = 0; k < p.count; k++) { // ragged, drooping branch tips
+      const y = p.getY(k);
+      if (y < 0) { const x = p.getX(k), z = p.getZ(k); const n = 0.85 + 0.3 * hash2(Math.round(x * 23 + 300 + i * 17), Math.round(z * 23 + 300)); p.setXYZ(k, x * n, y - (n - 0.85) * 0.5, z * n); }
+    }
+    cone.computeVertexNormals();
+    cone.translate(0, 2.2 + i * 1.25 + h * 0.5, 0);
+    shadeCrown(cone, new THREE.Color().setHSL(0.36 + r.range(-0.02, 0.02), 0.42, 0.12 + i * 0.012), 2, 8.5, 0, 0, 2);
+    parts.push(cone);
+  }
+  return mergeGeos(parts);
+}
+function makeBush(seed) {
+  const r = new RNG(seed), parts = [];
+  for (let i = 0; i < 4; i++) {
+    const rad = r.range(0.45, 0.8);
+    const ico = lumpyIco(rad, 1, seed * 5 + i, 0.72);
+    const a = r.range(0, TAU), d = i === 0 ? 0 : r.range(0.35, 0.7);
+    ico.translate(Math.cos(a) * d, rad * 0.55, Math.sin(a) * d);
+    shadeCrown(ico, new THREE.Color().setHSL(0.24 + r.range(-0.02, 0.04), 0.45, r.range(0.15, 0.21)), 0, 1.1, 0, 0, 0.9);
+    parts.push(ico);
+  }
+  return mergeGeos(parts);
+}
+function makeFarTree() {
+  const trunk = new THREE.CylinderGeometry(0.2, 0.3, 3, 4, 1); trunk.translate(0, 1.5, 0); paintGeo(trunk, new THREE.Color(0x3b3026));
+  const crown = lumpyIco(2.3, 0, 77, 1.15); crown.translate(0, 5, 0); paintGeo(crown, new THREE.Color().setHSL(0.27, 0.4, 0.2));
+  return mergeGeos([trunk, crown]);
+}
 
 class FieldEnvironment {
   constructor(game) {
@@ -3371,19 +3495,22 @@ class FieldEnvironment {
     this.bounds = { minX: -this.half + 2, maxX: this.half - 2, minZ: -this.half + 2, maxZ: this.half - 2 };
     this.time = 0; this.windDir = new V3(1, 0, 0.3).normalize();
     this.sunDir = new V3(0, 1, 0);
+    this.fogColor = new THREE.Color();
   }
   build() {
     const g = this.group;
-    const P = Settings.data.environment.field;
     const q = Settings.data.graphics.preset;
-    // sky
-    const skyMat = new THREE.ShaderMaterial({ uniforms: THREE.UniformsUtils.clone(SkyShader.uniforms), vertexShader: SkyShader.vertexShader, fragmentShader: SkyShader.fragmentShader, side: THREE.BackSide, depthWrite: false });
+    const R = q === 'low' ? 14 : q === 'ultra' ? 26 : 19;
+    this.fieldU = { uCenter: { value: new THREE.Vector2() }, uR: { value: R } };
+    // sky (its horizon takes the fog colour exactly, so distant terrain melts into it)
+    const su = THREE.UniformsUtils.clone(SkyShader.uniforms);
+    const skyMat = new THREE.ShaderMaterial({ uniforms: su, vertexShader: SkyShader.vertexShader, fragmentShader: SkyShader.fragmentShader, side: THREE.BackSide, depthWrite: false });
     this.sky = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), skyMat);
     this.sky.scale.setScalar(4000); this.sky.frustumCulled = false;
+    this.sky.onBeforeRender = (r) => this.syncSkyFog(r);
     g.add(this.sky);
     // lights
     this.sun = new THREE.DirectionalLight(0xffffff, 3.0);
-    this.sun.castShadow = true;
     const sq = Settings.data.graphics.shadowQuality;
     const size = sq === 'ultra' ? 4096 : sq === 'high' ? 2048 : 1024;
     this.sun.shadow.mapSize.set(size, size);
@@ -3393,8 +3520,8 @@ class FieldEnvironment {
     g.add(this.sun); g.add(this.sun.target);
     this.hemi = new THREE.HemisphereLight(0xbfd8ff, 0x55683a, 0.9);
     g.add(this.hemi);
-    // terrain
-    const T = 640, seg = q === 'low' ? 96 : 160;
+    // terrain: broad flat test area in the middle, rolling hills further out
+    const T = 1000, seg = q === 'low' ? 110 : 180;
     const tg = new THREE.PlaneGeometry(T, T, seg, seg);
     tg.rotateX(-Math.PI / 2);
     const pos = tg.attributes.position;
@@ -3403,18 +3530,32 @@ class FieldEnvironment {
       const x = pos.getX(i), z = pos.getZ(i);
       pos.setY(i, terrainHeight(x, z));
       const n = fbm2(x * 0.02 + 40, z * 0.02, 3);
-      cols[i * 3] = 0.85 + n * 0.3; cols[i * 3 + 1] = 0.95 + n * 0.15; cols[i * 3 + 2] = 0.85 + n * 0.2;
+      cols[i * 3] = 0.88 + n * 0.24; cols[i * 3 + 1] = 0.95 + n * 0.12; cols[i * 3 + 2] = 0.88 + n * 0.16;
     }
     tg.setAttribute('color', new THREE.BufferAttribute(cols, 3));
     tg.computeVertexNormals();
     const gt = Tex.grass().clone(); gt.needsUpdate = true; gt.repeat.set(T / 6, T / 6); gt.anisotropy = this.game.maxAniso || 4;
-    this.groundMat = new THREE.MeshStandardMaterial({ map: gt, vertexColors: true, roughness: 0.95, metalness: 0, envMapIntensity: 0.4 });
+    this.groundMat = new THREE.MeshStandardMaterial({ map: gt, vertexColors: true, roughness: 0.93, metalness: 0, envMapIntensity: 0.35 });
+    this.groundMat.onBeforeCompile = (sh) => {
+      sh.uniforms.uCenter = this.fieldU.uCenter; sh.uniforms.uR = this.fieldU.uR;
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vTW;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvTW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vTW; uniform vec2 uCenter; uniform float uR;\n' + GLSL_FIELD)
+        .replace('#include <map_fragment>', `#include <map_fragment>
+          // break up texture tiling with a second rotated, rescaled sample
+          vec3 htT2 = texture2D(map, vec2(vMapUv.y, -vMapUv.x) * 0.37 + 0.21).rgb;
+          diffuseColor.rgb = mix(diffuseColor.rgb, diffuse * htT2, 0.45);
+          // dry and lush patches (same pattern as the blades) and slow large-scale variation
+          float htDG = htDry(vTW.xz);
+          diffuseColor.rgb *= mix(vec3(0.9, 1.0, 0.88), vec3(1.28, 1.1, 0.74), htDG) * (0.88 + 0.24 * htNoise(vTW.xz * 0.018 + 5.0));
+          // soil under the blades reads darker; past the blade radius the ground carries the meadow tone
+          diffuseColor.rgb *= mix(0.72, 0.98, smoothstep(uR * 0.45, uR * 1.02, length(vTW.xz - uCenter)));`);
+    };
+    this.groundMat.customProgramCacheKey = () => 'ht3d-ground';
     this.terrain = new THREE.Mesh(tg, this.groundMat);
     this.terrain.receiveShadow = true; this.terrain.name = 'terrain';
     g.add(this.terrain);
-    // grass blades
-    this.buildGrass(q);
-    // trees + distant hills
+    this.buildGrass(q, R);
     this.buildTrees(q);
     this.buildHills();
     // clouds
@@ -3430,9 +3571,8 @@ class FieldEnvironment {
       this.clouds.add(s);
     }
     g.add(this.clouds);
-    // rain
     this.buildRain();
-    // physics: heightfield ground + invisible boundary walls
+    // physics: heightfield ground + invisible boundary walls (vegetation never blocks movement)
     const h = this.half;
     this.planes = [
       { n: new V3(1, 0, 0), d: -h }, { n: new V3(-1, 0, 0), d: -h }, { n: new V3(0, 0, 1), d: -h }, { n: new V3(0, 0, -1), d: -h }
@@ -3443,14 +3583,16 @@ class FieldEnvironment {
     this.game.scene.environment = null;
     this.applyTimeWeather();
   }
-  buildGrass(q) {
-    const count = q === 'low' ? 15000 : q === 'ultra' ? 72000 : 38000;
-    const R = q === 'low' ? 14 : q === 'ultra' ? 26 : 19;
+  syncSkyFog(r) {
+    const su = this.sky.material.uniforms;
+    this.fogColor.getRGB(su.uFogCol.value, r.getRenderTarget() === null ? r.outputColorSpace : THREE.ColorManagement.workingColorSpace);
+  }
+  buildGrass(q, R) {
+    const count = q === 'low' ? 16000 : q === 'ultra' ? 76000 : 40000;
     this.grassR = R;
-    const blade = new THREE.BufferGeometry();
-    const segs = 4, verts = [], uvs = [], idx = [];
+    const segs = 5, verts = [], uvs = [], idx = [];
     for (let i = 0; i <= segs; i++) {
-      const t = i / segs, w = 0.026 * (1 - t * 0.8);
+      const t = i / segs, w = 0.03 * (1 - t * 0.85);
       if (i < segs) { verts.push(-w, t, 0, w, t, 0); uvs.push(0, t, 1, t); }
       else { verts.push(0, 1, 0); uvs.push(0.5, 1); }
     }
@@ -3471,113 +3613,163 @@ class FieldEnvironment {
     ig.instanceCount = count;
     ig.boundingSphere = new THREE.Sphere(new V3(), 1e5);
     const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide });
-    this.grassU = { uCenter: { value: new THREE.Vector2() }, uTime: { value: 0 }, uWind: { value: 0.4 }, uWindDir: { value: new THREE.Vector2(1, 0.3) }, uR: { value: R }, uBlade: { value: 0.27 } };
+    this.pushMax = q === 'low' ? 6 : q === 'ultra' ? 16 : 12; // grass pressure points (vertex cost scales with this)
+    const push = []; for (let i = 0; i < this.pushMax; i++) push.push(new THREE.Vector4(0, 0, 0, 0));
+    this.grassU = {
+      uCenter: this.fieldU.uCenter, uR: this.fieldU.uR, uTime: { value: 0 }, uWind: { value: 0.4 }, uWindDir: { value: new THREE.Vector2(1, 0.3) },
+      uBlade: { value: 0.3 }, uPush: { value: push }, uPushN: { value: 0 }, uSunView: { value: new V3(0, 1, 0) }, uSunCol: { value: new THREE.Color(0, 0, 0) }
+    };
     mat.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, this.grassU);
       sh.vertexShader = sh.vertexShader.replace('#include <common>', `#include <common>
-        attribute vec4 aOff; uniform vec2 uCenter; uniform float uTime; uniform float uWind; uniform vec2 uWindDir; uniform float uR; uniform float uBlade;
-        varying float vGrassT; varying float vGrassShade;
-        ${GLSL_TERRAIN}`)
+        #define HT_PUSH ${this.pushMax}
+        attribute vec4 aOff; uniform vec2 uCenter; uniform float uTime; uniform float uWind; uniform vec2 uWindDir; uniform float uR; uniform float uBlade; uniform vec4 uPush[HT_PUSH]; uniform int uPushN;
+        varying float vGrassT; varying float vGrassShade; varying float vDry; varying float vFlower; varying float vPushAO; varying float vGust;
+        ${GLSL_TERRAIN}
+        ${GLSL_FIELD}`)
+        .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = normalize(vec3(-sin(aOff.z) * 0.5, 1.0, cos(aOff.z) * 0.5));')
         .replace('#include <begin_vertex>', `
           vec2 base = aOff.xy;
           vec2 wp = base + 2.0 * uR * floor((uCenter - base) / (2.0 * uR) + 0.5);
-          float dist = length(wp - uCenter);
-          float fade = 1.0 - smoothstep(uR * 0.72, uR, dist);
-          float hgt = uBlade * aOff.w * fade;
-          float c = cos(aOff.z), s = sin(aOff.z);
-          vec3 lp = vec3(position.x * c, position.y * hgt, position.x * s);
+          float fade = 1.0 - smoothstep(uR * 0.7, uR, length(wp - uCenter));
+          float rnd = htHash(base * 7.13 + 0.5);
+          float dry = htDry(wp);
+          float flower = step(0.975, htHash(base * 3.71 + 9.2)) * step(dry, 0.6);
           float t = position.y;
+          // feet and bodies press the blades down and aside
+          float press = 0.0; vec2 away = vec2(0.0);
+          for (int i = 0; i < HT_PUSH; i++) {
+            if (i >= uPushN) break;
+            vec4 P = uPush[i];
+            if (P.w <= 0.0) continue;
+            vec2 d = wp - P.xy; float dl = length(d);
+            float k = (1.0 - smoothstep(P.z * 0.5, P.z, dl)) * P.w;
+            if (k > press) { press = k; away = d / max(dl, 0.001); }
+          }
+          float hgt = uBlade * aOff.w * fade * htLen(wp) * mix(1.0, 0.72, flower) * (1.0 - press * 0.6);
+          float c = cos(aOff.z), s = sin(aOff.z);
+          float wid = 1.0 + flower * smoothstep(0.7, 0.85, t) * 2.6;
+          vec3 lp = vec3(position.x * wid * c, t * hgt, position.x * wid * s);
+          float arc = (0.12 + 0.3 * rnd) * t * t * hgt;
+          lp.x -= s * arc; lp.z += c * arc;
+          // wind: local flutter plus gust fronts rolling across the meadow
+          float gust = smoothstep(0.45, 1.0, 0.5 + 0.5 * sin(dot(wp, uWindDir) * 0.21 - uTime * (1.0 + uWind * 1.5)) + (htNoise(wp * 0.06 - uWindDir * uTime * 0.5) - 0.5) * 0.7);
           float sway = sin(uTime * 1.7 + wp.x * 0.35 + wp.y * 0.28) * 0.5 + sin(uTime * 3.1 + wp.x * 1.3) * 0.18 + 0.35;
-          float bend = (0.08 + uWind * 0.32) * sway * t * t;
-          lp.xz += uWindDir * bend * hgt * 2.2;
-          lp.y -= bend * bend * hgt * 0.8;
+          float bend = ((0.06 + uWind * 0.26) * sway + gust * uWind * 0.6) * t * t * (1.0 - press);
+          lp.xz += uWindDir * bend * hgt * 2.2 + away * press * t * hgt * 1.1;
+          lp.y -= (bend * bend * 0.8 + press * 0.25 * t) * hgt;
           vec3 transformed = vec3(wp.x, htTerrain(wp), wp.y) + lp;
-          vGrassT = t;
-          vGrassShade = fract(sin(dot(base, vec2(12.9898, 78.233))) * 43758.5453);
-        `)
-        .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = vec3(0.0, 1.0, 0.0);');
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vGrassT; varying float vGrassShade;')
+          vGrassT = t; vGrassShade = rnd; vDry = dry; vPushAO = press; vGust = gust * uWind;
+          vFlower = flower * (0.05 + 0.95 * htHash(base * 1.37 + 4.4));
+        `);
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+        varying float vGrassT; varying float vGrassShade; varying float vDry; varying float vFlower; varying float vPushAO; varying float vGust;
+        uniform vec3 uSunView; uniform vec3 uSunCol;`)
+        .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\n normal = normalize(vNormal); // both blade faces take the sky light')
         .replace('#include <color_fragment>', `#include <color_fragment>
-          vec3 gBase = mix(vec3(0.10, 0.20, 0.045), vec3(0.20, 0.32, 0.08), vGrassShade);
-          gBase = mix(gBase, vec3(0.30, 0.30, 0.10), step(0.86, vGrassShade) * 0.6);
-          diffuseColor.rgb = mix(gBase * 0.62, gBase * 1.2 + vec3(0.03, 0.05, 0.0), vGrassT);`);
+          vec3 lush = mix(vec3(0.095, 0.22, 0.04), vec3(0.165, 0.315, 0.058), vGrassShade);
+          vec3 dryc = mix(vec3(0.29, 0.32, 0.095), vec3(0.39, 0.38, 0.15), vGrassShade);
+          vec3 gBase = mix(lush, dryc, vDry * (0.45 + 0.4 * vGrassShade));
+          vec3 tipC = gBase * 1.2 + vec3(0.03, 0.04, 0.0) + vGust * vec3(0.03, 0.04, 0.015);
+          diffuseColor.rgb = mix(gBase * 0.55, tipC, smoothstep(0.0, 0.9, vGrassT)) * (1.0 - vPushAO * 0.35);
+          if (vFlower > 0.0 && vGrassT > 0.72) diffuseColor.rgb = vFlower < 0.45 ? vec3(0.92, 0.9, 0.82) : (vFlower < 0.8 ? vec3(0.93, 0.74, 0.12) : vec3(0.6, 0.4, 0.82));`)
+        .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+          // sunlight through the blades when looking toward the sun
+          totalEmissiveRadiance += diffuseColor.rgb * uSunCol * pow(max(0.0, dot(normalize(-vViewPosition), uSunView)), 4.0) * smoothstep(0.2, 1.0, vGrassT);`);
     };
-    mat.customProgramCacheKey = () => 'ht3d-grass';
+    mat.customProgramCacheKey = () => 'ht3d-grass2-' + this.pushMax;
     this.grass = new THREE.Mesh(ig, mat);
     this.grass.frustumCulled = false; this.grass.receiveShadow = true;
     this.group.add(this.grass);
   }
-  buildTrees(q) {
-    const rr = new RNG(4242);
-    // merged low-poly tree geometry with vertex colors
-    const parts = [];
-    const trunk = new THREE.CylinderGeometry(0.18, 0.32, 4.2, 7, 1); trunk.translate(0, 2.1, 0);
-    paintGeo(trunk, new THREE.Color(0x4a3524));
-    parts.push(trunk);
-    for (let i = 0; i < 4; i++) {
-      const ico = new THREE.IcosahedronGeometry(1.6 + i * 0.25 - (i === 3 ? 0.6 : 0), 1);
-      const p = ico.attributes.position;
-      for (let k = 0; k < p.count; k++) { const n = 1 + (hash2(k * 3 + i, k * 7) - 0.5) * 0.35; p.setXYZ(k, p.getX(k) * n, p.getY(k) * n * 0.85, p.getZ(k) * n); }
-      const nrm = new Float32Array(p.count * 3);
-      for (let k = 0; k < p.count; k++) { _v1.set(p.getX(k), p.getY(k) / 0.85, p.getZ(k)).normalize(); nrm[k * 3] = _v1.x; nrm[k * 3 + 1] = _v1.y; nrm[k * 3 + 2] = _v1.z; }
-      ico.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
-      const off = [[0, 5.0, 0], [0.9, 4.2, 0.4], [-0.8, 4.4, -0.5], [0.1, 6.0, 0.1]][i];
-      ico.translate(off[0], off[1], off[2]);
-      paintGeo(ico, new THREE.Color().setHSL(0.27 + i * 0.012, 0.45, 0.19 + i * 0.02));
-      { // fake canopy occlusion: darker underneath and inside the crown
-        const c = ico.attributes.color, pp = ico.attributes.position;
-        for (let k = 0; k < c.count; k++) { const ao = 0.55 + 0.45 * smoothstep(off[1] - 1.4, off[1] + 1.2, pp.getY(k)); c.setXYZ(k, c.getX(k) * ao, c.getY(k) * ao, c.getZ(k) * ao); }
-      }
-      parts.push(ico);
-    }
-    const geo = mergeGeos(parts);
-    if (!geo.attributes.normal) geo.computeVertexNormals();
-    const count = q === 'low' ? 90 : q === 'ultra' ? 260 : 170;
-    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 });
-    this.treeU = { uTime: { value: 0 }, uWind: { value: 0.4 } };
+  vegMaterial(sway) {
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0, envMapIntensity: 0.45 });
     mat.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, this.treeU);
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime; uniform float uWind;')
         .replace('#include <begin_vertex>', `#include <begin_vertex>
-          float hh = max(position.y - 2.5, 0.0);
+          float hh = max(position.y - ${sway < 1 ? '0.2' : '2.5'}, 0.0) * ${sway.toFixed(2)};
           vec4 ip = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
-          transformed.x += sin(uTime * 1.3 + ip.x * 0.1) * hh * 0.025 * (0.4 + uWind);
-          transformed.z += cos(uTime * 1.1 + ip.z * 0.13) * hh * 0.018 * (0.4 + uWind);`);
+          float gst = 0.6 + 0.4 * sin(uTime * 0.7 + ip.x * 0.02 + ip.z * 0.015);
+          transformed.x += (sin(uTime * 1.3 + ip.x * 0.1) * 0.025 + 0.02 * uWind) * hh * (0.4 + uWind) * gst;
+          transformed.z += cos(uTime * 1.1 + ip.z * 0.13) * hh * 0.018 * (0.4 + uWind) * gst;
+          transformed.y += sin(uTime * 2.3 + position.x * 3.0 + ip.z) * hh * 0.004 * uWind;`);
     };
-    mat.customProgramCacheKey = () => 'ht3d-tree';
-    const im = new THREE.InstancedMesh(geo, mat, count);
-    const m4 = new THREE.Matrix4(), qq = new THREE.Quaternion();
-    let n = 0, guard = 0;
-    // clusters
-    const clusters = [];
-    for (let i = 0; i < 18; i++) { const a = rr.range(0, TAU), d = rr.range(55, 210); clusters.push([Math.cos(a) * d, Math.sin(a) * d]); }
-    while (n < count && guard++ < count * 10) {
-      const c = clusters[n % clusters.length];
-      const x = c[0] + rr.normal(0, 9), z = c[1] + rr.normal(0, 9);
-      if (Math.hypot(x, z) < 45) continue;
-      const s = rr.range(0.8, 1.6);
+    mat.customProgramCacheKey = () => 'ht3d-veg' + sway;
+    return mat;
+  }
+  buildTrees(q) {
+    const rr = new RNG(4242);
+    this.treeU = { uTime: { value: 0 }, uWind: { value: 0.4 } };
+    const n = q === 'low' ? { b: 60, c: 26, s: 50, f: 220 } : q === 'ultra' ? { b: 180, c: 80, s: 170, f: 560 } : { b: 120, c: 52, s: 110, f: 380 };
+    const meshes = {
+      b: new THREE.InstancedMesh(makeBroadleaf(11), this.vegMaterial(1), n.b),
+      c: new THREE.InstancedMesh(makeConifer(23), this.vegMaterial(1), n.c),
+      s: new THREE.InstancedMesh(makeBush(37), this.vegMaterial(0.45), n.s),
+      f: new THREE.InstancedMesh(makeFarTree(), this.vegMaterial(1), n.f)
+    };
+    const cnt = { b: 0, c: 0, s: 0, f: 0 };
+    const m4 = new THREE.Matrix4(), qq = new THREE.Quaternion(), col = new THREE.Color();
+    const place = (kind, x, z, s, sy) => {
+      if (cnt[kind] >= n[kind]) return false;
       qq.setFromAxisAngle(UP, rr.range(0, TAU));
-      m4.compose(new V3(x, terrainHeight(x, z) - 0.2, z), qq, new V3(s, s * rr.range(0.85, 1.3), s));
-      im.setMatrixAt(n++, m4);
+      m4.compose(new V3(x, terrainHeight(x, z) - 0.15, z), qq, new V3(s, s * sy, s));
+      const i = cnt[kind]++;
+      meshes[kind].setMatrixAt(i, m4);
+      // per-plant tint: a few yellower or bluer individuals among the greens
+      col.setHSL(rr.range(-0.025, 0.035), rr.range(0, 0.18), 1).lerp(new THREE.Color(1, 1, 1), 0.55);
+      col.multiplyScalar(rr.range(0.85, 1.12));
+      meshes[kind].setColorAt(i, col);
+      return true;
+    };
+    // tree clusters around the open testing ground (nothing within 46 m of the centre)
+    const clusters = [];
+    for (let i = 0; i < 17; i++) { const a = rr.range(0, TAU), d = rr.range(54, 200); clusters.push({ x: Math.cos(a) * d, z: Math.sin(a) * d, sp: rr.range(6, 13), con: rr.next() < 0.35 ? rr.range(0.4, 0.8) : rr.range(0, 0.2) }); }
+    let guard = 0;
+    while ((cnt.b < n.b * 0.88 || cnt.c < n.c) && guard++ < 4000) {
+      const c = clusters[guard % clusters.length];
+      const x = c.x + rr.normal(0, c.sp), z = c.z + rr.normal(0, c.sp);
+      if (Math.hypot(x, z) < 46) continue;
+      if (rr.next() < c.con) place('c', x, z, rr.range(0.8, 1.35), rr.range(0.9, 1.25));
+      else place('b', x, z, rr.range(0.75, 1.5), rr.range(0.85, 1.25));
+      if (rr.next() < 0.45) { const a = rr.range(0, TAU), d = c.sp * rr.range(0.9, 1.6); const bx = c.x + Math.cos(a) * d, bz = c.z + Math.sin(a) * d; if (Math.hypot(bx, bz) > 44) place('s', bx, bz, rr.range(0.7, 1.4), rr.range(0.7, 1.1)); }
     }
-    im.count = n;
-    im.castShadow = false; im.receiveShadow = true;
-    this.trees = im;
-    this.group.add(im);
+    guard = 0;
+    while (cnt.b < n.b && guard++ < 2000) { const a = rr.range(0, TAU), d = rr.range(60, 260); place('b', Math.cos(a) * d, Math.sin(a) * d, rr.range(0.9, 1.6), rr.range(0.9, 1.2)); }
+    guard = 0;
+    while (cnt.s < n.s && guard++ < 2000) { const a = rr.range(0, TAU), d = rr.range(48, 230); place('s', Math.cos(a) * d, Math.sin(a) * d, rr.range(0.6, 1.3), rr.range(0.7, 1.1)); }
+    // distant tree line in bands with gaps (cheap single-lump trees, mostly lost in the haze)
+    guard = 0;
+    while (cnt.f < n.f && guard++ < 20000) {
+      const a = rr.range(0, TAU);
+      if (fbm2(Math.cos(a) * 2.5 + 20, Math.sin(a) * 2.5 + 20, 3) < 0.45) continue;
+      const d = rr.range(250, 430);
+      place('f', Math.cos(a) * d, Math.sin(a) * d, rr.range(1.0, 1.9), rr.range(0.8, 1.3));
+    }
+    for (const k of Object.keys(meshes)) {
+      const im = meshes[k];
+      im.count = cnt[k]; im.castShadow = false; im.receiveShadow = false;
+      if (im.instanceColor) im.instanceColor.needsUpdate = true;
+      this.group.add(im);
+    }
+    this.trees = meshes.b; this.vegMeshes = meshes;
   }
   buildHills() {
-    const g = new THREE.CylinderGeometry(900, 900, 1, 96, 6, true);
-    const p = g.attributes.position;
-    for (let i = 0; i < p.count; i++) {
-      const x = p.getX(i), z = p.getZ(i), y = p.getY(i);
-      const a = Math.atan2(z, x);
-      const h = 40 + 55 * fbm2(Math.cos(a) * 3 + 10, Math.sin(a) * 3 + 10, 4) + 25 * Math.sin(a * 5.0);
-      p.setY(i, y > 0 ? h : -20);
-    }
-    g.computeVertexNormals();
-    const m = new THREE.MeshLambertMaterial({ color: 0x5f7a55, side: THREE.BackSide });
-    this.hills = new THREE.Mesh(g, m);
-    this.group.add(this.hills);
+    const ring = (radius, base, amp, freq, seed) => {
+      const g = new THREE.CylinderGeometry(radius, radius, 1, 128, 6, true);
+      const p = g.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        const x = p.getX(i), z = p.getZ(i), y = p.getY(i);
+        const a = Math.atan2(z, x);
+        const h = base + amp * fbm2(Math.cos(a) * freq + seed, Math.sin(a) * freq + seed, 4) + amp * 0.35 * Math.sin(a * 5.0 + seed);
+        p.setY(i, y > 0 ? h : -25);
+      }
+      g.computeVertexNormals();
+      return new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: 0x5f7a55, side: THREE.BackSide }));
+    };
+    this.hills = ring(900, 40, 60, 3, 10);
+    this.hillsNear = ring(520, 8, 30, 4.5, 31);
+    this.group.add(this.hills); this.group.add(this.hillsNear);
   }
   buildRain() {
     const N = 2400;
@@ -3590,6 +3782,32 @@ class FieldEnvironment {
     this.rain = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0xa8b8c8, transparent: true, opacity: 0.45, depthWrite: false }));
     this.rain.frustumCulled = false; this.rain.visible = false;
     this.group.add(this.rain);
+  }
+  // sky-lit ambient + reflections: the current sky (and a dark ground) captured into a prefiltered env map
+  buildSkyEnv(day) {
+    const r = this.game.renderer;
+    if (!this.envScene) {
+      this.envScene = new THREE.Scene();
+      this.envSky = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), this.sky.material);
+      this.envSky.scale.setScalar(200); this.envSky.frustumCulled = false;
+      this.envSky.onBeforeRender = (rr) => this.syncSkyFog(rr);
+      this.envScene.add(this.envSky);
+      this.envGround = new THREE.Mesh(new THREE.CircleGeometry(150, 24), new THREE.MeshBasicMaterial({ color: 0x3b4a2a }));
+      this.envGround.rotation.x = -Math.PI / 2; this.envGround.position.y = -2;
+      this.envScene.add(this.envGround);
+    }
+    this.envGround.material.color.set(0x41522c).multiplyScalar(lerp(0.06, 1, day));
+    const su = this.sky.material.uniforms, disk = su.uDisk.value;
+    su.uDisk.value = 0.03; // keep the sun disk from blowing out the prefiltered map
+    try {
+      const pm = new THREE.PMREMGenerator(r);
+      const rt = pm.fromScene(this.envScene, 0, 0.5, 600);
+      pm.dispose();
+      if (this.envRT) this.envRT.dispose();
+      this.envRT = rt;
+      this.game.scene.environment = rt.texture;
+    } catch (e) { reportError(e, 'sky env'); this.game.scene.environment = null; }
+    su.uDisk.value = disk;
   }
   applyTimeWeather() {
     const P = Settings.data.environment.field;
@@ -3607,6 +3825,7 @@ class FieldEnvironment {
     this.cloudCover = cloud;
     const day = smoothstep(-0.05, 0.15, dir.y);
     const night = 1 - smoothstep(-0.21, -0.02, dir.y); // civil -> nautical twilight
+    this.dayK = day;
     const su = this.sky.material.uniforms;
     su.sunPosition.value.copy(dir).multiplyScalar(400000);
     const warmSky = 1 - smoothstep(0.05, 0.45, dir.y);
@@ -3628,21 +3847,29 @@ class FieldEnvironment {
     this.sunOffset = this.sun.position.clone();
     const skyCol = new THREE.Color(0x9ec6ff).lerp(new THREE.Color(0xb7bcc4), cloud).lerp(new THREE.Color(0x1a2438), night);
     this.hemi.color.copy(skyCol); this.hemi.groundColor.set(0x4d5f33).lerp(new THREE.Color(0x10140c), night);
-    this.hemi.intensity = lerp(0.95, 1.3, cloud) * lerp(1, 0.35, night);
+    // the sky env map now carries much of the ambient; the hemisphere fill stays for the grass
+    this.hemi.intensity = lerp(0.95, 1.3, cloud) * lerp(1, 0.35, night) * 0.72;
     const fogCol = new THREE.Color(0xc4d6ea).lerp(new THREE.Color(0xb3b8bf), cloud).lerp(new THREE.Color(0xe0a070), warm * day * 0.35 * (1 - cloud)).lerp(new THREE.Color(0x0a0e16), night);
-    const dens = W === 'fog' ? 0.035 : W === 'rain' ? 0.012 : W === 'overcast' ? 0.006 : 0.0022;
+    const dens = W === 'fog' ? 0.035 : W === 'rain' ? 0.012 : W === 'overcast' ? 0.006 : 0.0024;
     this.game.scene.fog = new THREE.FogExp2(fogCol, dens);
+    this.fogColor.copy(fogCol);
+    su.uHorizon.value = W === 'fog' ? 1.0 : 0.88;
     this.game.scene.background = null;
-    this.hills.material.color.set(0x5f7a55).lerp(fogCol, 0.55);
+    // layered haze: near hills keep more colour than the far range
+    this.hillsNear.material.color.set(0x56724a).lerp(fogCol, 0.42);
+    this.hills.material.color.set(0x5f7a55).lerp(fogCol, 0.62);
     for (const c of this.clouds.children) {
       c.material.opacity = clamp(0.25 + cloud * 0.9, 0, 0.95) * (W === 'clear' ? 0.6 : 1);
       c.material.color.set(0xffffff).lerp(new THREE.Color(0x8d939b), cloud * 0.7).lerp(new THREE.Color(0x202634), night);
     }
     this.rain.visible = W === 'rain';
     this.wet = W === 'rain' ? 1 : 0;
-    this.groundMat.roughness = W === 'rain' ? 0.55 : 0.95;
+    this.groundMat.roughness = W === 'rain' ? 0.55 : 0.93;
     this.game.renderer.toneMappingExposure = lerp(0.82, 1.05, cloud) * lerp(1, 1.8, night);
     this.windStrength = P.wind;
+    // blades glow when back-lit by a low, clear sun
+    this.sunGlow = sunCol.clone().multiplyScalar(day * (1 - cloud * 0.85) * 0.55);
+    this.buildSkyEnv(day);
   }
   groundHeight(x, z) { return terrainHeight(x, z); }
   groundNormal(x, z, out) {
@@ -3651,13 +3878,45 @@ class FieldEnvironment {
     const hz = terrainHeight(x, z + e) - terrainHeight(x, z - e);
     return out.set(-hx, 2 * e, -hz).normalize();
   }
+  // nearest bodies / feet flatten the grass around them (6-16 pressure points by quality)
+  updateGrassPush(cam) {
+    const P = this.grassU.uPush.value, R = this.grassR;
+    const cand = this._cand || (this._cand = []); cand.length = 0;
+    const add = (x, z, r, w) => { const d = Math.hypot(x - cam.position.x, z - cam.position.z); if (d < R + 1 && w > 0.02) cand.push(x, z, r, w, d); };
+    for (const npc of this.game.npcs.list) {
+      if (npc.removed) continue;
+      const S = npc.rig.H / 1.75;
+      if (npc.physMode === 'ragdoll') {
+        for (const bi of [RAG.CHEST, RAG.PELVIS, RAG.HEAD, RAG.SHIN_L, RAG.SHIN_R]) {
+          const b = npc.rag.bodies[bi]; const h = b.pos.y - terrainHeight(b.pos.x, b.pos.z);
+          add(b.pos.x, b.pos.z, (bi === RAG.CHEST || bi === RAG.PELVIS ? 0.42 : 0.26) * S, 1 - smoothstep(0.2, 0.7, h));
+        }
+      } else {
+        for (const fb of [B.foot_L, B.foot_R]) { const f = npc.boneWPos[fb]; add(f.x, f.z, 0.2 * S, 0.85 * (1 - smoothstep(0.12, 0.4, f.y - terrainHeight(f.x, f.z)))); }
+      }
+    }
+    for (const p of this.game.props.list) { const b = p.body; if (b) add(b.pos.x, b.pos.z, (p.radius || 0.3) * 1.3, 1 - smoothstep(0.3, 1.0, b.pos.y - terrainHeight(b.pos.x, b.pos.z) - (p.radius || 0.3))); }
+    const n = cand.length / 5;
+    // keep the closest to the camera when there are too many
+    const order = this._ord || (this._ord = []); order.length = 0;
+    for (let i = 0; i < n; i++) order.push(i);
+    const M = this.pushMax;
+    if (n > M) order.sort((a, b) => cand[a * 5 + 4] - cand[b * 5 + 4]);
+    for (let i = 0; i < M; i++) {
+      if (i < n) { const k = order[i] * 5; P[i].set(cand[k], cand[k + 1], cand[k + 2], cand[k + 3]); } else P[i].set(0, 0, 0, 0);
+    }
+    this.grassU.uPushN.value = Math.min(n, M);
+  }
   update(dt, cam) {
     this.time += dt;
     const w = Settings.data.environment.field.wind;
     if (this.grassU) {
       this.grassU.uTime.value = this.time; this.grassU.uWind.value = w;
-      this.grassU.uCenter.value.set(cam.position.x, cam.position.z);
+      this.fieldU.uCenter.value.set(cam.position.x, cam.position.z);
       this.grassU.uWindDir.value.set(this.windDir.x, this.windDir.z);
+      this.grassU.uSunView.value.copy(this.sunDir).transformDirection(cam.matrixWorldInverse);
+      if (this.sunGlow) this.grassU.uSunCol.value.copy(this.sunGlow);
+      this.updateGrassPush(cam);
     }
     if (this.treeU) { this.treeU.uTime.value = this.time; this.treeU.uWind.value = w; }
     this.sky.material.uniforms.uTime.value = this.time;
@@ -3692,6 +3951,9 @@ class FieldEnvironment {
   dispose() {
     this.game.scene.remove(this.group);
     disposeObject(this.group);
+    if (this.envRT) { this.envRT.dispose(); this.envRT = null; }
+    if (this.envScene) { this.envSky.geometry.dispose(); this.envGround.geometry.dispose(); this.envGround.material.dispose(); this.envScene = null; }
+    this.game.scene.environment = null;
     this.group = new THREE.Group();
     this.game.scene.fog = null;
   }
@@ -3745,6 +4007,97 @@ class EnvironmentManager {
   update(dt, cam) { if (this.current) this.current.update(dt, cam); }
 }
 HT.EnvironmentManager = EnvironmentManager;
+
+// ===== 22_contactshadows.js =====
+// ============================================================================
+// Contact shadows: soft dark blobs where feet, bodies and props meet the ground.
+// One instanced, depth-tested quad batch for the whole scene (cheap on mobile);
+// works in both environments, follows terrain slope, fades with height.
+// ============================================================================
+class ContactShadows {
+  constructor(game, max = 640) {
+    this.game = game; this.max = max;
+    const geo = new THREE.PlaneGeometry(1, 1); geo.rotateX(-Math.PI / 2);
+    this.aK = new THREE.InstancedBufferAttribute(new Float32Array(max), 1);
+    geo.setAttribute('aK', this.aK);
+    this.uniforms = { uStrength: { value: 1 } };
+    const mat = new THREE.ShaderMaterial({
+      uniforms: this.uniforms, transparent: true, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4,
+      vertexShader: `attribute float aK; varying vec2 vUv; varying float vK;
+        void main() { vUv = uv; vK = aK; gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0); }`,
+      fragmentShader: `uniform float uStrength; varying vec2 vUv; varying float vK;
+        void main() { float r = length(vUv - 0.5) * 2.0; float a = exp(-r * r * 3.2) * (1.0 - smoothstep(0.72, 1.0, r)) * vK * uStrength;
+          if (a < 0.003) discard; gl_FragColor = vec4(0.0, 0.0, 0.0, a); }`
+    });
+    this.mesh = new THREE.InstancedMesh(geo, mat, max);
+    this.mesh.count = 0; this.mesh.frustumCulled = false; this.mesh.renderOrder = 1; this.mesh.name = 'contactShadows';
+    game.scene.add(this.mesh);
+    this._m = new M4(); this._q = new QT(); this._q2 = new QT(); this._s = new V3(); this._p = new V3(); this._n = new V3();
+    this.n = 0;
+  }
+  // one blob: center (world), half-sizes along local x/z, yaw, darkness
+  blob(x, z, sx, sz, yaw, k) {
+    if (this.n >= this.max || k < 0.01) return;
+    const env = this.game.env;
+    const y = env.groundHeight(x, z) + 0.004;
+    env.groundNormal(x, z, this._n);
+    this._q.setFromUnitVectors(UP, this._n).multiply(this._q2.setFromAxisAngle(UP, yaw));
+    this._m.compose(this._p.set(x, y, z), this._q, this._s.set(sx * 2, 1, sz * 2));
+    this.mesh.setMatrixAt(this.n, this._m);
+    this.aK.array[this.n] = Math.min(1, k);
+    this.n++;
+  }
+  update() {
+    const g = this.game, env = g.env;
+    this.n = 0;
+    const cam = g.camera.position;
+    // brighter rooms read contact shadows more strongly than sunlit grass
+    this.uniforms.uStrength.value = env.current && env.current.kind === 'field' ? 0.85 : 0.78;
+    for (const npc of g.npcs.list) {
+      if (npc.removed) continue;
+      const dc = Math.hypot(npc.root.pos.x - cam.x, npc.root.pos.z - cam.z);
+      if (dc > 60) continue;
+      const S = npc.rig.H / 1.75;
+      if (npc.physMode === 'ragdoll') {
+        const R = npc.rag, bodies = R.bodies;
+        for (let i = 0; i < bodies.length; i++) {
+          const b = bodies[i], h = b.pos.y - env.groundHeight(b.pos.x, b.pos.z);
+          const big = i === RAG.PELVIS || i === RAG.CHEST || i === RAG.SPINE;
+          const rad = (big ? 0.27 : i === RAG.HEAD ? 0.16 : 0.12) * S;
+          const k = (big ? 0.75 : 0.6) * (1 - smoothstep(0.04, 0.55, h - rad * 0.5));
+          if (k > 0.02) this.blob(b.pos.x, b.pos.z, rad * 1.25, rad * 1.25, 0, k);
+        }
+        continue;
+      }
+      // standing / walking: a blob under each foot + a soft pool under the body
+      for (const fb of [B.foot_L, B.foot_R]) {
+        const a = npc.boneWPos[fb], r = npc.boneWRot[fb];
+        if (!a || !r) continue;
+        const f = this._p.set(0, 0, 1).applyQuaternion(r); f.y = 0;
+        const fl = Math.hypot(f.x, f.z) || 1; f.x /= fl; f.z /= fl;
+        const mx = a.x + f.x * 0.06 * S, mz = a.z + f.z * 0.06 * S;
+        const h = a.y - env.groundHeight(mx, mz) - npc.rig.ankleY;
+        const k = 0.9 * (1 - smoothstep(0.0, 0.3, h));
+        this.blob(mx, mz, 0.12 * S, 0.21 * S, Math.atan2(f.x, f.z), k);
+      }
+      const hp = npc.boneWPos[B.hips];
+      if (hp) {
+        const h = hp.y - env.groundHeight(hp.x, hp.z);
+        const k = 0.5 * (1 - smoothstep(0.3 * S, 1.3 * S, h)) + 0.3;
+        this.blob(hp.x, hp.z, 0.42 * S, 0.34 * S, npc.root.yaw, k);
+      }
+    }
+    for (const p of g.props.list) {
+      const b = p.body; if (!b) continue;
+      const r = p.radius || 0.3, h = b.pos.y - env.groundHeight(b.pos.x, b.pos.z);
+      this.blob(b.pos.x, b.pos.z, r * 1.15, r * 1.15, 0, 0.7 * (1 - smoothstep(r * 0.6, r * 0.6 + 0.8, h)));
+    }
+    this.mesh.count = this.n;
+    this.mesh.instanceMatrix.needsUpdate = true; this.aK.needsUpdate = true;
+  }
+}
+HT.ContactShadows = ContactShadows;
 
 // ===== 30_physics.js =====
 // ============================================================================
@@ -4795,15 +5148,94 @@ const ZOMBIE_GAITS = [
   // spasms, head snaps, sudden lurches
   { name: 'twitcher', w: 8, drag: [0.2, 0.4], stiff: [0.2, 0.3], limp: 0.2, hunch: 0.3, roll: 0.06, lurch: 0.05, headLoll: 0.35, arms: 'claw', stride: 0.8, jitter: 0.45, width: 1.25, toeOut: 0.15, speed: 0.9, twitch: 1 }
 ];
-if (HT.dev) HT.dev.ZOMBIE_GAITS = ZOMBIE_GAITS;
+if (HT.dev) { HT.dev.ZOMBIE_GAITS = ZOMBIE_GAITS; HT.dev.SB = SB; HT.dev.B = B; HT.dev.RAG = typeof RAG !== "undefined" ? RAG : null; }
 function pickZombieGait() {
   let tot = 0; for (const z of ZOMBIE_GAITS) tot += z.w;
   let r = Math.random() * tot;
   for (const z of ZOMBIE_GAITS) { r -= z.w; if (r <= 0) return z; }
   return ZOMBIE_GAITS[0];
 }
+// --- zombie attack clips -------------------------------------------------------------
+// Hand positions relative to the shoulder in arm-length units: x outward on that hand's side,
+// y up, z forward. a = attacking hand, s = other hand (both = mirrored two-handed attack).
+// ch/sp/hd = chest/spine/head [pitch, yaw toward the attacking side, roll]; hit = contact time.
+const SCRATCH_CLIPS = {
+  overhead: { dur: 1.0, hit: 0.55, keys: [
+    { t: 0.0, a: [0.12, -0.7, 0.32], s: [0.06, -0.85, 0.15], ch: [0.1, 0, 0], sp: [0.05, 0, 0], hd: [0.05, 0, 0], fa: 0.55, fs: 0.4, jaw: 0.12, hips: 0 },
+    { t: 0.3, a: [0.38, 0.42, -0.08], s: [0.12, -0.55, 0.32], ch: [-0.06, 0.32, 0.08], sp: [-0.03, 0.12, 0], hd: [-0.06, -0.12, 0], fa: 0.1, fs: 0.5, jaw: 0.38, hips: -0.02 },
+    { t: 0.45, a: [0.2, 0.28, 0.5], s: [0.1, -0.55, 0.3], ch: [0.1, 0.05, 0], sp: [0.04, 0.02, 0], hd: [0.05, 0, 0], fa: 0.5, fs: 0.5, jaw: 0.3, hips: 0.03 },
+    { t: 0.55, a: [-0.12, -0.22, 0.82], s: [0.18, -0.6, 0.12], ch: [0.26, -0.3, -0.07], sp: [0.1, -0.12, 0], hd: [0.16, 0.18, 0], fa: 0.92, fs: 0.5, jaw: 0.2, hips: 0.07 },
+    { t: 0.72, a: [-0.34, -0.58, 0.45], s: [0.18, -0.7, 0.05], ch: [0.18, -0.34, -0.04], sp: [0.08, -0.12, 0], hd: [0.1, 0.12, 0], fa: 0.8, fs: 0.45, jaw: 0.15, hips: 0.04 },
+    { t: 1.0, a: [0.12, -0.7, 0.32], s: [0.06, -0.85, 0.15], ch: [0.1, 0, 0], sp: [0.05, 0, 0], hd: [0.05, 0, 0], fa: 0.55, fs: 0.4, jaw: 0.12, hips: 0 }] },
+  backhand: { dur: 0.85, hit: 0.46, keys: [
+    { t: 0.0, a: [0.15, -0.6, 0.4], s: [0.1, -0.8, 0.2], ch: [0.08, 0, 0], sp: [0.04, 0, 0], hd: [0.04, 0, 0], fa: 0.5, fs: 0.45, jaw: 0.1, hips: 0 },
+    { t: 0.32, a: [0.72, 0.02, 0.18], s: [0.0, -0.55, 0.42], ch: [0.0, 0.38, -0.06], sp: [0.0, 0.15, 0], hd: [0.0, -0.2, 0.05], fa: 0.2, fs: 0.6, jaw: 0.3, hips: -0.02 },
+    { t: 0.46, a: [-0.2, -0.04, 0.78], s: [0.1, -0.62, 0.3], ch: [0.14, -0.32, 0.06], sp: [0.06, -0.14, 0], hd: [0.08, 0.2, -0.05], fa: 0.9, fs: 0.5, jaw: 0.22, hips: 0.05 },
+    { t: 0.66, a: [-0.52, -0.16, 0.4], s: [0.12, -0.72, 0.2], ch: [0.1, -0.4, 0.04], sp: [0.05, -0.15, 0], hd: [0.06, 0.15, 0], fa: 0.75, fs: 0.45, jaw: 0.15, hips: 0.03 },
+    { t: 1.0, a: [0.15, -0.6, 0.4], s: [0.1, -0.8, 0.2], ch: [0.08, 0, 0], sp: [0.04, 0, 0], hd: [0.04, 0, 0], fa: 0.5, fs: 0.45, jaw: 0.1, hips: 0 }] },
+  double: { dur: 1.1, hit: 0.52, both: true, keys: [
+    { t: 0.0, a: [0.1, -0.5, 0.55], ch: [0.12, 0, 0], sp: [0.06, 0, 0], hd: [0.05, 0, 0], fa: 0.55, jaw: 0.15, hips: 0 },
+    { t: 0.3, a: [0.28, 0.32, 0.12], ch: [-0.1, 0, 0], sp: [-0.06, 0, 0], hd: [-0.12, 0, 0], fa: 0.15, jaw: 0.45, hips: -0.05 },
+    { t: 0.52, a: [0.04, -0.12, 0.88], ch: [0.34, 0, 0], sp: [0.16, 0, 0], hd: [0.2, 0, 0], fa: 0.9, jaw: 0.25, hips: 0.12 },
+    { t: 0.75, a: [0.14, -0.45, 0.5], ch: [0.22, 0, 0], sp: [0.1, 0, 0], hd: [0.12, 0, 0], fa: 0.85, jaw: 0.15, hips: 0.06 },
+    { t: 1.0, a: [0.1, -0.5, 0.55], ch: [0.12, 0, 0], sp: [0.06, 0, 0], hd: [0.05, 0, 0], fa: 0.55, jaw: 0.15, hips: 0 }] },
+  jab: { dur: 0.7, hit: 0.4, keys: [
+    { t: 0.0, a: [0.1, -0.55, 0.45], s: [0.08, -0.8, 0.2], ch: [0.08, 0, 0], sp: [0.04, 0, 0], hd: [0.04, 0, 0], fa: 0.5, fs: 0.5, jaw: 0.12, hips: 0 },
+    { t: 0.25, a: [0.22, -0.05, 0.12], s: [0.12, -0.7, 0.3], ch: [-0.04, 0.18, 0], sp: [0, 0.08, 0], hd: [-0.05, -0.08, 0], fa: 0.3, fs: 0.5, jaw: 0.3, hips: -0.03 },
+    { t: 0.4, a: [0.02, 0.12, 0.95], s: [0.15, -0.68, 0.15], ch: [0.2, -0.12, 0], sp: [0.08, -0.06, 0], hd: [0.1, 0.06, 0], fa: 0.95, fs: 0.5, jaw: 0.4, hips: 0.08 },
+    { t: 0.62, a: [0.08, -0.3, 0.6], s: [0.1, -0.75, 0.2], ch: [0.12, -0.05, 0], sp: [0.05, 0, 0], hd: [0.06, 0, 0], fa: 0.8, fs: 0.5, jaw: 0.2, hips: 0.03 },
+    { t: 1.0, a: [0.1, -0.55, 0.45], s: [0.08, -0.8, 0.2], ch: [0.08, 0, 0], sp: [0.04, 0, 0], hd: [0.04, 0, 0], fa: 0.5, fs: 0.5, jaw: 0.12, hips: 0 }] }
+};
+const SCRATCH_NAMES = Object.keys(SCRATCH_CLIPS);
+// where each swipe is steered on the victim around the contact frame (motion warping):
+// bone (victim side mirrored), height offset, how far in front of the bone the hand stops, sideways bias
+const SCRATCH_AIM = {
+  overhead: { bone: 'clavicle', up: 0.05, back: 0.1, lat: 0 },
+  backhand: { bone: 'chest', up: 0.03, back: 0.16, lat: 0.07 },
+  double: { bone: 'upperarm', up: 0.03, back: 0.09, lat: 0 },
+  jab: { bone: 'chest', up: -0.07, back: 0.17, lat: 0 }
+};
+function crv(a, b, c, d, t) { // Catmull-Rom on one component
+  const t2 = t * t, t3 = t2 * t;
+  return 0.5 * ((2 * b) + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+}
+// sample a clip at normalised time u: returns { idx, f, k0, k1 } and fills out arrays via CR / smooth lerp
+function clipSample(keys, u, field, out) {
+  let i = 0; while (i < keys.length - 2 && keys[i + 1].t <= u) i++;
+  const k0 = keys[i], k1 = keys[i + 1], f = clamp((u - k0.t) / Math.max(1e-4, k1.t - k0.t), 0, 1);
+  const km = keys[Math.max(0, i - 1)], kp = keys[Math.min(keys.length - 1, i + 2)];
+  const A = km[field], Bq = k0[field], Cq = k1[field], D = kp[field];
+  if (Array.isArray(Bq)) { for (let j = 0; j < Bq.length; j++) out[j] = crv((A || Bq)[j], Bq[j], Cq[j], (D || Cq)[j], f); return out; }
+  return lerp(Bq, Cq, smooth01(f));
+}
+const _kca = [0, 0, 0], _kcb = [0, 0, 0], _kcc = [0, 0, 0], _kcd = [0, 0, 0], _kce = [0, 0, 0];
+
 const _qa = new QT(), _va = new V3();
 
+
+// --- transformation rise: lying -> pushing up -> knees -> crouch -> upright, zombie posture
+function zombieRiseKeys(faceDown) {
+  const stand = { t: 5.4, hy: 0.96, pitch: 0.12, sp: 0.12, ch: 0.08, hd: 0.22, feet: [[0.1, 0.0, 0.0], [-0.1, 0.0, 0.0]], knee: [0, 0, 1], hands: null, fing: 0.55 };
+  if (faceDown) return [
+    { t: 0.0, hy: 0.16, pitch: 1.5, sp: 0.0, ch: 0.0, hd: -0.25, feet: [[0.12, -0.95, 1.2], [-0.12, -0.95, 1.2]], knee: [0, -1, 0.2], hands: [[0.24, 0.02, 0.36], [-0.24, 0.02, 0.35]], fing: 0.25 },
+    { t: 0.8, hy: 0.16, pitch: 1.48, sp: 0.0, ch: -0.04, hd: -0.12, feet: [[0.12, -0.95, 1.2], [-0.13, -0.93, 1.2]], knee: [0, -1, 0.2], hands: [[0.18, 0.02, 0.34], [-0.17, 0.02, 0.33]], fing: 0.6 },
+    { t: 1.6, hy: 0.24, pitch: 1.12, sp: -0.1, ch: -0.12, hd: 0.35, feet: [[0.12, -0.9, 1.2], [-0.12, -0.88, 1.2]], knee: [0, -1, 0.25], hands: [[0.16, 0.02, 0.38], [-0.16, 0.02, 0.37]], fing: 0.3 },
+    { t: 2.5, hy: 0.33, pitch: 0.86, sp: 0.0, ch: 0.0, hd: 0.45, feet: [[0.12, -0.22, 1.0], [-0.12, -0.62, 1.2]], knee: [0, -0.3, 1], hands: [[0.15, 0.02, 0.32], [-0.15, 0.02, 0.33]], fing: 0.35 },
+    { t: 3.3, hy: 0.4, pitch: 0.7, sp: 0.1, ch: 0.08, hd: 0.5, feet: [[0.12, -0.45, 1.2], [-0.12, -0.45, 1.2]], knee: [0, -0.2, 1], hands: [[0.15, 0.02, 0.28], [-0.15, 0.02, 0.28]], fing: 0.45 },
+    { t: 4.1, hy: 0.55, pitch: 0.45, sp: 0.15, ch: 0.1, hd: 0.38, feet: [[0.11, 0.12, 0.0], [-0.11, -0.5, 1.1]], knee: [0, 0.2, 1], hands: [[0.16, 0.25, 0.18], [-0.16, 0.12, 0.2]], fing: 0.55 },
+    { t: 4.8, hy: 0.8, pitch: 0.34, sp: 0.2, ch: 0.15, hd: 0.3, feet: [[0.11, 0.08, 0.0], [-0.11, -0.18, 0.3]], knee: [0, 0, 1], hands: null, fing: 0.55 },
+    stand
+  ];
+  return [
+    { t: 0.0, hy: 0.15, pitch: -1.5, sp: 0.0, ch: 0.0, hd: 0.25, feet: [[0.12, 0.95, -0.2], [-0.12, 0.95, -0.2]], knee: [0, 1, 0.1], hands: [[0.26, 0.02, -0.02], [-0.26, 0.02, -0.02]], fing: 0.25 },
+    { t: 0.9, hy: 0.15, pitch: -1.46, sp: 0.02, ch: 0.04, hd: 0.12, feet: [[0.12, 0.94, -0.2], [-0.13, 0.92, -0.2]], knee: [0, 1, 0.1], hands: [[0.24, 0.02, -0.05], [-0.22, 0.02, -0.06]], fing: 0.62 },
+    { t: 1.9, hy: 0.15, pitch: -0.35, sp: 0.15, ch: 0.1, hd: 0.55, feet: [[0.13, 0.65, -0.1], [-0.13, 0.62, -0.1]], knee: [0, 1, 0.2], hands: [[0.18, 0.02, -0.12], [-0.18, 0.02, -0.14]], fing: 0.3 },
+    { t: 2.8, hy: 0.24, pitch: 0.3, sp: 0.25, ch: 0.2, hd: 0.45, feet: [[0.12, 0.25, 0.0], [-0.12, 0.42, 0.0]], knee: [0, 0.8, 0.6], hands: [[0.16, 0.02, 0.18], [-0.16, 0.02, 0.16]], fing: 0.35 },
+    { t: 3.6, hy: 0.42, pitch: 0.55, sp: 0.2, ch: 0.12, hd: 0.45, feet: [[0.12, 0.1, 0.0], [-0.12, -0.25, 0.9]], knee: [0, 0.3, 1], hands: [[0.15, 0.04, 0.25], [-0.15, 0.04, 0.24]], fing: 0.45 },
+    { t: 4.4, hy: 0.68, pitch: 0.4, sp: 0.2, ch: 0.12, hd: 0.35, feet: [[0.11, 0.06, 0.0], [-0.11, -0.12, 0.3]], knee: [0, 0, 1], hands: null, fing: 0.55 },
+    stand
+  ];
+}
 
 // --- two-bone IK ---------------------------------------------------------------------
 const _ikD = new V3(), _ikP = new V3(), _ikE = new V3(), _ikU1 = new V3(), _ikU2 = new V3(), _ikN = new V3(), _ikT = new V3();
@@ -5021,6 +5453,7 @@ class Animator {
     let stride = lg * (0.78 + 0.6 * Math.min(spd, 6));
     if (zs) stride *= lerp(1, zs.stride, zomb);
     let freq = Math.max(0.5, spd / Math.max(0.3, stride)) * pers.cadence;
+    if (zs && this.zvar) freq *= lerp(1, this.zvar.cadence, zomb);
     if (zs) {
       this.jitT -= dt;
       if (this.jitT <= 0) { this.jitT = 0.3 + Math.random() * 0.6; this.jitK = 1 + (Math.random() * 2 - 1) * zs.jitter; }
@@ -5060,6 +5493,12 @@ class Animator {
           const tLand = (1 - sw) * (1 - duty) * T + duty * T * 0.5;
           const yl = yaw + this.yawRate * tLand * 0.8;
           f.to.set(root.pos.x + Math.cos(yl) * sg * lat + this.vel.x * tLand, 0, root.pos.z - Math.sin(yl) * sg * lat + this.vel.z * tLand);
+          // side-stepping / staggering: the swing foot never lands across the planted one
+          const o = this.feet[1 - s];
+          if (!o.swing) {
+            const sepMin = lat * 0.9, rel = ((f.to.x - o.pos.x) * cy - (f.to.z - o.pos.z) * sy) * sg;
+            if (rel < sepMin) { const k = Math.min(sepMin - rel, 0.35) * sg; f.to.x += cy * k; f.to.z -= sy * k; }
+          }
           f.to.y = env.groundHeight(f.to.x, f.to.z);
           const e = smoothstep(0.0, 0.94, sw);
           f.pos.lerpVectors(f.from, f.to, e);
@@ -5282,6 +5721,21 @@ class Animator {
         P.clav[s].set(0, 0, 0);
       }
     }
+    if (zs && zomb > 0.5) {
+      const zv = this.zvar || { shoulder: 1, armPhase: 0, intensity: 1 };
+      for (let s = 0; s < 2; s++) { // shoulders roll with the steps, hands never quite still
+        P.clav[s].z += Math.sin(TAU * (ph + s * 0.5) + zv.armPhase) * 0.07 * zv.shoulder * wk + Math.sin(this.time * 0.7 + s * 2 + zv.armPhase) * 0.03;
+        P.clav[s].x += Math.sin(TAU * ph + s * Math.PI) * 0.05 * zv.shoulder * wk;
+        P.hand[s].fing = clamp(P.hand[s].fing + Math.sin(this.time * (1.1 + s * 0.37) + zv.armPhase) * 0.18, 0, 1);
+      }
+      // arms come up to grab as the zombie closes in on prey
+      this.reachW = damp(this.reachW || 0, this.reachTarget || 0, 4, dt);
+      if (this.reachW > 0.01) for (let s = 0; s < 2; s++) {
+        const rp = this.armPose('reach', s);
+        rp.pos.y += 0.08 * this.L + Math.sin(this.time * 3 + s * 1.9 + zv.armPhase) * 0.05 * this.L; rp.fing = 0.75 + 0.2 * Math.sin(this.time * 6 + s); rp.flex = 0.25;
+        P.hand[s].lerp(rp, this.reachW);
+      }
+    }
     P.jaw = zs ? 0.1 * zomb + Math.max(0, Math.sin(this.time * 1.7)) * 0.06 * zomb : 0;
     P.look = 1;
     if (moving) this.stateName = zs ? (run > 0.4 ? 'zombieRun' : 'zombieWalk') : (run > 0.5 ? 'run' : (spd > 1.7 ? 'jog' : 'walk'));
@@ -5327,6 +5781,7 @@ class Animator {
       const dx = wx - root.pos.x, dz = wz - root.pos.z;
       hp.posR.set(dx * cy - dz * sy, wy - root.pos.y, dx * sy + dz * cy);
       hp.space = 1; hp.pole.set(sg * 0.9, 0.4, -0.3); hp.pron = -1.3; hp.flex = -0.4; hp.fing = plant ? 0.6 : 0.3; hp.thumb = 0.4;
+      if (s === 1 && this.crawlAttack > 0) { const k = Math.sin(Math.PI * clamp(1 - this.crawlAttack / 0.55, 0, 1)); hp.posR.y += k * 0.28; hp.posR.z += k * 0.18; hp.fing = 0.9; }
       // legs drag behind (pointing back, knees down)
       const fp = P.foot[s];
       fp.pos.set(sg * rig.hipHalf * 1.3, rig.ankleY * 0.9, -rig.legLen * 0.97 + Math.sin((c.phase + s * 0.5) * TAU) * 0.03);
@@ -5335,6 +5790,7 @@ class Animator {
     }
     // keep the feet records near the body so standing up later is smooth
     for (let s = 0; s < 2; s++) { const f = this.feet[s]; f.pos.set(root.pos.x, env.groundHeight(root.pos.x, root.pos.z), root.pos.z); f.swing = false; }
+    if (this.crawlAttack > 0) this.crawlAttack -= dt;
     P.jaw = 0.15 + Math.max(0, Math.sin(this.time * 1.5)) * 0.1; P.look = 0.6;
     this.stateName = 'crawl';
   }
@@ -5434,10 +5890,21 @@ class Animator {
       else if (h0) { hp.posR.set(h0[0] * H, h0[1] * H + 0.02, h0[2] * H); hp.space = 1 - t; hp.pos.copy(this.armPose('hang', s).pos); }
       hp.pole.set(SIDE_SIGN[s] * 0.8, 0.2, -0.6); hp.pron = -1.2; hp.flex = -0.7; hp.fing = lerp(k0.fing, k1.fing, t); hp.thumb = 0.2;
     }
-    if (c.zombie) { Pc.head.z += Math.sin(c.t * 7) * 0.12; Pc.spine.y += Math.sin(c.t * 3.3) * 0.08; }
+    if (c.zombie && !c.transform) { Pc.head.z += Math.sin(c.t * 7) * 0.12; Pc.spine.y += Math.sin(c.t * 3.3) * 0.08; }
+    if (c.transform) {
+      // irregular head jerks and twitching hands, strongest in the middle of the rise
+      const k = clamp(c.t / c.dur, 0, 1), amp = 0.35 + 0.65 * Math.max(0, 1 - Math.abs(k - 0.5) * 1.7);
+      const jerk = Math.max(0, Math.sin(c.t * 2.7 + 1.3)) ** 6;
+      Pc.head.y += (Math.sin(c.t * 4.1) * 0.12 + jerk * 0.35 * Math.sign(Math.sin(c.t * 0.9))) * amp;
+      Pc.head.z += Math.sin(c.t * 2.9 + 1) * 0.14 * amp; Pc.neck.x += Math.sin(c.t * 1.7) * 0.08 * amp;
+      Pc.chest.z += Math.sin(c.t * 2.2) * 0.05 * amp; Pc.spine.y += Math.sin(c.t * 1.6 + 2) * 0.06 * amp;
+      for (let s = 0; s < 2; s++) { const hp = Pc.hand[s]; hp.fing = clamp(hp.fing + Math.sin(c.t * 6.3 + s * 2.1) * 0.35 * amp, 0, 1); hp.thumb = hp.fing * 0.8; }
+      Pc.jaw = 0.08 + Math.max(0, Math.sin(c.t * 3.3)) * 0.18 * amp;
+    }
     P.copy(Pc);
     if (c.t >= c.dur) {
       const done = c.onDone; this.clip = null;
+      this.takeSnapshot(c.transform ? 0.7 : 0.4); // blend into locomotion instead of popping
       if (done) done();
     }
   }
@@ -5446,91 +5913,235 @@ class Animator {
   setAction(type, opts) {
     if (!type) { if (this.action) this.action.ending = true; return; }
     const prev = this.action;
-    this.action = Object.assign({ type, t: 0, w: prev && !prev.ending ? prev.w : 0, ending: false }, opts || {});
+    this.action = Object.assign({ type, t: 0, w: prev && !prev.ending ? prev.w : 0, ending: false, inT: 0.22, outT: 0.35 }, opts || {});
   }
   toRoot(w, root, out) {
     const dx = w.x - root.pos.x, dz = w.z - root.pos.z, c = Math.cos(root.yaw), s = Math.sin(root.yaw);
     return out.set(dx * c - dz * s, w.y - root.pos.y, dx * s + dz * c);
   }
+  // point the face at a world position by turning chest, neck and head together (bite / feeding aim)
+  aimHead(P, root, target, weight) {
+    this.toRoot(target, root, _va);
+    _va.sub(this.csPos[B.neck]);
+    const yaw = Math.atan2(_va.x, _va.z), pitch = Math.atan2(-_va.y, Math.hypot(_va.x, _va.z) + 1e-4);
+    const trunk = P.hipsRot.x + P.spine.x + P.chest.x + P.neck.x + P.head.x;
+    const dp = clamp(pitch - trunk, -0.7, 1.1) * weight, dy = clamp(yaw, -1.1, 1.1) * weight;
+    P.chest.y += dy * 0.3; P.neck.y += dy * 0.3; P.head.y += dy * 0.4;
+    P.chest.x += dp * 0.2; P.neck.x += dp * 0.35; P.head.x += dp * 0.45;
+  }
   applyAction(P, dt, root, env) {
     const a = this.action;
     a.t += dt;
-    a.w = a.ending ? Math.max(0, a.w - dt / 0.35) : Math.min(1, a.w + dt / (a.type === 'feed' ? 0.6 : 0.22));
+    a.w = a.ending ? Math.max(0, a.w - dt / a.outT) : Math.min(1, a.w + dt / (a.type === 'feed' ? 0.6 : a.inT));
     if (a.ending && a.w <= 0) { this.action = null; return; }
     const Pc = this.Pc; Pc.copy(P);
-    if (a.type === 'bite') this.poseBite(Pc, a, root);
-    else if (a.type === 'struggle') this.poseStruggle(Pc, a, root);
-    else if (a.type === 'feed') this.poseFeed(Pc, a, root, env);
+    if (a.type === 'bite') this.poseBite(Pc, a, root, dt);
+    else if (a.type === 'scratch') this.poseScratch(Pc, a, root);
+    else if (a.type === 'struggle') this.poseStruggle(Pc, a, root, dt);
+    else if (a.type === 'feed') this.poseFeed(Pc, a, root, env, dt);
+    else if (a.type === 'recover') this.poseRecover(Pc, a, root);
+    else if (a.type === 'balance') this.poseBalance(Pc, a, root);
+    else if (a.type === 'notice') this.poseNotice(Pc, a, root);
     else if (a.type === 'convulse') this.poseConvulse(Pc, a, root);
     P.lerp(Pc, smooth01(a.w));
+    if (!a.ending && a.dur && a.t >= a.dur) a.ending = true;
   }
-  // zombie: hands clamp the victim's shoulders, lunges at the neck, bites and tears
-  poseBite(P, a, root) {
-    const v = a.target; if (!v || v.removed) return;
-    const cyc = (a.t * 1.1) % 1;
-    const lunge = cyc < 0.32 ? smooth01(cyc / 0.32) : (cyc < 0.55 ? 1 : 1 - smooth01((cyc - 0.55) / 0.45));
-    P.hipsRot.x += 0.06; P.spine.x += 0.1 + lunge * 0.08; P.chest.x += 0.1 + lunge * 0.14;
-    for (let s = 0; s < 2; s++) {
-      this.toRoot(v.boneWPos[SB('upperarm', 1 - s)], root, _va);
-      const hp = P.hand[s];
-      hp.posR.copy(_va); hp.posR.y -= 0.02; hp.posR.z -= 0.02; hp.space = 1;
-      hp.pole.set(SIDE_SIGN[s], -0.7, -0.25); hp.pron = -0.9; hp.flex = 0.55; hp.fing = 0.9; hp.thumb = 0.75;
+  // hand target from clip coordinates (shoulder-relative, outward-positive) into chest space
+  clipHand(hp, s, c, L) {
+    const sg = SIDE_SIGN[s], sc = this.shoulderC[s];
+    hp.pos.set(sc.x + c[0] * sg * L, sc.y + c[1] * L, sc.z + c[2] * L);
+    hp.space = 0;
+  }
+  // zombie swipes: keyframed shoulder/elbow/wrist/torso/head motion with a contact event
+  poseScratch(P, a, root) {
+    const C = SCRATCH_CLIPS[a.clip] || SCRATCH_CLIPS.overhead, K = C.keys, L = this.L;
+    const u = clamp(a.t / a.dur, 0, 1);
+    const side = a.side, so = 1 - side, sg = SIDE_SIGN[side];
+    const ha = P.hand[side], hs = P.hand[so];
+    this.clipHand(ha, side, clipSample(K, u, 'a', _kca), L);
+    ha.pole.set(sg * 1, -0.55, -0.45); ha.pron = -0.9; ha.flex = 0.15; ha.dev = 0;
+    ha.fing = clipSample(K, u, 'fa'); ha.thumb = ha.fing * 0.8;
+    if (C.both) { this.clipHand(hs, so, clipSample(K, u, 'a', _kcb), L); hs.fing = ha.fing; }
+    else { this.clipHand(hs, so, clipSample(K, u, 's', _kcb), L); hs.fing = clipSample(K, u, 'fs'); }
+    hs.pole.set(SIDE_SIGN[so] * 1, -0.55, -0.45); hs.pron = -0.6; hs.thumb = hs.fing * 0.8;
+    const ch = clipSample(K, u, 'ch', _kcc), sp = clipSample(K, u, 'sp', _kcd), hd = clipSample(K, u, 'hd', _kce);
+    const tw = C.both ? 0 : 1;
+    P.chest.x += ch[0]; P.chest.y += sg * ch[1] * tw; P.chest.z += sg * ch[2] * tw;
+    P.spine.x += sp[0]; P.spine.y += sg * sp[1] * tw;
+    P.head.x += hd[0]; P.head.y += sg * hd[1] * tw; P.head.z += sg * hd[2] * tw;
+    P.hipsOff.z += clipSample(K, u, 'hips'); P.hipsRot.x += clipSample(K, u, 'hips') * 0.8;
+    P.jaw = clipSample(K, u, 'jaw');
+    P.clav[side].set(0.15, 0, 0.1); P.clav[so].set(0.08, 0, 0);
+    const v = a.target;
+    if (v && !v.removed) {
+      this.aimHead(P, root, v.boneWPos[B.head], 0.35);
+      // motion warping: bend the strike toward the victim's body so the claw meets it at the contact frame
+      const w = v.physMode === 'anim' ? (u < C.hit ? smoothstep(C.hit - 0.24, C.hit, u) : 1 - smoothstep(C.hit + 0.04, C.hit + 0.26, u)) * 0.8 : 0;
+      if (w > 0.001) {
+        const aim = SCRATCH_AIM[a.clip] || SCRATCH_AIM.jab;
+        for (let k = 0; k < (C.both ? 2 : 1); k++) {
+          const s = k === 0 ? side : so;
+          this.toRoot(v.boneWPos[aim.bone === 'chest' ? B.chest : SB(aim.bone, 1 - s)], root, _va);
+          const hd = Math.hypot(_va.x, _va.z);
+          if (hd > 1e-3) { const back = Math.min(aim.back, hd * 0.5); _va.x -= _va.x / hd * back; _va.z -= _va.z / hd * back; }
+          _va.y += aim.up; _va.x += SIDE_SIGN[s] * aim.lat;
+          const hp = P.hand[s]; hp.posR.copy(_va); hp.space = w;
+        }
+      }
     }
-    P.jaw = cyc < 0.3 ? 0.42 : (cyc < 0.4 ? lerp(0.42, 0.02, (cyc - 0.3) / 0.1) : 0.04 + Math.max(0, Math.sin(a.t * 17)) * 0.05);
-    P.neck.x += 0.1 + lunge * 0.15; P.head.x += 0.12 + lunge * 0.18;
-    if (cyc > 0.4 && cyc < 0.68) { P.head.y += Math.sin(a.t * 38) * 0.14; P.chest.y += Math.sin(a.t * 38) * 0.05; }
-    P.look = 1;
+    P.look = 0;
   }
-  // victim: pushes against the attacker, leans and turns away, screaming
-  poseStruggle(P, a, root) {
+  // zombie bite: reach, clamp the shoulders, lunge and bite (event), tear, chew; aims at the bite point
+  poseBite(P, a, root, dt) {
+    const v = a.target; if (!v || v.removed) return;
+    // cycles: 'lunge' (bite lands on the snap frame), 'worry' (jaws locked, shaking), 'pause' (pull back, chew)
+    const mkCyc = (kind) => kind === 'lunge' ? { kind, t: 0, dur: 1.0 + Math.random() * 0.4, snap: 0.3 + Math.random() * 0.1, snapped: false }
+      : { kind, t: 0, dur: kind === 'worry' ? 0.8 + Math.random() * 0.4 : 0.7 + Math.random() * 0.4, snap: 99, snapped: true };
+    if (!a.cyc) a.cyc = mkCyc('lunge');
+    let c = a.cyc; c.t += dt;
+    if (c.t >= c.dur) { const r = Math.random(); a.cyc = c = mkCyc(c.kind !== 'lunge' ? (r < 0.75 ? 'lunge' : 'worry') : (r < 0.4 ? 'lunge' : r < 0.72 ? 'worry' : 'pause')); }
+    const cy = c.t / c.dur;
+    if (!c.snapped && c.t >= c.snap) { c.snapped = true; a.snapEvent = true; }
+    let lunge;
+    if (c.kind === 'lunge') lunge = cy < 0.3 ? smooth01(cy / 0.3) : (cy < 0.55 ? 1 : 1 - smooth01((cy - 0.55) / 0.45) * 0.6);
+    else if (c.kind === 'worry') lunge = 0.4 + 0.15 * Math.sin(cy * Math.PI);
+    else lunge = 0.4 * (1 - Math.sin(cy * Math.PI) * 0.9);
+    const reach = smooth01(Math.min(1, a.t / 0.28));
+    P.hipsRot.x += 0.05; P.spine.x += 0.08 + lunge * 0.06; P.chest.x += 0.08 + lunge * 0.1;
+    // hands: shoulders (front bite), shoulder + upper arm (side), or the raised forearm (arm bite)
+    for (let s = 0; s < 2; s++) {
+      let tb;
+      if (a.variant === 'arm') tb = s === 0 ? v.boneWPos[SB('forearm', 1)] : v.boneWPos[SB('hand', 1)];
+      else if (a.variant === 'shoulder') tb = s === 0 ? v.boneWPos[SB('upperarm', 1)] : v.boneWPos[SB('forearm', 1)];
+      else tb = v.boneWPos[SB('upperarm', 1 - s)];
+      this.toRoot(tb, root, _va);
+      const hp = P.hand[s];
+      const rest = this.armPose('reach', s);
+      hp.pos.copy(rest.pos); hp.posR.copy(_va); hp.posR.y -= 0.02; hp.posR.z -= 0.02; hp.space = reach;
+      hp.pole.set(SIDE_SIGN[s], -0.7, -0.25); hp.pron = -0.9; hp.flex = 0.55; hp.fing = lerp(0.5, 0.92, reach); hp.thumb = hp.fing * 0.8;
+    }
+    const bp = a.variant === 'arm' ? v.boneWPos[SB('forearm', 1)] : a.variant === 'shoulder' ? v.boneWPos[SB('clavicle', 1)] : v.boneWPos[B.neck];
+    this.aimHead(P, root, bp, 0.85);
+    if (c.kind === 'lunge') P.jaw = cy < 0.28 ? 0.45 : (cy < 0.38 ? lerp(0.45, 0.02, (cy - 0.28) / 0.1) : 0.04 + Math.max(0, Math.sin(a.t * 17)) * 0.05);
+    else if (c.kind === 'worry') P.jaw = 0.03 + Math.max(0, Math.sin(a.t * 11)) * 0.04;
+    else P.jaw = 0.06 + Math.max(0, Math.sin(a.t * 9)) * 0.2;
+    P.neck.x += lunge * 0.12; P.head.x += lunge * 0.14;
+    if (c.kind === 'lunge' && cy > 0.38 && cy < 0.66) { const sh = Math.sin(a.t * 36) * (1 - (cy - 0.38) / 0.28); P.head.y += sh * 0.16; P.chest.y += sh * 0.06; }
+    else if (c.kind === 'worry') { const sh = Math.sin(a.t * 24) * Math.sin(cy * Math.PI); P.head.y += sh * 0.2; P.chest.y += sh * 0.08; P.head.z += sh * 0.06; }
+    else if (c.kind === 'pause') { const k = Math.sin(cy * Math.PI); P.head.x -= k * 0.12; P.neck.x -= k * 0.06; P.head.y += Math.sin(a.t * 3.1) * 0.12 * k; }
+    P.look = 0;
+  }
+  // victim: pushes the attacker off, twists and pulls away, or blocks with a forearm
+  poseStruggle(P, a, root, dt) {
     const z = a.target; if (!z || z.removed) return;
     const t = a.t, away = a.away || 1;
-    P.spine.x -= 0.1; P.chest.x -= 0.16 + Math.sin(t * 7) * 0.04;
-    P.chest.z += Math.sin(t * 6.3) * 0.09; P.hipsRot.z += Math.sin(t * 5.1) * 0.04;
-    for (let s = 0; s < 2; s++) {
-      this.toRoot(s === 0 ? z.boneWPos[B.chest] : z.boneWPos[B.head], root, _va);
-      const hp = P.hand[s];
-      hp.posR.copy(_va); hp.posR.x += SIDE_SIGN[s] * 0.07; hp.posR.y += (s === 0 ? -0.04 : -0.1) + Math.sin(t * 9 + s * 2) * 0.03; hp.space = 1;
-      hp.pole.set(SIDE_SIGN[s], -0.8, -0.3); hp.pron = -1.4; hp.flex = -0.8; hp.fing = 0.15; hp.thumb = 0.2;
-    }
-    P.head.x -= 0.22; P.head.y += away * 0.55; P.neck.y += away * 0.3; P.head.z -= away * 0.12;
+    a.modeT = (a.modeT || 0) - dt;
+    if (a.modeT <= 0) { a.prevMode = a.mode || 'push'; a.mode = a.forceMode || ['push', 'pull', 'push', 'block'][Math.floor(Math.random() * 4)]; a.modeT = 0.7 + Math.random() * 0.8; a.mw = 0; }
+    a.mw = Math.min(1, (a.mw || 0) + dt / 0.3);
+    const base = P.spine.x, Pm = this.Pb; Pm.copy(P);
+    const mode = (m, Q) => {
+      Q.spine.x -= 0.1; Q.chest.x -= 0.16 + Math.sin(t * 7) * 0.04; Q.chest.z += Math.sin(t * 6.3) * 0.09; Q.hipsRot.z += Math.sin(t * 5.1) * 0.04;
+      for (let s = 0; s < 2; s++) {
+        const hp = Q.hand[s];
+        let tb = s === 0 ? z.boneWPos[B.chest] : z.boneWPos[B.head];
+        if (m === 'pull' && s === 1) tb = z.boneWPos[SB('upperarm', 0)];
+        this.toRoot(tb, root, _va);
+        hp.posR.copy(_va); hp.posR.x += SIDE_SIGN[s] * 0.07; hp.posR.y += (s === 0 ? -0.04 : -0.1) + Math.sin(t * 9 + s * 2) * 0.03; hp.space = 1;
+        hp.pole.set(SIDE_SIGN[s], -0.8, -0.3); hp.pron = -1.4; hp.flex = -0.8; hp.fing = 0.15; hp.thumb = 0.2;
+      }
+      if (m === 'pull') { Q.chest.y += away * 0.45; Q.spine.y += away * 0.25; Q.chest.x -= 0.12; Q.hipsOff.z -= 0.06; const hp = Q.hand[away > 0 ? 0 : 1]; hp.space = 0.3; }
+      if (m === 'block') { // forearm up between the faces
+        const hb = Q.hand[1]; hb.space = 0; hb.pos.copy(this.armPose('guard', 1).pos); hb.pos.z += 0.05; hb.pole.set(-1, -1, 0.2); hb.pron = -0.8; hb.fing = 0.75;
+        Q.head.x += 0.1; Q.chest.x -= 0.05;
+      }
+      Q.head.x -= 0.22; Q.head.y += away * 0.55; Q.neck.y += away * 0.3; Q.head.z -= away * 0.12;
+    };
+    mode(a.mode, P);
+    if (a.mw < 1 && a.prevMode && a.prevMode !== a.mode) { mode(a.prevMode, Pm); P.lerp(Pm, 1 - smooth01(a.mw)); }
     P.jaw = 0.36 + Math.sin(t * 13) * 0.06;
     P.look = 0;
   }
-  // zombie kneeling over a body: dips, bites, tears and chews; one hand pins, the other feeds
-  poseFeed(P, a, root, env) {
+  // zombie eating a body: dive-and-tear, two-handed pulling, sitting back to chew (pauses), leaning on one arm
+  poseFeed(P, a, root, env, dt) {
     const rig = this.rig, H = rig.H;
-    const t = a.t, cyc = (t / 1.9) % 1;
+    a.modeT = (a.modeT || 0) - dt;
+    if (a.modeT <= 0) {
+      a.prevMode = a.mode || 'dive';
+      const r = Math.random();
+      a.mode = a.prevMode === 'chew' ? (r < 0.6 ? 'dive' : 'tear') : (r < 0.38 ? 'dive' : r < 0.62 ? 'tear' : r < 0.85 ? 'chew' : 'lean');
+      a.modeT = a.mode === 'chew' ? 1.2 + Math.random() * 1.6 : 1.6 + Math.random() * 2.2;
+      a.mt = 0; a.mw = 0; a.cycle = 1.5 + Math.random() * 0.8;
+    }
+    a.mt = (a.mt || 0) + dt; a.mw = Math.min(1, (a.mw || 0) + dt / 0.45);
+    const Pm = this.Pb; Pm.copy(P);
+    this.feedMode(P, a, a.mode, a.mt, root);
+    if (a.mw < 1 && a.prevMode && a.prevMode !== a.mode) { this.feedMode(Pm, a, a.prevMode, a.mt + 2, root); P.lerp(Pm, 1 - smooth01(a.mw)); }
+    // bite event for the AI (blood, chunks, sound) at the deepest point of a dive / tear
+    const cyc = (a.mt / a.cycle) % 1;
+    if ((a.mode === 'dive' || a.mode === 'tear') && cyc > 0.32 && (a.lastCyc || 0) <= 0.32) a.biteEvent = true;
+    a.lastCyc = cyc;
+  }
+  feedMode(P, a, mode, t, root) {
+    const rig = this.rig, H = rig.H;
+    const cyc = (t / (a.cycle || 1.9)) % 1;
     const dip = cyc < 0.3 ? smooth01(cyc / 0.3) : (cyc < 0.5 ? 1 : 1 - smooth01((cyc - 0.5) / 0.5));
-    const hipJ = rig.thighLen * 0.82 + 0.07;
-    P.hipsOff.set(0, hipJ + 0.035 * H - rig.hipsHeight, -0.06);
-    P.hipsRot.set(0.45, 0, Math.sin(t * 0.9) * 0.04);
-    P.spine.set(0.42 + dip * 0.06, Math.sin(t * 0.7) * 0.05, 0); P.chest.set(0.38 + dip * 0.1, 0, Math.sin(t * 1.3) * 0.04);
-    P.neck.set(0.2 + dip * 0.2, 0, 0); P.head.set(0.2 + dip * 0.25, cyc > 0.3 && cyc < 0.5 ? Math.sin(t * 36) * 0.18 : 0, 0.1);
+    const sitBack = mode === 'chew' ? 1 : 0;
+    const hipJ = rig.thighLen * (0.82 - sitBack * 0.18) + 0.07;
+    P.hipsOff.set(0, hipJ + 0.035 * H - rig.hipsHeight, -0.06 - sitBack * 0.05);
+    P.hipsRot.set(0.45 - sitBack * 0.25, 0, Math.sin(t * 0.9) * 0.04);
+    const lean = mode === 'chew' ? 0.15 : mode === 'lean' ? 0.32 : 0.42;
+    P.spine.set(lean + dip * 0.06 * (1 - sitBack), Math.sin(t * 0.7) * 0.05, mode === 'lean' ? 0.12 : 0);
+    P.chest.set(lean - 0.04 + dip * 0.1 * (1 - sitBack), mode === 'chew' ? Math.sin(t * 0.8) * 0.15 : 0, Math.sin(t * 1.3) * 0.04);
+    P.neck.set(0.2 + dip * 0.2 * (1 - sitBack), 0, 0);
+    P.head.set(0.2 + dip * 0.25 * (1 - sitBack) - sitBack * 0.25, (cyc > 0.3 && cyc < 0.5 && mode !== 'chew') ? Math.sin(t * 36) * 0.18 : (mode === 'chew' ? Math.sin(t * 1.1) * 0.5 : 0), 0.1);
     for (let s = 0; s < 2; s++) {
       const sg = SIDE_SIGN[s], fp = P.foot[s];
       fp.pos.set(sg * rig.hipHalf * 1.15, rig.ankleY * 0.3 + 0.1, -rig.shinLen * 0.86);
       fp.pitch = 1.25; fp.yaw = 0; fp.roll = 0; fp.pole.set(sg * 0.15, -0.5, 1);
     }
-    const tgt = a.point;
+    const tgt = a.point, fh = a.hand || 0;
     for (let s = 0; s < 2; s++) {
       const hp = P.hand[s], sg = SIDE_SIGN[s];
-      const feeding = s === (a.hand || 0) && cyc > 0.42;
-      if (tgt && !feeding) {
+      let toMouth = 0;
+      if (mode === 'dive' && s === fh) toMouth = cyc > 0.42 ? smooth01((cyc - 0.42) / 0.18) * (1 - smooth01((cyc - 0.85) / 0.15)) : 0;
+      if (mode === 'tear') toMouth = cyc > 0.45 ? smooth01((cyc - 0.45) / 0.2) * (1 - smooth01((cyc - 0.85) / 0.15)) * 0.6 : 0;
+      if (mode === 'chew') toMouth = s === fh ? 0.9 : 0.15;
+      if (mode === 'lean' && s !== fh) toMouth = 0;
+      hp.pos.set(-sg * 0.03, 0.2, 0.17);
+      if (tgt) {
         this.toRoot(tgt, root, _va);
-        hp.posR.copy(_va); hp.posR.x += sg * 0.13; hp.posR.y += 0.04 + (s === (a.hand || 0) ? dip * 0.02 : 0); hp.space = 1;
-        hp.pole.set(sg, -0.5, -0.5); hp.pron = -1.2; hp.flex = 0.3; hp.fing = 0.8; hp.thumb = 0.6;
-      } else {
-        // hand to mouth (chest space)
-        const k = smooth01((cyc - 0.42) / 0.18) * (1 - smooth01((cyc - 0.85) / 0.15));
-        hp.pos.set(-sg * 0.03, 0.2, 0.17).lerp(this.armPose('reach', s).pos, 1 - k);
-        hp.space = tgt ? 1 - k : 0;
-        if (tgt) { this.toRoot(tgt, root, _va); hp.posR.copy(_va); hp.posR.y += 0.05; }
-        hp.pole.set(sg, -0.8, -0.2); hp.pron = -1.4; hp.flex = 0.7; hp.fing = 0.9; hp.thumb = 0.8;
-      }
+        hp.posR.copy(_va); hp.posR.x += sg * (mode === 'lean' && s !== fh ? 0.24 : 0.13); hp.posR.y += 0.04 + (mode === 'tear' ? smooth01(Math.max(0, cyc - 0.4) / 0.3) * 0.12 : 0);
+        if (mode === 'lean' && s !== fh) { hp.posR.z -= 0.15; hp.posR.y = 0.06 - root.pos.y + root.pos.y; }
+        hp.space = 1 - toMouth;
+      } else hp.space = 0;
+      hp.pole.set(sg, -0.5, -0.5); hp.pron = -1.2; hp.flex = toMouth > 0.5 ? 0.7 : 0.3; hp.fing = lerp(0.8, 0.95, toMouth); hp.thumb = 0.7;
     }
-    P.jaw = cyc < 0.3 ? 0.4 : (cyc < 0.5 ? 0.05 + Math.max(0, Math.sin(t * 22)) * 0.1 : 0.06 + Math.max(0, Math.sin(t * 15)) * 0.16);
-    P.look = 0.6;
+    P.jaw = mode === 'chew' ? 0.05 + Math.max(0, Math.sin(t * 9)) * 0.22 : (cyc < 0.3 ? 0.4 : (cyc < 0.5 ? 0.05 + Math.max(0, Math.sin(t * 22)) * 0.1 : 0.06 + Math.max(0, Math.sin(t * 15)) * 0.16));
+    P.look = mode === 'chew' ? 0.8 : 0.3;
+  }
+  // after an attack: half-step back, head shake, chewing
+  poseRecover(P, a, root) {
+    const u = clamp(a.t / (a.dur || 0.8), 0, 1), k = Math.sin(Math.PI * u);
+    P.hipsOff.z -= k * 0.06; P.chest.x -= k * 0.08; P.head.y += Math.sin(a.t * 14) * 0.14 * (1 - u); P.head.x += k * 0.1;
+    P.jaw = 0.06 + Math.max(0, Math.sin(a.t * 10)) * 0.2;
+    for (let s = 0; s < 2; s++) { const hp = P.hand[s]; hp.pos.y -= k * 0.06; hp.fing = 0.6 + 0.3 * Math.sin(a.t * 8 + s); }
+  }
+  // catching balance after a lurch: arms flung out, torso tilting the other way
+  poseBalance(P, a, root) {
+    const u = clamp(a.t / (a.dur || 0.8), 0, 1), k = Math.sin(Math.PI * u), d = a.dir || 1;
+    P.hipsRot.z += d * 0.08 * k; P.spine.z -= d * 0.12 * k; P.chest.z -= d * 0.1 * k; P.head.z += d * 0.15 * k;
+    for (let s = 0; s < 2; s++) {
+      const hp = P.hand[s], sg = SIDE_SIGN[s];
+      const arm = this.armPose('flail', s);
+      hp.pos.lerp(arm.pos, k * (sg === d ? 0.9 : 0.55)); hp.fing = lerp(hp.fing, 0.1, k);
+    }
+  }
+  // noticing prey: hunch, head snaps forward, arms twitch up
+  poseNotice(P, a, root) {
+    const u = clamp(a.t / (a.dur || 0.6), 0, 1), k = Math.sin(Math.PI * Math.min(1, u * 1.3));
+    P.chest.x += k * 0.1; P.neck.x -= k * 0.15; P.head.x -= k * 0.1; P.clav[0].z += k * 0.2; P.clav[1].z += k * 0.2;
+    P.jaw = 0.1 + k * 0.35;
+    for (let s = 0; s < 2; s++) { const hp = P.hand[s]; hp.pos.y += k * 0.08; hp.pos.z += k * 0.06; hp.fing = 0.4 + k * 0.5; }
   }
   // infected body seizing on the ground before it turns (used while ragdolled via springs too)
   poseConvulse(P, a, root) {
@@ -5539,7 +6150,6 @@ class Animator {
     for (let s = 0; s < 2; s++) { const hp = P.hand[s]; hp.pos.y += Math.sin(t * 27 + s * 3) * 0.08; hp.fing = 0.5 + 0.5 * Math.sin(t * 19 + s); }
     P.jaw = 0.2 + Math.abs(Math.sin(t * 21)) * 0.25;
   }
-
   // --- solver -------------------------------------------------------------------------
   solve(P, root, dt) {
     const rig = this.rig, off = rig.localOffset;
@@ -5935,7 +6545,10 @@ class NPC {
     this.settleTimer = 0;
     this.downTimer = 1.4 + Math.random() * 1.2;
     this.lastReaction = reason || 'Ragdoll';
-    if (this.brain) this.brain.state = 'down';
+    // interaction poses (bite, swipe, struggle, feeding) end when the body goes limp
+    if (this.lifeState === 'zombie' && this.brain && this.game.ai) { this.game.ai.endGrab(this); this.game.ai.endFeed(this); }
+    this.anim.action = null; this.anim.reachW = 0; this.anim.reachTarget = 0; this.anim.crawlAttack = 0;
+    if (this.brain) { this.brain.state = 'down'; this.brain.victim2 = null; this.brain.plan = null; }
   }
   handleDowned(dt) {
     if ((this.lifeState !== 'alive' && this.lifeState !== 'zombie') || this.carried) return;
@@ -5944,11 +6557,10 @@ class NPC {
     if (v < 0.35) this.settleTimer += dt; else this.settleTimer = 0;
     if (this.downTimer <= 0 && this.settleTimer > 0.5 && Settings.data.ai.enabled !== false) this.startGetUp(this.lifeState === 'zombie');
   }
-  startGetUp(asZombie) {
-    if ((this.gore && this.gore.lostLegs > 0) || (this.isZombie && this.anim.zstyle && this.anim.zstyle.crawl)) return this.startCrawl(asZombie);
+  // place the animation root under the lying ragdoll (no teleport): returns whether it lies face down
+  rootFromRagdoll() {
     const rag = this.rag;
-    const pel = rag.bodies[RAG.PELVIS], head = rag.bodies[RAG.HEAD];
-    // chest facing
+    const pel = rag.bodies[RAG.PELVIS], head = rag.bodies[this.gore && this.gore.boneDetached[B.head] ? RAG.CHEST : RAG.HEAD];
     rag.boneWorldFromBody(RAG.CHEST, _v1, _q1);
     const fwd = _v2.set(0, 0, 1).applyQuaternion(_q1);
     const faceDown = fwd.y < 0;
@@ -5960,23 +6572,41 @@ class NPC {
     const rp = _v4.set(pel.pos.x, 0, pel.pos.z);
     env.clampToBounds(rp, 0.5);
     rp.y = env.groundHeight(rp.x, rp.z);
-    // set the new root, then express current pose relative to it
     this.root.pos.copy(rp); this.root.yaw = yaw;
     this.bones[0].position.copy(rp); this.bones[0].quaternion.setFromAxisAngle(UP, yaw);
     _q2.setFromAxisAngle(UP, -yaw);
     const hw = this.boneWPos[B.hips].clone().sub(rp).applyQuaternion(_q2);
     this.bones[B.hips].position.copy(hw);
     this.bones[B.hips].quaternion.premultiply(_q2);
-    this.anim.takeSnapshot(asZombie ? 0.8 : 0.5);
     this.anim.resetFeet(rp, yaw, env);
     this.anim.prevRootPos.copy(rp);
+    return faceDown;
+  }
+  // transformation: slow zombie rise from the ground, finishing when the sequence ends
+  startTransformRise(duration) {
+    if ((this.gore && this.gore.lostLegs > 0) || (this.anim.zstyle && this.anim.zstyle.crawl)) { this.startCrawl(false); return; }
+    const faceDown = this.rootFromRagdoll();
+    this.anim.takeSnapshot(1.4);
+    const keys = zombieRiseKeys(faceDown);
+    this.anim.playClip('zombieTransform', keys, () => { if (this.physMode === 'getup') this.physMode = 'anim'; Events.emit('transformRisen', this); });
+    this.anim.clip.speed = keys[keys.length - 1].t / Math.max(2.8, duration);
+    this.anim.clip.zombie = true; this.anim.clip.transform = true;
+    this.rag.setDynamic(false);
+    this.physMode = 'getup';
+    this.lastReaction = 'Transforming (Rising)';
+  }
+  startGetUp(asZombie) {
+    if ((this.gore && this.gore.lostLegs > 0) || (this.isZombie && this.anim.zstyle && this.anim.zstyle.crawl)) return this.startCrawl(asZombie);
+    const faceDown = this.rootFromRagdoll();
+    const rp = this.root.pos, env = this.game.env;
+    this.anim.takeSnapshot(asZombie ? 0.8 : 0.5);
     const keys = getUpKeys(faceDown);
     this.anim.playClip(asZombie ? 'zombieRise' : 'getUp', keys, () => {
       if (this.physMode === 'getup') this.physMode = 'anim';
       if (asZombie) Events.emit('zombieRisen', this);
       if (this.brain) this.brain.state = 'idle';
     });
-    this.anim.clip.speed = asZombie ? 0.55 : this.personality.animSpeed;
+    this.anim.clip.speed = asZombie ? 0.75 : this.personality.animSpeed;
     this.anim.clip.zombie = asZombie;
     this.rag.setDynamic(false);
     this.physMode = 'getup';
@@ -6007,7 +6637,7 @@ class NPC {
     this.lastReaction = this.lifeState === 'zombie' ? 'Crawling (Legs Lost)' : 'Crawling (Leg Severed)';
     if (this.brain) this.brain.state = this.lifeState === 'zombie' || asZombie ? 'zIdle' : 'flee';
     Events.emit('npcGetUp', this);
-    if (asZombie || this.lifeState === 'reanimating') Events.emit('zombieRisen', this);
+    if (asZombie) Events.emit('zombieRisen', this);
   }
   // --- damage -----------------------------------------------------------------------
   applyHit(info) {
@@ -6042,6 +6672,8 @@ class NPC {
   }
   destroyZombie(info) {
     if (!this.setLife('destroyed', 'zombie killed')) return false;
+    if (this.game.ai) { this.game.ai.endGrab(this); this.game.ai.endFeed(this); } // let go of any victim / meal
+    this.zombieTarget = null;
     this.deathTime = this.game.time;
     this.goRagdoll('Ragdoll (Destroyed)', true);
     Events.emit('npcDied', { npc: this, info, zombie: true });
@@ -6072,6 +6704,7 @@ class NPC {
     const n = pos.length / 3;
     if (!this.skinned || this.skinned.length !== pos.length) this.skinned = new Float32Array(pos.length);
     const out = this.skinned;
+    this.mesh.updateMatrixWorld(true); // bone world matrices are otherwise refreshed only when rendering
     this.mesh.skeleton.update();
     const bm = this.mesh.skeleton.boneMatrices;
     // boneMatrices = boneWorld * boneInverse (mesh at identity)
@@ -6590,7 +7223,27 @@ class AISystem {
       }
     }
     b.burstT = Math.max(0, (b.burstT || 0) - dt);
+    b.attackCD = Math.max(0, (b.attackCD || 0) - dt);
+    if (!anim.zvar) anim.zvar = makeZombieVariation();
+    const zv = anim.zvar;
+    anim.reachTarget = 0;
+    // occasional balance corrections while walking (not for sprinting / weaving / crawling styles)
+    if (!anim.crawl && !zst.wobble && !zst.chase && anim.speed > 0.4 && anim.speed < 2 && !anim.action && b.state !== 'zGrab' && b.state !== 'zFeed') {
+      b.balT = (b.balT == null ? zv.balanceT : b.balT) - dt;
+      if (b.balT <= 0) {
+        b.balT = zv.balanceT * (0.7 + Math.random() * 0.8) / (1 + (zst.lurch || 0) * 6);
+        const dir = Math.random() < 0.5 ? 1 : -1;
+        anim.setAction('balance', { dur: 0.75 + Math.random() * 0.2, dir, inT: 0.12, outT: 0.3 });
+        b.stagger.add(_v1.set(Math.cos(npc.root.yaw), 0, -Math.sin(npc.root.yaw)).multiplyScalar(dir * 0.9 * zv.intensity));
+      }
+    }
     if (b.state === 'zGrab') { this.zombieGrab(npc, b, dt, Z); return; }
+    if (b.state === 'zScratch') { this.zombieScratch(npc, b, dt, Z); return; }
+    if (b.state === 'zRecover') {
+      b.speed = 0; b.recT -= dt;
+      if (b.recT <= 0) { b.state = npc.zombieTarget && npc.zombieTarget.lifeState === 'alive' ? 'zChase' : 'zIdle'; b.t = 0; }
+      return;
+    }
     if (b.state === 'zFeed' && this.zombieFeed(npc, b, dt, Z)) return;
     // target selection
     let tgt = npc.zombieTarget;
@@ -6598,38 +7251,158 @@ class AISystem {
     b.retarget = (b.retarget || 0) - dt;
     if ((!tgt || b.retarget <= 0) && Z.aggression && Z.targetNPCs) { tgt = this.selectTarget(npc, Z); b.retarget = 2.5; }
     if (!Z.aggression || !Z.targetNPCs) tgt = null;
-    if (tgt !== npc.zombieTarget) { npc.zombieTarget = tgt; if (tgt) Events.emit('zombieTarget', { npc, target: tgt }); }
+    if (tgt !== npc.zombieTarget) {
+      const was = npc.zombieTarget; npc.zombieTarget = tgt; b.plan = null;
+      if (tgt) {
+        Events.emit('zombieTarget', { npc, target: tgt });
+        // noticing new prey: stop, head snaps round, a growl, then go
+        if (!was && (b.state === 'zIdle' || b.state === 'zInvestigate' || b.state === 'zChase') && !anim.crawl) {
+          b.state = 'zNotice'; b.noticeT = (0.35 + Math.random() * 0.55) / zv.headRate; b.t = 0;
+          anim.setAction('notice', { dur: b.noticeT + 0.15, inT: 0.1, outT: 0.3 });
+          anim.kick(B.head, _v1.set(-2, (Math.random() - 0.5) * 6, 0));
+          if (Z.vocalize) this.game.audio.play('growl', { pos: npc.boneWPos[B.head].clone(), gain: 0.7 });
+        }
+      }
+    }
+    if (b.state === 'zNotice') {
+      b.speed = 0; b.noticeT -= dt;
+      if (tgt) { b.faceTarget = tgt.root.pos; anim.lookAt(tgt.boneWPos[B.head], 1); }
+      if (b.noticeT <= 0 || !tgt) { b.state = tgt ? 'zChase' : 'zIdle'; b.t = 0; }
+      return;
+    }
     if (tgt) {
       const d = tgt.root.pos.distanceTo(npc.root.pos);
       anim.lookAt(tgt.boneWPos[B.head], 1);
       anim.setUpper('hang'); // style arms from the zombie gait (reach / claw / limp)
+      // arms come up as the zombie closes in
+      if (!anim.crawl) anim.reachTarget = smoothstep(2.8, 1.1, d) * (zst.arms === 'flail' ? 0.4 : 1);
       // a living victim on the ground gets eaten where it lies
       if (tgt.physMode === 'ragdoll' && Z.feeding && !anim.crawl && (tgt.feeders || 0) < 2) { this.startFeed(npc, b, tgt); return; }
-      const canGrab = !anim.crawl && tgt.physMode === 'anim' && !tgt.grabbedBy && b.grabCooldown <= 0;
-      if (d > (canGrab ? 0.78 : (anim.crawl ? 0.7 : 0.95))) {
+      if (anim.crawl) {
+        if (d > 0.7) { b.state = 'zChase'; b.dest.copy(tgt.root.pos); b.speed = zspeed; }
+        else {
+          b.state = 'zAttack'; b.speed = 0; b.faceTarget = tgt.root.pos;
+          b.attackT -= dt;
+          if (b.attackT <= 0) { b.attackT = 1.2 + Math.random() * 0.8; anim.crawlAttack = 0.55; this.zombieAttack(npc, tgt); }
+        }
+        return;
+      }
+      // pick how to attack once in range: grab-and-bite or a swipe (re-planned after every attack)
+      const grabbable = tgt.physMode === 'anim' && !tgt.grabbedBy && b.grabCooldown <= 0;
+      if (!b.plan && d < 1.8) {
+        const weak = tgt.brain && (tgt.brain.state === 'hurt' || tgt.health < 50);
+        b.plan = grabbable && Math.random() < (weak ? 0.75 : 0.42) ? 'grab' : 'scratch';
+      }
+      if (b.plan === 'grab' && !grabbable) b.plan = 'scratch';
+      const range = b.plan === 'grab' ? 0.78 : 0.98;
+      if (d > range || b.attackCD > 0) {
         b.state = 'zChase'; b.dest.copy(tgt.root.pos);
         // lunge at close range; runners sprint, twitchers lurch in bursts
-        b.speed = d < 1.7 && !anim.crawl ? Math.max(zspeed * 1.5, 2.3) : zspeed * (d < 3 ? 1.25 : 1) * (zst.chase || 1) * (b.burstT > 0 ? 2.2 : 1);
-      } else if (canGrab) {
-        this.startGrab(npc, b, tgt);
-      } else {
-        b.state = 'zAttack'; b.speed = 0; b.faceTarget = tgt.root.pos;
-        b.attackT -= dt;
-        if (b.attackT <= 0) {
-          b.attackT = 1.1 + Math.random() * 0.6;
-          if (!anim.crawl) { anim.setUpper('claw'); anim.jawTarget = 0.35; setTimeout(() => { if (!npc.removed && npc.lifeState === 'zombie') { anim.setUpper('hang'); anim.jawTarget = 0.1; } }, 450); }
-          this.zombieAttack(npc, tgt);
-        }
-      }
+        // lunge into a grab; a swipe needs room, so the last steps slow down instead
+        b.speed = d < 1.7 ? (b.plan === 'scratch' ? Math.max(zspeed, 0.9) * (d < 1.25 ? 0.75 : 1) : Math.max(zspeed * 1.5, 2.3))
+          : zspeed * (d < 3 ? 1.25 : 1) * (zst.chase || 1) * (b.burstT > 0 ? 2.2 : 1) * zv.cadence;
+        if (b.attackCD > 0 && d < 0.85) b.speed = 0;
+      } else if (b.plan === 'grab') this.startGrab(npc, b, tgt);
+      else this.startScratch(npc, b, tgt);
     } else {
-      // nothing alive nearby: find a body to eat, else shamble around
+      // nothing alive nearby: find a body to eat, else shamble around looking about
       if (Z.feeding && !anim.crawl) { const c = this.findCorpse(npc, 14); if (c) { this.startFeed(npc, b, c); return; } }
       if (b.state !== 'zIdle' && b.state !== 'zInvestigate') { b.state = 'zIdle'; b.t = 0; this.pickWander(npc, b); }
       anim.setUpper('hang');
-      b.speed = b.state === 'zInvestigate' ? zspeed : (b.t % 8 < 4 ? zspeed * 0.6 : 0);
+      b.speed = b.state === 'zInvestigate' ? zspeed : (b.t % 8 < 4 ? zspeed * 0.6 * zv.cadence : 0);
       if (npc.root.pos.distanceTo(b.dest) < 0.7) { this.pickWander(npc, b); b.state = 'zIdle'; }
-      anim.clearLook();
+      b.lookT = (b.lookT || 0) - dt;
+      if (b.lookT <= 0) {
+        b.lookT = (1.2 + Math.random() * 2.6) / zv.headRate;
+        const a = npc.root.yaw + (Math.random() - 0.5) * 2.6;
+        b.lookPos = b.lookPos || new V3();
+        b.lookPos.set(npc.root.pos.x + Math.sin(a) * 4, npc.rig.eyeY + (Math.random() - 0.6) * 1.2, npc.root.pos.z + Math.cos(a) * 4);
+        anim.kick(B.head, _v1.set((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 7, (Math.random() - 0.5) * 3));
+      }
+      if (b.lookPos && b.speed < 0.3) anim.lookAt(b.lookPos, 0.7); else anim.clearLook();
     }
+  }
+  // --- scratches: keyframed swipes with contact detection at the hit frame ----------------
+  startScratch(z, b, v) {
+    const anim = z.anim, zst = anim.zstyle || {};
+    let clip = SCRATCH_NAMES[Math.floor(Math.random() * SCRATCH_NAMES.length)];
+    if (zst.arms === 'claw' && Math.random() < 0.4) clip = 'double';
+    const side = Math.random() < 0.5 ? 0 : 1;
+    const C = SCRATCH_CLIPS[clip];
+    const dur = C.dur * (0.85 + Math.random() * 0.3) / ((anim.zvar && anim.zvar.cadence) || 1);
+    anim.setAction('scratch', { clip, side, dur, target: v, hitDone: false, inT: 0.1, outT: 0.25 });
+    b.state = 'zScratch'; b.victim2 = v; b.t = 0; b.speed = 0; b.plan = null;
+    z.lastReaction = 'Attacking (Scratch)';
+    if (Math.random() < 0.6 && Settings.data.zombies.vocalize) this.game.audio.play('growl', { pos: z.boneWPos[B.head].clone(), gain: 0.6 });
+  }
+  zombieScratch(z, b, dt, Z) {
+    const v = b.victim2, a = z.anim.action;
+    if (!a || a.type !== 'scratch' || a.ending) { this.endScratch(z, b, false); return; }
+    if (!v || v.removed || v.lifeState !== 'alive') { this.endScratch(z, b, false); return; }
+    const d = v.root.pos.distanceTo(z.root.pos);
+    const C = SCRATCH_CLIPS[a.clip];
+    const u = a.t / a.dur;
+    // keep a striking distance while facing the target: step in during the wind-up only, never crowd after contact
+    b.faceTarget = v.root.pos;
+    if (d > 0.95 && u < C.hit * 0.8) { b.dest.copy(v.root.pos); b.speed = 0.7; }
+    else if (d < 0.66) { b.dest.copy(z.root.pos).addScaledVector(_v1.subVectors(z.root.pos, v.root.pos).setY(0).normalize(), 0.5); b.speed = 0.6; }
+    else b.speed = 0;
+    z.root.yaw = angleDamp(z.root.yaw, Math.atan2(v.root.pos.x - z.root.pos.x, v.root.pos.z - z.root.pos.z), u < C.hit ? 6 : 2, dt);
+    // contact is swept over a short window around the strike: it lands where the claw actually touches
+    if (!a.hitDone && u >= C.hit - 0.1) {
+      const last = u >= C.hit + 0.16;
+      if (this.scratchContact(z, v, a, last) || last) a.hitDone = true;
+    }
+    if (u >= 1) this.endScratch(z, b, true);
+  }
+  endScratch(z, b, finished) {
+    if (z.anim.action && z.anim.action.type === 'scratch') z.anim.setAction(null);
+    const v = b.victim2; b.victim2 = null;
+    // chain another swipe now and then, otherwise a short recovery
+    if (finished && v && !v.removed && v.lifeState === 'alive' && v.physMode === 'anim' && v.root.pos.distanceTo(z.root.pos) < 1.0 && Math.random() < 0.35) { this.startScratch(z, b, v); return; }
+    b.state = 'zRecover'; b.recT = 0.3 + Math.random() * 0.45; b.attackCD = 0.25 + Math.random() * 0.5;
+    z.anim.setAction('recover', { dur: b.recT + 0.2, inT: 0.15, outT: 0.3 });
+  }
+  // the swing connects only if the claw actually reaches the body; effects start at the contact point
+  scratchContact(z, v, a, last) {
+    const g = this.game, Z = Settings.data.zombies;
+    const C = SCRATCH_CLIPS[a.clip] || SCRATCH_CLIPS.jab;
+    let vi = -1, bd = 0.16, hs = a.side;
+    for (let k = 0; k < (C.both ? 2 : 1); k++) {
+      const s = k === 0 ? a.side : 1 - a.side, hand = z.boneWPos[SB('fingers1', s)];
+      // cheap reject before the per-vertex search
+      if (hand.distanceTo(v.boneWPos[B.chest]) > 0.8 && hand.distanceTo(v.boneWPos[B.head]) > 0.5 && hand.distanceTo(v.boneWPos[B.hips]) > 0.6) continue;
+      const i = g.gore.nearestVertex(v, hand, null);
+      if (i < 0) continue;
+      const S = v.skinnedPositions();
+      const dd = Math.hypot(S[i * 3] - hand.x, S[i * 3 + 1] - hand.y, S[i * 3 + 2] - hand.z);
+      if (dd < bd) { bd = dd; vi = i; hs = s; }
+    }
+    if (vi < 0) { if (last) g.audio.play('swing', { pos: z.boneWPos[SB('hand', a.side)].clone(), gain: 0.5 }); return false; }
+    const S = v.skinnedPositions();
+    const p = new V3(S[vi * 3], S[vi * 3 + 1], S[vi * 3 + 2]);
+    const region = v.mesh.geometry.attributes.aRegion.array[vi] | 0;
+    const toV = _v2.subVectors(v.root.pos, z.root.pos).setY(0).normalize();
+    const side = _v3.set(Math.cos(z.root.yaw), 0, -Math.sin(z.root.yaw)).multiplyScalar(SIDE_SIGN[hs] * (a.clip === 'backhand' ? -0.5 : (a.clip === 'overhead' ? -0.3 : 0)));
+    const dir = toV.clone().add(side).normalize();
+    // a raised guard takes the swipe on the forearms
+    const up = v.anim.upper && v.anim.upper.cur;
+    const blocked = (up === 'guard' || up === 'push' || up === 'cover') && (region === REGION.L_FOREARM || region === REGION.R_FOREARM || region === REGION.L_HAND || region === REGION.R_HAND);
+    const res = v.applyHit({ region, damage: Z.attackDamage * (0.8 + Math.random() * 0.4) * (blocked ? 0.45 : 1) / REGION_DAMAGE_MUL[region], weapon: 'zombie', dir: dir.clone(), point: p.clone(), force: 5, threatPos: z.root.pos.clone() });
+    g.gore.onClaw(v, z, vi, p, dir);
+    g.hits.report(v, region, res, 'Zombie Scratch', p);
+    if (Z.infection && !v.infection && Math.random() < 0.5) v.infection = { t: 0, dur: Z.infectionTime * (0.8 + Math.random() * 0.4), src: z.idStr };
+    if (v.lifeState === 'alive') {
+      // the reaction depends on where the claw lands and what the victim was doing
+      const running = v.anim.speed > 2.2;
+      this.onHit(v, { region, dir: dir.clone(), force: blocked ? 2.5 : (running ? 5.5 : 4.2), threatPos: z.root.pos.clone() });
+      if (blocked) v.lastReaction = 'Blocked Swipe';
+      if ((v.health < 22 && Math.random() < 0.5) || (running && Math.random() < 0.3)) {
+        v.goRagdoll(running ? 'Tripped (Zombie Swipe)' : 'Knockdown (Zombie)');
+        v.rag.bodies[RAG.CHEST].vel.addScaledVector(dir, running ? 1.6 : 2.4);
+      }
+    } else if (res.killed) z.kills++;
+    return true;
   }
   selectTarget(npc, Z) {
     const cands = [];
@@ -6654,12 +7427,16 @@ class AISystem {
   }
   // --- grapple & bite ---------------------------------------------------------------------
   startGrab(z, b, v) {
-    b.state = 'zGrab'; b.t = 0; b.victim = v; b.biteT = 0.32; b.bites = 0; b.grabDur = 2.2 + Math.random() * 2.2;
+    b.state = 'zGrab'; b.t = 0; b.victim = v; b.bites = 0; b.grabDur = 2.2 + Math.random() * 2.2; b.plan = null;
     v.grabbedBy = z;
     z.rag.noCollideWith = v.rag; v.rag.noCollideWith = z.rag;
     if (v.brain) { v.brain.state = 'grabbed'; v.brain.t = 0; v.brain.screamT = 0; }
-    z.anim.setUpper('hang'); z.anim.setAction('bite', { target: v });
-    v.anim.setAction('struggle', { target: z, away: Math.random() < 0.5 ? 1 : -1 });
+    // a raised forearm gets bitten; otherwise neck or shoulder
+    const guarding = v.anim.upper && (v.anim.upper.cur === 'guard' || v.anim.upper.cur === 'cover' || v.anim.upper.cur === 'push');
+    const variant = guarding && Math.random() < 0.7 ? 'arm' : (Math.random() < 0.55 ? 'neck' : 'shoulder');
+    b.biteVariant = variant;
+    z.anim.setUpper('hang'); z.anim.setAction('bite', { target: v, variant, inT: 0.25, outT: 0.35 });
+    v.anim.setAction('struggle', { target: z, away: Math.random() < 0.5 ? 1 : -1, forceMode: variant === 'arm' ? 'block' : null });
     v.anim.setUpper('hang'); v.fear = 1; v.lastReaction = 'Grabbed by Zombie';
     z.lastReaction = 'Biting';
     Events.emit('zombieAttack', { npc: z, target: v });
@@ -6677,23 +7454,27 @@ class AISystem {
     // hold both at biting distance, facing each other
     const dir = _v1.subVectors(v.root.pos, z.root.pos); dir.y = 0;
     let d = dir.length(); if (d < 1e-4) { dir.set(0, 0, 1); d = 1e-4; } else dir.multiplyScalar(1 / d);
-    const want = 0.37 * (z.rig.H + v.rig.H) / 3.5;
+    const want = 0.41 * (z.rig.H + v.rig.H) / 3.5;
     const corr = (d - want) * Math.min(1, dt * 7) * 0.5;
     z.root.pos.addScaledVector(dir, corr); v.root.pos.addScaledVector(dir, -corr);
     z.brain.vel.multiplyScalar(0.8); if (v.brain) v.brain.vel.multiplyScalar(0.8);
     z.root.yaw = angleDamp(z.root.yaw, Math.atan2(dir.x, dir.z), 9, dt);
     v.root.yaw = angleDamp(v.root.yaw, Math.atan2(-dir.x, -dir.z), 6, dt);
-    z.anim.lookAt(v.boneWPos[B.neck], 1);
-    b.biteT -= dt;
-    if (b.biteT <= 0) { b.biteT = 1 / 1.1; b.bites++; this.bite(z, v, b.bites); }
+    z.anim.clearLook();
+    // the victim tries to pull away: the pair drifts while it twists free
+    const sa = v.anim.action;
+    if (sa && sa.type === 'struggle' && sa.mode === 'pull') { z.root.pos.addScaledVector(dir, 0.12 * dt); v.root.pos.addScaledVector(dir, 0.12 * dt); }
+    // bites land on the animation's snap frame
+    const act = z.anim.action;
+    if (act && act.type === 'bite' && act.snapEvent) { act.snapEvent = false; b.bites++; this.bite(z, v, b.bites); }
     if (b.t > b.grabDur && v.lifeState === 'alive') {
       const chance = 0.25 + v.personality.bravery * 0.4 + clamp(v.health / 100, 0, 1) * 0.25;
       if (Math.random() < chance) this.breakFree(z, v); else b.grabDur += 1.3;
     }
   }
   bite(z, v, n) {
-    const Z = Settings.data.zombies;
-    const region = n === 1 || Math.random() < 0.55 ? REGION.NECK : (Math.random() < 0.6 ? REGION.UPPER_CHEST : (Math.random() < 0.5 ? REGION.L_UPPER_ARM : REGION.R_UPPER_ARM));
+    const Z = Settings.data.zombies, variant = z.brain && z.brain.biteVariant;
+    const region = variant === 'arm' ? REGION.R_FOREARM : variant === 'shoulder' ? (Math.random() < 0.6 ? REGION.UPPER_CHEST : REGION.R_UPPER_ARM) : (n === 1 || Math.random() < 0.7 ? REGION.NECK : REGION.UPPER_CHEST);
     const dir = _v2.subVectors(v.root.pos, z.root.pos).setY(0).normalize().clone();
     const res = v.applyHit({ region, damage: Z.biteDamage / REGION_DAMAGE_MUL[region], weapon: 'bite', dir, force: 2, threatPos: z.root.pos.clone() });
     this.game.gore.onBite(v, z, [region]);
@@ -6702,6 +7483,15 @@ class AISystem {
     v.anim.kick(B.neck, _v3.set(0.6, (Math.random() - 0.5) * 2, 0));
     v.anim.kick(B.chest, _v3.set(-0.8, 0, 0));
     if (res.killed) { z.kills++; HT.log('death', `${v.idStr} ${v.name} was killed by ${z.idStr}`); }
+    else if (v.lifeState === 'alive' && v.health < 32 && n > 1 && Math.random() < 0.45) {
+      // weakened victim is dragged to the ground (the zombie keeps eating where it falls)
+      v.goRagdoll('Pulled Down (Zombie)');
+      const side = _v3.set(Math.cos(z.root.yaw), 0, -Math.sin(z.root.yaw)).multiplyScalar(Math.random() < 0.5 ? 1 : -1);
+      v.rag.bodies[RAG.CHEST].vel.addScaledVector(dir, 0.6).addScaledVector(side, 0.9).y -= 1.2;
+      v.rag.bodies[RAG.PELVIS].vel.addScaledVector(dir, -0.5);
+      v.downTimer = Math.max(v.downTimer, 3);
+      v.lastReaction = 'Pulled Down (Zombie)';
+    }
   }
   breakFree(z, v) {
     this.endGrab(z);
@@ -6718,6 +7508,11 @@ class AISystem {
   endGrab(z) {
     const b = z.brain; if (!b) return;
     const v = b.victim;
+    if (v && z.physMode === 'anim' && z.lifeState === 'zombie') { // let go: stumble back, shake the head, chew
+      b.recT = 0.6 + Math.random() * 0.5;
+      z.anim.setAction('recover', { dur: b.recT + 0.2, inT: 0.2, outT: 0.35 });
+      b.stagger.add(_v1.subVectors(z.root.pos, v.root.pos).setY(0).normalize().multiplyScalar(0.8));
+    }
     if (v) {
       if (v.grabbedBy === z) v.grabbedBy = null;
       if (v.anim.action && v.anim.action.type === 'struggle') v.anim.setAction(null);
@@ -6725,7 +7520,7 @@ class AISystem {
     }
     b.victim = null;
     if (z.anim.action && z.anim.action.type === 'bite') z.anim.setAction(null);
-    if (b.state === 'zGrab') b.state = 'zIdle';
+    if (b.state === 'zGrab') { b.state = b.recT > 0 ? 'zRecover' : 'zIdle'; }
     b.grabCooldown = Math.max(b.grabCooldown || 0, 1.2);
   }
   // --- feeding --------------------------------------------------------------------------------
@@ -6759,14 +7554,15 @@ class AISystem {
       return true;
     }
     b.eating = true; b.speed = 0; b.faceTarget = tb.clone();
-    if (!z.anim.action || z.anim.action.type !== 'feed' || z.anim.action.ending) z.anim.setAction('feed', { target: c, point: new V3(), hand: Math.random() < 0.5 ? 0 : 1 });
-    z.anim.action.point.copy(tb); z.anim.action.point.y += 0.04;
-    z.anim.lookAt(tb, 0.6);
+    if (!z.anim.action || z.anim.action.type !== 'feed' || z.anim.action.ending) z.anim.setAction('feed', { target: c, point: new V3(), hand: Math.random() < 0.5 ? 0 : 1, outT: 0.9 });
+    const fa = z.anim.action;
+    fa.point.copy(tb); fa.point.y += 0.04;
+    if (fa.mode === 'chew') { b.lookT = (b.lookT || 0) - dt; if (b.lookT <= 0) { b.lookT = 0.8 + Math.random() * 1.2; b.lookPos = (b.lookPos || new V3()).set(z.root.pos.x + (Math.random() - 0.5) * 6, z.rig.eyeY * 0.6, z.root.pos.z + (Math.random() - 0.5) * 6); } z.anim.lookAt(b.lookPos, 0.7); }
+    else z.anim.lookAt(tb, 0.6);
     b.feedT += dt;
     this.game.gore.onFeed(c, z, dt, false);
-    b.biteT -= dt;
-    if (b.biteT <= 0) {
-      b.biteT = 1.9;
+    if (fa.biteEvent) {
+      fa.biteEvent = false;
       this.game.gore.onFeed(c, z, dt, true);
       if (c.lifeState === 'alive') {
         const res = c.applyHit({ region: REGION.ABDOMEN, damage: Z.biteDamage * 0.8 / REGION_DAMAGE_MUL[REGION.ABDOMEN], weapon: 'bite', force: 1 });
@@ -6891,15 +7687,25 @@ HT.AISystem = AISystem;
 
 // ===== 43_reincarnation.js =====
 // ============================================================================
-// Reincarnation Mode: eligible deceased NPCs return as zombies after a
-// configurable delay. Explicit per-NPC state machine guards against duplicate
-// zombie creation and repeated transitions.
-//   reinc.state: none -> pending -> rising -> done   (or ineligible / cancelled)
+// Reincarnation / infection: eligible deceased NPCs turn into zombies.
+// Explicit per-NPC state machine guards against duplicate zombies and repeated
+// transformations:
+//   reinc.state: none -> pending -> transforming -> done
+//                (or ineligible / cancelled / failed)
+// The transformation itself takes ~10 s:
+//   0-2 s  inert on the ground, tiny posture changes
+//   2-4 s  restrained, irregular movement (head, limbs)
+//   4-6 s  stronger movement, the body begins to rise
+//   6-8 s  zombie posture, head motion and limb positions blend in
+//   8-10 s upright, zombie idle; AI starts only when the sequence completes
+// A critical head injury (when configured) always wins: the body never rises.
 // ============================================================================
 const REINC_PRESETS = { immediate: 0.6, short: 5, medium: 15, long: 45 };
+const TRANSFORM_TIME = 10;
 class ReincarnationSystem {
   constructor(game) {
     this.game = game;
+    Events.on('transformRisen', (npc) => this.completeTransform(npc));
     Events.on('zombieRisen', (npc) => this.onRisen(npc));
     Events.on('npcDied', (e) => { const n = e.npc; if (n.reinc.state === 'none' || n.reinc.state === 'cancelled') n.reinc.checkNow = true; });
   }
@@ -6910,7 +7716,7 @@ class ReincarnationSystem {
   }
   checkEligible(npc) {
     const Z = Settings.data.zombies;
-    if (npc.lifeState !== 'dead') return { ok: false, reason: 'Not deceased' };
+    if (npc.lifeState !== 'dead' && npc.lifeState !== 'reanimating') return { ok: false, reason: 'Not deceased' };
     if (npc.isZombie) return { ok: false, reason: 'Already reanimated' };
     if (Z.headTraumaPrevents && npc.criticalHead) return { ok: false, reason: 'Critical head trauma (prevents reincarnation)' };
     return { ok: true, reason: 'Eligible' };
@@ -6919,6 +7725,7 @@ class ReincarnationSystem {
     const Z = Settings.data.zombies;
     for (const npc of this.game.npcs.list) {
       const r = npc.reinc;
+      if (r.state === 'transforming') { this.updateTransform(npc, r, dt, Z); continue; }
       if (npc.lifeState !== 'dead') continue;
       const infected = !!(npc.infection && Z.infection);   // bitten bodies always turn
       if (!Z.reincarnation && !infected) {
@@ -6931,7 +7738,7 @@ class ReincarnationSystem {
         if (e.ok) {
           const inf = npc.infection;
           r.state = 'pending';
-          r.delay = infected ? (inf.t >= inf.dur ? 2.5 + Math.random() * 1.5 : clamp(inf.dur - inf.t, 4, 14)) : this.delay() * (0.85 + Math.random() * 0.3);
+          r.delay = infected ? (inf.t >= inf.dur ? 1.5 + Math.random() * 1.5 : clamp(inf.dur - inf.t, 2, 8)) : this.delay() * (0.85 + Math.random() * 0.3);
           r.timer = r.delay; r.infected = infected;
           HT.log('zombie', `${npc.idStr} ${npc.name}: ${infected ? 'infection will turn them' : 'reincarnation scheduled'} in ${r.timer.toFixed(1)}s`);
         } else if (r.state !== 'ineligible') {
@@ -6943,49 +7750,119 @@ class ReincarnationSystem {
         const e = this.checkEligible(npc);
         if (!e.ok) { r.state = 'ineligible'; r.reason = e.reason; r.eligible = false; HT.log('zombie', `${npc.idStr} reincarnation revoked: ${e.reason}`); continue; }
         r.timer -= dt;
-        // the body seizes before it turns
-        if (r.timer < 2.6 && r.timer > 0.45 && npc.physMode === 'ragdoll' && !npc.carried) {
-          r.twitchT = (r.twitchT || 0) - dt;
-          if (r.twitchT <= 0) {
-            r.twitchT = 0.07 + Math.random() * 0.12;
-            const rag = npc.rag, bi = [RAG.HEAD, RAG.CHEST, RAG.HAND_L, RAG.HAND_R, RAG.FARM_L, RAG.FARM_R, RAG.FOOT_L, RAG.FOOT_R, RAG.SHIN_L, RAG.SHIN_R][Math.floor(Math.random() * 10)];
-            const b = rag.bodies[bi];
-            if (rag.world && !rag.detached[bi]) { if (rag.asleep) rag.world.wakeOwner(rag); rag.world.applyImpulse(b, _v1.set((Math.random() - 0.5), Math.random() * 0.9, (Math.random() - 0.5)).multiplyScalar(b.mass * (0.45 + Math.random() * 0.6)), null); }
-            if (!r.gurgled) { r.gurgled = true; this.game.audio.play('gurgle', { pos: npc.rag.bodies[RAG.HEAD].pos.clone(), gain: 0.9 }); }
-          }
-        }
         if (r.timer <= 0) {
           const settled = npc.physMode !== 'ragdoll' || npc.rag.asleep || npc.rag.maxSpeed() < 0.7;
-          if (settled && !npc.carried) this.rise(npc);
+          if (settled && !npc.carried) this.beginTransform(npc);
         }
       }
     }
   }
-  rise(npc) {
+  // --- the 10 second transformation --------------------------------------------------
+  beginTransform(npc) {
     const r = npc.reinc;
     if (r.state !== 'pending' || npc.lifeState !== 'dead' || npc.isZombie) return false; // duplicate guard
-    if (!npc.setLife('reanimating', 'reincarnation')) return false;
-    r.state = 'rising';
-    npc.isZombie = true; npc.health = 100; npc.maxHealth = 100;
+    if (!npc.setLife('reanimating', 'transformation')) return false;
+    r.state = 'transforming'; r.t = 0; r.dur = TRANSFORM_TIME * (0.94 + Math.random() * 0.12);
+    r.clip = false; r.twitchT = 0.7 + Math.random() * 0.6; r.cue = 0; r.rollDir = Math.random() < 0.5 ? 1 : -1;
+    r.tint0 = npc.material.userData.u.uZombie.value;
     npc.anim.zstyle = pickZombieGait(); npc.anim.zMirror = Math.random() < 0.5 ? 1 : 0;
+    npc.anim.zvar = makeZombieVariation();
     npc.zombieTarget = null;
-    if (npc.physMode !== 'ragdoll') npc.goRagdoll('Reanimating', true);
-    npc.startGetUp(true);
-    npc.anim.zombie = 1;
-    if (npc.brain) { npc.brain.state = 'zIdle'; npc.brain.t = 0; }
-    this.game.audio.play('groan' + Math.floor(Math.random() * 5), { pos: npc.root.pos.clone(), gain: 0.9, important: true });
-    HT.log('zombie', `${npc.idStr} ${npc.name} is reanimating`);
-    HT.toast(`${npc.name} ${npc.idStr} is rising...`, 'z');
+    if (npc.physMode !== 'ragdoll') npc.goRagdoll('Transforming', true);
+    if (npc.brain) { npc.brain.state = 'dead'; npc.brain.pending.length = 0; }
+    npc.lastReaction = 'Transforming';
+    HT.log('zombie', `${npc.idStr} ${npc.name} is turning`);
+    HT.toast(`${npc.name} ${npc.idStr} is turning...`, 'z');
     return true;
   }
-  onRisen(npc) {
-    if (npc.lifeState === 'reanimating') {
-      npc.setLife('zombie', 'risen');
-      npc.reinc.state = 'done';
-      npc.lastReaction = 'Zombie AI Active';
-      HT.log('zombie', `${npc.idStr} ${npc.name} returned as a zombie`);
-      this.game.audio.play('zombieAlert', { bus: 'ui', gain: 0.4 });
+  updateTransform(npc, r, dt, Z) {
+    if (npc.removed) return;
+    // eligibility takes precedence over the animation
+    if (Z.headTraumaPrevents && npc.criticalHead) { this.failTransform(npc, 'Critical head trauma (prevents reincarnation)'); return; }
+    if (npc.lifeState !== 'reanimating') { this.failTransform(npc, 'Interrupted'); return; }
+    if (!Z.reincarnation && !(npc.infection && Z.infection) && !r.clip) { this.failTransform(npc, 'Zombie mode disabled'); return; }
+    if (npc.carried) return; // paused while held
+    const u = npc.material.userData.u;
+    if (npc.physMode === 'ragdoll') {
+      if (r.clip) { // knocked back down during the rise: lie still again, then resume the rise
+        r.clip = false; r.t = Math.min(r.t, r.dur * 0.38); npc.anim.clip = null;
+        HT.log('zombie', `${npc.idStr} knocked down while turning`);
+      }
+      r.t += dt;
+      const tl = r.t / r.dur * TRANSFORM_TIME;
+      this.twitch(npc, r, tl, dt);
+      // begin the rise once the stillness/convulsion phase is over and the body has settled
+      const settled = npc.rag.asleep || npc.rag.maxSpeed() < 1.1;
+      if ((tl >= 4.5 && settled) || tl >= 5.6) {
+        npc.anim.zombie = 1;
+        npc.startTransformRise(Math.max(2.8, r.dur - r.t));
+        r.clip = true;
+      }
+    } else if (npc.physMode === 'getup' || npc.physMode === 'anim') {
+      r.t += dt;
+      // crawlers and legless bodies finish lying prone
+      if (npc.physMode === 'anim' && npc.anim.crawl && r.t >= r.dur) this.completeTransform(npc);
     }
+    const tl = r.t / r.dur * TRANSFORM_TIME;
+    u.uZombie.value = lerp(r.tint0 || 0, 1, smoothstep(0.8, 9.2, tl));
+    // voice cues
+    if (r.cue === 0 && tl > 2.2) { r.cue = 1; this.game.audio.play('gurgle', { pos: npc.boneWPos[B.head].clone(), gain: 0.55 }); }
+    if (r.cue === 1 && tl > 6.4) { r.cue = 2; this.game.audio.play('groan' + Math.floor(Math.random() * 5), { pos: npc.boneWPos[B.head].clone(), gain: 0.9, important: true }); }
+    // safety: never stay stuck between states
+    if (r.t > r.dur + 6 && npc.physMode !== 'ragdoll') this.completeTransform(npc);
+  }
+  // procedural movement while the body lies on the ground (impulses on ragdoll bodies)
+  twitch(npc, r, tl, dt) {
+    const rag = npc.rag;
+    if (!rag.world) return;
+    r.twitchT -= dt;
+    if (r.twitchT > 0) return;
+    let parts, dv, next;
+    if (tl < 2) { parts = [RAG.HAND_L, RAG.HAND_R, RAG.HEAD]; dv = 0.12 + Math.random() * 0.12; next = 0.6 + Math.random() * 0.8; }
+    else if (tl < 4) { parts = [RAG.HEAD, RAG.HAND_L, RAG.HAND_R, RAG.FARM_L, RAG.FARM_R, RAG.FOOT_L, RAG.FOOT_R]; dv = 0.3 + Math.random() * 0.35; next = 0.22 + Math.random() * 0.4; }
+    else { parts = [RAG.HEAD, RAG.CHEST, RAG.FARM_L, RAG.FARM_R, RAG.UARM_L, RAG.UARM_R, RAG.SHIN_L, RAG.SHIN_R]; dv = 0.55 + Math.random() * 0.5; next = 0.15 + Math.random() * 0.3; }
+    r.twitchT = next;
+    const bi = parts[Math.floor(Math.random() * parts.length)];
+    if (rag.detached[bi]) return;
+    const b = rag.bodies[bi];
+    if (rag.asleep) rag.world.wakeOwner(rag);
+    if (bi === RAG.HEAD && tl >= 2) { // head rolls side to side
+      r.rollDir = -r.rollDir;
+      const side = _v2.set(Math.cos(npc.root.yaw), 0, -Math.sin(npc.root.yaw)).multiplyScalar(r.rollDir);
+      rag.world.applyImpulse(b, side.multiplyScalar(b.mass * dv * 0.9), null);
+    } else if (bi === RAG.CHEST) { // back arches
+      rag.world.applyImpulse(b, _v2.set(0, b.mass * dv * 0.8, 0), null);
+    } else {
+      rag.world.applyImpulse(b, _v2.set(Math.random() - 0.5, Math.random() * 0.8, Math.random() - 0.5).normalize().multiplyScalar(b.mass * dv), null);
+    }
+  }
+  completeTransform(npc) {
+    const r = npc.reinc;
+    if (r.state !== 'transforming' || npc.lifeState !== 'reanimating' || npc.isZombie) return false;
+    npc.isZombie = true; npc.health = 100; npc.maxHealth = 100;
+    if (!npc.setLife('zombie', 'transformed')) return false;
+    r.state = 'done'; r.clip = false;
+    npc.anim.zombie = 1;
+    npc.material.userData.u.uZombie.value = 1;
+    if (npc.brain) { npc.brain.state = 'zIdle'; npc.brain.t = 0; npc.brain.pending.length = 0; npc.brain.noticeT = 0; }
+    npc.lastReaction = 'Zombie AI Active';
+    HT.log('zombie', `${npc.idStr} ${npc.name} returned as a zombie`);
+    this.game.audio.play('zombieAlert', { bus: 'ui', gain: 0.4 });
+    Events.emit('zombieActive', npc);
+    return true;
+  }
+  failTransform(npc, reason) {
+    const r = npc.reinc;
+    r.state = 'ineligible'; r.eligible = false; r.reason = reason; r.clip = false;
+    if (npc.lifeState === 'reanimating') npc.setLife('dead', reason);
+    npc.anim.clip = null;
+    if (npc.physMode !== 'ragdoll' && !npc.removed) npc.goRagdoll('Transformation failed', true);
+    // the partial pallor stays as a (non-graphic) sign of the failed transformation
+    HT.log('zombie', `${npc.idStr} transformation stopped: ${reason}`);
+  }
+  // legacy: zombies that are knocked down get up with the zombie clip
+  onRisen(npc) {
+    if (npc.lifeState === 'reanimating' && npc.reinc.state === 'transforming') this.completeTransform(npc);
   }
   reanimateAllNow() {
     let n = 0;
@@ -7000,13 +7877,18 @@ class ReincarnationSystem {
   }
   cancelAll() { for (const npc of this.game.npcs.list) if (npc.reinc.state === 'pending') npc.reinc.state = 'cancelled'; }
   makeZombieNow(npc) {
-    // convenience: kill (if alive) then immediate rise
     if (npc.lifeState === 'alive') { npc.applyHit({ region: REGION.TORSO, damage: 9999, weapon: 'sandbox' }); }
     if (npc.lifeState !== 'dead') return;
     npc.criticalHead = false;
     npc.reinc.state = 'pending'; npc.reinc.timer = 0.3; npc.reinc.delay = 0.3;
-    if (!Settings.data.zombies.reincarnation) { npc.reinc.timer = 0; this.rise(npc); }
   }
+}
+// per-zombie randomisation of timing and intensity (no two move alike)
+function makeZombieVariation() {
+  return {
+    cadence: 0.85 + Math.random() * 0.3, intensity: 0.75 + Math.random() * 0.55, armPhase: Math.random() * TAU,
+    headRate: 0.6 + Math.random() * 0.9, shoulder: 0.6 + Math.random() * 0.8, balanceT: 4 + Math.random() * 8
+  };
 }
 HT.ReincarnationSystem = ReincarnationSystem;
 
@@ -7553,6 +8435,20 @@ class FX {
       const d = _v1.set(n.x + (Math.random() - 0.5) * 1.6, n.y + Math.random() * 0.8, n.z + (Math.random() - 0.5) * 1.6).normalize();
       const sp = 2 + Math.random() * 4;
       this.glow.emit(p.x, p.y, p.z, d.x * sp, d.y * sp, d.z * sp, 0.12 + Math.random() * 0.15, 0.02, 0.005, 1.0, 0.75, 0.45, 0.9, 9.8, 1);
+    }
+  }
+  // soft dust where a falling body meets the ground (no sparks): dirt and grass bits outdoors, faint dust indoors
+  bodyDust(p, n, surface, k) {
+    const grass = surface === 'grass';
+    const c = grass ? [0.4, 0.35, 0.25] : [0.86, 0.86, 0.88];
+    const cnt = Math.round((grass ? 8 : 5) * k);
+    for (let i = 0; i < cnt; i++) {
+      const a = Math.random() * TAU, sp = 0.35 + Math.random() * 0.9 * k;
+      this.smoke.emit(p.x + Math.cos(a) * 0.05, p.y + 0.02, p.z + Math.sin(a) * 0.05, Math.cos(a) * sp, 0.15 + Math.random() * 0.35, Math.sin(a) * sp, 0.6 + Math.random() * 0.6, 0.05, (0.22 + Math.random() * 0.18) * (0.6 + k * 0.6), c[0], c[1], c[2], grass ? 0.45 : 0.22, 0.25, 2.2);
+    }
+    if (grass) for (let i = 0; i < Math.round(4 * k); i++) { // flicked grass blades
+      const a = Math.random() * TAU, sp = 0.8 + Math.random() * 1.4;
+      this.smoke.emit(p.x, p.y + 0.03, p.z, Math.cos(a) * sp, 1 + Math.random() * 1.5, Math.sin(a) * sp, 0.5 + Math.random() * 0.4, 0.012, 0.012, 0.22, 0.36, 0.12, 0.9, 6, 1.2);
     }
   }
   fabricPuff(p, n, color) {
@@ -8678,24 +9574,24 @@ function makeBloodAtlas() {
 const DECAL_TILES = { splat: [0, 4], spray: [4, 4], pool: [8, 4], drop: [12, 4], smear: [15, 1] };
 class BloodDecals {
   constructor(game, max) {
-    this.game = game; this.max = max; this.next = 0; this.used = 0;
+    this.game = game; this.max = max; this.next = 0; this.used = 0; this.lastAdd = 0;
     const geo = new THREE.PlaneGeometry(1, 1);
     this.aTile = new THREE.InstancedBufferAttribute(new Float32Array(max), 1);
     this.aBirth = new THREE.InstancedBufferAttribute(new Float32Array(max), 1);
     geo.setAttribute('aTile', this.aTile); geo.setAttribute('aBirth', this.aBirth);
-    this.uTime = { value: 0 };
+    this.uTime = { value: 0 }; this.uLife = { value: 120 };
     const mat = new THREE.MeshStandardMaterial({ map: makeBloodAtlas(), color: 0x5a0807, roughness: 0.15, metalness: 0, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6 });
     mat.onBeforeCompile = (sh) => {
-      sh.uniforms.uTime = this.uTime;
+      sh.uniforms.uTime = this.uTime; sh.uniforms.uLife = this.uLife;
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aTile; attribute float aBirth; uniform float uTime; varying float vAge;')
         .replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_MAP\n vMapUv = vMapUv * 0.25 + vec2(mod(aTile, 4.0), 3.0 - floor(aTile / 4.0)) * 0.25;\n#endif\n vAge = uTime - aBirth;');
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vAge;')
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vAge; uniform float uLife;')
         .replace('#include <map_fragment>', `#include <map_fragment>
           float htDry = smoothstep(6.0, 80.0, vAge);
           diffuseColor.rgb *= mix(vec3(1.0), vec3(0.5, 0.42, 0.42), htDry);
           float htMin = max(length(dFdx(vMapUv)), length(dFdy(vMapUv))) * 1024.0;
           float htA = min(1.0, diffuseColor.a * (1.0 + 0.9 * log2(max(htMin, 1.0))));
-          diffuseColor.a = smoothstep(0.02, 0.3, htA) * smoothstep(0.0, 0.08, vAge);`)
+          diffuseColor.a = smoothstep(0.02, 0.3, htA) * smoothstep(0.0, 0.08, vAge) * (1.0 - smoothstep(uLife - 12.0, uLife, vAge));`)
         .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n roughnessFactor = mix(0.08, 0.55, htDry);');
     };
     mat.customProgramCacheKey = () => 'ht3d-blood-decal';
@@ -8728,7 +9624,7 @@ class BloodDecals {
     this._m.compose(pos, q, this._s.set(grow ? sx * 0.08 : sx, grow ? sy * 0.08 : sy, 1));
     this.mesh.setMatrixAt(slot, this._m);
     this.aTile.array[slot] = k[0] + Math.floor(Math.random() * k[1]);
-    this.aBirth.array[slot] = this.game.time;
+    this.aBirth.array[slot] = this.game.time; this.lastAdd = this.game.time;
     this.aTile.needsUpdate = true; this.aBirth.needsUpdate = true; this.mesh.instanceMatrix.needsUpdate = true;
     this.mesh.count = this.used;
     if (grow) this.growing.push({ slot, t: 0, dur: opts.grow, sx, sy, pos: pos.clone(), q: q.clone() });
@@ -8736,6 +9632,8 @@ class BloodDecals {
   }
   update(dt) {
     this.uTime.value = this.game.time;
+    // temporary: once every decal has faded out the pool is reset
+    if (this.used && this.game.time - this.lastAdd > this.uLife.value + 1) { this.mesh.count = 0; this.used = 0; this.next = 0; }
     if (!this.growing.length) return;
     for (let i = this.growing.length - 1; i >= 0; i--) {
       const gr = this.growing[i];
@@ -8866,14 +9764,16 @@ class Gibs {
     this.mesh.setColorAt(0, new THREE.Color(1, 1, 1));
     game.scene.add(this.mesh);
     this._m = new M4(); this._c = new THREE.Color(); this._s = new V3();
+    this.free = []; this.life = 60;
   }
   spawn(p, v, size, type, color) {
     let gb;
-    if (this.list.length < this.max) { gb = { p: new V3(), v: new V3(), q: new QT(), w: new V3(), s: 1, rest: false, splat: false, idx: this.list.length }; this.list.push(gb); }
+    if (this.free.length) gb = this.list[this.free.pop()];
+    else if (this.list.length < this.max) { gb = { p: new V3(), v: new V3(), q: new QT(), w: new V3(), s: 1, rest: false, splat: false, idx: this.list.length }; this.list.push(gb); }
     else { gb = this.list[this.next]; this.next = (this.next + 1) % this.max; }
     gb.p.copy(p); gb.v.copy(v); gb.q.setFromEuler(new THREE.Euler(Math.random() * 6, Math.random() * 6, Math.random() * 6));
     gb.w.set((Math.random() - 0.5) * 24, (Math.random() - 0.5) * 24, (Math.random() - 0.5) * 24);
-    gb.s = size; gb.rest = false; gb.splat = false; gb.t = 0;
+    gb.s = size; gb.rest = false; gb.splat = false; gb.t = 0; gb.restT = 0; gb.dead = false;
     gb.sx = type === 'gut' ? 2.8 : 1; gb.sy = type === 'gut' ? 0.8 : (type === 'tooth' ? 0.6 : 1); gb.sz = type === 'gut' ? 0.9 : 1;
     if (type === 'eye') gb.s = Math.min(size, 0.013); if (type === 'tooth') gb.s = Math.min(size, 0.006);
     const pal = GIB_COLORS[type] || GIB_COLORS.flesh;
@@ -8896,7 +9796,17 @@ class Gibs {
     const env = this.game.env, planes = this.game.physics.planes;
     let any = false;
     for (const gb of this.list) {
-      if (gb.rest) continue;
+      if (gb.dead) continue;
+      if (gb.rest) { // temporary: settled chunks shrink away after a while
+        gb.restT += dt;
+        if (gb.restT > this.life) {
+          const f = 1 - (gb.restT - this.life) / 2;
+          if (f <= 0) { gb.dead = true; this.free.push(gb.idx); this._m.makeScale(0, 0, 0); }
+          else this._m.compose(gb.p, gb.q, this._s.set(gb.s * (gb.sx || 1) * f, gb.s * (gb.sy || 1) * f, gb.s * (gb.sz || 1) * f));
+          this.mesh.setMatrixAt(gb.idx, this._m); any = true;
+        }
+        continue;
+      }
       any = true; gb.t += dt;
       gb.v.y -= 9.8 * dt;
       gb.p.addScaledVector(gb.v, dt);
@@ -8918,7 +9828,7 @@ class Gibs {
     }
     if (any) this.mesh.instanceMatrix.needsUpdate = true;
   }
-  clear() { this.list.length = 0; this.next = 0; this.mesh.count = 0; }
+  clear() { this.list.length = 0; this.next = 0; this.mesh.count = 0; this.free.length = 0; }
 }
 
 // --- intestines: verlet rope strands anchored to a wound, rendered as instanced segments ---------
@@ -8952,6 +9862,7 @@ class GutStrands {
     for (let si = this.list.length - 1; si >= 0; si--) {
       const st = this.list[si], P = st.pts, Q = st.prev, n = P.length;
       if (st.npc && st.npc.removed) { st.free = true; st.npc = null; }
+      if (st.free) { st.age = (st.age || 0) + dt; if (st.age > 20) { this.list.splice(si, 1); continue; } }
       // integrate
       for (let i = 0; i < n; i++) {
         const p = P[i], q = Q[i];
@@ -9311,7 +10222,9 @@ class GoreSystem {
       npc.criticalHead = npc.criticalHead || false;
       if (npc.lifeState === 'alive') npc.die({ weapon: o.weapon || 'gore' });
       else if (npc.lifeState === 'zombie') { npc.health = 0; npc.destroyZombie({ weapon: o.weapon || 'gore' }); }
+      else if (npc.lifeState === 'reanimating' && npc.game.zombies) npc.game.zombies.failTransform(npc, 'Body cut in half');
       if (npc.physMode !== 'ragdoll') npc.goRagdoll('Ragdoll (Cut in Half)', true);
+      if (npc.lifeState === 'reanimating') npc.setLife('dead', 'cut in half');
       npc.reinc.state = 'ineligible'; npc.reinc.reason = 'Body cut in half'; npc.criticalHead = true;
       npc.lastReaction = 'Cut in Half';
       // spill guts from both halves
@@ -9568,6 +10481,22 @@ class GoreSystem {
     this.screenNear(hit.point, 0.5);
     return true;
   }
+  // zombie claw: slash at the contact vertex, spray along the swipe
+  onClaw(npc, zombie, vi, p, dir) {
+    if (!this.on) { this.game.fx.fabricPuff(p, dir.clone().negate()); return; }
+    this.vertexBind(npc, vi, _gv6, _gv7);
+    const region = npc.mesh.geometry.attributes.aRegion.array[vi] | 0;
+    const sd = _gv3.copy(dir).applyQuaternion(_gq1.copy(npc.boneWRot[REGION_BONE[region]]).invert());
+    sd.addScaledVector(_gv7, -sd.dot(_gv7)); if (sd.lengthSq() < 1e-6) sd.set(1, 0, 0); sd.normalize();
+    for (let k = 0; k < 3; k++) { // three raking claw marks
+      const off = _gv4.crossVectors(_gv7, sd).normalize().multiplyScalar((k - 1) * 0.012);
+      this.addWound(npc, WOUND.SLASH, _gv5.copy(_gv6).add(off), sd, 0.005 + Math.random() * 0.002, { vi, bleed: npc.lifeState === 'alive' ? 0.35 : 0.05, k: 0.12 });
+    }
+    this.spray(p, _gv1.copy(dir).add(_gv2.set(0, 0.25, 0)).normalize(), 14, 2.4, 0.35, 0.8, 0.5);
+    this.mist(p, dir, 2, 0.2);
+    this.sound(p, 'splat', 0.6);
+    this.screenNear(p, 0.35);
+  }
   onBlast(npc, center, f, res, o = {}) {
     if (!this.on) return;
     if (o.big) f = Math.min(1, f * 1.15);
@@ -9621,10 +10550,14 @@ class GoreSystem {
   }
   // zombie bite: ragged wound, spurting, mouth smeared
   onBite(victim, zombie, regionList) {
-    if (!this.on) return;
     const regs = regionList || [REGION.NECK, REGION.UPPER_CHEST];
     const mouth = _gv4.copy(zombie.boneWPos[B.jaw]).add(_gv5.set(0, -0.02, 0));
     const vi = this.nearestVertex(victim, mouth, regs);
+    if (!this.on) { // non-graphic: a cloth puff where the teeth meet the body
+      if (vi >= 0) { const wp = victim.skinVertexWorld(vi, new V3()); this.game.fx.fabricPuff(wp, _gv3.subVectors(wp, victim.boneWPos[B.chest]).normalize()); }
+      this.sound(mouth, 'bite', 0.7);
+      return;
+    }
     let wp = mouth.clone();
     if (vi >= 0) {
       this.vertexBind(victim, vi, _gv6, _gv7);
@@ -9673,6 +10606,9 @@ class GoreSystem {
   // --- per frame -------------------------------------------------------------------------------
   update(dt) {
     const g = this.game;
+    // decals and chunks are temporary; extreme keeps them longer
+    this.decals.uLife.value = this.extreme ? 240 : 100;
+    this.gibs.life = this.extreme ? 120 : 45;
     this.decals.update(dt);
     this.drops.update(dt, this);
     this.gibs.update(dt, this);
@@ -10328,7 +11264,7 @@ class UI {
           const life = npc.lifeState === 'alive' ? (npc.brain ? npc.brain.state : '') : npc.lifeState;
           st = `${life.toUpperCase()} · ${Math.round(npc.health)}HP`;
         }
-        const cd = r.state === 'pending' ? `REINCARNATION ${Math.max(0, r.timer).toFixed(1)}s` : (r.state === 'rising' ? 'RISING...' : (npc.lifeState === 'dead' && Settings.data.zombies.reincarnation && r.state === 'ineligible' ? 'NO REINCARNATION' : ''));
+        const cd = r.state === 'pending' ? `REINCARNATION ${Math.max(0, r.timer).toFixed(1)}s` : (r.state === 'transforming' ? 'TURNING...' : (npc.lifeState === 'dead' && Settings.data.zombies.reincarnation && r.state === 'ineligible' ? 'NO REINCARNATION' : ''));
         const key = npc.name + st + cd + npc.lifeState;
         if (el._key !== key) {
           el._key = key;
@@ -10991,7 +11927,7 @@ class Game {
     canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); HT.toast && HT.toast('Graphics context lost - attempting recovery', 'bad'); reportError('WebGL context lost', 'renderer'); });
     canvas.addEventListener('webglcontextrestored', () => { HT.toast && HT.toast('Graphics context restored'); });
   }
-  initTextures() { Tex.tile('floor'); Tex.tile('wall'); Tex.tile('ceiling'); Tex.grass(); Tex.smoke(); Tex.bulletHole(); Tex.scorch(); for (let i = 0; i < 6; i++) Tex.cloud(i); }
+  initTextures() { Tex.tile('floor'); Tex.tile('panel'); Tex.tile('ceiling'); Tex.grass(); Tex.smoke(); Tex.bulletHole(); Tex.scorch(); for (let i = 0; i < 6; i++) Tex.cloud(i); }
   initPhysics() {
     this.physics = new PhysicsWorld();
     this.applyPhysicsSettings();
@@ -11015,6 +11951,7 @@ class Game {
     this.props = new Props(this); this.props.build();
     this.weapons = new Weapons(this); this.weapons.build();
     this.gore = new GoreSystem(this);
+    this.contact = new ContactShadows(this);
   }
   initEnvironment() {
     this.env = new EnvironmentManager(this);
@@ -11110,6 +12047,10 @@ class Game {
       // re-place everything onto the new ground
       for (const n of this.npcs.list) {
         const p = n.root.pos.clone(); this.env.clampToBounds(p, 0.6);
+        // a body in the middle of getting up (or turning) falls back to the ground and restarts safely
+        if (n.physMode === 'getup') { n.anim.clip = null; n.goRagdoll('Moved', n.lifeState !== 'alive' && n.lifeState !== 'zombie'); }
+        if (n.anim.action) n.anim.action = null;
+        if (n.brain) { this.ai.endGrab(n); this.ai.endFeed(n); }
         if (n.physMode === 'ragdoll') { const pel = n.rag.bodies[RAG.PELVIS].pos; const dy = this.env.groundHeight(pel.x, pel.z) + 0.4 - pel.y; for (const b of n.rag.bodies) { b.pos.y += Math.max(0, dy); b.prevPos.copy(b.pos); } }
         else n.teleport(p);
       }
@@ -11136,6 +12077,9 @@ class Game {
       return n2;
     }
     if (npc.gore) this.gore.releaseNPC(npc);
+    // release grapples / meals in both directions before the state reset
+    if (npc.brain) { this.ai.endGrab(npc); this.ai.endFeed(npc); }
+    if (npc.grabbedBy && npc.grabbedBy.brain) this.ai.endGrab(npc.grabbedBy);
     npc.infection = null; npc.anim.crawl = 0; npc.anim.setAction(null);
     if (npc.lifeState !== 'alive') {
       if (npc.lifeState === 'reanimating') npc.lifeState = 'dead';
@@ -11248,6 +12192,7 @@ class Game {
     this.weapons.update(rdt);
     this.fx.update(dt);
     this.gore.update(dt);
+    this.contact.update();
     this.hits.update(rdt);
     this.env.update(dt, this.camera);
     this.audio.update(rdt, this.camera);
@@ -11268,7 +12213,17 @@ class Game {
         const imp = b.impact;
         if (imp > 1.6 && !b.kinematic && (b.lastSound == null || this.time - b.lastSound > 0.25)) {
           b.lastSound = this.time;
-          if (b.tag === 'npc') this.audio.play(imp > 4 ? 'thud' : 'thudLight', { pos: b.impactPoint.clone(), gain: clamp(imp / 8, 0.15, 1) });
+          if (b.tag === 'npc') {
+            this.audio.play(imp > 4 ? 'thud' : 'thudLight', { pos: b.impactPoint.clone(), gain: clamp(imp / 8, 0.15, 1) });
+            // surface effect at the actual contact point when a body part hits the ground
+            const ip = b.impactPoint, gy = this.env.groundHeight(ip.x, ip.z);
+            if (imp > 2.6 && ip.y < gy + 0.15) {
+              const gn = this.env.groundNormal(ip.x, ip.z, _v3);
+              this.fx.bodyDust(_v2.set(ip.x, gy, ip.z), gn, this.env.current.surface, clamp((imp - 2) / 5, 0.3, 1));
+              const npc = b.owner && b.owner.npc, G = npc && npc.gore;
+              if (G && this.gore.on && G.blood > 0.3 && Settings.data.gore.pools && Math.random() < 0.6) this.gore.decals.add(_v2.set(ip.x, gy, ip.z), gn, 0.18 + Math.random() * 0.12, 'drop');
+            }
+          }
           else if (b.tag === 'prop') this.audio.play(b.owner.type === 'ball' ? 'thudLight' : 'hitWood', { pos: b.impactPoint.clone(), gain: clamp(imp / 8, 0.1, 0.8) });
         }
         // a kinematic (animated) NPC struck by something heavy and fast -> knockdown

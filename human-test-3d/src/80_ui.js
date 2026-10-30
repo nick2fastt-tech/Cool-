@@ -188,7 +188,7 @@ class UI {
           const life = npc.lifeState === 'alive' ? (npc.brain ? npc.brain.state : '') : npc.lifeState;
           st = `${life.toUpperCase()} · ${Math.round(npc.health)}HP`;
         }
-        const cd = r.state === 'pending' ? `REINCARNATION ${Math.max(0, r.timer).toFixed(1)}s` : (r.state === 'rising' ? 'RISING...' : (npc.lifeState === 'dead' && Settings.data.zombies.reincarnation && r.state === 'ineligible' ? 'NO REINCARNATION' : ''));
+        const cd = r.state === 'pending' ? `REINCARNATION ${Math.max(0, r.timer).toFixed(1)}s` : (r.state === 'transforming' ? 'TURNING...' : (npc.lifeState === 'dead' && Settings.data.zombies.reincarnation && r.state === 'ineligible' ? 'NO REINCARNATION' : ''));
         const key = npc.name + st + cd + npc.lifeState;
         if (el._key !== key) {
           el._key = key;
