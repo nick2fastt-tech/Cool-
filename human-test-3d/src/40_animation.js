@@ -235,12 +235,14 @@ function zombieRiseKeys(faceDown) {
 
 // --- two-bone IK ---------------------------------------------------------------------
 const _ikD = new V3(), _ikP = new V3(), _ikE = new V3(), _ikU1 = new V3(), _ikU2 = new V3(), _ikN = new V3(), _ikT = new V3();
-function solveTwoBone(root, target, pole, L1, L2, bindDir, bindHinge, q1, q2, minBend = 0.02) {
+// soft: where the reach starts easing in (fraction of max reach); legs use a narrow zone so a
+// standing knee keeps only a natural few degrees of bend instead of a visible crouch
+function solveTwoBone(root, target, pole, L1, L2, bindDir, bindHinge, q1, q2, minBend = 0.02, soft = 0.94) {
   _ikD.subVectors(target, root);
   let dist = _ikD.length();
   if (dist < 1e-6) { _ikD.set(0, -1, 0); dist = 1e-6; } else _ikD.multiplyScalar(1 / dist);
   const maxR = (L1 + L2) * (1 - 0.0005 - minBend * 0.01), minR = Math.abs(L1 - L2) + 0.01;
-  const ds = maxR * 0.94;
+  const ds = maxR * soft;
   if (dist > ds) dist = ds + (maxR - ds) * (1 - Math.exp(-(dist - ds) / (maxR - ds)));
   dist = clamp(dist, minR, maxR);
   _ikP.copy(pole).addScaledVector(_ikD, -pole.dot(_ikD));
@@ -623,12 +625,12 @@ class Animator {
       f.hjx = hb.x + P.hipsOff.x + _va.x; f.hjz = hb.z + P.hipsOff.z + _va.z; f.hjOffY = _va.y;
     }
     const standY = hb.y;
-    let hipY = standY - (moving ? lerp(0.004, 0.075, run) * lg : 0.006 * lg) - hunch * 0.06 * lg;
+    let hipY = standY - (moving ? lerp(0.004, 0.075, run) * lg : 0.0012 * lg) - hunch * 0.06 * lg;
     if (moving && run > 0) hipY += run * (-Math.cos(4 * Math.PI * (ph - duty0 * 0.5))) * 0.032 * lg / 0.84;
     let bound = 1e9;
     for (let s = 0; s < 2; s++) {
       const f = this.feet[s], fp = P.foot[s];
-      let load = 1, th = 0.1;
+      let load = 1, th = 0.06;
       if (moving) {
         if (f.swing) continue;
         const st = f.st || 0;
@@ -1234,7 +1236,7 @@ class Animator {
       const fp = P.foot[s];
       const th = SB('thigh', s), sh = SB('shin', s), ft = SB('foot', s);
       this.updateCS(th);
-      solveTwoBone(X[th], fp.pos, fp.pole, rig.thighLen, rig.shinLen, _v1.set(0, -1, 0), rig.kneeAxis, _q1, _q2, 0.02);
+      solveTwoBone(X[th], fp.pos, fp.pole, rig.thighLen, rig.shinLen, _v1.set(0, -1, 0), rig.kneeAxis, _q1, _q2, 0.02, 0.993);
       this.setCS(th, _q1); this.setCS(sh, _q2);
       // foot: yaw then pitch (toe down positive)
       quatFromEuler(fp.pitch, fp.yaw, fp.roll, _q3, 'YXZ');

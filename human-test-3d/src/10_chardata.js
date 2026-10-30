@@ -157,9 +157,9 @@ function generateAppearance(seed, ov = {}) {
   const B = CHAR_DATA.builds[build];
   const j = () => rng.range(0.97, 1.03);
   const body = {
-    shoulder: B.shoulder * j() * (male ? 1 : 0.93), chest: B.chest * j(), waist: B.waist * j(), hip: B.hip * j(),
+    shoulder: B.shoulder * j() * (male ? 1 : 0.97), chest: B.chest * j(), waist: B.waist * j(), hip: B.hip * j(),
     limb: B.limb * j(), fat: clamp(B.fat + rng.range(-0.1, 0.1), 0, 1), belly: clamp(B.belly + rng.range(-0.1, 0.15), 0, 1.2),
-    muscle: B.muscle * j(), bust: male ? 0 : rng.range(0.55, 1.0) * (build === 'stocky' ? 1.15 : 1),
+    muscle: B.muscle * j(), bust: male ? 0 : rng.range(0.6, 1.08) * (build === 'stocky' ? 1.12 : build === 'slim' || build === 'athletic' ? 0.88 : 1),
     legRatio: rng.range(0.98, 1.025), armRatio: rng.range(0.98, 1.02), neck: rng.range(0.95, 1.06) * (male ? 1.06 : 0.92),
     headScale: rng.range(0.97, 1.03), massMul: B.mass
   };
@@ -189,11 +189,11 @@ function generateAppearance(seed, ov = {}) {
 
   const n = (s) => clamp(rng.normal(0, s), -1, 1);
   const face = {
-    jaw: n(0.45) + (male ? 0.35 : -0.25), chin: n(0.45), chinProj: n(0.4), noseLen: n(0.45), noseWidth: n(0.45) + (male ? 0.15 : -0.15),
-    noseProj: n(0.4), noseBridge: n(0.4), lips: n(0.45) + (male ? -0.15 : 0.2), mouthW: n(0.4), brow: n(0.4) + (male ? 0.45 : -0.3),
-    cheek: n(0.45), cheekFull: n(0.4) + body.fat * 0.5, eyeSize: n(0.4), eyeTilt: n(0.45), eyeSpacing: n(0.35),
-    forehead: n(0.45), faceLen: n(0.4), ear: n(0.45), browThick: n(0.45) + (male ? 0.4 : -0.1), browArch: n(0.45) + (male ? -0.2 : 0.35),
-    eyeOpen: n(0.35), lipTint: male ? rng.range(0, 0.25) : rng.range(0.15, 0.6)
+    jaw: n(0.4) + (male ? 0.35 : -0.38), chin: n(0.45) + (male ? 0.1 : -0.15), chinProj: n(0.4), noseLen: n(0.45) + (male ? 0 : -0.12), noseWidth: n(0.45) + (male ? 0.15 : -0.3),
+    noseProj: n(0.4), noseBridge: n(0.4) + (male ? 0 : -0.15), lips: n(0.4) + (male ? -0.15 : 0.34), mouthW: n(0.4), brow: n(0.4) + (male ? 0.45 : -0.35),
+    cheek: n(0.45) + (male ? 0 : 0.15), cheekFull: n(0.4) + body.fat * 0.5 + (male ? 0 : 0.12), eyeSize: n(0.4) + (male ? 0 : 0.3), eyeTilt: n(0.45), eyeSpacing: n(0.35),
+    forehead: n(0.45), faceLen: n(0.4) + (male ? 0.05 : -0.1), ear: n(0.45), browThick: n(0.45) + (male ? 0.4 : -0.1), browArch: n(0.45) + (male ? -0.2 : 0.35),
+    eyeOpen: n(0.35) + (male ? 0 : 0.2), lipTint: male ? rng.range(0, 0.25) : rng.range(0.3, 0.75)
   };
 
   // outfit -----------------------------------------------------------------------

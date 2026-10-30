@@ -161,7 +161,7 @@ const GLSL_HT_ALBEDO = /* glsl */`
   if (uWet > 0.0 && mT != 7) { base *= 1.0 - uWet * 0.25; htRough *= 1.0 - uWet * 0.45; }
   // ---- wounds & blood (bind space: they move with the skinned surface) ----
   if (uWN > 0 || uBlood > 0.0) {
-    float gBl = 0.0, gFl = 0.0, gHo = 0.0, gGu = 0.0, gSo = 0.0, gTu = 1.0;
+    float gBl = 0.0, gFl = 0.0, gHo = 0.0, gGu = 0.0, gSo = 0.0, gTu = 1.0, gCo = 1.0; // gTu: stump bone, gCo: gut coils
     for (int i = 0; i < 16; i++) {
       if (i >= uWN) break;
       vec4 wA = uWA[i]; vec4 wB = uWB[i];
@@ -224,8 +224,9 @@ const GLSL_HT_ALBEDO = /* glsl */`
         float inner = 1.0 - smoothstep(0.68, 0.9, q);
         gGu = max(gGu, inner);
         gFl = max(gFl, 1.0 - smoothstep(0.88, 1.1, q));
+        // coil shading only inside the opening (it used to bleach the whole torso and arms)
         float coil = htFbm(vRest.xz * 16.0 + vRest.y * 12.0 + float(i)) * 14.0;
-        gTu = min(gTu, mix(0.55, abs(sin(coil)), clamp(1.0 - fwidth(coil) * 0.9, 0.0, 1.0)));
+        gCo = min(gCo, mix(1.0, mix(0.55, abs(sin(coil)), clamp(1.0 - fwidth(coil) * 0.9, 0.0, 1.0)), inner));
       } else if (wt == 8.0) {
         float sootR = wr * 1.8;
         gSo = max(gSo, (1.0 - smoothstep(0.4, 1.0, wdist / sootR * (0.7 + 0.6 * wz2))) * wfront);
@@ -248,7 +249,7 @@ const GLSL_HT_ALBEDO = /* glsl */`
     vec3 fleshC = mix(vec3(0.42, 0.04, 0.035), vec3(0.62, 0.15, 0.12), mix(0.5, htFbm(vRest.xy * 70.0 + vRest.z * 41.0), htAA(70.0, vRest.xy)));
     base = mix(base, fleshC, gFl);
     vec3 gutC = mix(vec3(0.55, 0.22, 0.24), vec3(0.76, 0.42, 0.4), mix(0.5, htNoise(vRest.xz * 48.0 + vRest.y * 30.0), htAA(48.0, vRest.xz)));
-    gutC = mix(gutC * 0.3, gutC, smoothstep(0.15, 0.6, gTu));
+    gutC = mix(gutC * 0.3, gutC, smoothstep(0.15, 0.6, gCo));
     base = mix(base, gutC, gGu);
     base = mix(base, vec3(0.86, 0.8, 0.68), (1.0 - gTu) * (1.0 - gGu));
     base = mix(base, vec3(0.03, 0.025, 0.02), gSo * 0.85);
@@ -256,7 +257,7 @@ const GLSL_HT_ALBEDO = /* glsl */`
     float wetW = max(max(gBl, gFl), gGu);
     htRough = mix(htRough, isCloth ? 0.42 : 0.16, wetW);
     htMetal = 0.0;
-    htH -= gHo * 1.5 + gGu * (1.0 - gTu) * 0.9; htBump = max(htBump, (gHo + gGu * 0.8 + gFl * 0.4) * 0.9);
+    htH -= gHo * 1.5 + gGu * (1.0 - gCo) * 0.9; htBump = max(htBump, (gHo + gGu * 0.8 + gFl * 0.4) * 0.9);
   }
   diffuseColor.rgb = base;
 `;
@@ -295,7 +296,7 @@ function createCharacterMaterial() {
           if (uZombie > 0.0) totalEmissiveRadiance += vec3(0.02, 0.04, 0.0) * rim * uZombie;
         }`);
   };
-  m.customProgramCacheKey = () => 'ht3d-char-v2';
+  m.customProgramCacheKey = () => 'ht3d-char-v3';
   return m;
 }
 

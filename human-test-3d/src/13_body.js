@@ -52,13 +52,14 @@ const TORSO_CTRL = [
   [0.60, 0.089, 0.061, 0.056, 0.004, 0.079, 0.054, 0.052, 0.004],
   [0.70, 0.092, 0.060, 0.058, 0.003, 0.081, 0.054, 0.054, 0.003],
   [0.78, 0.092, 0.056, 0.058, 0.001, 0.081, 0.051, 0.054, 0.001],
-  [0.86, 0.090, 0.049, 0.054, -0.002, 0.080, 0.045, 0.050, -0.002],
-  [0.92, 0.083, 0.043, 0.049, -0.004, 0.074, 0.040, 0.046, -0.004],
+  [0.86, 0.091, 0.049, 0.054, -0.002, 0.082, 0.045, 0.050, -0.002],
+  [0.92, 0.086, 0.043, 0.049, -0.004, 0.077, 0.040, 0.046, -0.004],
   [0.96, 0.065, 0.037, 0.043, -0.005, 0.058, 0.034, 0.040, -0.005],
   [1.00, 0.036, 0.030, 0.035, -0.006, 0.032, 0.027, 0.032, -0.006]
 ];
 const ARM_CTRL = [ // dist (H units, canonical), a (thumb axis), b (palm normal axis)
-  [-0.030, 0.008, 0.008], [-0.025, 0.0165, 0.016], [-0.018, 0.0228, 0.022], [-0.009, 0.0268, 0.026], [0.000, 0.0292, 0.0285], [0.035, 0.0300, 0.0290], [0.070, 0.0275, 0.0260],
+  // the deltoid cap stays under the shoulder line (it used to rise above it like a puffed sleeve)
+  [-0.021, 0.009, 0.008], [-0.016, 0.0172, 0.0158], [-0.010, 0.0232, 0.0220], [-0.004, 0.0268, 0.0258], [0.004, 0.0287, 0.0278], [0.035, 0.0296, 0.0286], [0.070, 0.0275, 0.0260],
   [0.110, 0.0265, 0.0245], [0.150, 0.0235, 0.0225], [0.180, 0.0205, 0.0200], [0.200, 0.0215, 0.0205],
   [0.230, 0.0225, 0.0200], [0.270, 0.0195, 0.0170], [0.305, 0.0172, 0.0135], [0.332, 0.0160, 0.0112],
   [0.345, 0.0188, 0.0108], [0.368, 0.0222, 0.0104], [0.388, 0.0232, 0.0095]
@@ -129,14 +130,22 @@ function buildBody(mb, app, rig, Q) {
   const torsoBump = (u, th) => {
     let b = 0;
     if (!male && bd.bust > 0) {
-      const a = 0.0165 * H * bd.bust;
-      b += a * (gauss(th, 0.43, 0.30) + gauss(th, TAU - 0.43, 0.30)) * gauss(u, 0.595, 0.065);
+      // natural bust under clothing: gentle upper slope, fuller lower curve, fabric spanning the middle
+      const a = 0.0225 * H * bd.bust;
+      const side = Math.max(gauss(th, 0.44, 0.36), gauss(th, TAU - 0.44, 0.36));
+      const bridge = 0.72 * (gauss(th, 0, 0.5) + gauss(th, TAU, 0.5));
+      b += a * Math.max(side, bridge) * gauss(u, 0.622, u > 0.622 ? 0.085 : 0.052);
     } else if (male) {
       b += 0.004 * H * (bd.muscle - 0.85) * (gauss(th, 0.5, 0.35) + gauss(th, TAU - 0.5, 0.35)) * gauss(u, 0.66, 0.05);
     }
     if (bd.belly > 0) b += 0.026 * H * bd.belly * (gauss(th, 0, 0.75) + gauss(th, TAU, 0.75)) * gauss(u, 0.40, 0.11);
-    b += (male ? 0.010 : 0.016) * H * (gauss(th, Math.PI - 0.45, 0.4) + gauss(th, Math.PI + 0.45, 0.4)) * gauss(u, 0.12, 0.07);
+    // gluteal curve (rounder and fuller for women), lower edge tighter than the slope up to the lower back
+    b += (male ? 0.011 : 0.0185) * H * (gauss(th, Math.PI - 0.43, 0.42) + gauss(th, Math.PI + 0.43, 0.42)) * gauss(u, 0.125, u > 0.125 ? 0.085 : 0.056);
     b += 0.004 * H * (gauss(th, Math.PI - 0.62, 0.3) + gauss(th, Math.PI + 0.62, 0.3)) * gauss(u, 0.74, 0.06);
+    // shoulder girdle (clavicle to acromion): carries the shoulder line out over the top of the arm,
+    // so the deltoid continues the slope from the neck instead of sitting on the corner like a pad
+    // (falls off quickly above the shoulder tip so the line still slopes down from the neck)
+    b += (male ? 0.021 : 0.0185) * H * (gauss(th, Math.PI / 2, 0.6) + gauss(th, Math.PI * 1.5, 0.6)) * gauss(u, 0.872, u > 0.872 ? 0.03 : 0.05);
     return b;
   };
   const torsoXZ = (u, th, off) => {
@@ -146,8 +155,9 @@ function buildBody(mb, app, rig, Q) {
     let z = (c >= 0 ? P.fd + off : P.bd + off) * Math.sign(c) * Math.pow(Math.abs(c), ex);
     const bump = torsoBump(u, th);
     if (bump !== 0) { const r = Math.hypot(x, z) || 1; x *= 1 + bump / r; z *= 1 + bump / r; }
-    // collar line slopes down toward the front (sternal notch lower than C7)
-    const tilt = 0.5 * clamp((u - 0.8) / 0.2, 0, 1);
+    // collar line slopes down toward the front (sternal notch lower than C7); only around the neck -
+    // applied across the whole ring it used to drop the shoulder tops below the arms
+    const tilt = 0.5 * clamp((u - 0.8) / 0.2, 0, 1) * (1 - 0.7 * smoothstep(0.3, 0.75, Math.abs(s)));
     const dy = tilt > 0 ? -tilt * (z + P.bd + off) : 0;
     return [x, P.cz + z, dy];
   };
@@ -170,7 +180,7 @@ function buildBody(mb, app, rig, Q) {
     const shw = smoothstep(0.8, 0.95, u) * smoothstep(0.55, 0.98, Math.abs(s));
     if (shw > 0.01) {
       const side = s > 0 ? 0 : 1;
-      w.push([SB('clavicle', side), 0.45 * shw], [SB('upperarm', side), 0.30 * shw]);
+      w.push([SB('clavicle', side), 0.5 * shw], [SB('upperarm', side), 0.14 * shw]);
       w[0][1] *= 1 - 0.6 * shw;
     }
     return w;
@@ -241,6 +251,31 @@ function buildBody(mb, app, rig, Q) {
     segs.push({ u0: 0, u1: 1, layer: topTorso, off: topOff });
   }
 
+  // clothed torso surface (distance from the body axis along direction phi at height y), used to drape
+  // long hair over the back and shoulders instead of through the clothes; 0 where there is no torso
+  const hoodC = tdef.neck === 'hood' ? new V3(0, rig.neckBaseY - 0.03 * H, -0.062 * H) : null;
+  rig.torsoSurf = (y, phi) => {
+    const u = (y - crotchY) / span;
+    if (u < 0.55 || u > 1.1) return 0;
+    const uu = Math.min(1, u), th = ((phi % TAU) + TAU) % TAU;
+    let off = 0;
+    for (const sg of segs) if (uu >= sg.u0 - 1e-4 && uu <= sg.u1 + 1e-4) off = Math.max(off, sg.off(uu));
+    if (u > 0.94 && (tdef.neck === 'collar' || tdef.neck === 'lapel')) off += 0.012 * sc * smoothstep(0.94, 1.0, u);
+    const p = torsoXZ(uu, th, off);
+    let r = Math.hypot(p[0], p[1]);
+    if (u > 1) r *= 1 - (u - 1) * 2.5; // narrowing above the collar line
+    if (hoodC) { // the hood lies on the upper back
+      const rx = 0.068 * H, ry = 0.034 * H, rz = 0.03 * H, dy = (y - hoodC.y) / ry;
+      if (Math.abs(dy) < 1) {
+        const k = Math.sqrt(1 - dy * dy), sn = Math.sin(th), cs = Math.cos(th), hz = hoodC.z;
+        const A = sn * sn / (rx * rx) + cs * cs / (rz * rz), Bq = -2 * cs * hz / (rz * rz), Cq = hz * hz / (rz * rz) - k * k;
+        const disc = Bq * Bq - 4 * A * Cq;
+        if (disc > 0) r = Math.max(r, (-Bq + Math.sqrt(disc)) / (2 * A) + 0.004 * sc);
+      }
+    }
+    return r;
+  };
+
   const torsoRings = [];
   const torsoStep = 0.05 * Q.ringStep;
   const baseUs = [];
@@ -301,7 +336,8 @@ function buildBody(mb, app, rig, Q) {
   for (let s = 0; s < 2; s++) buildArm(mb, app, rig, Q, s, topLayer, skinLayer, tdef);
 
   // ---------------- LEGS ----------------
-  for (let s = 0; s < 2; s++) buildLeg(mb, app, rig, Q, s, bot, bottomLayer, legSkinLayer, app.shoes);
+  const coveredY = skirtSpec && (isDress || isSkirt) ? rig.hipJY - skirtSpec.len * H : null; // thighs hidden above this
+  for (let s = 0; s < 2; s++) buildLeg(mb, app, rig, Q, s, bot, bottomLayer, legSkinLayer, app.shoes, coveredY);
 
   // ---------------- SHOES ----------------
   for (let s = 0; s < 2; s++) buildShoe(mb, app, rig, Q, s);
@@ -318,12 +354,27 @@ function buildSkirt(mb, app, rig, Q, spec, torsoXZ, torsoP, crotchY, span) {
   const baseOff = 0.008 * sc;
   const wFor = (th, t) => {
     const s = Math.sin(th);
-    const down = smoothstep(0.0, 1.0, t);
-    const tl = 0.75 * down * smoothstep(-0.6, 0.6, s), tr = 0.75 * down * smoothstep(0.6, -0.6, s);
+    // the front/sides follow the thighs early (they push the fabric), the back hangs from the hips
+    const down = smoothstep(-0.15, 0.6, t) * (0.8 + 0.2 * Math.max(0, Math.cos(th)));
+    const tl = 0.92 * down * smoothstep(-0.5, 0.5, s), tr = 0.92 * down * smoothstep(0.5, -0.5, s);
     return [[B.hips, Math.max(0.05, 1 - tl - tr)], [B.thigh_L, tl], [B.thigh_R, tr]];
   };
   const regFor = (th, p, t) => t < 0.15 ? REGION.PELVIS : (p.x > 0 ? REGION.L_THIGH : REGION.R_THIGH);
   const slitHalf = spec.slit ? (spec.slitHalf || 0.14) : 0;
+  // furthest extent of either thigh along direction (s, c) at height y (thighs modelled as ellipses)
+  const bd = app.body, legK = Math.pow(bd.muscle, 0.7) * Math.pow(bd.limb, 0.6) * (1 + 0.08 * bd.fat) * (app.male ? 1 : 1.06);
+  const thighEnv = (y, s, c) => {
+    const fcan = clamp((rig.hipJY - y) / rig.thighLen * 0.49, -0.05, 0.45);
+    const ea = sampleTable(LEG_CTRL, fcan, 1) * H * legK, eb = sampleTable(LEG_CTRL, fcan, 2) * H * legK;
+    const ez = sampleTable(LEG_CTRL, fcan, 3) * H, ex = rig.hipHalf * lerp(0.8, 1.0, smoothstep(0.0, 0.28, fcan));
+    let best = 0;
+    for (const cx of [ex, -ex]) {
+      const A = s * s / (ea * ea) + c * c / (eb * eb), Bq = -2 * (s * cx / (ea * ea) + c * ez / (eb * eb)), Cq = cx * cx / (ea * ea) + ez * ez / (eb * eb) - 1;
+      const disc = Bq * Bq - 4 * A * Cq;
+      if (disc > 0) best = Math.max(best, (-Bq + Math.sqrt(disc)) / (2 * A));
+    }
+    return best;
+  };
   const ringAt = (t, off, strip, inner) => {
     const y = lerp(yTop, yHem, t);
     const uRef = clamp((y - crotchY) / span, 0.12, 1);
@@ -333,6 +384,12 @@ function buildSkirt(mb, app, rig, Q, spec, torsoXZ, torsoP, crotchY, span) {
       prof: (th) => {
         // take the max of body profile at this height and at hip level so the skirt hangs from the hips
         const a = torsoXZ(hipU, th, off + flare(t));
+        // ...and never cuts into the thighs (they used to poke through the front of long skirts)
+        if (y < rig.hipJY + 0.05 * rig.legLen) {
+          const s = Math.sin(th), c = Math.cos(th), r = Math.hypot(a[0], a[1]) || 1e-4;
+          const te = thighEnv(y, s, c) + off + 0.014 * sc + flare(t) * 0.5;
+          if (te > r) { a[0] *= te / r; a[1] *= te / r; }
+        }
         return a;
       },
       col: inner ? shadeColor(spec.layer.col, 0.7) : spec.layer.col, mat: spec.layer.mat, col2: spec.layer.col2,
@@ -414,9 +471,15 @@ function buildArm(mb, app, rig, Q, side, topLayer, skinLayer, tdef) {
     const b = sampleTable(ARM_CTRL, x, 2) * H * radK(x) + off;
     return (th) => [Math.cos(th) * a, Math.sin(th) * b];
   };
-  const wAt = (x) => {
+  const wAt = (x, th) => {
     const elbow = 0.186, wrist = 0.332;
-    if (x < 0.02) { const t = smoothstep(-0.03, 0.02, x); return [[SB('clavicle', side), 0.22 * (1 - t)], [SB('upperarm', side), 0.78 + 0.22 * t]]; }
+    // the shoulder cap follows the clavicle more than the arm - most of all over the top/outside
+    // (th = -90 deg) - so it doesn't swing up over the shoulder line when the arm hangs down
+    if (x < 0.07) {
+      const outer = th == null ? 0 : smoothstep(0.3, -0.9, Math.sin(th)) * 0.32 * (1 - smoothstep(0.0, 0.07, x));
+      const c = Math.min(0.75, 0.55 * (1 - smoothstep(-0.021, 0.05, x)) + outer);
+      return [[SB('clavicle', side), c], [SB('upperarm', side), 1 - c]];
+    }
     if (x < elbow - 0.018) return [[SB('upperarm', side), 1]];
     if (x < elbow + 0.016) { const t = smoothstep(elbow - 0.018, elbow + 0.016, x); return [[SB('upperarm', side), 1 - t], [SB('forearm', side), t]]; }
     if (x < wrist - 0.012) return [[SB('forearm', side), 1]];
@@ -428,9 +491,10 @@ function buildArm(mb, app, rig, Q, side, topLayer, skinLayer, tdef) {
   const sleeveEnd = tdef.sleeve === 'long' ? 0.322 : (tdef.sleeve === 'short' ? 0.085 : -0.02);
   const sleeveThick = (tdef.thick || 0.006) * sc;
   const sleeveLoose = (tdef.mat === 'knit' || tdef.mat === 'fleece' || tdef.mat === 'nylon' || tdef.mat === 'leather' ? 0.006 : 0.003) * sc;
+  const capK = (x) => 0.45 + 0.55 * smoothstep(-0.021, 0.03, x); // fabric lies flat over the shoulder cap
   const sleeveOff = (x) => {
-    if (tdef.sleeve === 'short') return sleeveThick + sleeveLoose + 0.005 * sc * smoothstep(0.0, sleeveEnd, x);
-    let o = sleeveThick + sleeveLoose * (0.6 + 0.8 * smoothstep(0.15, 0.28, x));
+    if (tdef.sleeve === 'short') return (sleeveThick + sleeveLoose) * capK(x) + 0.005 * sc * smoothstep(0.0, sleeveEnd, x);
+    let o = (sleeveThick + sleeveLoose * (0.6 + 0.8 * smoothstep(0.15, 0.28, x))) * capK(x);
     if (tdef.cuffs && x > sleeveEnd - 0.022) o = sleeveThick * 0.8;
     return o;
   };
@@ -438,7 +502,7 @@ function buildArm(mb, app, rig, Q, side, topLayer, skinLayer, tdef) {
   for (const row of ARM_CTRL) xs.push(row[0]);
   for (let x = 0.0; x < 0.388; x += 0.02 * Q.ringStep) xs.push(x);
   xs.push(sleeveEnd, 0.186 - 0.012, 0.186 + 0.012);
-  const allX = sortedUnique(xs.filter(x => x >= -0.030 && x <= 0.388));
+  const allX = sortedUnique(xs.filter(x => x >= -0.021 && x <= 0.388));
   const rings = [];
   const mk = (x, layer, off, strip) => {
     const dist = mapDist(x);
@@ -447,7 +511,7 @@ function buildArm(mb, app, rig, Q, side, topLayer, skinLayer, tdef) {
     let col = layer.col;
     if (layer.isSkin && x > 0.37) col = skinColorAt(layer.col, 0.5, 0.02);
     else if (layer.isSkin && x > 0.17 && x < 0.2) col = skinColorAt(layer.col, 0.25, 0.0);
-    return { c, e1, e2, prof: p, col, mat: layer.mat, col2: layer.col2, wts: wAt(x), reg: regAt(x), v: dist, strip: !!strip };
+    return { c, e1, e2, prof: p, col, mat: layer.mat, col2: layer.col2, wts: x < 0.07 ? (th) => wAt(x, th) : wAt(x), reg: regAt(x), v: dist, strip: !!strip };
   };
   const hasSleeve = sleeveEnd > 0;
   for (const x of allX) {
@@ -503,7 +567,7 @@ function buildArm(mb, app, rig, Q, side, topLayer, skinLayer, tdef) {
 }
 
 // ---------------------------------------------------------------------------------------
-function buildLeg(mb, app, rig, Q, side, bot, bottomLayer, skinLayer, shoes) {
+function buildLeg(mb, app, rig, Q, side, bot, bottomLayer, skinLayer, shoes, coveredY) {
   const H = rig.H, bd = app.body, sc = H / 1.75;
   const sg = SIDE_SIGN[side];
   const x0 = sg * rig.hipHalf;
@@ -513,8 +577,14 @@ function buildLeg(mb, app, rig, Q, side, bot, bottomLayer, skinLayer, shoes) {
   const fc = (f) => f < 0.49 ? f / 0.49 * fKnee : fKnee + (f - 0.49) / 0.51 * (1 - fKnee); // canonical -> actual
   const muscle = Math.pow(bd.muscle, 0.7) * Math.pow(bd.limb, 0.6) * (1 + 0.08 * bd.fat);
   const femK = (f) => app.male ? 1 : (f < 0.35 ? 1.06 : (f < 0.49 ? 1.0 : 0.95));
+  // under a skirt/dress the (hidden) upper thighs are slimmed a little so they never poke through the fabric
+  const hiddenK = (fcan) => {
+    if (coveredY == null) return 1;
+    const y = yAt(fc(Math.max(0, fcan)));
+    return 1 - 0.3 * smoothstep(coveredY + 0.02 * H, coveredY + 0.08 * H, y);
+  };
   const profAt = (fcan, off) => {
-    const k = muscle * femK(fcan);
+    const k = muscle * femK(fcan) * hiddenK(fcan);
     const a = sampleTable(LEG_CTRL, fcan, 1) * H * k + off;
     const b = sampleTable(LEG_CTRL, fcan, 2) * H * k + off;
     const cz = sampleTable(LEG_CTRL, fcan, 3) * H;

@@ -58,8 +58,9 @@ function buildRigSpec(app) {
   r.neckLen = 0.064 * r.sHead * bd.neck;
   r.neckBaseY = r.headJ.y - r.neckLen;
   r.crotchY = r.hipJY - 0.036 * H;
-  r.shoulderY = r.neckBaseY - 0.056 * H;
-  r.shoulderHalf = (male ? 0.0995 : 0.0915) * H * Math.pow(bd.shoulder, 0.6);
+  // shoulder joint tucked under the shoulder girdle (the deltoid cap stays inside the shoulder line)
+  r.shoulderY = r.neckBaseY - 0.064 * H;
+  r.shoulderHalf = (male ? 0.0955 : 0.0848) * H * Math.pow(bd.shoulder, 0.6);
   r.hipHalf = (male ? 0.0505 : 0.0555) * H * Math.pow(bd.hip, 0.5);
   r.armAngle = 62 * DEG; // relaxed A-pose: 62 degrees below horizontal
   r.upperArmLen = 0.186 * H * armK;

@@ -30,7 +30,7 @@ function makeHeadShape(app, rig) {
     noseProj: 0.0045 * F.noseProj,
     noseBridge: 1 + 0.25 * F.noseBridge,
     brow: (male ? 0.0075 : 0.0058) + 0.0018 * F.brow,
-    lips: 1 + 0.2 * F.lips,
+    lips: (male ? 1 : 1.06) + 0.2 * F.lips,
     mouthW: 1 + 0.08 * F.mouthW,
     cheek: 0.003 * F.cheek,
     cheekFull: 0.0035 * F.cheekFull,
@@ -67,8 +67,8 @@ function makeHeadShape(app, rig) {
     if (!far(BNOSE, x, y, z, d, 0.0072)) d = smin(d, sdCapR(x, y, z, 0, 0.0055, 0.0825, 0, tipY, tipZ, 0.0052 * P.noseBridge, 0.0097 * P.noseW), 0.0072);
     if (!far(BALA, ax, y, z, d, 0.0045)) d = smin(d, sdEll(ax, y, z, 0.0108 * P.noseW, tipY - 0.004, tipZ - 0.0135, 0.0058 * P.noseW, 0.0055, 0.0075), 0.0045);
     if (!far(BLIP, x, y, z, d, 0.0045)) {
-      d = smin(d, sdEll(x, y, z, 0, P.upLipY, 0.0885, 0.0215 * P.mouthW, 0.0058 * P.lips, 0.0112), 0.0045);
-      d = smin(d, sdEll(x, y, z, 0, P.loLipY, 0.0876, 0.0192 * P.mouthW, 0.0072 * P.lips, 0.0112), 0.0045);
+      d = smin(d, sdEll(x, y, z, 0, P.upLipY, 0.0892, 0.0215 * P.mouthW, 0.0066 * P.lips, 0.0121 * Math.sqrt(P.lips)), 0.004);
+      d = smin(d, sdEll(x, y, z, 0, P.loLipY - 0.0006, 0.0884, 0.0194 * P.mouthW, 0.0083 * P.lips, 0.0122 * Math.sqrt(P.lips)), 0.004);
     }
     // eye socket subtraction: smax(d, -s, k) only differs when s < -d + k
     { const dx = ax - BEYE.cx, dy = y - BEYE.cy, dz = z - BEYE.cz; const lb = Math.sqrt(dx * dx + dy * dy + dz * dz) - BEYE.r; if (lb < -d + 0.0068) d = smax(d, -(lb), 0.0068); }
@@ -76,8 +76,8 @@ function makeHeadShape(app, rig) {
   };
   const lipDist = (x, y0, z) => {
     const y = y0 < -0.02 ? -0.02 + (y0 + 0.02) / P.faceLen : y0;
-    return Math.min(sdEll(x, y, z, 0, P.upLipY + 0.0004, 0.0885, 0.0205 * P.mouthW, 0.0050 * P.lips, 0.0102),
-      sdEll(x, y, z, 0, P.loLipY - 0.0004, 0.0875, 0.0183 * P.mouthW, 0.0062 * P.lips, 0.0102));
+    return Math.min(sdEll(x, y, z, 0, P.upLipY + 0.0004, 0.0892, 0.0206 * P.mouthW, 0.0058 * P.lips, 0.0111 * Math.sqrt(P.lips)),
+      sdEll(x, y, z, 0, P.loLipY - 0.001, 0.0884, 0.0185 * P.mouthW, 0.0073 * P.lips, 0.0112 * Math.sqrt(P.lips)));
   };
   P.sdf = sdf; P.lipDist = lipDist;
   P.mouthYScaled = -0.02 + (P.mouthY + 0.02) * P.faceLen;
@@ -195,8 +195,9 @@ function buildHead(mb, app, rig, Q) {
   const lipCol = (() => {
     const c = skinBase.clone();
     const k = 0.55 + F.lipTint * 0.45;
-    c.r *= 1 - 0.04 * k; c.g *= 1 - 0.36 * k; c.b *= 1 - 0.30 * k;
-    return c.multiplyScalar(0.86);
+    if (app.male) { c.r *= 1 - 0.04 * k; c.g *= 1 - 0.36 * k; c.b *= 1 - 0.30 * k; return c.multiplyScalar(0.86); }
+    c.r *= 1 + 0.03 * k; c.g *= 1 - 0.44 * k; c.b *= 1 - 0.34 * k;
+    return c.multiplyScalar(0.84);
   })();
   const stubble = app.facialHair !== 'none';
   // facial hair regions as signed distances (positive inside), local meters
@@ -557,6 +558,30 @@ function buildEye(mb, app, rig, P, side, Q) {
     orientPartOutward(mb, st2, ec);
     mb.endPart();
   }
+  // eyelashes: a dark fringe curling out and up from the upper lid edge (longer for women)
+  {
+    const len = (app.male ? 0.0042 : 0.0072) * S, cols3 = 14;
+    mb.beginPart();
+    const st3 = mb.I.length, b3 = mb.n;
+    for (let i = 0; i <= 2; i++) {
+      for (let j = 0; j <= cols3; j++) {
+        const a = lerp(-1.25, 1.25, j / cols3);
+        const e = eUp(a);
+        const prof = Math.pow(Math.max(0, Math.cos(a / 1.25 * Math.PI * 0.5)), 0.6) * (1 + 0.25 * a * sg); // longer at the outer corner
+        const k = i / 2, L = len * prof * k;
+        const nx = Math.sin(a) * Math.cos(e), ny = Math.sin(e), nz = Math.cos(a) * Math.cos(e);
+        const rr = Rl * 1.03 + L * 0.75;
+        const x = ec.x + nx * rr, y = ec.y + ny * rr + L * (0.55 + 0.35 * k), z = ec.z + nz * rr;
+        mb.v(x, y, z, a, k, lashCol, [MAT.HAIR, 0.6, 0, 1], lashCol, [[SB('lid', side), 1]], REGION.HEAD);
+      }
+    }
+    for (let i = 0; i < 2; i++) for (let j = 0; j < cols3; j++) {
+      const a = b3 + i * (cols3 + 1) + j;
+      mb.quad(a, a + 1, a + cols3 + 2, a + cols3 + 1);
+    }
+    orientPartOutward(mb, st3, ec);
+    mb.endPart();
+  }
 }
 
 function buildEar(mb, app, rig, P, side) {
@@ -657,7 +682,7 @@ function buildHair(mb, app, rig, grid, Q) {
     if (style2.quiff) t += 0.012 * smoothstep(0.04, 0.09, y) * smoothstep(-0.02, 0.06, z);
     if (style2.afro) t *= 0.85 + 0.25 * smoothstep(-0.05, 0.08, y);
     if (style2.curl) t += style2.curl * (noise3(x * 160, y * 160, z * 160) - 0.5) * 2;
-    if (style2.curtain) t *= 1.0;
+    if (style2.curtain) t += 0.0028 * (noise3(x * 70, y * 22, z * 70) - 0.5) * 2 + 0.0015 * Math.sin(Math.atan2(x, z) * 26 + y * 40); // locks, not a shell
     // thin out at the hairline edge
     return t * (0.55 + 0.45 * m);
   };
@@ -689,7 +714,8 @@ function buildHairCurtain(mb, app, rig, grid, st, col, Q) {
     return t;
   };
   const neckR = (app.male ? 0.056 : 0.0475) * app.body.neck * 1.1;
-  const shoulderW = (rig.shoulderHalf / S) * 1.05, backD = 0.075 * (rig.H / 1.75) / S;
+  // the curtain must clear the clothed upper back (it used to sit inside the shirt and vanish)
+  const shoulderW = (rig.shoulderHalf / S) * 1.05, backD = ((app.male ? 0.06 : 0.058) * rig.H + 0.02 * (rig.H / 1.75)) / S;
   const phiLimTop = kind === 'bob' ? 0.72 : 1.0;
   const rings = [];
   const wFor = (y) => {
@@ -702,7 +728,9 @@ function buildHairCurtain(mb, app, rig, grid, st, col, Q) {
     const t = i / rowsN;
     const y = lerp(yTop, yBot, Math.pow(t, 1.05));
     const below = y < neckBaseL ? smoothstep(neckBaseL, neckBaseL - 0.08, y) : 0;
-    const phiLim = lerp(phiLimTop, kind === 'long' ? 2.05 : 1.6, smoothstep(-0.06, yBot, y) * (kind === 'bob' ? 0.3 : 1));
+    let phiLim = lerp(phiLimTop, kind === 'long' ? 2.05 : 1.6, smoothstep(-0.06, yBot, y) * (kind === 'bob' ? 0.3 : 1));
+    // below the neck the hair falls down the back (not over the shoulder tops like a cape)
+    if (y < neckBaseL + 0.02) phiLim = Math.max(phiLim, lerp(1.75, 2.3, smoothstep(neckBaseL + 0.02, neckBaseL - 0.08, y)));
     const end = i === rowsN;
     const ring = {
       c: new V3(HC.x, HC.y + y * S, HC.z - 0.01 * S), e1: LEFT, e2: FWD,
@@ -716,10 +744,16 @@ function buildHairCurtain(mb, app, rig, grid, st, col, Q) {
         else r = Math.max(neckR + 0.012, surfR(phi, -0.07) * lerp(1, 0.7, smoothstep(-0.075, -0.11, y)) + st.side);
         if (below > 0) {
           const bx = Math.abs(Math.sin(phi)) * shoulderW, bz = Math.max(0, -Math.cos(phi)) * backD;
-          r = Math.max(r, lerp(r, Math.hypot(bx * 0.55, bz) + 0.02, below));
+          r = Math.max(r, lerp(r, Math.hypot(bx * 0.6, bz) + 0.016, below));
         }
         if (st.wave) r += st.wave * Math.sin(y * 90 + phi * 3) * smoothstep(0.0, -0.05, y);
         if (st.curl) r += st.curl * (noise3(Math.cos(phi) * 30, y * 60, Math.sin(phi) * 30) - 0.5) * 2;
+        // lie on top of the clothed neck/back/shoulders (never through the collar, hood or shirt)
+        if (rig.torsoSurf && y < 0.0) {
+          const back = smoothstep(1.65, 2.15, Math.abs(wrapAngle(phi))); // the sides hang free, the back lies on the body
+          const ts = back > 0 ? rig.torsoSurf(HC.y + y * S, phi) : 0;
+          if (ts > 0) r = Math.max(r, lerp(r, (ts - Math.cos(phi) * (HC.z - 0.01 * S) + 0.007) / S + thick, back));
+        }
         let rr = outer ? r : r - (end ? 0 : thick);
         // the face-front ends taper
         return [Math.sin(phi) * rr, Math.cos(phi) * rr];
