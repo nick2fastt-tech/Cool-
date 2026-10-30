@@ -4110,6 +4110,17 @@ const SHAPE = { CAPSULE: 0, SPHERE: 1, BOX: 2 };
 const _p1 = new V3(), _p2 = new V3(), _p3 = new V3(), _p4 = new V3(), _p5 = new V3(), _p6 = new V3(), _p7 = new V3(), _p8 = new V3();
 const _pq1 = new QT(), _pq2 = new QT();
 
+// characteristic size for surface-speed checks
+function bodySize(b) { const s = b.shape; return s.type === SHAPE.BOX ? Math.max(s.he.x, s.he.y, s.he.z) : (s.r || 0.05) + (s.hh || 0); }
+// settling: a body resting on the ground, moving slowly, sheds residual spin and creep
+// (XPBD contact/joint fights otherwise keep hands and feet twitching forever)
+function restDamp(b, h) {
+  const v = b.vel.length();
+  if (v > 0.35) return;
+  const k = 1 - smoothstep(0.06, 0.35, v);
+  b.omega.multiplyScalar(Math.max(0, 1 - 16 * k * h));
+  b.vel.multiplyScalar(Math.max(0, 1 - 3 * k * h));
+}
 class RBody {
   constructor(shape, mass) {
     this.shape = shape;
@@ -4391,7 +4402,7 @@ class PhysicsWorld {
   wakeOwner(o) {
     if (!o || !o.bodies) return;
     for (const b of o.bodies) if (b.sleeping) { b.sleeping = false; b.vel.set(0, 0, 0); b.omega.set(0, 0, 0); }
-    o.sleepTimer = 0; o.asleep = false;
+    o.sleepTimer = 0; o.asleep = false; o.sleepRef = false;
   }
   wakeAll() { for (const o of this.owners) this.wakeOwner(o); }
   // --- step ------------------------------------------------------------------
@@ -4427,7 +4438,7 @@ class PhysicsWorld {
       }
       for (const j of this.joints) if (j.enabled) j.solvePos(h);
       this.solveContacts(h);
-      for (const b of bodies) if (!b.kinematic && !b.sleeping && b.invMass > 0) b.updateVelocities(h);
+      for (const b of bodies) if (!b.kinematic && !b.sleeping && b.invMass > 0) { b.updateVelocities(h); if (b.touchT !== undefined && this.time - b.touchT < 0.05) restDamp(b, h); }
       this.solveContactVelocities(h);
       for (const j of this.joints) if (j.enabled) j.solveVel(h);
     }
@@ -4452,9 +4463,9 @@ class PhysicsWorld {
       if (!o.bodies || !o.bodies.length || !o.bodies[0].inWorld) continue;
       const mn = o.aabbMin || (o.aabbMin = new V3()), mx = o.aabbMax || (o.aabbMax = new V3());
       mn.set(1e9, 1e9, 1e9); mx.set(-1e9, -1e9, -1e9);
-      let anyDyn = false;
-      for (const b of o.bodies) { mn.min(b.aabbMin); mx.max(b.aabbMax); if (!b.kinematic && !b.sleeping) anyDyn = true; }
-      o._anyDyn = anyDyn;
+      let anyDyn = false, kinMoving = false;
+      for (const b of o.bodies) { mn.min(b.aabbMin); mx.max(b.aabbMax); if (!b.kinematic && !b.sleeping) anyDyn = true; else if (b.kinematic && b.kinVel.lengthSq() > 0.09) kinMoving = true; }
+      o._anyDyn = anyDyn; o._kinMoving = kinMoving;
       owners.push(o);
     }
     for (let i = 0; i < owners.length; i++) {
@@ -4465,12 +4476,21 @@ class PhysicsWorld {
       }
       for (let k = i + 1; k < owners.length; k++) {
         const Bo = owners[k];
-        if (!A._anyDyn && !Bo._anyDyn) continue;
+        const wakeable = (A.asleep && Bo._kinMoving) || (Bo.asleep && A._kinMoving);
+        if (!A._anyDyn && !Bo._anyDyn && !wakeable) continue;
         const ka = A.physKind, kb = Bo.physKind;
         if (!this.npcCollisions && ka === 'npc' && kb === 'npc') continue;
         if (!this.propCollisions && ((ka === 'prop' && kb === 'npc') || (ka === 'npc' && kb === 'prop'))) continue;
         if (A.noCollideWith === Bo || Bo.noCollideWith === A) continue;
         if (A.aabbMax.x < Bo.aabbMin.x || A.aabbMin.x > Bo.aabbMax.x || A.aabbMax.y < Bo.aabbMin.y || A.aabbMin.y > Bo.aabbMax.y || A.aabbMax.z < Bo.aabbMin.z || A.aabbMin.z > Bo.aabbMax.z) continue;
+        // something animated walks into a resting body: wake it so it gets pushed instead of passed through
+        if (wakeable) {
+          const S = A.asleep ? A : Bo, M = S === A ? Bo : A;
+          let touch = false;
+          for (const b0 of S.bodies) { for (const b1 of M.bodies) if (b1.kinematic && aabbOverlap(b0, b1)) { touch = true; break; } if (touch) break; }
+          if (!touch) continue;
+          this.wakeOwner(S); S._anyDyn = true;
+        }
         for (const b0 of A.bodies) {
           for (const b1 of Bo.bodies) {
             const d0 = !b0.kinematic && !b0.sleeping, d1 = !b1.kinematic && !b1.sleeping;
@@ -4522,6 +4542,7 @@ class PhysicsWorld {
       for (const P of pts) {
         const dist = pl.n.dot(P) - pl.d - r;
         if (dist < 0) {
+          b.touchT = this.time;
           const p0 = _p5.copy(P).addScaledVector(pl.n, -r);
           const p1 = _p6.copy(p0).addScaledVector(pl.n, -(pl.n.dot(p0) - pl.d));
           this.addContact(b, null, p0, p1, pl.n);
@@ -4536,6 +4557,7 @@ class PhysicsWorld {
         const d = nrm.x * P.x + nrm.y * hgt + nrm.z * P.z;
         const dist = nrm.dot(P) - d - r;
         if (dist < 0) {
+          b.touchT = this.time;
           const p0 = _p5.copy(P).addScaledVector(nrm, -r);
           const p1 = _p6.copy(p0).addScaledVector(nrm, -(nrm.dot(p0) - d));
           this.addContact(b, null, p0, p1, nrm.clone());
@@ -4673,23 +4695,35 @@ class PhysicsWorld {
     }
     this.stats.contacts = this.contacts.length;
   }
+  // a body sleeps once every part has stayed put over a half-second window (net movement, so
+  // tiny high-frequency solver oscillation on hands/feet no longer keeps it awake)
   updateSleep(dt) {
     for (const o of this.owners) {
       if (!o.bodies || !o.canSleep) continue;
       if (o.asleep) continue;
-      let maxV = 0, maxW = 0, anyDyn = false;
-      for (const b of o.bodies) {
-        if (b.kinematic) continue; anyDyn = true;
-        maxV = Math.max(maxV, b.vel.lengthSq()); maxW = Math.max(maxW, b.omega.lengthSq());
-      }
+      let maxV = 0, anyDyn = false;
+      for (const b of o.bodies) { if (b.kinematic) continue; anyDyn = true; maxV = Math.max(maxV, b.vel.length()); }
       if (!anyDyn) continue;
-      if (maxV < 0.06 * 0.06 && maxW < 0.25 * 0.25) {
-        o.sleepTimer = (o.sleepTimer || 0) + dt;
-        if (o.sleepTimer > 0.8 && !o.noSleep) {
-          o.asleep = true;
-          for (const b of o.bodies) if (!b.kinematic) { b.sleeping = true; b.vel.set(0, 0, 0); b.omega.set(0, 0, 0); }
-        }
-      } else o.sleepTimer = 0;
+      if (maxV > 0.3 || o.noSleep) { o.sleepTimer = 0; o.sleepRef = false; continue; }
+      if (!o.sleepP) { o.sleepP = o.bodies.map(() => new V3()); o.sleepQ = o.bodies.map(() => new QT()); }
+      if (!o.sleepRef) {
+        o.bodies.forEach((b, i) => { o.sleepP[i].copy(b.pos); o.sleepQ[i].copy(b.rot); });
+        o.sleepRef = true; o.sleepTimer = 0; continue;
+      }
+      o.sleepTimer = (o.sleepTimer || 0) + dt;
+      if (o.sleepTimer < 0.5) continue;
+      let still = true;
+      for (let i = 0; i < o.bodies.length && still; i++) {
+        const b = o.bodies[i]; if (b.kinematic) continue;
+        // extremities (hands, feet, forearms, head) may jiggle a little; the trunk must be truly still
+        const small = bodySize(b) < 0.2, dTol = small ? 0.03 : 0.012, qTol = small ? 0.0025 : 0.0003;
+        if (b.pos.distanceToSquared(o.sleepP[i]) > dTol * dTol || 1 - Math.abs(b.rot.dot(o.sleepQ[i])) > qTol) still = false;
+      }
+      if (still) {
+        o.asleep = true;
+        for (const b of o.bodies) if (!b.kinematic) { b.sleeping = true; b.vel.set(0, 0, 0); b.omega.set(0, 0, 0); }
+      }
+      o.sleepRef = false; // start a new window either way
     }
   }
   // --- queries --------------------------------------------------------------------
