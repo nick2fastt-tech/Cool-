@@ -23,7 +23,8 @@ Fan-made album, 13 tracks, 40:48 total.
 1. **Stems** (`separate.py`): Demucs `htdemucs_ft` vocal model (2 shifts). The instrumental is
    `mix - vocals`, so the two stems always add back up to the original.
 2. **Lyrics** (`transcribe.py`, `build_lines.py`): Whisper large-v3-turbo with word timestamps on the
-   vocal stem, then cleaned into display lines (`lyrics/*.lrc`). Auto-transcribed, so some words can be off.
+   vocal stem, then cleaned into display lines (`lyrics/*.lrc`). Track 12 uses `transcribe_novad.py` (voice
+   detection off), because the default pass skipped its first verse. Auto-transcribed, so some words can be off.
 3. **Mix + master** (`mix.py`):
    - Instrumental: adaptive linear-phase EQ (less boom/mud, more top end), harmonic exciter to rebuild the
      top octave the AAC source cut off at ~15.5 kHz, glue compression. Width: mono beats (tracks 3, 4, 6, 7 came

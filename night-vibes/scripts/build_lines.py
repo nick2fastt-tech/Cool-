@@ -3,7 +3,7 @@ import sys, json, re
 
 BAD = ['thank you for watching', 'thanks for watching', 'subtitles by', 'please subscribe', 'lyrics from the r&b song',
        'amara.org', 'transcribed by', 'www.', '.com']
-MAXC = 42
+MAXC = 46
 
 
 def clean_word(w):
@@ -19,10 +19,16 @@ COMMON = {'it', 'the', 'and', 'but', 'so', 'now', 'see', 'tonight', 'you', 'we',
 LOWER_SEEN = set()
 
 
+I_FORMS = {'i': 'I', "i'm": "I'm", "i've": "I've", "i'll": "I'll", "i'd": "I'd", "i'ma": "I'ma"}
+
+
 def fix_case(words):
     out = []
     for i, w in enumerate(words):
         t = w['w']
+        core = t.rstrip('.,!?;:')
+        if core.lower() in I_FORMS and core != I_FORMS[core.lower()]:
+            t = I_FORMS[core.lower()] + t[len(core):]
         prev = out[-1] if out else ''
         base = t.rstrip('.,!?').lower()
         if i > 0 and t[:1].isupper() and t[1:] == t[1:].lower() and t.rstrip('.,!?') not in KEEP \
@@ -72,6 +78,10 @@ def compact(words):
     return out
 
 
+DANGLE = {'a', 'an', 'the', 'my', 'your', 'his', 'her', 'our', 'their', 'to', 'of', 'in', 'on', 'at', 'for', 'with',
+          'and', 'but', 'or', 'so', 'like', 'that', 'this', 'from', 'into', 'i', "i'm", 'you', 'we', 'they', 'is', 'was'}
+
+
 def split_long(words):
     """Split an over-long phrase where the singer pauses / at punctuation, keeping halves balanced."""
     text = norm_text(words)
@@ -84,7 +94,8 @@ def split_long(words):
         punct = words[i - 1]['w'][-1:] in ',.;!?'
         cap = words[i]['w'][:1].isupper() and words[i]['w'] not in ('I', "I'm", "I've", "I'll", "I'd")
         balance = abs(len(left) - len(right)) / len(text)
-        score = min(gap, 1.0) * 3 + (0.8 if punct else 0) + (0.5 if cap else 0) - balance * 1.5
+        dangling = words[i - 1]['w'].lower().strip(',') in DANGLE
+        score = min(gap, 1.0) * 3 + (0.8 if punct else 0) + (0.5 if cap else 0) - balance * 1.5 - (1.2 if dangling else 0)
         if best is None or score > best[0]: best = (score, i)
     if best is None: return [words]
     i = best[1]
