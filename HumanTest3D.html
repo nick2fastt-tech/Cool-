@@ -476,7 +476,7 @@ const SETTINGS_KEY = 'humantest3d.settings.v3';
 
 const DEFAULT_SETTINGS = {
   graphics: {
-    preset: 'high',            // low | high | ultra | custom
+    preset: 'highmax',         // V1.06: one fixed quality, HIGH MAX (internal tuning only)
     resolutionScale: 1.0,      // multiplier of device pixel ratio (capped)
     shadowQuality: 'high',     // off | low | high | ultra
     textureQuality: 'high',    // low | high | ultra
@@ -492,6 +492,8 @@ const DEFAULT_SETTINGS = {
     npcCollisions: true, selfCollisions: true, propCollisions: true, substeps: 8, muscleTone: 0.35, paused: false
   },
   ai: { enabled: true, reactions: true, flee: true, wander: true, lookAt: true, reactionVariance: 1.0, wanderRate: 0.5 },
+  vampires: { enabled: true, turning: true, turnTime: 14, targetPlayer: true, speed: 1.0, detection: 22, biteDamage: 14 },
+  horror: { enabled: true, damage: 1.0 },
   zombies: {
     reincarnation: true, delayPreset: 'short', delay: 5, headTraumaPrevents: true,
     aggression: true, targetNPCs: true, detection: 18, speed: 1.0, targetMode: 'nearest',
@@ -517,6 +519,16 @@ const DEFAULT_SETTINGS = {
   controls: { sensitivity: 1.0, invertY: false, touch: 'auto', fov: 70 },
   ui: { hints: true }
 };
+
+// HIGH MAX is the only graphics quality. The internal tier just sizes costs per device class
+// (shadow map, grass density, mesh detail); the player never picks or sees it.
+const GFX = { mobile: false, tier: 'ultra' };
+function detectGfx() {
+  const touch = (typeof window !== 'undefined') && (('ontouchstart' in window) || navigator.maxTouchPoints > 0);
+  GFX.mobile = !!touch && Math.min(screen.width, screen.height) < 900;
+  GFX.tier = GFX.mobile ? 'high' : 'ultra';
+  return GFX;
+}
 
 function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
 function deepMerge(base, over) {
@@ -564,7 +576,7 @@ const Settings = {
     Events.emit('settings', { path: '*', value: null });
   }
 };
-HT.Settings = Settings;
+HT.Settings = Settings; HT.GFX = GFX;
 
 // ===== 10_chardata.js =====
 // ============================================================================
@@ -3605,7 +3617,7 @@ class FieldEnvironment {
   }
   build() {
     const g = this.group;
-    const q = Settings.data.graphics.preset;
+    const q = GFX.tier; // HIGH MAX: density tuned per device class internally
     const R = q === 'low' ? 14 : q === 'ultra' ? 26 : 19;
     this.fieldU = { uCenter: { value: new THREE.Vector2() }, uR: { value: R } };
     // sky (its horizon takes the fog colour exactly, so distant terrain melts into it)
@@ -6085,6 +6097,7 @@ class Animator {
     else if (a.type === 'balance') this.poseBalance(Pc, a, root);
     else if (a.type === 'notice') this.poseNotice(Pc, a, root);
     else if (a.type === 'convulse') this.poseConvulse(Pc, a, root);
+    else if (a.type === 'zidle') this.poseZIdle(Pc, a, root);
     P.lerp(Pc, smooth01(a.w));
     if (!a.ending && a.dur && a.t >= a.dur) a.ending = true;
   }
@@ -6284,6 +6297,29 @@ class Animator {
     P.chest.x += k * 0.1; P.neck.x -= k * 0.15; P.head.x -= k * 0.1; P.clav[0].z += k * 0.2; P.clav[1].z += k * 0.2;
     P.jaw = 0.1 + k * 0.35;
     for (let s = 0; s < 2; s++) { const hp = P.hand[s]; hp.pos.y += k * 0.08; hp.pos.z += k * 0.06; hp.fing = 0.4 + k * 0.5; }
+  }
+  // standing-zombie idles: unsteady sway, lolling head, sniffing the air, reaching at nothing, shudder
+  poseZIdle(P, a, root) {
+    const t = a.t, u = clamp(t / (a.dur || 3), 0, 1), env = Math.sin(Math.PI * u), ph = a.ph || 0;
+    if (a.mode === 'sway') {
+      const sw = Math.sin(t * 1.25 + ph);
+      P.hipsOff.x += sw * 0.035 * env; P.hipsRot.z += sw * 0.05 * env; P.spine.z -= sw * 0.07 * env; P.chest.z -= sw * 0.05 * env;
+      P.head.z += Math.sin(t * 0.9 + ph + 1) * 0.18 * env; P.head.x += 0.08 * env;
+    } else if (a.mode === 'loll') {
+      P.head.x += 0.35 * env; P.neck.x += 0.15 * env; P.head.z += Math.sin(t * 0.55 + ph) * 0.3 * env; P.head.y += Math.sin(t * 0.37 + ph) * 0.25 * env;
+      P.jaw = Math.max(P.jaw, 0.18 * env);
+    } else if (a.mode === 'sniff') {
+      P.head.x -= 0.3 * env; P.neck.x -= 0.15 * env; P.chest.x -= 0.05 * env;
+      P.head.y += Math.sin(t * 1.6 + ph) * 0.45 * env; P.jaw = Math.max(P.jaw, (0.12 + 0.15 * Math.max(0, Math.sin(t * 7))) * env);
+    } else if (a.mode === 'reach') {
+      const s = a.side || 0, hp = P.hand[s], k = smooth01(Math.min(1, u * 2.2)) * (1 - smooth01(Math.max(0, (u - 0.7) / 0.3)));
+      hp.pos.lerp(this.armPose('reach', s).pos, k * 0.85); hp.fing = lerp(hp.fing, 0.75, k);
+      P.chest.y += SIDE_SIGN[s] * 0.12 * k; P.head.x -= 0.1 * k;
+    } else { // shudder
+      const j = Math.sin(t * 31 + ph) * Math.max(0, Math.sin(t * 2.3 + ph));
+      P.chest.x += j * 0.06 * env; P.head.y += j * 0.2 * env; P.head.z += j * 0.1 * env; P.hipsOff.x += j * 0.01 * env;
+      for (let s = 0; s < 2; s++) P.hand[s].fing = clamp(P.hand[s].fing + Math.sin(t * 23 + s * 2) * 0.3 * env, 0, 1);
+    }
   }
   // infected body seizing on the ground before it turns (used while ragdolled via springs too)
   poseConvulse(P, a, root) {
@@ -7451,7 +7487,13 @@ class AISystem {
       if (Z.feeding && !anim.crawl) { const c = this.findCorpse(npc, 14); if (c) { this.startFeed(npc, b, c); return; } }
       if (b.state !== 'zIdle' && b.state !== 'zInvestigate') { b.state = 'zIdle'; b.t = 0; this.pickWander(npc, b); }
       anim.setUpper('hang');
-      b.speed = b.state === 'zInvestigate' ? zspeed : (b.t % 8 < 4 ? zspeed * 0.6 * zv.cadence : 0);
+      b.speed = b.state === 'zInvestigate' ? zspeed : ((b.t + (zv.armPhase || 0)) % 8 < 4 ? zspeed * 0.6 * zv.cadence : 0);
+      // standing still: varied idles (sway, lolling head, sniffing, reaching at nothing, shudders)
+      const ia = anim.action;
+      if (b.speed === 0 && !anim.crawl && (!ia || ia.ending) && anim.speed < 0.2) {
+        const modes = ['sway', 'sway', 'loll', 'sniff', 'reach', 'shudder'];
+        anim.setAction('zidle', { mode: modes[Math.floor(Math.random() * modes.length)], dur: 2.2 + Math.random() * 2.8, ph: Math.random() * 6, side: Math.random() < 0.5 ? 0 : 1, inT: 0.5, outT: 0.6 });
+      } else if (b.speed > 0 && ia && ia.type === 'zidle' && !ia.ending) anim.setAction(null);
       if (npc.root.pos.distanceTo(b.dest) < 0.7) { this.pickWander(npc, b); b.state = 'zIdle'; }
       b.lookT = (b.lookT || 0) - dt;
       if (b.lookT <= 0) {
@@ -7856,12 +7898,18 @@ class ReincarnationSystem {
     if (Z.delayPreset && Z.delayPreset !== 'custom' && REINC_PRESETS[Z.delayPreset] != null) return REINC_PRESETS[Z.delayPreset];
     return clamp(Z.delay, 0, 600);
   }
+  // V1.06: turning (the look) and rising (an active zombie) are separate. Every eligible body turns;
+  // only bodies without critical head trauma (when that rule is on) may ever get up.
   checkEligible(npc) {
-    const Z = Settings.data.zombies;
     if (npc.lifeState !== 'dead' && npc.lifeState !== 'reanimating') return { ok: false, reason: 'Not deceased' };
     if (npc.isZombie) return { ok: false, reason: 'Already reanimated' };
-    if (Z.headTraumaPrevents && npc.criticalHead) return { ok: false, reason: 'Critical head trauma (prevents reincarnation)' };
-    return { ok: true, reason: 'Eligible' };
+    if (npc.vamp && npc.vamp.state !== 'none') return { ok: false, reason: 'Vampire' };
+    if (npc.horror) return { ok: false, reason: 'Horror character' };
+    return { ok: true, reason: this.canRise(npc) ? 'Eligible' : 'Turns, but critical head trauma keeps it down' };
+  }
+  canRise(npc) {
+    const Z = Settings.data.zombies;
+    return !(Z.headTraumaPrevents && npc.criticalHead);
   }
   update(dt) {
     const Z = Settings.data.zombies;
@@ -7874,6 +7922,7 @@ class ReincarnationSystem {
         if (r.state === 'pending') { r.state = 'cancelled'; HT.log('zombie', `${npc.idStr} reincarnation cancelled (mode disabled)`); }
         continue;
       }
+      if (r.state === 'inert' || r.state === 'done') continue; // a body turns at most once
       if (r.state === 'none' || r.state === 'cancelled' || r.state === 'ineligible') {
         const e = this.checkEligible(npc);
         r.eligible = e.ok; r.reason = e.reason;
@@ -7903,7 +7952,8 @@ class ReincarnationSystem {
   beginTransform(npc) {
     const r = npc.reinc;
     if (r.state !== 'pending' || npc.lifeState !== 'dead' || npc.isZombie) return false; // duplicate guard
-    if (!npc.setLife('reanimating', 'transformation')) return false;
+    r.inert = !this.canRise(npc);   // turns on the ground, never gets up
+    if (!r.inert && !npc.setLife('reanimating', 'transformation')) return false;
     r.state = 'transforming'; r.t = 0; r.dur = TRANSFORM_TIME * (0.94 + Math.random() * 0.12);
     r.clip = false; r.twitchT = 0.7 + Math.random() * 0.6; r.cue = 0; r.rollDir = Math.random() < 0.5 ? 1 : -1;
     r.tint0 = npc.material.userData.u.uZombie.value;
@@ -7913,18 +7963,33 @@ class ReincarnationSystem {
     if (npc.physMode !== 'ragdoll') npc.goRagdoll('Transforming', true);
     if (npc.brain) { npc.brain.state = 'dead'; npc.brain.pending.length = 0; }
     npc.lastReaction = 'Transforming';
-    HT.log('zombie', `${npc.idStr} ${npc.name} is turning`);
+    HT.log('zombie', `${npc.idStr} ${npc.name} is turning${r.inert ? ' (head trauma: will not rise)' : ''}`);
     HT.toast(`${npc.name} ${npc.idStr} is turning...`, 'z');
     return true;
   }
   updateTransform(npc, r, dt, Z) {
     if (npc.removed) return;
-    // eligibility takes precedence over the animation
-    if (Z.headTraumaPrevents && npc.criticalHead) { this.failTransform(npc, 'Critical head trauma (prevents reincarnation)'); return; }
-    if (npc.lifeState !== 'reanimating') { this.failTransform(npc, 'Interrupted'); return; }
+    // the rise rule takes precedence over the animation: head trauma mid-turn drops the body back down
+    // for good, but the turning itself carries on to completion
+    if (!r.inert && !this.canRise(npc)) this.makeInert(npc, r);
+    if (r.inert ? npc.lifeState !== 'dead' : npc.lifeState !== 'reanimating') { this.failTransform(npc, 'Interrupted'); return; }
     if (!Z.reincarnation && !(npc.infection && Z.infection) && !r.clip) { this.failTransform(npc, 'Zombie mode disabled'); return; }
     if (npc.carried) return; // paused while held
     const u = npc.material.userData.u;
+    if (r.inert) {
+      if (npc.physMode !== 'ragdoll') npc.goRagdoll('Collapsed (Head Trauma)', true);
+      r.t += dt;
+      const tl = r.t / r.dur * TRANSFORM_TIME;
+      if (tl < 7.5) this.twitch(npc, r, Math.min(tl, 3.9), dt); // restrained, never strong enough to rise
+      u.uZombie.value = lerp(r.tint0 || 0, 1, smoothstep(0.3, 4.2, tl));
+      if (r.cue === 0 && tl > 2.2) { r.cue = 1; this.game.audio.play('gurgle', { pos: npc.boneWPos[B.head].clone(), gain: 0.4 }); }
+      if (tl >= TRANSFORM_TIME) {
+        r.state = 'inert'; u.uZombie.value = 1;
+        npc.lastReaction = 'Turned (Inactive - Head Trauma)';
+        HT.log('zombie', `${npc.idStr} ${npc.name} turned but will never rise (critical head trauma)`);
+      }
+      return;
+    }
     if (npc.physMode === 'ragdoll') {
       if (r.clip) { // knocked back down during the rise: lie still again, then resume the rise
         r.clip = false; r.t = Math.min(r.t, r.dur * 0.38); npc.anim.clip = null;
@@ -7946,7 +8011,8 @@ class ReincarnationSystem {
       if (npc.physMode === 'anim' && npc.anim.crawl && r.t >= r.dur) this.completeTransform(npc);
     }
     const tl = r.t / r.dur * TRANSFORM_TIME;
-    u.uZombie.value = lerp(r.tint0 || 0, 1, smoothstep(0.8, 9.2, tl));
+    // the zombie look is complete while still lying down (the rise starts at ~4.5 s)
+    u.uZombie.value = lerp(r.tint0 || 0, 1, smoothstep(0.3, 4.2, tl));
     // voice cues
     if (r.cue === 0 && tl > 2.2) { r.cue = 1; this.game.audio.play('gurgle', { pos: npc.boneWPos[B.head].clone(), gain: 0.55 }); }
     if (r.cue === 1 && tl > 6.4) { r.cue = 2; this.game.audio.play('groan' + Math.floor(Math.random() * 5), { pos: npc.boneWPos[B.head].clone(), gain: 0.9, important: true }); }
@@ -7992,6 +8058,15 @@ class ReincarnationSystem {
     this.game.audio.play('zombieAlert', { bus: 'ui', gain: 0.4 });
     Events.emit('zombieActive', npc);
     return true;
+  }
+  // head trauma during a turn: drop to the ground if rising, keep turning, never get up
+  makeInert(npc, r) {
+    r.inert = true; r.clip = false;
+    npc.anim.clip = null;
+    if (npc.lifeState === 'reanimating') npc.setLife('dead', 'head trauma during transformation');
+    if (npc.physMode !== 'ragdoll' && !npc.removed) npc.goRagdoll('Collapsed (Head Trauma)', true);
+    r.t = Math.min(r.t, r.dur * 0.42);
+    HT.log('zombie', `${npc.idStr} head trauma: the body keeps turning but will not rise`);
   }
   failTransform(npc, reason) {
     const r = npc.reinc;
@@ -8557,7 +8632,7 @@ class FX {
     // shared flash light
     this.light = new THREE.PointLight(0xffc27a, 0, 12, 2);
     this.light.position.set(0, -100, 0);
-    if (Settings.data.graphics.preset !== 'low') sc.add(this.light);
+    sc.add(this.light);
     this.lightT = 0; this.lightMax = 0;
   }
   ground(x, z) { return this.game.env.groundHeight(x, z); }
@@ -10126,7 +10201,7 @@ function makeFleshMaterial() {
 class GoreSystem {
   constructor(game) {
     this.game = game;
-    const low = Settings.data.graphics.preset === 'low';
+    const low = false; // HIGH MAX
     this.decals = new BloodDecals(game, low ? 280 : 700);
     this.drops = new BloodDrops(game, low ? 700 : 1800);
     this.gibs = new Gibs(game, low ? 90 : 240);
@@ -10364,10 +10439,11 @@ class GoreSystem {
       npc.criticalHead = npc.criticalHead || false;
       if (npc.lifeState === 'alive') npc.die({ weapon: o.weapon || 'gore' });
       else if (npc.lifeState === 'zombie') { npc.health = 0; npc.destroyZombie({ weapon: o.weapon || 'gore' }); }
-      else if (npc.lifeState === 'reanimating' && npc.game.zombies) npc.game.zombies.failTransform(npc, 'Body cut in half');
+      npc.criticalHead = true; // like critical head trauma: the body may still turn, but never rises
+      if (npc.reinc.state === 'transforming' && npc.game.zombies) npc.game.zombies.makeInert(npc, npc.reinc);
       if (npc.physMode !== 'ragdoll') npc.goRagdoll('Ragdoll (Cut in Half)', true);
       if (npc.lifeState === 'reanimating') npc.setLife('dead', 'cut in half');
-      npc.reinc.state = 'ineligible'; npc.reinc.reason = 'Body cut in half'; npc.criticalHead = true;
+      if (npc.reinc.state !== 'transforming') npc.reinc.reason = 'Body cut in half';
       npc.lastReaction = 'Cut in Half';
       // spill guts from both halves
       const up = this.nearestVertex(npc, npc.boneWPos[B.spine], [REGION.ABDOMEN, REGION.TORSO]);
@@ -11406,7 +11482,7 @@ class UI {
           const life = npc.lifeState === 'alive' ? (npc.brain ? npc.brain.state : '') : npc.lifeState;
           st = `${life.toUpperCase()} · ${Math.round(npc.health)}HP`;
         }
-        const cd = r.state === 'pending' ? `REINCARNATION ${Math.max(0, r.timer).toFixed(1)}s` : (r.state === 'transforming' ? 'TURNING...' : (npc.lifeState === 'dead' && Settings.data.zombies.reincarnation && r.state === 'ineligible' ? 'NO REINCARNATION' : ''));
+        const cd = r.state === 'pending' ? `REINCARNATION ${Math.max(0, r.timer).toFixed(1)}s` : (r.state === 'transforming' ? 'TURNING...' : (npc.lifeState === 'dead' && Settings.data.zombies.reincarnation && (r.state === 'ineligible' || r.state === 'inert') ? 'NO REINCARNATION' : ''));
         const key = npc.name + st + cd + npc.lifeState;
         if (el._key !== key) {
           el._key = key;
@@ -11463,7 +11539,7 @@ class UI {
     const a = npc.app, r = npc.reinc;
     const hp = clamp(npc.health / npc.maxHealth, 0, 1);
     const lh = npc.lastHit;
-    const reincTxt = npc.lifeState === 'dead' ? (r.state === 'pending' ? `Pending: ${Math.max(0, r.timer).toFixed(1)}s` : (r.state === 'ineligible' ? 'Ineligible: ' + r.reason : (Settings.data.zombies.reincarnation ? r.state : 'Mode off'))) : (npc.isZombie ? 'Reanimated' : '-');
+    const reincTxt = npc.lifeState === 'dead' ? (r.state === 'pending' ? `Pending: ${Math.max(0, r.timer).toFixed(1)}s` : (r.state === 'ineligible' ? 'Ineligible: ' + r.reason : r.state === 'inert' ? 'Turned, will never rise (head trauma)' : (Settings.data.zombies.reincarnation ? r.state : 'Mode off'))) : (npc.isZombie ? 'Reanimated' : '-');
     el.innerHTML = `
       <div class="ins-head"><h4>${npc.name}<small>Human ${npc.idStr} · seed ${npc.seed}</small></h4><button class="xbtn" id="insClose">&#x2715;</button></div>
       <div class="ins-body">
@@ -11626,15 +11702,10 @@ class UI {
   }
   set_graphics(b) {
     const g = this.game, G = Settings.data.graphics;
-    let s = this.sec(b, 'Preset');
-    this.buttons(s, ['low', 'high', 'ultra'].map(p => ({ label: p.toUpperCase(), cls: G.preset === p ? 'pri' : '', fn: () => { g.applyPreset(p); this.renderDrawer(); } })));
-    s = this.sec(b, 'Quality');
-    this.slider(s, 'Resolution', 'graphics.resolutionScale', 0.4, 1.0, 0.05, x => Math.round(x * 100) + '%', () => { Settings.set('graphics.preset', 'custom', true); g.resize(); });
-    this.select(s, 'Shadows', [['off', 'Off'], ['low', 'Low'], ['high', 'High'], ['ultra', 'Ultra']], G.shadowQuality, v => { Settings.set('graphics.shadowQuality', v); Settings.set('graphics.preset', 'custom', true); g.applyShadows(); });
-    this.select(s, 'Textures', [['low', 'Low'], ['high', 'High'], ['ultra', 'Ultra']], G.textureQuality, v => { Settings.set('graphics.textureQuality', v); Settings.set('graphics.preset', 'custom', true); Tex.cache.clear(); g.switchEnvironment(g.env.current.kind, true); });
-    this.select(s, 'Character detail', [['low', 'Low'], ['high', 'High'], ['ultra', 'Ultra']], G.characterDetail, v => { Settings.set('graphics.characterDetail', v); Settings.set('graphics.preset', 'custom', true); HT.toast('Applies to newly spawned people'); });
+    let s = this.sec(b, 'Quality');
+    this.note(s, '<b>HIGH MAX</b> &middot; the game always runs at its highest graphics quality and keeps itself smooth automatically.');
+    s = this.sec(b, 'Display');
     this.select(s, 'Frame rate cap', [[30, '30 FPS'], [60, '60 FPS'], [0, 'Unlimited']], G.fpsCap, v => Settings.set('graphics.fpsCap', +v));
-    this.toggle(s, 'Ambient occlusion (SSAO)', 'graphics.ssao', () => g.post && g.post.setEnabled(Settings.data.graphics.ssao));
     this.toggle(s, 'Show FPS', 'graphics.showFps');
     this.slider(s, 'Field of view', 'controls.fov', 50, 100, 1, x => x + '°');
   }
@@ -11687,7 +11758,7 @@ class UI {
     this.toggle(s, 'Event log', 'diagnostics.eventLog');
     this.toggle(s, 'Debug panel', 'diagnostics.debugPanel');
     s = this.sec(b, 'Reset');
-    this.buttons(s, [{ label: 'Reset All Settings', cls: 'bad', fn: () => { if (confirm('Reset all settings to defaults?')) { Settings.resetAll(); g.applyPreset(Settings.data.graphics.preset); this.renderDrawer(); } } }]);
+    this.buttons(s, [{ label: 'Reset All Settings', cls: 'bad', fn: () => { if (confirm('Reset all settings to defaults?')) { Settings.resetAll(); g.applyPreset(); this.renderDrawer(); } } }]);
     this.note(s, `Settings ${Settings.storageOk ? 'are saved on this device' : 'cannot be saved (private mode?)'} · WebGL${g.renderer.capabilities.isWebGL2 ? '2' : '1'}`);
   }
 }
@@ -11996,12 +12067,9 @@ class Game {
     HT.game = this;
   }
   async boot() {
-    const firstRun = !localStorage.getItem || (() => { try { return !localStorage.getItem(SETTINGS_KEY); } catch (e) { return true; } })();
     Settings.load();
-    if (firstRun) {
-      const mobile = (('ontouchstart' in window) || navigator.maxTouchPoints > 0) && Math.min(screen.width, screen.height) < 900;
-      this.presetValues(mobile ? 'low' : 'high');
-    }
+    detectGfx();
+    this.presetValues('highmax'); // always HIGH MAX
     const L = this.loading = new LoadingScreen();
     document.addEventListener('pointerdown', () => this.audio && this.audio.unlock(), { once: false });
     const steps = [
@@ -12055,7 +12123,7 @@ class Game {
   initRenderer() {
     const canvas = document.getElementById('view');
     const G = Settings.data.graphics;
-    const r = new THREE.WebGLRenderer({ canvas, antialias: G.antialias && G.preset !== 'low', powerPreference: 'high-performance', stencil: false });
+    const r = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', stencil: false });
     r.outputColorSpace = THREE.SRGBColorSpace;
     r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.0;
     r.shadowMap.enabled = G.shadowQuality !== 'off'; r.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -12135,22 +12203,19 @@ class Game {
     if (typeof PostFX !== 'undefined') { this.post = new PostFX(this); this.post.setEnabled(Settings.data.graphics.ssao); }
   }
   // --- settings helpers -----------------------------------------------------------------
-  presetValues(p) {
-    const G = Settings.data.graphics;
-    G.preset = p;
-    if (p === 'low') Object.assign(G, { resolutionScale: 0.7, shadowQuality: 'low', textureQuality: 'low', characterDetail: 'low', ssao: false, antialias: false });
-    if (p === 'high') Object.assign(G, { resolutionScale: 1.0, shadowQuality: 'high', textureQuality: 'high', characterDetail: 'high', ssao: false, antialias: true });
-    if (p === 'ultra') Object.assign(G, { resolutionScale: 1.0, shadowQuality: 'ultra', textureQuality: 'ultra', characterDetail: 'ultra', ssao: true, antialias: true });
+  presetValues() {
+    // HIGH MAX for everyone; phones get the same look with internally lighter costs
+    const G = Settings.data.graphics, m = GFX.mobile;
+    Object.assign(G, { preset: 'highmax', resolutionScale: 1.0, shadowQuality: m ? 'high' : 'ultra', textureQuality: m ? 'high' : 'ultra', characterDetail: m ? 'high' : 'ultra', ssao: !m, antialias: true });
     Settings.save();
   }
-  applyPreset(p) {
-    this.presetValues(p);
+  applyPreset() {
+    this.presetValues();
     this.resize(); this.applyShadows();
     Tex.cache.clear();
     this.switchEnvironment(this.env.current.kind, true);
     if (this.post) this.post.setEnabled(Settings.data.graphics.ssao);
-    HT.toast('Graphics preset: ' + p.toUpperCase() + ' (character detail applies to new subjects)');
-    Events.emit('settings', { path: 'graphics.preset', value: p });
+    Events.emit('settings', { path: 'graphics.preset', value: 'highmax' });
   }
   applyShadows() {
     const sq = Settings.data.graphics.shadowQuality;
@@ -12167,11 +12232,25 @@ class Game {
       for (const n of this.npcs.list) { const tot = n.rig.mass * P.massScale; n.rag.totalMass = tot; n.rag.bodies.forEach((b, i) => b.setMass(tot * RAG_MASS[i])); }
     }
   }
+  // internal dynamic resolution: keeps HIGH MAX smooth on slower devices without changing the preset
+  adaptResolution(rdt) {
+    const D = this.dynRes || (this.dynRes = { scale: 1, acc: 0, n: 0, cool: 3 });
+    if (document.hidden || (this.ui && this.ui.drawerOpen)) { D.acc = 0; D.n = 0; return; }
+    D.acc += rdt; D.n++; D.cool -= rdt;
+    if (D.acc < 1.5) return;
+    const fps = D.n / D.acc, target = Settings.data.graphics.fpsCap || 60;
+    D.acc = 0; D.n = 0;
+    if (D.cool > 0) return;
+    let s = D.scale;
+    if (fps < target * 0.8 && s > 0.55) s = Math.max(0.55, s - (fps < target * 0.55 ? 0.12 : 0.07));
+    else if (fps > target * 0.95 && s < 1) s = Math.min(1, s + 0.05);
+    if (s !== D.scale) { D.scale = s; D.cool = 2; this.resize(); }
+  }
   resize() {
     if (!this.renderer) return;
     const G = Settings.data.graphics;
-    const cap = G.preset === 'ultra' ? 2 : 1.5;
-    const pr = Math.min(window.devicePixelRatio || 1, cap) * clamp(G.resolutionScale, 0.3, 1);
+    const cap = GFX.mobile ? 1.6 : 2;
+    const pr = Math.min(window.devicePixelRatio || 1, cap) * clamp(G.resolutionScale, 0.3, 1) * (this.dynRes ? this.dynRes.scale : 1);
     this.renderer.setPixelRatio(pr);
     this.renderer.setSize(innerWidth, innerHeight, false);
     this.camera.aspect = innerWidth / innerHeight; this.camera.updateProjectionMatrix();
@@ -12299,6 +12378,7 @@ class Game {
     if (cap > 0 && now - this.lastT < 1000 / cap - 2) return;
     let rdt = Math.min((now - this.lastT) / 1000, 0.1);
     this.lastT = now;
+    this.adaptResolution(rdt);
     const t0 = performance.now();
     try { this.step(rdt); } catch (e) { reportError(e, 'frame'); }
     this.prof.frame(performance.now() - t0);

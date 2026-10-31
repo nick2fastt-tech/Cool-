@@ -445,7 +445,7 @@ class FieldEnvironment {
   }
   build() {
     const g = this.group;
-    const q = Settings.data.graphics.preset;
+    const q = GFX.tier; // HIGH MAX: density tuned per device class internally
     const R = q === 'low' ? 14 : q === 'ultra' ? 26 : 19;
     this.fieldU = { uCenter: { value: new THREE.Vector2() }, uR: { value: R } };
     // sky (its horizon takes the fog colour exactly, so distant terrain melts into it)

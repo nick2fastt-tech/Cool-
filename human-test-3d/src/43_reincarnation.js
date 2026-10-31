@@ -26,12 +26,18 @@ class ReincarnationSystem {
     if (Z.delayPreset && Z.delayPreset !== 'custom' && REINC_PRESETS[Z.delayPreset] != null) return REINC_PRESETS[Z.delayPreset];
     return clamp(Z.delay, 0, 600);
   }
+  // V1.06: turning (the look) and rising (an active zombie) are separate. Every eligible body turns;
+  // only bodies without critical head trauma (when that rule is on) may ever get up.
   checkEligible(npc) {
-    const Z = Settings.data.zombies;
     if (npc.lifeState !== 'dead' && npc.lifeState !== 'reanimating') return { ok: false, reason: 'Not deceased' };
     if (npc.isZombie) return { ok: false, reason: 'Already reanimated' };
-    if (Z.headTraumaPrevents && npc.criticalHead) return { ok: false, reason: 'Critical head trauma (prevents reincarnation)' };
-    return { ok: true, reason: 'Eligible' };
+    if (npc.vamp && npc.vamp.state !== 'none') return { ok: false, reason: 'Vampire' };
+    if (npc.horror) return { ok: false, reason: 'Horror character' };
+    return { ok: true, reason: this.canRise(npc) ? 'Eligible' : 'Turns, but critical head trauma keeps it down' };
+  }
+  canRise(npc) {
+    const Z = Settings.data.zombies;
+    return !(Z.headTraumaPrevents && npc.criticalHead);
   }
   update(dt) {
     const Z = Settings.data.zombies;
@@ -44,6 +50,7 @@ class ReincarnationSystem {
         if (r.state === 'pending') { r.state = 'cancelled'; HT.log('zombie', `${npc.idStr} reincarnation cancelled (mode disabled)`); }
         continue;
       }
+      if (r.state === 'inert' || r.state === 'done') continue; // a body turns at most once
       if (r.state === 'none' || r.state === 'cancelled' || r.state === 'ineligible') {
         const e = this.checkEligible(npc);
         r.eligible = e.ok; r.reason = e.reason;
@@ -73,7 +80,8 @@ class ReincarnationSystem {
   beginTransform(npc) {
     const r = npc.reinc;
     if (r.state !== 'pending' || npc.lifeState !== 'dead' || npc.isZombie) return false; // duplicate guard
-    if (!npc.setLife('reanimating', 'transformation')) return false;
+    r.inert = !this.canRise(npc);   // turns on the ground, never gets up
+    if (!r.inert && !npc.setLife('reanimating', 'transformation')) return false;
     r.state = 'transforming'; r.t = 0; r.dur = TRANSFORM_TIME * (0.94 + Math.random() * 0.12);
     r.clip = false; r.twitchT = 0.7 + Math.random() * 0.6; r.cue = 0; r.rollDir = Math.random() < 0.5 ? 1 : -1;
     r.tint0 = npc.material.userData.u.uZombie.value;
@@ -83,18 +91,33 @@ class ReincarnationSystem {
     if (npc.physMode !== 'ragdoll') npc.goRagdoll('Transforming', true);
     if (npc.brain) { npc.brain.state = 'dead'; npc.brain.pending.length = 0; }
     npc.lastReaction = 'Transforming';
-    HT.log('zombie', `${npc.idStr} ${npc.name} is turning`);
+    HT.log('zombie', `${npc.idStr} ${npc.name} is turning${r.inert ? ' (head trauma: will not rise)' : ''}`);
     HT.toast(`${npc.name} ${npc.idStr} is turning...`, 'z');
     return true;
   }
   updateTransform(npc, r, dt, Z) {
     if (npc.removed) return;
-    // eligibility takes precedence over the animation
-    if (Z.headTraumaPrevents && npc.criticalHead) { this.failTransform(npc, 'Critical head trauma (prevents reincarnation)'); return; }
-    if (npc.lifeState !== 'reanimating') { this.failTransform(npc, 'Interrupted'); return; }
+    // the rise rule takes precedence over the animation: head trauma mid-turn drops the body back down
+    // for good, but the turning itself carries on to completion
+    if (!r.inert && !this.canRise(npc)) this.makeInert(npc, r);
+    if (r.inert ? npc.lifeState !== 'dead' : npc.lifeState !== 'reanimating') { this.failTransform(npc, 'Interrupted'); return; }
     if (!Z.reincarnation && !(npc.infection && Z.infection) && !r.clip) { this.failTransform(npc, 'Zombie mode disabled'); return; }
     if (npc.carried) return; // paused while held
     const u = npc.material.userData.u;
+    if (r.inert) {
+      if (npc.physMode !== 'ragdoll') npc.goRagdoll('Collapsed (Head Trauma)', true);
+      r.t += dt;
+      const tl = r.t / r.dur * TRANSFORM_TIME;
+      if (tl < 7.5) this.twitch(npc, r, Math.min(tl, 3.9), dt); // restrained, never strong enough to rise
+      u.uZombie.value = lerp(r.tint0 || 0, 1, smoothstep(0.3, 4.2, tl));
+      if (r.cue === 0 && tl > 2.2) { r.cue = 1; this.game.audio.play('gurgle', { pos: npc.boneWPos[B.head].clone(), gain: 0.4 }); }
+      if (tl >= TRANSFORM_TIME) {
+        r.state = 'inert'; u.uZombie.value = 1;
+        npc.lastReaction = 'Turned (Inactive - Head Trauma)';
+        HT.log('zombie', `${npc.idStr} ${npc.name} turned but will never rise (critical head trauma)`);
+      }
+      return;
+    }
     if (npc.physMode === 'ragdoll') {
       if (r.clip) { // knocked back down during the rise: lie still again, then resume the rise
         r.clip = false; r.t = Math.min(r.t, r.dur * 0.38); npc.anim.clip = null;
@@ -116,7 +139,8 @@ class ReincarnationSystem {
       if (npc.physMode === 'anim' && npc.anim.crawl && r.t >= r.dur) this.completeTransform(npc);
     }
     const tl = r.t / r.dur * TRANSFORM_TIME;
-    u.uZombie.value = lerp(r.tint0 || 0, 1, smoothstep(0.8, 9.2, tl));
+    // the zombie look is complete while still lying down (the rise starts at ~4.5 s)
+    u.uZombie.value = lerp(r.tint0 || 0, 1, smoothstep(0.3, 4.2, tl));
     // voice cues
     if (r.cue === 0 && tl > 2.2) { r.cue = 1; this.game.audio.play('gurgle', { pos: npc.boneWPos[B.head].clone(), gain: 0.55 }); }
     if (r.cue === 1 && tl > 6.4) { r.cue = 2; this.game.audio.play('groan' + Math.floor(Math.random() * 5), { pos: npc.boneWPos[B.head].clone(), gain: 0.9, important: true }); }
@@ -162,6 +186,15 @@ class ReincarnationSystem {
     this.game.audio.play('zombieAlert', { bus: 'ui', gain: 0.4 });
     Events.emit('zombieActive', npc);
     return true;
+  }
+  // head trauma during a turn: drop to the ground if rising, keep turning, never get up
+  makeInert(npc, r) {
+    r.inert = true; r.clip = false;
+    npc.anim.clip = null;
+    if (npc.lifeState === 'reanimating') npc.setLife('dead', 'head trauma during transformation');
+    if (npc.physMode !== 'ragdoll' && !npc.removed) npc.goRagdoll('Collapsed (Head Trauma)', true);
+    r.t = Math.min(r.t, r.dur * 0.42);
+    HT.log('zombie', `${npc.idStr} head trauma: the body keeps turning but will not rise`);
   }
   failTransform(npc, reason) {
     const r = npc.reinc;

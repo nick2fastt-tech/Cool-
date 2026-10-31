@@ -472,7 +472,13 @@ class AISystem {
       if (Z.feeding && !anim.crawl) { const c = this.findCorpse(npc, 14); if (c) { this.startFeed(npc, b, c); return; } }
       if (b.state !== 'zIdle' && b.state !== 'zInvestigate') { b.state = 'zIdle'; b.t = 0; this.pickWander(npc, b); }
       anim.setUpper('hang');
-      b.speed = b.state === 'zInvestigate' ? zspeed : (b.t % 8 < 4 ? zspeed * 0.6 * zv.cadence : 0);
+      b.speed = b.state === 'zInvestigate' ? zspeed : ((b.t + (zv.armPhase || 0)) % 8 < 4 ? zspeed * 0.6 * zv.cadence : 0);
+      // standing still: varied idles (sway, lolling head, sniffing, reaching at nothing, shudders)
+      const ia = anim.action;
+      if (b.speed === 0 && !anim.crawl && (!ia || ia.ending) && anim.speed < 0.2) {
+        const modes = ['sway', 'sway', 'loll', 'sniff', 'reach', 'shudder'];
+        anim.setAction('zidle', { mode: modes[Math.floor(Math.random() * modes.length)], dur: 2.2 + Math.random() * 2.8, ph: Math.random() * 6, side: Math.random() < 0.5 ? 0 : 1, inT: 0.5, outT: 0.6 });
+      } else if (b.speed > 0 && ia && ia.type === 'zidle' && !ia.ending) anim.setAction(null);
       if (npc.root.pos.distanceTo(b.dest) < 0.7) { this.pickWander(npc, b); b.state = 'zIdle'; }
       b.lookT = (b.lookT || 0) - dt;
       if (b.lookT <= 0) {

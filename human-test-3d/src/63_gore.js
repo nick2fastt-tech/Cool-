@@ -525,7 +525,7 @@ function makeFleshMaterial() {
 class GoreSystem {
   constructor(game) {
     this.game = game;
-    const low = Settings.data.graphics.preset === 'low';
+    const low = false; // HIGH MAX
     this.decals = new BloodDecals(game, low ? 280 : 700);
     this.drops = new BloodDrops(game, low ? 700 : 1800);
     this.gibs = new Gibs(game, low ? 90 : 240);
@@ -763,10 +763,11 @@ class GoreSystem {
       npc.criticalHead = npc.criticalHead || false;
       if (npc.lifeState === 'alive') npc.die({ weapon: o.weapon || 'gore' });
       else if (npc.lifeState === 'zombie') { npc.health = 0; npc.destroyZombie({ weapon: o.weapon || 'gore' }); }
-      else if (npc.lifeState === 'reanimating' && npc.game.zombies) npc.game.zombies.failTransform(npc, 'Body cut in half');
+      npc.criticalHead = true; // like critical head trauma: the body may still turn, but never rises
+      if (npc.reinc.state === 'transforming' && npc.game.zombies) npc.game.zombies.makeInert(npc, npc.reinc);
       if (npc.physMode !== 'ragdoll') npc.goRagdoll('Ragdoll (Cut in Half)', true);
       if (npc.lifeState === 'reanimating') npc.setLife('dead', 'cut in half');
-      npc.reinc.state = 'ineligible'; npc.reinc.reason = 'Body cut in half'; npc.criticalHead = true;
+      if (npc.reinc.state !== 'transforming') npc.reinc.reason = 'Body cut in half';
       npc.lastReaction = 'Cut in Half';
       // spill guts from both halves
       const up = this.nearestVertex(npc, npc.boneWPos[B.spine], [REGION.ABDOMEN, REGION.TORSO]);

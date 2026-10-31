@@ -5,7 +5,7 @@ const SETTINGS_KEY = 'humantest3d.settings.v3';
 
 const DEFAULT_SETTINGS = {
   graphics: {
-    preset: 'high',            // low | high | ultra | custom
+    preset: 'highmax',         // V1.06: one fixed quality, HIGH MAX (internal tuning only)
     resolutionScale: 1.0,      // multiplier of device pixel ratio (capped)
     shadowQuality: 'high',     // off | low | high | ultra
     textureQuality: 'high',    // low | high | ultra
@@ -21,6 +21,8 @@ const DEFAULT_SETTINGS = {
     npcCollisions: true, selfCollisions: true, propCollisions: true, substeps: 8, muscleTone: 0.35, paused: false
   },
   ai: { enabled: true, reactions: true, flee: true, wander: true, lookAt: true, reactionVariance: 1.0, wanderRate: 0.5 },
+  vampires: { enabled: true, turning: true, turnTime: 14, targetPlayer: true, speed: 1.0, detection: 22, biteDamage: 14 },
+  horror: { enabled: true, damage: 1.0 },
   zombies: {
     reincarnation: true, delayPreset: 'short', delay: 5, headTraumaPrevents: true,
     aggression: true, targetNPCs: true, detection: 18, speed: 1.0, targetMode: 'nearest',
@@ -46,6 +48,16 @@ const DEFAULT_SETTINGS = {
   controls: { sensitivity: 1.0, invertY: false, touch: 'auto', fov: 70 },
   ui: { hints: true }
 };
+
+// HIGH MAX is the only graphics quality. The internal tier just sizes costs per device class
+// (shadow map, grass density, mesh detail); the player never picks or sees it.
+const GFX = { mobile: false, tier: 'ultra' };
+function detectGfx() {
+  const touch = (typeof window !== 'undefined') && (('ontouchstart' in window) || navigator.maxTouchPoints > 0);
+  GFX.mobile = !!touch && Math.min(screen.width, screen.height) < 900;
+  GFX.tier = GFX.mobile ? 'high' : 'ultra';
+  return GFX;
+}
 
 function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
 function deepMerge(base, over) {
@@ -93,4 +105,4 @@ const Settings = {
     Events.emit('settings', { path: '*', value: null });
   }
 };
-HT.Settings = Settings;
+HT.Settings = Settings; HT.GFX = GFX;

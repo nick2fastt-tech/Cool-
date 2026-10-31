@@ -104,7 +104,7 @@ class FX {
     // shared flash light
     this.light = new THREE.PointLight(0xffc27a, 0, 12, 2);
     this.light.position.set(0, -100, 0);
-    if (Settings.data.graphics.preset !== 'low') sc.add(this.light);
+    sc.add(this.light);
     this.lightT = 0; this.lightMax = 0;
   }
   ground(x, z) { return this.game.env.groundHeight(x, z); }

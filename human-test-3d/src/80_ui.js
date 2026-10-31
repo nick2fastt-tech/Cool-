@@ -188,7 +188,7 @@ class UI {
           const life = npc.lifeState === 'alive' ? (npc.brain ? npc.brain.state : '') : npc.lifeState;
           st = `${life.toUpperCase()} · ${Math.round(npc.health)}HP`;
         }
-        const cd = r.state === 'pending' ? `REINCARNATION ${Math.max(0, r.timer).toFixed(1)}s` : (r.state === 'transforming' ? 'TURNING...' : (npc.lifeState === 'dead' && Settings.data.zombies.reincarnation && r.state === 'ineligible' ? 'NO REINCARNATION' : ''));
+        const cd = r.state === 'pending' ? `REINCARNATION ${Math.max(0, r.timer).toFixed(1)}s` : (r.state === 'transforming' ? 'TURNING...' : (npc.lifeState === 'dead' && Settings.data.zombies.reincarnation && (r.state === 'ineligible' || r.state === 'inert') ? 'NO REINCARNATION' : ''));
         const key = npc.name + st + cd + npc.lifeState;
         if (el._key !== key) {
           el._key = key;
@@ -245,7 +245,7 @@ class UI {
     const a = npc.app, r = npc.reinc;
     const hp = clamp(npc.health / npc.maxHealth, 0, 1);
     const lh = npc.lastHit;
-    const reincTxt = npc.lifeState === 'dead' ? (r.state === 'pending' ? `Pending: ${Math.max(0, r.timer).toFixed(1)}s` : (r.state === 'ineligible' ? 'Ineligible: ' + r.reason : (Settings.data.zombies.reincarnation ? r.state : 'Mode off'))) : (npc.isZombie ? 'Reanimated' : '-');
+    const reincTxt = npc.lifeState === 'dead' ? (r.state === 'pending' ? `Pending: ${Math.max(0, r.timer).toFixed(1)}s` : (r.state === 'ineligible' ? 'Ineligible: ' + r.reason : r.state === 'inert' ? 'Turned, will never rise (head trauma)' : (Settings.data.zombies.reincarnation ? r.state : 'Mode off'))) : (npc.isZombie ? 'Reanimated' : '-');
     el.innerHTML = `
       <div class="ins-head"><h4>${npc.name}<small>Human ${npc.idStr} · seed ${npc.seed}</small></h4><button class="xbtn" id="insClose">&#x2715;</button></div>
       <div class="ins-body">
@@ -408,15 +408,10 @@ class UI {
   }
   set_graphics(b) {
     const g = this.game, G = Settings.data.graphics;
-    let s = this.sec(b, 'Preset');
-    this.buttons(s, ['low', 'high', 'ultra'].map(p => ({ label: p.toUpperCase(), cls: G.preset === p ? 'pri' : '', fn: () => { g.applyPreset(p); this.renderDrawer(); } })));
-    s = this.sec(b, 'Quality');
-    this.slider(s, 'Resolution', 'graphics.resolutionScale', 0.4, 1.0, 0.05, x => Math.round(x * 100) + '%', () => { Settings.set('graphics.preset', 'custom', true); g.resize(); });
-    this.select(s, 'Shadows', [['off', 'Off'], ['low', 'Low'], ['high', 'High'], ['ultra', 'Ultra']], G.shadowQuality, v => { Settings.set('graphics.shadowQuality', v); Settings.set('graphics.preset', 'custom', true); g.applyShadows(); });
-    this.select(s, 'Textures', [['low', 'Low'], ['high', 'High'], ['ultra', 'Ultra']], G.textureQuality, v => { Settings.set('graphics.textureQuality', v); Settings.set('graphics.preset', 'custom', true); Tex.cache.clear(); g.switchEnvironment(g.env.current.kind, true); });
-    this.select(s, 'Character detail', [['low', 'Low'], ['high', 'High'], ['ultra', 'Ultra']], G.characterDetail, v => { Settings.set('graphics.characterDetail', v); Settings.set('graphics.preset', 'custom', true); HT.toast('Applies to newly spawned people'); });
+    let s = this.sec(b, 'Quality');
+    this.note(s, '<b>HIGH MAX</b> &middot; the game always runs at its highest graphics quality and keeps itself smooth automatically.');
+    s = this.sec(b, 'Display');
     this.select(s, 'Frame rate cap', [[30, '30 FPS'], [60, '60 FPS'], [0, 'Unlimited']], G.fpsCap, v => Settings.set('graphics.fpsCap', +v));
-    this.toggle(s, 'Ambient occlusion (SSAO)', 'graphics.ssao', () => g.post && g.post.setEnabled(Settings.data.graphics.ssao));
     this.toggle(s, 'Show FPS', 'graphics.showFps');
     this.slider(s, 'Field of view', 'controls.fov', 50, 100, 1, x => x + '°');
   }
@@ -469,7 +464,7 @@ class UI {
     this.toggle(s, 'Event log', 'diagnostics.eventLog');
     this.toggle(s, 'Debug panel', 'diagnostics.debugPanel');
     s = this.sec(b, 'Reset');
-    this.buttons(s, [{ label: 'Reset All Settings', cls: 'bad', fn: () => { if (confirm('Reset all settings to defaults?')) { Settings.resetAll(); g.applyPreset(Settings.data.graphics.preset); this.renderDrawer(); } } }]);
+    this.buttons(s, [{ label: 'Reset All Settings', cls: 'bad', fn: () => { if (confirm('Reset all settings to defaults?')) { Settings.resetAll(); g.applyPreset(); this.renderDrawer(); } } }]);
     this.note(s, `Settings ${Settings.storageOk ? 'are saved on this device' : 'cannot be saved (private mode?)'} · WebGL${g.renderer.capabilities.isWebGL2 ? '2' : '1'}`);
   }
 }

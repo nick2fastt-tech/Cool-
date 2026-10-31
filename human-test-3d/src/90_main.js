@@ -37,12 +37,9 @@ class Game {
     HT.game = this;
   }
   async boot() {
-    const firstRun = !localStorage.getItem || (() => { try { return !localStorage.getItem(SETTINGS_KEY); } catch (e) { return true; } })();
     Settings.load();
-    if (firstRun) {
-      const mobile = (('ontouchstart' in window) || navigator.maxTouchPoints > 0) && Math.min(screen.width, screen.height) < 900;
-      this.presetValues(mobile ? 'low' : 'high');
-    }
+    detectGfx();
+    this.presetValues('highmax'); // always HIGH MAX
     const L = this.loading = new LoadingScreen();
     document.addEventListener('pointerdown', () => this.audio && this.audio.unlock(), { once: false });
     const steps = [
@@ -96,7 +93,7 @@ class Game {
   initRenderer() {
     const canvas = document.getElementById('view');
     const G = Settings.data.graphics;
-    const r = new THREE.WebGLRenderer({ canvas, antialias: G.antialias && G.preset !== 'low', powerPreference: 'high-performance', stencil: false });
+    const r = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', stencil: false });
     r.outputColorSpace = THREE.SRGBColorSpace;
     r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.0;
     r.shadowMap.enabled = G.shadowQuality !== 'off'; r.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -176,22 +173,19 @@ class Game {
     if (typeof PostFX !== 'undefined') { this.post = new PostFX(this); this.post.setEnabled(Settings.data.graphics.ssao); }
   }
   // --- settings helpers -----------------------------------------------------------------
-  presetValues(p) {
-    const G = Settings.data.graphics;
-    G.preset = p;
-    if (p === 'low') Object.assign(G, { resolutionScale: 0.7, shadowQuality: 'low', textureQuality: 'low', characterDetail: 'low', ssao: false, antialias: false });
-    if (p === 'high') Object.assign(G, { resolutionScale: 1.0, shadowQuality: 'high', textureQuality: 'high', characterDetail: 'high', ssao: false, antialias: true });
-    if (p === 'ultra') Object.assign(G, { resolutionScale: 1.0, shadowQuality: 'ultra', textureQuality: 'ultra', characterDetail: 'ultra', ssao: true, antialias: true });
+  presetValues() {
+    // HIGH MAX for everyone; phones get the same look with internally lighter costs
+    const G = Settings.data.graphics, m = GFX.mobile;
+    Object.assign(G, { preset: 'highmax', resolutionScale: 1.0, shadowQuality: m ? 'high' : 'ultra', textureQuality: m ? 'high' : 'ultra', characterDetail: m ? 'high' : 'ultra', ssao: !m, antialias: true });
     Settings.save();
   }
-  applyPreset(p) {
-    this.presetValues(p);
+  applyPreset() {
+    this.presetValues();
     this.resize(); this.applyShadows();
     Tex.cache.clear();
     this.switchEnvironment(this.env.current.kind, true);
     if (this.post) this.post.setEnabled(Settings.data.graphics.ssao);
-    HT.toast('Graphics preset: ' + p.toUpperCase() + ' (character detail applies to new subjects)');
-    Events.emit('settings', { path: 'graphics.preset', value: p });
+    Events.emit('settings', { path: 'graphics.preset', value: 'highmax' });
   }
   applyShadows() {
     const sq = Settings.data.graphics.shadowQuality;
@@ -208,11 +202,25 @@ class Game {
       for (const n of this.npcs.list) { const tot = n.rig.mass * P.massScale; n.rag.totalMass = tot; n.rag.bodies.forEach((b, i) => b.setMass(tot * RAG_MASS[i])); }
     }
   }
+  // internal dynamic resolution: keeps HIGH MAX smooth on slower devices without changing the preset
+  adaptResolution(rdt) {
+    const D = this.dynRes || (this.dynRes = { scale: 1, acc: 0, n: 0, cool: 3 });
+    if (document.hidden || (this.ui && this.ui.drawerOpen)) { D.acc = 0; D.n = 0; return; }
+    D.acc += rdt; D.n++; D.cool -= rdt;
+    if (D.acc < 1.5) return;
+    const fps = D.n / D.acc, target = Settings.data.graphics.fpsCap || 60;
+    D.acc = 0; D.n = 0;
+    if (D.cool > 0) return;
+    let s = D.scale;
+    if (fps < target * 0.8 && s > 0.55) s = Math.max(0.55, s - (fps < target * 0.55 ? 0.12 : 0.07));
+    else if (fps > target * 0.95 && s < 1) s = Math.min(1, s + 0.05);
+    if (s !== D.scale) { D.scale = s; D.cool = 2; this.resize(); }
+  }
   resize() {
     if (!this.renderer) return;
     const G = Settings.data.graphics;
-    const cap = G.preset === 'ultra' ? 2 : 1.5;
-    const pr = Math.min(window.devicePixelRatio || 1, cap) * clamp(G.resolutionScale, 0.3, 1);
+    const cap = GFX.mobile ? 1.6 : 2;
+    const pr = Math.min(window.devicePixelRatio || 1, cap) * clamp(G.resolutionScale, 0.3, 1) * (this.dynRes ? this.dynRes.scale : 1);
     this.renderer.setPixelRatio(pr);
     this.renderer.setSize(innerWidth, innerHeight, false);
     this.camera.aspect = innerWidth / innerHeight; this.camera.updateProjectionMatrix();
@@ -340,6 +348,7 @@ class Game {
     if (cap > 0 && now - this.lastT < 1000 / cap - 2) return;
     let rdt = Math.min((now - this.lastT) / 1000, 0.1);
     this.lastT = now;
+    this.adaptResolution(rdt);
     const t0 = performance.now();
     try { this.step(rdt); } catch (e) { reportError(e, 'frame'); }
     this.prof.frame(performance.now() - t0);

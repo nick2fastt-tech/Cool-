@@ -941,6 +941,7 @@ class Animator {
     else if (a.type === 'balance') this.poseBalance(Pc, a, root);
     else if (a.type === 'notice') this.poseNotice(Pc, a, root);
     else if (a.type === 'convulse') this.poseConvulse(Pc, a, root);
+    else if (a.type === 'zidle') this.poseZIdle(Pc, a, root);
     P.lerp(Pc, smooth01(a.w));
     if (!a.ending && a.dur && a.t >= a.dur) a.ending = true;
   }
@@ -1140,6 +1141,29 @@ class Animator {
     P.chest.x += k * 0.1; P.neck.x -= k * 0.15; P.head.x -= k * 0.1; P.clav[0].z += k * 0.2; P.clav[1].z += k * 0.2;
     P.jaw = 0.1 + k * 0.35;
     for (let s = 0; s < 2; s++) { const hp = P.hand[s]; hp.pos.y += k * 0.08; hp.pos.z += k * 0.06; hp.fing = 0.4 + k * 0.5; }
+  }
+  // standing-zombie idles: unsteady sway, lolling head, sniffing the air, reaching at nothing, shudder
+  poseZIdle(P, a, root) {
+    const t = a.t, u = clamp(t / (a.dur || 3), 0, 1), env = Math.sin(Math.PI * u), ph = a.ph || 0;
+    if (a.mode === 'sway') {
+      const sw = Math.sin(t * 1.25 + ph);
+      P.hipsOff.x += sw * 0.035 * env; P.hipsRot.z += sw * 0.05 * env; P.spine.z -= sw * 0.07 * env; P.chest.z -= sw * 0.05 * env;
+      P.head.z += Math.sin(t * 0.9 + ph + 1) * 0.18 * env; P.head.x += 0.08 * env;
+    } else if (a.mode === 'loll') {
+      P.head.x += 0.35 * env; P.neck.x += 0.15 * env; P.head.z += Math.sin(t * 0.55 + ph) * 0.3 * env; P.head.y += Math.sin(t * 0.37 + ph) * 0.25 * env;
+      P.jaw = Math.max(P.jaw, 0.18 * env);
+    } else if (a.mode === 'sniff') {
+      P.head.x -= 0.3 * env; P.neck.x -= 0.15 * env; P.chest.x -= 0.05 * env;
+      P.head.y += Math.sin(t * 1.6 + ph) * 0.45 * env; P.jaw = Math.max(P.jaw, (0.12 + 0.15 * Math.max(0, Math.sin(t * 7))) * env);
+    } else if (a.mode === 'reach') {
+      const s = a.side || 0, hp = P.hand[s], k = smooth01(Math.min(1, u * 2.2)) * (1 - smooth01(Math.max(0, (u - 0.7) / 0.3)));
+      hp.pos.lerp(this.armPose('reach', s).pos, k * 0.85); hp.fing = lerp(hp.fing, 0.75, k);
+      P.chest.y += SIDE_SIGN[s] * 0.12 * k; P.head.x -= 0.1 * k;
+    } else { // shudder
+      const j = Math.sin(t * 31 + ph) * Math.max(0, Math.sin(t * 2.3 + ph));
+      P.chest.x += j * 0.06 * env; P.head.y += j * 0.2 * env; P.head.z += j * 0.1 * env; P.hipsOff.x += j * 0.01 * env;
+      for (let s = 0; s < 2; s++) P.hand[s].fing = clamp(P.hand[s].fing + Math.sin(t * 23 + s * 2) * 0.3 * env, 0, 1);
+    }
   }
   // infected body seizing on the ground before it turns (used while ragdolled via springs too)
   poseConvulse(P, a, root) {
