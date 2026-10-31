@@ -98,10 +98,36 @@ export function buildHorse() {
     mk(new THREE.CylinderGeometry(0.07, 0.08, 0.1, 10), hoofM, lo, [0, -0.47, 0.01]);
     legs.push({ up, lo, front: z > 0, sd: x > 0 ? 1 : -1 });
   }
+  // strange glowing markings (Episode 7): stripes along the body, rings on the legs, eye glow
+  const glowM = new THREE.MeshStandardMaterial({ color: 0x1a2a30, emissive: 0x2ad8ff, emissiveIntensity: 0, roughness: 0.4 });
+  for (const sd of [1, -1]) {
+    for (let i = 0; i < 4; i++) mk(new THREE.TorusGeometry(0.2 + i * 0.03, 0.012, 6, 20, P * 0.7), glowM, body, [sd * 0.33, 0.05, 0.45 - i * 0.3], [0, sd * P / 2, P * 0.15], [1, 1.3, 1], false);
+    mk(new THREE.SphereGeometry(0.022, 8, 6), glowM, head, [sd * 0.115, 0.1, -0.025], [0, 0, 0], null, false);
+  }
+  for (const L of legs) mk(new THREE.TorusGeometry(0.075, 0.012, 6, 16), glowM, L.lo, [0, -0.3, 0], [P / 2, 0, 0], null, false);
+  for (let i = 0; i < 5; i++) mk(new THREE.BoxGeometry(0.02, 0.1, 0.02), glowM, neck, [0, 0.15 + i * 0.12, 0.17], [0.3, 0, 0], null, false);
   // tail
   const tail = [];
   let parent = grp(body, 0, 0.22, -0.95);
   for (let i = 0; i < 6; i++) { const g = grp(parent, 0, i === 0 ? 0 : -0.12, 0); mk(new THREE.CapsuleGeometry(0.06 + i * 0.008, 0.12, 4, 8), dark, g, [0, -0.06, 0]); tail.push(g); parent = g; }
+  // own copies of every material so the horse can fade out (invisibility) without touching anything else
+  const fadeList = [];
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    if (o.material !== glowM) o.material = o.material.clone();
+    fadeList.push({ m: o.material, em: o.material.emissive.clone() });
+  });
+  const TEAL = new THREE.Color(0x40e8ff);
+  let lastA = 1;
+  const fade = (al, t) => {
+    if (al >= 0.999 && lastA >= 0.999) return;
+    lastA = al;
+    const sh = al < 0.999 ? Math.min(1, (1 - al) * 1.8) * (0.6 + 0.4 * Math.sin(t * 22)) : 0;
+    for (const e of fadeList) {
+      e.m.transparent = al < 0.999; e.m.opacity = al; e.m.depthWrite = al > 0.6;
+      if (e.m !== glowM) e.m.emissive.copy(e.em).lerp(TEAL, sh * 0.3);
+    }
+  };
   return {
     root, head, neck,
     // st: { t, act, a, speed, phase }
@@ -132,6 +158,17 @@ export function buildHorse() {
         legs[0].up.rotation.x = -0.9 * k; legs[0].lo.rotation.x = 1.2 * k; legs[1].up.rotation.x = -0.7 * k; legs[1].lo.rotation.x = 1.0 * k;
       }
       if (act === 'lookUp') { neck.rotation.x += -0.25; head.rotation.x += -0.2; }
+      if (act === 'rear') {
+        const k = smoothstep(0, 0.4, a) * (1 - smoothstep(1.6, 2.2, a));
+        body.rotation.x = -0.55 * k; body.position.y += 0.35 * k; neck.rotation.x += -0.3 * k; head.rotation.x += -0.3 * k; jaw.rotation.x = -0.4 * k;
+        legs[0].up.rotation.x = -1.1 * k + 0.3 * Math.sin(a * 12) * k; legs[0].lo.rotation.x = 1.4 * k; legs[1].up.rotation.x = -0.9 * k - 0.3 * Math.sin(a * 12) * k; legs[1].lo.rotation.x = 1.2 * k;
+        legs[2].up.rotation.x = 0.35 * k; legs[3].up.rotation.x = 0.35 * k;
+      }
+      fade(st.alpha ?? 1, t);
+      root.visible = (st.alpha ?? 1) > 0.01;
+      const gl = st.glow ?? 0;
+      glowM.emissiveIntensity = gl * (0.85 + 0.15 * Math.sin(t * 7));
+      glowM.color.setHex(gl > 0.05 ? 0x7af0ff : 0x1a2a30);
     },
   };
 }

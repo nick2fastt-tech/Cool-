@@ -673,6 +673,33 @@ export function buildLiving() {
   const ctable = grp(g);
   box(ctable, 2.0, 0.08, 0.9, 0x7a5232, [0, 0.42, -0.85], { round: 0.03 });
   for (const [x, z] of [[-0.9, -1.2], [0.9, -1.2], [-0.9, -0.5], [0.9, -0.5]]) box(ctable, 0.07, 0.4, 0.07, 0x5a3a22, [x, 0.2, z]);
+  // Flare's laptop (Episode 7): laptop.on shows it, laptop.mode 0 = news page, 1 = security footage list
+  const laptop = grp(ctable, 0.45, 0.46, -0.75);
+  box(laptop, 0.42, 0.02, 0.3, 0x2a2e36, [0, 0.01, 0], { m: 0.5, r: 0.35 });
+  const lid = grp(laptop, 0, 0.02, -0.15); lid.rotation.x = -0.25;
+  box(lid, 0.42, 0.28, 0.015, 0x2a2e36, [0, 0.14, 0], { m: 0.5, r: 0.35 });
+  const lapTex = canvasTex(512, 320, () => {});
+  let lapMode = -1;
+  const drawLap = (mode) => {
+    if (mode === lapMode) return; lapMode = mode;
+    const c = lapTex.userData.ctx, w = 512, h = 320;
+    if (mode === 0) {
+      c.fillStyle = '#f4f6fa'; c.fillRect(0, 0, w, h);
+      c.fillStyle = '#c0182a'; c.fillRect(0, 0, w, 54); c.fillStyle = '#fff'; c.font = 'bold 30px sans-serif'; c.fillText('AETHERFALL NEWS', 18, 38);
+      c.fillStyle = '#111'; c.font = 'bold 34px sans-serif'; c.fillText('BANK ROBBED AGAIN', 18, 104);
+      c.font = '22px sans-serif'; c.fillStyle = '#444'; c.fillText('Third robbery this week.', 18, 140); c.fillText('No suspects. No clues.', 18, 170);
+      c.fillStyle = '#c9ced8'; c.fillRect(18, 192, 220, 110); c.fillStyle = '#8a9098'; c.fillRect(40, 220, 170, 80);
+      c.fillStyle = '#b8bec8'; for (let i = 0; i < 5; i++) c.fillRect(260, 196 + i * 22, 230 - (i % 2) * 50, 10);
+    } else {
+      c.fillStyle = '#0e1418'; c.fillRect(0, 0, w, h);
+      c.fillStyle = '#7fe0a0'; c.font = 'bold 26px monospace'; c.fillText('SECURITY FOOTAGE', 18, 40);
+      for (let i = 0; i < 4; i++) { c.fillStyle = i === 1 ? '#2a5a3a' : '#1a2a22'; c.fillRect(18, 62 + i * 60, 476, 50); c.fillStyle = '#bfe8c8'; c.font = '22px monospace'; c.fillText(`CAM 0${4 + i}   ${['MAIN ST', '5TH ST', 'PARK AVE', 'DOCKS'][i]}   1:4${i} AM`, 32, 95 + i * 60); }
+      c.fillStyle = '#ff4040'; c.beginPath(); c.arc(470, 32, 9, 0, 7); c.fill();
+    }
+    lapTex.needsUpdate = true;
+  };
+  drawLap(0);
+  mk(new THREE.PlaneGeometry(0.38, 0.24), new THREE.MeshBasicMaterial({ map: lapTex }), lid, [0, 0.14, 0.009], [0, 0, 0], null, false);
   // posters
   for (const [x, t, c1, c2] of [[-4.2, 'TEAMWORK', '#2f6dff', '#0b1440'], [4.0, 'BE READY!', '#ff8a3d', '#5a1a0a']]) {
     mk(new THREE.PlaneGeometry(1.0, 1.4), new THREE.MeshStandardMaterial({ map: TX.posterTex(t, c1, c2), roughness: 0.8 }), g, [x, 2.0, -4.68], [0, 0, 0], null, false);
@@ -761,6 +788,7 @@ export function buildLiving() {
       win.material.emissive.set(night ? 0x1a2a50 : eve > 0.5 ? 0xffb08a : 0xeef6ff);
       steel.visible = v('steelTable', 0) > 0.5;
       ctable.visible = v('table.held', 0) < 0.5;
+      laptop.visible = v('laptop.on', 0) > 0.5; if (laptop.visible) drawLap(v('laptop.mode', 0) > 0.5 ? 1 : 0);
       tv.draw(t, v('tv.win', 0), v('tv.off', 0) > 0.5, v('tv.boss', 0), v('tv.hp', 0.12), v('tv.paused', 0) > 0.5, v('tv.hit', 0) > 0.5, v('tv.fall', -1));
       const hal = v('halloween', 0) > 0.5;
       hw.visible = hal; kit.visible = v('kitchen', 0) > 0.5;
@@ -877,6 +905,11 @@ export function buildTitle(font, TextGeometry) {
   const sub5 = mkText('BEHEMOTH AWAKENS', 0.5, 0.2, [new THREE.MeshStandardMaterial({ color: 0xf0d8ff, metalness: 0.4, roughness: 0.3, emissive: 0xb040ff, emissiveIntensity: 0.75 }), new THREE.MeshStandardMaterial({ color: 0x3a3f50, metalness: 0.8, roughness: 0.3 })]);
   sub5.position.set(0, -1.2, 0.3);
   g.add(sub5);
+  const sub6 = mkText('WESTERN DISASTER', 0.5, 0.2, [new THREE.MeshStandardMaterial({ color: 0xffe2a0, metalness: 0.4, roughness: 0.3, emissive: 0xff9a2a, emissiveIntensity: 0.7 }), new THREE.MeshStandardMaterial({ color: 0x6a3a1a, metalness: 0.6, roughness: 0.35 })]);
+  sub6.position.set(0, -1.2, 0.3);
+  g.add(sub6);
+  const westMats = [new THREE.MeshStandardMaterial({ color: 0xfff0d0, metalness: 0.5, roughness: 0.25, emissive: 0xd88a2a, emissiveIntensity: 0.7 }), new THREE.MeshStandardMaterial({ color: 0x8a4a1a, metalness: 0.7, roughness: 0.3, emissive: 0x3a1800, emissiveIntensity: 0.6 })];
+  const westBg = new THREE.Color(0x1a0c04);
   const orangeMats = [new THREE.MeshStandardMaterial({ color: 0xffe0b0, metalness: 0.5, roughness: 0.2, emissive: 0xff7a10, emissiveIntensity: 0.8 }), new THREE.MeshStandardMaterial({ color: 0xd05a08, metalness: 0.8, roughness: 0.25, emissive: 0x602000, emissiveIntensity: 0.7 })];
   const hwBg = new THREE.Color(0x12061e);
   const emb = new THREE.Mesh(new THREE.PlaneGeometry(4.5, 4.5), new THREE.MeshBasicMaterial({ map: TX.emblemTex(), transparent: true, opacity: 0.35, depthWrite: false }));
@@ -893,20 +926,20 @@ export function buildTitle(font, TextGeometry) {
     update(t, X) {
       const v = X.val;
       const k = v('title.k', 0);
-      const th = v('title.theme', 0), hw = th > 1.5, red = th > 0.5 && !hw;
-      title.material = hw ? orangeMats : red ? redMats : blueMats;
-      X.scene.background = hw ? hwBg : red ? redBg : blueBg;
-      rays.children.forEach((m, i) => m.material.color.set(hw ? (i % 2 ? 0x5a1a8a : 0x8a3a0a) : red ? (i % 2 ? 0x8a0a16 : 0x3a0408) : (i % 2 ? 0x1d3fa8 : 0x0f2470)));
-      rim.color.set(hw ? 0xa050ff : red ? 0xff3040 : 0x4fb0ff);
-      sweep.color.set(hw ? 0xffa050 : red ? 0xff7070 : 0x9fe0ff);
-      emb.visible = !red && !hw;
+      const th = v('title.theme', 0), we = th > 2.5, hw = th > 1.5 && !we, red = th > 0.5 && !hw && !we;
+      title.material = we ? westMats : hw ? orangeMats : red ? redMats : blueMats;
+      X.scene.background = we ? westBg : hw ? hwBg : red ? redBg : blueBg;
+      rays.children.forEach((m, i) => m.material.color.set(we ? (i % 2 ? 0x8a4a14 : 0x4a2208) : hw ? (i % 2 ? 0x5a1a8a : 0x8a3a0a) : red ? (i % 2 ? 0x8a0a16 : 0x3a0408) : (i % 2 ? 0x1d3fa8 : 0x0f2470)));
+      rim.color.set(we ? 0xffa040 : hw ? 0xa050ff : red ? 0xff3040 : 0x4fb0ff);
+      sweep.color.set(we ? 0xffd080 : hw ? 0xffa050 : red ? 0xff7070 : 0x9fe0ff);
+      emb.visible = !red && !hw && !we;
       title.scale.setScalar(Math.max(0.001, k));
       title.rotation.y = Math.max(0, 1 - k) * 1.2;
       title.position.x = red ? Math.sin(t * 61) * 0.03 * v('title.jolt', 0) : 0;
       const ks = v('title.sub', 0);
       const which = v('title.subText', 'BE READY!');
-      sub.visible = which === 'BE READY!'; sub2.visible = which === 'THE RED DIAMOND HUNT'; sub3.visible = which === "THE SOUL STEALER'S SECRET"; sub4.visible = which === 'SPOOKY HALLOWEEN PARTY'; sub5.visible = which === 'BEHEMOTH AWAKENS';
-      for (const m of [sub, sub2, sub3, sub4, sub5]) { m.scale.setScalar(Math.max(0.001, ks)); m.position.y = v('title.subY', -1.2); }
+      sub.visible = which === 'BE READY!'; sub2.visible = which === 'THE RED DIAMOND HUNT'; sub3.visible = which === "THE SOUL STEALER'S SECRET"; sub4.visible = which === 'SPOOKY HALLOWEEN PARTY'; sub5.visible = which === 'BEHEMOTH AWAKENS'; sub6.visible = which === 'WESTERN DISASTER';
+      for (const m of [sub, sub2, sub3, sub4, sub5, sub6]) { m.scale.setScalar(Math.max(0.001, ks)); m.position.y = v('title.subY', -1.2); }
       title.position.y = v('title.y', 0.25);
       emb.material.opacity = 0.35 * k;
       rays.rotation.z = t * 0.15;

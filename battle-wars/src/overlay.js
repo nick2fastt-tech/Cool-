@@ -21,6 +21,8 @@ export const SPEAKERS = {
   everyone: { name: 'EVERYONE', color: '#ffe066' },
   citizen: { name: 'CITIZEN', color: '#ffb35a' },
   behemoth: { name: 'BEHEMOTH', color: '#c78bff' },
+  guard: { name: 'SECURITY GUARD', color: '#b8d0e8' },
+  officer: { name: 'OFFICER', color: '#8fb8ff' },
 };
 
 function wrap(ctx, text, maxW) {
@@ -119,6 +121,16 @@ function drawCard(ctx, W, H, c, t) {
     ctx.fillStyle = '#2f8cff'; ctx.fillRect(36 * s, 36 * s, 8 * s, 60 * s);
     ctx.fillStyle = '#ffffff'; ctx.textBaseline = 'middle';
     ctx.fillText(c.text, 58 * s, 68 * s);
+  } else if (c.kind === 'nameTag') {
+    // lower-third name card (western style)
+    const x0 = 60 * s, y0 = H * 0.66, slide = (1 - smoothstep(0, 0.5, a)) * -80 * s;
+    ctx.translate(slide, 0);
+    ctx.font = `${Math.round(64 * s)}px ${FONT}`;
+    const w = Math.max(ctx.measureText(c.text).width, 260 * s) + 60 * s;
+    ctx.fillStyle = 'rgba(30,14,4,0.82)'; roundRect(ctx, x0, y0, w, 118 * s, 10 * s); ctx.fill();
+    ctx.fillStyle = '#d8902a'; ctx.fillRect(x0, y0 + 112 * s, w, 6 * s);
+    ctx.textBaseline = 'alphabetic'; ctx.fillStyle = '#ffd890'; ctx.fillText(c.text, x0 + 30 * s, y0 + 66 * s);
+    ctx.font = `600 ${Math.round(24 * s)}px ${UI_FONT}`; ctx.fillStyle = '#f2e2c8'; ctx.fillText(c.sub ?? '', x0 + 32 * s, y0 + 98 * s);
   } else if (c.kind === 'titleSub') {
     ctx.textAlign = 'center';
     ctx.font = `${Math.round(30 * s)}px ${UI_FONT}`;
@@ -240,7 +252,45 @@ function drawCard(ctx, W, H, c, t) {
   ctx.restore();
 }
 
+// security-camera look: grey-green picture, scanlines, noise, REC + camera name + running timestamp
+function drawCCTV(ctx, W, H, t, val) {
+  const s = H / 720;
+  ctx.save();
+  ctx.filter = 'grayscale(0.8) contrast(1.2) brightness(1.08)';
+  ctx.drawImage(ctx.canvas, 0, 0);
+  ctx.filter = 'none';
+  ctx.fillStyle = 'rgba(70,130,90,0.14)'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(0,0,0,0.13)';
+  for (let y = 0; y < H; y += 4 * s) ctx.fillRect(0, y, W, 1.4 * s);
+  const fr = Math.floor(t * 24);
+  for (let i = 0; i < 260; i++) {
+    const h1 = Math.sin((fr * 131 + i * 17) * 12.9898) * 43758.5453, h2 = Math.sin((fr * 71 + i * 29) * 78.233) * 43758.5453;
+    ctx.fillStyle = i % 2 ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.18)';
+    ctx.fillRect((h1 - Math.floor(h1)) * W, (h2 - Math.floor(h2)) * H, 2 * s, 2 * s);
+  }
+  const bandY = ((t * 0.35) % 1) * H;
+  ctx.fillStyle = 'rgba(255,255,255,0.05)'; ctx.fillRect(0, bandY, W, 26 * s);
+  const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.95);
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.55)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // corner brackets
+  ctx.strokeStyle = 'rgba(230,255,235,0.8)'; ctx.lineWidth = 3 * s;
+  const m = 40 * s, L = 46 * s;
+  for (const [x, y, dx, dy] of [[m, m, 1, 1], [W - m, m, -1, 1], [m, H - m, 1, -1], [W - m, H - m, -1, -1]]) { ctx.beginPath(); ctx.moveTo(x, y + dy * L); ctx.lineTo(x, y); ctx.lineTo(x + dx * L, y); ctx.stroke(); }
+  ctx.font = `700 ${Math.round(30 * s)}px "DejaVu Sans Mono", monospace`; ctx.textBaseline = 'middle';
+  if (Math.sin(t * 5) > -0.2) { ctx.fillStyle = '#ff3030'; ctx.beginPath(); ctx.arc(m + 32 * s, m + 34 * s, 11 * s, 0, 7); ctx.fill(); }
+  ctx.fillStyle = '#e8ffe8'; ctx.textAlign = 'left'; ctx.fillText('REC', m + 52 * s, m + 35 * s);
+  ctx.textAlign = 'left'; ctx.fillText(val('cctv.cam', 'CAM 07'), m + 20 * s, H - m - 76 * s);
+  const sec = Math.floor(val('cctv.base', 6120) + Math.max(0, t - val('cctv.t0', 0)));
+  const hh = Math.floor(sec / 3600) % 12 || 12, mm = Math.floor(sec / 60) % 60, ss = sec % 60;
+  ctx.textAlign = 'left';
+  ctx.fillText(`${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')} AM`, m + 20 * s, H - m - 34 * s);
+  ctx.textAlign = 'right'; ctx.fillText('PLAYBACK  \u25B6', W - m - 20 * s, H - m - 34 * s);
+  ctx.restore();
+}
+
 export function drawOverlay(ctx, W, H, t, T, val) {
+  if (val('cctv', 0) > 0.5) drawCCTV(ctx, W, H, t, val);
   for (const c of T.cards) drawCard(ctx, W, H, c, t);
   for (const c of T.comics) drawComic(ctx, W, H, c, t);
   const fade = val('fade', 0);

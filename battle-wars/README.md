@@ -14,6 +14,7 @@ Every episode is delivered as one **1080p MP4** (1920×1080) with stereo sound a
 | `s1e4-spooky-halloween-party` | Season 1, Episode 4: "SPOOKY HALLOWEEN PARTY" (Halloween special) | 9:24 |
 | `s1e5-behemoth-awakens` | Season 1, Episode 5: "BEHEMOTH AWAKENS" | 12:31 |
 | `s1e6-the-power-returns` | Season 1, Episode 6: "THE POWER RETURNS" | 10:19 |
+| `s1e7-western-disaster` | Season 1, Episode 7: "WESTERN DISASTER" | 7:05 |
 | `s1-red-diamonds` | Early Red Diamonds teaser scene (blue suits) | 1:02 |
 
 Finished videos go to `output/<episode-id>/` (not stored in git — GitHub's 100 MB file limit).
@@ -35,11 +36,14 @@ Finished videos go to `output/<episode-id>/` (not stored in git — GitHub's 100
 | **Behemoth** (villain) | a worm-like metal dragon with glowing eyes, armor plates, tiny claws and a crown that controls its size (from tiny to taller than the buildings) | purple |
 | **Tiger Eric** | Eric's tiger transformation | — |
 | **Cat Eric** | Eric's newest transformation: a small orange tabby cat that loves pizza and video games | — |
-| **The Cowboy** (mystery) | long coat, wide-brimmed hat, face always hidden in shadow; rides a dark horse | — |
+| **Fred Yeehaw** (the Cowboy) | long coat, wide-brimmed hat, face always hidden in shadow; never speaks. His strange horse has glowing markings and can turn them both invisible, and he can bring clay to life | — |
+| **Clay creatures** | Fred's clay army: lumpy clay figures with glowing blue eyes that fall apart and rebuild themselves, and melt under Flare's heat | — |
+| **Bird Eric** | Eric's bird form: a green bird with his brown tuft | — |
+| **Security Guard / Officers** | the bank guard with his flashlight, and the police officers who take Fred away | light blue / blue |
 
 ## Locations
 
-Aetherfall City streets · Aetherfall City Park · Aetherfall Coffee · Battle Wars HQ (outside, living room on floor 1, Controller Room on floor 3, hidden reactor room below) · Red Team HQ (with a lounge couch and TV) · abandoned subway tunnels, lower machine chamber and platform · the ancient diamond chamber · the Soul Stealer's crystal cavern (red or violet) · title card (blue, red "electric", or orange-and-purple Halloween style) · Flare and Aaron's bedroom · the Halloween store · Newark's house (outside at night, and the party room with stage and dance floor). Halloween episodes also decorate the living room and add pajama and costume outfits. Episode 5 adds Greg's HQ bedroom, a downtown intersection with a city-center plaza, a damaged city park, the UFO, and upgraded blue uniforms with armor. Episode 6 adds the Soul Stealer's lair with the Behemoth's cage, a dark city alley at night, a city view from the living-room window, and a little clay Behemoth figure.
+Aetherfall City streets · Aetherfall City Park · Aetherfall Coffee · Battle Wars HQ (outside, living room on floor 1, Controller Room on floor 3, hidden reactor room below) · Red Team HQ (with a lounge couch and TV) · abandoned subway tunnels, lower machine chamber and platform · the ancient diamond chamber · the Soul Stealer's crystal cavern (red or violet) · title card (blue, red "electric", or orange-and-purple Halloween style) · Flare and Aaron's bedroom · the Halloween store · Newark's house (outside at night, and the party room with stage and dance floor). Halloween episodes also decorate the living room and add pajama and costume outfits. Episode 5 adds Greg's HQ bedroom, a downtown intersection with a city-center plaza, a damaged city park, the UFO, and upgraded blue uniforms with armor. Episode 6 adds the Soul Stealer's lair with the Behemoth's cage, a dark city alley at night, a city view from the living-room window, and a little clay Behemoth figure. Episode 7 adds the Aetherfall City Bank (street, lobby and storage room), an abandoned street, an abandoned warehouse (inside and out), police cars, a security-camera look and a western title card.
 
 ## How it's made
 

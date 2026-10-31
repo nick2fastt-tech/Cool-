@@ -9,6 +9,7 @@ import { buildBedroom, buildStore, buildNewarkExt, buildParty } from './hallowee
 import { buildBehemoth, buildCrown, buildUFO, buildTiger, buildGregRoom, buildDowntown, buildParkRuin } from './behemoth.js';
 import { behemothRig, behParams } from './behemothRig.js';
 import { buildHorse, buildCat, buildLair, buildAlley } from './e6.js';
+import { buildBank, buildOldStreet, buildWarehouse, buildWarehouseExt, buildBird, buildClayBits } from './e7.js';
 import { buildFX } from './fx.js';
 import { evalTrack, evalStep, buildGaitTables, gaitAt } from './director.js';
 import { drawOverlay } from './overlay.js';
@@ -50,6 +51,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     ...(META?.halloween ? { bedroom: buildBedroom(), store: buildStore(), newarkExt: buildNewarkExt(), party: buildParty() } : {}),
     ...(META?.behemoth ? { gregRoom: buildGregRoom(), downtown: buildDowntown(), parkRuin: buildParkRuin() } : {}),
     ...(META?.e6 ? { lair: buildLair(), alley: buildAlley() } : {}),
+    ...(META?.e7 ? { bank: buildBank(), oldStreet: buildOldStreet(), warehouse: buildWarehouse(), whExt: buildWarehouseExt() } : {}),
     black: { name: 'black', group: new THREE.Group(), bg: new THREE.Color(0x000000), update() {} },
   };
   for (const s of Object.values(SETS)) { s.group.visible = false; scene.add(s.group); }
@@ -57,7 +59,8 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   // cast
   // each hero can have outfit variants (pajamas, party costumes); the `${name}.outfit` track picks one per frame
   const heroes = {}, heroSets = {};
-  const HERO_NAMES = ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy'];
+  const CLAYS = META?.e7 ? ['clay1', 'clay2', 'clay3', 'clay4', 'clay5', 'clay6', 'clay7', 'clay8'] : [];
+  const HERO_NAMES = ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy', ...(META?.e7 ? ['guard', 'officer', 'officer2'] : []), ...CLAYS];
   for (const n of HERO_NAMES) {
     const extras = [...(CAST[n].extras ?? []), ...(META?.extras?.[n] ?? [])];
     heroSets[n] = { base: buildHero({ ...CAST[n], ...(costume[n] ?? {}), extras }) };
@@ -70,7 +73,9 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   // generic hand props: `${name}.propR` / `${name}.propL` tracks pick one by name
   const PROP_KINDS = ['notebook', 'pen', 'scanner', 'pipe', 'case', 'diamond', 'bar', 'buzzer', 'phone', 'bowl', 'towels', 'capeFold', 'dinoPack', 'maskHeld', 'candy', 'plate', 'pizza', 'mic', 'clock', 'canister', 'table', 'clay', 'controller'];
   const handProps = {};
+  if (META?.e7) PROP_KINDS.push('sack', 'flashlight', 'toast');
   for (const n of Object.keys(heroes)) for (const side of ['L', 'R']) for (const k of PROP_KINDS) {
+    if (CLAYS.includes(n)) continue;
     const m = buildProp(k); m.visible = false; heroes[n].J.hand[side].add(m); handProps[`${n}.${side}.${k}`] = onHand(n, side, m);
   }
   const water = buildWaterGuy();
@@ -95,6 +100,38 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     flyObj.pizza = buildProp('pizza'); flyObj.pizza.position.set(0, 0, 0); flyObj.pizza.rotation.set(0, 0, 0);
     flyObj.rock = mk(new THREE.DodecahedronGeometry(0.16, 0), mat(0x8a8378, { r: 0.9 }), null);
     for (const o of Object.values(flyObj)) { o.visible = false; scene.add(o); }
+  }
+  // Episode 7: Fred can turn invisible (own material copies), clay creature bits, birds
+  const fadeable = {};
+  if (META?.e7) {
+    const TEAL = new THREE.Color(0x40e8ff);
+    for (const n of ['cowboy']) {
+      const list = [];
+      heroSets[n].base.root.traverse((o) => {
+        if (!o.isMesh) return;
+        o.material = o.material.clone();
+        list.push({ m: o.material, op: o.material.opacity, tr: o.material.transparent, dw: o.material.depthWrite, em: o.material.emissive ? o.material.emissive.clone() : null });
+      });
+      fadeable[n] = { list, last: 1, TEAL };
+    }
+  }
+  const applyFade = (n, al, t) => {
+    const f = fadeable[n]; if (!f) return;
+    if (al >= 0.999 && f.last >= 0.999) return;
+    f.last = al;
+    const sh = al < 0.98 ? Math.min(1, (1 - al) * 1.5) * (0.6 + 0.4 * Math.sin(t * 22)) : 0;
+    for (const e of f.list) {
+      e.m.transparent = al < 0.999 ? true : e.tr; e.m.opacity = e.op * al; e.m.depthWrite = al > 0.6 ? e.dw : false;
+      if (e.em) e.m.emissive.copy(e.em).lerp(f.TEAL, sh * 0.3);
+    }
+  };
+  const clayBits = {};
+  for (const n of CLAYS) { clayBits[n] = buildClayBits(CAST[n].skin); scene.add(clayBits[n].root); }
+  const birds = {};
+  if (META?.e7) {
+    birds.bird = buildBird({ body: 0x3fbf5f, wing: 0x2a9a48, belly: 0xf2e08a, beak: 0xffa020, tuft: 0x4e3020, scale: 1.7 });
+    for (let i = 1; i <= 4; i++) birds[`pigeon${i}`] = buildBird({ body: 0x8a8e9a, wing: 0x6a6e7a, belly: 0xb0b4be, beak: 0xd0a080, scale: 1.1 });
+    for (const b of Object.values(birds)) { b.root.visible = false; scene.add(b.root); }
   }
   const gadget = {};
   if (META?.e6) {
@@ -157,7 +194,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     slices[n] = onHand(n, 'R', attachProp(heroes[n], 'R', m, [0, -0.12, 0.08], [0.4, 0, 0]));
   }
 
-  const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy', 'water', 'dog', 'birddog', 'tiger', 'horse', 'cat']);
+  const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy', 'water', 'dog', 'birddog', 'tiger', 'horse', 'cat', ...(META?.e7 ? ['guard', 'officer', 'officer2'] : []), ...CLAYS]);
   const val = (name, d = 0) => { const v = evalTrack(T.tracks[name], curT); return v === undefined ? d : v; };
   let curT = 0;
   const X = { T, scene, val: (n, d = 0) => val(n, d), hand: (n, side = 'R') => { const v = new THREE.Vector3(); heroes[n].J.hand[side].getWorldPosition(v); return v; }, rig: () => rig, crownPos: () => crown ? crown.root.position.clone() : new THREE.Vector3() };
@@ -188,6 +225,17 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     const roll = val(`${name}.roll`);
     h.root.position.set(val(`${name}.x`), val(`${name}.y`) + (1 - Math.cos(roll)) * 0.8, val(`${name}.z`));
     h.root.rotation.set(0, val(`${name}.ry`), roll);
+    if (clayBits[name]) {
+      const rise = val(`${name}.rise`, 1), melt = val(`${name}.melt`, 0), cr = val(`${name}.crumble`, 0);
+      h.root.position.y -= (1 - rise) * 1.95;
+      h.root.scale.set(1 + 0.5 * melt, Math.max(0.05, 1 - 0.95 * melt), 1 + 0.5 * melt);
+      if (cr > 0.04 || melt > 0.97 || rise < 0.02) { h.root.visible = false; return; }
+    }
+    if (fadeable[name]) {
+      const al = val(`${name}.alpha`, 1);
+      applyFade(name, al, t);
+      if (al < 0.01) { h.root.visible = false; return; }
+    }
     const st = evalStep(T.tracks[`${name}.act`], t);
     const cur = ACTIONS[st.v] ?? ACTIONS.idle, prev = ACTIONS[st.prev] ?? ACTIONS.idle;
     const ctx = { seed: h.seed };
@@ -280,6 +328,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     if (name === 'ufo') return new THREE.Vector3(val('ufo.x'), val('ufo.y'), val('ufo.z'));
     if (name === 'horse') { horse.head.getWorldPosition(tmpV); return tmpV.clone(); }
     if (name === 'cat') { cat.headG.getWorldPosition(tmpV); return tmpV.clone(); }
+    if (birds[name]) { birds[name].head.getWorldPosition(tmpV); return tmpV.clone(); }
     if (name === 'crown') return crown.root.position.clone();
     if (!heroes[name]) return new THREE.Vector3(0, 1.5, 0);
     heroes[name].J.head.getWorldPosition(tmpV);
@@ -418,7 +467,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
       if (horse.root.visible) {
         horse.root.position.set(val('horse.x'), val('horse.y'), val('horse.z')); horse.root.rotation.set(0, val('horse.ry'), 0);
         const st = evalStep(T.tracks['horse.act'], t), g = gaitAt(gait.horse, t);
-        horse.update({ t, act: st.v, a: st.since, speed: g.speed, phase: g.phase * 0.9 });
+        horse.update({ t, act: st.v, a: st.since, speed: g.speed, phase: g.phase * 0.9, glow: val('horse.glow', 0), alpha: val('horse.alpha', 1) });
       }
       cat.root.visible = val('cat.vis', 0) > 0.5;
       if (cat.root.visible) {
@@ -444,6 +493,14 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
         gadget.shield.position.set(hp.x + Math.sin(ry) * 0.35, hp.y + 0.05, hp.z + Math.cos(ry) * 0.35); gadget.shield.rotation.set(0, ry, 0); gadget.shield.scale.setScalar(Math.max(0.01, sh) * (1 + 0.03 * Math.sin(t * 9)));
         gadget.shield.material.opacity = Math.min(1, sh) * (0.8 + 0.2 * Math.sin(t * 13));
       }
+    }
+    for (const n of CLAYS) clayBits[n].update({ t, x: val(`${n}.x`), z: val(`${n}.z`), ry: val(`${n}.ry`), mound: val(`${n}.mound`, 0), crumble: val(`${n}.crumble`, 0), melt: val(`${n}.melt`, 0) });
+    for (const [n, b] of Object.entries(birds)) {
+      b.root.visible = val(`${n}.vis`, 0) > 0.5;
+      if (!b.root.visible) continue;
+      b.root.position.set(val(`${n}.x`), val(`${n}.y`), val(`${n}.z`)); b.root.rotation.set(0, val(`${n}.ry`), 0);
+      const st = evalStep(T.tracks[`${n}.act`], t);
+      b.update({ t, act: st.v ?? 'perch', a: st.since, seed: n.length * 1.7 + (n.charCodeAt(n.length - 1) % 7) });
     }
     bigShadow.root.visible = val('shadow.vis', 0) > 0.5;
     if (bigShadow.root.visible) { bigShadow.root.position.set(val('shadow.x'), 0, val('shadow.z')); bigShadow.update(t, val('shadow.eyes', 0)); }

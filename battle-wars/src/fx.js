@@ -98,7 +98,7 @@ export function buildFX(parent) {
     for (let i = 0; i < (e.n ?? 30); i++) {
       const h1 = hash(i * 4.1 + e.t), h2 = hash(i * 8.3 + e.t), h3 = hash(i * 2.9 + e.t);
       const th = h1 * Math.PI * 2, r = (0.2 + h2 * 1.2) * (0.3 + a);
-      addS(e.x + Math.cos(th + a) * r, (e.y ?? 1) + h3 * 2 * (0.4 + a * 0.5), e.z + Math.sin(th + a) * r, (0.15 + h2 * 0.25) * (1 + a) * (1 - a / life), h3 < 0.5 ? 0x2a1a3a : 0x3a2a4a);
+      addS(e.x + Math.cos(th + a) * r, (e.y ?? 1) + h3 * 2 * (0.4 + a * 0.5), e.z + Math.sin(th + a) * r, (0.15 + h2 * 0.25) * (1 + a) * (1 - a / life), h3 < 0.5 ? (e.color ?? 0x2a1a3a) : (e.color2 ?? 0x3a2a4a));
     }
   }
   let n = 0, nb = 0;
@@ -171,16 +171,28 @@ export function buildFX(parent) {
           const k = a / e.dur;
           if (k <= 1) {
             const x = e.from[0] + (e.to[0] - e.from[0]) * k, y = e.from[1] + (e.to[1] - e.from[1]) * k + Math.sin(k * Math.PI) * (e.arc ?? 0.3), z = e.from[2] + (e.to[2] - e.from[2]) * k;
-            addG(x, y, z, 0.22 * (e.size ?? 1), 0xd8a0ff);
-            addG(x, y, z, 0.38 * (e.size ?? 1), 0x7020c0);
-            for (let j = 0; j < 16; j++) { const kk = Math.max(0, k - j * 0.025); addG(e.from[0] + (e.to[0] - e.from[0]) * kk + (hash(j + e.t) - 0.5) * 0.15, e.from[1] + (e.to[1] - e.from[1]) * kk + Math.sin(kk * Math.PI) * (e.arc ?? 0.3), e.from[2] + (e.to[2] - e.from[2]) * kk, 0.12 * (1 - j / 16) * (e.size ?? 1), 0x9040e0); }
-            light(x, y, z, 0xa040ff, 6);
+            addG(x, y, z, 0.22 * (e.size ?? 1), e.core ?? 0xd8a0ff);
+            addG(x, y, z, 0.38 * (e.size ?? 1), e.glowC ?? 0x7020c0);
+            for (let j = 0; j < 16; j++) { const kk = Math.max(0, k - j * 0.025); addG(e.from[0] + (e.to[0] - e.from[0]) * kk + (hash(j + e.t) - 0.5) * 0.15, e.from[1] + (e.to[1] - e.from[1]) * kk + Math.sin(kk * Math.PI) * (e.arc ?? 0.3), e.from[2] + (e.to[2] - e.from[2]) * kk, 0.12 * (1 - j / 16) * (e.size ?? 1), e.trail ?? 0x9040e0); }
+            light(x, y, z, e.lightC ?? 0xa040ff, 6);
           } else {
             const b = { t: e.t + e.dur, x: e.to[0], y: e.to[1], z: e.to[2], n: 50, speed: 3.5, size: 0.06 };
-            sparkBurst(b, t, 0xc060ff);
-            debris({ t: e.t + e.dur, x: e.to[0], y: e.to[1], z: e.to[2], n: e.debris ?? 30 }, t);
-            if (a - e.dur < 0.3) light(e.to[0], e.to[1] + 0.3, e.to[2], 0xa040ff, 8 * (1 - (a - e.dur) / 0.3));
+            sparkBurst(b, t, e.spark ?? 0xc060ff);
+            debris({ t: e.t + e.dur, x: e.to[0], y: e.to[1], z: e.to[2], n: e.debris ?? 30, color: e.debrisC, color2: e.debrisC2 }, t);
+            if (a - e.dur < 0.3) light(e.to[0], e.to[1] + 0.3, e.to[2], e.lightC ?? 0xa040ff, 8 * (1 - (a - e.dur) / 0.3));
           }
+        } else if (e.kind === 'heatWave' && a >= 0 && a <= e.dur) {
+          // a low wall of fire rolling across the floor from (x,z) along angle `dir`, spreading `spread` radians
+          const k = Math.min(1, a / 0.2, (e.dur - a) / 0.4);
+          const R = (e.r0 ?? 0.6) + (e.speed ?? 6) * a;
+          const n2 = e.n ?? 26, sp = e.spread ?? 1.0;
+          for (let j = 0; j < n2; j++) {
+            const ang = (e.dir ?? 0) + (j / (n2 - 1) - 0.5) * sp;
+            const rr = Math.min(R, e.maxR ?? 14) + 0.2 * Math.sin(j * 3.1 + t * 9);
+            fire(e.x + Math.sin(ang) * rr, 0.05, e.z + Math.cos(ang) * rr, t, 26 * k, (e.size ?? 0.38) * k, e.t + j * 3.7);
+          }
+          const rl = Math.min(R, e.maxR ?? 14);
+          light(e.x + Math.sin(e.dir ?? 0) * rl, 0.8, e.z + Math.cos(e.dir ?? 0) * rl, 0xff7a20, 14 * k, 10);
         } else if (e.kind === 'portal' && a >= 0 && a <= e.dur) {
           const k = Math.min(1, a / 0.5, (e.dur - a) / 0.5), r = (e.radius ?? 1.2) * k;
           const ry = e.ry ?? 0, cx = Math.cos(ry), sx = Math.sin(ry);

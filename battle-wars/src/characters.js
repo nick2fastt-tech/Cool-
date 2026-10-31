@@ -202,6 +202,23 @@ export const ACTIONS = {
   floatSit: { sit: true, gest: true, f: (a, t) => ({ ...sitLegs, spF: 0.05, aLO: 0.5, aRO: 0.5, aLF: 0.35, aRF: 0.35, eL: 0.4, eR: 0.4, hdN: -0.05 + 0.03 * S(t * 2) }) },
   catchSide: { f: (a) => { const k = smoothstep(0, 0.15, a); return { aRF: 1.4 * k, aRO: 0.7 * k, eR: 0.5, aLO: 0.12, eL: 0.2, hdY: 0.2 }; } },
   pointMap: { gest: false, f: (a, t) => { const k = smoothstep(0, 0.4, a); return { lean: 0.05, spF: 0.3, aRF: 1.0 + 0.1 * k, aRO: 0.0, eR: 0.15, aLF: 0.85, aLO: 0.22, eL: 0.2, hdN: 0.2, lLO: 0.1, lRO: 0.1 }; } },
+  // Episode 7
+  rideSummon: { sit: true, gest: false, f: (a, t) => { const k = smoothstep(0, 0.45, a); return { y: -0.32, lLF: 1.2, lRF: 1.2, lLO: 0.45, lRO: 0.45, kL: 1.3, kR: 1.3, fL: 0.2, fR: 0.2, spF: 0.06, aLF: 0.7, aLO: 0.1, eL: 1.2, aLT: 0.4, aRF: 0.75 + 1.25 * k, aRO: 0.12, eR: 1.1 * (1 - k) + 0.15 * k, aRT: 0.4 * (1 - k) - 0.3 * k, hdN: 0.0 }; } },
+  rideTip: { sit: true, gest: false, f: (a) => { const k = smoothstep(0, 0.5, a) - 0.25 * smoothstep(1.2, 1.7, a); return { y: -0.32, lLF: 1.2, lRF: 1.2, lLO: 0.45, lRO: 0.45, kL: 1.3, kR: 1.3, fL: 0.2, fR: 0.2, spF: 0.06, aLF: 0.7, aLO: 0.1, eL: 1.2, aLT: 0.4, aRF: 0.75 + 1.6 * k, aRO: 0.1 + 0.18 * k, eR: 1.1 + 0.85 * k, aRT: 0.4 * (1 - k) - 0.15 * k, hdN: 0.14 * k }; } },
+  summon: { gest: false, f: (a, t) => { const k = smoothstep(0, 0.45, a); return { aRF: 1.75 * k, aRO: 0.12, eR: 0.15, aRT: -0.3 * k, aLO: 0.1, eL: 0.25, spF: -0.04 * k, hdN: -0.06 * k, y: 0.004 * S(t * 27) * k }; } },
+  tipHat: { gest: false, f: (a) => { const k = smoothstep(0, 0.5, a) - 0.25 * smoothstep(1.2, 1.7, a); return { aRF: 2.35 * k, aRO: 0.28 * k, eR: 1.95 * k, aRT: -0.15 * k, aLO: 0.1, eL: 0.2, hdN: 0.14 * k }; } },
+  sitTipHat: { sit: true, gest: false, f: (a) => { const k = smoothstep(0, 0.5, a) - 0.25 * smoothstep(1.2, 1.7, a); return { ...sitLegs, aRF: 2.35 * k, aRO: 0.28 * k, eR: 1.95 * k, aRT: -0.15 * k, aLF: 0.5, eL: 0.9, aLT: 0.4, hdN: 0.14 * k }; } },
+  sitCar: { sit: true, f: (a, t) => ({ ...sitLegs, aLF: 0.5, aRF: 0.5, eL: 0.9, eR: 0.9, aLT: 0.4, aRT: 0.4, hdN: 0.04 + 0.02 * S(t * 0.7), spF: 0.04 }) },
+  handOnClay: { f: (a) => { const k = smoothstep(0, 0.6, a); return { y: -0.36 * k, lLF: 1.25 * k, kL: 1.45 * k, lRF: 0.35 * k, kR: 1.15 * k, fR: 0.3 * k, spF: 0.55 * k, aRF: 0.75 * k, eR: 0.1, aRO: 0.08, aLF: 0.3 * k, eL: 0.8 * k, hdN: 0.3 * k }; } },
+  cuffed: { f: (a, t) => ({ aLF: -0.45, aRF: -0.45, aLO: 0.06, aRO: 0.06, eL: 0.55, eR: 0.55, aLT: 0.5, aRT: 0.5, spF: 0.06, hdN: 0.1 + 0.02 * S(t * 0.6) }) },
+  flashlight: { gest: false, f: (a, t) => ({ aRF: 1.3, eR: 0.35, aRO: 0.05, aRT: -0.15, aLO: 0.1, eL: 0.25, spT: 0.32 * S(t * 0.9), hdY: 0.35 * S(t * 0.9), spF: 0.05 }) },
+  golem: { f: (a, t, c) => ({ spF: 0.2, aLF: 0.35, aRF: 0.35, aLO: 0.2, aRO: 0.2, eL: 0.45, eR: 0.45, hdN: 0.15, tilt: 0.04 * S(t * 1.3 + (c?.seed ?? 0)), spS: 0.05 * S(t * 0.9 + (c?.seed ?? 0)), lLO: 0.08, lRO: 0.08 }) },
+  golemReach: { f: (a, t, c) => { const k = smoothstep(0, 0.4, a); return { spF: 0.18, lean: 0.08, aLF: 1.4 * k + 0.1 * S(t * 2 + (c?.seed ?? 0)), aRF: 1.4 * k + 0.1 * S(t * 2.3 + (c?.seed ?? 0)), aLO: 0.15, aRO: 0.15, eL: 0.25, eR: 0.25, hdN: 0.1, tilt: 0.05 * S(t * 1.7) }; } },
+  golemSwipe: { f: (a, t) => { const c = (a % 1.4) / 1.4, w = smoothstep(0.25, 0.45, c) - smoothstep(0.55, 0.9, c); return { spF: 0.2, spT: -0.6 * w + 0.25 * (1 - w), aRF: 1.4, aRO: 0.6 - 0.5 * w, aRT: 0.6 * w, eR: 0.3, aLF: 0.6, aLO: 0.3, eL: 0.5, lean: 0.1, lLF: 0.4, kL: 0.3, lRF: -0.3, hdN: 0.1 }; } },
+  melt: { f: (a, t) => { const k = smoothstep(0, 0.8, a); return { spF: 0.45 * k, aLO: 0.7 * k, aRO: 0.7 * k, aLF: 0.4 + 0.3 * S(t * 7), aRF: 0.4 + 0.3 * S(t * 6 + 1), eL: 0.4, eR: 0.4, hdN: 0.3 * k, tilt: 0.12 * S(t * 3), lLO: 0.2 * k, lRO: 0.2 * k, kL: 0.4 * k, kR: 0.4 * k, y: -0.12 * k }; } },
+  pinned: { f: (a, t) => ({ aLO: 0.04, aRO: 0.04, aLF: 0.12, aRF: 0.12, eL: 0.2, eR: 0.2, spT: 0.18 * S(t * 9), spS: 0.08 * S(t * 7), hdN: 0.05, hdT: 0.2 * S(t * 8), y: 0.01 * S(t * 18) }) },
+  pushHeat: { f: (a, t) => { const k = smoothstep(0, 0.35, a); return { aLF: 1.35 * k, aRF: 1.35 * k, aLO: 0.22, aRO: 0.22, aLT: -0.2, aRT: -0.2, eL: 0.3, eR: 0.3, lean: 0.14 * k, lLF: 0.55, kL: 0.45, lRF: -0.5, kR: 0.25, y: -0.07 + 0.012 * S(t * 26), hdN: -0.05 }; } },
+  shrugBig: { f: (a, t) => ({ aLO: 0.7, aRO: 0.7, aLF: 0.5, aRF: 0.5, eL: 1.3, eR: 1.3, aLT: -0.6, aRT: -0.6, hdT: 0.15, spF: -0.04 }) },
 };
 
 export function locomotion(phase, run) {
@@ -413,7 +430,7 @@ export function buildHero(cfg) {
   const r = 0.2, hc = 0.2;
   mk(new THREE.SphereGeometry(r, 32, 24), skin, head, [0, hc, 0], [0, 0, 0], [0.95, 1.07, 1.0]);
   // jaw/cheeks for a softer face shape
-  const face = cfg.face === 'greg' ? buildGregFace(head, hc, r) : buildFace(head, cfg, hc, r);
+  const face = cfg.face === 'greg' ? buildGregFace(head, hc, r) : cfg.face === 'golem' ? buildGolemFace(head, hc, r, cfg) : buildFace(head, cfg, hc, r);
   if (cfg.hair) buildHair(head, cfg, hc, r);
 
   // arms
@@ -522,6 +539,7 @@ export function buildHero(cfg) {
 }
 
 // Costume pieces added on top of a hero: cfg.extras = ['cape', 'ruff', ...]
+const hashN = (n) => { const x = Math.sin(n * 127.1) * 43758.5453; return x - Math.floor(x); };
 function buildExtras(cfg, J, neck, hc, r) {
   const ex = { mask: null, maskY: 0 };
   const list = cfg.extras ?? [];
@@ -688,6 +706,28 @@ function buildExtras(cfg, J, neck, hc, r) {
     mk(new THREE.SphereGeometry(r * 1.04, 22, 14, 0, P, 0, P * 0.8), new THREE.MeshBasicMaterial({ color: 0x050407 }), head, [0, hc - 0.005, 0.015], [0, 0, 0], [0.98, 1.08, 1.04], false);
     mk(new THREE.BoxGeometry(0.34, 0.12, 0.14), mat(0x3a1a12, { r: 0.9 }), head, [0, hc - r * 0.62, r * 0.42], [0.2, 0, 0]);
   }
+  if (has('policeCap') || has('guardCap')) {
+    const police = has('policeCap');
+    const h = grp(head, 0, hc + r * 0.7, 0.0); h.rotation.set(-0.12, 0, 0);
+    const cloth = mat(police ? 0x141c34 : 0x4a5a6a, { r: 0.7 });
+    mk(new THREE.CylinderGeometry(r * 1.08, r * 0.98, r * 0.55, 24), cloth, h, [0, r * 0.22, 0]);
+    mk(new THREE.CylinderGeometry(r * 1.12, r * 1.12, r * 0.06, 24), mat(0x0a0a0c, { r: 0.4 }), h, [0, r * 0.47, 0]);
+    mk(new THREE.CylinderGeometry(r * 0.75, r * 0.75, 0.012, 20, 1, false, -P / 2, P), mat(0x0a0a0c, { r: 0.3, m: 0.3 }), h, [0, -0.005, r * 0.55], [0.18, 0, 0], [1, 1, 0.75]);
+    mk(new THREE.CylinderGeometry(r * 1.0, r * 1.0, r * 0.12, 24), mat(0x0a0a0c, { r: 0.5 }), h, [0, 0.0, 0]);
+    mk(new THREE.CircleGeometry(r * 0.16, 6), mat(0xe8c040, { m: 0.8, r: 0.3 }), h, [0, r * 0.25, r * 1.05], [0, 0, 0], null, false);
+  }
+  if (has('badge')) {
+    const b = grp(J.spine, 0.09, 0.36, 0.152);
+    mk(new THREE.CircleGeometry(0.03, 6), mat(0xe8c040, { m: 0.85, r: 0.25 }), b, [0, 0, 0], [0, 0, P / 6], null, false);
+    for (const sd of [1, -1]) mk(new THREE.BoxGeometry(0.06, 0.04, 0.01), mat(cfg.shirtDark ?? 0x0e1426, { r: 0.6 }), J.spine, [sd * 0.09, 0.4, 0.15]);
+  }
+  if (has('clayLumps')) {
+    const c = mat(cfg.skinDark ?? 0x6a5040, { r: 0.95 });
+    const rr = (k) => hashN(k + (cfg.seed ?? 1) * 13.1);
+    for (let i = 0; i < 5; i++) mk(new THREE.SphereGeometry(0.05 + rr(i) * 0.04, 8, 6), c, J.spine, [(rr(i + 7) - 0.5) * 0.3, 0.1 + rr(i + 3) * 0.4, 0.1 + rr(i + 9) * 0.06]);
+    for (let i = 0; i < 3; i++) mk(new THREE.SphereGeometry(0.05 + rr(i + 20) * 0.04, 8, 6), c, head, [(rr(i + 30) - 0.5) * 0.25, hc + 0.12 + rr(i + 40) * 0.08, -0.05 + rr(i + 50) * 0.1]);
+    for (const sd of ['L', 'R']) mk(new THREE.SphereGeometry(0.07, 8, 6), c, J.sh[sd], [0, 0.02, 0], [0, 0, 0], [1.2, 0.8, 1.1]);
+  }
   if (has('milkStain')) {
     ex.milk = grp(J.spine, 0.03, 0.27, 0.142);
     for (const [x, y, r] of [[0, 0, 0.07], [0.05, -0.06, 0.04], [-0.04, -0.08, 0.035], [0.02, -0.12, 0.025], [-0.06, 0.03, 0.03]]) mk(new THREE.CircleGeometry(r, 14), mat(0xf8f8ff, { r: 0.25 }), ex.milk, [x, y, 0.002], [0, 0, 0], null, false);
@@ -843,6 +883,27 @@ function buildGregFace(head, hc, r) {
   }
   const dummy = () => new THREE.Group();
   return { eyes, brows: [], smile: dummy(), open: dummy(), mg: dummy(), iris: black };
+}
+
+// Clay creature face: two hollow sockets with glowing blue eyes and a rough mouth slit.
+function buildGolemFace(head, hc, r, cfg) {
+  const glow = new THREE.MeshStandardMaterial({ color: 0x9fe6ff, emissive: 0x2a9cff, emissiveIntensity: 1.6, roughness: 0.3 });
+  const hole = mat(0x1a120c, { r: 0.9 });
+  const eyes = [];
+  for (const sd of [1, -1]) {
+    const eg = grp(head, sd * r * 0.36, hc + r * 0.16, r * 0.84);
+    eg.rotation.y = sd * 0.35;
+    const eye = grp(eg);
+    mk(new THREE.SphereGeometry(r * 0.2, 12, 10), hole, eye, [0, 0, 0], [0, 0, 0], [1.1, 0.8, 0.5], false);
+    const ir = grp(eye, 0, 0, r * 0.06);
+    mk(new THREE.SphereGeometry(r * 0.1, 10, 8), glow, ir, [0, 0, 0], [0, 0, 0], [1.1, 0.8, 0.6], false);
+    eyes.push({ eg, eye, ir });
+  }
+  const mg = grp(head, 0, hc - r * 0.42, r * 0.86);
+  const slit = mk(new THREE.BoxGeometry(r * 0.55, r * 0.07, r * 0.1), hole, mg, [0, 0, 0], [0, 0, 0.06], null, false);
+  mk(new THREE.BoxGeometry(r * 0.9, r * 0.14, r * 0.3), mat(cfg.skinDark ?? 0x6a5040, { r: 0.9 }), head, [0, hc + r * 0.38, r * 0.78], [0.25, 0, 0], null, false);
+  const open = grp(mg); mk(new THREE.SphereGeometry(r * 0.16, 10, 8), hole, open, [0, -r * 0.05, 0], [0, 0, 0], [1.4, 1, 0.4], false);
+  return { eyes, brows: [], smile: slit, open, mg, iris: glow };
 }
 
 // Soul Stealer: tall hooded villain with glowing red eyes and a red symbol in his palm.
@@ -1089,6 +1150,24 @@ export function buildProp(kind) {
   } else if (kind === 'clay') {
     g.add(buildClayFigure(0.9, true));
     g.position.set(0, -0.11, 0.06); g.rotation.set(1.8, 0, 0);
+  } else if (kind === 'sack') {
+    const c = mat(0xb8a47a, { r: 0.95 });
+    mk(new THREE.SphereGeometry(0.2, 14, 10), c, g, [0, -0.28, 0], [0, 0, 0], [1, 1.15, 0.9]);
+    mk(new THREE.CylinderGeometry(0.035, 0.08, 0.14, 10), c, g, [0, -0.08, 0]);
+    mk(new THREE.TorusGeometry(0.04, 0.012, 6, 12), mat(0x5a3a1a), g, [0, -0.06, 0], [P / 2, 0, 0]);
+    mk(new THREE.CircleGeometry(0.09, 16), new THREE.MeshBasicMaterial({ color: 0x2f6a2f }), g, [0, -0.28, 0.182], [0, 0, 0], null, false);
+    g.position.set(0, -0.04, 0.02);
+  } else if (kind === 'flashlight') {
+    mk(new THREE.CylinderGeometry(0.025, 0.025, 0.2, 10), mat(0x1a1a1e, { r: 0.4, m: 0.5 }), g, [0, 0, 0], [P / 2, 0, 0]);
+    mk(new THREE.CylinderGeometry(0.04, 0.028, 0.06, 12), mat(0x2a2a30, { r: 0.4, m: 0.5 }), g, [0, 0, 0.12], [P / 2, 0, 0]);
+    mk(new THREE.CircleGeometry(0.036, 14), mat(0xfff6d0, { e: 0xfff0b0, ei: 2 }), g, [0, 0, 0.152], [0, 0, 0], null, false);
+    const beam = mk(new THREE.ConeGeometry(0.55, 3.2, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0xfff0c0, transparent: true, opacity: 0.08, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }), g, [0, 0, 1.75], [-P / 2, 0, 0], null, false);
+    beam.castShadow = false;
+    g.position.set(0, -0.08, 0.04); g.rotation.set(-0.15, 0, 0);
+  } else if (kind === 'toast') {
+    mk(new RoundedBoxGeometry(0.11, 0.12, 0.02, 2, 0.01), mat(0xd89a50, { r: 0.8 }), g, [0, 0, 0]);
+    mk(new THREE.BoxGeometry(0.09, 0.1, 0.022), mat(0xf2d8a0, { r: 0.9 }), g, [0, 0, 0]);
+    g.position.set(0, -0.1, 0.05);
   } else if (kind === 'clock') {
     mk(new RoundedBoxGeometry(0.16, 0.08, 0.09, 2, 0.02), mat(0x1a1a22, { r: 0.4 }), g, [0, 0, 0]);
     g.position.set(0, -0.08, 0.06);
@@ -1184,5 +1263,16 @@ export const CAST = {
   greg: { name: 'greg', seed: 6, face: 'greg', skin: 0xf2f2f4, skinDark: 0xe6e6ea, eyeColor: 0x000000, casual: true, emblem: false, shirt: 0x141418, pants: 0x101014, boot: 0x0c0c10, glove: 0xf2f2f4, coat: 0x18181c, coatDark: 0x0a0a0c, belt: 0x0a0a0a },
   newark: { name: 'newark', seed: 11, scale: 0.9, hair: 'wavy', hairColor: 0x15100c, browColor: 0x15100c, skin: 0xa8734f, skinDark: 0x966442, eyeColor: 0x2a1a10, casual: true, emblem: false, shirt: 0xff7a1a, pants: 0x141418, boot: 0x0e0e12, belt: 0x0e0e12, coat: 0x16161a, coatDark: 0xff7a1a, coatTrim: 0xff8a2a, bareHands: true, extras: ['topHat', 'bowtie'] },
   cowboy: { name: 'cowboy', seed: 12, scale: 0.95, hair: 'wavy', hairColor: 0x2a1a10, browColor: 0x1a0e08, skin: 0xb98a66, skinDark: 0xa87a58, eyeColor: 0x1a100a, casual: true, emblem: false, shirt: 0x2a2a30, pants: 0x1e2a3a, boot: 0x3a2214, belt: 0x2a160c, glove: 0x2a1a10, coat: 0x4a3222, coatDark: 0x2a1a10, extras: ['wideHat', 'faceShadow'] },
+  clay7: { name: 'clay7', seed: 37, scale: 1.03, face: 'golem', skin: 0x8a6c52, skinDark: 0x6a4e3e, eyeColor: 0x2a9cff, casual: true, emblem: false, shirt: 0x8a6c52, pants: 0x6a4e3e, boot: 0x6a4e3e, belt: 0x6a4e3e, bareHands: true, extras: ['clayLumps'] },
+  clay8: { name: 'clay8', seed: 38, scale: 0.97, face: 'golem', skin: 0x7e6248, skinDark: 0x604836, eyeColor: 0x2a9cff, casual: true, emblem: false, shirt: 0x7e6248, pants: 0x604836, boot: 0x604836, belt: 0x604836, bareHands: true, extras: ['clayLumps'] },
+  guard: { name: 'guard', seed: 21, scale: 0.92, hair: 'wavy', hairColor: 0x6a5a4a, browColor: 0x4a3a2a, skin: 0xd9a07a, skinDark: 0xc98e68, eyeColor: 0x3a2412, casual: true, emblem: false, shirt: 0x5a6a7a, shirtDark: 0x3a4a5a, pants: 0x2a3040, boot: 0x15151a, belt: 0x111111, bareHands: true, extras: ['guardCap', 'badge'] },
+  officer: { name: 'officer', seed: 22, scale: 0.94, hair: 'spiky', hairColor: 0x1a1410, browColor: 0x120d0a, skin: 0xb07a55, skinDark: 0x9a6a48, eyeColor: 0x2a1a10, casual: true, emblem: false, shirt: 0x1e2a4a, shirtDark: 0x0e1426, pants: 0x141a2a, boot: 0x0c0c10, belt: 0x0c0c0c, bareHands: true, extras: ['policeCap', 'badge'] },
+  officer2: { name: 'officer2', seed: 23, scale: 0.9, hair: 'wavy', hairColor: 0x6a4a2a, browColor: 0x4a3018, skin: 0xe8b890, skinDark: 0xd8a47c, eyeColor: 0x3a5a7a, casual: true, emblem: false, shirt: 0x1e2a4a, shirtDark: 0x0e1426, pants: 0x141a2a, boot: 0x0c0c10, belt: 0x0c0c0c, bareHands: true, extras: ['policeCap', 'badge'] },
+  clay1: { name: 'clay1', seed: 31, scale: 1.0, face: 'golem', skin: 0x8a6a4e, skinDark: 0x6a5040, eyeColor: 0x2a9cff, casual: true, emblem: false, shirt: 0x8a6a4e, pants: 0x6a5040, boot: 0x6a5040, belt: 0x6a5040, bareHands: true, extras: ['clayLumps'] },
+  clay2: { name: 'clay2', seed: 32, scale: 0.96, face: 'golem', skin: 0x7a5e46, skinDark: 0x5c4434, eyeColor: 0x2a9cff, casual: true, emblem: false, shirt: 0x7a5e46, pants: 0x5c4434, boot: 0x5c4434, belt: 0x5c4434, bareHands: true, extras: ['clayLumps'] },
+  clay3: { name: 'clay3', seed: 33, scale: 1.04, face: 'golem', skin: 0x94705a, skinDark: 0x725444, eyeColor: 0x2a9cff, casual: true, emblem: false, shirt: 0x94705a, pants: 0x725444, boot: 0x725444, belt: 0x725444, bareHands: true, extras: ['clayLumps'] },
+  clay4: { name: 'clay4', seed: 34, scale: 0.98, face: 'golem', skin: 0x846448, skinDark: 0x644a36, eyeColor: 0x2a9cff, casual: true, emblem: false, shirt: 0x846448, pants: 0x644a36, boot: 0x644a36, belt: 0x644a36, bareHands: true, extras: ['clayLumps'] },
+  clay5: { name: 'clay5', seed: 35, scale: 1.02, face: 'golem', skin: 0x8e6c50, skinDark: 0x6c5040, eyeColor: 0x2a9cff, casual: true, emblem: false, shirt: 0x8e6c50, pants: 0x6c5040, boot: 0x6c5040, belt: 0x6c5040, bareHands: true, extras: ['clayLumps'] },
+  clay6: { name: 'clay6', seed: 36, scale: 0.95, face: 'golem', skin: 0x7c6048, skinDark: 0x5e4636, eyeColor: 0x2a9cff, casual: true, emblem: false, shirt: 0x7c6048, pants: 0x5e4636, boot: 0x5e4636, belt: 0x5e4636, bareHands: true, extras: ['clayLumps'] },
   barista: { name: 'barista', seed: 4, hair: 'wavy', hairColor: 0x2b1d14, skin: 0xc98d68, skinDark: 0xb87d5a, eyeColor: 0x2d1a10, casual: true, emblem: false, shirt: 0xf4f1ea, pants: 0x4a3a2c, apron: 0x2f7d4f, boot: 0x2a2420, bareHands: true, sleeves: 'short' },
 };
