@@ -69,6 +69,8 @@ class AISystem {
       npc.lastReaction = 'Stagger (Zombie)';
       return;
     }
+    if (npc.lifeState === 'vampire') { this.game.vampires.onHit(npc, info); return; }
+    if (npc.horror && npc.lifeState === 'alive') { if (this.game.horror) this.game.horror.onHit(npc, info); return; }
     if (npc.lifeState !== 'alive') return;
     npc.fear = clamp(npc.fear + 0.5, 0, 1);
     if (info.dir) b.stagger.copy(info.dir).setY(0).multiplyScalar(clamp((info.force || 4) * 0.12, 0.3, 1.6));
@@ -92,9 +94,11 @@ class AISystem {
       const b = npc.brain; if (!b || b.frozenMove) continue;
       try {
         if (npc.lifeState === 'zombie') this.updateZombie(npc, b, dt);
+        else if (npc.horror && npc.lifeState === 'alive') { if (game.horror) game.horror.think(npc, b, dt); }
         else if (npc.lifeState === 'alive') this.updateAlive(npc, b, dt);
+        else if (npc.lifeState === 'vampire') game.vampires.think(npc, b, dt);
         else { b.state = 'dead'; }
-        if (npc.physMode === 'anim' && (npc.lifeState === 'alive' || npc.lifeState === 'zombie')) this.steer(npc, b, dt);
+        if (npc.physMode === 'anim' && npc.active) this.steer(npc, b, dt);
       } catch (e) { reportError(e, 'ai ' + npc.idStr); }
     }
   }
@@ -126,6 +130,7 @@ class AISystem {
     if (npc.infection && Settings.data.zombies.infection) this.updateInfection(npc, b, dt);
     if (npc.lifeState !== 'alive') return;
     // held by a zombie: struggle (the zombie drives the grapple)
+    if (npc.grabbedBy && npc.grabbedBy.lifeState === 'vampire') { b.state = 'grabbed'; b.speed = 0; b.pending.length = 0; npc.fear = 1; return; }
     if (npc.grabbedBy) {
       b.state = 'grabbed'; b.speed = 0; b.pending.length = 0; npc.fear = 1;
       b.screamT = (b.screamT || 0) - dt;
@@ -153,9 +158,18 @@ class AISystem {
       else if (z && b.state !== 'flee' && b.state !== 'fight') {
         b.threat.copy(z.root.pos); b.hasThreat = true; b.threatNpc = z;
         npc.fear = Math.min(1, npc.fear + 0.4);
-        if (npc.personality.bravery > 0.82 && npc.health > 50) { this.setState(npc, b, 'fight'); npc.lastReaction = 'Defensive (Fight Back)'; }
-        else if (S.flee) { this.setState(npc, b, 'flee'); b.fleeT = 4 + Math.random() * 3; npc.lastReaction = 'Fleeing (Zombie)'; }
+        const kind = z.lifeState === 'vampire' ? 'Vampire' : (z.horror ? z.horror.label : 'Zombie');
+        if (z.lifeState === 'zombie' && npc.personality.bravery > 0.82 && npc.health > 50) { this.setState(npc, b, 'fight'); npc.lastReaction = 'Defensive (Fight Back)'; }
+        else if (S.flee) { this.setState(npc, b, 'flee'); b.fleeT = 4 + Math.random() * 3; npc.lastReaction = 'Fleeing (' + kind + ')'; }
         Events.emit('reaction', { npc, reaction: npc.lastReaction });
+      }
+    }
+    // a vampire player is a threat to everyone nearby
+    if (S.reactions && game.vampires && game.vampires.player.state === 'vampire' && b.state !== 'flee' && b.state !== 'cower') {
+      const cam = game.camera.position, dc = Math.hypot(cam.x - npc.root.pos.x, cam.z - npc.root.pos.z);
+      if (dc < 4.5 && cam.y - npc.root.pos.y < 3) {
+        b.threat.set(cam.x, npc.root.pos.y, cam.z); b.hasThreat = true; b.threatNpc = null; npc.fear = Math.min(1, npc.fear + 0.5);
+        if (S.flee) { this.setState(npc, b, 'flee'); b.fleeT = 4; npc.lastReaction = 'Fleeing (Vampire)'; }
       }
     }
     switch (b.state) {
@@ -194,7 +208,7 @@ class AISystem {
         b.speed = run;
         anim.setPosture('stand'); anim.setUpper(npc.fear > 0.85 && b.t < 1.2 ? 'flail' : 'hang');
         // direction away from threat
-        if (b.threatNpc && b.threatNpc.lifeState === 'zombie') b.threat.copy(b.threatNpc.root.pos);
+        if (b.threatNpc && !b.threatNpc.removed && b.threatNpc.hostile) b.threat.copy(b.threatNpc.root.pos);
         const away = _v1.subVectors(npc.root.pos, b.threat); away.y = 0;
         if (away.lengthSq() < 1e-4) away.set(Math.random() - 0.5, 0, Math.random() - 0.5);
         away.normalize();
@@ -324,6 +338,7 @@ class AISystem {
   }
   pickWander(npc, b) {
     const env = this.game.env.current, bb = env.bounds;
+    if (env.pickWander) return env.pickWander(npc, b);
     const r = Math.min(10, (bb.maxX - bb.minX) * 0.35);
     for (let i = 0; i < 6; i++) {
       const a = Math.random() * TAU, d = 2 + Math.random() * r;
@@ -337,10 +352,13 @@ class AISystem {
     let best = null, bd = r;
     const fx = Math.sin(npc.root.yaw), fz = Math.cos(npc.root.yaw);
     for (const o of this.game.npcs.list) {
-      if (o.lifeState !== 'zombie' || (o.physMode !== 'anim' && !o.anim.crawl)) continue;
+      const vamp = o.lifeState === 'vampire', hor = o.horror && o.lifeState === 'alive';
+      if ((o.lifeState !== 'zombie' && !vamp && !hor) || (o.physMode !== 'anim' && !o.anim.crawl)) continue;
       const dx = o.root.pos.x - npc.root.pos.x, dz = o.root.pos.z - npc.root.pos.z;
       const d = Math.hypot(dx, dz);
       if (d >= bd) continue;
+      if (vamp && o.brain && o.brain.state !== 'vRush' && o.brain.state !== 'vBite' && o.brain.state !== 'vHiss' && d > 2.2) continue; // a stalking vampire goes unnoticed
+      if (hor && o.brain && !o.brain.hunting && d > 2.5) continue;
       const inView = (dx * fx + dz * fz) / Math.max(d, 1e-3) > -0.25;
       if (d < 1.2 || inView || npc.fear > 0.6) { bd = d; best = o; }
     }
@@ -576,7 +594,7 @@ class AISystem {
   selectTarget(npc, Z) {
     const cands = [];
     for (const o of this.game.npcs.list) {
-      if (o.lifeState !== 'alive' || o === npc) continue;
+      if (o.lifeState !== 'alive' || o === npc || o.horror) continue;
       const d = o.root.pos.distanceTo(npc.root.pos);
       if (d <= Z.detection) cands.push({ o, d: d + (o.grabbedBy && o.grabbedBy !== npc ? 2.5 : 0) });
     }
@@ -588,7 +606,7 @@ class AISystem {
   findCorpse(npc, r) {
     let best = null, bd = r;
     for (const o of this.game.npcs.list) {
-      if (o === npc || o.removed || o.lifeState !== 'dead' || o.physMode !== 'ragdoll' || (o.feeders || 0) >= 2) continue;
+      if (o === npc || o.removed || o.lifeState !== 'dead' || o.physMode !== 'ragdoll' || (o.feeders || 0) >= 2 || o.horror || (o.vamp && o.vamp.state !== 'none')) continue;
       const d = o.root.pos.distanceTo(npc.root.pos);
       if (d < bd) { bd = d; best = o; }
     }
@@ -676,6 +694,8 @@ class AISystem {
   }
   endGrab(z) {
     const b = z.brain; if (!b) return;
+    if (b.vVictim) this.game.vampires.endBite(z, 'released');
+    if (z.horror && this.game.horror) this.game.horror.release(z);
     const v = b.victim;
     if (v && z.physMode === 'anim' && z.lifeState === 'zombie') { // let go: stumble back, shake the head, chew
       b.recT = 0.6 + Math.random() * 0.5;
@@ -793,11 +813,12 @@ class AISystem {
   steer(npc, b, dt) {
     const game = this.game, root = npc.root;
     const desired = _v4.set(0, 0, 0);
-    const isZ = npc.lifeState === 'zombie';
+    const isZ = npc.lifeState === 'zombie', isV = npc.lifeState === 'vampire';
     let wantYaw = null;
     if (b.speed > 0.01) {
       let spd = npc.anim.crawl ? Math.min(b.speed, 0.38) : b.speed;
-      desired.subVectors(b.dest, root.pos); desired.y = 0;
+      const envC = game.env.current, goal = envC && envC.navGoal ? envC.navGoal(root.pos, b.dest) : b.dest;
+      desired.subVectors(goal, root.pos); desired.y = 0;
       if (b.destOff && desired.lengthSq() > 1) desired.add(b.destOff);
       const d = desired.length();
       if (d > 0.05) {
@@ -818,6 +839,8 @@ class AISystem {
       if (d2 < minD * minD && d2 > 1e-6) {
         const d = Math.sqrt(d2), push = (minD - d) / minD * 2.2;
         if (isZ && (o === npc.zombieTarget || o === b.victim || o === b.corpse)) continue;
+        if (isV && (o === b.vVictim || o === b.vTarget)) continue;
+        if (b.hTarget === o || b.hVictim === o) continue;
         if (o === npc.grabbedBy) continue;
         desired.x += dx / d * push; desired.z += dz / d * push;
       }
@@ -827,6 +850,12 @@ class AISystem {
       const dx = root.pos.x - p.body.pos.x, dz = root.pos.z - p.body.pos.z;
       const r = p.radius + 0.35, d2 = dx * dx + dz * dz;
       if (d2 < r * r && d2 > 1e-6) { const d = Math.sqrt(d2); desired.x += dx / d * (r - d) * 4; desired.z += dz / d * (r - d) * 4; }
+    }
+    // map fixtures (columns, turnstiles, machines): steer around them instead of grinding into them
+    const envO = game.env.current;
+    if (envO && envO.obstaclesNear) for (const o of envO.obstaclesNear(root.pos.x, root.pos.z)) {
+      const cx = clamp(root.pos.x, o.x0, o.x1), cz = clamp(root.pos.z, o.z0, o.z1), dx = root.pos.x - cx, dz = root.pos.z - cz, d = Math.hypot(dx, dz);
+      if (d < 0.8 && d > 1e-4) { const k = (0.8 - d) / 0.8 * 2.6; desired.x += dx / d * k; desired.z += dz / d * k; }
     }
     // stagger impulse
     if (b.stagger.lengthSq() > 1e-4) {
@@ -846,7 +875,7 @@ class AISystem {
     else if (sp > 0.25 && b.speed > 0.01) targetYaw = Math.atan2(b.vel.x, b.vel.z);
     else if (b.state === 'handsUp') targetYaw = Math.atan2(game.camera.position.x - root.pos.x, game.camera.position.z - root.pos.z);
     if (targetYaw !== null) {
-      const maxTurn = (b.speed > 2.5 ? 4.0 : 1.9) * dt * (isZ ? 0.6 : 1);
+      const maxTurn = (b.speed > 2.5 ? 4.0 : 1.9) * dt * (isZ ? 0.6 : (isV ? 1.5 : (b.turnMul || 1)));
       root.yaw += clamp(wrapAngle(targetYaw - root.yaw), -maxTurn, maxTurn);
     }
     if (b.speed < 0.05) b.faceTarget = b.state === 'zAttack' || b.state === 'fight' ? b.faceTarget : null;

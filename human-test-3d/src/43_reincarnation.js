@@ -221,6 +221,21 @@ class ReincarnationSystem {
     return n;
   }
   cancelAll() { for (const npc of this.game.npcs.list) if (npc.reinc.state === 'pending') npc.reinc.state = 'cancelled'; }
+  // Sandbox "Spawn Zombie": a fresh, already-risen zombie (works whether or not zombie mode is on)
+  spawnZombie(pos) {
+    const g = this.game, n = g.npcs.spawnMany(1, { pose: 'idle', mode: 'crosshair', pos })[0];
+    if (!n) return null;
+    this.zombifyInstant(n);
+    n.spawnKind = 'zombie';
+    return n;
+  }
+  zombifyInstant(n) {
+    if (n.lifeState !== 'alive' || n.physMode !== 'anim') return false;
+    n.setLife('dead', 'spawned zombie'); n.setLife('reanimating', 'spawned zombie');
+    n.reinc.state = 'transforming';
+    n.anim.zstyle = pickZombieGait(); n.anim.zMirror = Math.random() < 0.5 ? 1 : 0; n.anim.zvar = makeZombieVariation();
+    return this.completeTransform(n);
+  }
   makeZombieNow(npc) {
     if (npc.lifeState === 'alive') { npc.applyHit({ region: REGION.TORSO, damage: 9999, weapon: 'sandbox' }); }
     if (npc.lifeState !== 'dead') return;

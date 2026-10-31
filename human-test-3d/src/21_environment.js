@@ -935,7 +935,7 @@ class EnvironmentManager {
   get() { return this.current; }
   load(kind) {
     if (this.current) { this.current.dispose(); }
-    const env = kind === 'field' ? new FieldEnvironment(this.game) : new RoomEnvironment(this.game);
+    const env = kind === 'field' ? new FieldEnvironment(this.game) : (kind === 'subway' ? new SubwayEnvironment(this.game) : new RoomEnvironment(this.game));
     env.build();
     this.game.scene.add(env.group);
     this.current = env;
@@ -946,6 +946,7 @@ class EnvironmentManager {
   groundHeight(x, z) { return this.current ? this.current.groundHeight(x, z) : 0; }
   groundNormal(x, z, out) { return this.current ? this.current.groundNormal(x, z, out) : out.set(0, 1, 0); }
   clampToBounds(p, margin = 0) {
+    if (this.current.clampToBounds) return this.current.clampToBounds(p, margin);
     const b = this.current.bounds;
     p.x = clamp(p.x, b.minX + margin, b.maxX - margin); p.z = clamp(p.z, b.minZ + margin, b.maxZ - margin);
     return p;

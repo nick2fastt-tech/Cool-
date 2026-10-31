@@ -4,10 +4,10 @@
 // ============================================================================
 const MAT = {
   SKIN: 0, COTTON: 1, DENIM: 2, KNIT: 3, LEATHER: 4, RUBBER: 5, HAIR: 6, EYE: 7, LIPS: 8, NYLON: 9,
-  MOUTH: 10, METAL: 11, BROW: 12, TEETH: 13, CANVAS: 14
+  MOUTH: 10, METAL: 11, BROW: 12, TEETH: 13, CANVAS: 14, FANG: 15, MASK: 16
 };
 const PAT = { PLAIN: 0, STRIPES: 1, PLAID: 2, HEATHER: 3, PINSTRIPE: 4, DOTS: 5, FLORAL: 6, RIB: 7 };
-const PATTERN_IDS = { plain: 0, stripes: 1, plaid: 2, heather: 3, pinstripe: 4, dots: 5, floral: 6, knit: 7 };
+const PATTERN_IDS = { plain: 0, stripes: 1, plaid: 2, heather: 3, pinstripe: 4, dots: 5, floral: 6, knit: 7, multistripe: 8 };
 
 class MeshBuilder {
   constructor() {

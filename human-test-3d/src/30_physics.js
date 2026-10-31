@@ -282,6 +282,7 @@ class PhysicsWorld {
     this.gravity = new V3(0, -9.81, 0);
     this.substeps = 8; this.dt = 1 / 60;
     this.planes = []; this.heightfield = null; // fn(x,z)->h, normalFn(x,z,out)
+    this.staticBoxes = null; this.staticGrid = null; this._sbSeen = new Set();
     this.contacts = []; this.contactPool = []; this.pairs = [];
     this.friction = 0.6; this.restitution = 0.1;
     this.npcCollisions = true; this.selfCollisions = true; this.propCollisions = true;
@@ -449,7 +450,7 @@ class PhysicsWorld {
     }
     if (this.heightfield) {
       for (const P of pts) {
-        const hgt = this.heightfield(P.x, P.z);
+        const hgt = this.heightfield(P.x, P.z, P.y - r);
         if (P.y - r - hgt > 0.05) continue;
         const nrm = this.heightNormal(P.x, P.z, _p3);
         const d = nrm.x * P.x + nrm.y * hgt + nrm.z * P.z;
@@ -461,6 +462,42 @@ class PhysicsWorld {
           this.addContact(b, null, p0, p1, nrm.clone());
         }
       }
+    }
+    if (this.staticGrid) this.collideStaticBoxes(b, pts, r);
+  }
+  // static axis-aligned boxes (map walls, slabs, fixtures), found through a 4 m grid
+  setStaticBoxes(list) {
+    this.staticBoxes = list && list.length ? list : null; this.staticGrid = null;
+    if (!this.staticBoxes) return;
+    const G = this.staticGrid = new Map();
+    for (const bx of list) for (let ix = Math.floor(bx.min.x / 4); ix <= Math.floor(bx.max.x / 4); ix++) for (let iz = Math.floor(bx.min.z / 4); iz <= Math.floor(bx.max.z / 4); iz++) {
+      const k = ix * 4099 + iz; let l = G.get(k); if (!l) G.set(k, l = []); l.push(bx);
+    }
+  }
+  staticBoxesNear(min, max, out) {
+    out.length = 0; const seen = this._sbSeen; seen.clear();
+    for (let ix = Math.floor(min.x / 4); ix <= Math.floor(max.x / 4); ix++) for (let iz = Math.floor(min.z / 4); iz <= Math.floor(max.z / 4); iz++) {
+      const l = this.staticGrid.get(ix * 4099 + iz); if (!l) continue;
+      for (const bx of l) { if (seen.has(bx)) continue; seen.add(bx); if (max.x < bx.min.x || min.x > bx.max.x || max.y < bx.min.y || min.y > bx.max.y || max.z < bx.min.z || min.z > bx.max.z) continue; out.push(bx); }
+    }
+    return out;
+  }
+  collideStaticBoxes(b, pts, r) {
+    const near = this.staticBoxesNear(b.aabbMin, b.aabbMax, this._sbNear || (this._sbNear = []));
+    for (const bx of near) for (const P of pts) {
+      const cx = clamp(P.x, bx.min.x, bx.max.x), cy = clamp(P.y, bx.min.y, bx.max.y), cz = clamp(P.z, bx.min.z, bx.max.z);
+      let nx = P.x - cx, ny = P.y - cy, nz = P.z - cz, d2 = nx * nx + ny * ny + nz * nz, depth;
+      const n = _p3;
+      if (d2 > 1e-12) { if (d2 >= r * r) continue; const d = Math.sqrt(d2); n.set(nx / d, ny / d, nz / d); depth = r - d; }
+      else { // centre inside: push out through the nearest face
+        const f = [P.x - bx.min.x, bx.max.x - P.x, P.y - bx.min.y, bx.max.y - P.y, P.z - bx.min.z, bx.max.z - P.z];
+        let k = 0; for (let i = 1; i < 6; i++) if (f[i] < f[k]) k = i;
+        n.set(k === 0 ? -1 : k === 1 ? 1 : 0, k === 2 ? -1 : k === 3 ? 1 : 0, k === 4 ? -1 : k === 5 ? 1 : 0); depth = f[k] + r;
+      }
+      b.touchT = this.time;
+      const p0 = _p5.copy(P).addScaledVector(n, -r);
+      const p1 = _p6.copy(p0).addScaledVector(n, depth);
+      this.addContact(b, null, p0, p1, n.clone());
     }
   }
   collidePair(b0, b1) {

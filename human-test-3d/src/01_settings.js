@@ -18,10 +18,10 @@ const DEFAULT_SETTINGS = {
   audio: { master: 0.8, effects: 0.9, ambience: 0.55, ui: 0.6, muted: false },
   physics: {
     gravity: 9.81, forceScale: 1.0, massScale: 1.0, friction: 0.65, bounciness: 0.1,
-    npcCollisions: true, selfCollisions: true, propCollisions: true, substeps: 8, muscleTone: 0.35, paused: false
+    npcCollisions: true, selfCollisions: true, propCollisions: true, substeps: 8, muscleTone: 0.35, paused: false, looseAccessories: true
   },
   ai: { enabled: true, reactions: true, flee: true, wander: true, lookAt: true, reactionVariance: 1.0, wanderRate: 0.5 },
-  vampires: { enabled: true, turning: true, turnTime: 14, targetPlayer: true, speed: 1.0, detection: 22, biteDamage: 14 },
+  vampires: { enabled: true, turning: true, turnTime: 14, targetPlayer: true, speed: 1.0, detection: 22, biteDamage: 14, pallor: 0.85, glowEyes: true, fangs: true },
   horror: { enabled: true, damage: 1.0 },
   zombies: {
     reincarnation: true, delayPreset: 'short', delay: 5, headTraumaPrevents: true,

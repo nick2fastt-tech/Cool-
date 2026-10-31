@@ -284,6 +284,77 @@ class AudioEngine {
           L[i] = Math.tanh((thump + hiss) * 1.4); }
         this.finish('rocketLaunch', b, 0.9); }
       this.synthVoice('gurgle', { dur: 0.9, f0: 90, slide: -0.2, jitter: 0.6, breath: 0.9, formants: [[400, 3, 1], [900, 4, 0.5], [2200, 5, 0.2]], drive: 2.5, seed: 15, norm: 0.55 });
+    } else if (group === 7) {
+      // supernatural: vampire hiss, heartbeat, the turning swell, crumbling to ash
+      { const b = this.buf(1.0), L = b.L; const hp = new Biquad('hp', 2300, 0.7, sr), bp = new Biquad('bp', 3400, 2.2, sr), lp = new Biquad('lp', 30, 0.7, sr);
+        for (let i = 0; i < L.length; i++) { const t = i / sr, n = this.noise(); const rasp = 0.6 + 0.4 * Math.abs(lp.p(this.noise()) * 40);
+          const env = Math.min(1, t / 0.04) * Math.exp(-Math.max(0, t - 0.45) / 0.18);
+          L[i] = (hp.p(n) * 0.7 + bp.p(n) * 1.1) * env * rasp; }
+        this.finish('hiss', b, 0.75); }
+      { const b = this.buf(0.62), L = b.L; const lp = new Biquad('lp', 120, 0.8, sr);
+        const beat = (t, t0, f, g) => { const u = t - t0; if (u < 0) return 0; return (Math.sin(TAU * f * u * (1 + 0.4 * Math.exp(-u / 0.02))) * Math.exp(-u / 0.07) + lp.p(this.noise()) * 6 * Math.exp(-u / 0.04)) * g; };
+        for (let i = 0; i < L.length; i++) { const t = i / sr; L[i] = Math.tanh((beat(t, 0, 52, 1) + beat(t, 0.27, 46, 0.75)) * 1.6); }
+        this.finish('heartbeat', b, 0.9); }
+      { const b = this.buf(2.8, 2); let p1 = 0, p2 = 0, p3 = 0;
+        for (let i = 0; i < b.L.length; i++) { const t = i / sr, u = t / 2.8;
+          if (i % 64 === 0) { const fc = 150 + 2400 * Math.pow(u, 2.2); this._vlp = new Biquad('lp', fc, 1.6, sr); this._vlp2 = new Biquad('lp', fc * 1.07, 1.6, sr); this._vbp = new Biquad('bp', 600 + 3000 * u, 1.3, sr); }
+          p1 = (p1 + 55 / sr) % 1; p2 = (p2 + 55.7 / sr) % 1; p3 = (p3 + 82.4 / sr) % 1;
+          const swell = Math.pow(Math.sin(Math.PI * Math.min(1, u * 1.15)), 1.5);
+          const drone = ((p1 * 2 - 1) + (p2 * 2 - 1) * 0.8 + (p3 * 2 - 1) * 0.5);
+          const rush = this._vbp.p(this.noise()) * smoothstep(0.2, 0.85, u) * (1 - smoothstep(0.9, 1, u)) * 1.4;
+          b.L[i] = Math.tanh((this._vlp.p(drone) + rush) * swell * 1.3);
+          b.R[i] = Math.tanh((this._vlp2.p(drone * 0.95) + rush * 0.9) * swell * 1.3); }
+        this.finish('vampTurn', b, 0.8); }
+      { const b = this.buf(2.2), L = b.L; const lp = new Biquad('lp', 260, 0.8, sr); let ph = 0;
+        for (let i = 0; i < L.length; i++) { const t = i / sr, n = this.noise();
+          if (i % 64 === 0) this._abp = new Biquad('bp', 2600 * Math.exp(-t * 0.9) + 300, 0.9, sr);
+          ph += TAU * (58 + 30 * Math.exp(-t / 0.05)) / sr;
+          const crackle = this.rng.next() < 0.012 * Math.exp(-t / 0.9) ? this.noise() * 2.5 : 0;
+          const whoosh = this._abp.p(n) * Math.exp(-t / 0.8) * (1 - Math.exp(-t / 0.05)) * 1.2;
+          L[i] = Math.tanh(Math.sin(ph) * Math.exp(-t / 0.12) * 1.1 + lp.p(n) * Math.exp(-t / 0.1) * 1.5 + whoosh + crackle); }
+        this.finish('ashBurst', b, 0.85); }
+      // horror: a doll's nasty little laugh, heavy boots
+      { const b = this.buf(1.3), L = b.L; const F = [[620, 4, 1], [1750, 6, 0.6], [2700, 7, 0.35]].map(f => [new Biquad('bp', f[0], f[1], sr), f[2]]); let ph = 0;
+        for (let i = 0; i < L.length; i++) { const t = i / sr; const k = Math.floor(t / 0.16), u = (t % 0.16) / 0.16;
+          if (k > 6) { L[i] = 0; continue; }
+          const f0 = (430 - k * 22) * (1 + 0.15 * (1 - u)) * (1 + 0.03 * Math.sin(t * 40));
+          ph += f0 / sr; if (ph > 1) ph -= 1;
+          const env = Math.sin(Math.PI * Math.min(1, u / 0.7)) ** 1.5 * (u < 0.7 ? 1 : 0) * (1 - k * 0.08);
+          const src = (ph * 2 - 1) * 0.8 + this.noise() * 0.35 * (u < 0.15 ? 2 : 0.4);
+          let sum = 0; for (const [bq, gn] of F) sum += bq.p(src) * gn;
+          L[i] = Math.tanh(sum * env * 2.2); }
+        this.finish('dollLaugh', b, 0.7); }
+      this.synthThud('heavyStep', { lp: 220, t: 0.09, f: 48, t2: 0.12, sub: 1.2, click: 0.25, dur: 0.4, norm: 0.9 });
+      // subway: station hum, trains arriving / leaving, door chime and slide
+      this.synthLoop('subwayHum', 6, (b) => { for (const [arr, o] of [[b.L, 0], [b.R, 1.3]]) { const lp = new Biquad('lp', 110, 0.7, sr), bp = new Biquad('bp', 520, 0.8, sr); let br = 0; for (let i = 0; i < arr.length; i++) { const t = i / sr; br = (br + this.noise() * 0.04) * 0.996; arr[i] = lp.p(br * 9) * 0.9 + bp.p(this.noise()) * (0.12 + 0.06 * Math.sin(t * 0.7 + o)) + Math.sin(TAU * 60 * t) * 0.02; } } }, true);
+      const clatter = (t, rate) => { const ph = (t * rate) % 1; return (ph < 0.02 ? 1 : 0) + (ph > 0.12 && ph < 0.14 ? 0.7 : 0); };
+      { const D = 7.5, b = this.buf(D), L = b.L; const lp = new Biquad('lp', 140, 0.7, sr), bp = new Biquad('bp', 1600, 3, sr); let br = 0, ph = 0, cr = 0;
+        for (let i = 0; i < L.length; i++) { const t = i / sr, u = t / D;
+          br = (br + this.noise() * 0.05) * 0.995;
+          const loud = smoothstep(0, 0.55, u) * (1 - smoothstep(0.9, 1, u));
+          const rate = lerp(5.5, 0.6, smoothstep(0.2, 0.85, u));
+          cr = cr * 0.995 + clatter(t, rate) * 0.2;
+          const sq = smoothstep(0.6, 0.68, u) * (1 - smoothstep(0.83, 0.88, u));
+          ph += TAU * (2850 + 60 * Math.sin(t * 31)) / sr;
+          const hiss = t > D * 0.87 ? bp.p(this.noise()) * Math.exp(-(t - D * 0.87) / 0.4) * 1.2 : 0;
+          L[i] = Math.tanh((lp.p(br * 12) * 1.4 + bp.p(this.noise() * cr) * 2) * loud + Math.sin(ph) * sq * 0.35 + hiss); }
+        this.finish('trainArrive', b, 0.85); }
+      { const D = 7.5, b = this.buf(D), L = b.L; const lp = new Biquad('lp', 140, 0.7, sr), bp = new Biquad('bp', 1500, 3, sr); let br = 0, ph = 0, ph2 = 0, cr = 0;
+        for (let i = 0; i < L.length; i++) { const t = i / sr, u = t / D;
+          br = (br + this.noise() * 0.05) * 0.995;
+          const loud = smoothstep(0, 0.15, u) * (1 - smoothstep(0.55, 1, u));
+          const f = lerp(240, 880, smoothstep(0.05, 0.75, u)); ph += TAU * f / sr; ph2 += TAU * f * 1.5 / sr;
+          cr = cr * 0.995 + clatter(t, lerp(0.6, 6, smoothstep(0.1, 0.8, u))) * 0.2;
+          L[i] = Math.tanh((lp.p(br * 12) * 1.3 + bp.p(this.noise() * cr) * 2 + (Math.sin(ph) * 0.18 + Math.sin(ph2) * 0.08) * smoothstep(0.02, 0.2, u)) * loud); }
+        this.finish('trainDepart', b, 0.85); }
+      { const b = this.buf(1.3), L = b.L;
+        for (let i = 0; i < L.length; i++) { const t = i / sr; let v = 0;
+          for (const [f0, t0] of [[784, 0], [659, 0.42]]) { const u = t - t0; if (u > 0) v += (Math.sin(TAU * f0 * u) + 0.35 * Math.sin(TAU * f0 * 2.01 * u) + 0.12 * Math.sin(TAU * f0 * 3.02 * u)) * Math.exp(-u / 0.5) * (1 - Math.exp(-u / 0.004)); }
+          L[i] = v; }
+        this.finish('doorChime', b, 0.6); }
+      { const b = this.buf(0.9), L = b.L; const bp = new Biquad('bp', 900, 1, sr), lp = new Biquad('lp', 200, 0.8, sr);
+        for (let i = 0; i < L.length; i++) { const t = i / sr; L[i] = bp.p(this.noise()) * Math.exp(-t / 0.3) * (1 - Math.exp(-t / 0.02)) * 0.8 + lp.p(this.noise()) * 3 * Math.exp(-Math.max(0, t - 0.6) / 0.05) * (t > 0.6 ? 1 : 0); }
+        this.finish('doorSlide', b, 0.6); }
     }
   }
   // --- playback -------------------------------------------------------------------------
@@ -339,8 +410,8 @@ class AudioEngine {
   setEnvironment(kind) {
     if (!this.ctx) return;
     this.envKind = kind;
-    try { this.reverb.buffer = this.makeIR(kind); } catch (e) { reportError(e, 'reverb'); }
-    this.reverbGain.gain.value = kind === 'room' ? 0.42 : 0.12;
+    try { this.reverb.buffer = this.makeIR(kind === 'field' ? 'field' : 'room'); } catch (e) { reportError(e, 'reverb'); }
+    this.reverbGain.gain.value = kind === 'room' ? 0.42 : (kind === 'subway' ? 0.5 : 0.12);
     if (this.unlocked) this.startAmbience();
   }
   startLoadingDrone() { if (!this.drone && this.buffers.drone) this.drone = this.loop('drone', 0.35, 'ui'); }
@@ -351,6 +422,7 @@ class AudioEngine {
     this.ambience = {};
     const env = this.game.env.current; if (!env) return;
     if (env.kind === 'room') this.ambience.hum = this.loop('roomHum', 0.32);
+    else if (env.kind === 'subway') { this.ambience.hum = this.loop('subwayHum', 0.45); this.ambience.city = this.loop('wind', 0.08); }
     else {
       this.ambience.wind = this.loop('wind', 0.2 + Settings.data.environment.field.wind * 0.5);
       if (Settings.data.environment.field.weather === 'rain') this.ambience.rain = this.loop('rain', 0.45);

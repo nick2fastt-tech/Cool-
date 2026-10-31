@@ -409,14 +409,30 @@ class Weapons {
       const t = (pl.d - pl.n.dot(o)) / den;
       if (t >= 0 && t < bt) { bt = t; best = { dist: t, normal: pl.n.clone() }; }
     }
+    if (ph.staticBoxes) { // map walls and fixtures (slab test)
+      for (const bx of ph.staticBoxes) {
+        let t0 = 0, t1 = bt, nAx = -1, nSg = 0;
+        for (let ax = 0; ax < 3; ax++) {
+          const oc = ax === 0 ? o.x : ax === 1 ? o.y : o.z, dc = ax === 0 ? d.x : ax === 1 ? d.y : d.z;
+          const mn = ax === 0 ? bx.min.x : ax === 1 ? bx.min.y : bx.min.z, mx = ax === 0 ? bx.max.x : ax === 1 ? bx.max.y : bx.max.z;
+          if (Math.abs(dc) < 1e-9) { if (oc < mn || oc > mx) { t0 = 1e9; break; } continue; }
+          let ta = (mn - oc) / dc, tb = (mx - oc) / dc, sg = -1;
+          if (ta > tb) { const tmp = ta; ta = tb; tb = tmp; sg = 1; }
+          if (ta > t0) { t0 = ta; nAx = ax; nSg = sg; }
+          if (tb < t1) t1 = tb;
+          if (t0 > t1) { t0 = 1e9; break; }
+        }
+        if (t0 < bt && t0 > 0 && nAx >= 0) { bt = t0; best = { dist: t0, normal: new V3(nAx === 0 ? nSg : 0, nAx === 1 ? nSg : 0, nAx === 2 ? nSg : 0) }; }
+      }
+    }
     if (ph.heightfield) {
       const step = 0.2; let prevT = 0;
       for (let t = step; t <= bt + step; t += step) {
         const tt = Math.min(t, bt);
         const x = o.x + d.x * tt, y = o.y + d.y * tt, z = o.z + d.z * tt;
-        if (y <= ph.heightfield(x, z)) {
+        if (y <= ph.heightfield(x, z, y)) {
           let lo = prevT, hi = tt;
-          for (let k = 0; k < 10; k++) { const m = (lo + hi) / 2; if (o.y + d.y * m <= ph.heightfield(o.x + d.x * m, o.z + d.z * m)) hi = m; else lo = m; }
+          for (let k = 0; k < 10; k++) { const m = (lo + hi) / 2, my = o.y + d.y * m; if (my <= ph.heightfield(o.x + d.x * m, o.z + d.z * m, my)) hi = m; else lo = m; }
           bt = hi; best = { dist: hi, normal: ph.heightNormal(o.x + d.x * hi, o.z + d.z * hi, new V3()).clone() };
           break;
         }
@@ -475,6 +491,10 @@ class Weapons {
         const d = f.clone().addScaledVector(r, off).normalize();
         const h = g.hits.raycastNPCs(o, d, t.range, null);
         if (h && (!best || h.dist < best.dist)) { best = h; best.dir = d; }
+      }
+      // a vampire player bites instead of cutting
+      if (best && g.vampires && g.vampires.player.state === 'vampire' && best.npc.lifeState === 'alive' && best.dist < 1.6) {
+        g.vampires.playerBite(best.npc); g.ui.hitMarker(false); return;
       }
       if (best) {
         const npc = best.npc;
@@ -618,8 +638,9 @@ class Weapons {
       const region = g.hits.closestRegion(npc, pos);
       const dir = _v1.subVectors(npc.boneWPos[B.chest], pos).normalize();
       const res = npc.applyHit({ region, damage: t.damage * f / REGION_DAMAGE_MUL[region], weapon: t.id, dir: dir.clone(), point: pos.clone(), force: strength * f, threatPos: pos.clone() });
+      if (g.accessories) g.accessories.onBlast(npc, pos, f);
       if (f > 0.12 || res.killed || npc.physMode === 'ragdoll') {
-        if (npc.physMode !== 'ragdoll') npc.goRagdoll(res.killed ? 'Ragdoll (Deceased)' : 'Knockdown (Blast)', npc.lifeState !== 'alive' && npc.lifeState !== 'zombie');
+        if (npc.physMode !== 'ragdoll') npc.goRagdoll(res.killed ? 'Ragdoll (Deceased)' : 'Knockdown (Blast)', !npc.active);
         npc.downTimer = Math.max(npc.downTimer, 2 + f * 2);
       } else {
         g.ai.onHit(npc, { region, dir: dir.clone(), force: 6, threatPos: pos.clone() });
@@ -662,7 +683,7 @@ class Weapons {
     let npc = null;
     if (b.tag === 'npc') {
       npc = b.owner.npc;
-      if (npc.physMode !== 'ragdoll') npc.goRagdoll('Grabbed (Physics Hand)', npc.lifeState !== 'alive' && npc.lifeState !== 'zombie');
+      if (npc.physMode !== 'ragdoll') npc.goRagdoll('Grabbed (Physics Hand)', !npc.active);
       npc.carried = true;
       npc.lastReaction = npc.lifeState === 'alive' ? 'Grabbed (Struggling)' : 'Grabbed';
     }

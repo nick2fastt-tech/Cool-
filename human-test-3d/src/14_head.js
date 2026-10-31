@@ -142,6 +142,7 @@ function hairlineY(app, phi) {
 function buildHead(mb, app, rig, Q) {
   const P = makeHeadShape(app, rig);
   const sdf = P.sdf;
+  rig.headSdf = sdf; // head-local SDF (metres at sHead = 1), used to fit hats
   const S = rig.sHead, HC = rig.headCenter;
   const skinBase = C(app.skin.hex);
   const skinMat = [MAT.SKIN, 0.5, 0, 1];
@@ -253,7 +254,9 @@ function buildHead(mb, app, rig, Q) {
     return { c, lm };
   };
   const jawW = (x, y, z) => {
-    const below = smoothstep(P.mouthYScaled - 0.002, P.mouthYScaled - 0.016, y);
+    // the whole lower lip rides with the jaw; out on the cheeks the skin stretches more gradually
+    const lat = smoothstep(P.mouthHalf * 0.8, P.mouthHalf * 1.6, Math.abs(x));
+    const below = lerp(smoothstep(P.mouthYScaled + 0.0005, P.mouthYScaled - 0.0035, y), smoothstep(P.mouthYScaled - 0.002, P.mouthYScaled - 0.016, y), lat);
     const front = smoothstep(-0.04, 0.0, z);
     const under = 1 - smoothstep(-0.085, -0.115, y) * (1 - smoothstep(0.02, 0.05, z)) * 0.6;
     return clamp(below * front * under, 0, 1);
@@ -277,7 +280,8 @@ function buildHead(mb, app, rig, Q) {
       const [x, y, z, phi] = row[c];
       toChar(x, y, z, vp);
       const { c: col, lm } = vtxColor(x, y, z);
-      const mat = lm > 0.5 ? [MAT.LIPS, 0.38, 0, 1] : skinMat;
+      // lips stay MAT.SKIN (no material-id seam); aMat.z carries a smooth lip factor for the shader
+      const mat = lm > 0.01 ? [MAT.SKIN, lerp(0.5, 0.38, lm), lm, 1] : skinMat;
       const u = phi * 0.1 * S, v = rows[r] * 0.1 * S;
       let w;
       const inMouth = r === mouthRow && Math.abs(x) < P.mouthHalf * 0.96 && z > 0.06;
@@ -351,6 +355,7 @@ function buildHead(mb, app, rig, Q) {
   }
   // ---- hair
   buildHair(mb, app, rig, grid, Q);
+  if (app.mask) buildMask(mb, app, rig, P);
   return grid;
 }
 
@@ -460,6 +465,53 @@ function buildNeck(mb, app, rig, P, Q) {
   addLoft(mb, rings, Q.limbCols + 2);
 }
 
+// Hockey-style mask (fan-made slasher): a moulded shell over the face. Radii come from rays against the
+// head SDF, max-filtered (bridges nose and lips) and blurred, then pushed out a few millimetres. The oval
+// outline is in the geometry; eye openings, breathing holes and red chevrons are drawn by the shader
+// (uv = view angles; aColor2 carries the eye-opening position).
+function buildMask(mb, app, rig, P) {
+  const S = rig.sHead, HC = rig.headCenter, sdf = P.sdf;
+  const nA = 18, nB = 20, aMax = 1.08, bTop = 1.02, bBot = -1.02, bc = (bTop + bBot) / 2, bh = (bTop - bBot) / 2;
+  const dirOf = (a, b, out) => out.set(Math.sin(a) * Math.cos(b), Math.sin(b), Math.cos(a) * Math.cos(b));
+  const G = [], A = [];
+  const v = new V3();
+  for (let i = 0; i <= nB; i++) {
+    const b = lerp(bTop, bBot, i / nB), aw = aMax * Math.sqrt(Math.max(0.03, 1 - ((b - bc) / bh) ** 2));
+    const row = [], arow = [];
+    for (let j = 0; j <= nA; j++) {
+      const a = lerp(-aw, aw, j / nA);
+      dirOf(a, b, v);
+      row.push(projectRay(sdf, 0, 0.004, 0, v.x, v.y, v.z, 0.22));
+      arow.push(a);
+    }
+    G.push(row); A.push(arow);
+  }
+  const filt = (src, rad, fn) => src.map((row, i) => row.map((_, j) => {
+    const vals = [];
+    for (let di = -rad; di <= rad; di++) for (let dj = -rad; dj <= rad; dj++) { const r = src[i + di]; if (r && r[j + dj] != null) vals.push(r[j + dj]); }
+    return fn(vals);
+  }));
+  let R = filt(G, 2, (vs) => Math.max(...vs));
+  R = filt(R, 1, (vs) => vs.reduce((x, y) => x + y, 0) / vs.length);
+  const eyeA = Math.atan2(P.eye.x, P.eye.z), eyeB = Math.atan2(P.eye.y - 0.004, Math.hypot(P.eye.x, P.eye.z));
+  const col = C(0xdcd8cc), col2 = { r: eyeA, g: eyeB, b: 0 };
+  const mat = [MAT.MASK, 0.45, 0, 1], wts = [[B.head, 1]];
+  mb.beginPart();
+  const st = mb.I.length, base = mb.n;
+  for (let i = 0; i <= nB; i++) {
+    const b = lerp(bTop, bBot, i / nB);
+    for (let j = 0; j <= nA; j++) {
+      const a = A[i][j];
+      dirOf(a, b, v);
+      const r = R[i][j] + 0.0065 + 0.004 * (1 - Math.cos(a));
+      mb.v(HC.x + v.x * r * S, HC.y + (0.004 + v.y * r) * S, HC.z + v.z * r * S, a, b, col, mat, col2, wts, REGION.HEAD);
+    }
+  }
+  for (let i = 0; i < nB; i++) for (let j = 0; j < nA; j++) { const q = base + i * (nA + 1) + j; mb.quad(q, q + 1, q + nA + 2, q + nA + 1); }
+  orientPartOutward(mb, st, new V3(HC.x, HC.y, HC.z - 0.02 * S));
+  mb.endPart();
+}
+
 function buildMouthInside(mb, app, rig, P) {
   const S = rig.sHead, HC = rig.headCenter;
   const dark = C(0x2a0c0c), teeth = C(0xe9e4d6);
@@ -488,6 +540,23 @@ function buildMouthInside(mb, app, rig, P) {
     }
     for (let i = 0; i < n; i++) mb.quad(base + i * 2, base + i * 2 + 1, base + i * 2 + 3, base + i * 2 + 2);
     orientPartOutward(mb, st, new V3(HC.x, HC.y + y0 * S, HC.z + 0.04 * S));
+    mb.endPart();
+  }
+  // fangs (everyone has them hidden behind the upper lip; the shader extends them for vampires:
+  // aMat.w on the tip = how far it grows, in metres)
+  const fangCol = C(0xf2eee2), y0 = P.mouthYScaled + 0.0025;
+  for (const sg of [1, -1]) {
+    const a = sg * 0.56, r = 0.0213;
+    const fx = Math.sin(a) * r, fz = 0.0655 + Math.cos(a) * r * 0.85 + 0.001;
+    mb.beginPart();
+    const st = mb.I.length, base = mb.n, n = 6, rad = 0.0025;
+    for (let i = 0; i < n; i++) {
+      const t = i / n * TAU;
+      mb.v(HC.x + (fx + Math.cos(t) * rad) * S, HC.y + (y0 + 0.002) * S, HC.z + (fz + Math.sin(t) * rad * 0.8) * S, i / n, 0, fangCol, [MAT.FANG, 0.3, 0, 0], fangCol, [[B.head, 1]], REGION.HEAD);
+    }
+    const tip = mb.v(HC.x + fx * S, HC.y + (y0 - 0.0005) * S, HC.z + (fz + 0.0006) * S, 0.5, 1, fangCol, [MAT.FANG, 0.3, 0, 0.0085 * S], fangCol, [[B.head, 1]], REGION.HEAD);
+    for (let i = 0; i < n; i++) mb.tri(base + i, base + (i + 1) % n, tip);
+    orientPartOutward(mb, st, new V3(HC.x + fx * S, HC.y + (y0 + 0.004) * S, HC.z + fz * S));
     mb.endPart();
   }
 }

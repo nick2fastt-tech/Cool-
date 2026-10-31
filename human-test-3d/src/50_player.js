@@ -166,7 +166,7 @@ class Player {
     if (inp.touch.move.lengthSq() > 0.01) { mv.addScaledVector(fwd, inp.touch.move.y); mv.addScaledVector(rgt, inp.touch.move.x); }
     let up = 0;
     if (k.Space || k.KeyE || inp.touch.up) up += 1; if (k.ControlLeft || k.KeyQ || k.KeyC || inp.touch.down) up -= 1;
-    const speed = (k.ShiftLeft || k.ShiftRight ? 9 : 4.2) * (this.aiming ? 0.5 : 1);
+    const speed = (k.ShiftLeft || k.ShiftRight ? 9 : 4.2) * (this.aiming ? 0.5 : 1) * (this.game.vampires ? this.game.vampires.playerSpeedMul : 1);
     if (mv.lengthSq() > 1) mv.normalize();
     const target = _v4.copy(mv).multiplyScalar(speed); target.y = up * speed * 0.7;
     this.vel.x = damp(this.vel.x, target.x, 10, dt); this.vel.y = damp(this.vel.y, target.y, 10, dt); this.vel.z = damp(this.vel.z, target.z, 10, dt);
@@ -174,7 +174,8 @@ class Player {
     p.addScaledVector(this.vel, dt);
     // stay inside environment
     const env = game.env.current;
-    if (env) {
+    if (env && env.constrainCamera) env.constrainCamera(p, this._prevCam || (this._prevCam = p.clone()));
+    else if (env) {
       const b = env.bounds;
       p.x = clamp(p.x, b.minX - 0.3, b.maxX + 0.3); p.z = clamp(p.z, b.minZ - 0.3, b.maxZ + 0.3);
       const gy = game.env.groundHeight(p.x, p.z) + 0.25;
@@ -182,6 +183,7 @@ class Player {
       const maxY = env.kind === 'room' ? env.Ht - 0.3 : 60;
       if (p.y > maxY) p.y = maxY;
     }
+    if (this._prevCam) this._prevCam.copy(p);
     // recoil + shake
     this.recoil = damp(this.recoil, 0, 9, dt); this.recoilYaw = damp(this.recoilYaw, 0, 9, dt);
     this.shake = Math.max(0, this.shake - dt * 2.2);

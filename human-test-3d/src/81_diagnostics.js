@@ -54,7 +54,7 @@ class Diagnostics {
     this.panelT = 0.25;
     const pr = g.prof, info = g.renderer.info, ph = g.physics.stats;
     const L = g.npcs.list;
-    const counts = { alive: 0, dead: 0, zombie: 0, reanimating: 0, destroyed: 0 };
+    const counts = { alive: 0, dead: 0, zombie: 0, reanimating: 0, destroyed: 0, vampire: 0 };
     let rag = 0, sleeping = 0, pend = 0;
     for (const n of L) { counts[n.lifeState]++; if (n.physMode === 'ragdoll') { rag++; if (n.rag.asleep) sleeping++; } if (n.reinc.state === 'pending') pend++; }
     const mem = performance.memory ? (performance.memory.usedJSHeapSize / 1048576).toFixed(0) + ' MB' : 'n/a';

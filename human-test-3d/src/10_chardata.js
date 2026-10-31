@@ -83,6 +83,7 @@ const CHAR_DATA = {
     blazer: { label: 'Blazer', sleeve: 'long', neck: 'lapel', thick: 0.015, mat: 'wool', hem: 'low', buttons: true, patterns: ['plain', 'plain', 'pinstripe'] },
     blouse: { label: 'Blouse', sleeve: 'long', neck: 'v', thick: 0.006, mat: 'silk', hem: 'tucked', patterns: ['plain', 'dots', 'plain'] },
     labcoat: { label: 'Lab Coat', sleeve: 'long', neck: 'lapel', thick: 0.012, mat: 'cotton', hem: 'coat', buttons: true, patterns: ['plain'] },
+    longcoat: { label: 'Long Coat', sleeve: 'long', neck: 'lapel', thick: 0.016, mat: 'wool', hem: 'coat', buttons: true, patterns: ['plain'] },
     dress: { label: 'Dress', sleeve: 'short', neck: 'crew', thick: 0.006, mat: 'cotton', hem: 'dress', patterns: ['plain', 'dots', 'floral', 'plain'] }
   },
   bottoms: {
@@ -124,7 +125,10 @@ const OUTFIT_TEMPLATES = [
   { name: 'Lab Staff', w: 0.6, top: ['labcoat'], bottom: ['trousers', 'chinos'], shoes: ['loafers', 'sneakers'] },
   { name: 'Dress', w: 1.6, female: true, top: ['dress'], bottom: [null], shoes: ['flats', 'flats', 'sneakers', 'boots'] },
   { name: 'Skirt Outfit', w: 1.4, female: true, top: ['blouse', 'tshirt', 'sweater'], bottom: ['skirt', 'longskirt'], shoes: ['flats', 'boots', 'sneakers'] },
-  { name: 'Athleisure', w: 1.2, female: true, top: ['hoodie', 'longsleeve', 'sweater'], bottom: ['leggings'], shoes: ['runners', 'sneakers'] }
+  { name: 'Athleisure', w: 1.2, female: true, top: ['hoodie', 'longsleeve', 'sweater'], bottom: ['leggings'], shoes: ['runners', 'sneakers'] },
+  // never picked at random: dark, sharp clothes for spawned vampires
+  { name: 'Vampire', w: 0, dark: true, top: ['longcoat', 'longcoat', 'blazer', 'leather', 'shirt'], bottom: ['trousers', 'trousers', 'jeans'], shoes: ['dress', 'boots', 'boots'],
+    femaleTop: ['longcoat', 'blouse', 'dress', 'leather'], femaleBottom: ['trousers', 'longskirt', 'leggings'], femaleShoes: ['boots', 'boots', 'flats'] }
 ];
 
 function pickWeighted(rng, arr) { return rng.weighted(arr.map(e => [e.w != null ? e.w : 1, e])); }
@@ -197,14 +201,15 @@ function generateAppearance(seed, ov = {}) {
   };
 
   // outfit -----------------------------------------------------------------------
-  let templates = OUTFIT_TEMPLATES.filter(t => !t.female || !male);
+  let templates = OUTFIT_TEMPLATES.filter(t => (!t.female || !male) && t.w > 0);
   let tpl = ov.outfit && ov.outfit !== 'random' ? (OUTFIT_TEMPLATES.find(t => t.name === ov.outfit) || null) : null;
   if (tpl && tpl.female && male) tpl = null;
   if (!tpl) tpl = rng.weighted(templates.map(t => [t.w, t]));
-  const topType = ov.top || rng.pick(tpl.top);
-  let bottomType = ov.bottom !== undefined ? ov.bottom : rng.pick(tpl.bottom);
+  const fem = !male && tpl.femaleTop;
+  const topType = ov.top || rng.pick(fem ? tpl.femaleTop : tpl.top);
+  let bottomType = ov.bottom !== undefined ? ov.bottom : rng.pick(fem ? tpl.femaleBottom : tpl.bottom);
   if (topType === 'dress') bottomType = null;
-  const shoeType = ov.shoes || rng.pick(tpl.shoes);
+  const shoeType = ov.shoes || rng.pick(fem ? tpl.femaleShoes : tpl.shoes);
   const topDef = CHAR_DATA.tops[topType];
   const top = {
     type: topType, def: topDef,
@@ -213,7 +218,7 @@ function generateAppearance(seed, ov = {}) {
     pattern: rng.pick(topDef.patterns),
     under: null
   };
-  if (topType === 'blazer' || topType === 'labcoat' || topType === 'jacket' || topType === 'leather') {
+  if (topType === 'blazer' || topType === 'labcoat' || topType === 'longcoat' || topType === 'jacket' || topType === 'leather') {
     top.under = { color: rng.pick([0xf2f2ee, 0xe6e9ef, 0xdfe7f2, 0x2b2b2e, 0xa9b5c4, 0x8a8f96]) };
   }
   if (top.pattern === 'plaid' && rng.chance(0.5)) top.color2 = 0x1d1d22;
@@ -231,10 +236,51 @@ function generateAppearance(seed, ov = {}) {
     color: sDef.mat === 'leather' ? rng.pick([0x1a1716, 0x2a1d15, 0x4a2c1a, 0x5b3a22]) : rng.pick(CHAR_DATA.palettes.shoe),
     sole: sDef.soleHex, sock: rng.pick([0xf0f0ee, 0x1c1c1e, 0x9a9a9a, 0xe6e2d8])
   };
-  return {
+  if (tpl.dark) { // deep, near-black colors with an oxblood or ivory accent
+    if (ov.topColor == null) top.color = rng.pick([0x121114, 0x1b1418, 0x2a0c12, 0x17181d, 0x360c15, 0x0f131c]);
+    top.pattern = 'plain'; top.color2 = 0x111114;
+    if (top.under) top.under.color = rng.pick([0x5a0c15, 0xe8e2d6, 0x141416, 0x5a0c15]);
+    if (bottom) { if (ov.bottomColor == null) bottom.color = rng.pick([0x111114, 0x19171a, 0x1c1c21, 0x1a1012]); bottom.pattern = 'plain'; }
+    shoes.color = rng.pick([0x0d0d0e, 0x19130f]);
+  }
+  const app = {
     seed: seed >>> 0, gender, male, firstName, lastName, name: firstName + ' ' + lastName, age, height, build, body,
     skin, eyes, hairColor, hairStyle, facialHair: facial, face, outfitName: tpl.name, top, bottom, shoes
   };
+  if (ov.special) applySpecialLook(app, ov.special, rng);
+  return app;
+}
+
+// Fan-made horror characters, built procedurally from the same generator (no external assets):
+// 'doll'    - a ~80 cm killer doll: big head, freckles, red hair, striped shirt, denim overalls, red sneakers, kitchen knife
+// 'slasher' - a ~2 m masked slasher: hockey-style mask, dark worn work clothes, heavy boots, machete
+function applySpecialLook(app, kind, rng) {
+  const jit = () => rng.range(-0.08, 0.08);
+  if (kind === 'doll') {
+    Object.assign(app, { special: 'doll', gender: 'male', male: true, firstName: 'Chucky', lastName: '', name: 'Chucky', age: 30, height: 0.8 + jit() * 0.1, build: 'stocky' });
+    Object.assign(app.body, { shoulder: 1.06, chest: 1.12, waist: 1.2, hip: 1.1, limb: 1.24, fat: 0.7, belly: 0.85, muscle: 0.9, bust: 0, legRatio: 0.86, armRatio: 0.9, neck: 0.82, headScale: 1.24, massMul: 1 });
+    app.skin = { name: 'Doll Vinyl', hex: 0xf1c6a6 };
+    app.eyes = { name: 'Doll Blue', hex: 0x3f73b8 };
+    app.hairColor = { name: 'Doll Red', hex: 0xc4451a };
+    app.hairStyle = 'medium'; app.facialHair = 'none';
+    Object.assign(app.face, { jaw: -0.7, chin: -0.55, chinProj: -0.25, noseLen: -0.9, noseWidth: -0.35, noseProj: -0.55, noseBridge: -0.7, lips: -0.25, mouthW: -0.05,
+      brow: 0.25, cheek: 0.65, cheekFull: 1.0, eyeSize: 1.0, eyeTilt: -0.55, eyeSpacing: 0.35, forehead: 0.7, faceLen: -0.65, ear: 0.15, browThick: 0.5, browArch: -1.0, eyeOpen: 0.5, lipTint: 0.55 });
+    app.outfitName = 'Doll Overalls';
+    app.top = { type: 'longsleeve', def: CHAR_DATA.tops.longsleeve, color: 0xb3262b, color2: 0x2b4f9f, pattern: 'multistripe', under: null };
+    app.bottom = { type: 'jeans', def: CHAR_DATA.bottoms.jeans, color: 0x3f6db0, color2: 0x2b4466, pattern: 'plain' };
+    app.shoes = { type: 'sneakers', def: CHAR_DATA.shoes.sneakers, color: 0xb6232a, sole: 0xf0f0ec, sock: 0xf0f0ee };
+    app.overalls = true; app.weapon = 'knife'; app.doll = true;
+  } else if (kind === 'slasher') {
+    Object.assign(app, { special: 'slasher', gender: 'male', male: true, firstName: 'Jason', lastName: '', name: 'Jason', age: 40, height: 1.98 + jit() * 0.15, build: 'broad' });
+    Object.assign(app.body, { shoulder: 1.14, chest: 1.12, waist: 1.08, hip: 1.04, limb: 1.12, fat: 0.4, belly: 0.3, muscle: 1.15, massMul: 1.2, neck: 1.14, headScale: 1.03 });
+    app.skin = CHAR_DATA.skinTones[1];
+    app.hairStyle = 'buzz'; app.hairColor = CHAR_DATA.hairColors[3]; app.facialHair = 'none';
+    app.outfitName = 'Work Clothes (Worn)';
+    app.top = { type: 'jacket', def: CHAR_DATA.tops.jacket, color: 0x393a2d, color2: 0x26261f, pattern: 'plain', under: { color: 0x2a2924 } };
+    app.bottom = { type: 'cargo', def: CHAR_DATA.bottoms.cargo, color: 0x2d2a24, color2: 0x1f1e1b, pattern: 'plain' };
+    app.shoes = { type: 'boots', def: CHAR_DATA.shoes.boots, color: 0x2a2018, sole: 0x1d1a17, sock: 0x1c1c1e };
+    app.mask = 'hockey'; app.weapon = 'machete';
+  }
 }
 
 function describeOutfit(app) {

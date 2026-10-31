@@ -48,7 +48,7 @@ class Game {
       ['Starting XPBD physics engine', 'Physics', () => this.initPhysics()],
       ['Synthesizing weapon audio', 'Sound Effects', () => this.initAudio(0)],
       ['Synthesizing mechanical & impact audio', 'Sound Effects', () => { this.audio.synthesizeGroup(1); this.audio.synthesizeGroup(2); }],
-      ['Synthesizing vocal & ambient audio', 'Sound Effects', () => { this.audio.synthesizeGroup(3); this.audio.synthesizeGroup(4); this.audio.synthesizeGroup(5); this.audio.synthesizeGroup(6); this.audio.startLoadingDrone && this.audio.unlocked && this.audio.startLoadingDrone(); }],
+      ['Synthesizing vocal & ambient audio', 'Sound Effects', () => { this.audio.synthesizeGroup(3); this.audio.synthesizeGroup(4); this.audio.synthesizeGroup(5); this.audio.synthesizeGroup(6); this.audio.synthesizeGroup(7); this.audio.startLoadingDrone && this.audio.unlocked && this.audio.startLoadingDrone(); }],
       ['Building weapon models & viewmodels', 'Weapons', () => this.initWeapons()],
       ['Building environment', 'Environment', () => this.initEnvironment()],
       ['Generating test subjects (procedural humans)', '3D Models', () => this.initNPCs()],
@@ -135,17 +135,31 @@ class Game {
   }
   initEnvironment() {
     this.env = new EnvironmentManager(this);
-    this.switchEnvironment(Settings.data.environment.current === 'field' ? 'field' : 'room', true, true);
+    const last = Settings.data.environment.current;
+    this.switchEnvironment(last === 'field' || last === 'subway' ? last : 'room', true, true);
   }
   initNPCs() {
     this.ai = new AISystem(this);
     this.npcs = new NPCManager(this);
     this.zombies = new ReincarnationSystem(this);
+    this.vampires = new VampireSystem(this);
+    this.horror = new HorrorSystem(this);
+    this.accessories = new AccessorySystem(this);
     this.diag = new Diagnostics(this);
     this.spawnDefaultSet();
   }
   spawnDefaultSet() {
-    const n = INITIAL_SEEDS.length;
+    const n = INITIAL_SEEDS.length, env = this.env.current;
+    if (env && env.cameraStart) { // maps with their own start: people on the spawn spots, the camera at the start view
+      const c = env.cameraStart;
+      this.camera.position.copy(c.pos); this.player.yaw = c.yaw; this.player.pitch = c.pitch;
+      for (let i = 0; i < n; i++) {
+        const sp = env.spawnPoints[i % env.spawnPoints.length], p = new V3(sp.x + (Math.random() - 0.5), 0, sp.z + (Math.random() - 0.5));
+        env.clampToBounds(p, 0.6);
+        this.npcs.spawn({ seed: INITIAL_SEEDS[i], pos: p, yaw: Math.atan2(c.pos.x - p.x, c.pos.z - p.z) });
+      }
+      return;
+    }
     for (let i = 0; i < n; i++) {
       const a = (i - (n - 1) / 2) * 0.32;
       const p = new V3(Math.sin(a) * 6.5, 0, -Math.cos(a) * 6.5 + 7);
@@ -159,6 +173,15 @@ class Game {
     for (let i = 0; i < 20; i++) { for (const n of this.npcs.list) n.update(1 / 60); }
     this.physics.step(1 / 60);
     this.npcs.postPhysics(1 / 60);
+  }
+  // compile every material of a freshly loaded map up front (into the target the frame really uses),
+  // so walking into a new area never stalls on shader compilation
+  warmShaders() {
+    try {
+      const r = this.renderer, post = this.post && this.post.enabled ? this.post : null;
+      if (post) { if (!post.rt) post.makeTargets(); r.setRenderTarget(post.rt); r.compile(this.scene, this.camera); r.setRenderTarget(null); }
+      else r.compile(this.scene, this.camera);
+    } catch (e) { reportError(e, 'warm shaders'); }
   }
   compile() {
     this.player.update(0.016);
@@ -233,23 +256,33 @@ class Game {
     ph.planes = env.planes;
     ph.heightfield = env.heightfield ? terrainHeight : null;
     ph.heightNormalFn = env.heightfield ? (x, z, out) => env.groundNormal(x, z, out) : null;
+    if (env.floorAt) { ph.heightfield = (x, z, y) => env.floorAt(x, z, y); ph.heightNormalFn = (x, z, out) => env.groundNormal(x, z, out); }
+    ph.setStaticBoxes(env.boxes || null);
+    if (env.attachPhysics) env.attachPhysics(ph);
     document.getElementById('envName') && (document.getElementById('envName').textContent = env.name);
     if (!initial) {
-      // re-place everything onto the new ground
+      // re-place everything onto the new ground (maps with spawn areas spread people over them)
+      let si = 0;
       for (const n of this.npcs.list) {
-        const p = n.root.pos.clone(); this.env.clampToBounds(p, 0.6);
+        const p = n.root.pos.clone();
+        if (env.spawnPoints && env.kind === 'subway') { const sp = env.spawnPoints[si++ % env.spawnPoints.length]; p.set(sp.x + (Math.random() - 0.5) * 2, 0, sp.z + (Math.random() - 0.5) * 2); }
+        this.env.clampToBounds(p, 0.6);
         // a body in the middle of getting up (or turning) falls back to the ground and restarts safely
-        if (n.physMode === 'getup') { n.anim.clip = null; n.goRagdoll('Moved', n.lifeState !== 'alive' && n.lifeState !== 'zombie'); }
+        if (n.physMode === 'getup') { n.anim.clip = null; n.goRagdoll('Moved', !n.active); }
         if (n.anim.action) n.anim.action = null;
         if (n.brain) { this.ai.endGrab(n); this.ai.endFeed(n); }
         if (n.physMode === 'ragdoll') { const pel = n.rag.bodies[RAG.PELVIS].pos; const dy = this.env.groundHeight(pel.x, pel.z) + 0.4 - pel.y; for (const b of n.rag.bodies) { b.pos.y += Math.max(0, dy); b.prevPos.copy(b.pos); } }
         else n.teleport(p);
       }
       for (const pr of this.props.list) { const b = pr.body; this.env.clampToBounds(b.pos, 0.5); b.pos.y = this.env.groundHeight(b.pos.x, b.pos.z) + pr.radius + 0.3; b.prevPos.copy(b.pos); }
+      this.accessories.restoreAll();
       this.physics.wakeAll();
+      if (env.cameraStart) { this.camera.position.copy(env.cameraStart.pos); this.player.yaw = env.cameraStart.yaw; this.player.pitch = env.cameraStart.pitch; }
+      else if (this.camera.position.y < -1 || Math.abs(this.camera.position.x) > 30 || Math.abs(this.camera.position.z) > 30) { this.camera.position.set(0, 1.65, 7.5); this.player.yaw = 0; this.player.pitch = -0.08; }
       this.env.clampToBounds(this.camera.position, 0.5);
       this.camera.position.y = Math.max(this.camera.position.y, this.env.groundHeight(this.camera.position.x, this.camera.position.z) + 1.4);
       this.audio.setEnvironment(kind);
+      this.warmShaders();
       if (this.ui && this.ui.drawerOpen) this.ui.renderDrawer();
       this.fx.clear(); if (this.gore) this.gore.clear();
     }
@@ -272,6 +305,7 @@ class Game {
     if (npc.brain) { this.ai.endGrab(npc); this.ai.endFeed(npc); }
     if (npc.grabbedBy && npc.grabbedBy.brain) this.ai.endGrab(npc.grabbedBy);
     npc.infection = null; npc.anim.crawl = 0; npc.anim.setAction(null);
+    if (this.vampires) this.vampires.onRevive(npc); if (this.accessories) this.accessories.restore(npc);
     if (npc.lifeState !== 'alive') {
       if (npc.lifeState === 'reanimating') npc.lifeState = 'dead';
       npc.setLife('alive', 'revived');
@@ -292,7 +326,8 @@ class Game {
     for (const n0 of this.npcs.list.slice()) {
       let n = n0;
       if (n.lifeState !== 'alive' || n.gore) n = this.revive(n) || n;
-      if (n !== n0) { n.spawn.pos.copy(n0.spawn.pos); n.spawn.yaw = n0.spawn.yaw; }
+      if (n !== n0) { n.spawn.pos.copy(n0.spawn.pos); n.spawn.yaw = n0.spawn.yaw; n.spawnKind = n0.spawnKind; }
+      if (n.vamp && n.vamp.state !== 'none' && n.lifeState === 'alive') this.vampires.cure(n);
       n.health = 100; n.regionDamage.fill(0); n.hitCounts.fill(0);
       n.anim.clip = null; n.anim.snapshot = null;
       if (n.physMode !== 'anim') { n.rag.setDynamic(false); n.physMode = 'anim'; }
@@ -300,7 +335,11 @@ class Game {
       n.anim.resetFeet(n.root.pos, n.root.yaw, this.env);
       if (n.brain) { n.brain.state = 'idle'; n.brain.vel.set(0, 0, 0); n.brain.stagger.set(0, 0, 0); }
       n.update(0.016); n.computeWorldBones(); n.rag.setFromBones(n.boneWPos, n.boneWRot, true);
+      if (n.spawnKind === 'vampire' && Settings.data.vampires.enabled) this.vampires.makeVampire(n, { instant: true, why: 'reset', keepStyle: true });
+      if (n.spawnKind === 'zombie') this.zombies.zombifyInstant(n);
+      if (n.horror) { n.health = n.maxHealth = n.horror.def.health; if (n.brain) { n.brain.state = 'hIdle'; n.brain.hTarget = null; } }
     }
+    this.vampires.restoreAshes(); this.vampires.curePlayer(); this.accessories.restoreAll();
     this.physics.wakeAll();
     this.hits.clear(); this.gore.clear();
     HT.log('sys', 'Physics reset: all subjects restored to their original state');
@@ -309,6 +348,7 @@ class Game {
   resetScene() {
     this.weapons.clearAll();
     this.npcs.removeAll(); this.props.clear(); this.fx.clear(); this.hits.clear(); this.gore.clear();
+    this.vampires.ashes.length = 0; this.vampires.curePlayer();
     this.weapons.resetAmmo(); this.timeScale = 1;
     if (Settings.data.physics.paused) Settings.set('physics.paused', false);
     this.spawnDefaultSet();
@@ -334,7 +374,7 @@ class Game {
       else if (k === 'KeyT') { this.timeScale = this.timeScale < 1 ? 1 : 0.25; HT.toast('Time scale ' + this.timeScale + 'x'); }
       else if (k === 'KeyM') { Settings.set('audio.muted', !Settings.data.audio.muted); this.audio.applyVolumes(); HT.toast(Settings.data.audio.muted ? 'Muted' : 'Sound on'); }
       else if (k === 'KeyZ') { this.npcs.spawnMany(1, { gender: 'random' }); this.ui.sound('spawn'); }
-      else if (k === 'KeyX') { const h = this.weapons.pickNPC(60); if (h && h.npc.physMode !== 'ragdoll') { h.npc.goRagdoll('Knockdown (Sandbox)', h.npc.lifeState !== 'alive' && h.npc.lifeState !== 'zombie'); h.npc.rag.applyImpulseAt(RAG.CHEST, this.camera.getWorldDirection(new V3()).multiplyScalar(30), null); } }
+      else if (k === 'KeyX') { const h = this.weapons.pickNPC(60); if (h && h.npc.physMode !== 'ragdoll') { h.npc.goRagdoll('Knockdown (Sandbox)', !h.npc.active); h.npc.rag.applyImpulseAt(RAG.CHEST, this.camera.getWorldDirection(new V3()).multiplyScalar(30), null); } }
       else if (k === 'Delete' || k === 'Backspace') { if (this.npcs.selected) this.npcs.remove(this.npcs.selected); }
       else if (k === 'KeyH') { Settings.set('ui.hints', !Settings.data.ui.hints); this.ui.updatePlayHint(); }
       else if (k === 'KeyB') { const p = this.player.groundTarget(6); p.y += 1.2; this.props.spawn(['crate', 'ball', 'barrel'][Math.floor(Math.random() * 3)], p); }
@@ -361,7 +401,7 @@ class Game {
     CharShared.uTime.value = this.time;
     // input / player (real time)
     this.player.update(rdt);
-    P.begin('ai'); this.ai.update(dt); this.zombies.update(dt); P.end('ai');
+    P.begin('ai'); this.ai.update(dt); this.zombies.update(dt); this.vampires.update(dt); P.end('ai');
     P.begin('anim'); this.npcs.update(dt); P.end('anim');
     P.begin('physics');
     const paused = Settings.data.physics.paused;
@@ -378,6 +418,7 @@ class Game {
     }
     this.handleImpacts();
     this.npcs.postPhysics(dt);
+    this.accessories.updateAll(dt);
     this.props.update();
     P.end('physics');
     P.begin('fx');
@@ -422,7 +463,7 @@ class Game {
         if (b.kinematic && b.tag === 'npc' && imp > 3.2 && b.impactOther && !b.impactOther.kinematic && b.impactOther.mass > 4) {
           const npc = b.owner.npc;
           const busy = npc.brain && (npc.brain.victim || npc.brain.corpse || npc.grabbedBy);
-          if ((npc.lifeState === 'alive' || npc.lifeState === 'zombie') && npc.physMode === 'anim' && !busy) {
+          if (npc.active && npc.physMode === 'anim' && !busy) {
             const m = b.impactOther.mass * imp;
             if (m > 70 * npc.personality.toughness) {
               npc.goRagdoll('Knockdown (Impact)');
@@ -449,7 +490,9 @@ class Game {
         f._wasSwing = f.swing;
         if (landed) {
           const sp = n.anim.speed;
-          this.audio.play((grass ? 'stepGrass' : 'stepHard') + Math.floor(Math.random() * 4), { pos: f.pos.clone(), gain: clamp(0.25 + sp * 0.18, 0.2, 0.9) * (n.isZombie ? 1.3 : 1), ref: 2, reverbAmt: 0.5 });
+          const hk = n.horror ? n.horror.kind : null;
+          if (hk === 'slasher') this.audio.play('heavyStep', { pos: f.pos.clone(), gain: 0.9, ref: 3, reverbAmt: 0.7 });
+          else this.audio.play((grass ? 'stepGrass' : 'stepHard') + Math.floor(Math.random() * 4), { pos: f.pos.clone(), gain: clamp(0.25 + sp * 0.18, 0.2, 0.9) * (n.isZombie ? 1.3 : (hk === 'doll' ? 0.45 : (n.lifeState === 'vampire' ? 0.55 : 1))), rate: hk === 'doll' ? 1.6 : 1, ref: 2, reverbAmt: 0.5 });
         }
       }
     }

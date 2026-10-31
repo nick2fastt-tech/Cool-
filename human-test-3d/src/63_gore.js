@@ -763,6 +763,7 @@ class GoreSystem {
       npc.criticalHead = npc.criticalHead || false;
       if (npc.lifeState === 'alive') npc.die({ weapon: o.weapon || 'gore' });
       else if (npc.lifeState === 'zombie') { npc.health = 0; npc.destroyZombie({ weapon: o.weapon || 'gore' }); }
+      else if (npc.lifeState === 'vampire') { npc.health = 0; this.game.vampires.destroy(npc, { weapon: o.weapon || 'gore' }); }
       npc.criticalHead = true; // like critical head trauma: the body may still turn, but never rises
       if (npc.reinc.state === 'transforming' && npc.game.zombies) npc.game.zombies.makeInert(npc, npc.reinc);
       if (npc.physMode !== 'ragdoll') npc.goRagdoll('Ragdoll (Cut in Half)', true);
@@ -783,13 +784,14 @@ class GoreSystem {
       npc.criticalHead = true;
       if (npc.lifeState === 'alive') npc.die({ weapon: o.weapon || 'gore' });
       else if (npc.lifeState === 'zombie') { npc.health = 0; npc.destroyZombie({ weapon: o.weapon || 'gore' }); }
+      else if (npc.lifeState === 'vampire') { npc.health = 0; this.game.vampires.destroy(npc, { weapon: o.weapon || 'gore' }); }
       else if (npc.lifeState === 'reanimating') { npc.health = 0; }
       if (npc.physMode !== 'ragdoll') npc.goRagdoll('Ragdoll (Decapitated)', true);
       npc.lastReaction = explode ? 'Head Destroyed' : 'Decapitated';
       return;
     }
     if (cut.isLeg) {
-      if (npc.physMode !== 'ragdoll' && (npc.lifeState === 'alive' || npc.lifeState === 'zombie')) npc.goRagdoll('Ragdoll (Leg Severed)');
+      if (npc.physMode !== 'ragdoll' && npc.active) npc.goRagdoll('Ragdoll (Leg Severed)');
       npc.anim.crawl = 1; npc.downTimer = Math.max(npc.downTimer, 1.2);
       npc.lastReaction = npc.lifeState === 'zombie' ? 'Crawling (Leg Lost)' : 'Collapsed (Leg Severed)';
     } else if (cut.isArm && npc.lifeState === 'alive') {
@@ -1114,6 +1116,23 @@ class GoreSystem {
     this.smear(zombie, B.jaw, 0.03);
     this.sound(wp, 'bite', 0.95);
     this.screenNear(wp, 0.5);
+  }
+  // vampire bite: two small puncture marks on the neck and a few drops (deliberately non-graphic)
+  onVampBite(victim, vamp) {
+    const mouth = vamp ? _gv4.copy(vamp.boneWPos[B.jaw]) : _gv4.copy(victim.boneWPos[B.neck]);
+    const vi = this.nearestVertex(victim, mouth, [REGION.NECK]);
+    this.sound(mouth, 'bite', 0.45);
+    if (vi < 0) return;
+    const wp = victim.skinVertexWorld(vi, new V3());
+    if (!this.on) { this.game.fx.fabricPuff(wp, _gv3.subVectors(wp, victim.boneWPos[B.neck]).normalize(), new THREE.Color(0.55, 0.08, 0.1)); return; }
+    this.vertexBind(victim, vi, _gv6, _gv7);
+    const side = _gv5.set(0, 1, 0).cross(_gv7).normalize().multiplyScalar(0.014);
+    this.addWound(victim, WOUND.ENTRY, _gv1.copy(_gv6).add(side), _gv7, 0.0045, { vi, bleed: 0, k: 0.08 });
+    this.addWound(victim, WOUND.ENTRY, _gv1.copy(_gv6).sub(side), _gv7, 0.0045, { vi, bleed: 0, k: 0.08 });
+    const out = _gv3.subVectors(wp, victim.boneWPos[B.neck]).normalize();
+    this.spray(wp, out.add(_gv1.set(0, -0.4, 0)).normalize(), 5, 0.6, 0.5, 0.6, 0.3);
+    const G = this.state(victim); G.blood = Math.min(1, G.blood + 0.02); G.dirty = true;
+    if (vamp) this.smear(vamp, B.jaw, 0.012);
   }
   // zombie feeding on a corpse: gaping abdomen, chunks, pool, smeared hands/face
   onFeed(corpse, zombie, dt, bite) {

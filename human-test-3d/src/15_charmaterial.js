@@ -7,6 +7,7 @@ const CharShared = { uTime: { value: 0 }, uDetail: { value: 1 } };
 
 const GLSL_HT_COMMON = /* glsl */`
 uniform float uZombie; uniform float uFlash; uniform float uHighlight; uniform float uWet; uniform float uTime; uniform float uDetail;
+uniform float uVampire; uniform float uEyeGlow; uniform float uHeat; uniform float uAsh; uniform float uDoll; uniform vec4 uFaceC;
 uniform vec4 uWA[16]; uniform vec4 uWB[16]; uniform int uWN; uniform float uBlood;
 varying vec4 vMat; varying vec3 vColor2; varying vec2 vUvP; varying vec3 vRest;
 float htHash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -27,13 +28,17 @@ vec3 htPerturb(vec3 surf_pos, vec3 surf_norm, vec2 dHdxy, float faceDir) {
 float htAA(float freq, vec2 uv) { vec2 w = fwidth(uv) * freq; return clamp(1.0 - max(w.x, w.y) * 1.6, 0.0, 1.0); }
 `;
 
+// material id: flat-interpolated on WebGL2 so triangles that join two materials never produce the ids in between
+const GLSL_MAT_ID = '#if __VERSION__ >= 300\nflat varying float vMatId;\n#else\nvarying float vMatId;\n#endif\n';
 const GLSL_HT_ALBEDO = /* glsl */`
-  int mT = int(vMat.x + 0.5);
+  int mT = int(vMatId + 0.5);
   int pT = int(vMat.z + 0.5);
   float htRough = vMat.y;
   float htMetal = 0.0;
   float htH = 0.0;       // bump height
   float htBump = 0.0;    // bump strength
+  float htGlow = 0.0;    // iris mask for glowing vampire eyes
+  float htEmber = 0.0;   // crumbling edge of a vampire turning to ash
   vec2 puv = vUvP;
   vec3 base = diffuseColor.rgb;
   bool isCloth = (mT >= 1 && mT <= 4) || mT == 9 || mT == 14;
@@ -59,6 +64,11 @@ const GLSL_HT_ALBEDO = /* glsl */`
       base = mix(base, mix(vColor2, vec3(0.95, 0.85, 0.4), step(r, 0.06)), fl * 0.95);
     }
     else if (pT == 7) { htH += abs(sin(puv.x * 520.0)) * 0.6; htBump += 0.5 * htAA(520.0, puv); }
+    else if (pT == 8) { // multicolour stripes (red / yellow / blue / white / green)
+      float k = floor(fract(puv.y * 9.0 * sc) * 5.0);
+      vec3 sc5 = k < 0.5 ? base : (k < 1.5 ? vec3(0.78, 0.6, 0.12) : (k < 2.5 ? vColor2 : (k < 3.5 ? vec3(0.86, 0.85, 0.82) : vec3(0.16, 0.45, 0.25))));
+      base = sc5;
+    }
     // weave / material micro structure
     if (mT == 1 || mT == 14) {
       float f = mT == 14 ? 260.0 : 380.0;
@@ -82,18 +92,35 @@ const GLSL_HT_ALBEDO = /* glsl */`
     } else if (mT == 9) {
       base *= 0.97 + 0.05 * htNoise(puv * 80.0);
     }
-  } else if (mT == 0 || mT == 8) {
+  } else if (mT == 0) {
     float n = htFbm(puv * 55.0);
     base *= 0.94 + 0.1 * n;
     float pores = htNoise(puv * 1400.0);
     htH += pores * 0.5; htBump += 0.18 * htAA(1400.0, puv) * uDetail;
     htRough = clamp(vMat.y + (n - 0.5) * 0.12 - uWet * 0.25, 0.2, 0.9);
+    if (uDoll > 0.0) { // painted vinyl: smoother, a little glossy, freckles across nose and cheeks
+      vec3 dq = (vRest - uFaceC.xyz) / uFaceC.w;
+      float fz = smoothstep(0.045, 0.07, dq.z) * smoothstep(-0.07, -0.045, dq.y) * (1.0 - smoothstep(-0.005, 0.01, dq.y)) * (1.0 - smoothstep(0.055, 0.07, abs(dq.x)));
+      float fr = step(0.86, htHash(floor(vRest.xy * 430.0 + vRest.z * 97.0))) * fz;
+      base = mix(base, base * vec3(0.72, 0.5, 0.36), fr * 0.8);
+      base *= 1.0 + 0.06 * uDoll; htRough = mix(htRough, 0.3, uDoll); htBump *= 0.3;
+    }
     if (uZombie > 0.0) {
       float lum = dot(base, vec3(0.3, 0.55, 0.15));
       vec3 zc = vec3(lum) * vec3(0.78, 0.9, 0.7) + vec3(0.02, 0.03, 0.0);
       float mott = htFbm(puv * 18.0);
       zc *= 0.82 + 0.3 * mott;
       base = mix(base, zc, uZombie * 0.85);
+    }
+    if (uVampire > 0.0) { // pallor with a cool undertone (keeps the skin's own shading detail), dark red lips
+      float lipK = smoothstep(0.04, 0.45, vMat.z);
+      float lum0 = max(0.03, dot(diffuseColor.rgb, vec3(0.3, 0.55, 0.15)));
+      float rel = clamp(dot(base, vec3(0.3, 0.55, 0.15)) / lum0, 0.55, 1.35);
+      vec3 pale = vec3(0.67, 0.64, 0.69) * rel;
+      pale = mix(pale, pale * vec3(0.93, 0.92, 1.0), htFbm(puv * 9.0) * 0.6);   // faint cold mottling
+      base = mix(base, pale, uVampire * (0.78 - lipK * 0.3));
+      base = mix(base, vec3(0.16, 0.012, 0.026) * (0.8 + 0.4 * rel), min(1.0, uVampire * 1.1) * lipK);
+      htRough = mix(htRough, 0.36, uVampire * 0.45);
     }
   } else if (mT == 6 || mT == 12) {
     float strands = htNoise(vec2(puv.x * 900.0, puv.y * 40.0));
@@ -115,10 +142,30 @@ const GLSL_HT_ALBEDO = /* glsl */`
     float pupil = 1.0 - smoothstep(pupilR - 0.015, pupilR + 0.015, pol);
     col = mix(col, vec3(0.01), pupil);
     if (uZombie > 0.0) col = mix(col, vec3(0.78, 0.8, 0.74) * (0.9 + 0.1 * fib), uZombie * 0.85 * (1.0 - smoothstep(irisR, irisR + 0.05, pol)));
+    float irisM = 1.0 - smoothstep(irisR - 0.02, irisR + 0.02, pol);
+    if (uVampire > 0.0) col = mix(col, mix(vec3(0.62, 0.05, 0.02) * (0.75 + 0.5 * fib), vec3(0.02), pupil), uVampire * irisM);
+    htGlow = irisM * (1.0 - pupil * 0.6);
     base = col; htRough = 0.07;
+  } else if (mT == 16) { // hockey-style mask: worn off-white shell, open eye holes, breathing holes, red chevrons
+    vec2 q = puv; vec2 eh = vColor2.xy;
+    vec2 de = vec2((abs(q.x) - eh.x) / 0.19, (q.y - eh.y) / 0.115);
+    if (dot(de, de) < 1.0) discard;
+    vec2 cell = floor(q / 0.1), cc = (cell + 0.5) * 0.1;
+    bool zone = (cc.y < -0.16 && cc.y > -0.8 && abs(cc.x) < 0.78 + (cc.y + 0.16) * 0.35) || (cc.y > 0.36 && cc.y < 0.8 && abs(cc.x) < 0.42);
+    zone = zone && length(vec2(abs(cc.x) - eh.x, cc.y - eh.y)) > 0.28 && abs(cc.x) > 0.04;
+    if (zone && length(q - cc) < 0.021) discard;
+    float grime = htFbm(q * 9.0);
+    base = vec3(0.83, 0.81, 0.75) * (0.86 + 0.14 * grime) - vec3(0.05, 0.05, 0.04) * smoothstep(0.55, 0.8, htNoise(q * 31.0));
+    vec2 p1 = vec2(abs(q.x), q.y - 0.5);  vec2 b1 = vec2(0.13, 0.12);
+    float c1 = length(p1 - b1 * clamp(dot(p1, b1) / dot(b1, b1), 0.0, 1.0));
+    vec2 p2 = vec2(abs(abs(q.x) - 0.52), q.y + 0.42); vec2 b2 = vec2(0.09, 0.09);
+    float c2 = length(p2 - b2 * clamp(dot(p2, b2) / dot(b2, b2), 0.0, 1.0));
+    float red = 1.0 - smoothstep(0.022, 0.03, min(c1, c2));
+    base = mix(base, vec3(0.55, 0.04, 0.035) * (0.8 + 0.3 * grime), red);
+    htRough = mix(0.42, 0.6, grime); htH += grime * 0.3; htBump += 0.15;
   } else if (mT == 10) { base = base; htRough = 0.6; }
-  else if (mT == 11) { htMetal = 1.0; htRough = 0.35; }
-  else if (mT == 13) { htRough = 0.3; }
+  else if (mT == 11) { htMetal = 0.3; htRough = vMat.y; base *= 1.05 + 0.05 * htNoise(puv * vec2(300.0, 8.0)); } // no env map: mostly dielectric so steel stays bright
+  else if (mT == 13 || mT == 15) { htRough = 0.3; }
   else if (mT == 5) { htRough = 0.85; base *= 0.95 + 0.08 * htNoise(puv * 200.0); }
   if (isCloth && feat > 0) {
     float ax = abs(puv.x);
@@ -259,6 +306,13 @@ const GLSL_HT_ALBEDO = /* glsl */`
     htMetal = 0.0;
     htH -= gHo * 1.5 + gGu * (1.0 - gCo) * 0.9; htBump = max(htBump, (gHo + gGu * 0.8 + gFl * 0.4) * 0.9);
   }
+  if (uAsh > 0.0) { // destroyed vampire: turns to grey ash, then crumbles away with a glowing edge
+    float an = htNoise(vRest.xy * 23.0 + vRest.z * 11.0) * 0.65 + htNoise(vRest.yz * 57.0 + 3.0) * 0.35;
+    float cut = (uAsh - 1.0) * 1.15 - 0.06;
+    if (uAsh > 1.0 && an < cut) discard;
+    htEmber = uAsh > 1.0 ? 1.0 - smoothstep(0.0, 0.05, an - cut) : 0.0;
+    base = mix(base, vec3(0.13, 0.12, 0.115) * (0.75 + 0.5 * htNoise(puv * 40.0)), min(uAsh, 1.0)); htRough = mix(htRough, 1.0, min(uAsh, 1.0)); htMetal = 0.0;
+  }
   diffuseColor.rgb = base;
 `;
 
@@ -268,16 +322,18 @@ function createCharacterMaterial() {
     uZombie: { value: 0 }, uFlash: { value: 0 }, uHighlight: { value: 0 }, uWet: { value: 0 },
     uTime: CharShared.uTime, uDetail: CharShared.uDetail,
     uWA: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) }, uWB: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) },
-    uWN: { value: 0 }, uBlood: { value: 0 }
+    uWN: { value: 0 }, uBlood: { value: 0 },
+    uVampire: { value: 0 }, uEyeGlow: { value: 0 }, uFang: { value: 0 }, uHeat: { value: 0 }, uAsh: { value: 0 },
+    uDoll: { value: 0 }, uFaceC: { value: new THREE.Vector4(0, 1.6, 0, 1) }
   };
   m.userData.u = U;
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, U);
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec4 aMat;\nattribute vec3 aColor2;\nvarying vec4 vMat;\nvarying vec3 vColor2;\nvarying vec2 vUvP;\nvarying vec3 vRest;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMat = aMat; vColor2 = aColor2; vUvP = uv; vRest = position;');
+      .replace('#include <common>', '#include <common>\nattribute vec4 aMat;\nattribute vec3 aColor2;\nvarying vec4 vMat;\n' + GLSL_MAT_ID + 'varying vec3 vColor2;\nvarying vec2 vUvP;\nvarying vec3 vRest;\nuniform float uFang;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMat = aMat; vMatId = aMat.x; vColor2 = aColor2; vUvP = uv; vRest = position;\nif (aMat.x > 14.5 && aMat.x < 15.5) { transformed.y -= uFang * aMat.w; transformed.z += uFang * aMat.w * 0.22; } // fangs extend');
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\n' + GLSL_HT_COMMON)
+      .replace('#include <common>', '#include <common>\n' + GLSL_MAT_ID + GLSL_HT_COMMON)
       .replace('#include <color_fragment>', '#include <color_fragment>\n' + GLSL_HT_ALBEDO)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = htRough;')
       .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = htMetal;')
@@ -292,11 +348,14 @@ function createCharacterMaterial() {
           float rim = pow(1.0 - clamp(abs(dot(normal, vdir)), 0.0, 1.0), 2.5);
           totalEmissiveRadiance += vec3(1.0, 0.93, 0.86) * uFlash * 0.22;
           totalEmissiveRadiance += vec3(0.25, 0.75, 1.0) * rim * uHighlight * 0.7;
-          if (mT == 0 || mT == 8) totalEmissiveRadiance += diffuseColor.rgb * vec3(0.9, 0.35, 0.25) * rim * 0.06 * (1.0 - uZombie);
+          if (mT == 0) totalEmissiveRadiance += diffuseColor.rgb * vec3(0.9, 0.35, 0.25) * rim * 0.06 * (1.0 - uZombie) * (1.0 - uVampire);
           if (uZombie > 0.0) totalEmissiveRadiance += vec3(0.02, 0.04, 0.0) * rim * uZombie;
+          totalEmissiveRadiance += vec3(0.95, 0.05, 0.03) * htGlow * uEyeGlow * 1.5;   // vampire eyes
+          totalEmissiveRadiance += vec3(1.0, 0.38, 0.08) * htEmber * 2.2;
+          totalEmissiveRadiance += vec3(1.0, 0.28, 0.12) * pow(rim, 0.8) * uHeat * 0.9; // heat sense (vampire player)
         }`);
   };
-  m.customProgramCacheKey = () => 'ht3d-char-v3';
+  m.customProgramCacheKey = () => 'ht3d-char-v7';
   return m;
 }
 

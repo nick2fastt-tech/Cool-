@@ -117,7 +117,7 @@ function buildRigSpec(app) {
   // useful derived
   r.hipsHeight = pos[B.hips].y;
   r.standHipsY = pos[B.hips].y;
-  r.mass = clamp(70 * Math.pow(H / 1.75, 2.4) * bd.massMul * (male ? 1.0 : 0.86), 42, 140);
+  r.mass = app.doll ? 11 : clamp(70 * Math.pow(H / 1.75, 2.4) * bd.massMul * (male ? 1.0 : 0.86), 42, 140);
   return r;
 }
 HT.buildRigSpec = buildRigSpec;

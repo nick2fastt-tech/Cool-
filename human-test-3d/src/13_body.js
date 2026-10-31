@@ -220,7 +220,7 @@ function buildBody(mb, app, rig, Q) {
   else if (tdef.neck === 'lapel') feat = 4;
   else if (tdef.zipper) feat = 3;
   else if (tdef.buttons || top.type === 'polo') feat = 2;
-  const vStartU = tdef.neck === 'lapel' ? (top.type === 'labcoat' ? 0.56 : 0.6) : 0.84;
+  const vStartU = tdef.neck === 'lapel' ? (tdef.hem === 'coat' ? 0.56 : 0.6) : 0.84;
   const vStartY = crotchY + vStartU * span;
   const fillCol = tdef.neck === 'lapel' ? (underColor || skin) : skin;
   const topTorso = Object.assign({}, topLayer);
@@ -324,7 +324,7 @@ function buildBody(mb, app, rig, Q) {
   // ---------------- SKIRT / DRESS / COAT TAILS ----------------
   const skirtSpec = isDress ? { u0: hem, len: 0.27 + (hash32(app.seed, 5) % 100) / 100 * 0.13, layer: topLayer }
     : isSkirt ? { u0: waistband, len: bot.def.skirtLen, layer: bottomLayer }
-      : top.type === 'labcoat' ? { u0: 0.30, len: 0.30, layer: topLayer, slit: true }
+      : tdef.hem === 'coat' ? { u0: 0.30, len: top.type === 'longcoat' ? 0.38 : 0.30, layer: topLayer, slit: true }
         : tdef.hem === 'low' ? { u0: 0.24, len: 0.035, layer: topLayer, slit: true, slitHalf: 0.22 } : null;
   if (skirtSpec) buildSkirt(mb, app, rig, Q, skirtSpec, torsoXZ, torsoP, crotchY, span);
 
@@ -332,8 +332,46 @@ function buildBody(mb, app, rig, Q) {
   if (tdef.neck === 'collar' || tdef.neck === 'lapel') buildCollar(mb, rig, Q, topLayer, tdef.neck === 'lapel', torsoXZ, crotchY, span, topOff(1.0));
   if (tdef.neck === 'hood') buildHood(mb, rig, Q, topLayer, top);
 
+  // ---------------- OVERALLS (bib + shoulder straps over the shirt) ----------------
+  if (app.overalls && bot) {
+    const den = bottomLayer, off0 = (u) => Math.max(topOff(u), pantsOff) + 0.0045 * sc, nrm = (t) => ((t % TAU) + TAU) % TAU;
+    const uTop = 0.8, nU = 7, nT = 8;
+    mb.beginPart();
+    const st = mb.I.length, base = mb.n;
+    for (let i = 0; i <= nU; i++) {
+      const u = lerp(waistband - 0.03, uTop, i / nU), y = crotchY + u * span, hw = 0.64 * (1 - 0.2 * (i / nU));
+      for (let j = 0; j <= nT; j++) {
+        const th = lerp(-hw, hw, j / nT), p = torsoXZ(u, nrm(th), off0(u));
+        mb.v(p[0], y + p[2], p[1], th * 0.1, y, den.col, den.mat, den.col2, torsoW(u, nrm(th)), torsoReg(u));
+      }
+    }
+    for (let i = 0; i < nU; i++) for (let j = 0; j < nT; j++) { const q = base + i * (nT + 1) + j; mb.quad(q, q + 1, q + nT + 2, q + nT + 1); }
+    orientPartOutward(mb, st, new V3(0, crotchY + span * 0.6, -0.03 * H));
+    mb.endPart();
+    for (const sgn of [1, -1]) {
+      const path = [[uTop - 0.01, 0.44], [0.87, 0.6], [0.93, 0.92], [0.965, 1.32], [0.97, 1.75], [0.94, 2.2], [0.86, 2.56], [0.7, 2.74], [waistband + 0.03, 2.78]];
+      const pts = path.map(([u, th]) => { const t = nrm(sgn * th), p = torsoXZ(Math.min(u, 1), t, off0(u) + 0.0015 * sc); return { p: new V3(p[0], crotchY + u * span + p[2], p[1]), u, t }; });
+      mb.beginPart();
+      const st2 = mb.I.length, b2 = mb.n, halfW = 0.0105 * H;
+      for (let i = 0; i < pts.length; i++) {
+        const P0 = pts[i].p, tan = new V3().subVectors(pts[Math.min(pts.length - 1, i + 1)].p, pts[Math.max(0, i - 1)].p).normalize();
+        const rad = new V3(P0.x, 0, P0.z).normalize(), w = new V3().crossVectors(tan, rad).normalize().multiplyScalar(halfW);
+        const wts = torsoW(pts[i].u, pts[i].t), reg = torsoReg(pts[i].u);
+        mb.v(P0.x + w.x, P0.y + w.y, P0.z + w.z, 0, i * 0.02, den.col, den.mat, den.col2, wts, reg);
+        mb.v(P0.x - w.x, P0.y - w.y, P0.z - w.z, 0.02, i * 0.02, den.col, den.mat, den.col2, wts, reg);
+      }
+      for (let i = 0; i < pts.length - 1; i++) { const q = b2 + i * 2; mb.quad(q, q + 1, q + 3, q + 2); }
+      orientPartOutward(mb, st2, new V3(0, crotchY + span * 0.75, 0));
+      mb.endPart();
+      // a metal clasp where the strap meets the bib
+      const cp = pts[0].p.clone();
+      addBox(mb, cp, new V3(1, 0, 0), new V3(0, 1, 0), new V3(0, 0, 1), 0.011 * H, 0.008 * H, 0.003 * H, C(0xc9a84a), [MAT.METAL, 0.3, 0, 1], torsoW(uTop, pts[0].t), REGION.UPPER_CHEST);
+    }
+  }
+
   // ---------------- ARMS ----------------
   for (let s = 0; s < 2; s++) buildArm(mb, app, rig, Q, s, topLayer, skinLayer, tdef);
+  if (app.weapon) buildHeldWeapon(mb, app, rig);
 
   // ---------------- LEGS ----------------
   const coveredY = skirtSpec && (isDress || isSkirt) ? rig.hipJY - skirtSpec.len * H : null; // thighs hidden above this
@@ -408,6 +446,56 @@ function buildSkirt(mb, app, rig, Q, spec, torsoXZ, torsoP, crotchY, span) {
 function skirtTheta(cols, slitHalf) {
   // columns spanning [slitHalf, TAU - slitHalf]; the last column wraps (closing seam) - we accept a narrow gap at front
   return (j) => slitHalf + (TAU - 2 * slitHalf) * (j / cols);
+}
+
+// small oriented box (separate vertices per face for crisp edges)
+function addBox(mb, c, ax, ay, az, hx, hy, hz, col, mat, wts, reg) {
+  mb.beginPart();
+  const st = mb.I.length;
+  const X = ax.clone().multiplyScalar(hx), Y = ay.clone().multiplyScalar(hy), Z = az.clone().multiplyScalar(hz);
+  const faces = [[X, Y, Z], [X.clone().negate(), Y, Z.clone().negate()], [Y, Z, X], [Y.clone().negate(), Z, X.clone().negate()], [Z, X, Y], [Z.clone().negate(), X, Y.clone().negate()]];
+  for (const [n, u, w] of faces) {
+    const b = mb.n;
+    for (const [su, sw] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      const p = c.clone().add(n).addScaledVector(u, su).addScaledVector(w, sw);
+      mb.v(p.x, p.y, p.z, su * 0.01, sw * 0.01, col, mat, col, wts, reg);
+    }
+    mb.quad(b, b + 1, b + 2, b + 3);
+  }
+  orientPartOutward(mb, st, c);
+  mb.endPart();
+}
+// weapon held in the right fist (horror characters): built in the hand's bind frame and skinned to the
+// hand bone. Handle runs through the fist along the thumb axis; the blade lies in the (thumb, arm) plane
+// with the edge toward +armDir (down when the arm hangs).
+function buildHeldWeapon(mb, app, rig) {
+  const s = 1, H = rig.H, machete = app.weapon === 'machete';
+  const wr = rig.bindPos[SB('hand', s)], d = rig.armDir[s], e1 = rig.armE1[s], e2 = rig.armE2[s];
+  const grip = wr.clone().addScaledVector(d, rig.palmLen * 0.62).addScaledVector(e2, 0.006 + 0.008 * H / 1.75);
+  const wts = [[SB('hand', s), 1]], reg = REGION.R_HAND;
+  const hLen = machete ? 0.15 : 0.11, hR = machete ? 0.0155 : 0.012;
+  addBox(mb, grip.clone().addScaledVector(e1, hLen * 0.12), e1, d, e2, hLen / 2, hR, hR * 0.75, C(machete ? 0x1b1712 : 0x2b1b11), [MAT.RUBBER, 0.7, 0, 1], wts, reg);
+  const b0 = grip.clone().addScaledVector(e1, hLen * 0.62);
+  addBox(mb, b0.clone().addScaledVector(e1, 0.004), e1, d, e2, 0.005, hR * 1.25, hR * 0.85, C(0x8a8f96), [MAT.METAL, 0.35, 0, 1], wts, reg);
+  // blade: triangular cross-section (spine thickness -> sharp edge), clipped point near the tip
+  const bLen = machete ? 0.46 : 0.2, bW = machete ? 0.05 : 0.03, tk = machete ? 0.0045 : 0.003;
+  const steel = C(0xb7bcc2), sm = [MAT.METAL, machete ? 0.42 : 0.28, 0, 1];
+  const N = 10;
+  mb.beginPart();
+  const st = mb.I.length, base = mb.n;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N, x = 0.006 + bLen * t;
+    let w = bW * (machete ? (1 + 0.18 * smoothstep(0.3, 0.85, t)) : 1) * (t > 0.82 ? Math.sqrt(Math.max(0, 1 - (t - 0.82) / 0.18)) : 1);
+    const spineOff = machete ? -0.3 * w + 0.35 * w * smoothstep(0.78, 1, t) : -0.25 * w, edgeOff = spineOff + w;
+    const c = b0.clone().addScaledVector(e1, x);
+    const pT = c.clone().addScaledVector(d, spineOff).addScaledVector(e2, tk / 2 * (1 - t * 0.5));
+    const pB = c.clone().addScaledVector(d, spineOff).addScaledVector(e2, -tk / 2 * (1 - t * 0.5));
+    const pE = c.clone().addScaledVector(d, edgeOff);
+    for (const p of [pT, pE, pB]) mb.v(p.x, p.y, p.z, t, 0, steel, sm, steel, wts, reg);
+  }
+  for (let i = 0; i < N; i++) { const q = base + i * 3, n = q + 3; mb.quad(q, q + 1, n + 1, n); mb.quad(q + 1, q + 2, n + 2, n + 1); mb.quad(q + 2, q, n, n + 2); }
+  orientPartOutward(mb, st, b0.clone().addScaledVector(e1, bLen * 0.5).addScaledVector(d, bW * 0.2));
+  mb.endPart();
 }
 
 function buildCollar(mb, rig, Q, layer, lapel, torsoXZ, crotchY, span, baseOff) {

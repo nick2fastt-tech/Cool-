@@ -206,7 +206,7 @@ function clipSample(keys, u, field, out) {
 }
 const _kca = [0, 0, 0], _kcb = [0, 0, 0], _kcc = [0, 0, 0], _kcd = [0, 0, 0], _kce = [0, 0, 0];
 
-const _qa = new QT(), _va = new V3();
+const _qa = new QT(), _va = new V3(), _vb = new V3();
 
 
 // --- transformation rise: lying -> pushing up -> knees -> crouch -> upright, zombie posture
@@ -231,6 +231,29 @@ function zombieRiseKeys(faceDown) {
     { t: 4.4, hy: 0.68, pitch: 0.4, sp: 0.2, ch: 0.12, hd: 0.35, feet: [[0.11, 0.06, 0.0], [-0.11, -0.12, 0.3]], knee: [0, 0, 1], hands: null, fing: 0.55 },
     stand
   ];
+}
+
+// --- vampires: movement personalities (posture, arms, speeds, idles) ----------------------
+// hunch/crouch: posture overlay on the human gait; walk/run: m/s; stalkR: distance the rush starts from
+const VAMP_STYLES = {
+  aristocrat: { name: 'aristocrat', hunch: -0.06, crouch: 0.0, walk: 1.3, run: 5.6, arms: 'behind', stalkR: 3.2, cadence: 0.9, idles: ['poised', 'adjust', 'poised', 'scan'] },
+  feral: { name: 'feral', hunch: 0.36, crouch: 0.075, walk: 1.65, run: 6.4, arms: 'claw', stalkR: 4.6, cadence: 1.12, twitch: true, idles: ['crouch', 'sniff', 'crouch', 'scan'] },
+  stalker: { name: 'stalker', hunch: 0.18, crouch: 0.1, walk: 0.95, run: 5.9, arms: 'low', stalkR: 5.6, cadence: 0.95, idles: ['still', 'still', 'scan', 'sniff'] }
+};
+const VAMP_STYLE_NAMES = Object.keys(VAMP_STYLES);
+// rising from the ground "like a board": the straight body pivots up about the heels (face-up bodies).
+// Dense linear keys sample a smooth angle curve; rz moves the root forward so the heels stay planted.
+function vampRiseKeys() {
+  const r = 0.97, hold = 0.9, rise = 2.5, N = 14, keys = [];
+  const pose = (t, a) => {
+    const ca = Math.cos(a), sa = Math.sin(a);
+    return { t, hy: 0.15 * ca + 0.995 * sa, pitch: -1.5 * (1 - a / (Math.PI / 2)), sp: 0, ch: 0, hd: 0.08 * ca,
+      feet: [[0.1, r * ca, -1.0 * ca], [-0.1, r * ca, -1.0 * ca]], rz: r * (1 - ca), knee: [0, 0, 1], hands: null, fing: 0.25 };
+  };
+  keys.push(pose(0, 0), pose(hold, 0));
+  for (let i = 1; i <= N; i++) { const u = i / N; keys.push(pose(hold + rise * u, (Math.PI / 2) * smooth01(u))); }
+  const end = pose(hold + rise + 0.6, Math.PI / 2); end.hd = -0.06; end.ch = -0.03; keys.push(end);
+  return keys;
 }
 
 // --- two-bone IK ---------------------------------------------------------------------
@@ -325,6 +348,8 @@ class Animator {
     this.zstyle = ZOMBIE_GAITS[zg % 5]; this.zMirror = (zg >>> 8) & 1;
     this.moving = false; this.jitT = 0; this.jitK = 1; this.hipY = 0; this.hipYInit = false;
     this.crawl = 0; this.action = null;
+    this.vamp = 0; this.vampTarget = 0; this.vstyle = null; this.vStalk = 0; this.vStalkTarget = 0; // vampire body language
+    this.hstyle = null; this.gripR = 0; // horror characters
     // hair spring
     this.hairTip = new V3(); this.hairPrev = new V3(); this.hairInit = false;
     this.handWave = 0;
@@ -387,6 +412,7 @@ class Animator {
     this.updateFace(dt);
     this.springs.update(dt);
     const u = this.upper; u.t += dt; u.w = Math.min(1, u.w + dt / Math.max(0.05, u.dur));
+    this.vamp = damp(this.vamp, this.vampTarget, 2.2, dt);
     const po = this.posture; po.w = Math.min(1, po.w + dt / Math.max(0.05, po.dur));
     this.exertion = clamp(this.exertion + (this.speed > 2.5 ? dt * 0.12 : -dt * 0.05), 0, 1);
     // 1) base locomotion
@@ -398,11 +424,17 @@ class Animator {
       this.applyPosture(P, dt);
       // 3) upper body
       this.applyUpper(P, dt, root);
+      // 3a) vampire posture and arm carriage
+      if (this.vamp > 0.001) this.applyVampPosture(P, dt, root);
+      // 3b) horror characters: doll waddle / slasher's heavy, leaning gait
+      if (this.hstyle) this.applyHorrorPosture(P, dt, root);
     }
     // 3b) interactions (grapple / bite / struggle / feeding)
     if (this.action) this.applyAction(P, dt, root, env);
     // 4) clip
     if (this.clip) this.applyClip(dt, root, env, P);
+    // a weapon in the right fist keeps the fingers closed around it
+    if (this.gripR > 0) { const h = P.hand[1]; h.fing = lerp(h.fing, 0.97, this.gripR); h.thumb = lerp(h.thumb, 0.9, this.gripR); }
     // 5) solve
     this.solve(P, root, dt);
     // 6) snapshot blend
@@ -865,8 +897,16 @@ class Animator {
     const keys = c.keys;
     let i = 0; while (i < keys.length - 2 && keys[i + 1].t < c.t) i++;
     const k0 = keys[i], k1 = keys[i + 1];
-    const t = smooth01((c.t - k0.t) / (k1.t - k0.t));
+    const f01 = clamp((c.t - k0.t) / (k1.t - k0.t), 0, 1), t = c.linear ? f01 : smooth01(f01);
     const rig = this.rig, H = rig.H, Lg = rig.legLen;
+    // root motion (vampire board rise): the root slides forward under the pivoting body
+    let rz = 0;
+    if (k0.rz != null) {
+      rz = lerp(k0.rz, k1.rz, t) * Lg;
+      const d = rz - (c.rzPrev || 0); c.rzPrev = rz;
+      root.pos.x += Math.sin(root.yaw) * d; root.pos.z += Math.cos(root.yaw) * d;
+      root.pos.y = env.groundHeight(root.pos.x, root.pos.z);
+    }
     const Pc = this.Pc;
     Pc.copy(P);
     const hy = lerp(k0.hy, k1.hy, t);
@@ -889,6 +929,11 @@ class Animator {
       hp.pole.set(SIDE_SIGN[s] * 0.8, 0.2, -0.6); hp.pron = -1.2; hp.flex = -0.7; hp.fing = lerp(k0.fing, k1.fing, t); hp.thumb = 0.2;
     }
     if (c.zombie && !c.transform) { Pc.head.z += Math.sin(c.t * 7) * 0.12; Pc.spine.y += Math.sin(c.t * 3.3) * 0.08; }
+    if (c.vrise) { // the hands slowly flex and the jaw parts as the eyes ignite
+      const k = clamp(c.t / c.dur, 0, 1);
+      for (let s = 0; s < 2; s++) { Pc.hand[s].fing = 0.25 + 0.5 * smoothstep(0.05, 0.3, k) * (1 - smoothstep(0.85, 1, k)); Pc.hand[s].thumb = Pc.hand[s].fing * 0.8; }
+      Pc.jaw = 0.04 + 0.2 * Math.sin(Math.PI * smoothstep(0.08, 0.6, k));
+    }
     if (c.transform) {
       // irregular head jerks and twitching hands, strongest in the middle of the rise
       const k = clamp(c.t / c.dur, 0, 1), amp = 0.35 + 0.65 * Math.max(0, 1 - Math.abs(k - 0.5) * 1.7);
@@ -942,6 +987,16 @@ class Animator {
     else if (a.type === 'notice') this.poseNotice(Pc, a, root);
     else if (a.type === 'convulse') this.poseConvulse(Pc, a, root);
     else if (a.type === 'zidle') this.poseZIdle(Pc, a, root);
+    else if (a.type === 'vbite') this.poseVBite(Pc, a, root, dt);
+    else if (a.type === 'vbiteDown') this.poseVBiteDown(Pc, a, root, dt);
+    else if (a.type === 'drained') this.poseDrained(Pc, a, root, dt);
+    else if (a.type === 'vturn') this.poseVTurn(Pc, a, root);
+    else if (a.type === 'vhiss') this.poseVHiss(Pc, a, root);
+    else if (a.type === 'vwipe') this.poseVWipe(Pc, a, root);
+    else if (a.type === 'vidle') this.poseVIdle(Pc, a, root);
+    else if (a.type === 'hlaugh') this.poseHLaugh(Pc, a, root);
+    else if (a.type === 'htilt') this.poseHTilt(Pc, a, root);
+    else if (a.type === 'hidle') this.poseHIdle(Pc, a, root);
     P.lerp(Pc, smooth01(a.w));
     if (!a.ending && a.dur && a.t >= a.dur) a.ending = true;
   }
@@ -959,7 +1014,7 @@ class Animator {
     const ha = P.hand[side], hs = P.hand[so];
     this.clipHand(ha, side, clipSample(K, u, 'a', _kca), L);
     ha.pole.set(sg * 1, -0.55, -0.45); ha.pron = -0.9; ha.flex = 0.15; ha.dev = 0;
-    ha.fing = clipSample(K, u, 'fa'); ha.thumb = ha.fing * 0.8;
+    ha.fing = a.grip ? 0.97 : clipSample(K, u, 'fa'); ha.thumb = a.grip ? 0.9 : ha.fing * 0.8;
     if (C.both) { this.clipHand(hs, so, clipSample(K, u, 'a', _kcb), L); hs.fing = ha.fing; }
     else { this.clipHand(hs, so, clipSample(K, u, 's', _kcb), L); hs.fing = clipSample(K, u, 'fs'); }
     hs.pole.set(SIDE_SIGN[so] * 1, -0.55, -0.45); hs.pron = -0.6; hs.thumb = hs.fing * 0.8;
@@ -1171,6 +1226,281 @@ class Animator {
     P.chest.x += Math.sin(t * 23) * 0.12; P.head.y += Math.sin(t * 31) * 0.3; P.head.x += Math.sin(t * 17) * 0.2;
     for (let s = 0; s < 2; s++) { const hp = P.hand[s]; hp.pos.y += Math.sin(t * 27 + s * 3) * 0.08; hp.fing = 0.5 + 0.5 * Math.sin(t * 19 + s); }
     P.jaw = 0.2 + Math.abs(Math.sin(t * 21)) * 0.25;
+  }
+  // ============================== vampires ==============================================
+  // style posture over the human gait: crouch/hunch with a level, fixed gaze; arms by style
+  applyVampPosture(P, dt, root) {
+    const st = this.vstyle || VAMP_STYLES.aristocrat, w = this.vamp, lg = this.rig.legLen, L = this.L;
+    const run = this.runBlend || 0, spd = this.speed, moving = this.moving;
+    this.vStalk = damp(this.vStalk, this.vStalkTarget, 3, dt);
+    const stalk = this.vStalk;
+    const crouch = Math.max(0, st.crouch + stalk * 0.06) * (1 - run * 0.6);
+    const hunch = (st.hunch + stalk * 0.16) * (1 - run * 0.4);
+    P.hipsOff.y -= crouch * lg * w; P.hipsOff.z -= crouch * 0.3 * lg * w;
+    const pel = (crouch * 0.7 + run * 0.14) * w;
+    P.hipsRot.x += pel; P.spine.x += (hunch * 0.5 + run * 0.08) * w; P.chest.x += hunch * 0.45 * w;
+    // the head stays level, locked forward: a predator's gaze
+    const trunk = pel + (hunch * 0.95 + run * 0.08) * w;
+    P.neck.x -= trunk * 0.38; P.head.x -= trunk * 0.42;
+    if (st.hunch < 0) P.head.x -= 0.04 * w; // aristocrat: chin up
+    // feral twitch of the head
+    if (st.twitch) { this.vTwT = (this.vTwT || 0) - dt; if (this.vTwT <= 0) { this.vTwT = 0.6 + Math.random() * 2.2; this.kick(B.head, _va.set((Math.random() - 0.5) * 5, (Math.random() - 0.5) * 9, (Math.random() - 0.5) * 6)); } }
+    const act = this.action, aw = w * (1 - (act && act.type !== 'vidle' ? smooth01(act.w) : 0));
+    if (aw < 0.01) return;
+    const swing = (s) => moving ? (s === 0 ? -1 : 1) * Math.cos(TAU * this.phase) : 0;
+    for (let s = 0; s < 2; s++) {
+      const sg = SIDE_SIGN[s], hp = P.hand[s];
+      let tgt, k = 1;
+      if (st.arms === 'behind') {        // hands clasped at the small of the back; a full arm drive at a sprint
+        k = 1 - smoothstep(1.9, 3.4, spd);
+        tgt = this.armPose('behind', s); tgt.pos.y += 0.06 * L; tgt.fing = 0.45;
+      } else if (st.arms === 'claw') {   // hands low and forward, fingers hooked, wrists cocked
+        tgt = this.armPose('hang', s);
+        const sw = swing(s);
+        tgt.pos.z += (0.2 + sw * 0.18 * clamp(spd / 2, 0, 1)) * L; tgt.pos.y += (0.1 + Math.max(0, sw) * 0.12 + run * 0.12) * L; tgt.pos.x += sg * 0.07 * L;
+        tgt.fing = 0.62 + 0.25 * Math.sin(this.time * 4.3 + s * 2); tgt.thumb = 0.55; tgt.flex = -0.45; tgt.pron = -0.3;
+      } else {                           // 'low': loose arms carried slightly forward, fingers curled
+        tgt = this.armPose('hang', s);
+        const sw = swing(s);
+        tgt.pos.z += (0.12 + sw * (0.08 + run * 0.26) * clamp(spd / 1.5, 0, 1)) * L; tgt.pos.y += (0.04 + Math.max(0, sw) * run * 0.22) * L; tgt.pos.x += sg * 0.03 * L;
+        tgt.fing = 0.72; tgt.thumb = 0.5; tgt.flex = 0.25; tgt.pron = 0.15;
+      }
+      hp.lerp(tgt, aw * k);
+    }
+  }
+  // chest-space landmark from the bind pose (throat, mouth)
+  chestLocal(bone, x, y, z, out) {
+    const r = this.rig, c = r.bindPos[B.chest], b = r.bindPos[bone], H = r.H;
+    return out.set(b.x - c.x + x * H, b.y - c.y + y * H, b.z - c.z + z * H);
+  }
+  // standing bite: seize the victim, tilt into the neck, sink the fangs (snap event), then drink
+  poseVBite(P, a, root, dt) {
+    const v = a.target, t = a.t, side = a.side || 0, behind = a.variant === 'behind';
+    const strike = t < 0.3 ? 0 : (t < 0.48 ? smooth01((t - 0.3) / 0.18) : 1);
+    if (!a.snapped && t >= 0.46) { a.snapped = true; a.snapEvent = true; }
+    const drink = a.snapped ? 1 : 0, gulp = Math.max(0, Math.sin(t * 4.6)) * drink;
+    P.hipsRot.x += 0.05; P.spine.x += 0.06 + strike * 0.04; P.chest.x += 0.07 + strike * 0.07;
+    if (v && !v.removed) {
+      const vy = v.root.yaw, vsx = Math.cos(vy) * SIDE_SIGN[side], vsz = -Math.sin(vy) * SIDE_SIGN[side];
+      const nk = v.boneWPos[B.neck], hd = v.boneWPos[B.head];
+      const bp = _vb.set(nk.x * 0.55 + hd.x * 0.45 + vsx * 0.045, nk.y * 0.55 + hd.y * 0.45 - 0.01, nk.z * 0.55 + hd.z * 0.45 + vsz * 0.045);
+      if (!behind) { bp.x += Math.sin(vy) * 0.02; bp.z += Math.cos(vy) * 0.02; }
+      for (let s = 0; s < 2; s++) {
+        const hp = P.hand[s];
+        // front: one hand cradles the head (tilting it away), the other grips the shoulder; behind: both shoulders
+        let tb;
+        if (behind) tb = v.boneWPos[SB('upperarm', s)];
+        else tb = s === side ? v.boneWPos[B.head] : v.boneWPos[SB('upperarm', side)];
+        this.toRoot(tb, root, _va);
+        if (!behind && s === side) { _va.x += SIDE_SIGN[s] * 0.06; _va.y += 0.02; _va.z -= 0.02; }
+        else { _va.y -= 0.03; _va.z -= 0.02; _va.x += SIDE_SIGN[s] * 0.03; }
+        hp.posR.copy(_va); hp.space = smooth01(Math.min(1, t / 0.32));
+        hp.pole.set(SIDE_SIGN[s], -0.7, -0.3); hp.pron = -0.9; hp.flex = 0.35; hp.fing = lerp(0.4, 0.9, hp.space); hp.thumb = hp.fing * 0.8;
+      }
+      this.aimHead(P, root, bp, 0.55 + 0.4 * strike);
+      // tilt the head along the neck; swallowing pulses once the fangs are in
+      P.head.z += (behind ? -1 : 1) * SIDE_SIGN[side] * 0.3 * strike;
+      P.neck.x += gulp * 0.05; P.head.x += gulp * 0.04;
+    } else if (a.point) { // lunge at a point (the player): both hands reach, the head darts in
+      for (let s = 0; s < 2; s++) {
+        const hp = P.hand[s], r = this.armPose('reach', s);
+        r.pos.y += 0.12 * this.L; r.pos.x -= SIDE_SIGN[s] * 0.08 * this.L; r.fing = 0.8; r.flex = 0.3;
+        hp.lerp(r, smooth01(Math.min(1, t / 0.3)));
+      }
+      this.aimHead(P, root, a.point, 0.7);
+      P.head.z += SIDE_SIGN[side] * 0.25 * strike;
+      P.hipsOff.z += strike * 0.08 * (1 - smoothstep(0.7, 1.4, t));
+    }
+    P.jaw = t < 0.3 ? lerp(0.05, 0.55, smooth01(t / 0.3)) : (t < 0.5 ? lerp(0.55, 0.16, smooth01((t - 0.3) / 0.2)) : 0.16 + gulp * 0.05);
+    P.look = 0;
+  }
+  // kneeling bite on someone lying on the ground: kneel at the shoulder, bend over the neck
+  poseVBiteDown(P, a, root, dt) {
+    const rig = this.rig, H = rig.H, t = a.t;
+    const strike = t < 0.55 ? smooth01(t / 0.55) : 1;
+    if (!a.snapped && t >= 0.6) { a.snapped = true; a.snapEvent = true; }
+    const gulp = a.snapped ? Math.max(0, Math.sin(t * 4.6)) : 0;
+    const hipJ = rig.thighLen * 0.8 + 0.07;
+    P.hipsOff.set(0, hipJ + 0.035 * H - rig.hipsHeight, -0.05);
+    P.hipsRot.set(0.48, 0, 0);
+    P.spine.set(0.4 + strike * 0.1, 0, 0); P.chest.set(0.32 + strike * 0.14, 0, 0); P.neck.set(0.1, 0, 0); P.head.set(0.05, 0, 0);
+    for (let s = 0; s < 2; s++) {
+      const sg = SIDE_SIGN[s], fp = P.foot[s];
+      fp.pos.set(sg * rig.hipHalf * 1.15, rig.ankleY * 0.3 + 0.1, -rig.shinLen * 0.86);
+      fp.pitch = 1.25; fp.yaw = 0; fp.roll = 0; fp.pole.set(sg * 0.15, -0.5, 1);
+      const hp = P.hand[s], tgt = s === 0 ? a.chest : a.ground;
+      if (tgt) { this.toRoot(tgt, root, _va); hp.posR.copy(_va); hp.posR.y += 0.03; hp.space = smooth01(Math.min(1, t / 0.4)); }
+      hp.pole.set(sg, -0.5, -0.5); hp.pron = -1.3; hp.flex = -0.6; hp.fing = 0.35; hp.thumb = 0.3;
+    }
+    if (a.point) this.aimHead(P, root, a.point, 0.95);
+    P.neck.x += gulp * 0.05;
+    P.jaw = t < 0.45 ? lerp(0.05, 0.5, smooth01(t / 0.45)) : (t < 0.65 ? lerp(0.5, 0.15, (t - 0.45) / 0.2) : 0.15 + gulp * 0.05);
+    P.look = 0;
+  }
+  // the victim: a brief struggle, then going limp in the grip, head tilted away from the bite
+  poseDrained(P, a, root, dt) {
+    const vmp = a.target, t = a.t, k = clamp(a.drain || 0, 0, 1), side = a.side || 0, sg = SIDE_SIGN[side];
+    const fight = 1 - smoothstep(0.12, 0.55, k);
+    P.head.z -= sg * (0.28 + 0.22 * k); P.neck.z -= sg * 0.14; P.head.x += -0.12 * (1 - k) + 0.16 * k;
+    P.hipsOff.y -= k * 0.1 * this.rig.legLen; P.hipsOff.z -= k * 0.03; P.spine.x += k * 0.08; P.chest.x += -0.1 * (1 - k) + 0.05 * k;
+    P.chest.z += Math.sin(t * 6.3) * 0.06 * fight;
+    for (let s = 0; s < 2; s++) {
+      const hp = P.hand[s];
+      if (fight > 0.02 && vmp && !vmp.removed) {
+        if (!a.behind) { this.toRoot(s === 0 ? vmp.boneWPos[B.chest] : vmp.boneWPos[SB('upperarm', 0)], root, _va); _va.x += SIDE_SIGN[s] * 0.06; _va.y -= 0.05 + Math.sin(t * 8 + s * 2) * 0.03; }
+        else { this.toRoot(vmp.boneWPos[SB('hand', s)], root, _va); }
+        hp.posR.copy(_va); hp.space = fight;
+        hp.pole.set(SIDE_SIGN[s], -0.8, -0.3); hp.pron = -1.3; hp.flex = a.behind ? 0.2 : -0.7; hp.fing = a.behind ? 0.7 : 0.2; hp.thumb = 0.3;
+      } else hp.space = 0;
+      const hang = this.armPose('hang', s);
+      hp.pos.lerp(hang.pos, k); hp.fing = lerp(hp.fing, 0.25, k);
+    }
+    P.jaw = lerp(0.32 + Math.sin(t * 11) * 0.05, 0.1, k);
+    if (k > 0.65) this.blink = Math.max(this.blink, 0.05);  // eyes falling shut
+    P.look = 0;
+  }
+  // turning: clutch the throat and double over, arch back with arms flung wide, then settle
+  poseVTurn(P, a, root) {
+    const t = a.t, u = clamp(t / (a.dur || 4.4), 0, 1), lg = this.rig.legLen, L = this.L;
+    const p1 = smoothstep(0.0, 0.1, u) * (1 - smoothstep(0.28, 0.4, u));
+    const p2 = smoothstep(0.3, 0.42, u) * (1 - smoothstep(0.6, 0.76, u));
+    const p3 = smoothstep(0.66, 0.85, u);
+    const shake = Math.sin(t * 23) * 0.035 * (p1 + p2 * 0.6);
+    P.hipsOff.y -= (p1 * 0.12 + p2 * 0.03 + p3 * 0.02) * lg;
+    P.spine.x += p1 * 0.38 - p2 * 0.22; P.chest.x += p1 * 0.34 - p2 * 0.3 + shake;
+    P.neck.x += p1 * 0.18 - p2 * 0.3; P.head.x += p1 * 0.22 - p2 * 0.42 + p3 * 0.08;
+    P.head.y += Math.sin(t * 3.1) * 0.18 * p1; P.head.z += shake * 2.5;
+    for (let s = 0; s < 2; s++) {
+      const sg = SIDE_SIGN[s], hp = P.hand[s];
+      this.chestLocal(B.neck, sg * 0.022, 0.035, 0.06, _va);
+      hp.pos.lerp(_va, p1); hp.space = 0;
+      const sc = this.shoulderC[s];
+      _vb.set(sc.x + sg * 0.82 * L, sc.y + 0.32 * L, sc.z + 0.12 * L);
+      hp.pos.lerp(_vb, p2);
+      hp.pole.set(sg * (1 - p2), -0.6 + p2 * 0.2, -0.5 * p2 - 0.2); hp.pron = lerp(-1.0, -1.5, p2);
+      hp.fing = lerp(lerp(0.75, 0.05, p2), 0.6, p3); hp.thumb = hp.fing * 0.7; hp.flex = lerp(0.3, -0.4, p2);
+    }
+    P.clav[0].z += p2 * 0.15; P.clav[1].z += p2 * 0.15;
+    P.jaw = 0.12 * p1 + Math.sin(t * 13) * 0.05 * p1 + 0.62 * p2 + 0.06 * p3;
+  }
+  // threat display: crouch, shoulders up, clawed hands raised, jaw wide
+  poseVHiss(P, a, root) {
+    const u = clamp(a.t / (a.dur || 1.1), 0, 1), k = Math.sin(Math.PI * Math.min(1, u * 1.2)), L = this.L;
+    P.hipsOff.y -= k * 0.06 * this.rig.legLen; P.chest.x += k * 0.12; P.neck.x -= k * 0.06; P.head.x -= k * 0.14;
+    P.head.y += Math.sin(a.t * 17) * 0.035 * k;
+    P.clav[0].z += k * 0.22; P.clav[1].z += k * 0.22;
+    for (let s = 0; s < 2; s++) {
+      const c = this.armPose('claw', s);
+      c.pos.y -= 0.12 * L; c.pos.z -= 0.32 * L; c.pos.x += SIDE_SIGN[s] * 0.2 * L;
+      c.fing = 0.78; c.thumb = 0.6; c.flex = -0.5;
+      P.hand[s].lerp(c, k);
+    }
+    P.jaw = Math.max(P.jaw, 0.58 * k);
+  }
+  // after feeding: the back of the hand wipes the mouth
+  poseVWipe(P, a, root) {
+    const u = clamp(a.t / (a.dur || 1.3), 0, 1), s = a.side || 1, sg = SIDE_SIGN[s], hp = P.hand[s];
+    const up = smoothstep(0.0, 0.3, u) * (1 - smoothstep(0.7, 1.0, u)), sw = smoothstep(0.3, 0.7, u);
+    this.chestLocal(B.head, sg * lerp(0.05, -0.04, sw), -0.022, 0.085, _va);
+    hp.pos.lerp(_va, up); hp.space *= 1 - up;
+    hp.pole.set(sg, -1, -0.2); hp.pron = lerp(hp.pron, -1.6, up); hp.flex = lerp(hp.flex, 0.5, up); hp.fing = lerp(hp.fing, 0.6, up);
+    P.head.x -= up * 0.12; P.head.y += (sw - 0.5) * 0.25 * up; P.jaw = 0.03;
+  }
+  // idles: poised scan, cuff adjust, feral crouch, sniffing the air, dead-still stalker
+  poseVIdle(P, a, root) {
+    const t = a.t, u = clamp(t / (a.dur || 4), 0, 1), env = Math.sin(Math.PI * u), ph = a.ph || 0, L = this.L;
+    if (a.mode === 'poised' || a.mode === 'scan') {
+      const k = a.mode === 'scan' ? 0.75 : 0.45;
+      P.head.y += Math.sin(t * 0.5 + ph) * k * env; P.neck.y += Math.sin(t * 0.5 + ph) * k * 0.35 * env; P.chest.y += Math.sin(t * 0.5 + ph) * 0.06 * env;
+    } else if (a.mode === 'adjust') { // straightens a cuff
+      const s = a.side || 0, hp = P.hand[s], o = P.hand[1 - s];
+      const k = smoothstep(0.05, 0.25, u) * (1 - smoothstep(0.75, 0.95, u));
+      const op = this.armPose('hang', 1 - s); op.pos.set(-SIDE_SIGN[s] * 0.02, -0.12 * L - 0.1, 0.32 * L); op.pron = -1.3; op.fing = 0.3;
+      o.lerp(op, k);
+      _va.set(op.pos.x + SIDE_SIGN[s] * 0.06, op.pos.y + 0.02, op.pos.z + 0.02);
+      hp.pos.lerp(_va, k); hp.space *= 1 - k; hp.fing = lerp(hp.fing, 0.55 + 0.2 * Math.sin(t * 9), k); hp.pron = lerp(hp.pron, -0.6, k);
+      P.head.x += 0.28 * k; P.neck.x += 0.1 * k;
+    } else if (a.mode === 'crouch') {
+      P.hipsOff.y -= 0.1 * this.rig.legLen * env; P.hipsRot.x += 0.12 * env; P.spine.x += 0.14 * env; P.chest.x += 0.08 * env;
+      P.neck.x -= 0.16 * env; P.head.x -= 0.2 * env; P.head.z += Math.sin(t * 1.3 + ph) * 0.38 * env;
+      for (let s = 0; s < 2; s++) P.hand[s].fing = clamp(P.hand[s].fing + Math.sin(t * 5 + s * 2.4) * 0.3 * env, 0, 1);
+    } else if (a.mode === 'sniff') {
+      P.head.x -= 0.28 * env; P.neck.x -= 0.12 * env; P.chest.x -= 0.04 * env;
+      P.head.y += Math.sin(t * 1.4 + ph) * 0.35 * env + Math.sin(t * 13) * 0.02 * env;
+    } else { // 'still': utterly motionless; the head turns in small, deliberate steps
+      const step = Math.round(Math.sin(t * 0.55 + ph) * 3) / 3;
+      this.vHeadStep = damp(this.vHeadStep || 0, step, 6, 1 / 60);
+      P.head.y += this.vHeadStep * 0.32 * env; P.neck.y += this.vHeadStep * 0.1 * env;
+    }
+  }
+  // ============================== horror characters ======================================
+  applyHorrorPosture(P, dt, root) {
+    const L = this.L, spd = this.speed, moving = this.moving, ph = this.phase, run = this.runBlend || 0;
+    const wk = moving ? clamp(spd / 1.2, 0, 1) : 0;
+    const act = this.action, aw = 1 - (act && act.type !== 'hidle' ? smooth01(act.w) : 0);
+    if (this.hstyle === 'doll') {
+      // stiff little legs: a side-to-side waddle, head bobbing, arms swinging straight from the shoulder
+      const sw = Math.sin(TAU * ph);
+      P.hipsOff.x += sw * 0.018 * wk; P.hipsRot.z += sw * 0.09 * wk; P.spine.z -= sw * 0.06 * wk; P.chest.z -= sw * 0.04 * wk;
+      P.head.z += sw * 0.07 * wk; P.head.x += Math.abs(sw) * 0.05 * wk - 0.04;
+      P.chest.x += run * 0.12; P.spine.x += run * 0.08;
+      for (let s = 0; s < 2; s++) {
+        const sg = SIDE_SIGN[s], hp = P.hand[s], swc = moving ? (s === 0 ? -1 : 1) * Math.cos(TAU * ph) : 0;
+        let t;
+        if (s === 1) { // knife hand: carried forward at waist height, blade up and out
+          t = this.armPose('hang', s);
+          t.pos.set(this.shoulderC[s].x + sg * 0.06 * L, this.shoulderC[s].y - 0.5 * L + Math.max(0, swc) * 0.08 * L, this.shoulderC[s].z + (0.42 + swc * 0.1 * wk) * L);
+          t.pole.set(sg * 0.8, -0.6, -0.4); t.pron = -0.4; t.flex = -0.2;
+        } else {
+          t = this.armPose('hang', s);
+          t.pos.z += swc * (0.32 + run * 0.15) * L * wk; t.pos.x += sg * 0.06 * L; t.pos.y += Math.abs(swc) * 0.12 * L * wk;
+          t.fing = 0.25; t.flex = 0;
+        }
+        hp.lerp(t, aw);
+      }
+    } else if (this.hstyle === 'slasher') {
+      // heavy, deliberate: shoulders rounded forward, head down and level, a slow arm swing
+      P.spine.x += 0.06; P.chest.x += 0.1; P.neck.x += 0.12; P.head.x -= 0.1;
+      P.clav[0].x += 0.12; P.clav[1].x += 0.12;
+      P.hipsRot.x += run * 0.12; P.chest.x += run * 0.1;
+      P.chest.y += Math.sin(TAU * ph) * 0.05 * wk;
+      for (let s = 0; s < 2; s++) {
+        const sg = SIDE_SIGN[s], hp = P.hand[s], swc = moving ? (s === 0 ? -1 : 1) * Math.cos(TAU * ph) : 0;
+        const t = this.armPose('hang', s);
+        if (s === 1) { t.pos.z += (0.1 + swc * 0.08 * wk) * L; t.pos.x += sg * 0.06 * L; t.pron = -0.2; } // machete low, blade forward
+        else { t.pos.z += swc * (0.14 + run * 0.3) * L * wk; t.pos.y += Math.max(0, swc) * run * 0.2 * L; t.fing = 0.55; }
+        hp.lerp(t, aw * 0.85);
+      }
+    }
+  }
+  // doll: a nasty little laugh - shoulders shaking, head thrown back, knife raised
+  poseHLaugh(P, a, root) {
+    const u = clamp(a.t / (a.dur || 1.6), 0, 1), k = Math.sin(Math.PI * Math.min(1, u * 1.3)), sh = Math.sin(a.t * 26) * k;
+    P.chest.x -= 0.18 * k; P.head.x -= 0.32 * k; P.neck.x -= 0.1 * k; P.chest.x += sh * 0.05; P.head.x += sh * 0.06;
+    P.clav[0].z += (0.15 + sh * 0.12) * k; P.clav[1].z += (0.15 + sh * 0.12) * k;
+    const hp = P.hand[1], c = this.armPose('hang', 1), L = this.L;
+    c.pos.set(this.shoulderC[1].x - 0.05 * L, this.shoulderC[1].y + 0.25 * L, this.shoulderC[1].z + 0.35 * L); c.pole.set(-1, -0.8, -0.2); c.pron = -1.2;
+    hp.lerp(c, k);
+    P.jaw = Math.max(P.jaw, (0.18 + 0.12 * Math.max(0, Math.sin(a.t * 26))) * k);
+  }
+  // slasher: the slow head tilt on spotting someone
+  poseHTilt(P, a, root) {
+    const u = clamp(a.t / (a.dur || 1.5), 0, 1), k = smoothstep(0, 0.35, u) * (1 - smoothstep(0.75, 1, u));
+    P.head.z += (a.dir || 1) * 0.42 * k; P.neck.z += (a.dir || 1) * 0.12 * k; P.head.x -= 0.06 * k;
+  }
+  poseHIdle(P, a, root) {
+    const t = a.t, u = clamp(t / (a.dur || 4), 0, 1), env = Math.sin(Math.PI * u), ph = a.ph || 0;
+    if (a.mode === 'look') { P.head.y += Math.sin(t * 0.8 + ph) * 0.6 * env; P.neck.y += Math.sin(t * 0.8 + ph) * 0.2 * env; }
+    else if (a.mode === 'tap') { // doll: taps the flat of the knife against the other palm
+      const L = this.L, hk = P.hand[1], ho = P.hand[0];
+      const c = this.armPose('hang', 0); c.pos.set(this.shoulderC[0].x - 0.15 * L, this.shoulderC[0].y - 0.55 * L, this.shoulderC[0].z + 0.4 * L); c.pron = -1.4; c.fing = 0.1;
+      ho.lerp(c, env);
+      const k2 = this.armPose('hang', 1); k2.pos.set(this.shoulderC[1].x + 0.1 * L, this.shoulderC[1].y - 0.45 * L + Math.abs(Math.sin(t * 5)) * 0.08 * L, this.shoulderC[1].z + 0.42 * L); k2.pron = -0.2;
+      hk.lerp(k2, env); P.head.x += 0.18 * env;
+    } else { // 'breathe': heavy breathing, shoulders rising
+      const b = Math.sin(t * 2.2) * 0.5 + 0.5;
+      P.chest.x -= b * 0.04 * env; P.clav[0].z += b * 0.08 * env; P.clav[1].z += b * 0.08 * env; P.head.x += 0.04 * env;
+    }
   }
   // --- solver -------------------------------------------------------------------------
   solve(P, root, dt) {

@@ -25,7 +25,9 @@ const TIPS = [
   'Shoot limbs to sever them. A subject who loses a leg can only crawl.',
   'Grenades tear bodies apart at close range. Hold the throw button longer to throw farther.',
   'Gore level, graphics, audio and controls are in <b>Settings</b>. Choices are saved.',
-  'Switch between the <b>White Testing Room</b> and the <b>Sunny Grassy Field</b> in the Sandbox menu.',
+  'Switch between the <b>White Testing Room</b>, the <b>Sunny Grassy Field</b> and the <b>Atlantic Av–Barclays Center subway</b> in the Sandbox menu.',
+  'Vampires stalk, rush and bite. Bitten people faint, recover, then turn. A knife to the chest is a vampire\'s weakness.',
+  'Chucky laughs and rushes in with his knife. Jason walks, tilts his head, and only runs when you keep getting away.',
   'On phones: left thumb moves, right thumb looks, tap the weapon bar to switch weapons.'
 ];
 
@@ -188,12 +190,13 @@ class UI {
           const life = npc.lifeState === 'alive' ? (npc.brain ? npc.brain.state : '') : npc.lifeState;
           st = `${life.toUpperCase()} · ${Math.round(npc.health)}HP`;
         }
-        const cd = r.state === 'pending' ? `REINCARNATION ${Math.max(0, r.timer).toFixed(1)}s` : (r.state === 'transforming' ? 'TURNING...' : (npc.lifeState === 'dead' && Settings.data.zombies.reincarnation && (r.state === 'ineligible' || r.state === 'inert') ? 'NO REINCARNATION' : ''));
+        const V = npc.vamp;
+        const cd = V && V.state === 'bitten' && Settings.data.vampires.turning ? `BITTEN ${Math.max(0, V.dur - V.t).toFixed(1)}s` : (V && V.state === 'turning' ? 'TURNING (VAMPIRE)...' : (r.state === 'pending' ? `REINCARNATION ${Math.max(0, r.timer).toFixed(1)}s` : (r.state === 'transforming' ? 'TURNING...' : (npc.lifeState === 'dead' && Settings.data.zombies.reincarnation && (r.state === 'ineligible' || r.state === 'inert') && !npc.horror ? 'NO REINCARNATION' : ''))));
         const key = npc.name + st + cd + npc.lifeState;
         if (el._key !== key) {
           el._key = key;
           el.innerHTML = `<div class="nm">${npc.idStr} ${npc.name}</div>` + (st ? `<div class="st">${st}</div>` : '') + (cd ? `<div class="cd">${cd}</div>` : '');
-          el.className = 'npc-label' + (npc.lifeState === 'zombie' ? ' zombie' : (npc.lifeState === 'dead' || npc.lifeState === 'destroyed') ? ' dead' : '');
+          el.className = 'npc-label' + (npc.lifeState === 'zombie' ? ' zombie' : npc.lifeState === 'vampire' ? ' vampire' : (npc.lifeState === 'dead' || npc.lifeState === 'destroyed') ? ' dead' : (V && V.state === 'bitten' ? ' bitten' : ''));
           el._w = el.offsetWidth; el._h = el.offsetHeight;
         }
         const it = items.length < (this._lblObjs || (this._lblObjs = [])).length ? this._lblObjs[items.length] : (this._lblObjs[items.length] = {});
@@ -247,7 +250,7 @@ class UI {
     const lh = npc.lastHit;
     const reincTxt = npc.lifeState === 'dead' ? (r.state === 'pending' ? `Pending: ${Math.max(0, r.timer).toFixed(1)}s` : (r.state === 'ineligible' ? 'Ineligible: ' + r.reason : r.state === 'inert' ? 'Turned, will never rise (head trauma)' : (Settings.data.zombies.reincarnation ? r.state : 'Mode off'))) : (npc.isZombie ? 'Reanimated' : '-');
     el.innerHTML = `
-      <div class="ins-head"><h4>${npc.name}<small>Human ${npc.idStr} · seed ${npc.seed}</small></h4><button class="xbtn" id="insClose">&#x2715;</button></div>
+      <div class="ins-head"><h4>${npc.name}<small>${npc.horror ? npc.horror.label + ' (horror character)' : npc.lifeState === 'vampire' ? 'Vampire (' + (npc.anim.vstyle ? npc.anim.vstyle.name : '') + ')' : npc.isZombie ? 'Zombie' : 'Human'} ${npc.idStr} · seed ${npc.seed}</small></h4><button class="xbtn" id="insClose">&#x2715;</button></div>
       <div class="ins-body">
         <div class="ins-diagram"><svg viewBox="0 0 100 190">${shapes}<text x="50" y="189" fill="#6b7d8b" font-size="7" text-anchor="middle" font-family="monospace">FRONT</text><text x="86" y="10" fill="#6b7d8b" font-size="7" font-family="monospace">L</text><text x="10" y="10" fill="#6b7d8b" font-size="7" font-family="monospace">R</text></svg></div>
         <div class="ins-info">
@@ -282,7 +285,7 @@ class UI {
   subjectAction(a, npc) {
     const g = this.game;
     if (!npc || npc.removed) return;
-    if (a === 'rag') { if (npc.physMode !== 'ragdoll') npc.goRagdoll('Knockdown (Sandbox)', npc.lifeState !== 'alive' && npc.lifeState !== 'zombie'); HT.log('sys', `${npc.idStr} ragdolled`); }
+    if (a === 'rag') { if (npc.physMode !== 'ragdoll') npc.goRagdoll('Knockdown (Sandbox)', !npc.active); HT.log('sys', `${npc.idStr} ragdolled`); }
     else if (a === 'kill') { const r = npc.applyHit({ region: REGION.TORSO, damage: 9999, weapon: 'sandbox' }); g.hits.report(npc, REGION.TORSO, r, 'Sandbox Kill', null); }
     else if (a === 'revive') g.revive(npc);
     else if (a === 'zombie') g.zombies.makeZombieNow(npc);
@@ -348,6 +351,9 @@ class UI {
     let s = this.sec(b, 'Spawn');
     const sp = (gender) => { g.npcs.spawnMany(1, { gender, pose: 'idle', mode: 'crosshair' }); this.sound('spawn'); };
     this.buttons(s, [{ label: '&#9794; Spawn Male', cls: 'pri', fn: () => sp('male') }, { label: '&#9792; Spawn Female', cls: 'pri', fn: () => sp('female') }], 'spawnbtns');
+    const sx = (fn) => { const p = g.player.groundTarget(8); if (fn(p)) this.sound('spawn'); };
+    this.buttons(s, [{ label: 'Vampire', cls: 'v', fn: () => sx(p => g.vampires.spawn(p)) }, { label: 'Zombie', cls: 'z', fn: () => sx(p => g.zombies.spawnZombie(p)) },
+      { label: 'Chucky', fn: () => sx(p => g.horror.spawn('doll', p)) }, { label: 'Jason', fn: () => sx(p => g.horror.spawn('slasher', p)) }], 'spawnbtns');
     this.note(s, 'Each person gets a random body, height, face and outfit. They appear where you are aiming.');
     s = this.sec(b, 'Weapons');
     const cards = document.createElement('div'); cards.className = 'wcards';
@@ -365,9 +371,12 @@ class UI {
     this.toggle(s, 'Bites infect and turn people', 'zombies.infection');
     this.toggle(s, 'Zombies eat bodies', 'zombies.feeding');
     this.buttons(s, [{ label: 'Start Outbreak', cls: 'z', fn: () => { this.startOutbreak(); this.toggleDrawer(false); } }, { label: 'Kill All Zombies', cls: 'bad', fn: () => { for (const n of g.npcs.list) if (n.lifeState === 'zombie' || n.lifeState === 'reanimating') { n.criticalHead = true; n.applyHit({ region: REGION.HEAD, damage: 9999, weapon: 'sandbox' }); } } }]);
+    this.toggle(s, 'Vampires', 'vampires.enabled', (v) => HT.toast('Vampires ' + (v ? 'on' : 'off'), 'v'));
+    this.toggle(s, 'Horror characters', 'horror.enabled', (v) => HT.toast('Horror characters ' + (v ? 'on' : 'off')));
     s = this.sec(b, 'World');
     const cur = g.env.current.kind;
-    this.buttons(s, [{ label: 'White Room', cls: cur === 'room' ? 'pri' : '', fn: () => { g.switchEnvironment('room'); this.renderDrawer(); } }, { label: 'Grassy Field', cls: cur === 'field' ? 'pri' : '', fn: () => { g.switchEnvironment('field'); this.renderDrawer(); } }]);
+    this.buttons(s, [{ label: 'White Room', cls: cur === 'room' ? 'pri' : '', fn: () => { g.switchEnvironment('room'); this.renderDrawer(); } }, { label: 'Grassy Field', cls: cur === 'field' ? 'pri' : '', fn: () => { g.switchEnvironment('field'); this.renderDrawer(); } },
+      { label: 'Subway: Atlantic Av–Barclays', cls: cur === 'subway' ? 'pri' : '', fn: () => { HT.toast('Loading Atlantic Av–Barclays Ctr...'); setTimeout(() => { g.switchEnvironment('subway'); this.renderDrawer(); }, 30); } }]);
     if (cur === 'field') {
       const F = Settings.data.environment.field;
       this.slider(s, 'Time of day', 'environment.field.timeOfDay', 0, 24, 0.25, x => { const h = Math.floor(x), m = Math.round((x - h) * 60); return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0'); }, () => g.env.current.applyTimeWeather());
@@ -450,7 +459,20 @@ class UI {
     this.select(s, 'Rise delay (zombie mode)', [['immediate', 'Immediate'], ['short', 'Short (5s)'], ['medium', 'Medium (15s)'], ['long', 'Long (45s)']], Settings.data.zombies.delayPreset, v => Settings.set('zombies.delayPreset', v));
     this.toggle(s, 'Destroyed head stops rising', 'zombies.headTraumaPrevents');
     this.slider(s, 'Zombie detection range', 'zombies.detection', 2, 40, 0.5, x => x.toFixed(1) + ' m');
+    s = this.sec(b, 'Vampires');
+    this.toggle(s, 'Vampire system', 'vampires.enabled');
+    this.toggle(s, 'Bites turn people into vampires', 'vampires.turning');
+    this.toggle(s, 'Vampires hunt you', 'vampires.targetPlayer');
+    this.slider(s, 'Turning time', 'vampires.turnTime', 5, 60, 1, x => x + ' s');
+    this.slider(s, 'Vampire speed', 'vampires.speed', 0.5, 2, 0.05, x => x.toFixed(2) + 'x');
+    this.slider(s, 'Pale skin', 'vampires.pallor', 0.3, 1, 0.01, x => Math.round(x * 100) + '%');
+    this.toggle(s, 'Glowing eyes', 'vampires.glowEyes');
+    this.toggle(s, 'Fangs', 'vampires.fangs');
+    s = this.sec(b, 'Horror Characters');
+    this.toggle(s, 'Chucky & Jason', 'horror.enabled');
+    this.slider(s, 'Attack damage', 'horror.damage', 0.25, 3, 0.05, x => x.toFixed(2) + 'x');
     s = this.sec(b, 'People & Physics');
+    this.toggle(s, 'Hats & glasses can fall off', 'physics.looseAccessories', () => { if (!Settings.data.physics.looseAccessories) g.accessories.restoreAll(); });
     this.toggle(s, 'People react and flee', 'ai.reactions');
     this.toggle(s, 'People wander', 'ai.wander');
     this.slider(s, 'Gravity', 'physics.gravity', 0, 25, 0.1, x => x.toFixed(1) + ' m/s²', () => g.applyPhysicsSettings());
