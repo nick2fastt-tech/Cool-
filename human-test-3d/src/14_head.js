@@ -61,7 +61,7 @@ function makeHeadShape(app, rig) {
     d = smin(d, sdEll(x, y, z, 0, -0.022, 0.024, 0.0655, 0.079, 0.068), 0.022);
     d = smin(d, sdEll(x, y, z, 0, -0.071, 0.025, P.jawW, 0.043, 0.058), 0.024);
     if (!far(BCHIN, x, y, z, d, 0.016)) d = smin(d, sdEll(x, y, z, 0, -0.101, 0.063 + P.chinProj, P.chinW, 0.0215, 0.024), 0.016);
-    if (!far(BCHEEK, ax, y, z, d, 0.018)) d = smin(d, sdEll(ax, y, z, 0.0465, -0.017, 0.046, 0.024 + P.cheekFull, 0.020, 0.030 + P.cheek), 0.018);
+    if (!far(BCHEEK, ax, y, z, d, 0.027)) d = smin(d, sdEll(ax, y, z, 0.0465, -0.017, 0.046, 0.024 + P.cheekFull, 0.020, 0.030 + P.cheek), 0.027); // a soft blend: no hard hollow under the cheekbone
     if (!far(BMUZ, x, y, z, d, 0.016)) d = smin(d, sdEll(x, y, z, 0, -0.067, 0.064, 0.030 * P.mouthW, 0.026, 0.030), 0.016);
     if (!far(BBROW, ax, y, z, d, 0.012)) d = smin(d, sdCapR(ax, y, z, 0.009, 0.0245, 0.0835, 0.050, 0.0205, 0.0705, P.brow, P.brow * 0.85), 0.012);
     if (!far(BNOSE, x, y, z, d, 0.0072)) d = smin(d, sdCapR(x, y, z, 0, 0.0055, 0.0825, 0, tipY, tipZ, 0.0052 * P.noseBridge, 0.0097 * P.noseW), 0.0072);

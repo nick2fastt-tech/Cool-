@@ -229,21 +229,25 @@ class HorrorSystem {
   }
 
   // --- the containment doctor ------------------------------------------------------------
-  // an ordinary, healthy person standing on the same level, not already infected, held, seated or riding
+  // an ordinary, healthy person on the same level (standing or sitting), not already infected, held or riding a train
   eligibleSubject(h, o, maxD) {
     if (!o || o.removed || o === h || o.horror || o.lifeState !== 'alive' || o.physMode !== 'anim' || o.carried) return false;
-    if (o.infection || (o.vamp && o.vamp.state !== 'none') || o.grabbedBy || o.seatLock || o.riding || (o.anim && o.anim.crawl)) return false;
+    if (o.infection || (o.vamp && o.vamp.state !== 'none') || o.grabbedBy || o.riding || (o.anim && o.anim.crawl)) return false;
     if (Math.abs(o.root.pos.y - h.root.pos.y) > 1.2) return false;
     return Math.hypot(o.root.pos.x - h.root.pos.x, o.root.pos.z - h.root.pos.z) < maxD;
   }
+  // the area someone stands in (platform, mezzanine...), when the map has areas
+  areaOf(n) { const e = this.game.env.current; return e && e.regionAt ? e.regionAt(n.root.pos.x, n.root.pos.z, true, n.root.pos.y) : null; }
   pickSubject(h, def) {
     let best = null, bs = 1e9;
+    const here = this.areaOf(h);
     for (const o of this.game.npcs.list) {
       if (!this.eligibleSubject(h, o, def.detect)) continue;
       let claimed = false; for (const w of this.game.npcs.list) if (w !== h && w.brain && w.brain.subject === o) claimed = true;
       if (claimed) continue;
       const moving = o.brain && o.brain.vel ? Math.hypot(o.brain.vel.x, o.brain.vel.z) : 0;
-      const sc = Math.hypot(o.root.pos.x - h.root.pos.x, o.root.pos.z - h.root.pos.z) + moving * 2.5 + (o.brain && o.brain.state === 'flee' ? 12 : 0) + Math.random() * 2;
+      const other = here && this.areaOf(o) !== here; // across the tracks or on another level: a long walk round
+      const sc = Math.hypot(o.root.pos.x - h.root.pos.x, o.root.pos.z - h.root.pos.z) + moving * 2.5 + (o.brain && o.brain.state === 'flee' ? 12 : 0) + (other ? 25 : 0) + Math.random() * 2;
       if (sc < bs) { bs = sc; best = o; }
     }
     return best;
@@ -303,13 +307,15 @@ class HorrorSystem {
     // a subject: walk up at a measured pace (he never runs after anyone)
     if (b.state === 'dStalk') {
       const v = b.subject;
-      if (!Z.infection || !this.eligibleSubject(h, v, def.detect * 1.4) || b.t > 32) { b.subject = null; a.clearLook(); this.setState(h, b, 'dIdle'); b.cd = 4 + Math.random() * 4; }
+      if (!Z.infection || !this.eligibleSubject(h, v, def.detect * 1.4) || b.t > 55) { b.subject = null; a.clearLook(); this.setState(h, b, 'dIdle'); b.cd = 4 + Math.random() * 4; }
       else {
         const d = Math.hypot(v.root.pos.x - h.root.pos.x, v.root.pos.z - h.root.pos.z);
         a.lookAt(v.boneWPos[B.head], d < 6 ? 1 : 0.6);
         if (act && act.type === 'didle' && !act.ending) a.setAction(null);
         b.dest.copy(v.root.pos);
-        b.speed = d > 2.6 ? def.walk : d > 1.2 ? def.walk * 1.35 : def.walk * 0.8;
+        b.speed = d > 4 ? def.walk * 1.6 : d > 1.2 ? def.walk * 1.3 : def.walk * 0.8;
+        // close up, the subject stops dead and stares at him, unable to look away
+        if (d < 4.5 && v.brain && v.brain.state !== 'flee') { v.brain.mesmerT = 0.4; v.brain.mesmerBy = h; }
         if (d < def.reach + 0.3) this.startInject(h, b, v);
         return;
       }

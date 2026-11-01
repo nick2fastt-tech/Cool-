@@ -252,6 +252,7 @@ class NPC {
     // interaction poses (bite, swipe, struggle, feeding) end when the body goes limp
     if (this.lifeState === 'zombie' && this.brain && this.game.ai) { this.game.ai.endGrab(this); this.game.ai.endFeed(this); this.game.ai.endPile(this); }
     if (this.lifeState === 'vampire' && this.brain && this.brain.vVictim && this.game.vampires) this.game.vampires.endBite(this, 'interrupted');
+    if (this.horror && this.brain && this.brain.victim && this.game.horror) this.game.horror.release(this); // the doctor lets go when knocked down
     this.anim.action = null; this.anim.reachW = 0; this.anim.reachTarget = 0; this.anim.crawlAttack = 0;
     if (this.game.transit && (this.transit || this.seatLock || this.riding)) this.game.transit.release(this, true); // a limp body rides with the physics
     if (this.brain) { this.brain.state = 'down'; this.brain.victim2 = null; this.brain.plan = null; }

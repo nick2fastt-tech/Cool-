@@ -147,6 +147,19 @@ class AISystem {
       return;
     }
     if (b.state === 'grabbed') { this.setState(npc, b, 'flee'); b.fleeT = 5; }
+    // the doctor's gaze: rooted to the spot, staring back at him as he comes closer
+    if (b.mesmerT > 0) {
+      b.mesmerT -= dt;
+      const m = b.mesmerBy;
+      if (m && !m.removed && m.lifeState === 'alive') {
+        if (npc.transit) game.transit.interrupt(npc);
+        b.speed = 0; b.dest.copy(npc.root.pos); b.faceTarget = m.root.pos; anim.lookAt(m.boneWPos[B.head], 1);
+        npc.fear = Math.min(1, npc.fear + dt * 0.3); npc.lastReaction = 'Frozen (Staring)';
+        if (anim.upper.cur !== 'clasp' && anim.upper.cur !== 'cover') anim.setUpper(npc.personality.bravery > 0.5 ? 'clasp' : 'cover');
+        return;
+      }
+      b.mesmerT = 0;
+    }
     // process pending stimuli
     for (let i = b.pending.length - 1; i >= 0; i--) {
       const st = b.pending[i];

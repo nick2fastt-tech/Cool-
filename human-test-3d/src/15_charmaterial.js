@@ -99,6 +99,13 @@ const GLSL_HT_ALBEDO = /* glsl */`
     float pores = htNoise(puv * 1400.0);
     htH += pores * 0.5; htBump += 0.18 * htAA(1400.0, puv) * uDetail;
     htRough = clamp(vMat.y + (n - 0.5) * 0.12 - uWet * 0.25, 0.2, 0.9);
+    {
+      // the T-zone (forehead, nose) is a little oilier
+      vec3 tq = (vRest - uFaceC.xyz) / uFaceC.w;
+      float tz = smoothstep(0.04, 0.07, tq.z) * (smoothstep(0.02, 0.05, tq.y) * (1.0 - smoothstep(0.035, 0.06, abs(tq.x))) + (1.0 - smoothstep(0.012, 0.022, abs(tq.x))) * smoothstep(-0.05, -0.02, tq.y) * (1.0 - smoothstep(0.02, 0.05, tq.y)));
+      htRough = clamp(htRough - 0.08 * clamp(tz, 0.0, 1.0), 0.2, 0.9);
+      htSkinK = (1.0 - uZombie * 0.8) * (1.0 - uVampire) * (1.0 - uDoll * 0.7);   // vampires keep their cold pallor exactly
+    }
     if (uDoll > 0.0) { // painted vinyl: smoother, a little glossy, freckles across nose and cheeks
       vec3 dq = (vRest - uFaceC.xyz) / uFaceC.w;
       float fz = smoothstep(0.045, 0.07, dq.z) * smoothstep(-0.07, -0.045, dq.y) * (1.0 - smoothstep(-0.005, 0.01, dq.y)) * (1.0 - smoothstep(0.055, 0.07, abs(dq.x)));
@@ -169,6 +176,7 @@ const GLSL_HT_ALBEDO = /* glsl */`
     base *= 0.72 + 0.42 * strands * htAA(900.0, puv) + 0.21 * (1.0 - htAA(900.0, puv)) + 0.18 * (clump - 0.5);
     htH += strands * 0.7 + clump * 0.5; htBump += (mT == 6 ? 0.6 : 0.8) * htAA(400.0, puv);
     htRough = mT == 6 ? clamp(0.42 + 0.2 * (1.0 - strands), 0.3, 0.75) : 0.85;
+    htHairK = mT == 6 ? (0.75 + 0.5 * strands) * (1.0 - uZombie * 0.7) : 0.0;
     if (uZombie > 0.0) {
       base = mix(base, base * vec3(0.8, 0.82, 0.78), uZombie * 0.5);
       float mat = htNoise(vec2(puv.x * 60.0, puv.y * 5.0) + uZLook.w);
@@ -213,6 +221,7 @@ const GLSL_HT_ALBEDO = /* glsl */`
   } else if (mT == 10) { base = base; htRough = 0.6; }
   else if (mT == 11) { htMetal = 0.3; htRough = vMat.y; base *= 1.05 + 0.05 * htNoise(puv * vec2(300.0, 8.0)); } // no env map: mostly dielectric so steel stays bright
   else if (mT == 13 || mT == 15) { htRough = 0.3; }
+  if (mT == 8) htSkinK = 0.8 * (1.0 - uZombie * 0.8) * (1.0 - uVampire);
   else if (mT == 5) { htRough = 0.85; base *= 0.95 + 0.08 * htNoise(puv * 200.0); }
   if (isCloth && feat > 0) {
     float ax = abs(puv.x);
@@ -380,6 +389,34 @@ const GLSL_HT_ALBEDO = /* glsl */`
   diffuseColor.rgb = base;
 `;
 
+// extra direct lighting for skin and hair: light bleeding warm and red a little past the terminator (a cheap
+// subsurface look, so faces stop reading as plastic), and a Kajiya-Kay strand highlight on hair
+const GLSL_HT_LIGHT = /* glsl */`
+float htSkinK = 0.0; float htHairK = 0.0;
+void RE_Direct_HT( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
+  RE_Direct_Physical( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
+  float ndl = dot( geometryNormal, directLight.direction );
+  if ( htSkinK > 0.0 ) {
+    float band = smoothstep( -0.3, 0.0, ndl ) * ( 1.0 - smoothstep( 0.0, 0.35, ndl ) );
+    reflectedLight.directDiffuse += directLight.color * material.diffuseColor * vec3( 0.15, 0.045, 0.025 ) * band * htSkinK;
+  }
+  if ( htHairK > 0.0 ) {
+    vec3 up = normalize( ( viewMatrix * vec4( 0.0, 1.0, 0.0, 0.0 ) ).xyz );
+    vec3 T = up - geometryNormal * dot( geometryNormal, up );
+    float tl = length( T );
+    if ( tl > 0.05 ) {
+      T /= tl;
+      vec3 Hh = normalize( directLight.direction + geometryViewDir );
+      float th = dot( T, Hh ), sn = sqrt( max( 0.0, 1.0 - th * th ) );
+      float spec = pow( sn, 80.0 ) * 0.45 + pow( sn, 14.0 ) * 0.1;
+      reflectedLight.directSpecular += directLight.color * mix( vec3( 1.0 ), material.diffuseColor * 3.0, 0.45 ) * spec * htHairK * smoothstep( -0.15, 0.35, ndl ) * min( tl * 3.0, 1.0 );
+    }
+  }
+}
+#undef RE_Direct
+#define RE_Direct RE_Direct_HT
+`;
+
 function createCharacterMaterial() {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0.0, envMapIntensity: 0.8 });
   const U = {
@@ -400,6 +437,7 @@ function createCharacterMaterial() {
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMat = aMat; vMatId = aMat.x; vColor2 = aColor2; vUvP = uv; vRest = position;\nif (aMat.x > 14.5 && aMat.x < 15.5) { transformed.y -= uFang * aMat.w; transformed.z += uFang * aMat.w * 0.22; } // fangs extend');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\n' + GLSL_MAT_ID + GLSL_HT_COMMON)
+      .replace('#include <lights_physical_pars_fragment>', '#include <lights_physical_pars_fragment>\n' + GLSL_HT_LIGHT)
       .replace('#include <color_fragment>', '#include <color_fragment>\n' + GLSL_HT_ALBEDO)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = htRough;')
       .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = htMetal;')
@@ -421,7 +459,7 @@ function createCharacterMaterial() {
           totalEmissiveRadiance += vec3(1.0, 0.28, 0.12) * pow(rim, 0.8) * uHeat * 0.9; // heat sense (vampire player)
         }`);
   };
-  m.customProgramCacheKey = () => 'ht3d-char-v8';
+  m.customProgramCacheKey = () => 'ht3d-char-v9';
   return m;
 }
 

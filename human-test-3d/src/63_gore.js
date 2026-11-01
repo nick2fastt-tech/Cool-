@@ -202,14 +202,16 @@ class BloodDrops {
     this.uniforms = { uScale: { value: 400 } };
     const mat = new THREE.ShaderMaterial({
       uniforms: this.uniforms, transparent: true, depthWrite: false,
-      vertexShader: `attribute float aSize; uniform float uScale; varying float vS;
+      vertexShader: `attribute float aSize; uniform float uScale; varying float vS; varying float vTone;
         void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mv; vS = aSize;
+          vTone = fract(sin(aSize * 91731.7) * 43758.5);   // stable per drop: some darker, some brighter
           gl_PointSize = clamp(aSize * uScale / max(0.05, -mv.z), 1.5, 64.0); }`,
-      fragmentShader: `varying float vS;
+      fragmentShader: `varying float vS; varying float vTone;
         void main() { vec2 c = gl_PointCoord - 0.5; float r = length(c); if (r > 0.5) discard;
-          float a = 1.0 - smoothstep(0.32, 0.5, r);
-          vec3 col = vec3(0.30, 0.01, 0.01) * (0.8 + 0.4 * (0.5 - c.y));
-          col += vec3(0.5, 0.25, 0.25) * smoothstep(0.12, 0.0, length(c - vec2(-0.14, -0.14)));
+          float a = (1.0 - smoothstep(0.3, 0.5, r)) * (0.85 + 0.15 * smoothstep(0.3, 0.0, r));
+          vec3 deep = mix(vec3(0.2, 0.008, 0.01), vec3(0.36, 0.02, 0.015), vTone);
+          vec3 col = deep * (0.75 + 0.5 * (0.5 - c.y)) * (0.85 + 0.3 * smoothstep(0.5, 0.15, r));
+          col += vec3(0.55, 0.3, 0.3) * smoothstep(0.1, 0.0, length(c - vec2(-0.13, -0.15))) * (0.6 + 0.4 * vTone);
           gl_FragColor = vec4(col, a);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>

@@ -268,7 +268,7 @@ const ZOMBIE_LOOKS = {
   recent: { name: 'Recently turned', tint: [0.88, 0.88, 0.86], decay: [0.05, 0.2], eyes: [0.3, 0.55], wear: [0.05, 0.25], w: 1.0 },
   classic: { name: 'Classic green', tint: [0.72, 0.9, 0.62], decay: [0.25, 0.5], eyes: [0.5, 0.75], wear: [0.25, 0.5], w: 1.4 },
   pale: { name: 'Pale', tint: [0.94, 0.97, 1.0], decay: [0.15, 0.35], eyes: [0.55, 0.8], wear: [0.15, 0.4], w: 1.0 },
-  dark: { name: 'Discolored', tint: [0.6, 0.64, 0.5], decay: [0.45, 0.75], eyes: [0.6, 0.9], wear: [0.3, 0.6], w: 0.9 },
+  dark: { name: 'Discolored', tint: [0.66, 0.7, 0.56], decay: [0.45, 0.75], eyes: [0.6, 0.9], wear: [0.3, 0.6], w: 0.9 },
   old: { name: 'Older', tint: [0.8, 0.82, 0.66], decay: [0.4, 0.65], eyes: [0.65, 0.9], wear: [0.35, 0.65], w: 0.8 },
   ragged: { name: 'Ragged', tint: [0.74, 0.84, 0.66], decay: [0.3, 0.55], eyes: [0.5, 0.8], wear: [0.75, 1.0], w: 0.8 }
 };

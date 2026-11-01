@@ -9,7 +9,7 @@ All humans, textures, sounds and environments are generated procedurally at load
 
 - **Loading screen**: progress for each system (models, textures, shaders, animations, physics, sound, weapons, environment), rotating tips, then starts on its own.
 - **Simple UI**: a **Sandbox** menu, a **Settings** menu, and a weapon bar you tap or click to equip.
-  - *Sandbox*: Spawn Male / Spawn Female (each person gets a random body, height, face and outfit), Spawn Vampire / Zombie / Chucky / Jason, weapon cards, zombie, vampire and horror switches, world (room, field or subway; time of day and weather on the field), and scene controls (pause, slow motion, clear bodies, reset).
+  - *Sandbox*: Spawn Male / Spawn Female (each person gets a random body, height, face and outfit), Spawn Vampire / Zombie / Chucky / Jason / Doctor, weapon cards, zombie, vampire and horror switches, world (room, field or subway; time of day and weather on the field), and scene controls (pause, slow motion, clear bodies, reset).
   - *Settings*: gore level, graphics, audio, controls, gameplay and on-screen info.
 - **Three environments**
   - *White Testing Room*: a clean white room with large wall panels, skirting boards, framed ceiling lights, soft corner shading, a measurement grid and spawn markers.
@@ -32,8 +32,11 @@ All humans, textures, sounds and environments are generated procedurally at load
   - Gut punch: a zombie drives its fist into the stomach, the victim doubles over, and the zombie tears the guts out and eats them.
   - Pile-on: while one zombie holds someone, others walk round to the back and sides and bite at the same time, drag the victim down and eat together (up to four at once).
   - Zombies kneel and feed with varied motions (diving in, tearing, sitting back to chew, leaning on one arm) and stop when interrupted or when the body is gone.
+  - Feeding zombies kneel right at the body and stay there: each takes its own place along it (torso, either side, legs), the mouth reaches the body without gaps, and nobody clips into the floor.
   - Turning takes about 10 seconds: the body lies still, starts twitching, convulses, then rises into a zombie stance. Zombie AI starts only when the rise is complete.
-  - Bodies already look like zombies (green, sickly skin) before they get up.
+  - **Infection** (about 60 seconds, adjustable): people who are bitten or injected keep their own face, hair and clothes while the sickness takes hold. First a slight change of expression and a hand to the temple or stomach; then coughing, sweat and a faint green tinge; then a tired, stooped posture, slower walking, irregular swaying and head movements; around 45 seconds they collapse, and the body slowly finishes turning green before it rises as a zombie. All changes are gradual and procedural.
+  - **Zombie looks**: six appearance types (recently turned, classic green, pale, discolored, older, ragged), each randomized so no two zombies look alike: skin tone, blotchy discoloration, dark eye areas, matted greying hair, slack or clenched jaws, uneven stance, worn, grimy and torn clothing.
+  - **Zombie animation**: several idles (swaying, lolling, sniffing, reaching, shuddering, twitching, teeth chattering, staggering, scratching, looking round), heads that turn toward nearby people and lead the body into turns, slow uneven walks, limps, runs, reaches, bites, scratches, ground feeding and recoveries, all with randomized timing.
   - A critically damaged head always wins: the body still turns green, but it never rises and its zombie AI never starts, even if the damage happens mid-transformation. A body can only turn once. Zombies never target the player.
 - **Vampires**
   - Pale skin (adjustable), red irises that glow (optional), dark red lips and fangs (optional) that come out when they hunt; dark coats, blazers and boots.
@@ -48,11 +51,17 @@ All humans, textures, sounds and environments are generated procedurally at load
   - *Jason*: a ~2 m slasher in a hockey-style mask, worn work clothes and heavy boots, with a machete. Slow, heavy steps and a head tilt when he spots someone; he only runs when his prey keeps getting away or when he is shot.
   - Each has his own walk: Chucky's stiff, rocking waddle with swinging arms; Jason's long, heavy, unhurried stride.
   - Both hunt people, zombies and vampires alike, are never bitten or reanimated, and fall as ordinary ragdolls when defeated.
+  - *The Physician* (V1.10): an original containment-doctor design (not based on any existing character or model): about 2 m tall, a fitted leather hood with a long curved beak, round brass goggles and a wide-brimmed hat, a long buckled coat open below the waist, white gloves, heavy boots, a stethoscope, an instrument pouch, serum vials on the belt and a brass-and-glass injector of green serum.
+    - He walks slowly and very upright, one hand behind his back and the injector held at his waist, his head moving in slow scans with bird-like tilts. Idles: hands clasped behind his back, tugging a glove snug, counting the vials on his belt, standing stock-still. Now and then he raises the injector to his goggles, flicks the glass and squeezes out a bead of serum.
+    - He never attacks. He picks out an ordinary person, walks up at a measured pace, grips their shoulder and drives the needle into the side of the neck or the upper arm. The subject enters the normal infection progression above. He then stands back and watches them, hands behind his back.
+    - Once someone's infection has taken hold, he may raise an open hand toward them and slowly close it into a fist: the subject collapses and the turning begins.
+    - People only become alarmed once he lays hands on someone. Zombies, vampires, Chucky and Jason all ignore him, and he ignores them. He can be shot down like anyone else and never turns.
 - **Accessories**: some people wear caps, beanies, fedoras, glasses or sunglasses. Head hits, blasts and hard falls knock them off as small physics objects; resets put them back (switch in Settings).
-- **Physics**: custom XPBD rigid-body solver with 16-body ragdolls, joint limits and anatomical mass distribution.
+- **Physics**: custom XPBD rigid-body solver with 16-body ragdolls, joint limits and anatomical mass distribution. Ragdolls start with the motion the animation had (no sudden launch when an animation ends), and overlapping bodies are pushed apart gently instead of being flung, even with several zombies around one victim.
+- **People**: skin with subtle light scatter at the shadow edge, an oilier T-zone, pores and roughness variation; hair with strand highlights; randomized bodies, faces, hairstyles and outfits for both men and women.
 - **Weapons**: pistol, sniper rifle, knife, grenade, bazooka, grab hand and move tool. Ammo is infinite by default (toggle in Settings).
 - **Graphics**: always HIGH MAX: PBR materials, soft shadows, SSAO on desktop. The game keeps itself smooth with an internal dynamic resolution and lighter internal costs on phones; there is no quality switch.
-- **Audio**: synthesized weapons, impacts, gore, screams, zombie voices, vampire hisses, a doll's laugh, heavy boots, trains, footsteps and ambience.
+- **Audio**: synthesized weapons, impacts, gore, screams, coughs, zombie voices, vampire hisses, a doll's laugh, heavy boots, the injector's hiss, trains, footsteps and ambience.
 
 ## Controls
 
