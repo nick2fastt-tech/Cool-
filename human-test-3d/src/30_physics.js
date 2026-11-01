@@ -329,10 +329,15 @@ class PhysicsWorld {
     const bodies = this.bodies;
     const fs = this.frameSteps, fi = this.frameIndex;
     this.broadphase(dt);
+    // animated (kinematic) bodies only need sub-step interpolation when something may touch them this
+    // step; the rest jump straight to their target on the last sub-step (big saving in crowds)
+    const stamp = this.pairStamp = (this.pairStamp || 0) + 1, pairs = this.pairs;
+    for (let i = 0; i < pairs.length; i++) pairs[i]._pairStamp = stamp;
     for (let s = 0; s < n; s++) {
-      const a = (fi * n + s + 1) / (fs * n);
+      const a = (fi * n + s + 1) / (fs * n), last = s === n - 1;
       for (const b of bodies) {
         if (b.kinematic) {
+          if (!last && b._pairStamp !== stamp && !this.kinAll) continue;
           b.prevPos.copy(b.pos); b.prevRot.copy(b.rot);
           b.pos.lerpVectors(b.kinPrevPos, b.kinPos, a); b.rot.slerpQuaternions(b.kinPrevRot, b.kinRot, a);
         } else if (!b.sleeping && b.invMass > 0) b.integrate(h, this.gravity);

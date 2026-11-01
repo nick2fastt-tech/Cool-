@@ -453,18 +453,30 @@ class AISystem {
       return;
     }
     if (b.state === 'zFeed' && this.zombieFeed(npc, b, dt, Z)) return;
+    // the doctor's zombies follow him and attack only the person he points at
+    if (b.master && !this.masterOk(npc, b.master)) { b.master = null; b.order = null; }
+    const ordered = b.master && b.order && !b.order.removed && b.order.lifeState === 'alive' ? b.order : null;
+    if (b.master && !ordered) {
+      b.order = null;
+      if (npc.zombieTarget) { npc.zombieTarget = null; b.plan = null; }
+      this.zombieFollow(npc, b, dt, zspeed, zv);
+      return;
+    }
     // target selection
     let tgt = npc.zombieTarget;
-    if (tgt && (tgt.lifeState !== 'alive' || tgt.removed || tgt.root.pos.distanceTo(npc.root.pos) > Z.detection * 1.3)) tgt = null;
-    b.retarget = (b.retarget || 0) - dt;
-    if ((!tgt || b.retarget <= 0) && Z.aggression && Z.targetNPCs) { tgt = this.selectTarget(npc, Z); b.retarget = 2.5; }
+    if (ordered) tgt = ordered;
+    else {
+      if (tgt && (tgt.lifeState !== 'alive' || tgt.removed || tgt.root.pos.distanceTo(npc.root.pos) > Z.detection * 1.3)) tgt = null;
+      b.retarget = (b.retarget || 0) - dt;
+      if ((!tgt || b.retarget <= 0) && Z.aggression && Z.targetNPCs) { tgt = this.selectTarget(npc, Z); b.retarget = 2.5; }
+    }
     if (!Z.aggression || !Z.targetNPCs) tgt = null;
     if (tgt !== npc.zombieTarget) {
       const was = npc.zombieTarget; npc.zombieTarget = tgt; b.plan = null;
       if (tgt) {
         Events.emit('zombieTarget', { npc, target: tgt });
         // noticing new prey: stop, head snaps round, a growl, then go
-        if (!was && (b.state === 'zIdle' || b.state === 'zInvestigate' || b.state === 'zChase') && !anim.crawl) {
+        if (!was && (b.state === 'zIdle' || b.state === 'zInvestigate' || b.state === 'zChase' || b.state === 'zFollow') && !anim.crawl) {
           b.state = 'zNotice'; b.noticeT = (0.35 + Math.random() * 0.55) / zv.headRate; b.t = 0;
           anim.setAction('notice', { dur: b.noticeT + 0.15, inT: 0.1, outT: 0.3 });
           anim.kick(B.head, _v1.set(-2, (Math.random() - 0.5) * 6, 0));
@@ -541,6 +553,38 @@ class AISystem {
       }
       if (b.lookPos && b.speed < 0.3) anim.lookAt(b.lookPos, 0.7); else anim.clearLook();
     }
+  }
+  // --- the doctor's zombies ---------------------------------------------------------------
+  masterOk(z, m) {
+    return !!(m && !m.removed && m.lifeState === 'alive' && m.horror && m.horror.kind === 'doctor' &&
+      Math.abs(m.root.pos.y - z.root.pos.y) < 4 && m.root.pos.distanceTo(z.root.pos) < 45);
+  }
+  // a loose pack behind him: each keeps its own place, shambles back into it, idles there watching
+  zombieFollow(z, b, dt, zspeed, zv) {
+    const m = b.master, anim = z.anim;
+    if (b.state !== 'zFollow') { b.state = 'zFollow'; b.t = 0; }
+    if (b.slotA == null) { b.slotA = (Math.random() - 0.5) * 2.6; b.slotR = 1.9 + Math.random() * 2.2; }
+    const hunting = m.brain && m.brain.state === 'dStalk', r = b.slotR + (hunting ? 2.5 : 0); // hang back while he closes in on someone
+    const yaw = m.root.yaw + Math.PI + b.slotA;
+    const tx = m.root.pos.x + Math.sin(yaw) * r, tz = m.root.pos.z + Math.cos(yaw) * r;
+    const d = Math.hypot(tx - z.root.pos.x, tz - z.root.pos.z);
+    anim.setUpper('hang'); anim.reachTarget = 0;
+    const ia = anim.action;
+    if (d > (b.speed > 0 ? 0.6 : 1.3)) {
+      b.dest.set(tx, m.root.pos.y, tz);
+      b.speed = zspeed * (d > 6 ? 1.7 : 1) * ((zv && zv.cadence) || 1);
+      if (ia && ia.type === 'zidle' && !ia.ending) anim.setAction(null);
+    } else {
+      b.speed = 0; b.dest.copy(z.root.pos);
+      if ((!ia || ia.ending) && anim.speed < 0.2 && !anim.crawl) {
+        const modes = ['sway', 'sway', 'loll', 'lookround', 'twitch', 'chatter', 'shudder'];
+        anim.setAction('zidle', { mode: modes[Math.floor(Math.random() * modes.length)], dur: 2 + Math.random() * 2.5, ph: Math.random() * 6, side: Math.random() < 0.5 ? 0 : 1, inT: 0.5, outT: 0.6 });
+      }
+    }
+    // their eyes keep going back to him
+    b.lookT = (b.lookT || 0) - dt;
+    if (b.lookT <= 0) { b.lookT = 0.8 + Math.random() * 2.6; b.watchMaster = Math.random() < 0.55; }
+    if (b.watchMaster) anim.lookAt(m.boneWPos[B.head], 0.75); else anim.clearLook();
   }
   // --- scratches: keyframed swipes with contact detection at the hit frame ----------------
   startScratch(z, b, v) {

@@ -323,7 +323,7 @@ function buildHead(mb, app, rig, Q) {
   // ---- neck tube
   buildNeck(mb, app, rig, P, Q);
   // ---- mouth interior + teeth
-  buildMouthInside(mb, app, rig, P);
+  if (app.mask !== 'plague') buildMouthInside(mb, app, rig, P); // (hidden under the doctor's hood)
   // ---- eyes + lids
   for (let s = 0; s < 2; s++) buildEye(mb, app, rig, P, s, Q);
   // ---- ears
@@ -520,15 +520,17 @@ function buildPlagueMask(mb, app, rig, P) {
   const leather = C(0x2c2119), beakC = C(0x5b412b), brass = C(0xb08b46), lens = C(0x0f1416), hatC = C(0x231c17), bandC = C(0x4a3828);
   const dirOf = (a, b, out) => out.set(Math.sin(a) * Math.cos(b), Math.sin(b), Math.cos(a) * Math.cos(b));
   // hood: a shell fitted over the head shape, all the way round
-  const nA = 28, nB = 18, b0 = -0.85, b1 = 1.45, R = [];
-  for (let i = 0; i <= nB; i++) { const b = lerp(b1, b0, i / nB), row = []; for (let j = 0; j <= nA; j++) { dirOf(-Math.PI + TAU * j / nA, b, v); row.push(projectRay(sdf, 0, 0.004, 0, v.x, v.y, v.z, 0.24)); } R.push(row); }
+  // the lower edge drops further at the front so the hood wraps under the chin like a balaclava
+  const nA = 28, nB = 18, b1 = 1.45, R = [], b0At = (a) => -0.85 - 0.32 * Math.pow(Math.max(0, Math.cos(a)), 1.5);
+  for (let i = 0; i <= nB; i++) { const row = []; for (let j = 0; j <= nA; j++) { const a = -Math.PI + TAU * j / nA; dirOf(a, lerp(b1, b0At(a), i / nB), v); row.push(Math.min(projectRay(sdf, 0, 0.004, 0, v.x, v.y, v.z, 0.24), 0.165)); } R.push(row); }
   mb.beginPart();
   let st = mb.I.length, base = mb.n;
   for (let i = 0; i <= nB; i++) {
-    const b = lerp(b1, b0, i / nB);
     for (let j = 0; j <= nA; j++) {
-      const a = -Math.PI + TAU * j / nA; dirOf(a, b, v);
-      const r = Math.max(R[i][j], R[i][(j + 1) % nA] || 0, R[i][(j + nA - 1) % nA] || 0) + 0.012;
+      const a = -Math.PI + TAU * j / nA, b = lerp(b1, b0At(a), i / nB); dirOf(a, b, v);
+      const up = R[Math.max(0, i - 1)], dn = R[Math.min(nB, i + 1)];
+      const mouth = 0.02 * Math.exp(-Math.pow(a / 0.5, 2) - Math.pow((b + 0.55) / 0.32, 2)); // lips and chin sit proud of the head shape
+      const r = Math.max(R[i][j], R[i][(j + 1) % nA] || 0, R[i][(j + nA - 1) % nA] || 0, up[j], dn[j]) + 0.012 + mouth;
       mb.v(HC.x + v.x * r * S, HC.y + (0.004 + v.y * r) * S, HC.z + v.z * r * S, j / nA * 6, i / nB * 3, leather, [MAT.LEATHER, 0.62, 0, 1], leather, wts, REGION.HEAD);
     }
   }
@@ -569,14 +571,15 @@ function buildPlagueMask(mb, app, rig, P) {
   // a leather cowl from the hood down over the neck, flaring onto the collar (no skin shows between)
   {
     const neckR = 0.059 * app.body.neck, nbl = (rig.neckBaseY - HC.y) / S, rows = [];
-    const spec = [[-0.05, 0.86, 0.9], [-0.09, 1.0, 1.0], [nbl + 0.02, 1.12, 1.08], [nbl - 0.03, 1.55, 1.25], [nbl - 0.065, 2.15, 1.6], [nbl - 0.08, 2.25, 1.68]];
-    for (const [yl, kx, kz] of spec) {
+    // [height, side, back/front depth, extra reach forward under the chin]
+    const spec = [[0.0, 1.28, 1.22, 1.05], [-0.045, 1.16, 1.1, 1.45], [-0.09, 1.0, 1.0, 1.5], [nbl + 0.02, 1.12, 1.08, 1.1], [nbl - 0.03, 1.55, 1.25, 1], [nbl - 0.065, 2.15, 1.6, 1], [nbl - 0.08, 2.25, 1.68, 1]];
+    for (const [yl, kx, kz, kf] of spec) {
       const y = HC.y + yl * S, zc = HC.z - 0.016 * S, k = smoothstep(-0.035, -0.075, yl);
       let w;
       if (yl > -0.07) w = [[B.head, 1 - k], [B.neck, k]];
       else if (yl > nbl - 0.01) w = [[B.neck, 1]];
       else { const q = smoothstep(nbl - 0.01, nbl - 0.06, yl); w = [[B.neck, 1 - q * 0.7], [B.chest, q * 0.7]]; }
-      rows.push({ c: new V3(HC.x, y, zc), e1: new V3(1, 0, 0), e2: new V3(0, 0, 1), prof: (t) => [Math.sin(t) * neckR * kx * 1.12 * S, Math.cos(t) * neckR * kz * (Math.cos(t) > 0 ? 1.2 : 1.5) * S], col: leather, mat: [MAT.LEATHER, 0.6, 0, 1], col2: leather, wts: w, reg: yl < -0.09 ? REGION.NECK : REGION.HEAD, v: yl });
+      rows.push({ c: new V3(HC.x, y, zc), e1: new V3(1, 0, 0), e2: new V3(0, 0, 1), prof: (t) => [Math.sin(t) * neckR * kx * 1.12 * S, Math.cos(t) * neckR * kz * (Math.cos(t) > 0 ? 1.2 * lerp(1, kf, Math.cos(t) ** 2) : 1.5) * S], col: leather, mat: [MAT.LEATHER, 0.6, 0, 1], col2: leather, wts: w, reg: yl < -0.09 ? REGION.NECK : REGION.HEAD, v: yl });
     }
     addLoft(mb, rows, 20);
   }
@@ -588,8 +591,37 @@ function buildPlagueMask(mb, app, rig, P) {
     const c = new V3(bc.x, bc.y - (0.012 + 0.07 * t * t) * S, bc.z + (0.27 * t) * S);
     beak.push({ c, e1: new V3(1, 0, 0), e2: new V3(0, 1, 0), prof: (q) => [Math.cos(q) * w * S, Math.sin(q) * h * S * (Math.sin(q) > 0 ? 1 : 0.8)], col: k % 3 === 0 ? C(0x4e3824) : beakC, mat: [MAT.LEATHER, 0.5, 0, 1], col2: beakC, wts, reg: REGION.HEAD, v: t });
   }
-  addLoft(mb, beak, nr, { capEnd: { offset: new V3(0, -0.004 * S, 0.004 * S) } });
+  addLoft(mb, beak, nr, { capStart: { offset: new V3(0, 0, -0.02 * S) }, capEnd: { offset: new V3(0, -0.004 * S, 0.004 * S) } });
   for (let k = 1; k < nb - 2; k += 2) { const q = beak[k]; addBox(mb, q.c.clone().add(new V3(0, (0.044 * Math.pow(1 - k / nb, 0.8)) * S + 0.002 * S, 0)), new V3(1, 0, 0), new V3(0, 1, 0), new V3(0, 0, 1), 0.0035 * S, 0.002 * S, 0.0035 * S, brass, [MAT.METAL, 0.3, 0, 1], wts, REGION.HEAD); }
+  // stitching along both sides of the beak, and two breathing holes near its base
+  for (const sg of [-1, 1]) for (let k = 1; k < nb - 1; k++) {
+    const t = k / nb, q = beak[k], w = (0.038 * Math.pow(1 - t, 0.85) + 0.0015) * S;
+    if (k % 1 === 0) addBox(mb, q.c.clone().add(new V3(sg * w * 0.98, 0.004 * S * (1 - t), 0)), new V3(0, 0, 1), new V3(0, 1, 0), new V3(sg, 0, 0), 0.006 * S, 0.0011 * S, 0.0012 * S, C(0x2b1d12), [MAT.LEATHER, 0.6, 0, 1], wts, REGION.HEAD);
+  }
+  for (const sg of [-1, 1]) {
+    const q = beak[2], t = 2 / nb, w = (0.038 * Math.pow(1 - t, 0.85) + 0.0015) * S;
+    addCyl(mb, q.c.clone().add(new V3(sg * w * 0.93, -0.012 * S, 0.004 * S)), new V3(sg, -0.2, 0), 0.0045 * S, 0.0015 * S, C(0x0c0907), [MAT.LEATHER, 0.8, 0, 1], wts, REGION.HEAD, 10);
+    addCyl(mb, q.c.clone().add(new V3(sg * (w * 0.93 + 0.0006 * S), -0.012 * S, 0.004 * S)), new V3(sg, -0.2, 0), 0.0058 * S, 0.0009 * S, brass, [MAT.METAL, 0.3, 0, 1], wts, REGION.HEAD, 10);
+  }
+  // a strap from the base of the beak round the back of the hood, buckled at the back
+  {
+    const yL = P.mouthYScaled + 0.035, pts = [], n = 22;
+    for (let k = 0; k <= n; k++) { const a = lerp(0.62, TAU - 0.62, k / n); pts.push(surf(Math.sin(a), yL * 6, Math.cos(a), 0.004)); }
+    mb.beginPart();
+    const st = mb.I.length, b0 = mb.n, hw = 0.006 * S, sc0 = C(0x1c140e);
+    for (let k = 0; k <= n; k++) { mb.v(pts[k].x, pts[k].y + hw, pts[k].z, k / n, 0, sc0, [MAT.LEATHER, 0.5, 0, 1], sc0, wts, REGION.HEAD); mb.v(pts[k].x, pts[k].y - hw, pts[k].z, k / n, 1, sc0, [MAT.LEATHER, 0.5, 0, 1], sc0, wts, REGION.HEAD); }
+    for (let k = 0; k < n; k++) { const q = b0 + k * 2; mb.quad(q, q + 1, q + 3, q + 2); }
+    orientPartOutward(mb, st, new V3(HC.x, HC.y, HC.z));
+    mb.endPart();
+    const back = pts[n >> 1];
+    addBuckle(mb, back.clone().add(new V3(0, 0, -0.002 * S)), new V3(1, 0, 0), new V3(0, 1, 0), new V3(0, 0, -1), 0.009 * S, 0.008 * S, 0.0018 * S, brass, [MAT.METAL, 0.3, 0, 1], wts, REGION.HEAD);
+  }
+  // a raised seam down the middle of the hood, forehead to nape
+  for (let k = 0; k <= 16; k++) {
+    const a = k < 8 ? lerp(1.15, Math.PI / 2, k / 8) : lerp(Math.PI / 2, Math.PI + 0.55, (k - 8) / 8);
+    const p = surf(0, Math.sin(a), Math.cos(a), 0.0015);
+    addBox(mb, p, new V3(1, 0, 0), new V3(0, Math.cos(a), -Math.sin(a)), new V3(0, Math.sin(a), Math.cos(a)), 0.0016 * S, 0.006 * S, 0.0014 * S, C(0x221811), [MAT.LEATHER, 0.6, 0, 1], wts, REGION.HEAD);
+  }
   // hat: a low flat crown with a band and emblem, on a wide brim tilted a touch forward
   const top = surf(0, 1, -0.05, 0), hy = top.y - 0.03 * S, tilt = 0.08;
   const hatRing = (r, y, col, mat) => ({ c: new V3(HC.x, y, HC.z - 0.01 * S + Math.sin(tilt) * (y - hy)), e1: new V3(1, 0, 0), e2: new V3(0, -Math.sin(tilt), Math.cos(tilt)), prof: (q) => [Math.cos(q) * r, Math.sin(q) * r * 1.08], col, mat, col2: col, wts, reg: REGION.HEAD, v: y });

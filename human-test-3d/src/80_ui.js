@@ -22,6 +22,7 @@ const TIPS = [
   'Open the <b>Sandbox</b> menu to spawn a man or a woman. Every body and height is random.',
   'Zombies grab and bite. Survivors who break free are infected: they sweat, cough and slowly turn green, then collapse and rise about a minute later.',
   'The Physician never attacks. He walks up to people, injects them, and watches them turn. Sometimes a closing fist is all it takes to finish the change.',
+  'Zombies follow the Physician. When he points at someone, his zombies go after that person and no one else; then he beckons them back.',
   'Zombies kneel and feed on bodies. A destroyed head stops a body from rising.',
   'Shoot limbs to sever them. A subject who loses a leg can only crawl.',
   'Grenades tear bodies apart at close range. Hold the throw button longer to throw farther.',

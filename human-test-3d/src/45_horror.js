@@ -276,10 +276,19 @@ class HorrorSystem {
     b.cd = Math.max(0, (b.cd == null ? 5 + Math.random() * 5 : b.cd) - dt);
     b.trigCd = Math.max(0, (b.trigCd == null ? 12 + Math.random() * 8 : b.trigCd) - dt);
     b.inspCd = Math.max(0, (b.inspCd == null ? 2 + Math.random() * 4 : b.inspCd) - dt);
+    b.cmdCd = Math.max(0, (b.cmdCd == null ? 4 + Math.random() * 4 : b.cmdCd) - dt);
     b.hunting = b.state === 'dInject';
+    if (b.victim && b.state !== 'dInject') this.endInject(h, b); // a reset or interruption left a hold behind: let go
+    const servants = this.manageServants(h, b, dt);
+    const canCommand = servants.length > 0 && !b.order && b.cmdCd <= 0 && !h.riding;
     switch (b.state) {
       case 'dInject': return this.doctorInject(h, b, dt);
       case 'dTrigger': return this.doctorTrigger(h, b, dt);
+      case 'dCommand': return this.doctorCommand(h, b, dt, servants);
+      case 'dRecall':
+        b.speed = 0;
+        if (!act || act.type !== 'drecall' || act.ending) this.setState(h, b, 'dIdle');
+        return;
       case 'dInspect':
         b.speed = 0;
         if (act && act.type === 'dinspect' && act.squirt === 1) { act.squirt = 2; const p = this.injectorTip(h, _hz1); g.fx.serum(p, this.needleDir(h, _hz2), 5, 0.6); g.audio.play('inject', { pos: p.clone(), gain: 0.3, rate: 1.6 }); }
@@ -294,6 +303,7 @@ class HorrorSystem {
         // keeps a clinical distance: follows slowly if the subject gets far, otherwise stands with hands behind his back
         if (d > 7) { b.dest.copy(sj.root.pos); b.speed = def.walk * 0.9; if (act && act.type === 'didle') a.setAction(null); }
         else { b.speed = 0; b.faceTarget = sj.root.pos; if ((!act || act.ending) && a.speed < 0.2) a.setAction('didle', { mode: Math.random() < 0.7 ? 'behind' : 'still', dur: 3 + Math.random() * 2, ph: Math.random() * 6, inT: 0.6, outT: 0.6 }); }
+        if (canCommand && !b.order) { const t = this.pickOrderTarget(h, servants); if (t) return this.startCommand(h, b, t); }
         // hasten it along once the sickness has taken hold
         if (b.trigCd <= 0) {
           const k = sj.infection ? sj.infection.t / sj.infection.dur : 0;
@@ -320,7 +330,9 @@ class HorrorSystem {
         return;
       }
     }
-    // idle and wander - he also sits down and rides trains, like anyone else
+    // with zombies at his heel, he points out whom they are to take
+    if (canCommand && b.state !== 'dStalk') { const t = this.pickOrderTarget(h, servants); if (t) { if (h.transit) g.transit.interrupt(h); return this.startCommand(h, b, t); } }
+    // idle and wander - he also sits down and rides trains, like anyone else (not with zombies in tow)
     if (!h.riding && Z.infection && b.cd <= 0 && b.state !== 'dStalk') {
       const v = this.pickSubject(h, def);
       if (v) {
@@ -332,7 +344,8 @@ class HorrorSystem {
       b.cd = 2 + Math.random() * 2; // look again in a moment
     }
     if (!h.riding && b.trigCd <= 0 && this.considerTrigger(h, b, this.pickInfected(h, 6), dt)) return;
-    if (g.transit && g.transit.think(h, b, dt)) return;
+    if (servants.length && (h.transit || h.seatLock) && !h.riding) g.transit.interrupt(h);
+    if (!servants.length && g.transit && g.transit.think(h, b, dt)) return;
     if (b.state !== 'dIdle' && b.state !== 'dWander') this.setState(h, b, 'dIdle');
     if (b.state === 'dIdle') {
       b.speed = 0;
@@ -424,6 +437,93 @@ class HorrorSystem {
     this.startTrigger(h, b, sj);
     return true;
   }
+  // --- his zombies ------------------------------------------------------------------------
+  // Zombies he made (from anyone he injected or triggered) follow him from up to 40 m away; any other
+  // zombie that comes within 7 m of him falls in behind him too. They attack only whom he points at.
+  manageServants(h, b, dt) {
+    const out = b.servants || (b.servants = []); out.length = 0;
+    b.recruitT = (b.recruitT || 0) - dt;
+    const scan = b.recruitT <= 0; if (scan) b.recruitT = 0.5;
+    for (const z of this.game.npcs.list) {
+      if (z.lifeState !== 'zombie' || z.removed || !z.brain) continue;
+      const zb = z.brain;
+      if (zb.master === h) { out.push(z); continue; }
+      if (!scan || (zb.master && this.game.ai.masterOk(z, zb.master))) continue;
+      if (z.physMode !== 'anim' || zb.victim || zb.victim2 || zb.corpse) continue; // finish what it is doing first
+      const d = z.root.pos.distanceTo(h.root.pos);
+      if (Math.abs(z.root.pos.y - h.root.pos.y) < 3 && ((z.injectedBy === h && d < 40) || d < 7)) {
+        zb.master = h; zb.order = b.order || null;
+        if (!zb.order && z.zombieTarget && !zb.victim) { z.zombieTarget = null; zb.plan = null; }
+        z.anim.kick(B.head, _hz1.set(-1.5, (Math.random() - 0.5) * 4, 0));
+        out.push(z);
+        HT.log('horror', `${z.idStr} falls in behind ${h.horror.label}`);
+      }
+    }
+    // an order runs until the target is down for good (or gets away), then he calls them back
+    if (b.order) {
+      const o = b.order, gone = o.removed || o.lifeState === 'destroyed';
+      b.orderT = (b.orderT || 0) + dt;
+      if (gone || o.lifeState !== 'alive' || !out.length) b.orderDone = (b.orderDone || 0) + dt;
+      if (gone || b.orderDone > 7 || b.orderT > 45) this.recall(h, b, out);
+    }
+    return out;
+  }
+  // someone healthy nearby, preferably on his own platform/area
+  pickOrderTarget(h, servants) {
+    const here = this.areaOf(h);
+    let best = null, bs = 1e9;
+    for (const o of this.game.npcs.list) {
+      if (o === h || o.removed || o.horror || o.lifeState !== 'alive' || o.infection || o.riding || o.carried) continue;
+      if ((o.vamp && o.vamp.state !== 'none') || o === h.brain.subject || Math.abs(o.root.pos.y - h.root.pos.y) > 1.2) continue;
+      const d = Math.hypot(o.root.pos.x - h.root.pos.x, o.root.pos.z - h.root.pos.z);
+      if (d > 16) continue;
+      const sc = d + (here && this.areaOf(o) !== here ? 25 : 0) + Math.random() * 3;
+      if (sc < bs) { bs = sc; best = o; }
+    }
+    return best;
+  }
+  startCommand(h, b, t) {
+    this.setState(h, b, 'dCommand'); b.speed = 0; b.cmdTarget = t; b.faceTarget = t.root.pos;
+    h.anim.setAction('dtrigger', { target: t, mode: 'point', dur: 2.6, dir: Math.random() < 0.5 ? 1 : -1, inT: 0.35, outT: 0.6 });
+    h.anim.lookAt(t.boneWPos[B.head], 1);
+    h.lastReaction = 'Directing his zombies';
+  }
+  doctorCommand(h, b, dt, servants) {
+    const t = b.cmdTarget, act = h.anim.action;
+    b.speed = 0;
+    if (t && !t.removed) { b.faceTarget = t.root.pos; h.anim.lookAt(t.boneWPos[B.head], 1); }
+    if (act && act.type === 'dtrigger' && act.fire === 1) {
+      act.fire = 2;
+      if (t && !t.removed && t.lifeState === 'alive') {
+        b.order = t; b.orderT = 0; b.orderDone = 0;
+        for (const z of servants) z.brain.order = t;
+        this.game.audio.play('dtrigger', { pos: h.boneWPos[B.head].clone(), gain: 0.45, rate: 1.6 });
+        HT.log('horror', `${h.horror.label} sent ${servants.length} zombie(s) after ${t.idStr} ${t.name}`);
+      }
+    }
+    if (!act || act.type !== 'dtrigger' || act.ending) {
+      b.faceTarget = null; b.cmdTarget = null;
+      if (b.order) { b.subject = b.order; b.obsT = 25; this.setState(h, b, 'dObserve'); }
+      else { b.cmdCd = 5; this.setState(h, b, 'dIdle'); }
+    }
+  }
+  // call them off: they let go and shamble back to him; he beckons if his hands are free
+  recall(h, b, servants) {
+    b.order = null; b.orderT = 0; b.orderDone = 0;
+    b.cmdCd = 14 + Math.random() * 12;
+    for (const z of servants) {
+      z.brain.order = null;
+      if (z.brain.corpse) this.game.ai.endFeed(z);
+      if (z.brain.victim) this.game.ai.endGrab(z);
+    }
+    const act = h.anim.action;
+    if (servants.length && h.physMode === 'anim' && (b.state === 'dIdle' || b.state === 'dObserve' || b.state === 'dWander') && (!act || act.ending || act.type === 'didle')) {
+      if (b.state === 'dObserve') { b.subject = null; h.anim.clearLook(); }
+      this.setState(h, b, 'dRecall'); b.speed = 0;
+      h.anim.setAction('drecall', { dur: 2.4, inT: 0.35, outT: 0.5 });
+      this.game.audio.play('dtrigger', { pos: h.boneWPos[B.head].clone(), gain: 0.3, rate: 0.8 });
+    }
+  }
   startTrigger(h, b, sj) {
     this.setState(h, b, 'dTrigger'); b.speed = 0; b.subject = sj; b.faceTarget = sj.root.pos;
     b.trigCd = 30 + Math.random() * 25;
@@ -440,6 +540,7 @@ class HorrorSystem {
       act.fire = 2;
       const inf = sj && !sj.removed && sj.lifeState === 'alive' ? sj.infection : null;
       if (inf && !inf.collapsed) {
+        sj.injectedBy = h; // his now: the zombie it becomes will follow him
         // the sickness jumps ahead to the point of collapse; the turning itself runs as normal
         inf.t = Math.max(inf.t, inf.dur * INFECTION.collapse);
         sj.anim.kick(B.chest, _hz1.set(-1.2, 0, 0)); sj.anim.kick(B.neck, _hz1.set(0.8, (Math.random() - 0.5) * 1.5, 0));

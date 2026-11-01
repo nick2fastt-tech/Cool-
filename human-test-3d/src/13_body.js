@@ -406,6 +406,31 @@ function buildBody(mb, app, rig, Q) {
       addBox(mb, f.c.clone().addScaledVector(f.ay, 0.016 * H).addScaledVector(f.az, 0.0115 * H), f.ax, f.ay, f.az, 0.0265 * H, 0.0145 * H, 0.0015 * H, leather, lm, f.w, REGION.ABDOMEN);
       addCyl(mb, f.c.clone().addScaledVector(f.ay, 0.004 * H).addScaledVector(f.az, 0.0135 * H), f.az, 0.0035 * H, 0.0012 * H, brass, mm, f.w, REGION.ABDOMEN, 8);
     }
+    // shoulder straps (epaulettes) buttoned at the collar end
+    for (const sgn of [1, -1]) {
+      const pts = [];
+      for (let k = 0; k <= 6; k++) pts.push(onCoat(lerp(0.985, 0.93, k / 6), sgn * lerp(1.1, 1.72, k / 6), 0.007));
+      mb.beginPart();
+      const st = mb.I.length, b0 = mb.n, hw = 0.011 * H;
+      for (let k = 0; k <= 6; k++) {
+        const u = lerp(0.985, 0.93, k / 6), th = nrm(sgn * lerp(1.1, 1.72, k / 6)), P0 = pts[k];
+        const tan = pts[Math.min(6, k + 1)].clone().sub(pts[Math.max(0, k - 1)]).normalize(), out = new V3(P0.x, 0, P0.z).normalize(), w = new V3().crossVectors(tan, out).normalize().multiplyScalar(hw);
+        mb.v(P0.x + w.x, P0.y + w.y + 0.004 * H, P0.z + w.z, 0, k / 6, leather, lm, leather, torsoW(u, th), REGION.UPPER_CHEST);
+        mb.v(P0.x - w.x, P0.y - w.y + 0.004 * H, P0.z - w.z, 1, k / 6, leather, lm, leather, torsoW(u, th), REGION.UPPER_CHEST);
+      }
+      for (let k = 0; k < 6; k++) { const q = b0 + k * 2; mb.quad(q, q + 1, q + 3, q + 2); }
+      orientPartOutward(mb, st, new V3(0, rig.shoulderY - 0.1 * H, 0));
+      mb.endPart();
+      addCyl(mb, pts[0].clone().add(new V3(0, 0.006 * H, 0)), new V3(0, 1, 0), 0.0045 * H, 0.0015 * H, brass, mm, torsoW(0.985, nrm(sgn * 1.1)), REGION.UPPER_CHEST, 8);
+    }
+    // a round brass badge on the left breast: an original emblem (a ring round a plain cross)
+    {
+      const f = frameAt(0.77, 0.62, 0.012);
+      addCyl(mb, f.c, f.az, 0.017 * H, 0.0018 * H, brass, mm, f.w, REGION.UPPER_CHEST, 16);
+      addCyl(mb, f.c.clone().addScaledVector(f.az, 0.0016 * H), f.az, 0.0125 * H, 0.0008 * H, C(0x2a2320), [MAT.METAL, 0.45, 0, 1], f.w, REGION.UPPER_CHEST, 16);
+      addBox(mb, f.c.clone().addScaledVector(f.az, 0.0026 * H), f.ax, f.ay, f.az, 0.0022 * H, 0.0095 * H, 0.0008 * H, brass, mm, f.w, REGION.UPPER_CHEST);
+      addBox(mb, f.c.clone().addScaledVector(f.az, 0.0026 * H), f.ax, f.ay, f.az, 0.0095 * H, 0.0022 * H, 0.0008 * H, brass, mm, f.w, REGION.UPPER_CHEST);
+    }
     // stethoscope: tubing round the back of the neck, hanging down the front; a chest piece on one end, an earpiece on the other
     for (const sgn of [1, -1]) {
       const path = [[0.995, 3.1], [0.995, 2.3], [0.985, 1.45], [0.95, 0.75], [0.88, 0.42], [0.8, 0.3], [0.72, 0.26]];
@@ -796,6 +821,18 @@ function buildArm(mb, app, rig, Q, side, topLayer, skinLayer, tdef) {
     tr.push({ c, e1: te1, e2, prof: (th) => [Math.cos(th) * r, Math.sin(th) * r * 0.85], col: skinHand, mat: handMat, col2: skinLayer.col2, wts: w, reg: sideRegion('HAND', side), v: t * tL });
   }
   addLoft(mb, tr, Q.fingerCols, { capEnd: { offset: tdir.clone().multiplyScalar(tr0 * 0.6) } });
+  // the doctor: a buckled leather strap round each coat cuff
+  if (app.doctor && hasSleeve) {
+    const lth = C(0x1c130c), lm = [MAT.LEATHER, 0.5, 0, 1], band = [];
+    for (const x of [sleeveEnd - 0.026, sleeveEnd - 0.012]) {
+      const c = sh.clone().addScaledVector(d, mapDist(x)), p = prof(x, sleeveOff(x) + 0.0035 * sc);
+      band.push({ c, e1, e2, prof: p, col: lth, mat: lm, col2: lth, wts: wAt(x), reg: regAt(x), v: x });
+    }
+    addLoft(mb, band, Q.limbCols);
+    const xm = sleeveEnd - 0.019, cm = sh.clone().addScaledVector(d, mapDist(xm)), pm = prof(xm, sleeveOff(xm) + 0.006 * sc)(0);
+    const bc = cm.clone().addScaledVector(e1, pm[0]).addScaledVector(e2, pm[1]);
+    addBuckle(mb, bc, e2, d, e1, 0.008 * H, 0.0075 * H, 0.0017 * H, C(0xa8843f), [MAT.METAL, 0.28, 0, 1], wAt(xm), regAt(xm));
+  }
 }
 
 // ---------------------------------------------------------------------------------------

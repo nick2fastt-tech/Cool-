@@ -1659,6 +1659,31 @@ function buildBody(mb, app, rig, Q) {
       addBox(mb, f.c.clone().addScaledVector(f.ay, 0.016 * H).addScaledVector(f.az, 0.0115 * H), f.ax, f.ay, f.az, 0.0265 * H, 0.0145 * H, 0.0015 * H, leather, lm, f.w, REGION.ABDOMEN);
       addCyl(mb, f.c.clone().addScaledVector(f.ay, 0.004 * H).addScaledVector(f.az, 0.0135 * H), f.az, 0.0035 * H, 0.0012 * H, brass, mm, f.w, REGION.ABDOMEN, 8);
     }
+    // shoulder straps (epaulettes) buttoned at the collar end
+    for (const sgn of [1, -1]) {
+      const pts = [];
+      for (let k = 0; k <= 6; k++) pts.push(onCoat(lerp(0.985, 0.93, k / 6), sgn * lerp(1.1, 1.72, k / 6), 0.007));
+      mb.beginPart();
+      const st = mb.I.length, b0 = mb.n, hw = 0.011 * H;
+      for (let k = 0; k <= 6; k++) {
+        const u = lerp(0.985, 0.93, k / 6), th = nrm(sgn * lerp(1.1, 1.72, k / 6)), P0 = pts[k];
+        const tan = pts[Math.min(6, k + 1)].clone().sub(pts[Math.max(0, k - 1)]).normalize(), out = new V3(P0.x, 0, P0.z).normalize(), w = new V3().crossVectors(tan, out).normalize().multiplyScalar(hw);
+        mb.v(P0.x + w.x, P0.y + w.y + 0.004 * H, P0.z + w.z, 0, k / 6, leather, lm, leather, torsoW(u, th), REGION.UPPER_CHEST);
+        mb.v(P0.x - w.x, P0.y - w.y + 0.004 * H, P0.z - w.z, 1, k / 6, leather, lm, leather, torsoW(u, th), REGION.UPPER_CHEST);
+      }
+      for (let k = 0; k < 6; k++) { const q = b0 + k * 2; mb.quad(q, q + 1, q + 3, q + 2); }
+      orientPartOutward(mb, st, new V3(0, rig.shoulderY - 0.1 * H, 0));
+      mb.endPart();
+      addCyl(mb, pts[0].clone().add(new V3(0, 0.006 * H, 0)), new V3(0, 1, 0), 0.0045 * H, 0.0015 * H, brass, mm, torsoW(0.985, nrm(sgn * 1.1)), REGION.UPPER_CHEST, 8);
+    }
+    // a round brass badge on the left breast: an original emblem (a ring round a plain cross)
+    {
+      const f = frameAt(0.77, 0.62, 0.012);
+      addCyl(mb, f.c, f.az, 0.017 * H, 0.0018 * H, brass, mm, f.w, REGION.UPPER_CHEST, 16);
+      addCyl(mb, f.c.clone().addScaledVector(f.az, 0.0016 * H), f.az, 0.0125 * H, 0.0008 * H, C(0x2a2320), [MAT.METAL, 0.45, 0, 1], f.w, REGION.UPPER_CHEST, 16);
+      addBox(mb, f.c.clone().addScaledVector(f.az, 0.0026 * H), f.ax, f.ay, f.az, 0.0022 * H, 0.0095 * H, 0.0008 * H, brass, mm, f.w, REGION.UPPER_CHEST);
+      addBox(mb, f.c.clone().addScaledVector(f.az, 0.0026 * H), f.ax, f.ay, f.az, 0.0095 * H, 0.0022 * H, 0.0008 * H, brass, mm, f.w, REGION.UPPER_CHEST);
+    }
     // stethoscope: tubing round the back of the neck, hanging down the front; a chest piece on one end, an earpiece on the other
     for (const sgn of [1, -1]) {
       const path = [[0.995, 3.1], [0.995, 2.3], [0.985, 1.45], [0.95, 0.75], [0.88, 0.42], [0.8, 0.3], [0.72, 0.26]];
@@ -2049,6 +2074,18 @@ function buildArm(mb, app, rig, Q, side, topLayer, skinLayer, tdef) {
     tr.push({ c, e1: te1, e2, prof: (th) => [Math.cos(th) * r, Math.sin(th) * r * 0.85], col: skinHand, mat: handMat, col2: skinLayer.col2, wts: w, reg: sideRegion('HAND', side), v: t * tL });
   }
   addLoft(mb, tr, Q.fingerCols, { capEnd: { offset: tdir.clone().multiplyScalar(tr0 * 0.6) } });
+  // the doctor: a buckled leather strap round each coat cuff
+  if (app.doctor && hasSleeve) {
+    const lth = C(0x1c130c), lm = [MAT.LEATHER, 0.5, 0, 1], band = [];
+    for (const x of [sleeveEnd - 0.026, sleeveEnd - 0.012]) {
+      const c = sh.clone().addScaledVector(d, mapDist(x)), p = prof(x, sleeveOff(x) + 0.0035 * sc);
+      band.push({ c, e1, e2, prof: p, col: lth, mat: lm, col2: lth, wts: wAt(x), reg: regAt(x), v: x });
+    }
+    addLoft(mb, band, Q.limbCols);
+    const xm = sleeveEnd - 0.019, cm = sh.clone().addScaledVector(d, mapDist(xm)), pm = prof(xm, sleeveOff(xm) + 0.006 * sc)(0);
+    const bc = cm.clone().addScaledVector(e1, pm[0]).addScaledVector(e2, pm[1]);
+    addBuckle(mb, bc, e2, d, e1, 0.008 * H, 0.0075 * H, 0.0017 * H, C(0xa8843f), [MAT.METAL, 0.28, 0, 1], wAt(xm), regAt(xm));
+  }
 }
 
 // ---------------------------------------------------------------------------------------
@@ -2520,7 +2557,7 @@ function buildHead(mb, app, rig, Q) {
   // ---- neck tube
   buildNeck(mb, app, rig, P, Q);
   // ---- mouth interior + teeth
-  buildMouthInside(mb, app, rig, P);
+  if (app.mask !== 'plague') buildMouthInside(mb, app, rig, P); // (hidden under the doctor's hood)
   // ---- eyes + lids
   for (let s = 0; s < 2; s++) buildEye(mb, app, rig, P, s, Q);
   // ---- ears
@@ -2717,15 +2754,17 @@ function buildPlagueMask(mb, app, rig, P) {
   const leather = C(0x2c2119), beakC = C(0x5b412b), brass = C(0xb08b46), lens = C(0x0f1416), hatC = C(0x231c17), bandC = C(0x4a3828);
   const dirOf = (a, b, out) => out.set(Math.sin(a) * Math.cos(b), Math.sin(b), Math.cos(a) * Math.cos(b));
   // hood: a shell fitted over the head shape, all the way round
-  const nA = 28, nB = 18, b0 = -0.85, b1 = 1.45, R = [];
-  for (let i = 0; i <= nB; i++) { const b = lerp(b1, b0, i / nB), row = []; for (let j = 0; j <= nA; j++) { dirOf(-Math.PI + TAU * j / nA, b, v); row.push(projectRay(sdf, 0, 0.004, 0, v.x, v.y, v.z, 0.24)); } R.push(row); }
+  // the lower edge drops further at the front so the hood wraps under the chin like a balaclava
+  const nA = 28, nB = 18, b1 = 1.45, R = [], b0At = (a) => -0.85 - 0.32 * Math.pow(Math.max(0, Math.cos(a)), 1.5);
+  for (let i = 0; i <= nB; i++) { const row = []; for (let j = 0; j <= nA; j++) { const a = -Math.PI + TAU * j / nA; dirOf(a, lerp(b1, b0At(a), i / nB), v); row.push(Math.min(projectRay(sdf, 0, 0.004, 0, v.x, v.y, v.z, 0.24), 0.165)); } R.push(row); }
   mb.beginPart();
   let st = mb.I.length, base = mb.n;
   for (let i = 0; i <= nB; i++) {
-    const b = lerp(b1, b0, i / nB);
     for (let j = 0; j <= nA; j++) {
-      const a = -Math.PI + TAU * j / nA; dirOf(a, b, v);
-      const r = Math.max(R[i][j], R[i][(j + 1) % nA] || 0, R[i][(j + nA - 1) % nA] || 0) + 0.012;
+      const a = -Math.PI + TAU * j / nA, b = lerp(b1, b0At(a), i / nB); dirOf(a, b, v);
+      const up = R[Math.max(0, i - 1)], dn = R[Math.min(nB, i + 1)];
+      const mouth = 0.02 * Math.exp(-Math.pow(a / 0.5, 2) - Math.pow((b + 0.55) / 0.32, 2)); // lips and chin sit proud of the head shape
+      const r = Math.max(R[i][j], R[i][(j + 1) % nA] || 0, R[i][(j + nA - 1) % nA] || 0, up[j], dn[j]) + 0.012 + mouth;
       mb.v(HC.x + v.x * r * S, HC.y + (0.004 + v.y * r) * S, HC.z + v.z * r * S, j / nA * 6, i / nB * 3, leather, [MAT.LEATHER, 0.62, 0, 1], leather, wts, REGION.HEAD);
     }
   }
@@ -2766,14 +2805,15 @@ function buildPlagueMask(mb, app, rig, P) {
   // a leather cowl from the hood down over the neck, flaring onto the collar (no skin shows between)
   {
     const neckR = 0.059 * app.body.neck, nbl = (rig.neckBaseY - HC.y) / S, rows = [];
-    const spec = [[-0.05, 0.86, 0.9], [-0.09, 1.0, 1.0], [nbl + 0.02, 1.12, 1.08], [nbl - 0.03, 1.55, 1.25], [nbl - 0.065, 2.15, 1.6], [nbl - 0.08, 2.25, 1.68]];
-    for (const [yl, kx, kz] of spec) {
+    // [height, side, back/front depth, extra reach forward under the chin]
+    const spec = [[0.0, 1.28, 1.22, 1.05], [-0.045, 1.16, 1.1, 1.45], [-0.09, 1.0, 1.0, 1.5], [nbl + 0.02, 1.12, 1.08, 1.1], [nbl - 0.03, 1.55, 1.25, 1], [nbl - 0.065, 2.15, 1.6, 1], [nbl - 0.08, 2.25, 1.68, 1]];
+    for (const [yl, kx, kz, kf] of spec) {
       const y = HC.y + yl * S, zc = HC.z - 0.016 * S, k = smoothstep(-0.035, -0.075, yl);
       let w;
       if (yl > -0.07) w = [[B.head, 1 - k], [B.neck, k]];
       else if (yl > nbl - 0.01) w = [[B.neck, 1]];
       else { const q = smoothstep(nbl - 0.01, nbl - 0.06, yl); w = [[B.neck, 1 - q * 0.7], [B.chest, q * 0.7]]; }
-      rows.push({ c: new V3(HC.x, y, zc), e1: new V3(1, 0, 0), e2: new V3(0, 0, 1), prof: (t) => [Math.sin(t) * neckR * kx * 1.12 * S, Math.cos(t) * neckR * kz * (Math.cos(t) > 0 ? 1.2 : 1.5) * S], col: leather, mat: [MAT.LEATHER, 0.6, 0, 1], col2: leather, wts: w, reg: yl < -0.09 ? REGION.NECK : REGION.HEAD, v: yl });
+      rows.push({ c: new V3(HC.x, y, zc), e1: new V3(1, 0, 0), e2: new V3(0, 0, 1), prof: (t) => [Math.sin(t) * neckR * kx * 1.12 * S, Math.cos(t) * neckR * kz * (Math.cos(t) > 0 ? 1.2 * lerp(1, kf, Math.cos(t) ** 2) : 1.5) * S], col: leather, mat: [MAT.LEATHER, 0.6, 0, 1], col2: leather, wts: w, reg: yl < -0.09 ? REGION.NECK : REGION.HEAD, v: yl });
     }
     addLoft(mb, rows, 20);
   }
@@ -2785,8 +2825,37 @@ function buildPlagueMask(mb, app, rig, P) {
     const c = new V3(bc.x, bc.y - (0.012 + 0.07 * t * t) * S, bc.z + (0.27 * t) * S);
     beak.push({ c, e1: new V3(1, 0, 0), e2: new V3(0, 1, 0), prof: (q) => [Math.cos(q) * w * S, Math.sin(q) * h * S * (Math.sin(q) > 0 ? 1 : 0.8)], col: k % 3 === 0 ? C(0x4e3824) : beakC, mat: [MAT.LEATHER, 0.5, 0, 1], col2: beakC, wts, reg: REGION.HEAD, v: t });
   }
-  addLoft(mb, beak, nr, { capEnd: { offset: new V3(0, -0.004 * S, 0.004 * S) } });
+  addLoft(mb, beak, nr, { capStart: { offset: new V3(0, 0, -0.02 * S) }, capEnd: { offset: new V3(0, -0.004 * S, 0.004 * S) } });
   for (let k = 1; k < nb - 2; k += 2) { const q = beak[k]; addBox(mb, q.c.clone().add(new V3(0, (0.044 * Math.pow(1 - k / nb, 0.8)) * S + 0.002 * S, 0)), new V3(1, 0, 0), new V3(0, 1, 0), new V3(0, 0, 1), 0.0035 * S, 0.002 * S, 0.0035 * S, brass, [MAT.METAL, 0.3, 0, 1], wts, REGION.HEAD); }
+  // stitching along both sides of the beak, and two breathing holes near its base
+  for (const sg of [-1, 1]) for (let k = 1; k < nb - 1; k++) {
+    const t = k / nb, q = beak[k], w = (0.038 * Math.pow(1 - t, 0.85) + 0.0015) * S;
+    if (k % 1 === 0) addBox(mb, q.c.clone().add(new V3(sg * w * 0.98, 0.004 * S * (1 - t), 0)), new V3(0, 0, 1), new V3(0, 1, 0), new V3(sg, 0, 0), 0.006 * S, 0.0011 * S, 0.0012 * S, C(0x2b1d12), [MAT.LEATHER, 0.6, 0, 1], wts, REGION.HEAD);
+  }
+  for (const sg of [-1, 1]) {
+    const q = beak[2], t = 2 / nb, w = (0.038 * Math.pow(1 - t, 0.85) + 0.0015) * S;
+    addCyl(mb, q.c.clone().add(new V3(sg * w * 0.93, -0.012 * S, 0.004 * S)), new V3(sg, -0.2, 0), 0.0045 * S, 0.0015 * S, C(0x0c0907), [MAT.LEATHER, 0.8, 0, 1], wts, REGION.HEAD, 10);
+    addCyl(mb, q.c.clone().add(new V3(sg * (w * 0.93 + 0.0006 * S), -0.012 * S, 0.004 * S)), new V3(sg, -0.2, 0), 0.0058 * S, 0.0009 * S, brass, [MAT.METAL, 0.3, 0, 1], wts, REGION.HEAD, 10);
+  }
+  // a strap from the base of the beak round the back of the hood, buckled at the back
+  {
+    const yL = P.mouthYScaled + 0.035, pts = [], n = 22;
+    for (let k = 0; k <= n; k++) { const a = lerp(0.62, TAU - 0.62, k / n); pts.push(surf(Math.sin(a), yL * 6, Math.cos(a), 0.004)); }
+    mb.beginPart();
+    const st = mb.I.length, b0 = mb.n, hw = 0.006 * S, sc0 = C(0x1c140e);
+    for (let k = 0; k <= n; k++) { mb.v(pts[k].x, pts[k].y + hw, pts[k].z, k / n, 0, sc0, [MAT.LEATHER, 0.5, 0, 1], sc0, wts, REGION.HEAD); mb.v(pts[k].x, pts[k].y - hw, pts[k].z, k / n, 1, sc0, [MAT.LEATHER, 0.5, 0, 1], sc0, wts, REGION.HEAD); }
+    for (let k = 0; k < n; k++) { const q = b0 + k * 2; mb.quad(q, q + 1, q + 3, q + 2); }
+    orientPartOutward(mb, st, new V3(HC.x, HC.y, HC.z));
+    mb.endPart();
+    const back = pts[n >> 1];
+    addBuckle(mb, back.clone().add(new V3(0, 0, -0.002 * S)), new V3(1, 0, 0), new V3(0, 1, 0), new V3(0, 0, -1), 0.009 * S, 0.008 * S, 0.0018 * S, brass, [MAT.METAL, 0.3, 0, 1], wts, REGION.HEAD);
+  }
+  // a raised seam down the middle of the hood, forehead to nape
+  for (let k = 0; k <= 16; k++) {
+    const a = k < 8 ? lerp(1.15, Math.PI / 2, k / 8) : lerp(Math.PI / 2, Math.PI + 0.55, (k - 8) / 8);
+    const p = surf(0, Math.sin(a), Math.cos(a), 0.0015);
+    addBox(mb, p, new V3(1, 0, 0), new V3(0, Math.cos(a), -Math.sin(a)), new V3(0, Math.sin(a), Math.cos(a)), 0.0016 * S, 0.006 * S, 0.0014 * S, C(0x221811), [MAT.LEATHER, 0.6, 0, 1], wts, REGION.HEAD);
+  }
   // hat: a low flat crown with a band and emblem, on a wide brim tilted a touch forward
   const top = surf(0, 1, -0.05, 0), hy = top.y - 0.03 * S, tilt = 0.08;
   const hatRing = (r, y, col, mat) => ({ c: new V3(HC.x, y, HC.z - 0.01 * S + Math.sin(tilt) * (y - hy)), e1: new V3(1, 0, 0), e2: new V3(0, -Math.sin(tilt), Math.cos(tilt)), prof: (q) => [Math.cos(q) * r, Math.sin(q) * r * 1.08], col, mat, col2: col, wts, reg: REGION.HEAD, v: y });
@@ -6813,10 +6882,15 @@ class PhysicsWorld {
     const bodies = this.bodies;
     const fs = this.frameSteps, fi = this.frameIndex;
     this.broadphase(dt);
+    // animated (kinematic) bodies only need sub-step interpolation when something may touch them this
+    // step; the rest jump straight to their target on the last sub-step (big saving in crowds)
+    const stamp = this.pairStamp = (this.pairStamp || 0) + 1, pairs = this.pairs;
+    for (let i = 0; i < pairs.length; i++) pairs[i]._pairStamp = stamp;
     for (let s = 0; s < n; s++) {
-      const a = (fi * n + s + 1) / (fs * n);
+      const a = (fi * n + s + 1) / (fs * n), last = s === n - 1;
       for (const b of bodies) {
         if (b.kinematic) {
+          if (!last && b._pairStamp !== stamp && !this.kinAll) continue;
           b.prevPos.copy(b.pos); b.prevRot.copy(b.rot);
           b.pos.lerpVectors(b.kinPrevPos, b.kinPos, a); b.rot.slerpQuaternions(b.kinPrevRot, b.kinRot, a);
         } else if (!b.sleeping && b.invMass > 0) b.integrate(h, this.gravity);
@@ -8535,6 +8609,7 @@ class Animator {
     else if (a.type === 'dinspect') this.poseDInspect(Pc, a, root);
     else if (a.type === 'dinject') this.poseDInject(Pc, a, root);
     else if (a.type === 'dtrigger') this.poseDTrigger(Pc, a, root);
+    else if (a.type === 'drecall') this.poseDRecall(Pc, a, root);
     P.lerp(Pc, smooth01(a.w));
     if (!a.ending && a.dur && a.t >= a.dur) a.ending = true;
   }
@@ -9338,19 +9413,33 @@ class Animator {
     this.aimHead(P, root, a.point, 0.75 * Math.max(k1, k2));
   }
   // the trigger: the left hand rises toward an infected subject, palm out, and slowly closes into a fist
+  // (mode 'point': the same arm, hand flat, a short jab toward whoever his zombies are to take)
   poseDTrigger(P, a, root) {
-    const s = a.target, t = a.t, L = this.L, dur = a.dur || 3.4, sc = this.shoulderC[0];
+    const s = a.target, t = a.t, L = this.L, dur = a.dur || 3.4, sc = this.shoulderC[0], point = a.mode === 'point';
     const up = smoothstep(0.1, 0.75, t) * (1 - smoothstep(dur - 1.0, dur - 0.1, t));
-    const close = smoothstep(0.95, 1.95, t);
-    if (!a.fire && t >= 1.95) a.fire = 1;
+    const close = point ? 0 : smoothstep(0.95, 1.95, t), jab = point ? Math.exp(-Math.pow((t - 1.05) / 0.14, 2)) : 0;
+    if (!a.fire && t >= (point ? 1.0 : 1.95)) a.fire = 1;
     let yaw = 0;
     if (s && !s.removed) { this.toRoot(s.boneWPos[B.chest], root, _va); yaw = clamp(Math.atan2(_va.x, _va.z), -0.8, 0.8); }
     const hl = this.armPose('hang', 0), tremble = close > 0 && close < 1 ? Math.sin(t * 40) * 0.004 : 0;
-    hl.pos.set(sc.x + Math.sin(yaw) * 0.82 * L - 0.06 * L, sc.y + 0.1 * L + tremble, sc.z + Math.cos(yaw) * 0.82 * L);
-    hl.pole.set(0.7, -1, -0.2); hl.pron = -1.45; hl.flex = lerp(-0.8, 0.15, close); hl.dev = 0; hl.fing = lerp(0.02, 1, close); hl.thumb = lerp(0.05, 0.95, close);
+    const reach = (point ? 0.86 + 0.08 * jab : 0.82) * L;
+    hl.pos.set(sc.x + Math.sin(yaw) * reach - 0.06 * L, sc.y + (point ? 0.04 : 0.1) * L + tremble, sc.z + Math.cos(yaw) * reach);
+    hl.pole.set(0.7, -1, -0.2); hl.pron = -1.45; hl.dev = 0;
+    if (point) { hl.flex = 0.05; hl.fing = 0.08; hl.thumb = 0.35; }
+    else { hl.flex = lerp(-0.8, 0.15, close); hl.fing = lerp(0.02, 1, close); hl.thumb = lerp(0.05, 0.95, close); }
     P.hand[0].lerp(hl, up);
     P.chest.y += yaw * 0.35 * up; P.neck.y += yaw * 0.25 * up; P.head.y += yaw * 0.25 * up;
     P.head.z += (a.dir || 1) * 0.32 * up; P.head.x += 0.14 * close * up; P.chest.x -= 0.05 * up;
+  }
+  // calling his zombies back: the left hand up in front, palm up, fingers beckoning
+  poseDRecall(P, a, root) {
+    const t = a.t, L = this.L, dur = a.dur || 2.4, sc = this.shoulderC[0];
+    const up = smoothstep(0.05, 0.5, t) * (1 - smoothstep(dur - 0.6, dur - 0.05, t));
+    const hl = this.armPose('hang', 0), curl = 0.5 + 0.5 * Math.sin(t * 7.5);
+    hl.pos.set(sc.x + 0.02 * L, sc.y - 0.3 * L, sc.z + 0.72 * L);
+    hl.pole.set(0.8, -1, -0.3); hl.pron = a.pron != null ? a.pron : 1.8; hl.flex = -0.25 + 0.55 * curl; hl.fing = 0.1 + 0.75 * curl; hl.thumb = 0.3;
+    P.hand[0].lerp(hl, up);
+    P.head.z += 0.22 * up; P.head.x -= 0.05 * up; P.chest.x -= 0.03 * up;
   }
   // --- solver -------------------------------------------------------------------------
   solve(P, root, dt) {
@@ -9393,7 +9482,8 @@ class Animator {
     this.setLocalEuler(B.head, P.head.x + hp, P.head.y + hy, P.head.z);
     // jaw, eyes, lids
     const zv = this.zombie > 0 && this.zvar ? this.zvar : null;
-    this.setLocalEuler(B.jaw, clamp(P.jaw + this.jaw + (zv ? (zv.jawRest || 0) * this.zombie : 0) + (this.sick || 0) * 0.04, 0, 0.45), 0, 0);
+    // (the doctor's jaw stays shut inside the rigid hood)
+    this.setLocalEuler(B.jaw, this.hstyle === 'doctor' ? 0 : clamp(P.jaw + this.jaw + (zv ? (zv.jawRest || 0) * this.zombie : 0) + (this.sick || 0) * 0.04, 0, 0.45), 0, 0);
     this.saccadeT -= dt;
     if (this.saccadeT <= 0) { this.saccade.set((Math.random() - 0.5) * 0.12, (Math.random() - 0.5) * 0.08, 0); this.saccadeT = 0.4 + Math.random() * 2; }
     this.eyeYaw = damp(this.eyeYaw, (this.eyeYawT || 0) + this.saccade.x, 25, dt);
@@ -9625,13 +9715,18 @@ class NPC {
   update(dt) {
     const env = this.game.env;
     if (this.physMode === 'anim' || this.physMode === 'getup') {
-      env.yHint = this.root.pos.y + 0.1;
-      this.anim.update(dt, this.root, env);
-      env.yHint = null;
-      this.computeWorldBones();
-      if (this.gore && this.gore.anyCut) this.syncDetached();
-      this.rag.setFromBones(this.boneWPos, this.boneWRot, false);
-    }
+      // in a crowd, far-away or off-screen people pose every other frame (the manager decides)
+      this.animAcc = (this.animAcc || 0) + dt;
+      if (!this.animSkip) {
+        const adt = this.animAcc; this.animAcc = 0;
+        env.yHint = this.root.pos.y + 0.1;
+        this.anim.update(adt, this.root, env);
+        env.yHint = null;
+        this.computeWorldBones();
+        if (this.gore && this.gore.anyCut) this.syncDetached();
+        this.rag.setFromBones(this.boneWPos, this.boneWRot, false);
+      }
+    } else this.animAcc = 0;
     // overlapping pairs (grapples / feeding) collide again once apart
     const nc = this.rag.noCollideWith;
     if (nc && !(this.brain && (this.brain.victim || this.brain.victim2 || this.brain.corpse)) && !this.grabbedBy && !(this.pilers > 0)) {
@@ -9956,6 +10051,7 @@ class NPC {
 }
 
 // ============================================================================
+const _lodF = new THREE.Frustum(), _lodM = new THREE.Matrix4(), _lodS = new THREE.Sphere();
 class NPCManager {
   constructor(game) {
     this.game = game; this.list = []; this.selected = null; this.shellPool = [];
@@ -10034,7 +10130,38 @@ class NPCManager {
     if (npc) npc.highlight = 1;
     Events.emit('select', npc);
   }
+  // level of detail for crowds: near and on-screen people are always full quality. Beyond that, a
+  // crowd poses far/off-screen people at half rate (alternating, so the work is spread evenly), and
+  // only the nearest people render into the shadow map (the rest keep their soft contact shadows).
+  updateLod() {
+    const g = this.game, cam = g.camera, L = this.list, n = L.length, crowd = n > 10 && !this.lodOff, farD2 = (n > 24 ? 16 : 22) ** 2;
+    _lodM.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse); _lodF.setFromProjectionMatrix(_lodM);
+    const cp = cam.position;
+    for (const o of L) {
+      const p = o.physMode === 'ragdoll' ? o.boneWPos[B.hips] : o.root.pos;
+      o.camD2 = p.distanceToSquared(cp);
+      o.onScreen = _lodF.intersectsSphere(_lodS.set(o.boneWPos[B.hips], o.rig.H * 0.75));
+      let skip = false;
+      if (crowd && o.physMode === 'anim' && !o.anim.clip && o !== this.selected && !o.grabbedBy && !o.riding && !o.carried) {
+        const b = o.brain, a = o.anim.action;
+        const busy = (b && (b.victim || b.victim2 || b.corpse)) || (a && !a.ending && a.type !== 'zidle' && a.type !== 'hidle' && a.type !== 'didle' && a.type !== 'vidle' && a.type !== 'sit');
+        // off-screen: every third frame; far away: every other frame
+        if (!busy && !o.onScreen && o.camD2 > 16) skip = (g.frame + o.id) % 3 !== 0 && (o.animAcc || 0) < 0.06;
+        else if (!busy && o.camD2 > farD2) skip = ((g.frame + o.id) & 1) === 1 && (o.animAcc || 0) < 0.05;
+      }
+      o.animSkip = skip;
+    }
+    if (g.frame % 12 === 0 || this.lodN !== n) {
+      this.lodN = n;
+      const maxCast = n > 12 ? 16 : 99, maxD2 = (n > 12 ? 30 : 45) ** 2;
+      const order = this._lodOrder || (this._lodOrder = []); order.length = 0;
+      for (const o of L) order.push(o);
+      order.sort((a, b) => a.camD2 - b.camD2);
+      for (let i = 0; i < order.length; i++) { const o = order[i]; o.mesh.castShadow = i < maxCast && o.camD2 < maxD2; }
+    }
+  }
   update(dt) {
+    this.updateLod();
     for (const n of this.list) {
       try { n.update(dt); }
       catch (e) { reportError(e, 'npc-update ' + n.idStr); n.errorCount = (n.errorCount || 0) + 1; if (n.errorCount > 5) { HT.log('error', `Removing malfunctioning NPC ${n.idStr}`); this.remove(n); break; } }
@@ -10518,18 +10645,30 @@ class AISystem {
       return;
     }
     if (b.state === 'zFeed' && this.zombieFeed(npc, b, dt, Z)) return;
+    // the doctor's zombies follow him and attack only the person he points at
+    if (b.master && !this.masterOk(npc, b.master)) { b.master = null; b.order = null; }
+    const ordered = b.master && b.order && !b.order.removed && b.order.lifeState === 'alive' ? b.order : null;
+    if (b.master && !ordered) {
+      b.order = null;
+      if (npc.zombieTarget) { npc.zombieTarget = null; b.plan = null; }
+      this.zombieFollow(npc, b, dt, zspeed, zv);
+      return;
+    }
     // target selection
     let tgt = npc.zombieTarget;
-    if (tgt && (tgt.lifeState !== 'alive' || tgt.removed || tgt.root.pos.distanceTo(npc.root.pos) > Z.detection * 1.3)) tgt = null;
-    b.retarget = (b.retarget || 0) - dt;
-    if ((!tgt || b.retarget <= 0) && Z.aggression && Z.targetNPCs) { tgt = this.selectTarget(npc, Z); b.retarget = 2.5; }
+    if (ordered) tgt = ordered;
+    else {
+      if (tgt && (tgt.lifeState !== 'alive' || tgt.removed || tgt.root.pos.distanceTo(npc.root.pos) > Z.detection * 1.3)) tgt = null;
+      b.retarget = (b.retarget || 0) - dt;
+      if ((!tgt || b.retarget <= 0) && Z.aggression && Z.targetNPCs) { tgt = this.selectTarget(npc, Z); b.retarget = 2.5; }
+    }
     if (!Z.aggression || !Z.targetNPCs) tgt = null;
     if (tgt !== npc.zombieTarget) {
       const was = npc.zombieTarget; npc.zombieTarget = tgt; b.plan = null;
       if (tgt) {
         Events.emit('zombieTarget', { npc, target: tgt });
         // noticing new prey: stop, head snaps round, a growl, then go
-        if (!was && (b.state === 'zIdle' || b.state === 'zInvestigate' || b.state === 'zChase') && !anim.crawl) {
+        if (!was && (b.state === 'zIdle' || b.state === 'zInvestigate' || b.state === 'zChase' || b.state === 'zFollow') && !anim.crawl) {
           b.state = 'zNotice'; b.noticeT = (0.35 + Math.random() * 0.55) / zv.headRate; b.t = 0;
           anim.setAction('notice', { dur: b.noticeT + 0.15, inT: 0.1, outT: 0.3 });
           anim.kick(B.head, _v1.set(-2, (Math.random() - 0.5) * 6, 0));
@@ -10606,6 +10745,38 @@ class AISystem {
       }
       if (b.lookPos && b.speed < 0.3) anim.lookAt(b.lookPos, 0.7); else anim.clearLook();
     }
+  }
+  // --- the doctor's zombies ---------------------------------------------------------------
+  masterOk(z, m) {
+    return !!(m && !m.removed && m.lifeState === 'alive' && m.horror && m.horror.kind === 'doctor' &&
+      Math.abs(m.root.pos.y - z.root.pos.y) < 4 && m.root.pos.distanceTo(z.root.pos) < 45);
+  }
+  // a loose pack behind him: each keeps its own place, shambles back into it, idles there watching
+  zombieFollow(z, b, dt, zspeed, zv) {
+    const m = b.master, anim = z.anim;
+    if (b.state !== 'zFollow') { b.state = 'zFollow'; b.t = 0; }
+    if (b.slotA == null) { b.slotA = (Math.random() - 0.5) * 2.6; b.slotR = 1.9 + Math.random() * 2.2; }
+    const hunting = m.brain && m.brain.state === 'dStalk', r = b.slotR + (hunting ? 2.5 : 0); // hang back while he closes in on someone
+    const yaw = m.root.yaw + Math.PI + b.slotA;
+    const tx = m.root.pos.x + Math.sin(yaw) * r, tz = m.root.pos.z + Math.cos(yaw) * r;
+    const d = Math.hypot(tx - z.root.pos.x, tz - z.root.pos.z);
+    anim.setUpper('hang'); anim.reachTarget = 0;
+    const ia = anim.action;
+    if (d > (b.speed > 0 ? 0.6 : 1.3)) {
+      b.dest.set(tx, m.root.pos.y, tz);
+      b.speed = zspeed * (d > 6 ? 1.7 : 1) * ((zv && zv.cadence) || 1);
+      if (ia && ia.type === 'zidle' && !ia.ending) anim.setAction(null);
+    } else {
+      b.speed = 0; b.dest.copy(z.root.pos);
+      if ((!ia || ia.ending) && anim.speed < 0.2 && !anim.crawl) {
+        const modes = ['sway', 'sway', 'loll', 'lookround', 'twitch', 'chatter', 'shudder'];
+        anim.setAction('zidle', { mode: modes[Math.floor(Math.random() * modes.length)], dur: 2 + Math.random() * 2.5, ph: Math.random() * 6, side: Math.random() < 0.5 ? 0 : 1, inT: 0.5, outT: 0.6 });
+      }
+    }
+    // their eyes keep going back to him
+    b.lookT = (b.lookT || 0) - dt;
+    if (b.lookT <= 0) { b.lookT = 0.8 + Math.random() * 2.6; b.watchMaster = Math.random() < 0.55; }
+    if (b.watchMaster) anim.lookAt(m.boneWPos[B.head], 0.75); else anim.clearLook();
   }
   // --- scratches: keyframed swipes with contact detection at the hit frame ----------------
   startScratch(z, b, v) {
@@ -12427,10 +12598,19 @@ class HorrorSystem {
     b.cd = Math.max(0, (b.cd == null ? 5 + Math.random() * 5 : b.cd) - dt);
     b.trigCd = Math.max(0, (b.trigCd == null ? 12 + Math.random() * 8 : b.trigCd) - dt);
     b.inspCd = Math.max(0, (b.inspCd == null ? 2 + Math.random() * 4 : b.inspCd) - dt);
+    b.cmdCd = Math.max(0, (b.cmdCd == null ? 4 + Math.random() * 4 : b.cmdCd) - dt);
     b.hunting = b.state === 'dInject';
+    if (b.victim && b.state !== 'dInject') this.endInject(h, b); // a reset or interruption left a hold behind: let go
+    const servants = this.manageServants(h, b, dt);
+    const canCommand = servants.length > 0 && !b.order && b.cmdCd <= 0 && !h.riding;
     switch (b.state) {
       case 'dInject': return this.doctorInject(h, b, dt);
       case 'dTrigger': return this.doctorTrigger(h, b, dt);
+      case 'dCommand': return this.doctorCommand(h, b, dt, servants);
+      case 'dRecall':
+        b.speed = 0;
+        if (!act || act.type !== 'drecall' || act.ending) this.setState(h, b, 'dIdle');
+        return;
       case 'dInspect':
         b.speed = 0;
         if (act && act.type === 'dinspect' && act.squirt === 1) { act.squirt = 2; const p = this.injectorTip(h, _hz1); g.fx.serum(p, this.needleDir(h, _hz2), 5, 0.6); g.audio.play('inject', { pos: p.clone(), gain: 0.3, rate: 1.6 }); }
@@ -12445,6 +12625,7 @@ class HorrorSystem {
         // keeps a clinical distance: follows slowly if the subject gets far, otherwise stands with hands behind his back
         if (d > 7) { b.dest.copy(sj.root.pos); b.speed = def.walk * 0.9; if (act && act.type === 'didle') a.setAction(null); }
         else { b.speed = 0; b.faceTarget = sj.root.pos; if ((!act || act.ending) && a.speed < 0.2) a.setAction('didle', { mode: Math.random() < 0.7 ? 'behind' : 'still', dur: 3 + Math.random() * 2, ph: Math.random() * 6, inT: 0.6, outT: 0.6 }); }
+        if (canCommand && !b.order) { const t = this.pickOrderTarget(h, servants); if (t) return this.startCommand(h, b, t); }
         // hasten it along once the sickness has taken hold
         if (b.trigCd <= 0) {
           const k = sj.infection ? sj.infection.t / sj.infection.dur : 0;
@@ -12471,7 +12652,9 @@ class HorrorSystem {
         return;
       }
     }
-    // idle and wander - he also sits down and rides trains, like anyone else
+    // with zombies at his heel, he points out whom they are to take
+    if (canCommand && b.state !== 'dStalk') { const t = this.pickOrderTarget(h, servants); if (t) { if (h.transit) g.transit.interrupt(h); return this.startCommand(h, b, t); } }
+    // idle and wander - he also sits down and rides trains, like anyone else (not with zombies in tow)
     if (!h.riding && Z.infection && b.cd <= 0 && b.state !== 'dStalk') {
       const v = this.pickSubject(h, def);
       if (v) {
@@ -12483,7 +12666,8 @@ class HorrorSystem {
       b.cd = 2 + Math.random() * 2; // look again in a moment
     }
     if (!h.riding && b.trigCd <= 0 && this.considerTrigger(h, b, this.pickInfected(h, 6), dt)) return;
-    if (g.transit && g.transit.think(h, b, dt)) return;
+    if (servants.length && (h.transit || h.seatLock) && !h.riding) g.transit.interrupt(h);
+    if (!servants.length && g.transit && g.transit.think(h, b, dt)) return;
     if (b.state !== 'dIdle' && b.state !== 'dWander') this.setState(h, b, 'dIdle');
     if (b.state === 'dIdle') {
       b.speed = 0;
@@ -12575,6 +12759,93 @@ class HorrorSystem {
     this.startTrigger(h, b, sj);
     return true;
   }
+  // --- his zombies ------------------------------------------------------------------------
+  // Zombies he made (from anyone he injected or triggered) follow him from up to 40 m away; any other
+  // zombie that comes within 7 m of him falls in behind him too. They attack only whom he points at.
+  manageServants(h, b, dt) {
+    const out = b.servants || (b.servants = []); out.length = 0;
+    b.recruitT = (b.recruitT || 0) - dt;
+    const scan = b.recruitT <= 0; if (scan) b.recruitT = 0.5;
+    for (const z of this.game.npcs.list) {
+      if (z.lifeState !== 'zombie' || z.removed || !z.brain) continue;
+      const zb = z.brain;
+      if (zb.master === h) { out.push(z); continue; }
+      if (!scan || (zb.master && this.game.ai.masterOk(z, zb.master))) continue;
+      if (z.physMode !== 'anim' || zb.victim || zb.victim2 || zb.corpse) continue; // finish what it is doing first
+      const d = z.root.pos.distanceTo(h.root.pos);
+      if (Math.abs(z.root.pos.y - h.root.pos.y) < 3 && ((z.injectedBy === h && d < 40) || d < 7)) {
+        zb.master = h; zb.order = b.order || null;
+        if (!zb.order && z.zombieTarget && !zb.victim) { z.zombieTarget = null; zb.plan = null; }
+        z.anim.kick(B.head, _hz1.set(-1.5, (Math.random() - 0.5) * 4, 0));
+        out.push(z);
+        HT.log('horror', `${z.idStr} falls in behind ${h.horror.label}`);
+      }
+    }
+    // an order runs until the target is down for good (or gets away), then he calls them back
+    if (b.order) {
+      const o = b.order, gone = o.removed || o.lifeState === 'destroyed';
+      b.orderT = (b.orderT || 0) + dt;
+      if (gone || o.lifeState !== 'alive' || !out.length) b.orderDone = (b.orderDone || 0) + dt;
+      if (gone || b.orderDone > 7 || b.orderT > 45) this.recall(h, b, out);
+    }
+    return out;
+  }
+  // someone healthy nearby, preferably on his own platform/area
+  pickOrderTarget(h, servants) {
+    const here = this.areaOf(h);
+    let best = null, bs = 1e9;
+    for (const o of this.game.npcs.list) {
+      if (o === h || o.removed || o.horror || o.lifeState !== 'alive' || o.infection || o.riding || o.carried) continue;
+      if ((o.vamp && o.vamp.state !== 'none') || o === h.brain.subject || Math.abs(o.root.pos.y - h.root.pos.y) > 1.2) continue;
+      const d = Math.hypot(o.root.pos.x - h.root.pos.x, o.root.pos.z - h.root.pos.z);
+      if (d > 16) continue;
+      const sc = d + (here && this.areaOf(o) !== here ? 25 : 0) + Math.random() * 3;
+      if (sc < bs) { bs = sc; best = o; }
+    }
+    return best;
+  }
+  startCommand(h, b, t) {
+    this.setState(h, b, 'dCommand'); b.speed = 0; b.cmdTarget = t; b.faceTarget = t.root.pos;
+    h.anim.setAction('dtrigger', { target: t, mode: 'point', dur: 2.6, dir: Math.random() < 0.5 ? 1 : -1, inT: 0.35, outT: 0.6 });
+    h.anim.lookAt(t.boneWPos[B.head], 1);
+    h.lastReaction = 'Directing his zombies';
+  }
+  doctorCommand(h, b, dt, servants) {
+    const t = b.cmdTarget, act = h.anim.action;
+    b.speed = 0;
+    if (t && !t.removed) { b.faceTarget = t.root.pos; h.anim.lookAt(t.boneWPos[B.head], 1); }
+    if (act && act.type === 'dtrigger' && act.fire === 1) {
+      act.fire = 2;
+      if (t && !t.removed && t.lifeState === 'alive') {
+        b.order = t; b.orderT = 0; b.orderDone = 0;
+        for (const z of servants) z.brain.order = t;
+        this.game.audio.play('dtrigger', { pos: h.boneWPos[B.head].clone(), gain: 0.45, rate: 1.6 });
+        HT.log('horror', `${h.horror.label} sent ${servants.length} zombie(s) after ${t.idStr} ${t.name}`);
+      }
+    }
+    if (!act || act.type !== 'dtrigger' || act.ending) {
+      b.faceTarget = null; b.cmdTarget = null;
+      if (b.order) { b.subject = b.order; b.obsT = 25; this.setState(h, b, 'dObserve'); }
+      else { b.cmdCd = 5; this.setState(h, b, 'dIdle'); }
+    }
+  }
+  // call them off: they let go and shamble back to him; he beckons if his hands are free
+  recall(h, b, servants) {
+    b.order = null; b.orderT = 0; b.orderDone = 0;
+    b.cmdCd = 14 + Math.random() * 12;
+    for (const z of servants) {
+      z.brain.order = null;
+      if (z.brain.corpse) this.game.ai.endFeed(z);
+      if (z.brain.victim) this.game.ai.endGrab(z);
+    }
+    const act = h.anim.action;
+    if (servants.length && h.physMode === 'anim' && (b.state === 'dIdle' || b.state === 'dObserve' || b.state === 'dWander') && (!act || act.ending || act.type === 'didle')) {
+      if (b.state === 'dObserve') { b.subject = null; h.anim.clearLook(); }
+      this.setState(h, b, 'dRecall'); b.speed = 0;
+      h.anim.setAction('drecall', { dur: 2.4, inT: 0.35, outT: 0.5 });
+      this.game.audio.play('dtrigger', { pos: h.boneWPos[B.head].clone(), gain: 0.3, rate: 0.8 });
+    }
+  }
   startTrigger(h, b, sj) {
     this.setState(h, b, 'dTrigger'); b.speed = 0; b.subject = sj; b.faceTarget = sj.root.pos;
     b.trigCd = 30 + Math.random() * 25;
@@ -12591,6 +12862,7 @@ class HorrorSystem {
       act.fire = 2;
       const inf = sj && !sj.removed && sj.lifeState === 'alive' ? sj.infection : null;
       if (inf && !inf.collapsed) {
+        sj.injectedBy = h; // his now: the zombie it becomes will follow him
         // the sickness jumps ahead to the point of collapse; the turning itself runs as normal
         inf.t = Math.max(inf.t, inf.dur * INFECTION.collapse);
         sj.anim.kick(B.chest, _hz1.set(-1.2, 0, 0)); sj.anim.kick(B.neck, _hz1.set(0.8, (Math.random() - 0.5) * 1.5, 0));
@@ -16550,6 +16822,7 @@ const TIPS = [
   'Open the <b>Sandbox</b> menu to spawn a man or a woman. Every body and height is random.',
   'Zombies grab and bite. Survivors who break free are infected: they sweat, cough and slowly turn green, then collapse and rise about a minute later.',
   'The Physician never attacks. He walks up to people, injects them, and watches them turn. Sometimes a closing fist is all it takes to finish the change.',
+  'Zombies follow the Physician. When he points at someone, his zombies go after that person and no one else; then he beckons them back.',
   'Zombies kneel and feed on bodies. A destroyed head stops a body from rising.',
   'Shoot limbs to sever them. A subject who loses a leg can only crawl.',
   'Grenades tear bodies apart at close range. Hold the throw button longer to throw farther.',

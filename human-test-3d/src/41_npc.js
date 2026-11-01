@@ -116,13 +116,18 @@ class NPC {
   update(dt) {
     const env = this.game.env;
     if (this.physMode === 'anim' || this.physMode === 'getup') {
-      env.yHint = this.root.pos.y + 0.1;
-      this.anim.update(dt, this.root, env);
-      env.yHint = null;
-      this.computeWorldBones();
-      if (this.gore && this.gore.anyCut) this.syncDetached();
-      this.rag.setFromBones(this.boneWPos, this.boneWRot, false);
-    }
+      // in a crowd, far-away or off-screen people pose every other frame (the manager decides)
+      this.animAcc = (this.animAcc || 0) + dt;
+      if (!this.animSkip) {
+        const adt = this.animAcc; this.animAcc = 0;
+        env.yHint = this.root.pos.y + 0.1;
+        this.anim.update(adt, this.root, env);
+        env.yHint = null;
+        this.computeWorldBones();
+        if (this.gore && this.gore.anyCut) this.syncDetached();
+        this.rag.setFromBones(this.boneWPos, this.boneWRot, false);
+      }
+    } else this.animAcc = 0;
     // overlapping pairs (grapples / feeding) collide again once apart
     const nc = this.rag.noCollideWith;
     if (nc && !(this.brain && (this.brain.victim || this.brain.victim2 || this.brain.corpse)) && !this.grabbedBy && !(this.pilers > 0)) {
@@ -447,6 +452,7 @@ class NPC {
 }
 
 // ============================================================================
+const _lodF = new THREE.Frustum(), _lodM = new THREE.Matrix4(), _lodS = new THREE.Sphere();
 class NPCManager {
   constructor(game) {
     this.game = game; this.list = []; this.selected = null; this.shellPool = [];
@@ -525,7 +531,38 @@ class NPCManager {
     if (npc) npc.highlight = 1;
     Events.emit('select', npc);
   }
+  // level of detail for crowds: near and on-screen people are always full quality. Beyond that, a
+  // crowd poses far/off-screen people at half rate (alternating, so the work is spread evenly), and
+  // only the nearest people render into the shadow map (the rest keep their soft contact shadows).
+  updateLod() {
+    const g = this.game, cam = g.camera, L = this.list, n = L.length, crowd = n > 10 && !this.lodOff, farD2 = (n > 24 ? 16 : 22) ** 2;
+    _lodM.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse); _lodF.setFromProjectionMatrix(_lodM);
+    const cp = cam.position;
+    for (const o of L) {
+      const p = o.physMode === 'ragdoll' ? o.boneWPos[B.hips] : o.root.pos;
+      o.camD2 = p.distanceToSquared(cp);
+      o.onScreen = _lodF.intersectsSphere(_lodS.set(o.boneWPos[B.hips], o.rig.H * 0.75));
+      let skip = false;
+      if (crowd && o.physMode === 'anim' && !o.anim.clip && o !== this.selected && !o.grabbedBy && !o.riding && !o.carried) {
+        const b = o.brain, a = o.anim.action;
+        const busy = (b && (b.victim || b.victim2 || b.corpse)) || (a && !a.ending && a.type !== 'zidle' && a.type !== 'hidle' && a.type !== 'didle' && a.type !== 'vidle' && a.type !== 'sit');
+        // off-screen: every third frame; far away: every other frame
+        if (!busy && !o.onScreen && o.camD2 > 16) skip = (g.frame + o.id) % 3 !== 0 && (o.animAcc || 0) < 0.06;
+        else if (!busy && o.camD2 > farD2) skip = ((g.frame + o.id) & 1) === 1 && (o.animAcc || 0) < 0.05;
+      }
+      o.animSkip = skip;
+    }
+    if (g.frame % 12 === 0 || this.lodN !== n) {
+      this.lodN = n;
+      const maxCast = n > 12 ? 16 : 99, maxD2 = (n > 12 ? 30 : 45) ** 2;
+      const order = this._lodOrder || (this._lodOrder = []); order.length = 0;
+      for (const o of L) order.push(o);
+      order.sort((a, b) => a.camD2 - b.camD2);
+      for (let i = 0; i < order.length; i++) { const o = order[i]; o.mesh.castShadow = i < maxCast && o.camD2 < maxD2; }
+    }
+  }
   update(dt) {
+    this.updateLod();
     for (const n of this.list) {
       try { n.update(dt); }
       catch (e) { reportError(e, 'npc-update ' + n.idStr); n.errorCount = (n.errorCount || 0) + 1; if (n.errorCount > 5) { HT.log('error', `Removing malfunctioning NPC ${n.idStr}`); this.remove(n); break; } }

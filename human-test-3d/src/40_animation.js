@@ -1044,6 +1044,7 @@ class Animator {
     else if (a.type === 'dinspect') this.poseDInspect(Pc, a, root);
     else if (a.type === 'dinject') this.poseDInject(Pc, a, root);
     else if (a.type === 'dtrigger') this.poseDTrigger(Pc, a, root);
+    else if (a.type === 'drecall') this.poseDRecall(Pc, a, root);
     P.lerp(Pc, smooth01(a.w));
     if (!a.ending && a.dur && a.t >= a.dur) a.ending = true;
   }
@@ -1847,19 +1848,33 @@ class Animator {
     this.aimHead(P, root, a.point, 0.75 * Math.max(k1, k2));
   }
   // the trigger: the left hand rises toward an infected subject, palm out, and slowly closes into a fist
+  // (mode 'point': the same arm, hand flat, a short jab toward whoever his zombies are to take)
   poseDTrigger(P, a, root) {
-    const s = a.target, t = a.t, L = this.L, dur = a.dur || 3.4, sc = this.shoulderC[0];
+    const s = a.target, t = a.t, L = this.L, dur = a.dur || 3.4, sc = this.shoulderC[0], point = a.mode === 'point';
     const up = smoothstep(0.1, 0.75, t) * (1 - smoothstep(dur - 1.0, dur - 0.1, t));
-    const close = smoothstep(0.95, 1.95, t);
-    if (!a.fire && t >= 1.95) a.fire = 1;
+    const close = point ? 0 : smoothstep(0.95, 1.95, t), jab = point ? Math.exp(-Math.pow((t - 1.05) / 0.14, 2)) : 0;
+    if (!a.fire && t >= (point ? 1.0 : 1.95)) a.fire = 1;
     let yaw = 0;
     if (s && !s.removed) { this.toRoot(s.boneWPos[B.chest], root, _va); yaw = clamp(Math.atan2(_va.x, _va.z), -0.8, 0.8); }
     const hl = this.armPose('hang', 0), tremble = close > 0 && close < 1 ? Math.sin(t * 40) * 0.004 : 0;
-    hl.pos.set(sc.x + Math.sin(yaw) * 0.82 * L - 0.06 * L, sc.y + 0.1 * L + tremble, sc.z + Math.cos(yaw) * 0.82 * L);
-    hl.pole.set(0.7, -1, -0.2); hl.pron = -1.45; hl.flex = lerp(-0.8, 0.15, close); hl.dev = 0; hl.fing = lerp(0.02, 1, close); hl.thumb = lerp(0.05, 0.95, close);
+    const reach = (point ? 0.86 + 0.08 * jab : 0.82) * L;
+    hl.pos.set(sc.x + Math.sin(yaw) * reach - 0.06 * L, sc.y + (point ? 0.04 : 0.1) * L + tremble, sc.z + Math.cos(yaw) * reach);
+    hl.pole.set(0.7, -1, -0.2); hl.pron = -1.45; hl.dev = 0;
+    if (point) { hl.flex = 0.05; hl.fing = 0.08; hl.thumb = 0.35; }
+    else { hl.flex = lerp(-0.8, 0.15, close); hl.fing = lerp(0.02, 1, close); hl.thumb = lerp(0.05, 0.95, close); }
     P.hand[0].lerp(hl, up);
     P.chest.y += yaw * 0.35 * up; P.neck.y += yaw * 0.25 * up; P.head.y += yaw * 0.25 * up;
     P.head.z += (a.dir || 1) * 0.32 * up; P.head.x += 0.14 * close * up; P.chest.x -= 0.05 * up;
+  }
+  // calling his zombies back: the left hand up in front, palm up, fingers beckoning
+  poseDRecall(P, a, root) {
+    const t = a.t, L = this.L, dur = a.dur || 2.4, sc = this.shoulderC[0];
+    const up = smoothstep(0.05, 0.5, t) * (1 - smoothstep(dur - 0.6, dur - 0.05, t));
+    const hl = this.armPose('hang', 0), curl = 0.5 + 0.5 * Math.sin(t * 7.5);
+    hl.pos.set(sc.x + 0.02 * L, sc.y - 0.3 * L, sc.z + 0.72 * L);
+    hl.pole.set(0.8, -1, -0.3); hl.pron = a.pron != null ? a.pron : 1.8; hl.flex = -0.25 + 0.55 * curl; hl.fing = 0.1 + 0.75 * curl; hl.thumb = 0.3;
+    P.hand[0].lerp(hl, up);
+    P.head.z += 0.22 * up; P.head.x -= 0.05 * up; P.chest.x -= 0.03 * up;
   }
   // --- solver -------------------------------------------------------------------------
   solve(P, root, dt) {
@@ -1902,7 +1917,8 @@ class Animator {
     this.setLocalEuler(B.head, P.head.x + hp, P.head.y + hy, P.head.z);
     // jaw, eyes, lids
     const zv = this.zombie > 0 && this.zvar ? this.zvar : null;
-    this.setLocalEuler(B.jaw, clamp(P.jaw + this.jaw + (zv ? (zv.jawRest || 0) * this.zombie : 0) + (this.sick || 0) * 0.04, 0, 0.45), 0, 0);
+    // (the doctor's jaw stays shut inside the rigid hood)
+    this.setLocalEuler(B.jaw, this.hstyle === 'doctor' ? 0 : clamp(P.jaw + this.jaw + (zv ? (zv.jawRest || 0) * this.zombie : 0) + (this.sick || 0) * 0.04, 0, 0.45), 0, 0);
     this.saccadeT -= dt;
     if (this.saccadeT <= 0) { this.saccade.set((Math.random() - 0.5) * 0.12, (Math.random() - 0.5) * 0.08, 0); this.saccadeT = 0.4 + Math.random() * 2; }
     this.eyeYaw = damp(this.eyeYaw, (this.eyeYawT || 0) + this.saccade.x, 25, dt);
