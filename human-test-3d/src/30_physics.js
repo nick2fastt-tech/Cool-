@@ -283,6 +283,7 @@ class PhysicsWorld {
     this.substeps = 8; this.dt = 1 / 60;
     this.planes = []; this.heightfield = null; // fn(x,z)->h, normalFn(x,z,out)
     this.staticBoxes = null; this.staticGrid = null; this._sbSeen = new Set();
+    this.movers = null; // moving axis-aligned collider groups (train cars): [{ min, max, boxes: [{ min, max, on }] }]
     this.contacts = []; this.contactPool = []; this.pairs = [];
     this.friction = 0.6; this.restitution = 0.1;
     this.npcCollisions = true; this.selfCollisions = true; this.propCollisions = true;
@@ -464,6 +465,19 @@ class PhysicsWorld {
       }
     }
     if (this.staticGrid) this.collideStaticBoxes(b, pts, r);
+    if (this.movers) this.collideMovers(b, pts, r);
+  }
+  // moving boxes (train cars): whatever rides inside is carried by the map before the step, so in the
+  // car's frame these act like static walls, floor and seats
+  collideMovers(b, pts, r) {
+    const mn = b.aabbMin, mx = b.aabbMax;
+    for (const g of this.movers) {
+      if (mx.x < g.min.x || mn.x > g.max.x || mx.y < g.min.y || mn.y > g.max.y || mx.z < g.min.z || mn.z > g.max.z) continue;
+      for (const bx of g.boxes) {
+        if (!bx.on || mx.x < bx.min.x || mn.x > bx.max.x || mx.y < bx.min.y || mn.y > bx.max.y || mx.z < bx.min.z || mn.z > bx.max.z) continue;
+        this.collideBoxPoints(b, pts, r, bx);
+      }
+    }
   }
   // static axis-aligned boxes (map walls, slabs, fixtures), found through a 4 m grid
   setStaticBoxes(list) {
@@ -484,7 +498,10 @@ class PhysicsWorld {
   }
   collideStaticBoxes(b, pts, r) {
     const near = this.staticBoxesNear(b.aabbMin, b.aabbMax, this._sbNear || (this._sbNear = []));
-    for (const bx of near) for (const P of pts) {
+    for (const bx of near) this.collideBoxPoints(b, pts, r, bx);
+  }
+  collideBoxPoints(b, pts, r, bx) {
+    for (const P of pts) {
       const cx = clamp(P.x, bx.min.x, bx.max.x), cy = clamp(P.y, bx.min.y, bx.max.y), cz = clamp(P.z, bx.min.z, bx.max.z);
       let nx = P.x - cx, ny = P.y - cy, nz = P.z - cz, d2 = nx * nx + ny * ny + nz * nz, depth;
       const n = _p3;

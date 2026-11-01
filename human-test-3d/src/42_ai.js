@@ -131,6 +131,7 @@ class AISystem {
     if (npc.infection && Settings.data.zombies.infection) this.updateInfection(npc, b, dt);
     if (npc.lifeState !== 'alive') return;
     // held by a zombie: struggle (the zombie drives the grapple)
+    if (npc.grabbedBy && npc.transit) game.transit.interrupt(npc);
     if (npc.grabbedBy && npc.grabbedBy.lifeState === 'vampire') { b.state = 'grabbed'; b.speed = 0; b.pending.length = 0; npc.fear = 1; return; }
     if (npc.grabbedBy) {
       b.state = 'grabbed'; b.speed = 0; b.pending.length = 0; npc.fear = 1;
@@ -173,6 +174,9 @@ class AISystem {
         if (S.flee) { this.setState(npc, b, 'flee'); b.fleeT = 4; npc.lastReaction = 'Fleeing (Vampire)'; }
       }
     }
+    // sitting / riding: only while calm (a fright, a hit or a grab stands them up)
+    if (npc.transit && b.state !== 'idle' && b.state !== 'wander') game.transit.interrupt(npc);
+    if ((b.state === 'idle' || b.state === 'wander') && game.transit && game.transit.think(npc, b, dt)) return;
     switch (b.state) {
       case 'idle': {
         b.speed = 0;
@@ -942,6 +946,7 @@ class AISystem {
   // --- steering -----------------------------------------------------------------------
   steer(npc, b, dt) {
     const game = this.game, root = npc.root;
+    if (npc.seatLock) { b.vel.set(0, 0, 0); return; } // seated: the transit system holds the root
     const desired = _v4.set(0, 0, 0);
     const isZ = npc.lifeState === 'zombie', isV = npc.lifeState === 'vampire';
     let wantYaw = null;
@@ -997,9 +1002,9 @@ class AISystem {
     b.vel.x = damp(b.vel.x, desired.x, accel, dt); b.vel.z = damp(b.vel.z, desired.z, accel, dt);
     root.pos.x += b.vel.x * dt; root.pos.z += b.vel.z * dt;
     // on a train: the car's floor and walls; stepping through an open door hands over to the platform
-    if (game.transit && (npc.riding || game.transit.anyOpen)) game.transit.afterMove(npc, b);
+    const placed = game.transit && (npc.riding || game.transit.anyOpen) ? game.transit.afterMove(npc, b) : false;
     if (npc.riding) root.pos.y = npc.riding.car.floorY;
-    else { game.env.clampToBounds(root.pos, 0.35); root.pos.y = game.env.groundHeight(root.pos.x, root.pos.z, root.pos.y + 0.1); }
+    else if (!placed) { game.env.clampToBounds(root.pos, 0.35); root.pos.y = game.env.groundHeight(root.pos.x, root.pos.z, root.pos.y + 0.1); }
     // facing
     const sp = Math.hypot(b.vel.x, b.vel.z);
     let targetYaw = null;

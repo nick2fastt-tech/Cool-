@@ -101,6 +101,7 @@ class HorrorSystem {
     let tgt = b.hTarget;
     if (!this.validPrey(h, tgt, def.detect * 1.5)) tgt = null;
     if (!tgt || b.retarget <= 0) { const n = this.pickPrey(h, def); if (n && (!tgt || b.state !== 'hHunt' || n === tgt)) tgt = n; b.retarget = 2; }
+    if (tgt && h.transit) g.transit.interrupt(h);
     if (tgt !== b.hTarget) {
       const was = b.hTarget; b.hTarget = tgt; b.chaseT = 0;
       if (tgt && !was) {
@@ -130,8 +131,9 @@ class HorrorSystem {
       if (doll && b.laughT <= 0 && d > 3) this.laugh(h, b);
       return;
     }
-    // idle: look around, fidget, wander
+    // idle: look around, fidget, wander - or sit down / take the train like anyone else
     b.hunting = false;
+    if (g.transit && g.transit.think(h, b, dt)) return;
     if (b.state !== 'hIdle' && b.state !== 'hWander') this.setState(h, b, 'hIdle');
     if (b.state === 'hIdle') {
       b.speed = 0;

@@ -134,6 +134,7 @@ class Game {
     this.contact = new ContactShadows(this);
   }
   initEnvironment() {
+    this.transit = new TransitSystem(this);
     this.env = new EnvironmentManager(this);
     const last = Settings.data.environment.current;
     this.switchEnvironment(last === 'field' || last === 'subway' ? last : 'room', true, true);
@@ -258,6 +259,7 @@ class Game {
     ph.heightNormalFn = env.heightfield ? (x, z, out) => env.groundNormal(x, z, out) : null;
     if (env.floorAt) { ph.heightfield = (x, z, y) => env.floorAt(x, z, y); ph.heightNormalFn = (x, z, out) => env.groundNormal(x, z, out); }
     ph.setStaticBoxes(env.boxes || null);
+    ph.movers = null;
     if (env.attachPhysics) env.attachPhysics(ph);
     document.getElementById('envName') && (document.getElementById('envName').textContent = env.name);
     if (!initial) {
@@ -273,6 +275,8 @@ class Game {
         if (n.brain) { this.ai.endGrab(n); this.ai.endFeed(n); }
         if (n.physMode === 'ragdoll') { const pel = n.rag.bodies[RAG.PELVIS].pos; const dy = this.env.groundHeight(pel.x, pel.z, pel.y) + 0.4 - pel.y; for (const b of n.rag.bodies) { b.pos.y += Math.max(0, dy); b.prevPos.copy(b.pos); } }
         else n.teleport(p);
+        // a reset brings them back here, not to where they stood on the old map
+        n.spawn.pos.set(p.x, this.env.groundHeight(p.x, p.z, p.y + 0.1), p.z);
       }
       for (const pr of this.props.list) { const b = pr.body; this.env.clampToBounds(b.pos, 0.5); b.pos.y = this.env.groundHeight(b.pos.x, b.pos.z, b.pos.y) + pr.radius + 0.3; b.prevPos.copy(b.pos); }
       this.accessories.restoreAll();
@@ -331,7 +335,8 @@ class Game {
       if (n !== n0) { n.spawn.pos.copy(n0.spawn.pos); n.spawn.yaw = n0.spawn.yaw; n.spawnKind = n0.spawnKind; }
       if (n.vamp && n.vamp.state !== 'none' && n.lifeState === 'alive') this.vampires.cure(n);
       n.health = 100; n.regionDamage.fill(0); n.hitCounts.fill(0);
-      n.anim.clip = null; n.anim.snapshot = null;
+      n.anim.clip = null; n.anim.snapshot = null; n.anim.action = null;
+      if (this.transit) this.transit.release(n, true);
       if (n.physMode !== 'anim') { n.rag.setDynamic(false); n.physMode = 'anim'; }
       n.root.pos.copy(n.spawn.pos); n.root.yaw = n.spawn.yaw;
       n.anim.resetFeet(n.root.pos, n.root.yaw, this.env);
@@ -403,6 +408,7 @@ class Game {
     CharShared.uTime.value = this.time;
     // input / player (real time)
     this.player.update(rdt);
+    this.env.preStep(dt); // moving parts of the map (trains) and whatever rides them
     P.begin('ai'); this.ai.update(dt); this.zombies.update(dt); this.vampires.update(dt); P.end('ai');
     P.begin('anim'); this.npcs.update(dt); P.end('anim');
     P.begin('physics');

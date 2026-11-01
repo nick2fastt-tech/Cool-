@@ -252,6 +252,7 @@ class NPC {
     if (this.lifeState === 'zombie' && this.brain && this.game.ai) { this.game.ai.endGrab(this); this.game.ai.endFeed(this); this.game.ai.endPile(this); }
     if (this.lifeState === 'vampire' && this.brain && this.brain.vVictim && this.game.vampires) this.game.vampires.endBite(this, 'interrupted');
     this.anim.action = null; this.anim.reachW = 0; this.anim.reachTarget = 0; this.anim.crawlAttack = 0;
+    if (this.game.transit && (this.transit || this.seatLock || this.riding)) this.game.transit.release(this, true); // a limp body rides with the physics
     if (this.brain) { this.brain.state = 'down'; this.brain.victim2 = null; this.brain.plan = null; }
   }
   handleDowned(dt) {
@@ -277,7 +278,7 @@ class NPC {
     const env = this.game.env;
     const rp = _v4.set(pel.pos.x, pel.pos.y, pel.pos.z);
     if (!(this.game.transit && this.game.transit.insideCar(rp))) env.clampToBounds(rp, 0.5);
-    rp.y = env.groundHeight(rp.x, rp.z, pel.pos.y);
+    rp.y = env.groundHeight(rp.x, rp.z, rp.y + 0.1);
     this.root.pos.copy(rp); this.root.yaw = yaw;
     this.bones[0].position.copy(rp); this.bones[0].quaternion.setFromAxisAngle(UP, yaw);
     _q2.setFromAxisAngle(UP, -yaw);
@@ -329,7 +330,7 @@ class NPC {
     const env = this.game.env;
     const rp = _v4.set(pel.pos.x, pel.pos.y, pel.pos.z);
     if (!(this.game.transit && this.game.transit.insideCar(rp))) env.clampToBounds(rp, 0.5);
-    rp.y = env.groundHeight(rp.x, rp.z, pel.pos.y);
+    rp.y = env.groundHeight(rp.x, rp.z, rp.y + 0.1);
     this.root.pos.copy(rp); this.root.yaw = yaw;
     this.bones[0].position.copy(rp); this.bones[0].quaternion.setFromAxisAngle(UP, yaw);
     _q2.setFromAxisAngle(UP, -yaw);
@@ -507,6 +508,7 @@ class NPCManager {
     if (this.selected === npc) this.select(null);
     this.game.scene.remove(npc.mesh);
     this.game.ai.detach(npc);
+    if (this.game.transit) this.game.transit.release(npc, true); // frees a seat it was holding
     if (this.game.gore) this.game.gore.releaseNPC(npc);
     Events.emit('npcRemoved', npc);
     npc.dispose();

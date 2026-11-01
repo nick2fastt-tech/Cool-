@@ -381,6 +381,7 @@ class VampireSystem {
       if (tgt) { this.setState(v, b, 'vStalk'); v.lastReaction = tgt.isPlayer ? 'Stalking (You)' : 'Stalking'; }
       else if (b.state === 'vStalk' || b.state === 'vRush') this.setState(v, b, 'vIdle');
     }
+    if (tgt && v.transit) g.transit.interrupt(v);
     if (tgt) {
       const tp = this.targetPos(tgt), d = this.dist2(tp, v.root.pos);
       a.lookAt(this.targetHead(tgt), 1);
@@ -405,8 +406,9 @@ class VampireSystem {
       } else this.setState(v, b, 'vStalk');
       return;
     }
-    // --- nothing to hunt: style idles and slow, gliding walks ------------------------------------
+    // --- nothing to hunt: style idles and slow, gliding walks (or a seat, or a train ride) -----------
     a.vStalkTarget = 0;
+    if (g.transit && g.transit.think(v, b, dt)) return;
     if (b.state !== 'vIdle' && b.state !== 'vWander') this.setState(v, b, 'vIdle');
     if (b.state === 'vIdle') {
       b.speed = 0;

@@ -27,7 +27,9 @@ const TIPS = [
   'Gore level, graphics, audio and controls are in <b>Settings</b>. Choices are saved.',
   'Switch between the <b>White Testing Room</b>, the <b>Sunny Grassy Field</b> and the <b>Atlantic Av–Barclays Center subway</b> in the Sandbox menu.',
   'Vampires stalk, rush and bite. Bitten people faint, recover, then turn. A knife to the chest is a vampire\'s weakness.',
-  'Chucky laughs and rushes in with his knife. Jason walks, tilts his head, and only runs when you keep getting away.',
+  'Chucky laughs and rushes in with his knife. Jason walks, tilts his head, and only runs when his prey keeps getting away. Both hunt zombies and vampires too.',
+  'In the subway, people sit on the benches and ride the trains: they board, take a seat, and get off when the train comes back round. Zombies never sit.',
+  'Several zombies can pile onto one victim, and a zombie can punch into the stomach and tear the guts out.',
   'On phones: left thumb moves, right thumb looks, tap the weapon bar to switch weapons.'
 ];
 
