@@ -241,6 +241,19 @@ const VAMP_STYLES = {
   stalker: { name: 'stalker', hunch: 0.18, crouch: 0.1, walk: 0.95, run: 5.9, arms: 'low', stalkR: 5.6, cadence: 0.95, idles: ['still', 'still', 'scan', 'sniff'] }
 };
 const VAMP_STYLE_NAMES = Object.keys(VAMP_STYLES);
+// gait profiles: each character walks its own way (multipliers on the human gait)
+// stride, stance width, toe-out (rad), swing height, vertical bob, pelvis roll / yaw, side sway, arm swing,
+// forward lean (rad), landing foot pitch (hs: - heel first, + toe first), heavy: body dip on each landing
+const GAITS = {
+  // the slasher: long, heavy, deliberate strides, arms nearly still, a dip on every footfall
+  slasher: { stride: 1.2, width: 1.2, toeOut: 0.14, stepH: 0.8, bob: 1.0, roll: 0.5, yaw: 0.45, sway: 0.8, arm: 0.25, lean: 0.06, hs: -0.32, heavy: 1.4 },
+  // the doll: short quick steps on stiff little legs, a wide side-to-side waddle, big arm pumps
+  doll: { stride: 0.66, width: 1.5, toeOut: 0.32, stepH: 0.7, bob: 1.4, roll: 2.4, yaw: 1.4, sway: 2.2, arm: 1.8, lean: 0.07, hs: -0.1 },
+  // vampires: the aristocrat glides on a narrow line, the feral one scurries low, the stalker creeps toe-first
+  aristocrat: { stride: 1.14, width: 0.7, toeOut: 0.03, stepH: 0.85, bob: 0.22, roll: 0.4, yaw: 0.45, sway: 0.45, arm: 0.0, lean: -0.02, hs: -0.2 },
+  feral: { stride: 0.82, width: 1.3, toeOut: 0.2, stepH: 0.95, bob: 0.75, roll: 0.75, yaw: 0.85, sway: 1.15, arm: 0.6, lean: 0.12, hs: -0.04 },
+  stalker: { stride: 0.9, width: 0.92, toeOut: 0.07, stepH: 0.55, bob: 0.18, roll: 0.3, yaw: 0.3, sway: 0.35, arm: 0.3, lean: 0.03, hs: 0.2 }
+};
 // rising from the ground "like a board": the straight body pivots up about the heels (face-up bodies).
 // Dense linear keys sample a smooth angle curve; rz moves the root forward so the heels stay planted.
 function vampRiseKeys() {
@@ -387,11 +400,21 @@ class Animator {
       const f = this.feet[s];
       const sg = SIDE_SIGN[s];
       f.pos.set(rootPos.x + Math.cos(yaw) * sg * this.stance * 0.5 * 1.0, 0, rootPos.z - Math.sin(yaw) * sg * this.stance * 0.5);
-      f.pos.y = env.groundHeight(f.pos.x, f.pos.z);
+      f.pos.y = env.groundHeight(f.pos.x, f.pos.z, rootPos.y + 0.1);
       f.swing = false; f.yaw = yaw; f.pitch = 0;
     }
     this.prevRootPos.copy(rootPos);
     this.initialized = true;
+  }
+  // the ground under the character moved (a train): move the planted feet and the velocity reference with it
+  carry(dx, dy, dz) {
+    for (let s = 0; s < 2; s++) {
+      const f = this.feet[s];
+      f.pos.x += dx; f.pos.y += dy; f.pos.z += dz;
+      f.from.x += dx; f.from.y += dy; f.from.z += dz;
+      f.to.x += dx; f.to.y += dy; f.to.z += dz;
+    }
+    this.prevRootPos.x += dx; this.prevRootPos.y += dy; this.prevRootPos.z += dz;
   }
   lookAt(p, w = 1) { this.lookTarget.copy(p); this.lookActive = true; this.lookWTarget = w; }
   clearLook() { this.lookActive = false; }
@@ -480,7 +503,8 @@ class Animator {
     const wasMoving = this.moving;
     const moving = this.moving = spd > (wasMoving ? 0.07 : 0.15);
     const lg = rig.legLen;
-    let stride = lg * (0.78 + 0.6 * Math.min(spd, 6));
+    const gp = !zs && this.gait ? this.gait : null; // character gait profile (vampire styles, doll, slasher)
+    let stride = lg * (0.78 + 0.6 * Math.min(spd, 6)) * (gp ? gp.stride : 1);
     if (zs) stride *= lerp(1, zs.stride, zomb);
     let freq = Math.max(0.5, spd / Math.max(0.3, stride)) * pers.cadence;
     if (zs && this.zvar) freq *= lerp(1, this.zvar.cadence, zomb);
@@ -499,7 +523,7 @@ class Animator {
     this.prevYaw = yaw;
     this.yawRate = damp(this.yawRate || 0, clamp(yr, -6, 6), 12, dt);
     const H = rig.H, ha = rig.ankleY - rig.sole, db = 0.07 * H, dh = 0.024 * H, dtoe = 0.1 * H;
-    const toeOut = zs ? lerp(0.07, zs.toeOut, zomb) : 0.075;
+    const toeOut = zs ? lerp(0.07, zs.toeOut, zomb) : (gp ? gp.toeOut : 0.075);
     const mirror = this.zMirror;
     const limpShift = zs ? zs.limp * 0.07 * zomb * (mirror ? -1 : 1) : 0;
     // --- per-foot ground track (world) -----------------------------------------------
@@ -509,9 +533,9 @@ class Animator {
       const drag = zs ? zs.drag[zi] * zomb : 0, stiff = zs ? zs.stiff[zi] * zomb : 0;
       const duty = clamp(duty0 + (zs ? (zi ? -1 : 1) * zs.limp * 0.1 * zomb : 0) - this.limp[s] * 0.08 + this.limp[1 - s] * 0.05, 0.3, 0.78);
       f.duty = duty; f.drag = drag; f.stiff = stiff;
-      const lat = this.stance * 0.5 * lerp(0.66, 0.42, run) * (zs ? lerp(1, zs.width, zomb) : (npc.app.male ? 1 : 0.8));
+      const lat = this.stance * 0.5 * lerp(0.66, 0.42, run) * (zs ? lerp(1, zs.width, zomb) : (npc.app.male ? 1 : 0.8)) * (gp ? gp.width : 1);
       const idealX = root.pos.x + cy * sg * lat, idealZ = root.pos.z - sy * sg * lat;
-      const hsP = lerp(-0.26, -0.1, run) * (1 - drag) * (1 - stiff * 0.6);
+      const hsP = gp && gp.hs != null ? lerp(gp.hs, -0.1, run) : lerp(-0.26, -0.1, run) * (1 - drag) * (1 - stiff * 0.6);
       const toP = lerp(0.6, 0.8, run) * (1 - drag * 0.55);
       f.hsP = hsP; f.toP = toP;
       if (moving) {
@@ -600,16 +624,16 @@ class Animator {
     this.prevSpd = spd;
     this.accLean = damp(this.accLean || 0, clamp(accel * 0.035, -0.12, 0.16), 6, dt);
     this.bank = damp(this.bank || 0, clamp(-(this.yawRate || 0) * spd * 0.035, -0.16, 0.16), 6, dt);
-    const rotA = lerp(0.075, 0.12, run) * wk * (zs ? lerp(1, 0.55, zomb) : 1) * (1 + fem * 0.15);
+    const rotA = lerp(0.075, 0.12, run) * wk * (zs ? lerp(1, 0.55, zomb) : 1) * (1 + fem * 0.15) * (gp ? gp.yaw : 1);
     const pelYaw = -Math.cos(TAU * ph) * rotA;
     const lurch = zs ? zs.lurch * zomb : 0;
-    const rollA = (lerp(0.055, 0.03, run) * (1 + fem * 0.35) + lurch * 0.9) * wk;
+    const rollA = (lerp(0.055, 0.03, run) * (1 + fem * 0.35) + lurch * 0.9) * wk * (gp ? gp.roll : 1);
     const pelRoll = Math.sin(TAU * (ph - 0.06)) * rollA;
-    const swayA = (lerp(0.024, 0.01, run) * (1 + fem * 0.2) + lurch * 0.55) * wk;
+    const swayA = (lerp(0.024, 0.01, run) * (1 + fem * 0.2) + lurch * 0.55) * wk * (gp ? gp.sway : 1);
     let sway = moving ? Math.sin(TAU * (ph - 0.04)) * swayA : this.weightShift * 0.035;
     if (zs && !moving) sway += Math.sin(this.time * 1.25 + mirror) * 0.03 * zomb * (zs.wobble ? 1.8 : 1);
     const hunch = zs ? zs.hunch * zomb : 0;
-    const lean = (0.035 + 0.13 * run) * pers.leanMul + hunch * 0.25;
+    const lean = (0.035 + 0.13 * run) * pers.leanMul + hunch * 0.25 + (gp ? gp.lean : 0);
     const zRoll = zs ? zs.roll * zomb * (mirror ? -1 : 1) : 0;
     P.hipsOff.set(sway, 0, 0);
     P.hipsRot.set(lean * 0.5 + 0.02 + this.accLean * 0.5, pelYaw, pelRoll + (moving ? 0 : -this.weightShift * 0.05) + zRoll * 0.4 + this.bank * 0.5);
@@ -681,6 +705,12 @@ class Animator {
     if (!this.hipYInit) { this.hipY = hipY; this.hipYInit = true; }
     this.hipY = damp(this.hipY, hipY, moving ? 22 : 10, dt);
     P.hipsOff.y = this.hipY - standY;
+    if (gp) { // glide (smooth, little bob) or bounce (exaggerated) around the running average height
+      this.hipAvg = damp(this.hipAvg == null ? P.hipsOff.y : this.hipAvg, P.hipsOff.y, 2.5, dt);
+      P.hipsOff.y = this.hipAvg + (P.hipsOff.y - this.hipAvg) * gp.bob;
+      // heavy heel strikes: a short dip of the whole body as each foot lands
+      if (gp.heavy && moving) for (let s = 0; s < 2; s++) { const f = this.feet[s]; if (!f.swing && f.landT < 0.18) P.hipsOff.y -= Math.sin(Math.PI * f.landT / 0.18) * 0.016 * gp.heavy * clamp(spd, 0, 2); }
+    }
     // --- swing foot height from the knee flexion profile -----------------------------------
     if (moving) {
       for (let s = 0; s < 2; s++) {
@@ -691,7 +721,7 @@ class Animator {
         // the IK turns it into the natural knee bend (~60 deg walking, ~110 deg running)
         const peak = lerp(0.33, 0.42, run);
         const bump = sw < peak ? smooth01(sw / peak) : 1 - smooth01((sw - peak) / (1 - peak));
-        const Hl = lg * lerp(0.17, 0.36, run) * pers.stepLift * (1 - f.drag * 0.88) * (1 - f.stiff * 0.7) * (1 - 0.45 * this.limp[s]) * (zs ? lerp(1, 0.75, zomb) : 1);
+        const Hl = lg * lerp(0.17, 0.36, run) * pers.stepLift * (1 - f.drag * 0.88) * (1 - f.stiff * 0.7) * (1 - 0.45 * this.limp[s]) * (zs ? lerp(1, 0.75, zomb) : 1) * (gp ? gp.stepH : 1);
         const pTo = f.fromPitch != null ? f.fromPitch : f.toP;
         const offFrom = ha * (Math.cos(pTo) - 1) + db * Math.sin(Math.max(0, pTo));
         const offLand = ha * (Math.cos(f.hsP) - 1) - dh * Math.sin(Math.min(0, f.hsP));
@@ -740,7 +770,7 @@ class Animator {
         P.hand[s].copy(base);
         P.clav[s].set(0.18, 0, -0.04);
       } else {
-        const amp = lerp(0.2, 0.3, run) * pers.armSwing * clamp(spd / 1.3, 0, 1.15);
+        const amp = lerp(0.2, 0.3, run) * pers.armSwing * clamp(spd / 1.3, 0, 1.15) * (gp ? gp.arm : 1);
         const base = run > 0.01 ? this.armPose('hang', s).lerp(this.armPose('run', s), run) : this.armPose('hang', s);
         const fwd = Math.max(0, swc), back = Math.max(0, -swc);
         base.pos.z += swc * amp * this.L;
@@ -995,6 +1025,10 @@ class Animator {
     else if (a.type === 'vwipe') this.poseVWipe(Pc, a, root);
     else if (a.type === 'vidle') this.poseVIdle(Pc, a, root);
     else if (a.type === 'hlaugh') this.poseHLaugh(Pc, a, root);
+    else if (a.type === 'gutpunch') this.poseGutPunch(Pc, a, root, dt);
+    else if (a.type === 'gutted') this.poseGutted(Pc, a, root, dt);
+    else if (a.type === 'sit') this.poseSit(Pc, a, root, dt);
+    else if (a.type === 'ridehold') this.poseRideHold(Pc, a, root, dt);
     else if (a.type === 'htilt') this.poseHTilt(Pc, a, root);
     else if (a.type === 'hidle') this.poseHIdle(Pc, a, root);
     P.lerp(Pc, smooth01(a.w));
@@ -1067,6 +1101,8 @@ class Animator {
       let tb;
       if (a.variant === 'arm') tb = s === 0 ? v.boneWPos[SB('forearm', 1)] : v.boneWPos[SB('hand', 1)];
       else if (a.variant === 'shoulder') tb = s === 0 ? v.boneWPos[SB('upperarm', 1)] : v.boneWPos[SB('forearm', 1)];
+      else if (a.variant === 'pileBack') tb = v.boneWPos[SB('upperarm', s)];               // from behind: both shoulders
+      else if (a.variant === 'pileSide') tb = s === 0 ? v.boneWPos[SB('upperarm', a.vs)] : v.boneWPos[SB('forearm', a.vs)]; // one side: arm
       else tb = v.boneWPos[SB('upperarm', 1 - s)];
       this.toRoot(tb, root, _va);
       const hp = P.hand[s];
@@ -1074,7 +1110,8 @@ class Animator {
       hp.pos.copy(rest.pos); hp.posR.copy(_va); hp.posR.y -= 0.02; hp.posR.z -= 0.02; hp.space = reach;
       hp.pole.set(SIDE_SIGN[s], -0.7, -0.25); hp.pron = -0.9; hp.flex = 0.55; hp.fing = lerp(0.5, 0.92, reach); hp.thumb = hp.fing * 0.8;
     }
-    const bp = a.variant === 'arm' ? v.boneWPos[SB('forearm', 1)] : a.variant === 'shoulder' ? v.boneWPos[SB('clavicle', 1)] : v.boneWPos[B.neck];
+    const bp = a.variant === 'arm' ? v.boneWPos[SB('forearm', 1)] : a.variant === 'shoulder' ? v.boneWPos[SB('clavicle', 1)]
+      : a.variant === 'pileBack' ? v.boneWPos[B.neck] : a.variant === 'pileSide' ? v.boneWPos[SB('upperarm', a.vs)] : v.boneWPos[B.neck];
     this.aimHead(P, root, bp, 0.85);
     if (c.kind === 'lunge') P.jaw = cy < 0.28 ? 0.45 : (cy < 0.38 ? lerp(0.45, 0.02, (cy - 0.28) / 0.1) : 0.04 + Math.max(0, Math.sin(a.t * 17)) * 0.05);
     else if (c.kind === 'worry') P.jaw = 0.03 + Math.max(0, Math.sin(a.t * 11)) * 0.04;
@@ -1090,7 +1127,11 @@ class Animator {
     const z = a.target; if (!z || z.removed) return;
     const t = a.t, away = a.away || 1;
     a.modeT = (a.modeT || 0) - dt;
-    if (a.modeT <= 0) { a.prevMode = a.mode || 'push'; a.mode = a.forceMode || ['push', 'pull', 'push', 'block'][Math.floor(Math.random() * 4)]; a.modeT = 0.7 + Math.random() * 0.8; a.mw = 0; }
+    if (a.modeT <= 0) {
+      a.prevMode = a.mode || 'push';
+      const brave = this.npc.personality.bravery, pool = brave < 0.3 ? ['freeze', 'freeze', 'push', 'pull'] : brave > 0.7 ? ['shove', 'push', 'pull', 'block'] : ['push', 'pull', 'push', 'block', 'freeze', 'shove'];
+      a.mode = a.forceMode || pool[Math.floor(Math.random() * pool.length)]; a.modeT = 0.7 + Math.random() * 0.8; a.mw = 0;
+    }
     a.mw = Math.min(1, (a.mw || 0) + dt / 0.3);
     const base = P.spine.x, Pm = this.Pb; Pm.copy(P);
     const mode = (m, Q) => {
@@ -1107,6 +1148,19 @@ class Animator {
       if (m === 'block') { // forearm up between the faces
         const hb = Q.hand[1]; hb.space = 0; hb.pos.copy(this.armPose('guard', 1).pos); hb.pos.z += 0.05; hb.pole.set(-1, -1, 0.2); hb.pron = -0.8; hb.fing = 0.75;
         Q.head.x += 0.1; Q.chest.x -= 0.05;
+      }
+      if (m === 'freeze') { // paralysed with fear: hands half-raised near the chest, shaking, face turned away
+        for (let s = 0; s < 2; s++) { const hp = Q.hand[s], g2 = this.armPose('cover', s); g2.pos.y -= 0.25 * this.L; g2.pos.z -= 0.08 * this.L; hp.copy(g2); hp.pos.x += Math.sin(t * 31 + s) * 0.008; hp.fing = 0.7; }
+        Q.chest.x += 0.08; Q.spine.x += 0.04; Q.head.x += 0.12; Q.hipsOff.y -= 0.03 * this.rig.legLen;
+      }
+      if (m === 'shove') { // both palms flat on the attacker's chest, arms locked, leaning back hard
+        for (let s = 0; s < 2; s++) { const hp = Q.hand[s]; this.toRoot(z.boneWPos[B.chest], root, _va); hp.posR.copy(_va); hp.posR.x += SIDE_SIGN[s] * 0.11; hp.posR.z -= 0.02; hp.space = 1; hp.pron = -1.5; hp.flex = -1.0; hp.fing = 0.05; }
+        Q.chest.x -= 0.22; Q.spine.x -= 0.12; Q.hipsOff.z -= 0.08;
+      }
+      if (a.armBite) { // the bitten forearm is dragged to the zombie's mouth; the free hand shoves at its face
+        const ha = Q.hand[1]; this.toRoot(z.boneWPos[B.jaw], root, _va); ha.posR.copy(_va); ha.posR.y -= 0.05; ha.space = 1; ha.pron = -0.4; ha.fing = 0.5;
+        const hf = Q.hand[0]; this.toRoot(z.boneWPos[B.head], root, _va); hf.posR.copy(_va); hf.posR.x += 0.05; hf.space = 1; hf.pron = -1.4; hf.flex = -0.8; hf.fing = 0.1;
+        Q.chest.y -= away * 0.2;
       }
       Q.head.x -= 0.22; Q.head.y += away * 0.55; Q.neck.y += away * 0.3; Q.head.z -= away * 0.12;
     };
@@ -1251,9 +1305,10 @@ class Animator {
     for (let s = 0; s < 2; s++) {
       const sg = SIDE_SIGN[s], hp = P.hand[s];
       let tgt, k = 1;
-      if (st.arms === 'behind') {        // hands clasped at the small of the back; a full arm drive at a sprint
+      if (st.arms === 'behind') {        // hands clasped at the small of the back (in front under a cape); a full arm drive at a sprint
         k = 1 - smoothstep(1.9, 3.4, spd);
-        tgt = this.armPose('behind', s); tgt.pos.y += 0.06 * L; tgt.fing = 0.45;
+        if (this.npc.app.cape) { tgt = this.armPose('clasp', s); tgt.pos.z += 0.03 * L; } else { tgt = this.armPose('behind', s); tgt.pos.y += 0.06 * L; }
+        tgt.fing = 0.45;
       } else if (st.arms === 'claw') {   // hands low and forward, fingers hooked, wrists cocked
         tgt = this.armPose('hang', s);
         const sw = swing(s);
@@ -1433,6 +1488,85 @@ class Animator {
       P.head.y += this.vHeadStep * 0.32 * env; P.neck.y += this.vHeadStep * 0.1 * env;
     }
   }
+  // ============================== zombie gut punch ======================================
+  // wind up, drive a fist into the victim's belly (hit event), dig, rip back out (rip event), then eat
+  poseGutPunch(P, a, root, dt) {
+    const v = a.target, t = a.t, L = this.L, s = 1, sg = SIDE_SIGN[s], sc = this.shoulderC[s];
+    const wind = smoothstep(0, 0.35, t) * (1 - smoothstep(0.38, 0.5, t)), thrust = smoothstep(0.38, 0.5, t), rip = smoothstep(1.2, 1.4, t), eat = smoothstep(1.5, 1.8, t);
+    if (!a.hitDone && t >= 0.48) { a.hitDone = true; a.hitEvent = true; }
+    if (!a.ripDone && t >= 1.26) { a.ripDone = true; a.ripEvent = true; }
+    const hp = P.hand[s], ho = P.hand[1 - s];
+    // wind-up: fist pulled back by the hip, shoulders turned
+    hp.pos.set(sc.x + sg * 0.12 * L, sc.y - 0.62 * L, sc.z - 0.28 * L); hp.space = 0; hp.fing = 0.9; hp.thumb = 0.8; hp.pron = -0.2; hp.flex = 0;
+    P.chest.y += sg * 0.32 * wind; P.spine.y += sg * 0.12 * wind; P.chest.x -= 0.05 * wind;
+    if (v && !v.removed) {
+      // thrust into the abdomen, hold there while digging, then rip back toward the chest
+      this.toRoot(v.boneWPos[B.spine], root, _va); _va.y -= 0.02; _va.z -= 0.04;
+      const dig = thrust * (1 - rip);
+      hp.posR.copy(_va); hp.posR.x += Math.sin(t * 23) * 0.012 * dig; hp.posR.y += Math.sin(t * 17) * 0.01 * dig;
+      hp.space = dig; hp.pron = lerp(-0.2, -1.2, thrust); hp.flex = lerp(0, 0.5, dig); hp.fing = lerp(0.3, 0.95, rip);
+      P.chest.y -= sg * 0.22 * thrust * (1 - rip); P.spine.x += 0.07 * dig; P.chest.x += 0.05 * dig; P.hipsOff.z += 0.04 * dig;
+      // the other hand grips the victim's shoulder for leverage
+      this.toRoot(v.boneWPos[SB('upperarm', s)], root, _va); ho.posR.copy(_va); ho.posR.y -= 0.03; ho.space = smooth01(Math.min(1, t / 0.4)) * (1 - eat);
+      ho.pole.set(-sg, -0.7, -0.3); ho.pron = -0.9; ho.fing = 0.9; ho.thumb = 0.8;
+      this.aimHead(P, root, v.boneWPos[B.chest], 0.25 * dig + 0.3);
+      P.head.y -= sg * 0.25 * dig;   // face turned aside, not buried in the victim's chest
+    }
+    // pull back and lean away with the prize, then hand to mouth and chew
+    if (rip > 0) { const back = _vb.set(sc.x - sg * 0.12 * L, sc.y - 0.18 * L, sc.z + 0.32 * L); hp.pos.copy(back); P.chest.x -= 0.1 * rip * (1 - eat); P.hipsOff.z -= 0.06 * rip; }
+    if (eat > 0) { this.chestLocal(B.head, -sg * 0.015, -0.035, 0.07, _vb); hp.pos.lerp(_vb, eat); P.head.x += 0.2 * eat; P.neck.x += 0.1 * eat; }
+    P.jaw = 0.12 + 0.25 * thrust * (1 - rip) + (eat > 0 ? Math.max(0, Math.sin(t * 9)) * 0.22 * eat : 0);
+    P.look = 0;
+  }
+  // the victim: doubles over the punch, clutches the belly, staggers when it is torn open
+  poseGutted(P, a, root, dt) {
+    const t = a.t, hit = smoothstep(a.hitT || 0.5, (a.hitT || 0.5) + 0.12, t), rip = smoothstep(a.ripT || 1.26, (a.ripT || 1.26) + 0.2, t);
+    const lg = this.rig.legLen, shake = Math.sin(t * 29) * 0.03 * hit;
+    P.spine.x += 0.3 * hit - 0.15 * rip; P.chest.x += 0.28 * hit - 0.2 * rip + shake; P.head.x += 0.25 * hit - 0.1 * rip;
+    P.hipsOff.y -= (0.08 * hit + 0.05 * rip) * lg; P.hipsOff.z -= 0.12 * hit + 0.06 * rip;
+    for (let s = 0; s < 2; s++) {
+      const hp = P.hand[s], c = this.chestLocal(B.spine, SIDE_SIGN[s] * 0.035, -0.02, 0.09, _va);
+      hp.pos.lerp(c, hit * (1 - rip * 0.4)); hp.space *= 1 - hit; hp.pron = lerp(hp.pron, -1.2, hit); hp.flex = lerp(hp.flex, 0.4, hit); hp.fing = lerp(hp.fing, 0.6, hit);
+      const fl = this.armPose('flail', s); hp.pos.lerp(fl.pos, rip * 0.5);
+    }
+    P.jaw = Math.max(P.jaw, 0.35 * hit + 0.15 * rip);
+    if (rip > 0.5) this.blink = Math.max(this.blink, 0.03);
+    P.look = 0;
+  }
+  // ============================== sitting =================================================
+  // the root stays at the stand-up spot in front of the seat; the hips go back and down onto it
+  poseSit(P, a, root, dt) {
+    const rig = this.rig, H = rig.H, t = a.t, seatH = a.seatH != null ? a.seatH : 0.45, depth = a.depth != null ? a.depth : 0.42;
+    const hipY = seatH + 0.075 * (H / 1.75), standY = rig.bindPos[B.hips].y;
+    P.hipsOff.set(0, hipY - standY, -depth); P.hipsRot.set(-0.12, 0, 0);
+    P.spine.set(0.06 + (a.slouch || 0), 0, 0); P.chest.set(0.04, 0, 0); P.neck.set(0.05, 0, 0); P.head.set(0.02, 0, 0);
+    const shin = rig.shinLen, footY = Math.max(rig.ankleY, seatH + 0.02 - shin - rig.ankleY * 0.2);
+    const dangle = footY > rig.ankleY + 0.01;   // short legs (the doll) swing above the floor
+    for (let s = 0; s < 2; s++) {
+      const sg = SIDE_SIGN[s], fp = P.foot[s];
+      const kneeOut = rig.hipHalf * (a.wide ? 1.9 : 1.15);
+      fp.pos.set(sg * kneeOut, footY + (dangle ? Math.max(0, Math.sin(t * 2.4 + s * Math.PI)) * 0.05 : 0), -depth + rig.thighLen * 0.95 + (dangle ? 0.06 : 0.03));
+      fp.pitch = dangle ? 0.5 : 0.05; fp.yaw = sg * 0.08; fp.roll = 0; fp.pole.set(sg * 0.15, 0.25, 1);
+      const hp = P.hand[s];
+      // hands resting on the thighs (or the mode's own pose)
+      hp.posR.set(sg * (rig.hipHalf + 0.03), hipY + 0.06, -depth + rig.thighLen * 0.55); hp.space = 1;
+      hp.pole.set(sg, -0.2, -0.6); hp.pron = -1.2; hp.flex = 0.25; hp.fing = 0.5; hp.thumb = 0.4;
+    }
+    const m = a.mode;
+    if (m === 'phone') { const hp = P.hand[0]; hp.space = 0; hp.pos.copy(this.armPose('phone', 0).pos); hp.pron = -1.1; hp.flex = -0.2; hp.fing = 0.55; P.head.x += 0.35; P.neck.x += 0.12; }
+    else if (m === 'doze') { P.head.x += 0.45 + Math.sin(t * 0.7) * 0.05; P.head.z += 0.15; P.neck.x += 0.15; this.blink = Math.max(this.blink, 0.05); }
+    else if (m === 'arms') { for (let s = 0; s < 2; s++) { const hp = P.hand[s], c = this.armPose('crossed', s); hp.space = 0; hp.pos.copy(c.pos); hp.pole.copy(c.pole); hp.pron = c.pron; hp.fing = 0.6; } P.chest.x -= 0.04; }
+    else if (m === 'look') { P.head.y += Math.sin(t * 0.4 + (a.ph || 0)) * 0.6; P.neck.y += Math.sin(t * 0.4 + (a.ph || 0)) * 0.2; }
+    else if (m === 'lean') { P.spine.x += 0.22; P.chest.x += 0.12; for (let s = 0; s < 2; s++) { const hp = P.hand[s]; hp.posR.set(SIDE_SIGN[s] * 0.06, hipY + 0.12, -depth + rig.thighLen * 0.85); } P.head.x -= 0.1; }
+    P.look = m === 'doze' ? 0 : 1;
+  }
+  // standing in a moving train: one hand up on the grab rail, feet apart
+  poseRideHold(P, a, root, dt) {
+    const s = a.side || 1, hp = P.hand[s], L = this.L, sc = this.shoulderC[s];
+    hp.pos.set(sc.x + SIDE_SIGN[s] * 0.08 * L, sc.y + 0.82 * L, sc.z + 0.12 * L); hp.space = 0; hp.pron = -1.4; hp.flex = -0.1; hp.fing = 0.9; hp.thumb = 0.85;
+    const sway = Math.sin(a.t * 1.7) * 0.03 * (a.moving ? 1 : 0.2);
+    P.hipsRot.z += sway; P.spine.z -= sway * 0.6; P.head.z += sway * 0.4;
+  }
   // ============================== horror characters ======================================
   applyHorrorPosture(P, dt, root) {
     const L = this.L, spd = this.speed, moving = this.moving, ph = this.phase, run = this.runBlend || 0;
@@ -1441,8 +1575,8 @@ class Animator {
     if (this.hstyle === 'doll') {
       // stiff little legs: a side-to-side waddle, head bobbing, arms swinging straight from the shoulder
       const sw = Math.sin(TAU * ph);
-      P.hipsOff.x += sw * 0.018 * wk; P.hipsRot.z += sw * 0.09 * wk; P.spine.z -= sw * 0.06 * wk; P.chest.z -= sw * 0.04 * wk;
-      P.head.z += sw * 0.07 * wk; P.head.x += Math.abs(sw) * 0.05 * wk - 0.04;
+      P.hipsOff.x += sw * 0.008 * wk; P.spine.z -= sw * 0.07 * wk; P.chest.z -= sw * 0.05 * wk;
+      P.head.z += sw * 0.09 * wk; P.head.x += Math.abs(sw) * 0.05 * wk - 0.04;
       P.chest.x += run * 0.12; P.spine.x += run * 0.08;
       for (let s = 0; s < 2; s++) {
         const sg = SIDE_SIGN[s], hp = P.hand[s], swc = moving ? (s === 0 ? -1 : 1) * Math.cos(TAU * ph) : 0;

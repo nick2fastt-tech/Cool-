@@ -137,10 +137,10 @@ class Player {
     let t = maxD;
     if (d.y < -0.02) {
       // march to the ground
-      for (let s = 0.25; s <= maxD; s += 0.25) { const y = o.y + d.y * s; const gx = o.x + d.x * s, gz = o.z + d.z * s; if (y <= env.groundHeight(gx, gz)) { t = s; break; } }
+      for (let s = 0.25; s <= maxD; s += 0.25) { const y = o.y + d.y * s; const gx = o.x + d.x * s, gz = o.z + d.z * s; if (y <= env.groundHeight(gx, gz, y + 0.25)) { t = s; break; } }
     }
     const p = o.clone().addScaledVector(d, t);
-    p.y = env.groundHeight(p.x, p.z);
+    p.y = env.groundHeight(p.x, p.z, p.y + 0.25);
     env.clampToBounds(p, 0.6);
     return p;
   }
@@ -236,7 +236,7 @@ class Props {
     body.owner = prop; body.tag = 'prop';
     body.friction = type === 'ball' ? 0.5 : 0.7; body.restitution = type === 'ball' ? 0.65 : 0.12;
     body.linDamp = 0.05; body.angDamp = type === 'ball' ? 0.3 : 0.1;
-    body.pos.copy(pos); body.pos.y = Math.max(pos.y, this.game.env.groundHeight(pos.x, pos.z) + radius + 0.02);
+    body.pos.copy(pos); body.pos.y = Math.max(pos.y, this.game.env.groundHeight(pos.x, pos.z, pos.y + 0.3) + radius + 0.02);
     body.prevPos.copy(body.pos);
     mesh.castShadow = true; mesh.receiveShadow = true;
     this.game.scene.add(mesh);

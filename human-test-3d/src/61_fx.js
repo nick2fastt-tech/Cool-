@@ -51,7 +51,7 @@ class ParticleSystem {
       const dr = Math.max(0, 1 - this.drag[i] * dt);
       this.v[k] *= dr; this.v[k + 1] = this.v[k + 1] * dr - this.g[i] * dt; this.v[k + 2] *= dr;
       this.p[k] += this.v[k] * dt; this.p[k + 1] += this.v[k + 1] * dt; this.p[k + 2] += this.v[k + 2] * dt;
-      if (groundFn && this.g[i] > 0) { const gy = groundFn(this.p[k], this.p[k + 2]) + 0.01; if (this.p[k + 1] < gy) { this.p[k + 1] = gy; this.v[k + 1] *= -0.3; this.v[k] *= 0.6; this.v[k + 2] *= 0.6; } }
+      if (groundFn && this.g[i] > 0) { const gy = groundFn(this.p[k], this.p[k + 2], this.p[k + 1] + 0.3) + 0.01; if (this.p[k + 1] < gy) { this.p[k + 1] = gy; this.v[k + 1] *= -0.3; this.v[k] *= 0.6; this.v[k + 2] *= 0.6; } }
       // compact
       const t = 1 - l / this.maxLife[i];
       const o = w * 3;
@@ -107,7 +107,7 @@ class FX {
     sc.add(this.light);
     this.lightT = 0; this.lightMax = 0;
   }
-  ground(x, z) { return this.game.env.groundHeight(x, z); }
+  ground(x, z, y) { return this.game.env.groundHeight(x, z, y); }
   flash(pos, intensity, dur, color) {
     this.light.position.copy(pos); this.light.color.set(color || 0xffc27a);
     this.lightMax = intensity; this.lightT = dur; this.lightDur = dur; this.light.intensity = intensity;
@@ -179,7 +179,7 @@ class FX {
     r.mesh.position.copy(pos); r.mesh.position.y += 0.05; r.t = 0.45; r.max = radius; r.mesh.visible = true;
   }
   explosion(pos, radius) {
-    const g = this.ground(pos.x, pos.z);
+    const g = this.ground(pos.x, pos.z, pos.y + 0.3);
     this.flash(_v1.copy(pos).setY(pos.y + 0.5), 60, 0.35, 0xffb35a);
     for (let i = 0; i < 46; i++) {
       const d = _v2.set(Math.random() - 0.5, Math.random() * 0.9 + 0.1, Math.random() - 0.5).normalize();
@@ -221,7 +221,7 @@ class FX {
     this.flash(pos, 6, 0.06, 0xffc070);
   }
   update(dt) {
-    const gfn = (x, z) => this.ground(x, z);
+    const gfn = (x, z, y) => this.ground(x, z, y);
     this.smoke.update(dt, gfn); this.glow.update(dt, gfn);
     const h = this.game.renderer.domElement.height, fov = this.game.camera.fov;
     const sc = h / (2 * Math.tan(fov * DEG / 2));
@@ -248,7 +248,7 @@ class FX {
       s.life -= dt;
       if (s.life <= 0) continue;
       s.v.y -= 9.8 * dt; s.p.addScaledVector(s.v, dt);
-      const gy = this.ground(s.p.x, s.p.z) + 0.005;
+      const gy = this.ground(s.p.x, s.p.z, s.p.y + 0.1) + 0.005;
       if (s.p.y < gy) { s.p.y = gy; if (s.v.y < -0.5 && s.bounces < 3) { s.bounces++; Events.emit('shellBounce', s.p); } s.v.y *= -0.35; s.v.x *= 0.5; s.v.z *= 0.5; s.w.multiplyScalar(0.5); }
       quatFromRotVec(_v1.copy(s.w).multiplyScalar(dt), _q1); s.q.premultiply(_q1);
       m4.compose(s.p, s.q, _v2.set(1, 1, 1));

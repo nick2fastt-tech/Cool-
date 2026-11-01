@@ -26,10 +26,10 @@ class ContactShadows {
     this.n = 0;
   }
   // one blob: center (world), half-sizes along local x/z, yaw, darkness
-  blob(x, z, sx, sz, yaw, k) {
+  blob(x, z, sx, sz, yaw, k, yFrom) {
     if (this.n >= this.max || k < 0.01) return;
     const env = this.game.env;
-    const y = env.groundHeight(x, z) + 0.004;
+    const y = env.groundHeight(x, z, yFrom) + 0.004;
     env.groundNormal(x, z, this._n);
     this._q.setFromUnitVectors(UP, this._n).multiply(this._q2.setFromAxisAngle(UP, yaw));
     this._m.compose(this._p.set(x, y, z), this._q, this._s.set(sx * 2, 1, sz * 2));
@@ -51,11 +51,11 @@ class ContactShadows {
       if (npc.physMode === 'ragdoll') {
         const R = npc.rag, bodies = R.bodies;
         for (let i = 0; i < bodies.length; i++) {
-          const b = bodies[i], h = b.pos.y - env.groundHeight(b.pos.x, b.pos.z);
+          const b = bodies[i], h = b.pos.y - env.groundHeight(b.pos.x, b.pos.z, b.pos.y);
           const big = i === RAG.PELVIS || i === RAG.CHEST || i === RAG.SPINE;
           const rad = (big ? 0.27 : i === RAG.HEAD ? 0.16 : 0.12) * S;
           const k = (big ? 0.75 : 0.6) * (1 - smoothstep(0.04, 0.55, h - rad * 0.5));
-          if (k > 0.02) this.blob(b.pos.x, b.pos.z, rad * 1.25, rad * 1.25, 0, k);
+          if (k > 0.02) this.blob(b.pos.x, b.pos.z, rad * 1.25, rad * 1.25, 0, k, b.pos.y);
         }
         continue;
       }
@@ -66,21 +66,21 @@ class ContactShadows {
         const f = this._p.set(0, 0, 1).applyQuaternion(r); f.y = 0;
         const fl = Math.hypot(f.x, f.z) || 1; f.x /= fl; f.z /= fl;
         const mx = a.x + f.x * 0.06 * S, mz = a.z + f.z * 0.06 * S;
-        const h = a.y - env.groundHeight(mx, mz) - npc.rig.ankleY;
+        const h = a.y - env.groundHeight(mx, mz, a.y) - npc.rig.ankleY;
         const k = 0.9 * (1 - smoothstep(0.0, 0.3, h));
-        this.blob(mx, mz, 0.12 * S, 0.21 * S, Math.atan2(f.x, f.z), k);
+        this.blob(mx, mz, 0.12 * S, 0.21 * S, Math.atan2(f.x, f.z), k, a.y);
       }
       const hp = npc.boneWPos[B.hips];
       if (hp) {
-        const h = hp.y - env.groundHeight(hp.x, hp.z);
+        const h = hp.y - env.groundHeight(hp.x, hp.z, npc.root.pos.y + 0.1);
         const k = 0.5 * (1 - smoothstep(0.3 * S, 1.3 * S, h)) + 0.3;
-        this.blob(hp.x, hp.z, 0.42 * S, 0.34 * S, npc.root.yaw, k);
+        this.blob(hp.x, hp.z, 0.42 * S, 0.34 * S, npc.root.yaw, k, npc.root.pos.y + 0.1);
       }
     }
     for (const p of g.props.list) {
       const b = p.body; if (!b) continue;
-      const r = p.radius || 0.3, h = b.pos.y - env.groundHeight(b.pos.x, b.pos.z);
-      this.blob(b.pos.x, b.pos.z, r * 1.15, r * 1.15, 0, 0.7 * (1 - smoothstep(r * 0.6, r * 0.6 + 0.8, h)));
+      const r = p.radius || 0.3, h = b.pos.y - env.groundHeight(b.pos.x, b.pos.z, b.pos.y);
+      this.blob(b.pos.x, b.pos.z, r * 1.15, r * 1.15, 0, 0.7 * (1 - smoothstep(r * 0.6, r * 0.6 + 0.8, h)), b.pos.y);
     }
     this.mesh.count = this.n;
     this.mesh.instanceMatrix.needsUpdate = true; this.aK.needsUpdate = true;

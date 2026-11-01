@@ -24,9 +24,10 @@ class AISystem {
   constructor(game) { this.game = game; this.stimuli = []; this._tmp = new V3(); this.aimed = null; }
   attach(npc) { npc.brain = new Brain(npc); npc.brain.home.copy(npc.root.pos); }
   detach(npc) {
-    if (npc.brain) { this.endGrab(npc); this.endFeed(npc); npc.brain.npc = null; }
+    if (npc.brain) { this.endGrab(npc); this.endFeed(npc); this.endPile(npc); npc.brain.npc = null; }
     for (const n of this.game.npcs.list) {
       if (n.zombieTarget === npc) n.zombieTarget = null;
+      if (n.brain && n.brain.state === 'zPile' && n.brain.victim2 === npc) this.endPile(n);
       if (n.brain && n.brain.victim === npc) this.endGrab(n);
       if (n.brain && n.brain.corpse === npc) this.endFeed(n);
     }
@@ -419,6 +420,8 @@ class AISystem {
       }
     }
     if (b.state === 'zGrab') { this.zombieGrab(npc, b, dt, Z); return; }
+    if (b.state === 'zGut') { this.zombieGut(npc, b, dt, Z); return; }
+    if (b.state === 'zPile') { this.zombiePile(npc, b, dt, Z); return; }
     if (b.state === 'zScratch') { this.zombieScratch(npc, b, dt, Z); return; }
     if (b.state === 'zRecover') {
       b.speed = 0; b.recT -= dt;
@@ -458,7 +461,7 @@ class AISystem {
       // arms come up as the zombie closes in
       if (!anim.crawl) anim.reachTarget = smoothstep(2.8, 1.1, d) * (zst.arms === 'flail' ? 0.4 : 1);
       // a living victim on the ground gets eaten where it lies
-      if (tgt.physMode === 'ragdoll' && Z.feeding && !anim.crawl && (tgt.feeders || 0) < 2) { this.startFeed(npc, b, tgt); return; }
+      if (tgt.physMode === 'ragdoll' && Z.feeding && !anim.crawl && (tgt.feeders || 0) < 4) { this.startFeed(npc, b, tgt); return; }
       if (anim.crawl) {
         if (d > 0.7) { b.state = 'zChase'; b.dest.copy(tgt.root.pos); b.speed = zspeed; }
         else {
@@ -470,12 +473,15 @@ class AISystem {
       }
       // pick how to attack once in range: grab-and-bite or a swipe (re-planned after every attack)
       const grabbable = tgt.physMode === 'anim' && !tgt.grabbedBy && b.grabCooldown <= 0;
+      // someone else already has hold of it: pile on and bite from another side
+      const holder = tgt.grabbedBy;
+      if (holder && holder !== npc && holder.lifeState === 'zombie' && holder.brain && holder.brain.state === 'zGrab' && (tgt.pilers || 0) < 2 && d < 2.2 && tgt.physMode === 'anim') { this.startPile(npc, b, tgt); return; }
       if (!b.plan && d < 1.8) {
-        const weak = tgt.brain && (tgt.brain.state === 'hurt' || tgt.health < 50);
-        b.plan = grabbable && Math.random() < (weak ? 0.75 : 0.42) ? 'grab' : 'scratch';
+        const weak = tgt.brain && (tgt.brain.state === 'hurt' || tgt.health < 50), r = Math.random();
+        b.plan = grabbable && r < (weak ? 0.58 : 0.34) ? 'grab' : (grabbable && r < (weak ? 0.8 : 0.54) ? 'gut' : 'scratch');
       }
-      if (b.plan === 'grab' && !grabbable) b.plan = 'scratch';
-      const range = b.plan === 'grab' ? 0.78 : 0.98;
+      if ((b.plan === 'grab' || b.plan === 'gut') && !grabbable) b.plan = 'scratch';
+      const range = b.plan === 'grab' ? 0.78 : (b.plan === 'gut' ? 0.74 : 0.98);
       if (d > range || b.attackCD > 0) {
         b.state = 'zChase'; b.dest.copy(tgt.root.pos);
         // lunge at close range; runners sprint, twitchers lurch in bursts
@@ -484,6 +490,7 @@ class AISystem {
           : zspeed * (d < 3 ? 1.25 : 1) * (zst.chase || 1) * (b.burstT > 0 ? 2.2 : 1) * zv.cadence;
         if (b.attackCD > 0 && d < 0.85) b.speed = 0;
       } else if (b.plan === 'grab') this.startGrab(npc, b, tgt);
+      else if (b.plan === 'gut') this.startGut(npc, b, tgt);
       else this.startScratch(npc, b, tgt);
     } else {
       // nothing alive nearby: find a body to eat, else shamble around looking about
@@ -606,7 +613,7 @@ class AISystem {
   findCorpse(npc, r) {
     let best = null, bd = r;
     for (const o of this.game.npcs.list) {
-      if (o === npc || o.removed || o.lifeState !== 'dead' || o.physMode !== 'ragdoll' || (o.feeders || 0) >= 2 || o.horror || (o.vamp && o.vamp.state !== 'none')) continue;
+      if (o === npc || o.removed || o.lifeState !== 'dead' || o.physMode !== 'ragdoll' || (o.feeders || 0) >= 4 || o.horror || (o.vamp && o.vamp.state !== 'none')) continue;
       const d = o.root.pos.distanceTo(npc.root.pos);
       if (d < bd) { bd = d; best = o; }
     }
@@ -620,10 +627,10 @@ class AISystem {
     if (v.brain) { v.brain.state = 'grabbed'; v.brain.t = 0; v.brain.screamT = 0; }
     // a raised forearm gets bitten; otherwise neck or shoulder
     const guarding = v.anim.upper && (v.anim.upper.cur === 'guard' || v.anim.upper.cur === 'cover' || v.anim.upper.cur === 'push');
-    const variant = guarding && Math.random() < 0.7 ? 'arm' : (Math.random() < 0.55 ? 'neck' : 'shoulder');
+    const rv = Math.random(), variant = guarding ? (rv < 0.75 ? 'arm' : 'neck') : (rv < 0.32 ? 'arm' : rv < 0.68 ? 'neck' : 'shoulder');
     b.biteVariant = variant;
     z.anim.setUpper('hang'); z.anim.setAction('bite', { target: v, variant, inT: 0.25, outT: 0.35 });
-    v.anim.setAction('struggle', { target: z, away: Math.random() < 0.5 ? 1 : -1, forceMode: variant === 'arm' ? 'block' : null });
+    v.anim.setAction('struggle', { target: z, away: Math.random() < 0.5 ? 1 : -1, forceMode: null, armBite: variant === 'arm' });
     v.anim.setUpper('hang'); v.fear = 1; v.lastReaction = 'Grabbed by Zombie';
     z.lastReaction = 'Biting';
     Events.emit('zombieAttack', { npc: z, target: v });
@@ -638,6 +645,7 @@ class AISystem {
       return;
     }
     b.speed = 0; b.faceTarget = null;
+    if (!(v.pilers > 0)) v.pileT = 0;
     // hold both at biting distance, facing each other
     const dir = _v1.subVectors(v.root.pos, z.root.pos); dir.y = 0;
     let d = dir.length(); if (d < 1e-4) { dir.set(0, 0, 1); d = 1e-4; } else dir.multiplyScalar(1 / d);
@@ -661,16 +669,20 @@ class AISystem {
   }
   bite(z, v, n) {
     const Z = Settings.data.zombies, variant = z.brain && z.brain.biteVariant;
-    const region = variant === 'arm' ? REGION.R_FOREARM : variant === 'shoulder' ? (Math.random() < 0.6 ? REGION.UPPER_CHEST : REGION.R_UPPER_ARM) : (n === 1 || Math.random() < 0.7 ? REGION.NECK : REGION.UPPER_CHEST);
+    const region = variant === 'arm' ? REGION.R_FOREARM : variant === 'shoulder' ? (Math.random() < 0.6 ? REGION.UPPER_CHEST : REGION.R_UPPER_ARM)
+      : variant === 'pileBack' ? (Math.random() < 0.6 ? REGION.NECK : REGION.UPPER_CHEST) : variant === 'pileSide' ? (z.brain.pileSide === 0 ? REGION.L_UPPER_ARM : REGION.R_UPPER_ARM)
+      : (n === 1 || Math.random() < 0.7 ? REGION.NECK : REGION.UPPER_CHEST);
     const dir = _v2.subVectors(v.root.pos, z.root.pos).setY(0).normalize().clone();
-    const res = v.applyHit({ region, damage: Z.biteDamage / REGION_DAMAGE_MUL[region], weapon: 'bite', dir, force: 2, threatPos: z.root.pos.clone() });
+    // several mouths at once: each pile bite tears less, so the victim is dragged down alive before it dies
+    const pileK = variant === 'pileBack' || variant === 'pileSide' || (v.pilers || 0) > 0 ? 0.42 : 1;
+    const res = v.applyHit({ region, damage: Z.biteDamage * pileK / REGION_DAMAGE_MUL[region], weapon: 'bite', dir, force: 2, threatPos: z.root.pos.clone() });
     this.game.gore.onBite(v, z, [region]);
     this.game.hits.report(v, region, res, 'Zombie Bite', null);
     if (Z.infection && !v.infection) v.infection = { t: 0, dur: Z.infectionTime * (0.8 + Math.random() * 0.4), src: z.idStr };
     v.anim.kick(B.neck, _v3.set(0.6, (Math.random() - 0.5) * 2, 0));
     v.anim.kick(B.chest, _v3.set(-0.8, 0, 0));
     if (res.killed) { z.kills++; HT.log('death', `${v.idStr} ${v.name} was killed by ${z.idStr}`); }
-    else if (v.lifeState === 'alive' && v.health < 32 && n > 1 && Math.random() < 0.45) {
+    else if (v.lifeState === 'alive' && v.physMode === 'anim' && ((v.health < 32 && n > 1 && Math.random() < 0.45) || ((v.pilers || 0) > 0 && (v.pileT || 0) > 2.4 && Math.random() < 0.28 * v.pilers))) {
       // weakened victim is dragged to the ground (the zombie keeps eating where it falls)
       v.goRagdoll('Pulled Down (Zombie)');
       const side = _v3.set(Math.cos(z.root.yaw), 0, -Math.sin(z.root.yaw)).multiplyScalar(Math.random() < 0.5 ? 1 : -1);
@@ -707,10 +719,128 @@ class AISystem {
       if (v.anim.action && v.anim.action.type === 'struggle') v.anim.setAction(null);
       if (v.brain && v.brain.state === 'grabbed' && v.lifeState === 'alive') { v.brain.state = 'flee'; v.brain.t = 0; v.brain.fleeT = 5; }
     }
+    if (v && v.anim.action && v.anim.action.type === 'gutted') v.anim.setAction(null);
     b.victim = null;
-    if (z.anim.action && z.anim.action.type === 'bite') z.anim.setAction(null);
-    if (b.state === 'zGrab') { b.state = b.recT > 0 ? 'zRecover' : 'zIdle'; }
+    if (z.anim.action && (z.anim.action.type === 'bite' || z.anim.action.type === 'gutpunch')) z.anim.setAction(null);
+    if (b.state === 'zGrab' || b.state === 'zGut') { b.state = b.recT > 0 ? 'zRecover' : 'zIdle'; }
     b.grabCooldown = Math.max(b.grabCooldown || 0, 1.2);
+  }
+  // --- gut punch: a fist into the belly, the guts torn out, then eaten -----------------------------
+  startGut(z, b, v) {
+    b.state = 'zGut'; b.t = 0; b.victim = v; b.plan = null;
+    v.grabbedBy = z;
+    z.rag.noCollideWith = v.rag; v.rag.noCollideWith = z.rag;
+    if (v.brain) { v.brain.state = 'grabbed'; v.brain.t = 0; v.brain.screamT = 0.4; }
+    z.anim.setUpper('hang'); z.anim.setAction('gutpunch', { target: v, dur: 2.6, inT: 0.12, outT: 0.4 });
+    v.anim.setAction('gutted', { target: z, hitT: 0.5, ripT: 1.28, dur: 2.4, inT: 0.08, outT: 0.4 });
+    v.anim.setUpper('hang'); v.fear = 1; v.lastReaction = 'Gut Punch';
+    z.lastReaction = 'Gut Punch';
+    Events.emit('zombieAttack', { npc: z, target: v });
+    HT.log('zombie', `${z.idStr} punches into ${v.idStr} ${v.name}`);
+  }
+  zombieGut(z, b, dt, Z) {
+    const v = b.victim, act = z.anim.action;
+    if (!v || v.removed || v.physMode !== 'anim' || v.lifeState !== 'alive' || !act || act.type !== 'gutpunch') {
+      const meal = v && !v.removed && v.physMode === 'ragdoll' && (v.lifeState === 'dead' || v.lifeState === 'alive') ? v : null;
+      this.endGrab(z);
+      if (meal && Z.feeding) this.startFeed(z, b, meal);
+      return;
+    }
+    b.speed = 0; b.faceTarget = null;
+    const dir = _v1.subVectors(v.root.pos, z.root.pos); dir.y = 0;
+    let d = dir.length(); if (d < 1e-4) { dir.set(0, 0, 1); d = 1e-4; } else dir.multiplyScalar(1 / d);
+    // arm's length for the punch, a step back once the guts come out
+    const back = smoothstep(1.2, 1.7, act.t), want = (0.58 + 0.2 * back) * (z.rig.H + v.rig.H) / 3.5, corr = (d - want) * Math.min(1, dt * 7) * 0.5;
+    z.root.pos.addScaledVector(dir, corr); v.root.pos.addScaledVector(dir, -corr);
+    z.root.yaw = angleDamp(z.root.yaw, Math.atan2(dir.x, dir.z), 9, dt);
+    v.root.yaw = angleDamp(v.root.yaw, Math.atan2(-dir.x, -dir.z), 6, dt);
+    if (act.hitEvent) {
+      act.hitEvent = false;
+      const res = v.applyHit({ region: REGION.ABDOMEN, damage: Z.attackDamage * 1.3 / REGION_DAMAGE_MUL[REGION.ABDOMEN], weapon: 'zombie', dir: dir.clone(), force: 3, threatPos: z.root.pos.clone() });
+      this.game.gore.onGutPunch(v, z, 'hit');
+      this.game.hits.report(v, REGION.ABDOMEN, res, 'Zombie Gut Punch', null);
+      v.anim.kick(B.spine, _v2.set(2.2, 0, 0)); v.anim.kick(B.chest, _v2.set(1.6, 0, 0));
+      this.game.audio.play('pain0', { pos: v.boneWPos[B.head].clone(), gain: 1 });
+      if (Z.infection && !v.infection) v.infection = { t: 0, dur: Z.infectionTime * (0.8 + Math.random() * 0.4), src: z.idStr };
+      if (res.killed) { z.kills++; return; }
+    }
+    if (act.ripEvent) {
+      act.ripEvent = false;
+      const res = v.applyHit({ region: REGION.ABDOMEN, damage: 62 / REGION_DAMAGE_MUL[REGION.ABDOMEN], weapon: 'zombie', dir: dir.clone().negate(), force: 3, threatPos: z.root.pos.clone() });
+      this.game.gore.onGutPunch(v, z, 'rip');
+      this.game.audio.play('scream' + Math.floor(Math.random() * 3), { pos: v.boneWPos[B.head].clone(), gain: 1, important: true });
+      if (res.killed) z.kills++;
+      else if (v.lifeState === 'alive') { // torn open: staggers, then drops
+        setTimeout(() => { if (!v.removed && v.lifeState === 'alive' && v.physMode === 'anim' && v.grabbedBy === z) { this.endGrab(z); v.goRagdoll('Collapsed (Gut Wound)'); v.downTimer = Math.max(v.downTimer, 6); } }, 650);
+      }
+    }
+  }
+  // --- pile-on: more zombies seize a victim already held and bite from behind and the sides ---------
+  startPile(z, b, v) {
+    const holder = v.grabbedBy;
+    const hdir = Math.atan2(holder.root.pos.x - v.root.pos.x, holder.root.pos.z - v.root.pos.z);
+    const taken = []; for (const o of this.game.npcs.list) if (o.brain && o.brain.state === 'zPile' && o.brain.victim2 === v) taken.push(o.brain.pileSlot);
+    const slots = [{ k: 'back', a: Math.PI }, { k: 'left', a: Math.PI / 2 }, { k: 'right', a: -Math.PI / 2 }].filter(q => taken.indexOf(q.k) < 0);
+    if (!slots.length) return;
+    // the free slot nearest to where this zombie already stands
+    const mine = Math.atan2(z.root.pos.x - v.root.pos.x, z.root.pos.z - v.root.pos.z);
+    slots.sort((p, q) => Math.abs(wrapAngle(hdir + p.a - mine)) - Math.abs(wrapAngle(hdir + q.a - mine)));
+    const sl = slots[0];
+    b.state = 'zPile'; b.t = 0; b.victim2 = v; b.pileSlot = sl.k; b.pileAng = sl.a; b.bites = 0; b.plan = null; b.pileReady = false;
+    b.pileSide = sl.k === 'left' ? 0 : 1; b.biteVariant = sl.k === 'back' ? 'pileBack' : 'pileSide';
+    v.pilers = (v.pilers || 0) + 1;
+    z.rag.noCollideWith = v.rag;
+    z.anim.setUpper('hang');
+    z.lastReaction = 'Piling On';
+    HT.log('zombie', `${z.idStr} piles onto ${v.idStr} ${v.name} (${sl.k})`);
+  }
+  zombiePile(z, b, dt, Z) {
+    const v = b.victim2;
+    const held = v && !v.removed && v.lifeState === 'alive' && v.physMode === 'anim' && v.grabbedBy && v.grabbedBy.lifeState === 'zombie';
+    if (!held) {
+      const meal = v && !v.removed && v.physMode === 'ragdoll' && (v.lifeState === 'dead' || v.lifeState === 'alive') ? v : null;
+      this.endPile(z);
+      if (meal && Z.feeding && (meal.feeders || 0) < 4) this.startFeed(z, b, meal);
+      return;
+    }
+    const holder = v.grabbedBy, hdir = Math.atan2(holder.root.pos.x - v.root.pos.x, holder.root.pos.z - v.root.pos.z) + b.pileAng;
+    const want = 0.42 * (z.rig.H + v.rig.H) / 3.5;
+    const tx = v.root.pos.x + Math.sin(hdir) * want, tz = v.root.pos.z + Math.cos(hdir) * want;
+    z.anim.lookAt(v.boneWPos[B.head], 1);
+    if (!b.pileReady) {
+      // walk round to the free side first (a wide arc keeps clear of the victim), then seize and bite
+      const dx = tx - z.root.pos.x, dz = tz - z.root.pos.z, dd = Math.hypot(dx, dz);
+      const vx = z.root.pos.x - v.root.pos.x, vz = z.root.pos.z - v.root.pos.z, vd = Math.hypot(vx, vz) || 1;
+      b.dest.set(tx, v.root.pos.y, tz);
+      if (vd < 0.75 && dd > 0.4) b.dest.set(v.root.pos.x + vx / vd * 0.8 + dx * 0.5, v.root.pos.y, v.root.pos.z + vz / vd * 0.8 + dz * 0.5);
+      b.speed = Math.max(b.zspeed || 0.8, 0.8) * (dd < 0.9 ? 0.7 : 1.1); b.faceTarget = null;
+      z.anim.reachTarget = 1;
+      if (dd < 0.3 || (b.t > 2.5 && dd < 0.7)) {
+        b.pileReady = true; b.t = 0; b.speed = 0;
+        z.anim.setAction('bite', { target: v, variant: b.biteVariant, vs: b.pileSide, inT: 0.25, outT: 0.35 });
+        if (v.anim.action && v.anim.action.type === 'struggle') { v.anim.action.modeT = 0; v.anim.action.forceMode = Math.random() < 0.5 ? 'freeze' : null; }
+      } else if (b.t > 5) this.endPile(z);
+      return;
+    }
+    b.speed = 0; b.faceTarget = null;
+    const k = Math.min(1, dt * 5);
+    z.root.pos.x += (tx - z.root.pos.x) * k; z.root.pos.z += (tz - z.root.pos.z) * k;
+    z.root.yaw = angleDamp(z.root.yaw, Math.atan2(v.root.pos.x - z.root.pos.x, v.root.pos.z - z.root.pos.z), 8, dt);
+    b.vel.multiplyScalar(0.8);
+    v.pileT = Math.max(v.pileT || 0, b.t);
+    const act = z.anim.action;
+    if (act && act.type === 'bite' && act.snapEvent) { act.snapEvent = false; b.bites++; this.bite(z, v, b.bites + 1); }
+    if (b.t > 7) this.endPile(z);
+  }
+  endPile(z) {
+    const b = z.brain; if (!b) return;
+    const v = b.victim2;
+    if (v && b.state === 'zPile') v.pilers = Math.max(0, (v.pilers || 1) - 1);
+    b.victim2 = null;
+    if (z.anim.action && z.anim.action.type === 'bite') z.anim.setAction(null);
+    if (b.state === 'zPile') { b.state = 'zIdle'; b.t = 0; }
+    // keep ignoring the victim's body until the two are apart (NPC.update releases it), so overlapping
+    // limbs are never resolved in one violent push
   }
   // --- feeding --------------------------------------------------------------------------------
   startFeed(z, b, c) {
@@ -817,7 +947,8 @@ class AISystem {
     let wantYaw = null;
     if (b.speed > 0.01) {
       let spd = npc.anim.crawl ? Math.min(b.speed, 0.38) : b.speed;
-      const envC = game.env.current, goal = envC && envC.navGoal ? envC.navGoal(root.pos, b.dest) : b.dest;
+      const envC = game.env.current, tr = game.transit;
+      const goal = tr && (npc.riding || tr.anyOpen) ? tr.navGoal(npc, b.dest) : (envC && envC.navGoal ? envC.navGoal(root.pos, b.dest) : b.dest);
       desired.subVectors(goal, root.pos); desired.y = 0;
       if (b.destOff && desired.lengthSq() > 1) desired.add(b.destOff);
       const d = desired.length();
@@ -853,7 +984,7 @@ class AISystem {
     }
     // map fixtures (columns, turnstiles, machines): steer around them instead of grinding into them
     const envO = game.env.current;
-    if (envO && envO.obstaclesNear) for (const o of envO.obstaclesNear(root.pos.x, root.pos.z)) {
+    if (envO && envO.obstaclesNear && !npc.riding) for (const o of envO.obstaclesNear(root.pos.x, root.pos.z, root.pos.y)) {
       const cx = clamp(root.pos.x, o.x0, o.x1), cz = clamp(root.pos.z, o.z0, o.z1), dx = root.pos.x - cx, dz = root.pos.z - cz, d = Math.hypot(dx, dz);
       if (d < 0.8 && d > 1e-4) { const k = (0.8 - d) / 0.8 * 2.6; desired.x += dx / d * k; desired.z += dz / d * k; }
     }
@@ -865,8 +996,10 @@ class AISystem {
     const accel = b.speed > 2.5 ? 9 : 5;
     b.vel.x = damp(b.vel.x, desired.x, accel, dt); b.vel.z = damp(b.vel.z, desired.z, accel, dt);
     root.pos.x += b.vel.x * dt; root.pos.z += b.vel.z * dt;
-    game.env.clampToBounds(root.pos, 0.35);
-    root.pos.y = game.env.groundHeight(root.pos.x, root.pos.z);
+    // on a train: the car's floor and walls; stepping through an open door hands over to the platform
+    if (game.transit && (npc.riding || game.transit.anyOpen)) game.transit.afterMove(npc, b);
+    if (npc.riding) root.pos.y = npc.riding.car.floorY;
+    else { game.env.clampToBounds(root.pos, 0.35); root.pos.y = game.env.groundHeight(root.pos.x, root.pos.z, root.pos.y + 0.1); }
     // facing
     const sp = Math.hypot(b.vel.x, b.vel.z);
     let targetYaw = null;

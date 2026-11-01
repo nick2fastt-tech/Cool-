@@ -669,6 +669,7 @@ function buildEar(mb, app, rig, P, side) {
     // C-shaped outline: wider at top, narrower lobe
     const wz = W2 * (cy > 0 ? 1.0 : 0.78 + 0.22 * (1 + cy));
     let ly = Math.sin(ph) * cy * H2, lz = Math.sin(ph) * sz * wz;
+    if (app.vampEars) { const tip = Math.pow(Math.max(0, cy), 3) * clamp(0.5 - sz * 0.7, 0, 1) * Math.sin(ph); ly += tip * 0.017; lz -= tip * 0.011; } // pointed tips
     const rad = Math.sin(ph);
     let lx = Math.cos(ph) * 0.0055;
     if (lx > 0) lx = 0.0012 + lx * (0.15 + 0.85 * smoothstep(0.55, 0.92, rad)); // cupped outer face with rim

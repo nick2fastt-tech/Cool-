@@ -160,7 +160,7 @@ class AccessorySystem {
       // falls: a hat comes off when the head hits the ground hard (or the head is gone)
       if (this.on && npc.physMode === 'ragdoll') {
         const hb = npc.rag.bodies[RAG.HEAD];
-        const low = hb.pos.y - env.groundHeight(hb.pos.x, hb.pos.z) < 0.16 * npc.rig.H / 1.75;
+        const low = hb.pos.y - env.groundHeight(hb.pos.x, hb.pos.z, hb.pos.y) < 0.16 * npc.rig.H / 1.75;
         const fast = hb.vel.lengthSq() > 9;
         for (const a of npc.acc) if (!a.body && ((low && (a.kind !== 'glasses' && a.kind !== 'sunglasses' || fast)) || (fast && Math.random() < dt * 2))) this.knockOff(npc, a, hb.vel.clone().multiplyScalar(0.6));
       }

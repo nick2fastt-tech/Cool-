@@ -236,6 +236,11 @@ function generateAppearance(seed, ov = {}) {
     color: sDef.mat === 'leather' ? rng.pick([0x1a1716, 0x2a1d15, 0x4a2c1a, 0x5b3a22]) : rng.pick(CHAR_DATA.palettes.shoe),
     sole: sDef.soleHex, sock: rng.pick([0xf0f0ee, 0x1c1c1e, 0x9a9a9a, 0xe6e2d8])
   };
+  if (tpl.dark) { // vampire: slicked dark hair, often a cape with a high collar and a red lining, pointed ears
+    if (ov.hairColor == null) hairColor = rng.pick([CHAR_DATA.hairColors[0], CHAR_DATA.hairColors[0], CHAR_DATA.hairColors[1], CHAR_DATA.hairColors[11]]);
+    if (!ov.hairStyle || ov.hairStyle === 'random') hairStyle = rng.pick(male ? ['sidepart', 'sidepart', 'short', 'medium', 'long_straight'] : ['long_straight', 'long_straight', 'long_wavy', 'bun', 'bob']);
+    if (male && (!ov.facialHair || ov.facialHair === 'random')) facial = rng.chance(0.75) ? 'none' : 'goatee';
+  }
   if (tpl.dark) { // deep, near-black colors with an oxblood or ivory accent
     if (ov.topColor == null) top.color = rng.pick([0x121114, 0x1b1418, 0x2a0c12, 0x17181d, 0x360c15, 0x0f131c]);
     top.pattern = 'plain'; top.color2 = 0x111114;
@@ -247,6 +252,10 @@ function generateAppearance(seed, ov = {}) {
     seed: seed >>> 0, gender, male, firstName, lastName, name: firstName + ' ' + lastName, age, height, build, body,
     skin, eyes, hairColor, hairStyle, facialHair: facial, face, outfitName: tpl.name, top, bottom, shoes
   };
+  if (tpl.dark) {
+    app.vampire = true; app.vampEars = rng.chance(0.7);
+    if (rng.chance(0.6)) app.cape = { color: rng.pick([0x0d0c0f, 0x111014, 0x170c10]), lining: rng.pick([0x7a0b16, 0x5c0710, 0x8e1020, 0x2a0d3a]) };
+  }
   if (ov.special) applySpecialLook(app, ov.special, rng);
   return app;
 }

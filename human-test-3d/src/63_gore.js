@@ -242,7 +242,7 @@ class BloodDrops {
       let x = this.p[k] + this.v[k] * dt, y = this.p[k + 1] + this.v[k + 1] * dt, z = this.p[k + 2] + this.v[k + 2] * dt;
       // collisions -> decals
       let hitN = null;
-      const gy = env.groundHeight(x, z);
+      const gy = env.groundHeight(x, z, this.p[k + 1] + 0.05);
       if (y <= gy + 0.004) { y = gy + 0.004; hitN = env.groundNormal(x, z, _gv3); }
       else for (const pl of planes) {
         if (pl.n.y > 0.5) continue; // floor handled above
@@ -352,7 +352,7 @@ class Gibs {
       gb.v.y -= 9.8 * dt;
       gb.p.addScaledVector(gb.v, dt);
       quatFromRotVec(_gv1.copy(gb.w).multiplyScalar(dt), _gq1); gb.q.premultiply(_gq1);
-      const gy = env.groundHeight(gb.p.x, gb.p.z) + gb.s * 0.7;
+      const gy = env.groundHeight(gb.p.x, gb.p.z, gb.p.y + 0.05) + gb.s * 0.7;
       if (gb.p.y < gy) {
         gb.p.y = gy;
         if (!gb.splat && gb.v.y < -1.2) { gb.splat = true; gore.decals.add(_gv2.set(gb.p.x, gy - gb.s * 0.7, gb.p.z), env.groundNormal(gb.p.x, gb.p.z, _gv3), 0.07 + gb.s * 4, 'drop'); }
@@ -394,7 +394,7 @@ class GutStrands {
     const seg = 0.045 + Math.random() * 0.01, pts = [], prev = [];
     const dir = new V3((Math.random() - 0.5), -0.3 - Math.random() * 0.4, (Math.random() - 0.5)).normalize();
     for (let i = 0; i < n; i++) { const p = a.clone().addScaledVector(dir, seg * i * 0.6); pts.push(p); prev.push(p.clone().addScaledVector(dir, -0.02 + Math.random() * 0.01)); }
-    this.list.push({ npc, vi, pts, prev, seg, r: 0.013 + Math.random() * 0.006, free: false });
+    this.list.push({ npc, vi, pts, prev, seg, r: 0.013 + Math.random() * 0.006, free: false, grab: opts.grab || null });
   }
   update(dt) {
     if (!this.list.length) { this.mesh.count = 0; return; }
@@ -411,8 +411,9 @@ class GutStrands {
         q.copy(p);
         p.x += vx; p.y += vy - 9.8 * h * h; p.z += vz;
       }
-      // pin to the wound
+      // pin to the wound (and, for a moment, the far end to the hand pulling it out)
       if (!st.free && st.npc) st.npc.skinVertexWorld(st.vi, P[0]);
+      if (st.grab) { st.grab.t -= dt; if (st.grab.t <= 0 || !st.grab.npc || st.grab.npc.removed) st.grab = null; else { P[n - 1].copy(st.grab.npc.boneWPos[st.grab.bone]); Q[n - 1].copy(P[n - 1]); } }
       // length constraints + ground
       for (let it = 0; it < 6; it++) {
         for (let i = 1; i < n; i++) {
@@ -424,7 +425,7 @@ class GutStrands {
           b.x -= dx * diff * wb; b.y -= dy * diff * wb; b.z -= dz * diff * wb;
         }
         for (let i = 0; i < n; i++) {
-          const p = P[i], gy = env.groundHeight(p.x, p.z) + st.r;
+          const p = P[i], gy = env.groundHeight(p.x, p.z, p.y + 0.05) + st.r;
           if (p.y < gy) { p.y = gy; const q = Q[i]; q.x = lerp(q.x, p.x, 0.4); q.z = lerp(q.z, p.z, 0.4); }
         }
       }
@@ -619,7 +620,7 @@ class GoreSystem {
   }
   splatAt(p, size, kind = 'splat', dir = null) {
     const env = this.game.env;
-    const gy = env.groundHeight(p.x, p.z);
+    const gy = env.groundHeight(p.x, p.z, p.y + 0.05);
     this.decals.add(_gv2.set(p.x, gy, p.z), env.groundNormal(p.x, p.z, _gv3), size, kind, dir);
   }
   // blood thrown onto the nearest surface along a direction (walls / floor)
@@ -1117,6 +1118,32 @@ class GoreSystem {
     this.sound(wp, 'bite', 0.95);
     this.screenNear(wp, 0.5);
   }
+  // zombie gut punch: 'hit' opens the belly, 'rip' tears it wide and pulls the guts out with the hand
+  onGutPunch(victim, zombie, stage) {
+    const hand = zombie.boneWPos[SB('hand', 1)];
+    const vi = this.nearestVertex(victim, victim.boneWPos[B.spine], [REGION.ABDOMEN, REGION.TORSO]);
+    const wp = vi >= 0 ? victim.skinVertexWorld(vi, new V3()) : hand.clone();
+    const out = _gv3.subVectors(wp, victim.boneWPos[B.spine]); out.y = 0; if (out.lengthSq() < 1e-6) out.set(0, 0, 1); out.normalize();
+    if (!this.on) { this.game.fx.fabricPuff(wp, out); this.sound(wp, stage === 'hit' ? 'hitBody' : 'thud', 0.9); return; }
+    const G = this.state(victim);
+    if (vi >= 0) this.vertexBind(victim, vi, _gv6, _gv7);
+    if (stage === 'hit') {
+      if (vi >= 0) G.gaping = this.addWound(victim, WOUND.GAPING, _gv6, _gv7, 0.035, { vi, bleed: 1.2, k: 0.3 }) || G.gaping;
+      this.spray(wp, out, 18, 2.2, 0.6, 1.0, 0.5);
+      this.sound(wp, 'squelch', 0.9);
+      G.blood = Math.min(1, G.blood + 0.1); G.dirty = true;
+      this.smear(zombie, SB('hand', 1), 0.03);
+    } else {
+      if (vi >= 0) this.addWound(victim, WOUND.GAPING, _gv6, _gv7, 0.06, { vi, bleed: 1.5, k: 0.45 });
+      if (this.extreme && vi >= 0) for (let k = 0; k < 3; k++) this.guts.add(victim, vi, 8 + Math.floor(Math.random() * 5), { grab: { npc: zombie, bone: SB('hand', 1), t: 0.6 + k * 0.25 } });
+      if (Settings.data.gore.gibs && this.extreme) this.gibs.burst(wp, out, 3, 'gut', 2.2, 0.8, 1.0);
+      this.spray(wp, out, 30, 3, 0.7, 1.1, 0.6); this.mist(wp, out, 6, 0.4);
+      this.splatAt(wp, 0.6, 'splat');
+      this.sound(wp, 'gib', 0.9);
+      G.blood = Math.min(1, G.blood + 0.18); G.dirty = true;
+      this.screenNear(wp, 0.8); this.smear(zombie, B.jaw, 0.03);
+    }
+  }
   // vampire bite: two small puncture marks on the neck and a few drops (deliberately non-graphic)
   onVampBite(victim, vamp) {
     const mouth = vamp ? _gv4.copy(vamp.boneWPos[B.jaw]) : _gv4.copy(victim.boneWPos[B.neck]);
@@ -1153,7 +1180,7 @@ class GoreSystem {
       this.smear(zombie, B.jaw, 0.035); this.smear(zombie, B.hand_L, 0.04); this.smear(zombie, B.hand_R, 0.04);
       this.sound(p, Math.random() < 0.5 ? 'chew' : 'squelch', 0.75);
       // the body bleeds into a pool
-      if (!G.pool) G.pool = this.decals.add(_gv2.copy(corpse.boneWPos[B.spine]).setY(this.game.env.groundHeight(corpse.boneWPos[B.spine].x, corpse.boneWPos[B.spine].z)), this.game.env.groundNormal(corpse.boneWPos[B.spine].x, corpse.boneWPos[B.spine].z, _gv3), 1.5 + Math.random() * 0.5, 'pool', null, { grow: 16 });
+      if (!G.pool) G.pool = this.decals.add(_gv2.copy(corpse.boneWPos[B.spine]).setY(this.game.env.groundHeight(corpse.boneWPos[B.spine].x, corpse.boneWPos[B.spine].z, corpse.boneWPos[B.spine].y)), this.game.env.groundNormal(corpse.boneWPos[B.spine].x, corpse.boneWPos[B.spine].z, _gv3), 1.5 + Math.random() * 0.5, 'pool', null, { grow: 16 });
     }
   }
   smear(npc, bone, r) {
@@ -1210,20 +1237,20 @@ class GoreSystem {
       if (dead && !G.pool && npc.physMode === 'ragdoll' && (npc.rag.asleep || npc.rag.maxSpeed() < 0.25) && (G.wounds.length || G.anyCut) && Settings.data.gore.pools) {
         const c = npc.rag.bodies[G.headGone ? RAG.CHEST : RAG.SPINE].pos;
         const sz = clamp(0.8 + G.wounds.length * 0.12 + (G.anyCut ? 0.6 : 0), 0.8, 2.4) * (this.extreme ? 1 : 0.7);
-        G.pool = this.decals.add(_gv1.set(c.x, g.env.groundHeight(c.x, c.z), c.z), g.env.groundNormal(c.x, c.z, _gv2), sz, 'pool', null, { grow: 10 + sz * 6 });
-        if (G.headGone) { const hp = npc.rag.bodies[RAG.CHEST].pos; this.decals.add(_gv1.set(hp.x, g.env.groundHeight(hp.x, hp.z), hp.z), g.env.groundNormal(hp.x, hp.z, _gv2), 0.9, 'pool', null, { grow: 9 }); }
+        G.pool = this.decals.add(_gv1.set(c.x, g.env.groundHeight(c.x, c.z, c.y), c.z), g.env.groundNormal(c.x, c.z, _gv2), sz, 'pool', null, { grow: 10 + sz * 6 });
+        if (G.headGone) { const hp = npc.rag.bodies[RAG.CHEST].pos; this.decals.add(_gv1.set(hp.x, g.env.groundHeight(hp.x, hp.z, hp.y), hp.z), g.env.groundNormal(hp.x, hp.z, _gv2), 0.9, 'pool', null, { grow: 9 }); }
       }
       // smeared blood trails: crawling or dragged bloody bodies
       if (G.wounds.length || G.anyCut) {
         let tp = null, moving = false;
-        if (npc.physMode === 'ragdoll') { const b = npc.rag.bodies[RAG.CHEST]; if (b.pos.y < g.env.groundHeight(b.pos.x, b.pos.z) + 0.3 && b.vel.lengthSq() > 0.16) { tp = b.pos; moving = true; } }
+        if (npc.physMode === 'ragdoll') { const b = npc.rag.bodies[RAG.CHEST]; if (b.pos.y < g.env.groundHeight(b.pos.x, b.pos.z, b.pos.y) + 0.3 && b.vel.lengthSq() > 0.16) { tp = b.pos; moving = true; } }
         else if (npc.anim.crawl && npc.anim.speed > 0.08) { tp = npc.root.pos; moving = true; }
         if (moving) {
           if (!G.trail) G.trail = tp.clone();
           const d = Math.hypot(tp.x - G.trail.x, tp.z - G.trail.z);
           if (d > 0.28) {
             _gv3.set(tp.x - G.trail.x, 0, tp.z - G.trail.z);
-            this.decals.add(_gv1.set(tp.x, g.env.groundHeight(tp.x, tp.z), tp.z), g.env.groundNormal(tp.x, tp.z, _gv2), 0.32 + Math.random() * 0.12, 'smear', _gv3);
+            this.decals.add(_gv1.set(tp.x, g.env.groundHeight(tp.x, tp.z, tp.y), tp.z), g.env.groundNormal(tp.x, tp.z, _gv2), 0.32 + Math.random() * 0.12, 'smear', _gv3);
             G.trail.copy(tp);
           }
         } else if (G.trail) G.trail = null;

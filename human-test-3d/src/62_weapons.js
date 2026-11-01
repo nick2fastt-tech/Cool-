@@ -702,7 +702,7 @@ class Weapons {
     const g = this.game, gr = this.grab;
     const target = g.camera.position.clone().addScaledVector(g.camera.getWorldDirection(_v1), gr.dist);
     g.env.clampToBounds(target, 0.2);
-    target.y = Math.max(target.y, g.env.groundHeight(target.x, target.z) + 0.15);
+    target.y = Math.max(target.y, g.env.groundHeight(target.x, target.z, target.y + 0.3) + 0.15);
     gr.joint.lp1.copy(target);
     gr.owner.asleep = false; for (const b of gr.owner.bodies) b.sleeping = false;
     // beam

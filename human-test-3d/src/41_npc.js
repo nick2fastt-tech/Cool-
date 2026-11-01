@@ -79,17 +79,19 @@ class NPC {
   }
   place(pos, yaw) {
     this.root.pos.copy(pos); this.root.yaw = yaw || 0;
-    this.root.pos.y = this.game.env.groundHeight(pos.x, pos.z);
+    this.root.pos.y = this.game.env.groundHeight(pos.x, pos.z, pos.y + 0.1);
     this.spawn.pos.copy(this.root.pos); this.spawn.yaw = this.root.yaw;
     this.anim.resetFeet(this.root.pos, this.root.yaw, this.game.env);
+    this.game.env.yHint = this.root.pos.y + 0.1;
     this.anim.update(0.016, this.root, this.game.env);
+    this.game.env.yHint = null;
     this.computeWorldBones();
     this.rag.setFromBones(this.boneWPos, this.boneWRot, true);
     this.updateBounds();
   }
   teleport(pos, yaw) {
     if (this.physMode !== 'anim') return;
-    this.root.pos.copy(pos); this.root.pos.y = this.game.env.groundHeight(pos.x, pos.z);
+    this.root.pos.copy(pos); this.root.pos.y = this.game.env.groundHeight(pos.x, pos.z, pos.y + 0.1);
     if (yaw != null) this.root.yaw = yaw;
     this.anim.resetFeet(this.root.pos, this.root.yaw, this.game.env);
     this.anim.prevRootPos.copy(this.root.pos); this.anim.vel.set(0, 0, 0);
@@ -113,14 +115,16 @@ class NPC {
   update(dt) {
     const env = this.game.env;
     if (this.physMode === 'anim' || this.physMode === 'getup') {
+      env.yHint = this.root.pos.y + 0.1;
       this.anim.update(dt, this.root, env);
+      env.yHint = null;
       this.computeWorldBones();
       if (this.gore && this.gore.anyCut) this.syncDetached();
       this.rag.setFromBones(this.boneWPos, this.boneWRot, false);
     }
     // overlapping pairs (grapples / feeding) collide again once apart
     const nc = this.rag.noCollideWith;
-    if (nc && !(this.brain && (this.brain.victim || this.brain.corpse)) && !this.grabbedBy) {
+    if (nc && !(this.brain && (this.brain.victim || this.brain.victim2 || this.brain.corpse)) && !this.grabbedBy && !(this.pilers > 0)) {
       const o = nc.npc;
       if (!o || o.removed || o.root.pos.distanceTo(this.root.pos) > 1.3) this.rag.noCollideWith = null;
     }
@@ -137,7 +141,7 @@ class NPC {
       this.syncFromRagdoll();
       // root follows pelvis (for AI/labels)
       const p = this.rag.bodies[RAG.PELVIS].pos;
-      this.root.pos.set(p.x, this.game.env.groundHeight(p.x, p.z), p.z);
+      this.root.pos.set(p.x, this.game.env.groundHeight(p.x, p.z, p.y), p.z);
       this.handleDowned(dt);
     }
     this.updateBounds();
@@ -245,7 +249,7 @@ class NPC {
     this.downTimer = 1.4 + Math.random() * 1.2;
     this.lastReaction = reason || 'Ragdoll';
     // interaction poses (bite, swipe, struggle, feeding) end when the body goes limp
-    if (this.lifeState === 'zombie' && this.brain && this.game.ai) { this.game.ai.endGrab(this); this.game.ai.endFeed(this); }
+    if (this.lifeState === 'zombie' && this.brain && this.game.ai) { this.game.ai.endGrab(this); this.game.ai.endFeed(this); this.game.ai.endPile(this); }
     if (this.lifeState === 'vampire' && this.brain && this.brain.vVictim && this.game.vampires) this.game.vampires.endBite(this, 'interrupted');
     this.anim.action = null; this.anim.reachW = 0; this.anim.reachTarget = 0; this.anim.crawlAttack = 0;
     if (this.brain) { this.brain.state = 'down'; this.brain.victim2 = null; this.brain.plan = null; }
@@ -271,9 +275,9 @@ class NPC {
     axis.normalize();
     const yaw = faceDown ? Math.atan2(axis.x, axis.z) : Math.atan2(-axis.x, -axis.z);
     const env = this.game.env;
-    const rp = _v4.set(pel.pos.x, 0, pel.pos.z);
-    env.clampToBounds(rp, 0.5);
-    rp.y = env.groundHeight(rp.x, rp.z);
+    const rp = _v4.set(pel.pos.x, pel.pos.y, pel.pos.z);
+    if (!(this.game.transit && this.game.transit.insideCar(rp))) env.clampToBounds(rp, 0.5);
+    rp.y = env.groundHeight(rp.x, rp.z, pel.pos.y);
     this.root.pos.copy(rp); this.root.yaw = yaw;
     this.bones[0].position.copy(rp); this.bones[0].quaternion.setFromAxisAngle(UP, yaw);
     _q2.setFromAxisAngle(UP, -yaw);
@@ -323,8 +327,9 @@ class NPC {
     axis.normalize();
     const yaw = Math.atan2(axis.x, axis.z);
     const env = this.game.env;
-    const rp = _v4.set(pel.pos.x, 0, pel.pos.z);
-    env.clampToBounds(rp, 0.5); rp.y = env.groundHeight(rp.x, rp.z);
+    const rp = _v4.set(pel.pos.x, pel.pos.y, pel.pos.z);
+    if (!(this.game.transit && this.game.transit.insideCar(rp))) env.clampToBounds(rp, 0.5);
+    rp.y = env.groundHeight(rp.x, rp.z, pel.pos.y);
     this.root.pos.copy(rp); this.root.yaw = yaw;
     this.bones[0].position.copy(rp); this.bones[0].quaternion.setFromAxisAngle(UP, yaw);
     _q2.setFromAxisAngle(UP, -yaw);
@@ -378,7 +383,7 @@ class NPC {
   }
   destroyZombie(info) {
     if (!this.setLife('destroyed', 'zombie killed')) return false;
-    if (this.game.ai) { this.game.ai.endGrab(this); this.game.ai.endFeed(this); } // let go of any victim / meal
+    if (this.game.ai) { this.game.ai.endGrab(this); this.game.ai.endFeed(this); this.game.ai.endPile(this); } // let go of any victim / meal
     this.zombieTarget = null;
     this.deathTime = this.game.time;
     this.goRagdoll('Ragdoll (Destroyed)', true);

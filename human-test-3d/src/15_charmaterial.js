@@ -121,6 +121,15 @@ const GLSL_HT_ALBEDO = /* glsl */`
       base = mix(base, pale, uVampire * (0.78 - lipK * 0.3));
       base = mix(base, vec3(0.16, 0.012, 0.026) * (0.8 + 0.4 * rel), min(1.0, uVampire * 1.1) * lipK);
       htRough = mix(htRough, 0.36, uVampire * 0.45);
+      // sunken, shadowed eyes and faint blue veins at the temples and the neck
+      vec3 vq = (vRest - uFaceC.xyz) / uFaceC.w;
+      float sock = exp(-pow(abs(vq.x) - 0.034, 2.0) / 0.00045 - pow(vq.y + 0.003, 2.0) / 0.00028) * smoothstep(0.02, 0.05, vq.z);
+      base = mix(base, base * vec3(0.55, 0.45, 0.58), sock * uVampire * 0.75);
+      float cheek = exp(-pow(abs(vq.x) - 0.045, 2.0) / 0.0003 - pow(vq.y + 0.04, 2.0) / 0.0004) * smoothstep(0.02, 0.06, vq.z);
+      base *= 1.0 - cheek * uVampire * 0.18;
+      float vmask = smoothstep(0.045, 0.06, abs(vq.x)) * (1.0 - smoothstep(0.05, 0.08, abs(vq.y - 0.015))) + (1.0 - smoothstep(-0.09, -0.06, vq.y)) * smoothstep(-0.2, -0.12, vq.y);
+      float vein = 1.0 - smoothstep(0.0, 0.022, abs(htNoise(vRest.xy * 70.0 + vRest.z * 31.0) - 0.5));
+      base = mix(base, base * vec3(0.62, 0.7, 0.95), vein * vmask * uVampire * 0.55);
     }
   } else if (mT == 6 || mT == 12) {
     float strands = htNoise(vec2(puv.x * 900.0, puv.y * 40.0));

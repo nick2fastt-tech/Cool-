@@ -462,7 +462,6 @@ class UI {
     s = this.sec(b, 'Vampires');
     this.toggle(s, 'Vampire system', 'vampires.enabled');
     this.toggle(s, 'Bites turn people into vampires', 'vampires.turning');
-    this.toggle(s, 'Vampires hunt you', 'vampires.targetPlayer');
     this.slider(s, 'Turning time', 'vampires.turnTime', 5, 60, 1, x => x + ' s');
     this.slider(s, 'Vampire speed', 'vampires.speed', 0.5, 2, 0.05, x => x.toFixed(2) + 'x');
     this.slider(s, 'Pale skin', 'vampires.pallor', 0.3, 1, 0.01, x => Math.round(x * 100) + '%');

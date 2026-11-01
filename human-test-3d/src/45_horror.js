@@ -46,7 +46,7 @@ class HorrorSystem {
     npc.horror = { kind, label: def.label, def };
     npc.name = def.label;
     npc.health = npc.maxHealth = def.health;
-    npc.anim.hstyle = kind; npc.anim.gripR = 1;
+    npc.anim.hstyle = kind; npc.anim.gait = GAITS[kind]; npc.anim.gripR = 1;
     if (npc.brain) { npc.brain.state = 'hIdle'; npc.brain.t = 0; npc.brain.cd = 1; }
   }
   removeAll() {
@@ -62,15 +62,21 @@ class HorrorSystem {
   }
 
   // --- AI ------------------------------------------------------------------------------
+  // people, zombies and vampires are all fair game (never another horror character)
   validPrey(h, o, maxD) {
-    return o && !o.removed && o !== h && o.lifeState === 'alive' && !o.horror && (!o.grabbedBy || o.grabbedBy === h) && Math.hypot(o.root.pos.x - h.root.pos.x, o.root.pos.z - h.root.pos.z) < maxD;
+    if (!o || o.removed || o === h || o.horror) return false;
+    if (o.lifeState !== 'alive' && o.lifeState !== 'zombie' && o.lifeState !== 'vampire') return false;
+    if (o.lifeState === 'alive' && o.grabbedBy && o.grabbedBy !== h) return false;
+    if (o.riding && o.riding.moving) return false;
+    return Math.hypot(o.root.pos.x - h.root.pos.x, o.root.pos.z - h.root.pos.z) < maxD;
   }
   pickPrey(h, def) {
     let best = null, bs = 1e9;
     for (const o of this.game.npcs.list) {
       if (!this.validPrey(h, o, def.detect)) continue;
       let claimed = 0; for (const w of this.game.npcs.list) if (w !== h && w.horror && w.brain && w.brain.hTarget === o) claimed++;
-      const s = Math.hypot(o.root.pos.x - h.root.pos.x, o.root.pos.z - h.root.pos.z) + claimed * 5 + (o.physMode === 'ragdoll' ? 3 : 0);
+      const kind = o.lifeState === 'zombie' ? 2 : o.lifeState === 'vampire' ? 2.5 : 0; // a slight taste for the living
+      const s = Math.hypot(o.root.pos.x - h.root.pos.x, o.root.pos.z - h.root.pos.z) + claimed * 5 + (o.physMode === 'ragdoll' ? 3 : 0) + kind;
       if (s < bs) { bs = s; best = o; }
     }
     return best;
@@ -174,6 +180,9 @@ class HorrorSystem {
     const g = this.game, def = h.horror.def, S = this.S;
     let region = def.regions[Math.floor(Math.random() * def.regions.length)];
     if (v.physMode === 'ragdoll') region = Math.random() < 0.5 ? REGION.TORSO : REGION.ABDOMEN;
+    // monsters: the slasher goes for a zombie's head; both go for a vampire's heart
+    else if (v.lifeState === 'zombie') region = h.horror.kind === 'slasher' && Math.random() < 0.45 ? REGION.HEAD : region;
+    else if (v.lifeState === 'vampire') region = Math.random() < 0.7 ? REGION.UPPER_CHEST : REGION.TORSO;
     const dir = new V3(dx, 0, dz);
     const p = v.boneWPos[REGION_BONE[region]].clone();
     const res = v.applyHit({ region, damage: def.damage * S.damage / REGION_DAMAGE_MUL[region], weapon: 'knife', dir: dir.clone(), point: p, force: h.horror.kind === 'doll' ? 3 : 9, threatPos: h.root.pos.clone() });
@@ -181,7 +190,8 @@ class HorrorSystem {
     if (vi >= 0) g.gore.onClaw(v, h, vi, v.skinVertexWorld(vi, new V3()), dir);
     g.audio.play('stab', { pos: p, gain: 0.9 });
     g.hits.report(v, region, res, h.horror.label + (h.horror.kind === 'doll' ? ' (Knife)' : ' (Machete)'), p);
-    if (v.lifeState === 'alive' && v.physMode === 'anim') {
+    if (region === REGION.HEAD && v.lifeState === 'zombie' && h.horror.kind === 'slasher') v.criticalHead = true;
+    if (v.active && v.physMode === 'anim') {
       if (Math.random() < def.knock || v.health < 25) {
         v.goRagdoll('Knocked Down (' + h.horror.label + ')');
         v.rag.applyImpulseAt(RAG.CHEST, dir.clone().multiplyScalar(h.horror.kind === 'doll' ? 25 : 120).setY(10), null);

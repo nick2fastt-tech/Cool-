@@ -369,6 +369,46 @@ function buildBody(mb, app, rig, Q) {
     }
   }
 
+  // ---------------- CAPE (vampires): a long cloak over the shoulders and arms, red lining, high collar ----------------
+  if (app.cape) {
+    const outer = { col: C(app.cape.color), mat: [MAT.COTTON, 0.88, 0, 1] }, inner = { col: C(app.cape.lining), mat: [MAT.NYLON, 0.42, 0, 1] };
+    const yTop = rig.neckBaseY - 0.004 * H, yBot = rig.ankleY + 0.13 * H;
+    const sb = rig.bindPos, chY = sb[B.chest].y, spY = sb[B.spine].y, hpY = sb[B.hips].y;
+    const surf = (y, th) => rig.torsoSurf(y, th) || 0;
+    const rx = rig.shoulderHalf + 0.058 * H, rz = Math.max(surf(rig.shoulderY + 0.02 * H, Math.PI), 0.05 * H) + 0.03 * H;
+    const ell = (th) => { const sx = Math.sin(th) / rx, cz = Math.cos(th) / rz; return 1 / Math.sqrt(sx * sx + cz * cz); };
+    const wAt = (y, th) => {
+      if (y >= chY) return [[B.chest, 1]];
+      if (y >= spY) { const k = (chY - y) / (chY - spY); return [[B.chest, 1 - k], [B.spine, k]]; }
+      if (y >= hpY) { const k = (spY - y) / (spY - hpY); return [[B.spine, 1 - k], [B.hips, k]]; }
+      const k = smoothstep(hpY, rig.kneeY, y) * 0.45, wl = smoothstep(-0.5, 0.5, Math.sin(th));
+      return [[B.hips, 1 - k], [B.thigh_L, k * wl], [B.thigh_R, k * (1 - wl)]];
+    };
+    const nR = 14, nC = 18, th0 = Math.PI - 1.38, th1 = Math.PI + 1.38;
+    const shell = (layer, off, inward, rows, colsN, ta, tb, ringR, ringY, weights) => {
+      mb.beginPart(); const st = mb.I.length, base = mb.n;
+      for (let i = 0; i <= rows; i++) for (let j = 0; j <= colsN; j++) {
+        const t = i / rows, th = lerp(ta, tb, j / colsN), y = ringY(t), r = ringR(t, th) + off;
+        mb.v(Math.sin(th) * r, y, Math.cos(th) * r, j / colsN, y, layer.col, layer.mat, layer.col, weights(y, th), y > chY ? REGION.UPPER_CHEST : (y > hpY ? REGION.TORSO : REGION.PELVIS));
+      }
+      for (let i = 0; i < rows; i++) for (let j = 0; j < colsN; j++) { const q = base + i * (colsN + 1) + j; mb.quad(q, q + 1, q + colsN + 2, q + colsN + 1); }
+      orientPartOutward(mb, st, new V3(0, lerp(yTop, yBot, 0.4), 0));
+      if (inward) mb.flipPart(st);
+      mb.endPart();
+    };
+    // the cloak: hugs the neck, slopes over the shoulders, then hangs over the arms and flares to mid-calf
+    const capeR = (t, th) => { const top = surf(yTop, th) + 0.01 * sc, k = smoothstep(0, 0.14, t); return lerp(top, ell(th), k) + 0.05 * H * Math.pow(Math.max(0, t - 0.14) / 0.86, 1.4); };
+    const capeY = (t) => lerp(yTop, yBot, t < 0.14 ? t * 0.55 : 0.077 + (t - 0.14) / 0.86 * 0.923);
+    shell(outer, 0.004 * sc, false, nR, nC, th0, th1, capeR, capeY, wAt);
+    shell(inner, 0, true, nR, nC, th0, th1, capeR, capeY, wAt);
+    // the stand-up collar fanning out behind the head
+    const colR = (t, th) => (surf(yTop, th) || 0.04 * H) + lerp(0.012, 0.055, t) * H;
+    const colY = (t) => yTop + lerp(-0.004, 0.09, t) * H;
+    const colW = () => [[B.chest, 0.75], [B.neck, 0.25]];
+    shell(outer, 0.003 * sc, false, 4, 14, Math.PI - 1.45, Math.PI + 1.45, colR, colY, colW);
+    shell(inner, 0, true, 4, 14, Math.PI - 1.45, Math.PI + 1.45, colR, colY, colW);
+  }
+
   // ---------------- ARMS ----------------
   for (let s = 0; s < 2; s++) buildArm(mb, app, rig, Q, s, topLayer, skinLayer, tdef);
   if (app.weapon) buildHeldWeapon(mb, app, rig);

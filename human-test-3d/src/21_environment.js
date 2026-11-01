@@ -931,7 +931,7 @@ function mergeGeos(geos) {
 
 // ----------------------------------------------------------------------------
 class EnvironmentManager {
-  constructor(game) { this.game = game; this.current = null; this.envs = {}; }
+  constructor(game) { this.game = game; this.current = null; this.envs = {}; this.yHint = null; }
   get() { return this.current; }
   load(kind) {
     if (this.current) { this.current.dispose(); }
@@ -943,7 +943,9 @@ class EnvironmentManager {
     Events.emit('environment', env);
     return env;
   }
-  groundHeight(x, z) { return this.current ? this.current.groundHeight(x, z) : 0; }
+  // y: the height the query comes from (a body, a foot, a root). Maps with stacked floors pick the floor
+  // below it; without one, an NPC update can set yHint for the lookups it makes.
+  groundHeight(x, z, y) { return this.current ? this.current.groundHeight(x, z, y != null ? y : this.yHint) : 0; }
   groundNormal(x, z, out) { return this.current ? this.current.groundNormal(x, z, out) : out.set(0, 1, 0); }
   clampToBounds(p, margin = 0) {
     if (this.current.clampToBounds) return this.current.clampToBounds(p, margin);
@@ -952,5 +954,7 @@ class EnvironmentManager {
     return p;
   }
   update(dt, cam) { if (this.current) this.current.update(dt, cam); }
+  // start of a frame, before AI and physics: moving parts of the map (trains) and what rides on them
+  preStep(dt) { if (this.current && this.current.preStep) this.current.preStep(dt); }
 }
 HT.EnvironmentManager = EnvironmentManager;

@@ -47,6 +47,7 @@ class VampireSystem {
   }
   pickStyle(npc) {
     const h = hash32(npc.seed, 7177) % 100, t = npc.app.top.type;
+    if (npc.app.cape) return VAMP_STYLES.aristocrat;
     if ((t === 'blazer' || t === 'longcoat' || t === 'shirt') && h < 50) return VAMP_STYLES.aristocrat;
     return VAMP_STYLES[VAMP_STYLE_NAMES[h % VAMP_STYLE_NAMES.length]];
   }
@@ -59,7 +60,7 @@ class VampireSystem {
     npc.vamp = { state: 'vampire', t: 0, regenT: 9 };
     const st = (o.style && VAMP_STYLES[o.style]) || (npc.anim.vstyle && o.keepStyle ? npc.anim.vstyle : this.pickStyle(npc));
     const a = npc.anim;
-    a.vstyle = st; a.vampTarget = 1; if (o.instant) a.vamp = 1;
+    a.vstyle = st; a.gait = GAITS[st.name] || null; a.vampTarget = 1; if (o.instant) a.vamp = 1;
     a.zombie = 0; a.crawl = a.crawl || 0; a.limp[0] = a.limp[1] = 0;
     a.setPosture('stand'); a.setUpper('hang');
     if (a.action && a.action.type !== 'vturn') a.action = null;
@@ -79,7 +80,7 @@ class VampireSystem {
     const u = npc.material.userData.u;
     u.uVampire.value = 0; u.uEyeGlow.value = 0; u.uFang.value = 0; u.uAsh.value = 0; u.uHeat.value = 0;
     const a = npc.anim;
-    a.vamp = 0; a.vampTarget = 0; a.vstyle = null; a.vStalk = 0; a.vStalkTarget = 0;
+    a.vamp = 0; a.vampTarget = 0; a.vstyle = null; a.gait = null; a.vStalk = 0; a.vStalkTarget = 0;
     if (a.action && (a.action.type[0] === 'v' || a.action.type === 'drained')) a.action = null;
     if (npc.brain && (npc.brain.vVictim)) this.endBite(npc, 'cured');
     if (a.clip && a.clip.name === 'vampireRise') { a.clip = null; if (npc.physMode === 'getup') npc.goRagdoll('Cured', false); }
@@ -180,7 +181,7 @@ class VampireSystem {
     if (!npc.setLife('vampire', 'turned')) return;
     npc.infection = null; npc.isZombie = false; npc.anim.zombie = 0; npc.zombieTarget = null;
     npc.material.userData.u.uZombie.value = 0;
-    npc.anim.vstyle = this.pickStyle(npc);
+    npc.anim.vstyle = this.pickStyle(npc); npc.anim.gait = GAITS[npc.anim.vstyle.name] || null;
     V.state = 'turning'; V.t = 0; V.rising = false; V.pallor0 = npc.material.userData.u.uVampire.value;
     if (npc.brain) { npc.brain.state = 'vTurn'; npc.brain.t = 0; npc.brain.speed = 0; npc.brain.vTarget = null; }
     if (npc.physMode === 'anim' && from === 'alive') {
@@ -277,7 +278,7 @@ class VampireSystem {
     }
     if (V.t > 3.5) {
       const pel = npc.rag.bodies[RAG.PELVIS].pos;
-      g.fx.decal(_vp1.set(pel.x, g.env.groundHeight(pel.x, pel.z) + 0.004, pel.z), UP, 0.8, 'scorch');
+      g.fx.decal(_vp1.set(pel.x, g.env.groundHeight(pel.x, pel.z, pel.y) + 0.004, pel.z), UP, 0.8, 'scorch');
       this.ashes.push({ seed: npc.seed, overrides: Object.assign({}, npc.overrides || {}), kind: npc.spawnKind || null, pos: npc.spawn.pos.clone(), yaw: npc.spawn.yaw, style: npc.anim.vstyle ? npc.anim.vstyle.name : null });
       g.npcs.remove(npc, true);
     }
@@ -310,14 +311,12 @@ class VampireSystem {
     v.lastReaction = 'Stagger (Vampire)';
     if (v.physMode !== 'anim' || b.state === 'vTurn' || b.state === 'vBite' || b.state === 'vBiteDown') return;
     // hiss at the attacker, then go for them (the player when allowed)
-    const fromPlayer = info.threatPos && info.threatPos.distanceTo(this.game.camera.position) < 0.5;
     if (b.state !== 'vHiss' && b.state !== 'vPlayerBite') {
       this.setState(v, b, 'vHiss'); b.hissT = 0.9 + Math.random() * 0.4; b.speed = 0;
       if (info.threatPos) b.faceTarget = info.threatPos.clone();
       v.anim.setAction('vhiss', { dur: b.hissT, inT: 0.12, outT: 0.3 });
       this.game.audio.play('hiss', { pos: v.boneWPos[B.head].clone(), gain: 0.9 });
     }
-    if (fromPlayer && this.S.targetPlayer && this.player.state === 'none') { b.vTarget = this.playerTarget; b.cool = 0; }
   }
 
   // --- AI -------------------------------------------------------------------------------------------
@@ -325,7 +324,7 @@ class VampireSystem {
   targetHead(t) { return t.isPlayer ? this.game.camera.position : t.boneWPos[B.head]; }
   dist2(a, b) { return Math.hypot(a.x - b.x, a.z - b.z); }
   validTarget(v, t, maxD) {
-    if (t.isPlayer) return this.S.targetPlayer && this.player.state === 'none' && this.dist2(v.root.pos, this.game.camera.position) < maxD && this.game.camera.position.y - this.game.env.groundHeight(this.game.camera.position.x, this.game.camera.position.z) < 2.6;
+    if (t.isPlayer) return false; // the player is an unseen observer: nobody can see or attack them
     if (t.removed || t.lifeState !== 'alive' || t.horror || (t.grabbedBy && t.grabbedBy !== v)) return false;
     if (t.vamp && t.vamp.state !== 'none') return false;   // already marked
     if ((t.feeders || 0) > 0) return false;
@@ -342,11 +341,6 @@ class VampireSystem {
       let claimed = 0; for (const w of g.npcs.list) if (w !== v && w.brain && w.brain.vTarget === o) claimed++;
       const s = d + crowd * 2.5 + claimed * 6 + (o.physMode === 'ragdoll' ? 2 : 0);
       if (s < bs) { bs = s; best = o; }
-    }
-    if (this.validTarget(v, this.playerTarget, S.detection)) {
-      let claimed = 0; for (const w of g.npcs.list) if (w !== v && w.brain && w.brain.vTarget === this.playerTarget) claimed++;
-      const s = this.dist2(v.root.pos, g.camera.position) + 3 + claimed * 8;
-      if (s < bs) { bs = s; best = this.playerTarget; }
     }
     return best;
   }
@@ -562,7 +556,7 @@ class VampireSystem {
     if (!a || a.type !== 'vbiteDown' || a.ending) { v.anim.setAction('vbiteDown', { point: new V3(), chest: new V3(), ground: new V3(), inT: 0.4, outT: 0.6 }); a = v.anim.action; }
     a.point.copy(np); a.point.y += 0.02;
     a.chest.copy(ch);
-    a.ground.copy(hd).addScaledVector(side, -0.22); a.ground.y = this.game.env.groundHeight(a.ground.x, a.ground.z);
+    a.ground.copy(hd).addScaledVector(side, -0.22); a.ground.y = this.game.env.groundHeight(a.ground.x, a.ground.z, hd.y);
     if (a.snapEvent) { a.snapEvent = false; this.onSnap(v, tgt); }
     if (a.snapped) this.drink(v, b, tgt, dt);
     if (b.vVictim && b.drink >= b.biteDur) this.endBite(v, 'fed');

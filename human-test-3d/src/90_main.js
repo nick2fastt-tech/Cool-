@@ -154,7 +154,7 @@ class Game {
       const c = env.cameraStart;
       this.camera.position.copy(c.pos); this.player.yaw = c.yaw; this.player.pitch = c.pitch;
       for (let i = 0; i < n; i++) {
-        const sp = env.spawnPoints[i % env.spawnPoints.length], p = new V3(sp.x + (Math.random() - 0.5), 0, sp.z + (Math.random() - 0.5));
+        const sp = env.spawnPoints[i % env.spawnPoints.length], p = new V3(sp.x + (Math.random() - 0.5), sp.y, sp.z + (Math.random() - 0.5));
         env.clampToBounds(p, 0.6);
         this.npcs.spawn({ seed: INITIAL_SEEDS[i], pos: p, yaw: Math.atan2(c.pos.x - p.x, c.pos.z - p.z) });
       }
@@ -265,22 +265,22 @@ class Game {
       let si = 0;
       for (const n of this.npcs.list) {
         const p = n.root.pos.clone();
-        if (env.spawnPoints && env.kind === 'subway') { const sp = env.spawnPoints[si++ % env.spawnPoints.length]; p.set(sp.x + (Math.random() - 0.5) * 2, 0, sp.z + (Math.random() - 0.5) * 2); }
+        if (env.spawnPoints && env.kind === 'subway') { const sp = env.spawnPoints[si++ % env.spawnPoints.length]; p.set(sp.x + (Math.random() - 0.5) * 2, sp.y, sp.z + (Math.random() - 0.5) * 2); }
         this.env.clampToBounds(p, 0.6);
         // a body in the middle of getting up (or turning) falls back to the ground and restarts safely
         if (n.physMode === 'getup') { n.anim.clip = null; n.goRagdoll('Moved', !n.active); }
         if (n.anim.action) n.anim.action = null;
         if (n.brain) { this.ai.endGrab(n); this.ai.endFeed(n); }
-        if (n.physMode === 'ragdoll') { const pel = n.rag.bodies[RAG.PELVIS].pos; const dy = this.env.groundHeight(pel.x, pel.z) + 0.4 - pel.y; for (const b of n.rag.bodies) { b.pos.y += Math.max(0, dy); b.prevPos.copy(b.pos); } }
+        if (n.physMode === 'ragdoll') { const pel = n.rag.bodies[RAG.PELVIS].pos; const dy = this.env.groundHeight(pel.x, pel.z, pel.y) + 0.4 - pel.y; for (const b of n.rag.bodies) { b.pos.y += Math.max(0, dy); b.prevPos.copy(b.pos); } }
         else n.teleport(p);
       }
-      for (const pr of this.props.list) { const b = pr.body; this.env.clampToBounds(b.pos, 0.5); b.pos.y = this.env.groundHeight(b.pos.x, b.pos.z) + pr.radius + 0.3; b.prevPos.copy(b.pos); }
+      for (const pr of this.props.list) { const b = pr.body; this.env.clampToBounds(b.pos, 0.5); b.pos.y = this.env.groundHeight(b.pos.x, b.pos.z, b.pos.y) + pr.radius + 0.3; b.prevPos.copy(b.pos); }
       this.accessories.restoreAll();
       this.physics.wakeAll();
       if (env.cameraStart) { this.camera.position.copy(env.cameraStart.pos); this.player.yaw = env.cameraStart.yaw; this.player.pitch = env.cameraStart.pitch; }
       else if (this.camera.position.y < -1 || Math.abs(this.camera.position.x) > 30 || Math.abs(this.camera.position.z) > 30) { this.camera.position.set(0, 1.65, 7.5); this.player.yaw = 0; this.player.pitch = -0.08; }
       this.env.clampToBounds(this.camera.position, 0.5);
-      this.camera.position.y = Math.max(this.camera.position.y, this.env.groundHeight(this.camera.position.x, this.camera.position.z) + 1.4);
+      this.camera.position.y = Math.max(this.camera.position.y, this.env.groundHeight(this.camera.position.x, this.camera.position.z, this.camera.position.y) + 1.4);
       this.audio.setEnvironment(kind);
       this.warmShaders();
       if (this.ui && this.ui.drawerOpen) this.ui.renderDrawer();
@@ -302,8 +302,10 @@ class Game {
     }
     if (npc.gore) this.gore.releaseNPC(npc);
     // release grapples / meals in both directions before the state reset
-    if (npc.brain) { this.ai.endGrab(npc); this.ai.endFeed(npc); }
+    if (npc.brain) { this.ai.endGrab(npc); this.ai.endFeed(npc); this.ai.endPile(npc); }
     if (npc.grabbedBy && npc.grabbedBy.brain) this.ai.endGrab(npc.grabbedBy);
+    for (const o of this.npcs.list) if (o.brain && o.brain.state === 'zPile' && o.brain.victim2 === npc) this.ai.endPile(o);
+    npc.pilers = 0;
     npc.infection = null; npc.anim.crawl = 0; npc.anim.setAction(null);
     if (this.vampires) this.vampires.onRevive(npc); if (this.accessories) this.accessories.restore(npc);
     if (npc.lifeState !== 'alive') {
@@ -449,7 +451,7 @@ class Game {
           if (b.tag === 'npc') {
             this.audio.play(imp > 4 ? 'thud' : 'thudLight', { pos: b.impactPoint.clone(), gain: clamp(imp / 8, 0.15, 1) });
             // surface effect at the actual contact point when a body part hits the ground
-            const ip = b.impactPoint, gy = this.env.groundHeight(ip.x, ip.z);
+            const ip = b.impactPoint, gy = this.env.groundHeight(ip.x, ip.z, ip.y + 0.2);
             if (imp > 2.6 && ip.y < gy + 0.15) {
               const gn = this.env.groundNormal(ip.x, ip.z, _v3);
               this.fx.bodyDust(_v2.set(ip.x, gy, ip.z), gn, this.env.current.surface, clamp((imp - 2) / 5, 0.3, 1));
