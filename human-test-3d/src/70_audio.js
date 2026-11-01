@@ -296,6 +296,22 @@ class AudioEngine {
         }
         this.finish(name, b, 0.7);
       }
+      // the doctor's injector: a latch click, a short pneumatic hiss and a faint ring of glass
+      { const b = this.buf(0.6), L = b.L; const hp = new Biquad('hp', 2600, 0.8, sr), bp = new Biquad('bp', 5200, 1.6, sr);
+        for (let i = 0; i < L.length; i++) { const t = i / sr, n = this.noise();
+          const click = n * Math.exp(-t / 0.0025) * 1.4 + Math.sin(TAU * 3100 * t) * Math.exp(-t / 0.01) * 0.5;
+          const u = t - 0.05, hiss = u > 0 ? (hp.p(n) * 0.5 + bp.p(n) * 0.8) * Math.min(1, u / 0.015) * Math.exp(-u / 0.13) : 0;
+          const ring = (Math.sin(TAU * 2350 * t) + 0.6 * Math.sin(TAU * 3790 * t)) * Math.exp(-t / 0.18) * 0.12;
+          L[i] = Math.tanh((click + hiss + ring) * 1.2); }
+        this.finish('inject', b, 0.75); }
+      // the trigger: a low swell under a cold, beating tone, cut off sharply
+      { const b = this.buf(1.9), L = b.L; const lp = new Biquad('lp', 300, 0.7, sr);
+        for (let i = 0; i < L.length; i++) { const t = i / sr, n = this.noise();
+          const env = Math.min(1, t / 0.9) * (t < 1.55 ? 1 : Math.exp(-(t - 1.55) / 0.05));
+          const tone = (Math.sin(TAU * 523 * t) * 0.5 + Math.sin(TAU * 527.5 * t) * 0.5 + Math.sin(TAU * 1046 * t) * 0.15) * 0.45;
+          const hum = Math.sin(TAU * 55 * t + Math.sin(TAU * 0.7 * t)) * 0.5 + lp.p(n) * 1.5;
+          L[i] = Math.tanh((tone + hum) * env * 1.3); }
+        this.finish('dtrigger', b, 0.7); }
     } else if (group === 7) {
       // supernatural: vampire hiss, heartbeat, the turning swell, crumbling to ash
       { const b = this.buf(1.0), L = b.L; const hp = new Biquad('hp', 2300, 0.7, sr), bp = new Biquad('bp', 3400, 2.2, sr), lp = new Biquad('lp', 30, 0.7, sr);

@@ -20,7 +20,8 @@ const TIPS = [
   'Tap a weapon on the bar (or press <b>1-7</b>) to equip it: Pistol, Sniper, Knife, Grenade, Bazooka, Grab, Move.',
   'Hold <b>right mouse</b> (or AIM) to aim. A sniper headshot destroys the head.',
   'Open the <b>Sandbox</b> menu to spawn a man or a woman. Every body and height is random.',
-  'Zombies grab and bite. Survivors who break free are infected and will turn.',
+  'Zombies grab and bite. Survivors who break free are infected: they sweat, cough and slowly turn green, then collapse and rise about a minute later.',
+  'The Physician never attacks. He walks up to people, injects them, and watches them turn. Sometimes a closing fist is all it takes to finish the change.',
   'Zombies kneel and feed on bodies. A destroyed head stops a body from rising.',
   'Shoot limbs to sever them. A subject who loses a leg can only crawl.',
   'Grenades tear bodies apart at close range. Hold the throw button longer to throw farther.',
@@ -355,7 +356,8 @@ class UI {
     this.buttons(s, [{ label: '&#9794; Spawn Male', cls: 'pri', fn: () => sp('male') }, { label: '&#9792; Spawn Female', cls: 'pri', fn: () => sp('female') }], 'spawnbtns');
     const sx = (fn) => { const p = g.player.groundTarget(8); if (fn(p)) this.sound('spawn'); };
     this.buttons(s, [{ label: 'Vampire', cls: 'v', fn: () => sx(p => g.vampires.spawn(p)) }, { label: 'Zombie', cls: 'z', fn: () => sx(p => g.zombies.spawnZombie(p)) },
-      { label: 'Chucky', fn: () => sx(p => g.horror.spawn('doll', p)) }, { label: 'Jason', fn: () => sx(p => g.horror.spawn('slasher', p)) }], 'spawnbtns');
+      { label: 'Chucky', fn: () => sx(p => g.horror.spawn('doll', p)) }, { label: 'Jason', fn: () => sx(p => g.horror.spawn('slasher', p)) },
+      { label: 'Doctor', cls: 'wide', fn: () => sx(p => g.horror.spawn('doctor', p)) }], 'spawnbtns');
     this.note(s, 'Each person gets a random body, height, face and outfit. They appear where you are aiming.');
     s = this.sec(b, 'Weapons');
     const cards = document.createElement('div'); cards.className = 'wcards';
@@ -470,7 +472,7 @@ class UI {
     this.toggle(s, 'Glowing eyes', 'vampires.glowEyes');
     this.toggle(s, 'Fangs', 'vampires.fangs');
     s = this.sec(b, 'Horror Characters');
-    this.toggle(s, 'Chucky & Jason', 'horror.enabled');
+    this.toggle(s, 'Chucky, Jason & the Doctor', 'horror.enabled');
     this.slider(s, 'Attack damage', 'horror.damage', 0.25, 3, 0.05, x => x.toFixed(2) + 'x');
     s = this.sec(b, 'People & Physics');
     this.toggle(s, 'Hats & glasses can fall off', 'physics.looseAccessories', () => { if (!Settings.data.physics.looseAccessories) g.accessories.restoreAll(); });

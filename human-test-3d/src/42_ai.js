@@ -370,7 +370,7 @@ class AISystem {
       const d = Math.hypot(dx, dz);
       if (d >= bd) continue;
       if (vamp && o.brain && o.brain.state !== 'vRush' && o.brain.state !== 'vBite' && o.brain.state !== 'vHiss' && d > 2.2) continue; // a stalking vampire goes unnoticed
-      if (hor && o.brain && !o.brain.hunting && d > 2.5) continue;
+      if (hor && o.brain && !o.brain.hunting && (d > 2.5 || o.horror.kind === 'doctor')) continue; // the doctor is only alarming once he lays hands on someone
       const inView = (dx * fx + dz * fz) / Math.max(d, 1e-3) > -0.25;
       if (d < 1.2 || inView || npc.fear > 0.6) { bd = d; best = o; }
     }

@@ -154,6 +154,7 @@ button { font-family: inherit; cursor: pointer; }
 .wcard.sel { border-color: var(--accent); background: rgba(79,209,255,0.14); }
 .spawnbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .spawnbtns .btn { padding: 14px 8px; font-size: 14px; font-weight: 600; }
+.spawnbtns .btn.wide { grid-column: 1 / -1; }
 /* ---------------- Inspector ---------------- */
 #inspector { position: fixed; left: 10px; top: 60px; width: 270px; max-height: calc(100vh - 150px); overflow-y: auto; z-index: 20; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px; backdrop-filter: blur(10px); font-size: 12px; }
 #inspector .ins-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
@@ -7658,7 +7659,7 @@ function clipSample(keys, u, field, out) {
 }
 const _kca = [0, 0, 0], _kcb = [0, 0, 0], _kcc = [0, 0, 0], _kcd = [0, 0, 0], _kce = [0, 0, 0];
 
-const _qa = new QT(), _va = new V3(), _vb = new V3();
+const _qa = new QT(), _va = new V3(), _vb = new V3(), _vc = new V3(), _vd = new V3();
 
 
 // --- transformation rise: lying -> pushing up -> knees -> crouch -> upright, zombie posture
@@ -8492,6 +8493,10 @@ class Animator {
     else if (a.type === 'ridehold') this.poseRideHold(Pc, a, root, dt);
     else if (a.type === 'htilt') this.poseHTilt(Pc, a, root);
     else if (a.type === 'hidle') this.poseHIdle(Pc, a, root);
+    else if (a.type === 'didle') this.poseDIdle(Pc, a, root);
+    else if (a.type === 'dinspect') this.poseDInspect(Pc, a, root);
+    else if (a.type === 'dinject') this.poseDInject(Pc, a, root);
+    else if (a.type === 'dtrigger') this.poseDTrigger(Pc, a, root);
     P.lerp(Pc, smooth01(a.w));
     if (!a.ending && a.dur && a.t >= a.dur) a.ending = true;
   }
@@ -9120,7 +9125,8 @@ class Animator {
   applyHorrorPosture(P, dt, root) {
     const L = this.L, spd = this.speed, moving = this.moving, ph = this.phase, run = this.runBlend || 0;
     const wk = moving ? clamp(spd / 1.2, 0, 1) : 0;
-    const act = this.action, aw = 1 - (act && act.type !== 'hidle' ? smooth01(act.w) : 0);
+    const act = this.action, aw = 1 - (act && act.type !== 'hidle' && act.type !== 'didle' ? smooth01(act.w) : 0);
+    if (this.hstyle === 'doctor') return this.doctorPosture(P, dt, root, aw, wk, moving, ph);
     if (this.hstyle === 'doll') {
       // stiff little legs: a side-to-side waddle, head bobbing, arms swinging straight from the shoulder
       const sw = Math.sin(TAU * ph);
@@ -9184,6 +9190,129 @@ class Animator {
       const b = Math.sin(t * 2.2) * 0.5 + 0.5;
       P.chest.x -= b * 0.04 * env; P.clav[0].z += b * 0.08 * env; P.clav[1].z += b * 0.08 * env; P.head.x += 0.04 * env;
     }
+  }
+  // ============================== the containment doctor ======================================
+  // Very upright, the beak carried forward; the left hand rests in the small of the back and the right
+  // holds the injector at the waist, needle down. The head moves in slow scans with held, bird-like tilts.
+  doctorPosture(P, dt, root, aw, wk, moving, ph) {
+    const L = this.L, dv = this.dvar || (this.dvar = { ph: Math.random() * 10, tiltT: 1, tilt: 0, goal: 0 });
+    P.spine.x -= 0.03; P.chest.x -= 0.05; P.neck.x += 0.12; P.head.x -= 0.03;
+    P.clav[0].x -= 0.05; P.clav[1].x -= 0.05;
+    dv.tiltT -= dt;
+    if (dv.tiltT <= 0) { dv.goal = Math.random() < 0.45 ? (Math.random() < 0.5 ? -1 : 1) * (0.16 + Math.random() * 0.2) : 0; dv.tiltT = 1.4 + Math.random() * 3.2; }
+    dv.tilt = damp(dv.tilt, dv.goal, 3.5, dt);
+    const free = 1 - (this.lookW || 0);
+    const scan = Math.sin(this.time * 0.37 + dv.ph) * 0.32 + Math.sin(this.time * 0.13 + dv.ph * 2) * 0.18;
+    P.head.y += scan * free * 0.75; P.neck.y += scan * free * 0.25; P.head.z += dv.tilt;
+    // the stride: barely any sway, the coat-tails do the moving
+    P.chest.y += Math.sin(TAU * ph) * 0.025 * wk;
+    const sw = moving ? Math.cos(TAU * ph) : 0;
+    const hl = this.armPose('behind', 0); hl.pos.x -= 0.03 * L; hl.pos.y += Math.abs(sw) * 0.01 * L;
+    P.hand[0].lerp(hl, aw);
+    const hr = this.armPose('hang', 1), sc = this.shoulderC[1];
+    hr.pos.set(sc.x - 0.03 * L, sc.y - 0.62 * L + Math.max(0, sw) * 0.02 * L, sc.z + (0.36 + sw * 0.05 * wk) * L);
+    hr.pole.set(-0.35, 0, -1); hr.pron = -0.1; hr.flex = 0.15;
+    P.hand[1].lerp(hr, aw);
+  }
+  // idles: hands clasped behind the back; tugging a glove cuff snug; counting the vials on the belt; stock-still
+  poseDIdle(P, a, root) {
+    const t = a.t, u = clamp(t / (a.dur || 4), 0, 1), env = smoothstep(0, 0.16, u) * (1 - smoothstep(0.84, 1, u)), L = this.L, rig = this.rig;
+    if (a.mode === 'behind') {
+      for (let s = 0; s < 2; s++) { const c = this.armPose('behind', s); c.pos.x -= SIDE_SIGN[s] * 0.03 * L; P.hand[s].lerp(c, env); }
+      P.chest.x -= 0.05 * env; P.head.x -= 0.04 * env; P.hipsRot.z += Math.sin(t * 0.6 + (a.ph || 0)) * 0.012 * env;
+    } else if (a.mode === 'glove') {
+      const sc = this.shoulderC[1], hr = this.armPose('hang', 1);
+      hr.pos.set(sc.x + 0.14 * L, sc.y - 0.5 * L, sc.z + 0.44 * L); hr.pole.set(-0.6, -0.3, -1); hr.pron = -0.9; hr.flex = 0.2;
+      P.hand[1].lerp(hr, env);
+      const tug = Math.max(0, Math.sin(t * 6.5)) * (Math.sin(t * 0.9 + 1) > -0.4 ? 1 : 0);
+      const hl = this.armPose('hang', 0);
+      hl.pos.set(hr.pos.x + 0.01, hr.pos.y + 0.035, hr.pos.z - 0.075 - tug * 0.03); hl.pole.set(0.8, -0.3, -0.7); hl.pron = -1.25; hl.flex = 0.35; hl.fing = 0.78; hl.thumb = 0.85;
+      P.hand[0].lerp(hl, env);
+      P.head.x += 0.3 * env; P.neck.x += 0.12 * env; P.head.y -= 0.14 * env; P.head.z += 0.1 * env;
+    } else if (a.mode === 'vials') {
+      const H = rig.H, sk = H / 1.75, y = rig.crotchY + 0.375 * (rig.neckBaseY - rig.crotchY), k = Math.floor(t * 0.9) % 3, th = 0.6 + k * 0.16;
+      const hl = this.armPose('hang', 0);
+      hl.posR.set(Math.sin(th) * 0.2 * sk + 0.03, y + 0.06 * sk + Math.abs(Math.sin(t * 2.8)) * 0.012, Math.cos(th) * 0.15 * sk + 0.05);
+      hl.space = 1; hl.pole.set(1, -0.2, -0.8); hl.pron = -1.0; hl.flex = 0.45; hl.fing = 0.45 + 0.25 * Math.sin(t * 2.8); hl.thumb = 0.5;
+      P.hand[0].lerp(hl, env);
+      P.head.x += 0.5 * env; P.neck.x += 0.16 * env; P.head.y += 0.36 * env; P.chest.y += 0.08 * env;
+    } else { // 'still': rigid; the head moves in small sudden steps
+      const step = Math.round(Math.sin(t * 0.7 + (a.ph || 0)) * 2.5) / 2.5;
+      this.dHeadStep = damp(this.dHeadStep || 0, step, 9, 1 / 60);
+      P.head.y += this.dHeadStep * 0.42 * env; P.head.z += Math.abs(this.dHeadStep) * 0.2 * env; P.neck.y += this.dHeadStep * 0.12 * env;
+    }
+  }
+  // inspection: the injector up beside the beak, the glass flicked twice, a bead squeezed from the needle.
+  // Targets are in root space (looking at the injector pitches the chest, which must not move the hand).
+  poseDInspect(P, a, root) {
+    const t = a.t, dur = a.dur || 4.4, rig = this.rig, sk = rig.H / 1.75;
+    const up = smoothstep(0.05, 0.85, t) * (1 - smoothstep(dur - 0.9, dur - 0.1, t));
+    const hx = -0.1 * sk, hy = rig.eyeY - 0.05 * sk, hz = 0.27 * sk;
+    const hr = this.armPose('hang', 1);
+    hr.posR.set(hx, hy, hz); hr.space = 1; hr.pole.set(-0.7, -1, 0.1); hr.pron = a.pron != null ? a.pron : -1.5; hr.flex = 0.1;
+    hr.thumb = 0.5 + 0.5 * smoothstep(2.5, 2.75, t) * (1 - smoothstep(3.0, 3.3, t));
+    P.hand[1].lerp(hr, up);
+    if (!a.squirt && t > 2.7) a.squirt = 1;
+    // the left hand comes up beside the barrel and flicks it with a fingertip
+    const near = smoothstep(0.9, 1.4, t) * (1 - smoothstep(2.4, 2.9, t));
+    const flick = Math.exp(-Math.pow((t - 1.65) / 0.06, 2)) + Math.exp(-Math.pow((t - 2.1) / 0.06, 2));
+    const hl = this.armPose('hang', 0);
+    hl.posR.set(hx + 0.075 * sk, hy - 0.05 * sk, hz + 0.01 * sk); hl.space = 1; hl.pole.set(0.8, -1, 0); hl.pron = -1.3; hl.flex = -0.2 - flick * 0.5; hl.fing = 0.75 - flick * 0.7; hl.thumb = 0.7;
+    P.hand[0].lerp(hl, near * up);
+    const c = Math.cos(root.yaw), s = Math.sin(root.yaw);
+    _vc.set(root.pos.x + hx * c + hz * s, root.pos.y + hy, root.pos.z - hx * s + hz * c);
+    this.aimHead(P, root, _vc, 0.8 * up);
+    P.head.z += (a.dir || 1) * 0.2 * up;
+  }
+  // the injection: a hand clamps the subject's shoulder, the needle hand rises, drives down into the neck
+  // (or the upper arm), holds while the thumb presses the plunger, and withdraws
+  poseDInject(P, a, root) {
+    const v = a.target; if (!v || v.removed) return;
+    const t = a.t, L = this.L, sk = this.rig.H / 1.75, sc = this.shoulderC[1];
+    const reach = smoothstep(0, 0.45, t) * (1 - smoothstep(2.5, 3.0, t));
+    const k1 = smoothstep(0.25, 0.85, t) * (1 - smoothstep(2.45, 2.95, t)), k2 = smoothstep(0.85, 1.02, t) * (1 - smoothstep(2.0, 2.4, t));
+    if (!a.hit && t >= 1.02) a.hit = 1;
+    const hl = P.hand[0];
+    this.toRoot(v.boneWPos[SB('upperarm', 1)], root, _va);
+    hl.posR.copy(_va); hl.posR.y += 0.05 * sk; hl.space = reach; hl.pole.set(0.9, -0.5, -0.4); hl.pron = lerp(hl.pron, -1.5, reach); hl.flex = lerp(hl.flex, 0.5, reach); hl.fing = lerp(hl.fing, 0.85, reach); hl.thumb = lerp(hl.thumb, 0.7, reach);
+    // wound up: fist high beside the head, needle pointing down
+    const hr = P.hand[1], wu = this.Pa.hand[1];
+    wu.copy(hr); wu.pos.set(sc.x - 0.1 * L, sc.y + 0.08 * L, sc.z + 0.3 * L); wu.space = 0; wu.pole.set(-1, -0.7, -0.5); wu.pron = 0.15; wu.flex = 0.25;
+    hr.lerp(wu, k1);
+    // the strike: the needle tip is placed on the side of the neck (or the outside of the upper arm) and
+    // driven in a little; the wrist target is solved back from the tip using last frame's hand orientation
+    const npc = this.npc, rig = this.rig, hb = SB('hand', 1), vy = v.root.yaw;
+    const lx = Math.cos(vy), lz = -Math.sin(vy);                         // the subject's left, in world space
+    const tdx = root.pos.x - v.root.pos.x, tdz = root.pos.z - v.root.pos.z, tl = Math.hypot(tdx, tdz) || 1;
+    const tb = a.region === 'arm' ? v.boneWPos[SB('upperarm', 0)] : v.boneWPos[B.neck], vs = v.rig.H / 1.75;
+    if (a.region === 'arm') _vb.set(tb.x + lx * 0.055 * vs + tdx / tl * 0.02, tb.y - 0.075 * vs, tb.z + lz * 0.055 * vs + tdz / tl * 0.02);
+    else _vb.set(tb.x + lx * 0.032 * vs + tdx / tl * 0.045 * vs, tb.y + 0.035 * vs, tb.z + lz * 0.032 * vs + tdz / tl * 0.045 * vs);
+    a.point = a.point || new V3(); a.point.copy(_vb);
+    _vc.set(0, 0, 0).addScaledVector(rig.armDir[1], rig.palmLen * 0.62).addScaledVector(rig.armE2[1], 0.006 + 0.008 * sk).addScaledVector(rig.armE1[1], -0.13 * sk).applyQuaternion(npc.boneWRot[hb]);
+    const dn = _vd.copy(rig.armE1[1]).negate().applyQuaternion(npc.boneWRot[hb]), dep = 0.016 * smoothstep(1.0, 1.25, t);
+    _vb.addScaledVector(dn, dep).sub(_vc);                                 // world wrist target
+    this.toRoot(_vb, root, _vb);
+    const st = this.Pb.hand[1]; st.copy(hr);
+    st.posR.copy(_vb); st.space = 1; st.pole.set(-1, -0.6, -0.3); st.pron = 0.5; st.flex = 0.8;
+    st.thumb = 0.5 + 0.5 * smoothstep(1.15, 1.8, t);
+    hr.lerp(st, k2);
+    P.spine.x += 0.05 * k2; P.chest.x += 0.08 * Math.max(k1 * 0.5, k2); P.head.z -= 0.15 * k2;
+    this.aimHead(P, root, a.point, 0.75 * Math.max(k1, k2));
+  }
+  // the trigger: the left hand rises toward an infected subject, palm out, and slowly closes into a fist
+  poseDTrigger(P, a, root) {
+    const s = a.target, t = a.t, L = this.L, dur = a.dur || 3.4, sc = this.shoulderC[0];
+    const up = smoothstep(0.1, 0.75, t) * (1 - smoothstep(dur - 1.0, dur - 0.1, t));
+    const close = smoothstep(0.95, 1.95, t);
+    if (!a.fire && t >= 1.95) a.fire = 1;
+    let yaw = 0;
+    if (s && !s.removed) { this.toRoot(s.boneWPos[B.chest], root, _va); yaw = clamp(Math.atan2(_va.x, _va.z), -0.8, 0.8); }
+    const hl = this.armPose('hang', 0), tremble = close > 0 && close < 1 ? Math.sin(t * 40) * 0.004 : 0;
+    hl.pos.set(sc.x + Math.sin(yaw) * 0.82 * L - 0.06 * L, sc.y + 0.1 * L + tremble, sc.z + Math.cos(yaw) * 0.82 * L);
+    hl.pole.set(0.7, -1, -0.2); hl.pron = -1.45; hl.flex = lerp(-0.8, 0.15, close); hl.dev = 0; hl.fing = lerp(0.02, 1, close); hl.thumb = lerp(0.05, 0.95, close);
+    P.hand[0].lerp(hl, up);
+    P.chest.y += yaw * 0.35 * up; P.neck.y += yaw * 0.25 * up; P.head.y += yaw * 0.25 * up;
+    P.head.z += (a.dir || 1) * 0.32 * up; P.head.x += 0.14 * close * up; P.chest.x -= 0.05 * up;
   }
   // --- solver -------------------------------------------------------------------------
   solve(P, root, dt) {
@@ -10267,7 +10396,7 @@ class AISystem {
       const d = Math.hypot(dx, dz);
       if (d >= bd) continue;
       if (vamp && o.brain && o.brain.state !== 'vRush' && o.brain.state !== 'vBite' && o.brain.state !== 'vHiss' && d > 2.2) continue; // a stalking vampire goes unnoticed
-      if (hor && o.brain && !o.brain.hunting && d > 2.5) continue;
+      if (hor && o.brain && !o.brain.hunting && (d > 2.5 || o.horror.kind === 'doctor')) continue; // the doctor is only alarming once he lays hands on someone
       const inView = (dx * fx + dz * fz) / Math.max(d, 1e-3) > -0.25;
       if (d < 1.2 || inView || npc.fear > 0.6) { bd = d; best = o; }
     }
@@ -11975,8 +12104,14 @@ HT.VampireSystem = VampireSystem;
 //   doll    - "Chucky": short, quick, laughing; stalks then rushes in to stab
 //   slasher - "Jason":  huge, slow, relentless; head tilt on sight, runs only
 //             when the prey keeps getting away (or he is shot); machete swings
-// They hunt people only (never zombies, vampires or each other), are never
-// bitten or reanimated, and fall as ordinary ragdolls when defeated.
+//   doctor  - "The Physician" (V1.10): an original containment-doctor design.
+//             Never attacks. Wanders, inspects his injector, walks up to an
+//             ordinary person and injects them - they enter the normal
+//             infection progression - then stands and observes. Now and then
+//             a closing-fist gesture hastens an infected subject's turning.
+// Chucky and Jason hunt people, zombies and vampires (never another horror
+// character). None of them is ever bitten or reanimated, and they fall as
+// ordinary ragdolls when defeated. Zombies and vampires ignore all three.
 // ============================================================================
 const HORROR_DEFS = {
   doll: { label: 'Chucky', health: 150, armor: 0.8, walk: 0.95, run: 3.3, detect: 18, rushR: 5.5, reach: 0.82, damage: 20, cooldown: [0.9, 1.6],
@@ -12027,7 +12162,8 @@ class HorrorSystem {
     for (const n of this.game.npcs.list.slice()) if (n.horror) { this.game.npcs.remove(n, true); c++; }
     if (c) HT.log('horror', `horror characters off: ${c} removed`);
   }
-  release(n) { /* attacks are instantaneous swings: nothing to let go of */ }
+  // something broke a hold (the subject was knocked down, shot, removed...): Chucky and Jason only swing
+  release(n) { if (n.horror && n.horror.kind === 'doctor' && n.brain && n.brain.victim) this.endInject(n, n.brain); }
   onDefeated(n) {
     const g = this.game;
     if (n.horror.kind === 'doll') { const p = n.boneWPos[B.chest]; g.fx.fabricPuff(p, _hz1.set(0, 1, 0), new THREE.Color(0.92, 0.9, 0.85)); g.fx.fabricPuff(p, _hz1.set(0.5, 0.6, 0), new THREE.Color(0.92, 0.9, 0.85)); }
@@ -12060,6 +12196,7 @@ class HorrorSystem {
     a.zombie = 0; a.hstyle = H.kind; a.gripR = 1;
     if (h.physMode !== 'anim') { b.speed = 0; b.hunting = false; return; }
     if (!Settings.data.ai.enabled || !this.S.enabled) { b.speed = 0; return; }
+    if (H.kind === 'doctor') return this.thinkDoctor(h, b, dt);
     b.cd = Math.max(0, (b.cd || 0) - dt);
     b.enraged = Math.max(0, (b.enraged || 0) - dt);
     const doll = H.kind === 'doll';
@@ -12180,9 +12317,233 @@ class HorrorSystem {
   }
   onHit(h, info) {
     const b = h.brain; if (!b) return;
+    if (h.horror.kind === 'doctor') { // barely flinches; a hold in progress is kept
+      if (info.dir) b.stagger.copy(info.dir).setY(0).multiplyScalar(0.35);
+      h.lastReaction = 'Unmoved'; h.anim.kick(B.chest, _hz1.set(0.5, (Math.random() - 0.5) * 0.6, 0));
+      return;
+    }
     if (info.dir) b.stagger.copy(info.dir).setY(0).multiplyScalar(h.horror.kind === 'doll' ? 1.2 : 0.25);
     if (h.horror.kind === 'slasher') { b.enraged = 5; h.lastReaction = 'Unfazed'; }
     else { h.lastReaction = 'Stagger'; if (Math.random() < 0.3 && b.state !== 'hAttack') this.laugh(h, b); }
+  }
+
+  // --- the containment doctor ------------------------------------------------------------
+  // an ordinary, healthy person standing on the same level, not already infected, held, seated or riding
+  eligibleSubject(h, o, maxD) {
+    if (!o || o.removed || o === h || o.horror || o.lifeState !== 'alive' || o.physMode !== 'anim' || o.carried) return false;
+    if (o.infection || (o.vamp && o.vamp.state !== 'none') || o.grabbedBy || o.seatLock || o.riding || (o.anim && o.anim.crawl)) return false;
+    if (Math.abs(o.root.pos.y - h.root.pos.y) > 1.2) return false;
+    return Math.hypot(o.root.pos.x - h.root.pos.x, o.root.pos.z - h.root.pos.z) < maxD;
+  }
+  pickSubject(h, def) {
+    let best = null, bs = 1e9;
+    for (const o of this.game.npcs.list) {
+      if (!this.eligibleSubject(h, o, def.detect)) continue;
+      let claimed = false; for (const w of this.game.npcs.list) if (w !== h && w.brain && w.brain.subject === o) claimed = true;
+      if (claimed) continue;
+      const moving = o.brain && o.brain.vel ? Math.hypot(o.brain.vel.x, o.brain.vel.z) : 0;
+      const sc = Math.hypot(o.root.pos.x - h.root.pos.x, o.root.pos.z - h.root.pos.z) + moving * 2.5 + (o.brain && o.brain.state === 'flee' ? 12 : 0) + Math.random() * 2;
+      if (sc < bs) { bs = sc; best = o; }
+    }
+    return best;
+  }
+  // someone infected (by him or by a bite) and well into the sickness, close by
+  pickInfected(h, maxD) {
+    let best = null, bd = maxD;
+    for (const o of this.game.npcs.list) {
+      if (o === h || o.removed || o.horror || o.lifeState !== 'alive' || o.physMode !== 'anim' || !o.infection || o.infection.collapsed || o.grabbedBy) continue;
+      const k = o.infection.t / o.infection.dur;
+      if (k < 0.3 || k > 0.72 || Math.abs(o.root.pos.y - h.root.pos.y) > 1.2) continue;
+      const d = Math.hypot(o.root.pos.x - h.root.pos.x, o.root.pos.z - h.root.pos.z);
+      if (d < bd) { bd = d; best = o; }
+    }
+    return best;
+  }
+  // world position of the needle tip (the injector is rigid on the right hand bone)
+  injectorTip(h, out) {
+    const rig = h.rig, hb = SB('hand', 1), sk = rig.H / 1.75, wr = rig.bindPos[hb];
+    out.set(0, 0, 0).addScaledVector(rig.armDir[1], rig.palmLen * 0.62).addScaledVector(rig.armE2[1], 0.006 + 0.008 * sk).addScaledVector(rig.armE1[1], -0.13 * sk);
+    return out.applyQuaternion(h.boneWRot[hb]).add(h.boneWPos[hb]);
+  }
+  needleDir(h, out) { return out.copy(h.rig.armE1[1]).negate().applyQuaternion(h.boneWRot[SB('hand', 1)]); }
+  thinkDoctor(h, b, dt) {
+    const g = this.game, a = h.anim, def = h.horror.def, Z = Settings.data.zombies, act = a.action;
+    b.cd = Math.max(0, (b.cd == null ? 5 + Math.random() * 5 : b.cd) - dt);
+    b.trigCd = Math.max(0, (b.trigCd == null ? 12 + Math.random() * 8 : b.trigCd) - dt);
+    b.inspCd = Math.max(0, (b.inspCd == null ? 2 + Math.random() * 4 : b.inspCd) - dt);
+    b.hunting = b.state === 'dInject';
+    switch (b.state) {
+      case 'dInject': return this.doctorInject(h, b, dt);
+      case 'dTrigger': return this.doctorTrigger(h, b, dt);
+      case 'dInspect':
+        b.speed = 0;
+        if (act && act.type === 'dinspect' && act.squirt === 1) { act.squirt = 2; const p = this.injectorTip(h, _hz1); g.fx.serum(p, this.needleDir(h, _hz2), 5, 0.6); g.audio.play('inject', { pos: p.clone(), gain: 0.3, rate: 1.6 }); }
+        if (!act || act.type !== 'dinspect' || act.ending) this.setState(h, b, 'dIdle');
+        return;
+      case 'dObserve': {
+        const sj = b.subject;
+        const watching = sj && !sj.removed && (sj.lifeState === 'alive' || sj.lifeState === 'dead' || sj.lifeState === 'reanimating' || sj.lifeState === 'zombie') && Math.abs(sj.root.pos.y - h.root.pos.y) < 2;
+        if (!watching || b.t > b.obsT) { b.subject = null; a.clearLook(); this.setState(h, b, 'dIdle'); break; }
+        a.lookAt(sj.boneWPos[B.head], 0.9);
+        const d = Math.hypot(sj.root.pos.x - h.root.pos.x, sj.root.pos.z - h.root.pos.z);
+        // keeps a clinical distance: follows slowly if the subject gets far, otherwise stands with hands behind his back
+        if (d > 7) { b.dest.copy(sj.root.pos); b.speed = def.walk * 0.9; if (act && act.type === 'didle') a.setAction(null); }
+        else { b.speed = 0; b.faceTarget = sj.root.pos; if ((!act || act.ending) && a.speed < 0.2) a.setAction('didle', { mode: Math.random() < 0.7 ? 'behind' : 'still', dur: 3 + Math.random() * 2, ph: Math.random() * 6, inT: 0.6, outT: 0.6 }); }
+        // hasten it along once the sickness has taken hold
+        if (b.trigCd <= 0) {
+          const k = sj.infection ? sj.infection.t / sj.infection.dur : 0;
+          const ripe = sj.lifeState === 'alive' && sj.infection && !sj.infection.collapsed && d < 6.5 && sj.physMode === 'anim' && k > 0.3 && k < 0.72;
+          if (this.considerTrigger(h, b, ripe ? sj : null, dt)) return;
+        }
+        return;
+      }
+    }
+    if (h.physMode !== 'anim') return;
+    // a subject: walk up at a measured pace (he never runs after anyone)
+    if (b.state === 'dStalk') {
+      const v = b.subject;
+      if (!Z.infection || !this.eligibleSubject(h, v, def.detect * 1.4) || b.t > 32) { b.subject = null; a.clearLook(); this.setState(h, b, 'dIdle'); b.cd = 4 + Math.random() * 4; }
+      else {
+        const d = Math.hypot(v.root.pos.x - h.root.pos.x, v.root.pos.z - h.root.pos.z);
+        a.lookAt(v.boneWPos[B.head], d < 6 ? 1 : 0.6);
+        if (act && act.type === 'didle' && !act.ending) a.setAction(null);
+        b.dest.copy(v.root.pos);
+        b.speed = d > 2.6 ? def.walk : d > 1.2 ? def.walk * 1.35 : def.walk * 0.8;
+        if (d < def.reach + 0.3) this.startInject(h, b, v);
+        return;
+      }
+    }
+    // idle and wander - he also sits down and rides trains, like anyone else
+    if (!h.riding && Z.infection && b.cd <= 0 && b.state !== 'dStalk') {
+      const v = this.pickSubject(h, def);
+      if (v) {
+        if (h.transit) g.transit.interrupt(h);
+        b.subject = v; this.setState(h, b, 'dStalk'); h.lastReaction = 'Selecting a subject';
+        HT.log('horror', `${h.idStr} ${h.horror.label} is approaching ${v.idStr} ${v.name}`);
+        return;
+      }
+      b.cd = 2 + Math.random() * 2; // look again in a moment
+    }
+    if (!h.riding && b.trigCd <= 0 && this.considerTrigger(h, b, this.pickInfected(h, 6), dt)) return;
+    if (g.transit && g.transit.think(h, b, dt)) return;
+    if (b.state !== 'dIdle' && b.state !== 'dWander') this.setState(h, b, 'dIdle');
+    if (b.state === 'dIdle') {
+      b.speed = 0;
+      if ((!act || act.ending) && a.speed < 0.2) {
+        if (b.inspCd <= 0 && Math.random() < 0.4) {
+          b.inspCd = 12 + Math.random() * 12; this.setState(h, b, 'dInspect');
+          a.setAction('dinspect', { dur: 4.4, dir: Math.random() < 0.5 ? 1 : -1, inT: 0.4, outT: 0.5 }); h.lastReaction = 'Inspecting the injector';
+          return;
+        }
+        const modes = ['behind', 'behind', 'glove', 'vials', 'still'];
+        a.setAction('didle', { mode: modes[Math.floor(Math.random() * modes.length)], dur: 3.5 + Math.random() * 3.5, ph: Math.random() * 6, inT: 0.6, outT: 0.6 });
+      }
+      if (b.t > (b.idleFor || (b.idleFor = 6 + Math.random() * 6)) && Settings.data.ai.wander) {
+        b.idleFor = 0; g.ai.pickWander(h, b); this.setState(h, b, 'dWander');
+        if (act && act.type === 'didle') a.setAction(null);
+      }
+    } else {
+      b.speed = def.walk * 0.85; a.clearLook();
+      if (Math.hypot(h.root.pos.x - b.dest.x, h.root.pos.z - b.dest.z) < 0.6 || b.t > 16) this.setState(h, b, 'dIdle');
+    }
+  }
+  startInject(h, b, v) {
+    const g = this.game;
+    if (v.transit) g.transit.interrupt(v);
+    this.setState(h, b, 'dInject'); b.speed = 0; b.victim = v; b.subject = v; b.faceTarget = null;
+    b.injRegion = Math.random() < 0.6 ? 'neck' : 'arm';
+    v.grabbedBy = h; h.rag.noCollideWith = v.rag; v.rag.noCollideWith = h.rag;
+    if (v.brain) { v.brain.state = 'grabbed'; v.brain.t = 0; v.brain.screamT = 0.5; v.brain.pending.length = 0; }
+    v.anim.setAction('struggle', { target: h, away: Math.random() < 0.5 ? 1 : -1, forceMode: Math.random() < 0.45 ? 'freeze' : null });
+    v.anim.setUpper('hang'); v.fear = 1; v.lastReaction = 'Seized by ' + h.horror.label;
+    h.anim.setAction('dinject', { target: v, region: b.injRegion, dur: 3.0, inT: 0.25, outT: 0.5 });
+    h.lastReaction = 'Injecting';
+    HT.log('horror', `${h.idStr} ${h.horror.label} seized ${v.idStr} ${v.name}`);
+  }
+  doctorInject(h, b, dt) {
+    const v = b.victim, a = h.anim;
+    b.speed = 0;
+    if (!v || v.removed || v.lifeState !== 'alive' || v.physMode !== 'anim' || v.grabbedBy !== h || h.physMode !== 'anim') { this.endInject(h, b); return; }
+    // hold the subject at arm's length, face to face
+    const dir = _hz1.subVectors(v.root.pos, h.root.pos); dir.y = 0;
+    let d = dir.length(); if (d < 1e-4) { dir.set(0, 0, 1); d = 1e-4; } else dir.multiplyScalar(1 / d);
+    const want = 0.52 * (h.rig.H + v.rig.H) / 3.5, corr = (d - want) * Math.min(1, dt * 6) * 0.5;
+    h.root.pos.addScaledVector(dir, corr); v.root.pos.addScaledVector(dir, -corr);
+    b.vel.multiplyScalar(0.8); if (v.brain) v.brain.vel.multiplyScalar(0.8);
+    h.root.yaw = angleDamp(h.root.yaw, Math.atan2(dir.x, dir.z), 8, dt);
+    v.root.yaw = angleDamp(v.root.yaw, Math.atan2(-dir.x, -dir.z), 5, dt);
+    const act = a.action;
+    if (act && act.type === 'dinject' && act.hit === 1) { act.hit = 2; this.inject(h, v, b); }
+    if (!act || act.type !== 'dinject' || act.ending) this.endInject(h, b);
+  }
+  // the needle goes in: a jolt and a gasp, no wound - the subject now carries the infection
+  inject(h, v, b) {
+    const g = this.game, Z = Settings.data.zombies, p = this.injectorTip(h, new V3()), nd = this.needleDir(h, new V3());
+    if (!v.infection) v.infection = { t: 0, dur: Z.infectionTime * (0.92 + Math.random() * 0.16), src: 'doctor' };
+    v.injectedBy = h;
+    v.anim.kick(B.neck, _hz2.set(0.35, (Math.random() - 0.5) * 1.2, 0)); v.anim.kick(B.chest, _hz2.set(-0.5, 0, 0));
+    g.fx.serum(p, nd.negate(), 4, 0.35);
+    g.audio.play('inject', { pos: p, gain: 0.9 });
+    g.audio.play('scream' + Math.floor(Math.random() * 3), { pos: v.boneWPos[B.head].clone(), gain: 0.7, rate: 1.15 });
+    v.lastReaction = 'Injected'; Events.emit('reaction', { npc: v, reaction: v.lastReaction });
+    g.ai.emit('scream', v.boneWPos[B.head].clone(), { threatPos: h.root.pos.clone(), source: v });
+    HT.log('horror', `${h.idStr} ${h.horror.label} injected ${v.idStr} ${v.name}: infected (${v.infection.dur.toFixed(0)} s)`);
+  }
+  endInject(h, b) {
+    const v = b.victim;
+    b.victim = null;
+    if (v) {
+      if (v.grabbedBy === h) v.grabbedBy = null;
+      if (v.anim.action && v.anim.action.type === 'struggle') v.anim.setAction(null);
+      if (v.brain && v.brain.state === 'grabbed' && v.lifeState === 'alive') {
+        v.brain.state = 'flee'; v.brain.t = 0; v.brain.fleeT = 6;
+        v.brain.threat.copy(h.root.pos); v.brain.hasThreat = true; v.brain.threatNpc = h; v.fear = 1;
+      }
+    }
+    if (h.anim.action && h.anim.action.type === 'dinject') h.anim.setAction(null);
+    const def = h.horror.def;
+    b.cd = def.cooldown[0] + Math.random() * (def.cooldown[1] - def.cooldown[0]);
+    if (v && !v.removed && v.infection && v.lifeState === 'alive') { b.subject = v; b.obsT = 9 + Math.random() * 7; this.setState(h, b, 'dObserve'); }
+    else { b.subject = null; this.setState(h, b, 'dIdle'); }
+  }
+  // an infected subject well into the sickness is noticed, considered for a moment, then hastened along
+  considerTrigger(h, b, sj, dt) {
+    if (!sj) { b.trigWait = null; return false; }
+    if (b.trigWait == null) b.trigWait = 1.5 + Math.random() * 3;
+    b.trigWait -= dt;
+    if (b.trigWait > 0) return false;
+    b.trigWait = null;
+    if (h.transit) this.game.transit.interrupt(h);
+    this.startTrigger(h, b, sj);
+    return true;
+  }
+  startTrigger(h, b, sj) {
+    this.setState(h, b, 'dTrigger'); b.speed = 0; b.subject = sj; b.faceTarget = sj.root.pos;
+    b.trigCd = 30 + Math.random() * 25;
+    h.anim.setAction('dtrigger', { target: sj, dur: 3.4, dir: Math.random() < 0.5 ? 1 : -1, inT: 0.4, outT: 0.6 });
+    h.anim.lookAt(sj.boneWPos[B.head], 1);
+    this.game.audio.play('dtrigger', { pos: h.boneWPos[B.head].clone(), gain: 0.8 });
+    h.lastReaction = 'Triggering the change';
+  }
+  doctorTrigger(h, b, dt) {
+    const sj = b.subject, a = h.anim, act = a.action;
+    b.speed = 0;
+    if (sj && !sj.removed) { b.faceTarget = sj.root.pos; a.lookAt(sj.boneWPos[B.head], 1); }
+    if (act && act.type === 'dtrigger' && act.fire === 1) {
+      act.fire = 2;
+      const inf = sj && !sj.removed && sj.lifeState === 'alive' ? sj.infection : null;
+      if (inf && !inf.collapsed) {
+        // the sickness jumps ahead to the point of collapse; the turning itself runs as normal
+        inf.t = Math.max(inf.t, inf.dur * INFECTION.collapse);
+        sj.anim.kick(B.chest, _hz1.set(-1.2, 0, 0)); sj.anim.kick(B.neck, _hz1.set(0.8, (Math.random() - 0.5) * 1.5, 0));
+        HT.log('horror', `${h.idStr} ${h.horror.label} triggered ${sj.idStr} ${sj.name}'s turning`);
+      }
+    }
+    if (!act || act.type !== 'dtrigger' || act.ending) {
+      b.faceTarget = null;
+      if (sj && !sj.removed && sj.lifeState !== 'destroyed') { b.obsT = 10 + Math.random() * 6; this.setState(h, b, 'dObserve'); }
+      else { b.subject = null; this.setState(h, b, 'dIdle'); }
+    }
   }
 }
 HT.HorrorSystem = HorrorSystem;
@@ -13313,6 +13674,14 @@ class FX {
       const sp = 0.4 + Math.random() * 1.2;
       this.smoke.emit(p.x, p.y, p.z, d.x * sp, d.y * sp, d.z * sp, 0.4 + Math.random() * 0.4, 0.03, 0.14, lerp(c.r, 0.8, 0.5), lerp(c.g, 0.8, 0.5), lerp(c.b, 0.8, 0.5), 0.45, 0.2, 3);
     }
+  }
+  // a bead of the doctor's green serum: a few glowing droplets along dir, and a faint mist
+  serum(p, dir, n = 6, k = 1) {
+    for (let i = 0; i < n; i++) {
+      const sp = (0.35 + Math.random() * 0.9) * k;
+      this.glow.emit(p.x, p.y, p.z, dir.x * sp + (Math.random() - 0.5) * 0.25, dir.y * sp + (Math.random() - 0.5) * 0.25 + 0.15, dir.z * sp + (Math.random() - 0.5) * 0.25, 0.35 + Math.random() * 0.35, 0.012, 0.004, 0.35, 1.0, 0.45, 0.85, 4.5, 1.5);
+    }
+    for (let i = 0; i < Math.ceil(n / 3); i++) this.smoke.emit(p.x, p.y, p.z, dir.x * 0.2 * k, 0.05, dir.z * 0.2 * k, 0.5 + Math.random() * 0.4, 0.01, 0.06, 0.55, 0.85, 0.55, 0.22, -0.05, 2.5);
   }
   decal(p, n, size, kind) {
     let d;
@@ -15908,6 +16277,22 @@ class AudioEngine {
         }
         this.finish(name, b, 0.7);
       }
+      // the doctor's injector: a latch click, a short pneumatic hiss and a faint ring of glass
+      { const b = this.buf(0.6), L = b.L; const hp = new Biquad('hp', 2600, 0.8, sr), bp = new Biquad('bp', 5200, 1.6, sr);
+        for (let i = 0; i < L.length; i++) { const t = i / sr, n = this.noise();
+          const click = n * Math.exp(-t / 0.0025) * 1.4 + Math.sin(TAU * 3100 * t) * Math.exp(-t / 0.01) * 0.5;
+          const u = t - 0.05, hiss = u > 0 ? (hp.p(n) * 0.5 + bp.p(n) * 0.8) * Math.min(1, u / 0.015) * Math.exp(-u / 0.13) : 0;
+          const ring = (Math.sin(TAU * 2350 * t) + 0.6 * Math.sin(TAU * 3790 * t)) * Math.exp(-t / 0.18) * 0.12;
+          L[i] = Math.tanh((click + hiss + ring) * 1.2); }
+        this.finish('inject', b, 0.75); }
+      // the trigger: a low swell under a cold, beating tone, cut off sharply
+      { const b = this.buf(1.9), L = b.L; const lp = new Biquad('lp', 300, 0.7, sr);
+        for (let i = 0; i < L.length; i++) { const t = i / sr, n = this.noise();
+          const env = Math.min(1, t / 0.9) * (t < 1.55 ? 1 : Math.exp(-(t - 1.55) / 0.05));
+          const tone = (Math.sin(TAU * 523 * t) * 0.5 + Math.sin(TAU * 527.5 * t) * 0.5 + Math.sin(TAU * 1046 * t) * 0.15) * 0.45;
+          const hum = Math.sin(TAU * 55 * t + Math.sin(TAU * 0.7 * t)) * 0.5 + lp.p(n) * 1.5;
+          L[i] = Math.tanh((tone + hum) * env * 1.3); }
+        this.finish('dtrigger', b, 0.7); }
     } else if (group === 7) {
       // supernatural: vampire hiss, heartbeat, the turning swell, crumbling to ash
       { const b = this.buf(1.0), L = b.L; const hp = new Biquad('hp', 2300, 0.7, sr), bp = new Biquad('bp', 3400, 2.2, sr), lp = new Biquad('lp', 30, 0.7, sr);
@@ -16103,7 +16488,8 @@ const TIPS = [
   'Tap a weapon on the bar (or press <b>1-7</b>) to equip it: Pistol, Sniper, Knife, Grenade, Bazooka, Grab, Move.',
   'Hold <b>right mouse</b> (or AIM) to aim. A sniper headshot destroys the head.',
   'Open the <b>Sandbox</b> menu to spawn a man or a woman. Every body and height is random.',
-  'Zombies grab and bite. Survivors who break free are infected and will turn.',
+  'Zombies grab and bite. Survivors who break free are infected: they sweat, cough and slowly turn green, then collapse and rise about a minute later.',
+  'The Physician never attacks. He walks up to people, injects them, and watches them turn. Sometimes a closing fist is all it takes to finish the change.',
   'Zombies kneel and feed on bodies. A destroyed head stops a body from rising.',
   'Shoot limbs to sever them. A subject who loses a leg can only crawl.',
   'Grenades tear bodies apart at close range. Hold the throw button longer to throw farther.',
@@ -16438,7 +16824,8 @@ class UI {
     this.buttons(s, [{ label: '&#9794; Spawn Male', cls: 'pri', fn: () => sp('male') }, { label: '&#9792; Spawn Female', cls: 'pri', fn: () => sp('female') }], 'spawnbtns');
     const sx = (fn) => { const p = g.player.groundTarget(8); if (fn(p)) this.sound('spawn'); };
     this.buttons(s, [{ label: 'Vampire', cls: 'v', fn: () => sx(p => g.vampires.spawn(p)) }, { label: 'Zombie', cls: 'z', fn: () => sx(p => g.zombies.spawnZombie(p)) },
-      { label: 'Chucky', fn: () => sx(p => g.horror.spawn('doll', p)) }, { label: 'Jason', fn: () => sx(p => g.horror.spawn('slasher', p)) }], 'spawnbtns');
+      { label: 'Chucky', fn: () => sx(p => g.horror.spawn('doll', p)) }, { label: 'Jason', fn: () => sx(p => g.horror.spawn('slasher', p)) },
+      { label: 'Doctor', cls: 'wide', fn: () => sx(p => g.horror.spawn('doctor', p)) }], 'spawnbtns');
     this.note(s, 'Each person gets a random body, height, face and outfit. They appear where you are aiming.');
     s = this.sec(b, 'Weapons');
     const cards = document.createElement('div'); cards.className = 'wcards';
@@ -16553,7 +16940,7 @@ class UI {
     this.toggle(s, 'Glowing eyes', 'vampires.glowEyes');
     this.toggle(s, 'Fangs', 'vampires.fangs');
     s = this.sec(b, 'Horror Characters');
-    this.toggle(s, 'Chucky & Jason', 'horror.enabled');
+    this.toggle(s, 'Chucky, Jason & the Doctor', 'horror.enabled');
     this.slider(s, 'Attack damage', 'horror.damage', 0.25, 3, 0.05, x => x.toFixed(2) + 'x');
     s = this.sec(b, 'People & Physics');
     this.toggle(s, 'Hats & glasses can fall off', 'physics.looseAccessories', () => { if (!Settings.data.physics.looseAccessories) g.accessories.restoreAll(); });

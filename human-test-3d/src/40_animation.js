@@ -206,7 +206,7 @@ function clipSample(keys, u, field, out) {
 }
 const _kca = [0, 0, 0], _kcb = [0, 0, 0], _kcc = [0, 0, 0], _kcd = [0, 0, 0], _kce = [0, 0, 0];
 
-const _qa = new QT(), _va = new V3(), _vb = new V3();
+const _qa = new QT(), _va = new V3(), _vb = new V3(), _vc = new V3(), _vd = new V3();
 
 
 // --- transformation rise: lying -> pushing up -> knees -> crouch -> upright, zombie posture
@@ -1040,6 +1040,10 @@ class Animator {
     else if (a.type === 'ridehold') this.poseRideHold(Pc, a, root, dt);
     else if (a.type === 'htilt') this.poseHTilt(Pc, a, root);
     else if (a.type === 'hidle') this.poseHIdle(Pc, a, root);
+    else if (a.type === 'didle') this.poseDIdle(Pc, a, root);
+    else if (a.type === 'dinspect') this.poseDInspect(Pc, a, root);
+    else if (a.type === 'dinject') this.poseDInject(Pc, a, root);
+    else if (a.type === 'dtrigger') this.poseDTrigger(Pc, a, root);
     P.lerp(Pc, smooth01(a.w));
     if (!a.ending && a.dur && a.t >= a.dur) a.ending = true;
   }
@@ -1668,7 +1672,8 @@ class Animator {
   applyHorrorPosture(P, dt, root) {
     const L = this.L, spd = this.speed, moving = this.moving, ph = this.phase, run = this.runBlend || 0;
     const wk = moving ? clamp(spd / 1.2, 0, 1) : 0;
-    const act = this.action, aw = 1 - (act && act.type !== 'hidle' ? smooth01(act.w) : 0);
+    const act = this.action, aw = 1 - (act && act.type !== 'hidle' && act.type !== 'didle' ? smooth01(act.w) : 0);
+    if (this.hstyle === 'doctor') return this.doctorPosture(P, dt, root, aw, wk, moving, ph);
     if (this.hstyle === 'doll') {
       // stiff little legs: a side-to-side waddle, head bobbing, arms swinging straight from the shoulder
       const sw = Math.sin(TAU * ph);
@@ -1732,6 +1737,129 @@ class Animator {
       const b = Math.sin(t * 2.2) * 0.5 + 0.5;
       P.chest.x -= b * 0.04 * env; P.clav[0].z += b * 0.08 * env; P.clav[1].z += b * 0.08 * env; P.head.x += 0.04 * env;
     }
+  }
+  // ============================== the containment doctor ======================================
+  // Very upright, the beak carried forward; the left hand rests in the small of the back and the right
+  // holds the injector at the waist, needle down. The head moves in slow scans with held, bird-like tilts.
+  doctorPosture(P, dt, root, aw, wk, moving, ph) {
+    const L = this.L, dv = this.dvar || (this.dvar = { ph: Math.random() * 10, tiltT: 1, tilt: 0, goal: 0 });
+    P.spine.x -= 0.03; P.chest.x -= 0.05; P.neck.x += 0.12; P.head.x -= 0.03;
+    P.clav[0].x -= 0.05; P.clav[1].x -= 0.05;
+    dv.tiltT -= dt;
+    if (dv.tiltT <= 0) { dv.goal = Math.random() < 0.45 ? (Math.random() < 0.5 ? -1 : 1) * (0.16 + Math.random() * 0.2) : 0; dv.tiltT = 1.4 + Math.random() * 3.2; }
+    dv.tilt = damp(dv.tilt, dv.goal, 3.5, dt);
+    const free = 1 - (this.lookW || 0);
+    const scan = Math.sin(this.time * 0.37 + dv.ph) * 0.32 + Math.sin(this.time * 0.13 + dv.ph * 2) * 0.18;
+    P.head.y += scan * free * 0.75; P.neck.y += scan * free * 0.25; P.head.z += dv.tilt;
+    // the stride: barely any sway, the coat-tails do the moving
+    P.chest.y += Math.sin(TAU * ph) * 0.025 * wk;
+    const sw = moving ? Math.cos(TAU * ph) : 0;
+    const hl = this.armPose('behind', 0); hl.pos.x -= 0.03 * L; hl.pos.y += Math.abs(sw) * 0.01 * L;
+    P.hand[0].lerp(hl, aw);
+    const hr = this.armPose('hang', 1), sc = this.shoulderC[1];
+    hr.pos.set(sc.x - 0.03 * L, sc.y - 0.62 * L + Math.max(0, sw) * 0.02 * L, sc.z + (0.36 + sw * 0.05 * wk) * L);
+    hr.pole.set(-0.35, 0, -1); hr.pron = -0.1; hr.flex = 0.15;
+    P.hand[1].lerp(hr, aw);
+  }
+  // idles: hands clasped behind the back; tugging a glove cuff snug; counting the vials on the belt; stock-still
+  poseDIdle(P, a, root) {
+    const t = a.t, u = clamp(t / (a.dur || 4), 0, 1), env = smoothstep(0, 0.16, u) * (1 - smoothstep(0.84, 1, u)), L = this.L, rig = this.rig;
+    if (a.mode === 'behind') {
+      for (let s = 0; s < 2; s++) { const c = this.armPose('behind', s); c.pos.x -= SIDE_SIGN[s] * 0.03 * L; P.hand[s].lerp(c, env); }
+      P.chest.x -= 0.05 * env; P.head.x -= 0.04 * env; P.hipsRot.z += Math.sin(t * 0.6 + (a.ph || 0)) * 0.012 * env;
+    } else if (a.mode === 'glove') {
+      const sc = this.shoulderC[1], hr = this.armPose('hang', 1);
+      hr.pos.set(sc.x + 0.14 * L, sc.y - 0.5 * L, sc.z + 0.44 * L); hr.pole.set(-0.6, -0.3, -1); hr.pron = -0.9; hr.flex = 0.2;
+      P.hand[1].lerp(hr, env);
+      const tug = Math.max(0, Math.sin(t * 6.5)) * (Math.sin(t * 0.9 + 1) > -0.4 ? 1 : 0);
+      const hl = this.armPose('hang', 0);
+      hl.pos.set(hr.pos.x + 0.01, hr.pos.y + 0.035, hr.pos.z - 0.075 - tug * 0.03); hl.pole.set(0.8, -0.3, -0.7); hl.pron = -1.25; hl.flex = 0.35; hl.fing = 0.78; hl.thumb = 0.85;
+      P.hand[0].lerp(hl, env);
+      P.head.x += 0.3 * env; P.neck.x += 0.12 * env; P.head.y -= 0.14 * env; P.head.z += 0.1 * env;
+    } else if (a.mode === 'vials') {
+      const H = rig.H, sk = H / 1.75, y = rig.crotchY + 0.375 * (rig.neckBaseY - rig.crotchY), k = Math.floor(t * 0.9) % 3, th = 0.6 + k * 0.16;
+      const hl = this.armPose('hang', 0);
+      hl.posR.set(Math.sin(th) * 0.2 * sk + 0.03, y + 0.06 * sk + Math.abs(Math.sin(t * 2.8)) * 0.012, Math.cos(th) * 0.15 * sk + 0.05);
+      hl.space = 1; hl.pole.set(1, -0.2, -0.8); hl.pron = -1.0; hl.flex = 0.45; hl.fing = 0.45 + 0.25 * Math.sin(t * 2.8); hl.thumb = 0.5;
+      P.hand[0].lerp(hl, env);
+      P.head.x += 0.5 * env; P.neck.x += 0.16 * env; P.head.y += 0.36 * env; P.chest.y += 0.08 * env;
+    } else { // 'still': rigid; the head moves in small sudden steps
+      const step = Math.round(Math.sin(t * 0.7 + (a.ph || 0)) * 2.5) / 2.5;
+      this.dHeadStep = damp(this.dHeadStep || 0, step, 9, 1 / 60);
+      P.head.y += this.dHeadStep * 0.42 * env; P.head.z += Math.abs(this.dHeadStep) * 0.2 * env; P.neck.y += this.dHeadStep * 0.12 * env;
+    }
+  }
+  // inspection: the injector up beside the beak, the glass flicked twice, a bead squeezed from the needle.
+  // Targets are in root space (looking at the injector pitches the chest, which must not move the hand).
+  poseDInspect(P, a, root) {
+    const t = a.t, dur = a.dur || 4.4, rig = this.rig, sk = rig.H / 1.75;
+    const up = smoothstep(0.05, 0.85, t) * (1 - smoothstep(dur - 0.9, dur - 0.1, t));
+    const hx = -0.1 * sk, hy = rig.eyeY - 0.05 * sk, hz = 0.27 * sk;
+    const hr = this.armPose('hang', 1);
+    hr.posR.set(hx, hy, hz); hr.space = 1; hr.pole.set(-0.7, -1, 0.1); hr.pron = a.pron != null ? a.pron : -1.5; hr.flex = 0.1;
+    hr.thumb = 0.5 + 0.5 * smoothstep(2.5, 2.75, t) * (1 - smoothstep(3.0, 3.3, t));
+    P.hand[1].lerp(hr, up);
+    if (!a.squirt && t > 2.7) a.squirt = 1;
+    // the left hand comes up beside the barrel and flicks it with a fingertip
+    const near = smoothstep(0.9, 1.4, t) * (1 - smoothstep(2.4, 2.9, t));
+    const flick = Math.exp(-Math.pow((t - 1.65) / 0.06, 2)) + Math.exp(-Math.pow((t - 2.1) / 0.06, 2));
+    const hl = this.armPose('hang', 0);
+    hl.posR.set(hx + 0.075 * sk, hy - 0.05 * sk, hz + 0.01 * sk); hl.space = 1; hl.pole.set(0.8, -1, 0); hl.pron = -1.3; hl.flex = -0.2 - flick * 0.5; hl.fing = 0.75 - flick * 0.7; hl.thumb = 0.7;
+    P.hand[0].lerp(hl, near * up);
+    const c = Math.cos(root.yaw), s = Math.sin(root.yaw);
+    _vc.set(root.pos.x + hx * c + hz * s, root.pos.y + hy, root.pos.z - hx * s + hz * c);
+    this.aimHead(P, root, _vc, 0.8 * up);
+    P.head.z += (a.dir || 1) * 0.2 * up;
+  }
+  // the injection: a hand clamps the subject's shoulder, the needle hand rises, drives down into the neck
+  // (or the upper arm), holds while the thumb presses the plunger, and withdraws
+  poseDInject(P, a, root) {
+    const v = a.target; if (!v || v.removed) return;
+    const t = a.t, L = this.L, sk = this.rig.H / 1.75, sc = this.shoulderC[1];
+    const reach = smoothstep(0, 0.45, t) * (1 - smoothstep(2.5, 3.0, t));
+    const k1 = smoothstep(0.25, 0.85, t) * (1 - smoothstep(2.45, 2.95, t)), k2 = smoothstep(0.85, 1.02, t) * (1 - smoothstep(2.0, 2.4, t));
+    if (!a.hit && t >= 1.02) a.hit = 1;
+    const hl = P.hand[0];
+    this.toRoot(v.boneWPos[SB('upperarm', 1)], root, _va);
+    hl.posR.copy(_va); hl.posR.y += 0.05 * sk; hl.space = reach; hl.pole.set(0.9, -0.5, -0.4); hl.pron = lerp(hl.pron, -1.5, reach); hl.flex = lerp(hl.flex, 0.5, reach); hl.fing = lerp(hl.fing, 0.85, reach); hl.thumb = lerp(hl.thumb, 0.7, reach);
+    // wound up: fist high beside the head, needle pointing down
+    const hr = P.hand[1], wu = this.Pa.hand[1];
+    wu.copy(hr); wu.pos.set(sc.x - 0.1 * L, sc.y + 0.08 * L, sc.z + 0.3 * L); wu.space = 0; wu.pole.set(-1, -0.7, -0.5); wu.pron = 0.15; wu.flex = 0.25;
+    hr.lerp(wu, k1);
+    // the strike: the needle tip is placed on the side of the neck (or the outside of the upper arm) and
+    // driven in a little; the wrist target is solved back from the tip using last frame's hand orientation
+    const npc = this.npc, rig = this.rig, hb = SB('hand', 1), vy = v.root.yaw;
+    const lx = Math.cos(vy), lz = -Math.sin(vy);                         // the subject's left, in world space
+    const tdx = root.pos.x - v.root.pos.x, tdz = root.pos.z - v.root.pos.z, tl = Math.hypot(tdx, tdz) || 1;
+    const tb = a.region === 'arm' ? v.boneWPos[SB('upperarm', 0)] : v.boneWPos[B.neck], vs = v.rig.H / 1.75;
+    if (a.region === 'arm') _vb.set(tb.x + lx * 0.055 * vs + tdx / tl * 0.02, tb.y - 0.075 * vs, tb.z + lz * 0.055 * vs + tdz / tl * 0.02);
+    else _vb.set(tb.x + lx * 0.032 * vs + tdx / tl * 0.045 * vs, tb.y + 0.035 * vs, tb.z + lz * 0.032 * vs + tdz / tl * 0.045 * vs);
+    a.point = a.point || new V3(); a.point.copy(_vb);
+    _vc.set(0, 0, 0).addScaledVector(rig.armDir[1], rig.palmLen * 0.62).addScaledVector(rig.armE2[1], 0.006 + 0.008 * sk).addScaledVector(rig.armE1[1], -0.13 * sk).applyQuaternion(npc.boneWRot[hb]);
+    const dn = _vd.copy(rig.armE1[1]).negate().applyQuaternion(npc.boneWRot[hb]), dep = 0.016 * smoothstep(1.0, 1.25, t);
+    _vb.addScaledVector(dn, dep).sub(_vc);                                 // world wrist target
+    this.toRoot(_vb, root, _vb);
+    const st = this.Pb.hand[1]; st.copy(hr);
+    st.posR.copy(_vb); st.space = 1; st.pole.set(-1, -0.6, -0.3); st.pron = 0.5; st.flex = 0.8;
+    st.thumb = 0.5 + 0.5 * smoothstep(1.15, 1.8, t);
+    hr.lerp(st, k2);
+    P.spine.x += 0.05 * k2; P.chest.x += 0.08 * Math.max(k1 * 0.5, k2); P.head.z -= 0.15 * k2;
+    this.aimHead(P, root, a.point, 0.75 * Math.max(k1, k2));
+  }
+  // the trigger: the left hand rises toward an infected subject, palm out, and slowly closes into a fist
+  poseDTrigger(P, a, root) {
+    const s = a.target, t = a.t, L = this.L, dur = a.dur || 3.4, sc = this.shoulderC[0];
+    const up = smoothstep(0.1, 0.75, t) * (1 - smoothstep(dur - 1.0, dur - 0.1, t));
+    const close = smoothstep(0.95, 1.95, t);
+    if (!a.fire && t >= 1.95) a.fire = 1;
+    let yaw = 0;
+    if (s && !s.removed) { this.toRoot(s.boneWPos[B.chest], root, _va); yaw = clamp(Math.atan2(_va.x, _va.z), -0.8, 0.8); }
+    const hl = this.armPose('hang', 0), tremble = close > 0 && close < 1 ? Math.sin(t * 40) * 0.004 : 0;
+    hl.pos.set(sc.x + Math.sin(yaw) * 0.82 * L - 0.06 * L, sc.y + 0.1 * L + tremble, sc.z + Math.cos(yaw) * 0.82 * L);
+    hl.pole.set(0.7, -1, -0.2); hl.pron = -1.45; hl.flex = lerp(-0.8, 0.15, close); hl.dev = 0; hl.fing = lerp(0.02, 1, close); hl.thumb = lerp(0.05, 0.95, close);
+    P.hand[0].lerp(hl, up);
+    P.chest.y += yaw * 0.35 * up; P.neck.y += yaw * 0.25 * up; P.head.y += yaw * 0.25 * up;
+    P.head.z += (a.dir || 1) * 0.32 * up; P.head.x += 0.14 * close * up; P.chest.x -= 0.05 * up;
   }
   // --- solver -------------------------------------------------------------------------
   solve(P, root, dt) {

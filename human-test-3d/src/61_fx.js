@@ -148,6 +148,14 @@ class FX {
       this.smoke.emit(p.x, p.y, p.z, d.x * sp, d.y * sp, d.z * sp, 0.4 + Math.random() * 0.4, 0.03, 0.14, lerp(c.r, 0.8, 0.5), lerp(c.g, 0.8, 0.5), lerp(c.b, 0.8, 0.5), 0.45, 0.2, 3);
     }
   }
+  // a bead of the doctor's green serum: a few glowing droplets along dir, and a faint mist
+  serum(p, dir, n = 6, k = 1) {
+    for (let i = 0; i < n; i++) {
+      const sp = (0.35 + Math.random() * 0.9) * k;
+      this.glow.emit(p.x, p.y, p.z, dir.x * sp + (Math.random() - 0.5) * 0.25, dir.y * sp + (Math.random() - 0.5) * 0.25 + 0.15, dir.z * sp + (Math.random() - 0.5) * 0.25, 0.35 + Math.random() * 0.35, 0.012, 0.004, 0.35, 1.0, 0.45, 0.85, 4.5, 1.5);
+    }
+    for (let i = 0; i < Math.ceil(n / 3); i++) this.smoke.emit(p.x, p.y, p.z, dir.x * 0.2 * k, 0.05, dir.z * 0.2 * k, 0.5 + Math.random() * 0.4, 0.01, 0.06, 0.55, 0.85, 0.55, 0.22, -0.05, 2.5);
+  }
   decal(p, n, size, kind) {
     let d;
     if (this.decals.length >= this.maxDecals) { d = this.decals.shift(); }
