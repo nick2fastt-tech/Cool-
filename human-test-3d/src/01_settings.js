@@ -26,7 +26,7 @@ const DEFAULT_SETTINGS = {
   zombies: {
     reincarnation: true, delayPreset: 'short', delay: 5, headTraumaPrevents: true,
     aggression: true, targetNPCs: true, detection: 18, speed: 1.0, targetMode: 'nearest',
-    attackDamage: 18, vocalize: true, infection: true, infectionTime: 12, feeding: true, biteDamage: 24
+    attackDamage: 18, vocalize: true, infection: true, infectionTime: 60, feeding: true, biteDamage: 24
   },
   gore: { level: 'extreme', dismember: true, gibs: true, pools: true, screenBlood: true, blood: 1.0 },
   weapons: {
@@ -78,7 +78,13 @@ const Settings = {
   load() {
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
-      if (raw) deepMerge(this.data, JSON.parse(raw));
+      if (raw) {
+        const saved = JSON.parse(raw);
+        // V1.10: infections take about a minute (the old 12 s default is moved to the new one)
+        if (!(saved.rev >= 110) && saved.zombies && saved.zombies.infectionTime === 12) saved.zombies.infectionTime = 60;
+        deepMerge(this.data, saved);
+      }
+      this.data.rev = 110;
     } catch (e) { this.storageOk = false; }
     return this.data;
   },

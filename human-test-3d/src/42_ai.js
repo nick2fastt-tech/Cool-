@@ -20,6 +20,13 @@ class Brain {
   }
 }
 
+// infection timeline as fractions of the infection time (the default time is 60 s; Settings › zombies)
+const INFECTION = { dur: 60, stage1: 0.25, stage2: 0.5, collapse: 0.75 };
+// where feeding zombies kneel around a body: which part they bite, which side, nudged along the body
+const FEED_SLOTS = [
+  { part: RAG.SPINE, side: 1, along: 0 }, { part: RAG.SPINE, side: -1, along: 0.05 },
+  { part: RAG.THIGH_R, side: 1, along: -0.1 }, { part: RAG.CHEST, side: -1, along: 0.15 }
+];
 class AISystem {
   constructor(game) { this.game = game; this.stimuli = []; this._tmp = new V3(); this.aimed = null; }
   attach(npc) { npc.brain = new Brain(npc); npc.brain.home.copy(npc.root.pos); }
@@ -196,7 +203,7 @@ class AISystem {
         break;
       }
       case 'wander': {
-        b.speed = npc.personality.walkSpeed * Math.sqrt(npc.rig.legLen / 0.84) * (1 - 0.45 * Math.max(anim.limp[0], anim.limp[1]));
+        b.speed = npc.personality.walkSpeed * Math.sqrt(npc.rig.legLen / 0.84) * (1 - 0.45 * Math.max(anim.limp[0], anim.limp[1])) * (1 - 0.4 * smoothstep(0.4, 0.75, anim.sick || 0));
         if (!b.holdPose) anim.setUpper('hang');
         anim.setPosture('stand');
         this.idleLook(npc, b, dt);
@@ -209,7 +216,7 @@ class AISystem {
         break;
       }
       case 'flee': {
-        const run = npc.personality.runSpeed * Math.sqrt(npc.rig.legLen / 0.84) * (1 - 0.5 * Math.max(anim.limp[0], anim.limp[1]));
+        const run = npc.personality.runSpeed * Math.sqrt(npc.rig.legLen / 0.84) * (1 - 0.5 * Math.max(anim.limp[0], anim.limp[1])) * (1 - 0.45 * smoothstep(0.4, 0.75, anim.sick || 0));
         b.speed = run;
         anim.setPosture('stand'); anim.setUpper(npc.fear > 0.85 && b.t < 1.2 ? 'flail' : 'hang');
         // direction away from threat
@@ -505,7 +512,7 @@ class AISystem {
       // standing still: varied idles (sway, lolling head, sniffing, reaching at nothing, shudders)
       const ia = anim.action;
       if (b.speed === 0 && !anim.crawl && (!ia || ia.ending) && anim.speed < 0.2) {
-        const modes = ['sway', 'sway', 'loll', 'sniff', 'reach', 'shudder'];
+        const modes = ['sway', 'sway', 'loll', 'sniff', 'reach', 'shudder', 'twitch', 'chatter', 'stagger', 'scratch', 'lookround'];
         anim.setAction('zidle', { mode: modes[Math.floor(Math.random() * modes.length)], dur: 2.2 + Math.random() * 2.8, ph: Math.random() * 6, side: Math.random() < 0.5 ? 0 : 1, inT: 0.5, outT: 0.6 });
       } else if (b.speed > 0 && ia && ia.type === 'zidle' && !ia.ending) anim.setAction(null);
       if (npc.root.pos.distanceTo(b.dest) < 0.7) { this.pickWander(npc, b); b.state = 'zIdle'; }
@@ -514,7 +521,9 @@ class AISystem {
         b.lookT = (1.2 + Math.random() * 2.6) / zv.headRate;
         const a = npc.root.yaw + (Math.random() - 0.5) * 2.6;
         b.lookPos = b.lookPos || new V3();
-        b.lookPos.set(npc.root.pos.x + Math.sin(a) * 4, npc.rig.eyeY + (Math.random() - 0.6) * 1.2, npc.root.pos.z + Math.cos(a) * 4);
+        b.lookPos.set(npc.root.pos.x + Math.sin(a) * 4, npc.root.pos.y + npc.rig.eyeY + (Math.random() - 0.6) * 1.2, npc.root.pos.z + Math.cos(a) * 4);
+        // or a glance at whoever is close by (another zombie shuffling past, a body, someone hiding)
+        if (Math.random() < 0.4) { let best = null, bd = 9; for (const o of this.game.npcs.list) { if (o === npc || o.removed) continue; const d = o.root.pos.distanceTo(npc.root.pos); if (d < bd) { bd = d; best = o; } } if (best) b.lookPos.copy(best.boneWPos[B.head]); }
         anim.kick(B.head, _v1.set((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 7, (Math.random() - 0.5) * 3));
       }
       if (b.lookPos && b.speed < 0.3) anim.lookAt(b.lookPos, 0.7); else anim.clearLook();
@@ -589,7 +598,7 @@ class AISystem {
     const res = v.applyHit({ region, damage: Z.attackDamage * (0.8 + Math.random() * 0.4) * (blocked ? 0.45 : 1) / REGION_DAMAGE_MUL[region], weapon: 'zombie', dir: dir.clone(), point: p.clone(), force: 5, threatPos: z.root.pos.clone() });
     g.gore.onClaw(v, z, vi, p, dir);
     g.hits.report(v, region, res, 'Zombie Scratch', p);
-    if (Z.infection && !v.infection && Math.random() < 0.5) v.infection = { t: 0, dur: Z.infectionTime * (0.8 + Math.random() * 0.4), src: z.idStr };
+    if (Z.infection && !v.infection && Math.random() < 0.5) v.infection = { t: 0, dur: Z.infectionTime * (0.92 + Math.random() * 0.16), src: z.idStr };
     if (v.lifeState === 'alive') {
       // the reaction depends on where the claw lands and what the victim was doing
       const running = v.anim.speed > 2.2;
@@ -618,6 +627,7 @@ class AISystem {
     let best = null, bd = r;
     for (const o of this.game.npcs.list) {
       if (o === npc || o.removed || o.lifeState !== 'dead' || o.physMode !== 'ragdoll' || (o.feeders || 0) >= 4 || o.horror || (o.vamp && o.vamp.state !== 'none')) continue;
+      if (npc.brain && npc.brain.skipCorpse === o && this.game.time < npc.brain.skipT) continue;
       const d = o.root.pos.distanceTo(npc.root.pos);
       if (d < bd) { bd = d; best = o; }
     }
@@ -682,7 +692,7 @@ class AISystem {
     const res = v.applyHit({ region, damage: Z.biteDamage * pileK / REGION_DAMAGE_MUL[region], weapon: 'bite', dir, force: 2, threatPos: z.root.pos.clone() });
     this.game.gore.onBite(v, z, [region]);
     this.game.hits.report(v, region, res, 'Zombie Bite', null);
-    if (Z.infection && !v.infection) v.infection = { t: 0, dur: Z.infectionTime * (0.8 + Math.random() * 0.4), src: z.idStr };
+    if (Z.infection && !v.infection) v.infection = { t: 0, dur: Z.infectionTime * (0.92 + Math.random() * 0.16), src: z.idStr };
     v.anim.kick(B.neck, _v3.set(0.6, (Math.random() - 0.5) * 2, 0));
     v.anim.kick(B.chest, _v3.set(-0.8, 0, 0));
     if (res.killed) { z.kills++; HT.log('death', `${v.idStr} ${v.name} was killed by ${z.idStr}`); }
@@ -765,7 +775,7 @@ class AISystem {
       this.game.hits.report(v, REGION.ABDOMEN, res, 'Zombie Gut Punch', null);
       v.anim.kick(B.spine, _v2.set(2.2, 0, 0)); v.anim.kick(B.chest, _v2.set(1.6, 0, 0));
       this.game.audio.play('pain0', { pos: v.boneWPos[B.head].clone(), gain: 1 });
-      if (Z.infection && !v.infection) v.infection = { t: 0, dur: Z.infectionTime * (0.8 + Math.random() * 0.4), src: z.idStr };
+      if (Z.infection && !v.infection) v.infection = { t: 0, dur: Z.infectionTime * (0.92 + Math.random() * 0.16), src: z.idStr };
       if (res.killed) { z.kills++; return; }
     }
     if (act.ripEvent) {
@@ -853,7 +863,31 @@ class AISystem {
     b.state = 'zFeed'; b.t = 0; b.corpse = c; b.feedT = 0; b.biteT = 1.3; b.eating = false;
     c.feeders = (c.feeders || 0) + 1;
     z.rag.noCollideWith = c.rag;
+    // a place at the body: the free slot whose kneeling spot is nearest
+    const taken = new Set(); for (const o of this.game.npcs.list) if (o !== z && o.brain && o.brain.corpse === c && o.brain.feedSlot != null) taken.add(o.brain.feedSlot);
+    let best = 0, bd = 1e9;
+    for (let i = 0; i < FEED_SLOTS.length; i++) { if (taken.has(i)) continue; const sp = this.feedSpot(z, c, i, _v5); const d = Math.hypot(sp.x - z.root.pos.x, sp.z - z.root.pos.z); if (d < bd) { bd = d; best = i; } }
+    b.feedSlot = best; b.feedAxis = null;
     z.lastReaction = 'Feeding';
+  }
+  // the bite point on the body for a slot, and the spot to kneel at beside it (in out, with out.bite)
+  feedSpot(z, c, slot, out) {
+    const R = c.rag.bodies, S = FEED_SLOTS[slot] || FEED_SLOTS[0], b = z.brain;
+    const pel = R[RAG.PELVIS].pos, ch = R[RAG.CHEST].pos;
+    let ax = ch.x - pel.x, az = ch.z - pel.z, al = Math.hypot(ax, az);
+    if (al < 0.08 && b && b.feedAxis) { ax = b.feedAxis.x; az = b.feedAxis.z; al = 1; } // body folded up: keep the last heading
+    else if (al < 1e-3) { ax = 1; az = 0; al = 1; }
+    ax /= al; az /= al;
+    if (b) { b.feedAxis = b.feedAxis || new V3(); b.feedAxis.set(ax, 0, az); }
+    const det = c.rag.detached, pi = det && det[S.part] ? (det[RAG.SPINE] ? RAG.CHEST : RAG.SPINE) : S.part;
+    const part = R[pi].pos;
+    const bite = out.bite || (out.bite = new V3());
+    bite.copy(part); bite.y += 0.05;
+    const reach = 0.42 * z.rig.H / 1.75;
+    // perpendicular to the body, on the slot's side, nudged along it
+    out.set(part.x + az * S.side * reach + ax * S.along, 0, part.z - ax * S.side * reach + az * S.along);
+    out.y = this.game.env.groundHeight(out.x, out.z, part.y + 0.3);
+    return out;
   }
   zombieFeed(z, b, dt, Z) {
     const c = b.corpse;
@@ -864,22 +898,25 @@ class AISystem {
       const live = this.selectTarget(z, { detection: 4.5, targetMode: 'nearest' });
       if (live && live.physMode === 'anim' && !live.grabbedBy) { this.endFeed(z); z.zombieTarget = live; return false; }
     }
-    const tb = c.rag.bodies[c.gore && c.gore.headGone ? RAG.CHEST : RAG.SPINE].pos;
-    const side = _v1.subVectors(z.root.pos, tb); side.y = 0;
-    if (side.lengthSq() < 1e-4) side.set(1, 0, 0);
-    side.normalize();
-    const spot = _v2.copy(tb).addScaledVector(side, 0.62); spot.y = 0;
+    if (b.feedSlot == null) b.feedSlot = 0;
+    const spot = this.feedSpot(z, c, b.feedSlot, _v2), tb = spot.bite;
     const d = Math.hypot(z.root.pos.x - spot.x, z.root.pos.z - spot.z);
-    if (!b.eating && d > 0.3) {
-      b.dest.copy(spot); b.speed = (b.zspeed || 0.8) * 0.9; b.faceTarget = null;
+    if (!b.eating && d > 0.35) {
+      b.dest.copy(spot); b.speed = (b.zspeed || 0.8) * 0.9 * (d < 1.2 ? 0.7 : 1); b.faceTarget = null;
       z.anim.lookAt(tb, 0.8); z.anim.setUpper('hang');
-      if (b.t > 12) this.endFeed(z);
+      if (b.t > 12) { this.endFeed(z); b.skipCorpse = c; b.skipT = this.game.time + 15; }
       return true;
     }
-    b.eating = true; b.speed = 0; b.faceTarget = tb.clone();
+    // kneeling at the body: stay on the spot as the body shifts, face the bite point
+    if (d > 0.9) { b.eating = false; return true; }
+    b.eating = true; b.speed = 0; b.vel.set(0, 0, 0);
+    const k = Math.min(1, dt * 4);
+    z.root.pos.x += (spot.x - z.root.pos.x) * k; z.root.pos.z += (spot.z - z.root.pos.z) * k;
+    z.root.yaw = angleDamp(z.root.yaw, Math.atan2(tb.x - z.root.pos.x, tb.z - z.root.pos.z), 6, dt);
+    b.faceTarget = null;
     if (!z.anim.action || z.anim.action.type !== 'feed' || z.anim.action.ending) z.anim.setAction('feed', { target: c, point: new V3(), hand: Math.random() < 0.5 ? 0 : 1, outT: 0.9 });
     const fa = z.anim.action;
-    fa.point.copy(tb); fa.point.y += 0.04;
+    fa.point.copy(tb);
     if (fa.mode === 'chew') { b.lookT = (b.lookT || 0) - dt; if (b.lookT <= 0) { b.lookT = 0.8 + Math.random() * 1.2; b.lookPos = (b.lookPos || new V3()).set(z.root.pos.x + (Math.random() - 0.5) * 6, z.rig.eyeY * 0.6, z.root.pos.z + (Math.random() - 0.5) * 6); } z.anim.lookAt(b.lookPos, 0.7); }
     else z.anim.lookAt(tb, 0.6);
     b.feedT += dt;
@@ -901,29 +938,65 @@ class AISystem {
   endFeed(z) {
     const b = z.brain; if (!b) return;
     if (b.corpse) b.corpse.feeders = Math.max(0, (b.corpse.feeders || 1) - 1);
-    b.corpse = null; b.eating = false; b.faceTarget = null;
+    b.corpse = null; b.eating = false; b.faceTarget = null; b.feedSlot = null;
     if (z.anim.action && z.anim.action.type === 'feed') z.anim.setAction(null);
     if (b.state === 'zFeed') { b.state = 'zIdle'; b.t = 0; }
   }
   // --- infection: bitten humans sicken, collapse and turn --------------------------------------
+  // infection: a slow, staged sickness (default 60 s) on the person's own body, then a collapse and the turn
+  //   0-25 %  mostly normal: a little sweat, now and then a headache, nausea or chills
+  //   25-50 % coughing, more sweat, the first faint green
+  //   50-75 % greener and sallow, tired and slow, swaying and lolling, retching
+  //   75 %    collapses (inactive); the zombie transformation runs on the ground and they rise as the time runs out
   updateInfection(npc, b, dt) {
-    const inf = npc.infection;
+    const inf = npc.infection, u = npc.material.userData.u, a = npc.anim, I = INFECTION;
+    // only an ordinary living person sickens; anything else drops the infection
+    if (npc.horror || npc.lifeState !== 'alive' || (npc.vamp && npc.vamp.state !== 'none')) { if (npc.lifeState === 'alive') { npc.infection = null; u.uSick.value = 0; u.uSweat.value = 0; a.sick = 0; } return; }
+    if (!inf.init) { inf.init = true; inf.dur = Math.max(2, inf.dur || I.dur); inf.cueT = 3 + Math.random() * 4; if (u.uZLook) u.uZLook.value.set(0, 0, 0, Math.random() * 50); }
     inf.t += dt;
-    const k = inf.t / inf.dur;
-    const u = npc.material.userData.u;
-    u.uZombie.value = Math.max(u.uZombie.value, smoothstep(0.1, 1.0, k) * 0.5);
-    if (k > 0.45) {
-      for (let s = 0; s < 2; s++) npc.anim.limp[s] = Math.max(npc.anim.limp[s], (k - 0.45) * 0.9);
-      npc.anim.setPosture('wounded', 0.6);
-      inf.coughT = (inf.coughT || 0) - dt;
-      if (inf.coughT <= 0) { inf.coughT = 2 + Math.random() * 3; this.game.audio.play(Math.random() < 0.5 ? 'gurgle' : 'pain0', { pos: npc.boneWPos[B.head].clone(), gain: 0.7 }); npc.anim.kick(B.chest, _v1.set(1.2, 0, 0)); }
+    const k = clamp(inf.t / inf.dur, 0, 1);
+    inf.stage = k < I.stage1 ? 0 : k < I.stage2 ? 1 : k < I.collapse ? 2 : 3;
+    // the look, blended on the same skin: sweat from the start, a faint green from the second stage
+    u.uSick.value = Math.max(u.uSick.value, smoothstep(0, I.collapse, k));
+    u.uSweat.value = Math.max(u.uSweat.value, 0.22 + 0.68 * smoothstep(0, I.stage2 + 0.1, k));
+    u.uZombie.value = Math.max(u.uZombie.value, smoothstep(I.stage1, I.collapse, k) * 0.42);
+    a.sick = smoothstep(0.05, I.collapse, k);
+    // what they do about it
+    const free = npc.physMode === 'anim' && !npc.grabbedBy && !npc.seatLock && !a.clip && (!a.action || a.action.ending || a.action.type === 'ill');
+    const pick = (l) => l[Math.floor(Math.random() * l.length)];
+    inf.cueT -= dt;
+    if (inf.cueT <= 0) {
+      if (inf.stage === 0) { if (free && Math.random() < 0.75) a.setAction('ill', { mode: pick(['temple', 'stomach', 'neck', 'shiver']), side: Math.random() < 0.5 ? 0 : 1, dur: 1.8 + Math.random() * 1.4, inT: 0.35, outT: 0.5 }); inf.cueT = 5 + Math.random() * 6; }
+      else if (inf.stage === 1) { if (Math.random() < 0.7) this.cough(npc, free, 1 + Math.floor(Math.random() * 3)); else if (free) a.setAction('ill', { mode: pick(['temple', 'stomach', 'shiver']), side: 1, dur: 2, inT: 0.35, outT: 0.5 }); inf.cueT = 3 + Math.random() * 4; }
+      else if (inf.stage === 2) {
+        if (Math.random() < 0.4) this.cough(npc, free, 2 + Math.floor(Math.random() * 3));
+        else if (free) a.setAction('ill', { mode: pick(['sway', 'retch', 'loll', 'temple', 'stomach']), side: Math.random() < 0.5 ? 0 : 1, ph: Math.random() * 6, dur: 2 + Math.random() * 1.6, inT: 0.4, outT: 0.6 });
+        inf.cueT = 2.2 + Math.random() * 2.8;
+        a.kick(B.head, _v1.set((Math.random() - 0.3) * 1.6, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 1.6));
+      }
     }
-    if (k >= 1 && npc.lifeState === 'alive') {
-      npc.lastReaction = 'Turning (Infection)';
-      HT.log('zombie', `${npc.idStr} ${npc.name} succumbed to the infection`);
+    if (inf.stage >= 2) {
+      a.setPosture('wounded', 0.8);
+      for (let s = 0; s < 2; s++) a.limp[s] = Math.max(a.limp[s], (k - I.stage2) * 0.5);
+    }
+    if (k >= I.collapse && npc.lifeState === 'alive') {
+      // passes out: the knees give, the body crumples, and the turn begins where it falls
+      inf.collapsed = true;
+      npc.lastReaction = 'Collapsed (Infection)';
+      HT.log('zombie', `${npc.idStr} ${npc.name} collapsed from the infection`);
       if (npc.grabbedBy && npc.grabbedBy.brain) this.endGrab(npc.grabbedBy);
+      if (this.game.transit) this.game.transit.interrupt(npc);
+      const fwd = _v2.set(Math.sin(npc.root.yaw), 0, Math.cos(npc.root.yaw));
       npc.die({ weapon: 'infection' });
+      if (npc.physMode === 'ragdoll') { const R = npc.rag.bodies; R[RAG.CHEST].vel.addScaledVector(fwd, 0.5); R[RAG.HEAD].vel.addScaledVector(fwd, 0.4); R[RAG.PELVIS].vel.y -= 0.3; }
+      this.game.audio.play('gurgle', { pos: npc.boneWPos[B.head].clone(), gain: 0.5 });
     }
+  }
+  // a coughing fit: the sound, and the fist to the mouth when the hands are free
+  cough(npc, free, n) {
+    this.game.audio.play(npc.app && npc.app.male ? 'cough0' : 'cough1', { pos: npc.boneWPos[B.head].clone(), gain: 0.75, rate: 0.9 + Math.random() * 0.2 });
+    if (free) npc.anim.setAction('ill', { mode: 'cough', n, side: 1, dur: 0.5 + n * 0.42, inT: 0.2, outT: 0.4 });
+    else npc.anim.kick(B.chest, _v1.set(1.4, 0, 0));
   }
   zombieAttack(z, tgt) {
     const Z = Settings.data.zombies;
@@ -933,7 +1006,7 @@ class AISystem {
     const region = crawl ? (Math.random() < 0.5 ? REGION.L_LOWER_LEG : REGION.R_LOWER_LEG) : (Math.random() < 0.4 ? (Math.random() < 0.5 ? REGION.L_FOREARM : REGION.R_FOREARM) : (Math.random() < 0.5 ? REGION.UPPER_CHEST : REGION.NECK));
     const res = tgt.applyHit({ region, damage: Z.attackDamage / REGION_DAMAGE_MUL[region], weapon: 'zombie', dir: dir.clone(), force: 5, threatPos: z.root.pos.clone() });
     this.game.hits.report(tgt, region, res, crawl ? 'Zombie Bite (Leg)' : 'Zombie Attack', null);
-    if (crawl || Math.random() < 0.5) { this.game.gore.onBite(tgt, z, [region]); if (Z.infection && !tgt.infection) tgt.infection = { t: 0, dur: Z.infectionTime * (0.8 + Math.random() * 0.4), src: z.idStr }; }
+    if (crawl || Math.random() < 0.5) { this.game.gore.onBite(tgt, z, [region]); if (Z.infection && !tgt.infection) tgt.infection = { t: 0, dur: Z.infectionTime * (0.92 + Math.random() * 0.16), src: z.idStr }; }
     if (tgt.lifeState === 'alive') {
       this.onHit(tgt, { region, dir: dir.clone(), force: 5, threatPos: z.root.pos.clone() });
       if ((tgt.health < 30 || crawl) && Math.random() < 0.45) { tgt.goRagdoll('Knockdown (Zombie)'); tgt.rag.bodies[RAG.CHEST].vel.addScaledVector(dir, crawl ? -1.5 : 2.5); }
@@ -974,7 +1047,7 @@ class AISystem {
       const minD = (o.physMode === 'ragdoll' ? 0.55 : 0.62);
       if (d2 < minD * minD && d2 > 1e-6) {
         const d = Math.sqrt(d2), push = (minD - d) / minD * 2.2;
-        if (isZ && (o === npc.zombieTarget || o === b.victim || o === b.corpse)) continue;
+        if (isZ && (o === npc.zombieTarget || o === b.victim || o === b.corpse || (b.corpse && o.brain && o.brain.corpse === b.corpse))) continue;
         if (isV && (o === b.vVictim || o === b.vTarget)) continue;
         if (b.hTarget === o || b.hVictim === o) continue;
         if (o === npc.grabbedBy) continue;

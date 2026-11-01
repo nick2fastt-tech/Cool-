@@ -12,7 +12,10 @@ const HORROR_DEFS = {
   doll: { label: 'Chucky', health: 150, armor: 0.8, walk: 0.95, run: 3.3, detect: 18, rushR: 5.5, reach: 0.82, damage: 20, cooldown: [0.9, 1.6],
     regions: [REGION.L_THIGH, REGION.R_THIGH, REGION.ABDOMEN, REGION.PELVIS, REGION.L_LOWER_LEG], knock: 0.22, clips: ['overhead', 'jab'] },
   slasher: { label: 'Jason', health: 700, armor: 0.45, walk: 1.1, run: 4.6, detect: 26, rushR: 0, reach: 1.25, damage: 58, cooldown: [1.4, 2.2],
-    regions: [REGION.NECK, REGION.UPPER_CHEST, REGION.TORSO, REGION.L_UPPER_ARM, REGION.R_UPPER_ARM], knock: 0.65, clips: ['overhead', 'backhand'] }
+    regions: [REGION.NECK, REGION.UPPER_CHEST, REGION.TORSO, REGION.L_UPPER_ARM, REGION.R_UPPER_ARM], knock: 0.65, clips: ['overhead', 'backhand'] },
+  // the containment doctor: never attacks; wanders, inspects his injector, and injects people
+  doctor: { label: 'The Physician', health: 420, armor: 0.55, walk: 0.78, run: 1.7, detect: 18, rushR: 0, reach: 0.75, damage: 0, cooldown: [16, 26],
+    regions: [REGION.NECK, REGION.L_UPPER_ARM, REGION.R_UPPER_ARM], knock: 0.4, clips: [] }
 };
 const _hz1 = new V3(), _hz2 = new V3();
 
@@ -34,7 +37,7 @@ class HorrorSystem {
     const p = pos ? pos.clone() : g.player.groundTarget(8);
     g.env.clampToBounds(p, 0.6);
     const yaw = Math.atan2(g.camera.position.x - p.x, g.camera.position.z - p.z);
-    const npc = g.npcs.spawn({ gender: 'male', pos: p, yaw, overrides: { special: kind === 'slasher' ? 'slasher' : 'doll' } });
+    const npc = g.npcs.spawn({ gender: 'male', pos: p, yaw, overrides: { special: HORROR_DEFS[kind] ? kind : 'doll' } });
     if (!npc) return null;
     npc.spawnKind = kind;
     HT.log('horror', `${npc.idStr} ${npc.horror.label} appeared`);
@@ -42,7 +45,7 @@ class HorrorSystem {
   }
   // called for every NPC built with a special look (spawn, rebuild, reset)
   attach(npc, special) {
-    const kind = special === 'slasher' ? 'slasher' : 'doll', def = HORROR_DEFS[kind];
+    const kind = HORROR_DEFS[special] ? special : 'doll', def = HORROR_DEFS[kind];
     npc.horror = { kind, label: def.label, def };
     npc.name = def.label;
     npc.health = npc.maxHealth = def.health;

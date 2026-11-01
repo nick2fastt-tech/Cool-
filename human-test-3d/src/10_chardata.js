@@ -289,6 +289,21 @@ function applySpecialLook(app, kind, rng) {
     app.bottom = { type: 'cargo', def: CHAR_DATA.bottoms.cargo, color: 0x2d2a24, color2: 0x1f1e1b, pattern: 'plain' };
     app.shoes = { type: 'boots', def: CHAR_DATA.shoes.boots, color: 0x2a2018, sole: 0x1d1a17, sock: 0x1c1c1e };
     app.mask = 'hockey'; app.weapon = 'machete';
+  } else if (kind === 'doctor') {
+    // an original containment-doctor design: tall and gaunt, a long buckled leather-brown coat, latex
+    // gloves, heavy boots, a leather hood with a beaked mask and round goggles under a wide hat,
+    // a stethoscope, vials on the belt and a brass-and-glass injector
+    Object.assign(app, { special: 'doctor', gender: 'male', male: true, firstName: 'The', lastName: 'Physician', name: 'The Physician', age: 52, height: 2.0 + jit() * 0.08, build: 'slim' });
+    Object.assign(app.body, { shoulder: 1.06, chest: 0.97, waist: 0.92, hip: 0.96, limb: 0.92, fat: 0.2, belly: 0.05, muscle: 0.85, massMul: 0.95, neck: 0.94, headScale: 1.0, legRatio: 1.04, armRatio: 1.05 });
+    app.skin = CHAR_DATA.skinTones[0];
+    app.hairStyle = 'bald'; app.facialHair = 'none';
+    app.outfitName = 'Containment Coat';
+    app.top = { type: 'longcoat', def: CHAR_DATA.tops.longcoat, color: 0x3a2c21, color2: 0x24190f, pattern: 'plain', under: { color: 0x1a1714 } };
+    app.coatLen = 0.44; app.coatOpen = true;
+    app.bottom = { type: 'trousers', def: CHAR_DATA.bottoms.trousers, color: 0x1d1a17, color2: 0x15120f, pattern: 'plain' };
+    app.shoes = { type: 'boots', def: CHAR_DATA.shoes.boots, color: 0x17120e, sole: 0x0e0c0a, sock: 0x111111 };
+    app.gloves = { color: 0xe4dfd0 };
+    app.mask = 'plague'; app.weapon = 'injector'; app.doctor = true;
   }
 }
 

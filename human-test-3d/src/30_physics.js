@@ -284,6 +284,7 @@ class PhysicsWorld {
     this.planes = []; this.heightfield = null; // fn(x,z)->h, normalFn(x,z,out)
     this.staticBoxes = null; this.staticGrid = null; this._sbSeen = new Set();
     this.movers = null; // moving axis-aligned collider groups (train cars): [{ min, max, boxes: [{ min, max, on }] }]
+    this.maxDepenBody = 2.2; this.maxDepenStatic = 7; // m/s: fastest overlap recovery between bodies / against the world
     this.contacts = []; this.contactPool = []; this.pairs = [];
     this.friction = 0.6; this.restitution = 0.1;
     this.npcCollisions = true; this.selfCollisions = true; this.propCollisions = true;
@@ -598,7 +599,9 @@ class PhysicsWorld {
       const d = _cd.subVectors(P0, P1).dot(c.n);
       if (d >= 0) continue;
       c.active = true;
-      const corr = _cc.copy(c.n).multiplyScalar(-d);
+      // deep overlaps (two bodies that started inside each other, a limb under the floor) are pushed
+      // apart over a few substeps at a bounded speed instead of in one jump that launches them
+      const corr = _cc.copy(c.n).multiplyScalar(Math.min(-d, (b1 ? this.maxDepenBody : this.maxDepenStatic) * h));
       c.lambdaN = applyBodyPairCorrection(b0, b1d, corr, 0, h, P0, P1, false);
       // static friction
       const P0n = _cp0.copy(c.r0).applyQuaternion(b0.rot).add(b0.pos);

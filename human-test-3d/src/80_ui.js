@@ -457,7 +457,7 @@ class UI {
     s = this.sec(b, 'Zombies');
     this.slider(s, 'Zombie speed', 'zombies.speed', 0.3, 2.5, 0.05, x => x.toFixed(2) + 'x');
     this.slider(s, 'Bite damage', 'zombies.biteDamage', 5, 60, 1);
-    this.slider(s, 'Infection time', 'zombies.infectionTime', 2, 60, 1, x => x + ' s');
+    this.slider(s, 'Infection time', 'zombies.infectionTime', 5, 120, 1, x => x + ' s');
     this.select(s, 'Rise delay (zombie mode)', [['immediate', 'Immediate'], ['short', 'Short (5s)'], ['medium', 'Medium (15s)'], ['long', 'Long (45s)']], Settings.data.zombies.delayPreset, v => Settings.set('zombies.delayPreset', v));
     this.toggle(s, 'Destroyed head stops rising', 'zombies.headTraumaPrevents');
     this.slider(s, 'Zombie detection range', 'zombies.detection', 2, 40, 0.5, x => x.toFixed(1) + ' m');

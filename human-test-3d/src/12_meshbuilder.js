@@ -134,8 +134,8 @@ function addLoft(mb, rings, cols, opts = {}) {
       const reg = typeof R.reg === 'function' ? R.reg(thn, p) : R.reg;
       mb.v(p.x, p.y, p.z, u0 + arc[j], R.v, col, mat, col2, wts, reg);
     }
-    // weld seam
-    mb.weld[base + cols] = base;
+    // weld seam (an open loft, e.g. a coat with an open front, keeps its edges apart)
+    if (!opts.open) mb.weld[base + cols] = base;
     ringBase.push(base);
   }
   // faces (+ orientation vote: face normal vs radial direction)
@@ -146,7 +146,7 @@ function addLoft(mb, rings, cols, opts = {}) {
     if (rings[i + 1].strip) continue;
     const a0 = ringBase[i], b0 = ringBase[i + 1];
     const rc = rings[i].c;
-    for (let j = 0; j < cols; j++) {
+    for (let j = 0; j < (opts.open ? cols - 1 : cols); j++) {
       const a = a0 + j, b = a0 + j + 1, c = b0 + j + 1, d = b0 + j;
       mb.quad(a, b, c, d);
       if (vr && (j < vr[0] || j >= vr[1])) continue;

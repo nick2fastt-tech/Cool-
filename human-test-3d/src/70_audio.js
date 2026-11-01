@@ -284,6 +284,18 @@ class AudioEngine {
           L[i] = Math.tanh((thump + hiss) * 1.4); }
         this.finish('rocketLaunch', b, 0.9); }
       this.synthVoice('gurgle', { dur: 0.9, f0: 90, slide: -0.2, jitter: 0.6, breath: 0.9, formants: [[400, 3, 1], [900, 4, 0.5], [2200, 5, 0.2]], drive: 2.5, seed: 15, norm: 0.55 });
+      // coughs: a short burst of breathy noise through the throat, twice (lower and higher voices)
+      for (const [name, f0, bpf] of [['cough0', 105, 1250], ['cough1', 175, 1650]]) {
+        const b = this.buf(0.75), L = b.L; const bp = new Biquad('bp', bpf, 1.4, sr), bp2 = new Biquad('bp', bpf * 2.1, 2.5, sr), lp = new Biquad('lp', 2800, 0.7, sr); let ph = 0;
+        for (let i = 0; i < L.length; i++) {
+          const t = i / sr, n = this.noise();
+          let env = 0; for (const [t0, a] of [[0, 1], [0.27, 0.62]]) { const u = t - t0; if (u > 0) env += a * Math.min(1, u / 0.012) * Math.exp(-u / 0.085); }
+          ph += TAU * f0 * (1 - 0.25 * Math.min(1, (t % 0.27) / 0.2)) / sr;
+          const voice = (Math.sin(ph) + 0.5 * Math.sin(ph * 2.01)) * 0.35;
+          L[i] = Math.tanh(lp.p(bp.p(n) * 1.6 + bp2.p(n) * 0.7 + voice) * env * 2.4);
+        }
+        this.finish(name, b, 0.7);
+      }
     } else if (group === 7) {
       // supernatural: vampire hiss, heartbeat, the turning swell, crumbling to ash
       { const b = this.buf(1.0), L = b.L; const hp = new Biquad('hp', 2300, 0.7, sr), bp = new Biquad('bp', 3400, 2.2, sr), lp = new Biquad('lp', 30, 0.7, sr);

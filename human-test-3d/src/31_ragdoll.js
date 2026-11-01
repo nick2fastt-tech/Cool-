@@ -8,6 +8,7 @@ const RAG = {
   THIGH_L: 10, SHIN_L: 11, FOOT_L: 12, THIGH_R: 13, SHIN_R: 14, FOOT_R: 15
 };
 const RAG_COUNT = 16;
+const _rgMv = new V3(); // ragdoll-private scratch (setDynamic runs inside callers that hold the shared ones)
 const RAG_NAMES = ['Pelvis', 'Abdomen', 'Chest', 'Head', 'L Upper Arm', 'L Forearm', 'L Hand', 'R Upper Arm', 'R Forearm', 'R Hand', 'L Thigh', 'L Shin', 'L Foot', 'R Thigh', 'R Shin', 'R Foot'];
 const RAG_BONE = [B.hips, B.spine, B.chest, B.head, B.upperarm_L, B.forearm_L, B.hand_L, B.upperarm_R, B.forearm_R, B.hand_R, B.thigh_L, B.shin_L, B.foot_L, B.thigh_R, B.shin_R, B.foot_R];
 const RAG_MASS = [0.142, 0.139, 0.216, 0.081, 0.028, 0.016, 0.006, 0.028, 0.016, 0.006, 0.100, 0.0465, 0.0145, 0.100, 0.0465, 0.0145];
@@ -166,9 +167,22 @@ class Ragdoll {
   }
   setDynamic(on, deadDamping) {
     this.dynamic = on;
+    // hand-over from animation to physics: keep the body's momentum but not the spikes of a single
+    // animated frame (snaps, clamps, root corrections), which used to fling bodies across the room
+    let mv = null;
+    if (on) {
+      mv = _rgMv.set(0, 0, 0); let m = 0;
+      for (const b of this.bodies) if (b.kinematic) { mv.addScaledVector(b.kinVel, b.mass); m += b.mass; }
+      if (m > 0) mv.multiplyScalar(1 / m);
+      const ms = mv.length(); if (ms > 7) mv.multiplyScalar(7 / ms);
+    }
     for (const b of this.bodies) {
       if (on) {
-        if (b.kinematic) { b.vel.copy(b.kinVel); b.omega.copy(b.kinOmega); b.kinematic = false; }
+        if (b.kinematic) {
+          b.vel.subVectors(b.kinVel, mv); const dl = b.vel.length(); if (dl > 3) b.vel.multiplyScalar(3 / dl); b.vel.add(mv);
+          b.omega.copy(b.kinOmega); const wl = b.omega.length(); if (wl > 9) b.omega.multiplyScalar(9 / wl);
+          b.kinematic = false;
+        }
         b.sleeping = false;
       } else if (!this.detached[b.index]) { b.kinematic = true; b.sleeping = false; b.vel.set(0, 0, 0); b.omega.set(0, 0, 0); }
     }

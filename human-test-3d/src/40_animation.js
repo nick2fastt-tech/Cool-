@@ -245,6 +245,8 @@ const VAMP_STYLE_NAMES = Object.keys(VAMP_STYLES);
 // stride, stance width, toe-out (rad), swing height, vertical bob, pelvis roll / yaw, side sway, arm swing,
 // forward lean (rad), landing foot pitch (hs: - heel first, + toe first), heavy: body dip on each landing
 const GAITS = {
+  // the containment doctor: long, unhurried, deliberate steps, upright, hardly any arm swing
+  doctor: { stride: 1.12, width: 0.78, toeOut: 0.05, stepH: 0.7, bob: 0.3, roll: 0.35, yaw: 0.35, sway: 0.35, arm: 0.12, lean: -0.01, hs: -0.26, heavy: 0.5 },
   // the slasher: long, heavy, deliberate strides, arms nearly still, a dip on every footfall
   slasher: { stride: 1.2, width: 1.2, toeOut: 0.14, stepH: 0.8, bob: 1.0, roll: 0.5, yaw: 0.45, sway: 0.8, arm: 0.25, lean: 0.06, hs: -0.32, heavy: 1.4 },
   // the doll: short quick steps on stiff little legs, a wide side-to-side waddle, big arm pumps
@@ -320,6 +322,7 @@ class HitSprings {
 }
 
 // ============================================================================
+const _feedFK = [[0, 0], [0, 0], [0, 0]];
 class Animator {
   constructor(npc) {
     this.npc = npc; this.rig = npc.rig;
@@ -643,9 +646,14 @@ class Animator {
     const trunkPitch = P.hipsRot.x + P.spine.x + P.chest.x;
     const chestYaw = pelYaw * (1 - 0.85 - 0.85);
     if (zs) {
-      const loll = zs.headLoll * zomb;
+      const loll = zs.headLoll * zomb, zv = this.zvar;
+      // each zombie's own stance: a head tilt, one shoulder dropped, a little extra hunch
+      if (zv && zv.hunch != null) { P.spine.x += zv.hunch * zomb * 0.5; P.chest.x += zv.hunch * zomb * 0.5; P.chest.z += zv.drop * zomb; }
+      // turning: the head swings round first, the shoulders follow, the hips come last
+      const yr = clamp(this.yawRate || 0, -3, 3) * zomb;
+      P.chest.y += yr * 0.07; this.turnLead = damp(this.turnLead || 0, yr * 0.14, 6, dt);
       P.neck.set(-trunkPitch * 0.25 + loll * 0.3, -chestYaw * 0.5, 0);
-      P.head.set(-trunkPitch * 0.25 + loll * 0.45 + pers.headTilt, -chestYaw * 0.5 + Math.sin(this.time * 0.9) * loll * 0.25, (mirror ? -1 : 1) * loll * 0.35 + Math.sin(this.time * 0.63) * loll * 0.3);
+      P.head.set(-trunkPitch * 0.25 + loll * 0.45 + pers.headTilt, -chestYaw * 0.5 + Math.sin(this.time * 0.9) * loll * 0.25 + (this.turnLead || 0), (mirror ? -1 : 1) * loll * 0.35 + Math.sin(this.time * 0.63) * loll * 0.3 + (zv && zv.tilt ? zv.tilt * zomb : 0));
     } else {
       P.neck.set(-trunkPitch * 0.4, -chestYaw * 0.5, 0);
       P.head.set(-trunkPitch * 0.45 + pers.headTilt, -chestYaw * 0.5, 0);
@@ -1027,6 +1035,7 @@ class Animator {
     else if (a.type === 'hlaugh') this.poseHLaugh(Pc, a, root);
     else if (a.type === 'gutpunch') this.poseGutPunch(Pc, a, root, dt);
     else if (a.type === 'gutted') this.poseGutted(Pc, a, root, dt);
+    else if (a.type === 'ill') this.poseIll(Pc, a, root, dt);
     else if (a.type === 'sit') this.poseSit(Pc, a, root, dt);
     else if (a.type === 'ridehold') this.poseRideHold(Pc, a, root, dt);
     else if (a.type === 'htilt') this.poseHTilt(Pc, a, root);
@@ -1193,15 +1202,43 @@ class Animator {
     const rig = this.rig, H = rig.H;
     const cyc = (t / (a.cycle || 1.9)) % 1;
     const dip = cyc < 0.3 ? smooth01(cyc / 0.3) : (cyc < 0.5 ? 1 : 1 - smooth01((cyc - 0.5) / 0.5));
-    const sitBack = mode === 'chew' ? 1 : 0;
-    const hipJ = rig.thighLen * (0.82 - sitBack * 0.18) + 0.07;
-    P.hipsOff.set(0, hipJ + 0.035 * H - rig.hipsHeight, -0.06 - sitBack * 0.05);
-    P.hipsRot.set(0.45 - sitBack * 0.25, 0, Math.sin(t * 0.9) * 0.04);
-    const lean = mode === 'chew' ? 0.15 : mode === 'lean' ? 0.32 : 0.42;
-    P.spine.set(lean + dip * 0.06 * (1 - sitBack), Math.sin(t * 0.7) * 0.05, mode === 'lean' ? 0.12 : 0);
-    P.chest.set(lean - 0.04 + dip * 0.1 * (1 - sitBack), mode === 'chew' ? Math.sin(t * 0.8) * 0.15 : 0, Math.sin(t * 1.3) * 0.04);
-    P.neck.set(0.2 + dip * 0.2 * (1 - sitBack), 0, 0);
-    P.head.set(0.2 + dip * 0.25 * (1 - sitBack) - sitBack * 0.25, (cyc > 0.3 && cyc < 0.5 && mode !== 'chew') ? Math.sin(t * 36) * 0.18 : (mode === 'chew' ? Math.sin(t * 1.1) * 0.5 : 0), 0.1);
+    const sitBack = mode === 'chew' ? 1 : 0, S = H / 1.75;
+    // where the mouth has to go (root space): the bite point, lifted off it between bites
+    let tz = 0.42 * S, ty = 0.18;
+    if (a.point) { this.toRoot(a.point, root, _va); tz = _va.z; ty = _va.y; }
+    const tearUp = mode === 'tear' ? smooth01(Math.max(0, cyc - 0.4) / 0.3) * 0.12 : 0;
+    const my = ty + 0.04 + (mode === 'chew' ? 0.32 : (1 - dip) * 0.09 + tearUp) + (mode === 'lean' ? 0.05 : 0);
+    // a body down on the floor: sit back on the heels and fold over it (hands down, back arched)
+    const low = clamp((0.42 * S - ty) / (0.22 * S), 0, 1);
+    const hipJ = lerp(rig.thighLen * 0.82 + 0.07, rig.thighLen * 0.38 + 0.09 * S, Math.max(low, sitBack * 0.6));
+    const hz = -0.06 - 0.08 * low - sitBack * 0.05, hy = hipJ + 0.035 * H;
+    P.hipsOff.set(0, hy - rig.hipsHeight, hz);
+    // reach: solve the torso pitch (shared by pelvis, spine, chest) and the neck bend so the mouth
+    // meets the point, along the real spine segments (warm-started from last frame, a few Newton steps)
+    const bp = rig.bindPos, l0 = bp[B.spine].y - bp[B.hips].y, l1 = bp[B.chest].y - bp[B.spine].y, l2 = bp[B.neck].y - bp[B.chest].y, l3 = bp[B.head].y - bp[B.neck].y;
+    const mf = 0.09 * S, mu = -0.06 * S, wH = 0.33, wS = 0.3, F = _feedFK;
+    const fk = (th, ph, o) => {
+      const a0 = th * wH, a1 = a0 + th * wS, a2 = th, a3 = th + ph * 0.45, a4 = th + ph;
+      o[0] = hz + l0 * Math.sin(a0) + l1 * Math.sin(a1) + l2 * Math.sin(a2) + l3 * Math.sin(a3) + mu * Math.sin(a4) + mf * Math.cos(a4);
+      o[1] = hy + l0 * Math.cos(a0) + l1 * Math.cos(a1) + l2 * Math.cos(a2) + l3 * Math.cos(a3) + mu * Math.cos(a4) - mf * Math.sin(a4);
+    };
+    let th = a.rth != null ? a.rth : 1.0, ph = a.rph != null ? a.rph : 0.6;
+    for (let it = 0; it < 5; it++) {
+      fk(th, ph, F[0]); const ez = tz - F[0][0], ey = my - F[0][1];
+      if (ez * ez + ey * ey < 1e-6) break;
+      fk(th + 0.01, ph, F[1]); fk(th, ph + 0.01, F[2]);
+      const j11 = (F[1][0] - F[0][0]) * 100, j21 = (F[1][1] - F[0][1]) * 100, j12 = (F[2][0] - F[0][0]) * 100, j22 = (F[2][1] - F[0][1]) * 100;
+      const det = j11 * j22 - j12 * j21; if (Math.abs(det) < 1e-5) break;
+      let dth = (j22 * ez - j12 * ey) / det, dph = (-j21 * ez + j11 * ey) / det;
+      const m = Math.max(Math.abs(dth), Math.abs(dph)); if (m > 0.35) { dth *= 0.35 / m; dph *= 0.35 / m; }
+      th = clamp(th + dth, 0, 1.8); ph = clamp(ph + dph, -0.2, 1.6);
+    }
+    a.rth = th; a.rph = ph;
+    P.hipsRot.set(th * wH, 0, Math.sin(t * 0.9) * 0.04);
+    P.spine.set(th * wS, Math.sin(t * 0.7) * 0.05, mode === 'lean' ? 0.12 : 0);
+    P.chest.set(th * (1 - wH - wS), mode === 'chew' ? Math.sin(t * 0.8) * 0.15 : 0, Math.sin(t * 1.3) * 0.04);
+    P.neck.set(ph * 0.45, 0, 0);
+    P.head.set(ph * 0.55, (cyc > 0.3 && cyc < 0.5 && mode !== 'chew') ? Math.sin(t * 36) * 0.18 : (mode === 'chew' ? Math.sin(t * 1.1) * 0.5 : 0), 0.1);
     for (let s = 0; s < 2; s++) {
       const sg = SIDE_SIGN[s], fp = P.foot[s];
       fp.pos.set(sg * rig.hipHalf * 1.15, rig.ankleY * 0.3 + 0.1, -rig.shinLen * 0.86);
@@ -1268,6 +1305,26 @@ class Animator {
       const s = a.side || 0, hp = P.hand[s], k = smooth01(Math.min(1, u * 2.2)) * (1 - smooth01(Math.max(0, (u - 0.7) / 0.3)));
       hp.pos.lerp(this.armPose('reach', s).pos, k * 0.85); hp.fing = lerp(hp.fing, 0.75, k);
       P.chest.y += SIDE_SIGN[s] * 0.12 * k; P.head.x -= 0.1 * k;
+    } else if (a.mode === 'twitch') { // sudden jerks of the head and a shoulder, at uneven intervals
+      const pulse = Math.pow(Math.max(0, Math.sin(t * 3.1 + ph) * Math.sin(t * 1.7 + ph * 2)), 6);
+      P.head.y += pulse * 0.5 * Math.sign(Math.sin(ph * 5 + Math.floor(t * 1.3))) * env; P.head.z += pulse * 0.3 * env;
+      P.clav[a.side || 0].z += pulse * 0.35 * env; P.chest.z += pulse * 0.06 * env;
+    } else if (a.mode === 'chatter') { // the jaw working, teeth knocking, the head trembling
+      P.jaw = Math.max(P.jaw, (0.08 + Math.abs(Math.sin(t * 13 + ph)) * 0.16) * env);
+      P.head.y += Math.sin(t * 17 + ph) * 0.04 * env; P.head.x += 0.06 * env;
+    } else if (a.mode === 'stagger') { // a lurch to one side and the catch
+      const d = (a.side ? 1 : -1), k = Math.sin(Math.PI * clamp(u * 1.6, 0, 1));
+      P.hipsOff.x += d * 0.06 * k; P.hipsRot.z += d * 0.08 * k; P.spine.z -= d * 0.12 * k; P.chest.z -= d * 0.08 * k; P.head.z += d * 0.2 * k;
+      for (let s = 0; s < 2; s++) { const hp = P.hand[s]; hp.pos.lerp(this.armPose('flail', s).pos, k * (SIDE_SIGN[s] === d ? 0.6 : 0.3)); }
+    } else if (a.mode === 'scratch') { // slow scratching at its own forearm
+      const s = a.side || 0, hp = P.hand[s], o = P.hand[1 - s];
+      this.chestLocal(SB('forearm', 1 - s), -SIDE_SIGN[s] * 0.02, -0.03, 0.06, _va);
+      hp.pos.lerp(_va, env); hp.pos.y += Math.sin(t * 7 + ph) * 0.015 * env; hp.fing = lerp(hp.fing, 0.6 + 0.3 * Math.sin(t * 7), env);
+      o.pos.lerp(this.armPose('hang', 1 - s).pos, 0.4 * env); o.pos.z += 0.12 * env;
+      P.head.x += 0.22 * env; P.head.y += SIDE_SIGN[1 - s] * 0.2 * env;
+    } else if (a.mode === 'lookround') { // a slow scan of the surroundings, head leading the shoulders
+      const sw = Math.sin(t * 0.7 + ph);
+      P.head.y += sw * 0.7 * env; P.neck.y += sw * 0.25 * env; P.chest.y += sw * 0.15 * env; P.head.x -= 0.08 * env;
     } else { // shudder
       const j = Math.sin(t * 31 + ph) * Math.max(0, Math.sin(t * 2.3 + ph));
       P.chest.x += j * 0.06 * env; P.head.y += j * 0.2 * env; P.head.z += j * 0.1 * env; P.hipsOff.x += j * 0.01 * env;
@@ -1518,6 +1575,46 @@ class Animator {
     P.jaw = 0.12 + 0.25 * thrust * (1 - rip) + (eat > 0 ? Math.max(0, Math.sin(t * 9)) * 0.22 * eat : 0);
     P.look = 0;
   }
+  // infection: discomfort, coughing, chills, swaying. Upper body only, so it plays over walking.
+  poseIll(P, a, root, dt) {
+    const t = a.t, m = a.mode, s = a.side != null ? a.side : 1, sg = SIDE_SIGN[s], hp = P.hand[s], ho = P.hand[1 - s];
+    const env = smooth01(Math.min(1, t / 0.35)) * (a.dur ? 1 - smooth01((t - (a.dur - 0.45)) / 0.45) : 1);
+    const toward = (h, x) => { h.pos.lerp(x, env); h.space *= 1 - env; };
+    if (m === 'temple') { // a headache: fingers pressed to the temple, eyes screwed shut
+      toward(hp, this.chestLocal(B.head, sg * 0.045, 0.02, 0.02, _va)); hp.pron = lerp(hp.pron, -1.7, env); hp.flex = lerp(hp.flex, 0.45, env); hp.fing = lerp(hp.fing, 0.3, env);
+      P.head.x += 0.16 * env; P.head.z += sg * 0.12 * env; P.neck.x += 0.05 * env;
+      this.blink = Math.max(this.blink, 0.03 * env);
+    } else if (m === 'stomach') { // nausea: a hand pressed to the belly, curling over it
+      toward(hp, this.chestLocal(B.spine, sg * 0.02, -0.01, 0.075, _va)); hp.pron = lerp(hp.pron, -1.2, env); hp.flex = lerp(hp.flex, 0.35, env); hp.fing = lerp(hp.fing, 0.55, env);
+      P.spine.x += 0.12 * env; P.chest.x += 0.1 * env; P.head.x += 0.14 * env;
+    } else if (m === 'neck') { // rubbing at the bite / the needle mark
+      toward(hp, this.chestLocal(B.neck, sg * 0.035, 0.01, 0.015, _va)); hp.pos.y += Math.sin(t * 9) * 0.012 * env; hp.pron = lerp(hp.pron, -1.5, env); hp.fing = lerp(hp.fing, 0.4, env);
+      P.head.z -= sg * 0.16 * env; P.head.y -= sg * 0.1 * env;
+    } else if (m === 'shiver') { // chills: arms wrapped round the body, a fine tremor
+      for (const [h, k] of [[hp, s], [ho, 1 - s]]) { const c = this.armPose('crossed', k); toward(h, c.pos); h.pole.lerp(c.pole, env); h.pron = lerp(h.pron, c.pron, env); h.fing = lerp(h.fing, 0.7, env); }
+      const tr = Math.sin(t * 41) * 0.022 * env; P.chest.z += tr; P.neck.z -= tr * 0.7; P.spine.x += 0.06 * env; P.head.x += 0.06 * env;
+      P.clav[0].z += 0.12 * env; P.clav[1].z += 0.12 * env;
+    } else if (m === 'cough') { // a fist to the mouth, the chest jerking with each cough
+      const n = a.n || 2, per = 0.42, ct = (t - 0.22) % per, on = t > 0.22 && t < 0.22 + n * per;
+      const k = on ? Math.exp(-ct / 0.09) * smooth01(ct / 0.03) : 0;
+      toward(hp, this.chestLocal(B.head, sg * 0.012, -0.04, 0.055, _va)); hp.fing = lerp(hp.fing, 0.95, env); hp.thumb = lerp(hp.thumb, 0.8, env); hp.pron = lerp(hp.pron, -1.4, env); hp.flex = lerp(hp.flex, 0.55, env);
+      P.spine.x += (0.05 + 0.12 * k) * env; P.chest.x += (0.05 + 0.16 * k) * env; P.neck.x += 0.08 * k * env; P.head.x += (0.06 + 0.2 * k) * env;
+      P.jaw = Math.max(P.jaw, 0.24 * k * env);
+    } else if (m === 'sway') { // light-headed: the body sways, the arms drift out to catch the balance
+      const sw = Math.sin(t * 2.3 + (a.ph || 0)) * env;
+      P.hipsRot.z += sw * 0.05; P.spine.z -= sw * 0.09; P.chest.z -= sw * 0.07; P.head.z += sw * 0.14; P.head.x += 0.1 * env;
+      hp.pos.x += sg * 0.07 * env; ho.pos.x -= sg * 0.07 * env;
+    } else if (m === 'retch') { // bent over, hands toward the knees, mouth open
+      const k = env * (0.75 + 0.25 * Math.sin(t * 5));
+      P.spine.x += 0.28 * k; P.chest.x += 0.24 * k; P.head.x += 0.2 * k; P.neck.x += 0.08 * k;
+      for (const [h, k2] of [[hp, s], [ho, 1 - s]]) { _vb.set(SIDE_SIGN[k2] * 0.11 * this.rig.H, -0.33 * this.rig.H, 0.16 * this.rig.H); toward(h, _vb); h.fing = lerp(h.fing, 0.5, env); }
+      P.jaw = Math.max(P.jaw, 0.26 * env);
+    } else if (m === 'loll') { // drowsy: the head drops and rolls, eyelids heavy
+      P.head.x += (0.22 + Math.sin(t * 0.9) * 0.12) * env; P.head.z += Math.sin(t * 0.6 + (a.ph || 0)) * 0.24 * env; P.neck.x += 0.1 * env;
+      this.blink = Math.max(this.blink, 0.012 * env);
+    }
+    P.look = Math.min(P.look, 1 - env * 0.7);
+  }
   // the victim: doubles over the punch, clutches the belly, staggers when it is torn open
   poseGutted(P, a, root, dt) {
     const t = a.t, hit = smoothstep(a.hitT || 0.5, (a.hitT || 0.5) + 0.12, t), rip = smoothstep(a.ripT || 1.26, (a.ripT || 1.26) + 0.2, t);
@@ -1676,7 +1773,8 @@ class Animator {
     this.setLocalEuler(B.neck, P.neck.x + np, P.neck.y + ny, P.neck.z);
     this.setLocalEuler(B.head, P.head.x + hp, P.head.y + hy, P.head.z);
     // jaw, eyes, lids
-    this.setLocalEuler(B.jaw, clamp(P.jaw + this.jaw, 0, 0.45), 0, 0);
+    const zv = this.zombie > 0 && this.zvar ? this.zvar : null;
+    this.setLocalEuler(B.jaw, clamp(P.jaw + this.jaw + (zv ? (zv.jawRest || 0) * this.zombie : 0) + (this.sick || 0) * 0.04, 0, 0.45), 0, 0);
     this.saccadeT -= dt;
     if (this.saccadeT <= 0) { this.saccade.set((Math.random() - 0.5) * 0.12, (Math.random() - 0.5) * 0.08, 0); this.saccadeT = 0.4 + Math.random() * 2; }
     this.eyeYaw = damp(this.eyeYaw, (this.eyeYawT || 0) + this.saccade.x, 25, dt);
@@ -1684,7 +1782,7 @@ class Animator {
     const dead = npc.lifeState === 'dead' || npc.lifeState === 'destroyed';
     for (let s = 0; s < 2; s++) {
       this.setLocalEuler(SB('eye', s), this.eyePitch, this.eyeYaw, 0);
-      const lidClose = dead ? 0.55 : (this.blink > 0 ? 1 : 0) * 0.62 + (npc.fear ? -0.08 : 0) + (this.zombie ? 0.1 : 0);
+      const lidClose = dead ? 0.55 : (this.blink > 0 ? 1 : 0) * 0.62 + (npc.fear ? -0.08 : 0) + (this.zombie ? (zv && zv.lid != null ? zv.lid : 0.1) * this.zombie : 0) + (this.sick || 0) * 0.2;
       this.setLocalEuler(SB('lid', s), clamp(lidClose, -0.1, 0.62), 0, 0);
     }
     // hair bone (spring)

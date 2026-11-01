@@ -57,7 +57,10 @@ class ReincarnationSystem {
         if (e.ok) {
           const inf = npc.infection;
           r.state = 'pending';
-          r.delay = infected ? (inf.t >= inf.dur ? 1.5 + Math.random() * 1.5 : clamp(inf.dur - inf.t, 2, 8)) : this.delay() * (0.85 + Math.random() * 0.3);
+          // passed out from the infection: the turn starts at once and is paced to finish as the infection
+          // time runs out; otherwise (killed while infected, or plain reincarnation) as before
+          r.delay = infected ? (inf.collapsed ? 1.2 + Math.random() * 0.6 : (inf.t >= inf.dur ? 1.5 + Math.random() * 1.5 : clamp(inf.dur - inf.t, 2, 8))) : this.delay() * (0.85 + Math.random() * 0.3);
+          r.fitDur = infected && inf.collapsed ? clamp(inf.dur - inf.t - r.delay, 8, 16) : null;
           r.timer = r.delay; r.infected = infected;
           HT.log('zombie', `${npc.idStr} ${npc.name}: ${infected ? 'infection will turn them' : 'reincarnation scheduled'} in ${r.timer.toFixed(1)}s`);
         } else if (r.state !== 'ineligible') {
@@ -82,11 +85,13 @@ class ReincarnationSystem {
     if (r.state !== 'pending' || npc.lifeState !== 'dead' || npc.isZombie) return false; // duplicate guard
     r.inert = !this.canRise(npc);   // turns on the ground, never gets up
     if (!r.inert && !npc.setLife('reanimating', 'transformation')) return false;
-    r.state = 'transforming'; r.t = 0; r.dur = TRANSFORM_TIME * (0.94 + Math.random() * 0.12);
+    r.state = 'transforming'; r.t = 0; r.dur = r.fitDur || TRANSFORM_TIME * (0.94 + Math.random() * 0.12);
+    r.sick0 = npc.material.userData.u.uSick ? npc.material.userData.u.uSick.value : 0;
     r.clip = false; r.twitchT = 0.7 + Math.random() * 0.6; r.cue = 0; r.rollDir = Math.random() < 0.5 ? 1 : -1;
     r.tint0 = npc.material.userData.u.uZombie.value;
     npc.anim.zstyle = pickZombieGait(); npc.anim.zMirror = Math.random() < 0.5 ? 1 : 0;
     npc.anim.zvar = makeZombieVariation();
+    applyZombieLook(npc, Math.random() < 0.55 ? 'recent' : null);
     npc.zombieTarget = null;
     if (npc.physMode !== 'ragdoll') npc.goRagdoll('Transforming', true);
     if (npc.brain) { npc.brain.state = 'dead'; npc.brain.pending.length = 0; }
@@ -104,6 +109,7 @@ class ReincarnationSystem {
     if (!Z.reincarnation && !(npc.infection && Z.infection) && !r.clip) { this.failTransform(npc, 'Zombie mode disabled'); return; }
     if (npc.carried) return; // paused while held
     const u = npc.material.userData.u;
+    if (u.uSick) { const f = 1 - smoothstep(0, r.dur * 0.8, r.t); u.uSick.value = (r.sick0 || 0) * f; u.uSweat.value = Math.min(u.uSweat.value, 0.9 * f); npc.anim.sick = 0; }
     if (r.inert) {
       if (npc.physMode !== 'ragdoll') npc.goRagdoll('Collapsed (Head Trauma)', true);
       r.t += dt;
@@ -180,6 +186,8 @@ class ReincarnationSystem {
     r.state = 'done'; r.clip = false;
     npc.anim.zombie = 1;
     npc.material.userData.u.uZombie.value = 1;
+    { const u = npc.material.userData.u; if (u.uSick) { u.uSick.value = 0; u.uSweat.value = 0; } npc.anim.sick = 0; }
+    if (!npc.zlook) applyZombieLook(npc, npc.spawnKind === 'zombie' ? null : (Math.random() < 0.55 ? 'recent' : null));
     if (npc.brain) { npc.brain.state = 'zIdle'; npc.brain.t = 0; npc.brain.pending.length = 0; npc.brain.noticeT = 0; }
     npc.lastReaction = 'Zombie AI Active';
     HT.log('zombie', `${npc.idStr} ${npc.name} returned as a zombie`);
@@ -234,6 +242,7 @@ class ReincarnationSystem {
     n.setLife('dead', 'spawned zombie'); n.setLife('reanimating', 'spawned zombie');
     n.reinc.state = 'transforming';
     n.anim.zstyle = pickZombieGait(); n.anim.zMirror = Math.random() < 0.5 ? 1 : 0; n.anim.zvar = makeZombieVariation();
+    applyZombieLook(n, null);
     return this.completeTransform(n);
   }
   makeZombieNow(npc) {
@@ -243,11 +252,41 @@ class ReincarnationSystem {
     npc.reinc.state = 'pending'; npc.reinc.timer = 0.3; npc.reinc.delay = 0.3;
   }
 }
-// per-zombie randomisation of timing and intensity (no two move alike)
+// per-zombie randomisation of timing and intensity (no two move alike), plus a face and a stance:
+// a slack or clenched jaw, heavy or staring lids, a head tilt and one shoulder lower than the other
 function makeZombieVariation() {
   return {
     cadence: 0.85 + Math.random() * 0.3, intensity: 0.75 + Math.random() * 0.55, armPhase: Math.random() * TAU,
-    headRate: 0.6 + Math.random() * 0.9, shoulder: 0.6 + Math.random() * 0.8, balanceT: 4 + Math.random() * 8
+    headRate: 0.6 + Math.random() * 0.9, shoulder: 0.6 + Math.random() * 0.8, balanceT: 4 + Math.random() * 8,
+    jawRest: Math.random() < 0.25 ? 0.01 : 0.05 + Math.random() * 0.2, lid: Math.random() < 0.3 ? -0.06 : Math.random() * 0.26,
+    tilt: (Math.random() - 0.5) * 0.36, drop: (Math.random() - 0.5) * 0.12, hunch: Math.random() * 0.12
   };
 }
-HT.ReincarnationSystem = ReincarnationSystem;
+// how zombies look: a skin tint multiplier, decay (blotches, veins, greying), dark eye sockets and how
+// worn the clothes are (grime, fraying, tears). Every zombie varies within its preset.
+const ZOMBIE_LOOKS = {
+  recent: { name: 'Recently turned', tint: [0.88, 0.88, 0.86], decay: [0.05, 0.2], eyes: [0.3, 0.55], wear: [0.05, 0.25], w: 1.0 },
+  classic: { name: 'Classic green', tint: [0.72, 0.9, 0.62], decay: [0.25, 0.5], eyes: [0.5, 0.75], wear: [0.25, 0.5], w: 1.4 },
+  pale: { name: 'Pale', tint: [0.94, 0.97, 1.0], decay: [0.15, 0.35], eyes: [0.55, 0.8], wear: [0.15, 0.4], w: 1.0 },
+  dark: { name: 'Discolored', tint: [0.6, 0.64, 0.5], decay: [0.45, 0.75], eyes: [0.6, 0.9], wear: [0.3, 0.6], w: 0.9 },
+  old: { name: 'Older', tint: [0.8, 0.82, 0.66], decay: [0.4, 0.65], eyes: [0.65, 0.9], wear: [0.35, 0.65], w: 0.8 },
+  ragged: { name: 'Ragged', tint: [0.74, 0.84, 0.66], decay: [0.3, 0.55], eyes: [0.5, 0.8], wear: [0.75, 1.0], w: 0.8 }
+};
+function applyZombieLook(npc, key) {
+  if (!key) {
+    const keys = Object.keys(ZOMBIE_LOOKS); let tot = 0; for (const k of keys) tot += ZOMBIE_LOOKS[k].w;
+    let r = Math.random() * tot; key = keys[keys.length - 1];
+    for (const k of keys) { r -= ZOMBIE_LOOKS[k].w; if (r <= 0) { key = k; break; } }
+  }
+  const L = ZOMBIE_LOOKS[key], u = npc.material.userData.u, rr = (a) => a[0] + Math.random() * (a[1] - a[0]), j = () => (Math.random() - 0.5) * 0.06;
+  if (!u.uZTint) return key;
+  u.uZTint.value.set(L.tint[0] + j(), L.tint[1] + j(), L.tint[2] + j());
+  u.uZLook.value.set(rr(L.decay), rr(L.eyes), rr(L.wear), Math.random() * 50);
+  // what shows through torn clothes: this person's own skin, turned
+  const sc = new THREE.Color((npc.app.skin && npc.app.skin.hex) || 0xc89878).convertSRGBToLinear();
+  const lum = sc.r * 0.3 + sc.g * 0.55 + sc.b * 0.15;
+  u.uSkinZ.value.set(lum * u.uZTint.value.x + 0.02, lum * u.uZTint.value.y + 0.03, lum * u.uZTint.value.z);
+  npc.zlook = key;
+  return key;
+}
+HT.ReincarnationSystem = ReincarnationSystem; HT.ZOMBIE_LOOKS = ZOMBIE_LOOKS; HT.applyZombieLook = applyZombieLook;

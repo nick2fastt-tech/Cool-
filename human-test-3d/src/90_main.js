@@ -318,6 +318,7 @@ class Game {
     }
     npc.health = npc.maxHealth = 100; npc.regionDamage.fill(0); npc.hitCounts.fill(0); npc.criticalHead = false;
     npc.isZombie = false; npc.zombieTarget = null; npc.material.userData.u.uZombie.value = 0; npc.anim.zombie = 0; npc.fear = 0;
+    { const u = npc.material.userData.u; if (u.uSick) { u.uSick.value = 0; u.uSweat.value = 0; } npc.anim.sick = 0; npc.infection = null; npc.zlook = null; if (u.uZTint) { u.uZTint.value.set(0.78, 0.9, 0.7); u.uZLook.value.set(0, 0, 0, 0); } }
     npc.reinc = { state: 'none', timer: 0, delay: 0, eligible: false, reason: '' };
     npc.anim.limp[0] = npc.anim.limp[1] = 0; npc.anim.setPosture('stand'); npc.anim.setUpper('hang');
     if (npc.brain) { npc.brain.state = 'idle'; npc.brain.pending.length = 0; }

@@ -324,7 +324,7 @@ function buildBody(mb, app, rig, Q) {
   // ---------------- SKIRT / DRESS / COAT TAILS ----------------
   const skirtSpec = isDress ? { u0: hem, len: 0.27 + (hash32(app.seed, 5) % 100) / 100 * 0.13, layer: topLayer }
     : isSkirt ? { u0: waistband, len: bot.def.skirtLen, layer: bottomLayer }
-      : tdef.hem === 'coat' ? { u0: 0.30, len: top.type === 'longcoat' ? 0.38 : 0.30, layer: topLayer, slit: true }
+      : tdef.hem === 'coat' ? { u0: 0.30, len: top.type === 'longcoat' ? (app.coatLen || 0.38) : 0.30, layer: topLayer, slit: true, open: !!app.coatOpen, slitHalf: app.coatOpen ? 0.2 : 0 }
         : tdef.hem === 'low' ? { u0: 0.24, len: 0.035, layer: topLayer, slit: true, slitHalf: 0.22 } : null;
   if (skirtSpec) buildSkirt(mb, app, rig, Q, skirtSpec, torsoXZ, torsoP, crotchY, span);
 
@@ -369,6 +369,62 @@ function buildBody(mb, app, rig, Q) {
     }
   }
 
+  // ---------------- CONTAINMENT DOCTOR: buckled straps, a belt with vials and a pouch, a stethoscope ----------------
+  if (app.doctor) {
+    const nrm = (t) => ((t % TAU) + TAU) % TAU, leather = C(0x1c130c), brass = C(0xa8843f), lm = [MAT.LEATHER, 0.48, 0, 1], mm = [MAT.METAL, 0.28, 0, 1];
+    const onCoat = (u, th, extra) => { const p = torsoXZ(u, nrm(th), topOff(u) + (extra || 0.004) * sc); return new V3(p[0], crotchY + u * span + p[2], p[1]); };
+    // a little frame on the coat surface: across (ax), up (ay) and outward (az)
+    const frameAt = (u, th, extra) => {
+      const c = onCoat(u, th, extra), ax = onCoat(u, th + 0.03, extra).sub(onCoat(u, th - 0.03, extra)).normalize();
+      const az = new V3().crossVectors(ax, UP).normalize(); if (az.dot(new V3(c.x, 0, c.z)) < 0) az.negate();
+      return { c, ax, ay: new V3().crossVectors(az, ax).normalize(), az, w: torsoW(u, nrm(th)), reg: torsoReg(u) };
+    };
+    // straps across the front, each closed with a buckle, and a broad belt
+    for (const [u, hw, wd, bth] of [[0.84, 0.5, 0.0075, 0.2], [0.71, 0.55, 0.0075, 0.22], [0.58, 0.58, 0.0075, 0.24], [waistband + 0.06, Math.PI, 0.012, 0]]) {
+      const n = Math.max(6, Math.round(hw * 10)), pts = [];
+      for (let j = 0; j <= n; j++) pts.push(onCoat(u, lerp(-hw, hw, j / n), 0.006));
+      mb.beginPart();
+      const st = mb.I.length, b0 = mb.n, hwd = wd * H;
+      for (let j = 0; j <= n; j++) { const th = lerp(-hw, hw, j / n), w = torsoW(u, nrm(th)), reg = torsoReg(u); mb.v(pts[j].x, pts[j].y + hwd, pts[j].z, j / n, 0, leather, lm, leather, w, reg); mb.v(pts[j].x, pts[j].y - hwd, pts[j].z, j / n, 1, leather, lm, leather, w, reg); }
+      for (let j = 0; j < n; j++) { const q = b0 + j * 2; mb.quad(q, q + 1, q + 3, q + 2); }
+      orientPartOutward(mb, st, new V3(0, crotchY + u * span, -0.05 * H));
+      mb.endPart();
+      const f = frameAt(u, bth, 0.0085), belt = wd > 0.01;
+      addBuckle(mb, f.c, f.ax, f.ay, f.az, (belt ? 0.015 : 0.0095) * H, wd * 1.3 * H, (belt ? 0.0026 : 0.002) * H, brass, mm, f.w, f.reg);
+    }
+    // three vials of green serum in loops on the belt, brass-capped
+    for (let k = 0; k < 3; k++) {
+      const f = frameAt(waistband + 0.045, 0.6 + k * 0.16, 0.016);
+      addBox(mb, f.c.clone().addScaledVector(f.az, -0.005 * H), f.ax, f.ay, f.az, 0.0085 * H, 0.006 * H, 0.0025 * H, leather, lm, f.w, REGION.ABDOMEN);
+      addCyl(mb, f.c, f.ay, 0.0052 * H, 0.016 * H, C(0x3f9a52), [MAT.NYLON, 0.1, 0, 1], f.w, REGION.ABDOMEN, 8);
+      addCyl(mb, f.c.clone().addScaledVector(f.ay, 0.019 * H), f.ay, 0.0058 * H, 0.0035 * H, brass, mm, f.w, REGION.ABDOMEN, 8);
+    }
+    // an instrument pouch on the other hip, flap and brass stud
+    {
+      const f = frameAt(waistband - 0.005, -0.72, 0.018);
+      addBox(mb, f.c, f.ax, f.ay, f.az, 0.026 * H, 0.03 * H, 0.011 * H, C(0x2a1d13), lm, f.w, REGION.ABDOMEN);
+      addBox(mb, f.c.clone().addScaledVector(f.ay, 0.016 * H).addScaledVector(f.az, 0.0115 * H), f.ax, f.ay, f.az, 0.0265 * H, 0.0145 * H, 0.0015 * H, leather, lm, f.w, REGION.ABDOMEN);
+      addCyl(mb, f.c.clone().addScaledVector(f.ay, 0.004 * H).addScaledVector(f.az, 0.0135 * H), f.az, 0.0035 * H, 0.0012 * H, brass, mm, f.w, REGION.ABDOMEN, 8);
+    }
+    // stethoscope: tubing round the back of the neck, hanging down the front; a chest piece on one end, an earpiece on the other
+    for (const sgn of [1, -1]) {
+      const path = [[0.995, 3.1], [0.995, 2.3], [0.985, 1.45], [0.95, 0.75], [0.88, 0.42], [0.8, 0.3], [0.72, 0.26]];
+      const pts = path.map(([u, th]) => ({ p: onCoat(u, sgn * th, 0.014), u, th: nrm(sgn * th) }));
+      const rings = pts.map((q, i) => {
+        const tan = new V3().subVectors(pts[Math.min(pts.length - 1, i + 1)].p, pts[Math.max(0, i - 1)].p).normalize();
+        const e1 = new V3().crossVectors(tan, UP).normalize(); if (e1.lengthSq() < 1e-6) e1.set(1, 0, 0);
+        const e2 = new V3().crossVectors(e1, tan).normalize(), r = 0.0042 * H;
+        const wts = q.u > 0.93 ? [[B.neck, 0.4], [B.chest, 0.6]] : torsoW(q.u, q.th);
+        return { c: q.p, e1, e2, prof: (t) => [Math.cos(t) * r, Math.sin(t) * r], col: C(0x2f3236), mat: [MAT.RUBBER, 0.4, 0, 1], col2: C(0x2f3236), wts, reg: REGION.UPPER_CHEST, v: i * 0.02 };
+      });
+      addLoft(mb, rings, 6, { capEnd: { offset: new V3(0, -0.003 * H, 0) } });
+      const f = frameAt(0.7, sgn * 0.26, 0.016);
+      if (sgn > 0) {
+        addCyl(mb, f.c.clone().addScaledVector(f.ay, -0.008 * H), f.az, 0.0105 * H, 0.0032 * H, C(0xc3c8cc), [MAT.METAL, 0.22, 0, 1], f.w, REGION.UPPER_CHEST, 12);
+        addCyl(mb, f.c.clone().addScaledVector(f.ay, -0.008 * H).addScaledVector(f.az, 0.0034 * H), f.az, 0.0085 * H, 0.0006 * H, C(0x1d1f22), [MAT.RUBBER, 0.5, 0, 1], f.w, REGION.UPPER_CHEST, 12);
+      } else addCyl(mb, f.c.clone().addScaledVector(f.ay, -0.006 * H), f.ay, 0.0032 * H, 0.008 * H, C(0xc3c8cc), [MAT.METAL, 0.22, 0, 1], f.w, REGION.UPPER_CHEST, 8, 0.002 * H);
+    }
+  }
   // ---------------- CAPE (vampires): a long cloak over the shoulders and arms, red lining, high collar ----------------
   if (app.cape) {
     const outer = { col: C(app.cape.color), mat: [MAT.COTTON, 0.88, 0, 1] }, inner = { col: C(app.cape.lining), mat: [MAT.NYLON, 0.42, 0, 1] };
@@ -476,16 +532,36 @@ function buildSkirt(mb, app, rig, Q, spec, torsoXZ, torsoP, crotchY, span) {
   };
   for (let i = 0; i <= n; i++) rings.push(ringAt(i / n, baseOff, false, false));
   rings.push(ringAt(1.0, baseOff - 0.007 * sc, false, false));
-  addLoft(mb, rings, Q.torsoCols, slitHalf ? { theta: skirtTheta(Q.torsoCols, slitHalf) } : {});
+  // an open coat front leaves a real gap between the two front edges
+  const thOpt = slitHalf ? { theta: skirtTheta(Q.torsoCols, slitHalf, spec.open), open: !!spec.open } : {};
+  addLoft(mb, rings, Q.torsoCols, thOpt);
   // inner surface (visible from below), facing inward
   const inner = [];
   inner.push(ringAt(1.0, baseOff - 0.007 * sc, false, true));
   for (let i = n; i >= 0; i--) inner.push(ringAt(i / n, baseOff - 0.008 * sc, false, true));
-  addLoft(mb, inner, Q.torsoCols, Object.assign({ inward: true }, slitHalf ? { theta: skirtTheta(Q.torsoCols, slitHalf) } : {}));
+  addLoft(mb, inner, Q.torsoCols, Object.assign({ inward: true }, thOpt));
 }
-function skirtTheta(cols, slitHalf) {
-  // columns spanning [slitHalf, TAU - slitHalf]; the last column wraps (closing seam) - we accept a narrow gap at front
-  return (j) => slitHalf + (TAU - 2 * slitHalf) * (j / cols);
+function skirtTheta(cols, slitHalf, open) {
+  // columns spanning [slitHalf, TAU - slitHalf]; the last column wraps (closing seam) - we accept a narrow gap at front.
+  // Open: the last real column sits on the far edge and the wrapping column is left out.
+  return open ? (j) => slitHalf + (TAU - 2 * slitHalf) * Math.min(1, j / (cols - 1)) : (j) => slitHalf + (TAU - 2 * slitHalf) * (j / cols);
+}
+
+// small capped cylinder along axis ax (centre c, radius r, half-length hl)
+function addCyl(mb, c, ax, r, hl, col, mat, wts, reg, n = 10, r2) {
+  const a = ax.clone().normalize(), e1 = new V3().crossVectors(a, Math.abs(a.y) < 0.95 ? UP : FWD).normalize(), e2 = new V3().crossVectors(e1, a).normalize(), rings = [];
+  for (let k = 0; k <= 1; k++) { const rr = k && r2 != null ? r2 : r; rings.push({ c: c.clone().addScaledVector(a, (k * 2 - 1) * hl), e1, e2, prof: (t) => [Math.cos(t) * rr, Math.sin(t) * rr], col, mat, col2: col, wts, reg, v: k * hl * 2 }); }
+  addLoft(mb, rings, n, { capStart: { offset: new V3() }, capEnd: { offset: new V3() } });
+}
+
+// rectangular buckle frame (four bars) lying in the plane (ax, ay), facing az
+function addBuckle(mb, c, ax, ay, az, hx, hy, bar, col, mat, wts, reg) {
+  const t = bar * 0.6;
+  addBox(mb, c.clone().addScaledVector(ay, hy - bar), ax, ay, az, hx, bar, t, col, mat, wts, reg);
+  addBox(mb, c.clone().addScaledVector(ay, -(hy - bar)), ax, ay, az, hx, bar, t, col, mat, wts, reg);
+  addBox(mb, c.clone().addScaledVector(ax, hx - bar), ax, ay, az, bar, hy - 2 * bar, t, col, mat, wts, reg);
+  addBox(mb, c.clone().addScaledVector(ax, -(hx - bar)), ax, ay, az, bar, hy - 2 * bar, t, col, mat, wts, reg);
+  addBox(mb, c.clone().addScaledVector(az, t * 0.5), ax, ay, az, bar * 0.45, hy - bar, t * 0.6, col, mat, wts, reg); // the prong
 }
 
 // small oriented box (separate vertices per face for crisp edges)
@@ -509,6 +585,7 @@ function addBox(mb, c, ax, ay, az, hx, hy, hz, col, mat, wts, reg) {
 // hand bone. Handle runs through the fist along the thumb axis; the blade lies in the (thumb, arm) plane
 // with the edge toward +armDir (down when the arm hangs).
 function buildHeldWeapon(mb, app, rig) {
+  if (app.weapon === 'injector') return buildInjector(mb, app, rig);
   const s = 1, H = rig.H, machete = app.weapon === 'machete';
   const wr = rig.bindPos[SB('hand', s)], d = rig.armDir[s], e1 = rig.armE1[s], e2 = rig.armE2[s];
   const grip = wr.clone().addScaledVector(d, rig.palmLen * 0.62).addScaledVector(e2, 0.006 + 0.008 * H / 1.75);
@@ -536,6 +613,31 @@ function buildHeldWeapon(mb, app, rig) {
   for (let i = 0; i < N; i++) { const q = base + i * 3, n = q + 3; mb.quad(q, q + 1, n + 1, n); mb.quad(q + 1, q + 2, n + 2, n + 1); mb.quad(q + 2, q, n, n + 2); }
   orientPartOutward(mb, st, b0.clone().addScaledVector(e1, bLen * 0.5).addScaledVector(d, bW * 0.2));
   mb.endPart();
+}
+
+// the containment doctor's injector, held in an overhand grip: a glass barrel of green fluid in brass
+// fittings through the fist, the plunger and thumb ring on the thumb side, the needle out of the bottom
+function buildInjector(mb, app, rig) {
+  const s = 1, H = rig.H, sc = H / 1.75;
+  const wr = rig.bindPos[SB('hand', s)], d = rig.armDir[s], e1 = rig.armE1[s], e2 = rig.armE2[s];
+  const grip = wr.clone().addScaledVector(d, rig.palmLen * 0.62).addScaledVector(e2, 0.006 + 0.008 * sc);
+  const wts = [[SB('hand', s), 1]], reg = REGION.R_HAND, brass = C(0xb48a42), steel = C(0xc8ccd0), mm = [MAT.METAL, 0.28, 0, 1];
+  const tube = (from, to, r0, r1, col, mat, n = 8) => {
+    const ax = to.clone().sub(from), L = ax.length(); ax.normalize();
+    const rings = [];
+    for (let i = 0; i <= 1; i++) { const r = i ? r1 : r0; rings.push({ c: from.clone().addScaledVector(ax, L * i), e1: d, e2, prof: (t) => [Math.cos(t) * r, Math.sin(t) * r], col, mat, col2: col, wts, reg, v: i * L }); }
+    addLoft(mb, rings, n, { capStart: { offset: ax.clone().multiplyScalar(-0.0005) }, capEnd: { offset: ax.clone().multiplyScalar(0.0005) } });
+  };
+  const at = (k) => grip.clone().addScaledVector(e1, k * sc);
+  tube(at(-0.055), at(0.055), 0.0125 * sc, 0.0125 * sc, C(0xa9c4c8), [MAT.NYLON, 0.08, 0, 1], 10);      // glass barrel
+  tube(at(-0.05), at(0.035), 0.0105 * sc, 0.0105 * sc, C(0x47b85a), [MAT.NYLON, 0.2, 0, 1], 10);      // the fluid
+  tube(at(-0.062), at(-0.05), 0.0142 * sc, 0.0142 * sc, brass, mm, 10);                                 // fittings
+  tube(at(0.05), at(0.064), 0.0142 * sc, 0.0142 * sc, brass, mm, 10);
+  tube(at(0.064), at(0.068), 0.026 * sc, 0.026 * sc, brass, mm, 10);                                    // finger flange
+  tube(at(0.068), at(0.118), 0.0028 * sc, 0.0028 * sc, steel, mm, 6);                                   // plunger rod
+  tube(at(0.118), at(0.124), 0.012 * sc, 0.012 * sc, brass, mm, 10);                                    // thumb rest
+  tube(at(-0.075), at(-0.062), 0.006 * sc, 0.0042 * sc, brass, mm, 8);                                  // needle hub
+  tube(at(-0.135), at(-0.075), 0.0007 * sc, 0.0011 * sc, steel, [MAT.METAL, 0.18, 0, 1], 5);           // needle
 }
 
 function buildCollar(mb, rig, Q, layer, lapel, torsoXZ, crotchY, span, baseOff) {
@@ -615,6 +717,7 @@ function buildArm(mb, app, rig, Q, side, topLayer, skinLayer, tdef) {
     return [[SB('hand', side), 1]];
   };
   const regAt = (x) => x < 0.186 ? sideRegion('UPPER_ARM', side) : x < 0.332 ? sideRegion('FOREARM', side) : sideRegion('HAND', side);
+  const gloveMat = [MAT.RUBBER, 0.32, 0, 1];
   // sleeve
   const sleeveEnd = tdef.sleeve === 'long' ? 0.322 : (tdef.sleeve === 'short' ? 0.085 : -0.02);
   const sleeveThick = (tdef.thick || 0.006) * sc;
@@ -636,10 +739,11 @@ function buildArm(mb, app, rig, Q, side, topLayer, skinLayer, tdef) {
     const dist = mapDist(x);
     const c = sh.clone().addScaledVector(d, dist);
     const p = prof(x, off);
-    let col = layer.col;
-    if (layer.isSkin && x > 0.37) col = skinColorAt(layer.col, 0.5, 0.02);
+    let col = layer.col, mat = layer.mat;
+    if (layer.isSkin && app.gloves && x > 0.305) { col = C(app.gloves.color); mat = gloveMat; }
+    else if (layer.isSkin && x > 0.37) col = skinColorAt(layer.col, 0.5, 0.02);
     else if (layer.isSkin && x > 0.17 && x < 0.2) col = skinColorAt(layer.col, 0.25, 0.0);
-    return { c, e1, e2, prof: p, col, mat: layer.mat, col2: layer.col2, wts: x < 0.07 ? (th) => wAt(x, th) : wAt(x), reg: regAt(x), v: dist, strip: !!strip };
+    return { c, e1, e2, prof: p, col, mat, col2: layer.col2, wts: x < 0.07 ? (th) => wAt(x, th) : wAt(x), reg: regAt(x), v: dist, strip: !!strip };
   };
   const hasSleeve = sleeveEnd > 0;
   for (const x of allX) {
@@ -660,7 +764,7 @@ function buildArm(mb, app, rig, Q, side, topLayer, skinLayer, tdef) {
     [0.0138, 0.0435, 0.0050, 0.06], [0.0046, 0.0480, 0.0052, 0.015], [-0.0046, 0.0455, 0.0049, -0.03], [-0.0135, 0.0365, 0.0043, -0.09]
   ];
   const fk = app.male ? 1.0 : 0.9;
-  const skinHand = skinColorAt(skinLayer.col, 0.35, 0.0);
+  const skinHand = app.gloves ? C(app.gloves.color) : skinColorAt(skinLayer.col, 0.35, 0.0), handMat = app.gloves ? gloveMat : skinLayer.mat;
   for (const fs of fingerSpec) {
     const base = kn.clone().addScaledVector(e1, fs[0] * H).addScaledVector(d, -0.004 * H);
     const dir = d.clone().addScaledVector(e1, fs[3]).normalize();
@@ -674,7 +778,7 @@ function buildArm(mb, app, rig, Q, side, topLayer, skinLayer, tdef) {
       const r = r0 * (1 - 0.28 * t) * (i === 0 ? 1.05 : 1);
       const w = t < 0.12 ? [[SB('hand', side), 0.6], [SB('fingers1', side), 0.4]] : t < 0.45 ? [[SB('fingers1', side), 1]]
         : t < 0.6 ? [[SB('fingers1', side), 0.5], [SB('fingers2', side), 0.5]] : [[SB('fingers2', side), 1]];
-      fr.push({ c, e1, e2, prof: (th) => [Math.cos(th) * r, Math.sin(th) * r * 0.9], col: i >= n - 1 ? skinColorAt(skinLayer.col, 0.7, 0) : skinHand, mat: skinLayer.mat, col2: skinLayer.col2, wts: w, reg: sideRegion('HAND', side), v: t * L });
+      fr.push({ c, e1, e2, prof: (th) => [Math.cos(th) * r, Math.sin(th) * r * 0.9], col: i >= n - 1 && !app.gloves ? skinColorAt(skinLayer.col, 0.7, 0) : skinHand, mat: handMat, col2: skinLayer.col2, wts: w, reg: sideRegion('HAND', side), v: t * L });
     }
     addLoft(mb, fr, Q.fingerCols, { capEnd: { offset: dir.clone().multiplyScalar(r0 * 0.7) } });
   }
@@ -689,7 +793,7 @@ function buildArm(mb, app, rig, Q, side, topLayer, skinLayer, tdef) {
     const r = tr0 * (1 - 0.32 * t);
     const w = t < 0.2 ? [[SB('hand', side), 0.6], [SB('thumb', side), 0.4]] : [[SB('thumb', side), 1]];
     const te1 = new V3().crossVectors(tdir, e2).normalize();
-    tr.push({ c, e1: te1, e2, prof: (th) => [Math.cos(th) * r, Math.sin(th) * r * 0.85], col: skinHand, mat: skinLayer.mat, col2: skinLayer.col2, wts: w, reg: sideRegion('HAND', side), v: t * tL });
+    tr.push({ c, e1: te1, e2, prof: (th) => [Math.cos(th) * r, Math.sin(th) * r * 0.85], col: skinHand, mat: handMat, col2: skinLayer.col2, wts: w, reg: sideRegion('HAND', side), v: t * tL });
   }
   addLoft(mb, tr, Q.fingerCols, { capEnd: { offset: tdir.clone().multiplyScalar(tr0 * 0.6) } });
 }

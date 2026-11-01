@@ -327,7 +327,7 @@ function buildHead(mb, app, rig, Q) {
   // ---- eyes + lids
   for (let s = 0; s < 2; s++) buildEye(mb, app, rig, P, s, Q);
   // ---- ears
-  for (let s = 0; s < 2; s++) buildEar(mb, app, rig, P, s);
+  if (app.mask !== 'plague') for (let s = 0; s < 2; s++) buildEar(mb, app, rig, P, s); // the hood covers the ears
   // ---- brows
   for (let s = 0; s < 2; s++) buildBrow(mb, app, rig, P, s);
 
@@ -470,6 +470,7 @@ function buildNeck(mb, app, rig, P, Q) {
 // outline is in the geometry; eye openings, breathing holes and red chevrons are drawn by the shader
 // (uv = view angles; aColor2 carries the eye-opening position).
 function buildMask(mb, app, rig, P) {
+  if (app.mask === 'plague') return buildPlagueMask(mb, app, rig, P);
   const S = rig.sHead, HC = rig.headCenter, sdf = P.sdf;
   const nA = 18, nB = 20, aMax = 1.08, bTop = 1.02, bBot = -1.02, bc = (bTop + bBot) / 2, bh = (bTop - bBot) / 2;
   const dirOf = (a, b, out) => out.set(Math.sin(a) * Math.cos(b), Math.sin(b), Math.cos(a) * Math.cos(b));
@@ -510,6 +511,93 @@ function buildMask(mb, app, rig, P) {
   for (let i = 0; i < nB; i++) for (let j = 0; j < nA; j++) { const q = base + i * (nA + 1) + j; mb.quad(q, q + 1, q + nA + 2, q + nA + 1); }
   orientPartOutward(mb, st, new V3(HC.x, HC.y, HC.z - 0.02 * S));
   mb.endPart();
+}
+
+// the containment doctor's head: a stitched leather hood over the whole head, round brass goggles,
+// a long curved beak over the nose and mouth, and a wide-brimmed hat with a band and a brass emblem
+function buildPlagueMask(mb, app, rig, P) {
+  const S = rig.sHead, HC = rig.headCenter, sdf = P.sdf, wts = [[B.head, 1]], v = new V3();
+  const leather = C(0x2c2119), beakC = C(0x5b412b), brass = C(0xb08b46), lens = C(0x0f1416), hatC = C(0x231c17), bandC = C(0x4a3828);
+  const dirOf = (a, b, out) => out.set(Math.sin(a) * Math.cos(b), Math.sin(b), Math.cos(a) * Math.cos(b));
+  // hood: a shell fitted over the head shape, all the way round
+  const nA = 28, nB = 18, b0 = -0.85, b1 = 1.45, R = [];
+  for (let i = 0; i <= nB; i++) { const b = lerp(b1, b0, i / nB), row = []; for (let j = 0; j <= nA; j++) { dirOf(-Math.PI + TAU * j / nA, b, v); row.push(projectRay(sdf, 0, 0.004, 0, v.x, v.y, v.z, 0.24)); } R.push(row); }
+  mb.beginPart();
+  let st = mb.I.length, base = mb.n;
+  for (let i = 0; i <= nB; i++) {
+    const b = lerp(b1, b0, i / nB);
+    for (let j = 0; j <= nA; j++) {
+      const a = -Math.PI + TAU * j / nA; dirOf(a, b, v);
+      const r = Math.max(R[i][j], R[i][(j + 1) % nA] || 0, R[i][(j + nA - 1) % nA] || 0) + 0.012;
+      mb.v(HC.x + v.x * r * S, HC.y + (0.004 + v.y * r) * S, HC.z + v.z * r * S, j / nA * 6, i / nB * 3, leather, [MAT.LEATHER, 0.62, 0, 1], leather, wts, REGION.HEAD);
+    }
+  }
+  for (let i = 0; i < nB; i++) for (let j = 0; j < nA; j++) { const q = base + i * (nA + 1) + j; mb.quad(q, q + 1, q + nA + 2, q + nA + 1); }
+  orientPartOutward(mb, st, new V3(HC.x, HC.y, HC.z));
+  mb.endPart();
+  const surf = (dx, dy, dz, extra) => { const L = Math.hypot(dx, dy, dz); const r = projectRay(sdf, 0, 0.004, 0, dx / L, dy / L, dz / L, 0.24) + 0.012 + (extra || 0); return new V3(HC.x + dx / L * r * S, HC.y + (0.004 + dy / L * r) * S, HC.z + dz / L * r * S); };
+  const ring = (c, ax, r0, r1, len, col, mat, n = 14) => {
+    const e1 = new V3().crossVectors(ax, UP).normalize(), e2 = new V3().crossVectors(e1, ax).normalize(), rings = [];
+    for (let k = 0; k <= 1; k++) { const r = k ? r1 : r0; rings.push({ c: c.clone().addScaledVector(ax, len * k), e1, e2, prof: (t) => [Math.cos(t) * r, Math.sin(t) * r], col, mat, col2: col, wts, reg: REGION.HEAD, v: k * len }); }
+    addLoft(mb, rings, n, { capEnd: { offset: ax.clone().multiplyScalar(0.0006) } });
+  };
+  // goggles: thick brass rims round recessed dark glass, sitting on the hood over the eyes. The hood is
+  // max-filtered (it bridges the eye sockets), so the rim base is measured the same way.
+  const hoodR = (dx, dy, dz) => {
+    const L = Math.hypot(dx, dy, dz), a = Math.atan2(dx, dz), b = Math.asin(dy / L);
+    let r = 0;
+    for (const da of [-TAU / nA, 0, TAU / nA]) for (const db of [-0.08, 0, 0.08]) { dirOf(a + da, b + db, v); r = Math.max(r, projectRay(sdf, 0, 0.004, 0, v.x, v.y, v.z, 0.24)); }
+    return r + 0.012;
+  };
+  for (const sg of [-1, 1]) {
+    const ex = P.eye.x * sg * 1.05, ey = P.eye.y + 0.004, ez = P.eye.z, L = Math.hypot(ex, ey, ez), r = hoodR(ex, ey, ez) - 0.004;
+    const c = new V3(HC.x + ex / L * r * S, HC.y + (0.004 + ey / L * r) * S, HC.z + ez / L * r * S), ax = new V3(ex * 0.9, 0.03, 1).normalize();
+    const e1 = new V3().crossVectors(ax, UP).normalize(), e2 = new V3().crossVectors(e1, ax).normalize();
+    const ro = 0.029 * S, ri = 0.021 * S, len = 0.02 * S, bm = [MAT.METAL, 0.3, 0, 1];
+    const rr = (d, rad, col, mat) => ({ c: c.clone().addScaledVector(ax, d), e1, e2, prof: (t) => [Math.cos(t) * rad, Math.sin(t) * rad], col, mat, col2: col, wts, reg: REGION.HEAD, v: d });
+    // the rim: out along the side, round the lip, and back in to the glass
+    addLoft(mb, [rr(-0.006 * S, ro * 0.96, leather, [MAT.LEATHER, 0.6, 0, 1]), rr(0, ro, brass, bm), rr(len * 0.7, ro, brass, bm), rr(len, ro * 0.9, brass, bm), rr(len, ri, brass, bm), rr(len - 0.006 * S, ri, brass, bm)], 18);
+    // the glass, slightly domed, and four little screws on the rim face
+    addLoft(mb, [rr(len - 0.006 * S, ri, lens, [MAT.METAL, 0.05, 0, 1]), rr(len - 0.003 * S, ri * 0.6, lens, [MAT.METAL, 0.05, 0, 1])], 18, { capEnd: { offset: ax.clone().multiplyScalar(0.0012 * S) } });
+    for (let k = 0; k < 4; k++) { const t = k * Math.PI / 2 + Math.PI / 4; addBox(mb, c.clone().addScaledVector(ax, len + 0.0005 * S).addScaledVector(e1, Math.cos(t) * (ro + ri) * 0.5).addScaledVector(e2, Math.sin(t) * (ro + ri) * 0.5), e1, e2, ax, 0.0018 * S, 0.0018 * S, 0.0012 * S, C(0x7d6230), bm, wts, REGION.HEAD); }
+  }
+  // a strap between the goggles across the bridge of the beak
+  {
+    const L = Math.hypot(0, P.eye.y, P.eye.z), r = hoodR(0, P.eye.y + 0.004, P.eye.z) + 0.002;
+    addBox(mb, new V3(HC.x, HC.y + (0.004 + (P.eye.y + 0.004) / L * r) * S, HC.z + P.eye.z / L * r * S), new V3(1, 0, 0), new V3(0, 1, 0), new V3(0, 0, 1), Math.abs(P.eye.x) * 0.55 * S, 0.006 * S, 0.003 * S, C(0x1c140e), [MAT.LEATHER, 0.5, 0, 1], wts, REGION.HEAD);
+  }
+  // a leather cowl from the hood down over the neck, flaring onto the collar (no skin shows between)
+  {
+    const neckR = 0.059 * app.body.neck, nbl = (rig.neckBaseY - HC.y) / S, rows = [];
+    const spec = [[-0.05, 0.86, 0.9], [-0.09, 1.0, 1.0], [nbl + 0.02, 1.12, 1.08], [nbl - 0.03, 1.55, 1.25], [nbl - 0.065, 2.15, 1.6], [nbl - 0.08, 2.25, 1.68]];
+    for (const [yl, kx, kz] of spec) {
+      const y = HC.y + yl * S, zc = HC.z - 0.016 * S, k = smoothstep(-0.035, -0.075, yl);
+      let w;
+      if (yl > -0.07) w = [[B.head, 1 - k], [B.neck, k]];
+      else if (yl > nbl - 0.01) w = [[B.neck, 1]];
+      else { const q = smoothstep(nbl - 0.01, nbl - 0.06, yl); w = [[B.neck, 1 - q * 0.7], [B.chest, q * 0.7]]; }
+      rows.push({ c: new V3(HC.x, y, zc), e1: new V3(1, 0, 0), e2: new V3(0, 0, 1), prof: (t) => [Math.sin(t) * neckR * kx * 1.12 * S, Math.cos(t) * neckR * kz * (Math.cos(t) > 0 ? 1.2 : 1.5) * S], col: leather, mat: [MAT.LEATHER, 0.6, 0, 1], col2: leather, wts: w, reg: yl < -0.09 ? REGION.NECK : REGION.HEAD, v: yl });
+    }
+    addLoft(mb, rows, 20);
+  }
+  // beak: elliptical rings from the face, forward and curving down to a point
+  const nb = 12, nr = 14, beak = [];
+  const bc = surf(0, P.mouthYScaled + 0.02, 0.1, -0.002);
+  for (let k = 0; k <= nb; k++) {
+    const t = k / nb, w = 0.038 * Math.pow(1 - t, 0.85) + 0.0015, h = 0.044 * Math.pow(1 - t, 0.8) + 0.0015;
+    const c = new V3(bc.x, bc.y - (0.012 + 0.07 * t * t) * S, bc.z + (0.27 * t) * S);
+    beak.push({ c, e1: new V3(1, 0, 0), e2: new V3(0, 1, 0), prof: (q) => [Math.cos(q) * w * S, Math.sin(q) * h * S * (Math.sin(q) > 0 ? 1 : 0.8)], col: k % 3 === 0 ? C(0x4e3824) : beakC, mat: [MAT.LEATHER, 0.5, 0, 1], col2: beakC, wts, reg: REGION.HEAD, v: t });
+  }
+  addLoft(mb, beak, nr, { capEnd: { offset: new V3(0, -0.004 * S, 0.004 * S) } });
+  for (let k = 1; k < nb - 2; k += 2) { const q = beak[k]; addBox(mb, q.c.clone().add(new V3(0, (0.044 * Math.pow(1 - k / nb, 0.8)) * S + 0.002 * S, 0)), new V3(1, 0, 0), new V3(0, 1, 0), new V3(0, 0, 1), 0.0035 * S, 0.002 * S, 0.0035 * S, brass, [MAT.METAL, 0.3, 0, 1], wts, REGION.HEAD); }
+  // hat: a low flat crown with a band and emblem, on a wide brim tilted a touch forward
+  const top = surf(0, 1, -0.05, 0), hy = top.y - 0.03 * S, tilt = 0.08;
+  const hatRing = (r, y, col, mat) => ({ c: new V3(HC.x, y, HC.z - 0.01 * S + Math.sin(tilt) * (y - hy)), e1: new V3(1, 0, 0), e2: new V3(0, -Math.sin(tilt), Math.cos(tilt)), prof: (q) => [Math.cos(q) * r, Math.sin(q) * r * 1.08], col, mat, col2: col, wts, reg: REGION.HEAD, v: y });
+  const hm = [MAT.CANVAS, 0.8, 0, 1];
+  addLoft(mb, [hatRing(0.215 * S, hy - 0.004 * S, hatC, hm), hatRing(0.205 * S, hy + 0.004 * S, hatC, hm), hatRing(0.112 * S, hy + 0.006 * S, hatC, hm)], 28);
+  addLoft(mb, [hatRing(0.108 * S, hy, bandC, [MAT.LEATHER, 0.5, 0, 1]), hatRing(0.108 * S, hy + 0.026 * S, bandC, [MAT.LEATHER, 0.5, 0, 1]), hatRing(0.104 * S, hy + 0.028 * S, hatC, hm), hatRing(0.1 * S, hy + 0.088 * S, hatC, hm)], 24, { capEnd: { offset: new V3(0, 0.002 * S, 0) } });
+  addLoft(mb, [hatRing(0.215 * S, hy - 0.004 * S, hatC, hm), hatRing(0.2 * S, hy - 0.01 * S, hatC, hm), hatRing(0.1 * S, hy - 0.008 * S, hatC, hm)], 28);
+  addBox(mb, new V3(HC.x, hy + 0.014 * S, HC.z + 0.108 * S), new V3(1, 0, 0), new V3(0, 1, 0), new V3(0, 0, 1), 0.012 * S, 0.012 * S, 0.003 * S, brass, [MAT.METAL, 0.3, 0, 1], wts, REGION.HEAD);
 }
 
 function buildMouthInside(mb, app, rig, P) {

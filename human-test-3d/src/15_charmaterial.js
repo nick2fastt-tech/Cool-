@@ -8,6 +8,7 @@ const CharShared = { uTime: { value: 0 }, uDetail: { value: 1 } };
 const GLSL_HT_COMMON = /* glsl */`
 uniform float uZombie; uniform float uFlash; uniform float uHighlight; uniform float uWet; uniform float uTime; uniform float uDetail;
 uniform float uVampire; uniform float uEyeGlow; uniform float uHeat; uniform float uAsh; uniform float uDoll; uniform vec4 uFaceC;
+uniform float uSick; uniform float uSweat; uniform vec3 uZTint; uniform vec4 uZLook; uniform vec3 uSkinZ; // uZLook: decay, dark eyes, clothing wear, seed
 uniform vec4 uWA[16]; uniform vec4 uWB[16]; uniform int uWN; uniform float uBlood;
 varying vec4 vMat; varying vec3 vColor2; varying vec2 vUvP; varying vec3 vRest;
 float htHash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -107,10 +108,41 @@ const GLSL_HT_ALBEDO = /* glsl */`
     }
     if (uZombie > 0.0) {
       float lum = dot(base, vec3(0.3, 0.55, 0.15));
-      vec3 zc = vec3(lum) * vec3(0.78, 0.9, 0.7) + vec3(0.02, 0.03, 0.0);
-      float mott = htFbm(puv * 18.0);
+      vec3 zc = vec3(lum) * uZTint + vec3(0.02, 0.03, 0.0) * uZTint.g;
+      float mott = htFbm(puv * 18.0 + uZLook.w);
       zc *= 0.82 + 0.3 * mott;
+      // decay (non-graphic): blotchy bruise-like discoloration and fine dark veins under the skin
+      float blot = smoothstep(0.55, 0.85, htFbm(vRest.xy * 7.0 + vRest.z * 5.0 + uZLook.w * 3.1)) * uZLook.x;
+      zc = mix(zc, zc * vec3(0.62, 0.52, 0.6), blot * 0.75);
+      float vn = 1.0 - smoothstep(0.0, 0.03, abs(htNoise(vRest.xy * 48.0 + vRest.zy * 21.0 + uZLook.w) - 0.5));
+      zc = mix(zc, zc * vec3(0.55, 0.6, 0.52), vn * uZLook.x * 0.45 * htAA(48.0, vRest.xy));
+      vec3 zq = (vRest - uFaceC.xyz) / uFaceC.w;
+      float zs = exp(-pow(abs(zq.x) - 0.034, 2.0) / 0.0006 - pow(zq.y + 0.004, 2.0) / 0.0004) * smoothstep(0.015, 0.05, zq.z);
+      zc = mix(zc, zc * vec3(0.4, 0.36, 0.4), zs * uZLook.y);
+      zc = mix(zc, zc * vec3(0.7, 0.66, 0.7), smoothstep(0.04, 0.4, vMat.z) * 0.6); // greyed lips
       base = mix(base, zc, uZombie * 0.85);
+    }
+    // infection: fever flush first, then a sallow pallor and tired, darkening eyes
+    if (uSick > 0.0) {
+      vec3 fq = (vRest - uFaceC.xyz) / uFaceC.w;
+      float flush = uSick * (1.0 - smoothstep(0.3, 0.7, uSick));
+      float cheekF = exp(-pow(abs(fq.x) - 0.042, 2.0) / 0.0007 - pow(fq.y + 0.025, 2.0) / 0.0007) * smoothstep(0.02, 0.06, fq.z);
+      base = mix(base, base * vec3(1.12, 0.88, 0.86), (0.2 + cheekF * 0.65) * flush);
+      float pallor = smoothstep(0.3, 1.0, uSick);
+      float sl = dot(base, vec3(0.3, 0.55, 0.15));
+      base = mix(base, vec3(sl) * vec3(0.98, 1.0, 0.93), pallor * 0.32);
+      float sock = exp(-pow(abs(fq.x) - 0.034, 2.0) / 0.00045 - pow(fq.y + 0.003, 2.0) / 0.00028) * smoothstep(0.02, 0.05, fq.z);
+      base = mix(base, base * vec3(0.66, 0.58, 0.62), sock * smoothstep(0.15, 0.9, uSick) * 0.6);
+    }
+    // sweat: a damp sheen with beads that catch the light
+    if (uSweat > 0.0) {
+      float dn = htNoise(vRest.xy * 240.0 + vRest.zy * 160.0);
+      float dw = fwidth(dn) + 0.02;
+      float bead = smoothstep(0.87 - uSweat * 0.07 - dw, 0.87 - uSweat * 0.07 + dw, dn) * htAA(240.0, vRest.xy);
+      htRough = mix(htRough, 0.16, uSweat * 0.55);
+      htRough = mix(htRough, 0.05, bead * uSweat);
+      htH += bead * 0.7; htBump = max(htBump, bead * 0.45 * uSweat);
+      base *= 1.0 - 0.05 * uSweat;
     }
     if (uVampire > 0.0) { // pallor with a cool undertone (keeps the skin's own shading detail), dark red lips
       float lipK = smoothstep(0.04, 0.45, vMat.z);
@@ -137,7 +169,13 @@ const GLSL_HT_ALBEDO = /* glsl */`
     base *= 0.72 + 0.42 * strands * htAA(900.0, puv) + 0.21 * (1.0 - htAA(900.0, puv)) + 0.18 * (clump - 0.5);
     htH += strands * 0.7 + clump * 0.5; htBump += (mT == 6 ? 0.6 : 0.8) * htAA(400.0, puv);
     htRough = mT == 6 ? clamp(0.42 + 0.2 * (1.0 - strands), 0.3, 0.75) : 0.85;
-    if (uZombie > 0.0) base = mix(base, base * vec3(0.8, 0.82, 0.78), uZombie * 0.5);
+    if (uZombie > 0.0) {
+      base = mix(base, base * vec3(0.8, 0.82, 0.78), uZombie * 0.5);
+      float mat = htNoise(vec2(puv.x * 60.0, puv.y * 5.0) + uZLook.w);
+      base = mix(base, base * (0.6 + 0.5 * mat), uZombie * uZLook.z * 0.6);          // matted clumps
+      base = mix(base, vec3(dot(base, vec3(0.33))) * 1.15, uZombie * uZLook.x * 0.25); // greying
+      htRough = mix(htRough, 0.85, uZombie * 0.6);
+    }
   } else if (mT == 7) {
     float pol = puv.y;
     float irisR = 0.50, pupilR = 0.18;
@@ -213,7 +251,24 @@ const GLSL_HT_ALBEDO = /* glsl */`
       htRough = mix(htRough, 0.35, z); htMetal = z * 0.8;
     }
   }
-  if (isCloth && uZombie > 0.0) base = mix(base, base * vec3(0.72, 0.7, 0.62), uZombie * 0.45);
+  if (isCloth && uZombie > 0.0) {
+    base = mix(base, base * vec3(0.72, 0.7, 0.62), uZombie * 0.45);
+    float wear = uZLook.z * uZombie;
+    if (wear > 0.0) {
+      // grime and stains, frayed patches, and tears where the skin shows through
+      float gr = htFbm(vRest.xy * 6.0 + vRest.z * 4.0 + uZLook.w * 2.3);
+      base = mix(base, base * vec3(0.55, 0.5, 0.42), smoothstep(0.45, 0.8, gr) * wear * 0.8);
+      float fr = htNoise(vRest.xy * 90.0 + vRest.zx * 70.0);
+      base = mix(base, base * 1.25 + 0.04, smoothstep(0.82, 0.95, fr) * wear * 0.5 * htAA(90.0, vRest.xy));
+      float tn = htFbm(vRest.xy * 11.0 + vRest.zy * 9.0 + uZLook.w * 5.7);
+      float tw = fwidth(tn) + 0.01, cut = 0.86 - wear * 0.13;
+      float tear = smoothstep(cut - tw, cut + tw, tn);
+      float rim = smoothstep(cut - 0.05 - tw, cut - 0.05 + tw, tn) * (1.0 - tear);
+      base = mix(base, base * 0.35, rim * 0.8);
+      base = mix(base, uSkinZ * (0.85 + 0.2 * htNoise(vRest.xy * 40.0)), tear);
+      htRough = mix(htRough, 0.75, tear); htBump *= 1.0 - tear * 0.7;
+    }
+  }
   if (uWet > 0.0 && mT != 7) { base *= 1.0 - uWet * 0.25; htRough *= 1.0 - uWet * 0.45; }
   // ---- wounds & blood (bind space: they move with the skinned surface) ----
   if (uWN > 0 || uBlood > 0.0) {
@@ -333,7 +388,9 @@ function createCharacterMaterial() {
     uWA: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) }, uWB: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) },
     uWN: { value: 0 }, uBlood: { value: 0 },
     uVampire: { value: 0 }, uEyeGlow: { value: 0 }, uFang: { value: 0 }, uHeat: { value: 0 }, uAsh: { value: 0 },
-    uDoll: { value: 0 }, uFaceC: { value: new THREE.Vector4(0, 1.6, 0, 1) }
+    uDoll: { value: 0 }, uFaceC: { value: new THREE.Vector4(0, 1.6, 0, 1) },
+    uSick: { value: 0 }, uSweat: { value: 0 }, uZTint: { value: new THREE.Vector3(0.78, 0.9, 0.7) }, uZLook: { value: new THREE.Vector4(0, 0, 0, 0) },
+    uSkinZ: { value: new THREE.Vector3(0.5, 0.55, 0.45) }
   };
   m.userData.u = U;
   m.onBeforeCompile = (sh) => {
@@ -364,7 +421,7 @@ function createCharacterMaterial() {
           totalEmissiveRadiance += vec3(1.0, 0.28, 0.12) * pow(rim, 0.8) * uHeat * 0.9; // heat sense (vampire player)
         }`);
   };
-  m.customProgramCacheKey = () => 'ht3d-char-v7';
+  m.customProgramCacheKey = () => 'ht3d-char-v8';
   return m;
 }
 

@@ -43,7 +43,7 @@ class NPC {
     this.brain = null; this.zombieTarget = null; this.isZombie = false;
     this.deathTime = 0; this.removed = false; this.carried = false;
     this.spawn = { pos: new V3(), yaw: 0 };
-    this.kills = 0; this.label = null; this.gore = null; this.infection = null;
+    this.kills = 0; this.label = null; this.gore = null; this.infection = null; this.zlook = null;
     this.vamp = { state: 'none' }; this.spawnKind = null; this.horror = null;
   }
   setupMesh(shell) {
@@ -56,7 +56,8 @@ class NPC {
       this.mesh.updateMatrixWorld(true);
       this.mesh.skeleton.calculateInverses();
       this.mesh.bind(this.mesh.skeleton);
-      const u = this.material.userData.u; u.uZombie.value = 0; u.uFlash.value = 0; u.uHighlight.value = 0; u.uWet.value = 0; if (u.uWN) { u.uWN.value = 0; u.uBlood.value = 0; } for (const k of ['uVampire', 'uEyeGlow', 'uFang', 'uHeat', 'uAsh', 'uDoll']) if (u[k]) u[k].value = 0;
+      const u = this.material.userData.u; u.uZombie.value = 0; u.uFlash.value = 0; u.uHighlight.value = 0; u.uWet.value = 0; if (u.uWN) { u.uWN.value = 0; u.uBlood.value = 0; } for (const k of ['uVampire', 'uEyeGlow', 'uFang', 'uHeat', 'uAsh', 'uDoll', 'uSick', 'uSweat']) if (u[k]) u[k].value = 0;
+      if (u.uZTint) { u.uZTint.value.set(0.78, 0.9, 0.7); u.uZLook.value.set(0, 0, 0, 0); }
     } else {
       const bones = [];
       for (let b = 0; b < NUM_BONES; b++) {
