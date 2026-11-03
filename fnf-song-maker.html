@@ -81,7 +81,41 @@
 
   /* Interface Scale, desktop only. The play screen is deliberately left out:
      the canvas is sized from the window, and zooming it would fight that. */
-  .screen:not(#gameScreen){zoom:var(--ui,1)}
+  .screen:not(#gameScreen):not(#manualScreen){zoom:var(--ui,1)}
+
+  /* ---------- Manual Chart ---------- */
+  #manualScreen{padding:calc(env(safe-area-inset-top) + 8px) 8px calc(env(safe-area-inset-bottom) + 8px);overflow:hidden}
+  .mc-top{display:flex;align-items:center;gap:10px;margin-bottom:8px;min-height:42px}
+  .mc-top h2{flex:1;margin:0;font-size:18px;font-weight:800;letter-spacing:-.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mc-top h2 small{font-size:11px;font-weight:800;color:var(--muted);margin-left:4px}
+  .mc-row{display:flex;align-items:center;gap:6px;margin-bottom:6px;overflow-x:auto;scrollbar-width:none;flex:0 0 auto}
+  .mc-row::-webkit-scrollbar{display:none}
+  .mc-b{
+    -webkit-appearance:none;appearance:none;flex:0 0 auto;border:1.5px solid var(--line);background:var(--card);color:var(--ink);
+    font:inherit;font-size:13px;font-weight:800;border-radius:11px;padding:8px 10px;min-height:38px;cursor:pointer;
+    display:inline-flex;align-items:center;gap:5px;white-space:nowrap;transition:transform .12s ease,background .12s ease;
+  }
+  .mc-b:active{transform:scale(.95)}
+  .mc-b.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .mc-b.off{opacity:.5;text-decoration:line-through}
+  .mc-b.save{background:var(--green);border-color:var(--green);color:#fff}
+  .mc-b.play{min-width:58px;justify-content:center;font-size:16px;background:var(--pink);border-color:var(--pink);color:#fff}
+  .mc-b[disabled]{opacity:.35;pointer-events:none}
+  .mc-lbl{font-size:10.5px;font-weight:800;color:var(--muted);letter-spacing:.6px;text-transform:uppercase;flex:0 0 auto;margin-left:4px}
+  .mc-in{
+    width:74px;flex:0 0 auto;border:1.5px solid var(--line);background:var(--field);color:var(--ink);border-radius:11px;
+    font:inherit;font-size:15px;font-weight:800;padding:7px 8px;min-height:38px;text-align:center;
+    -webkit-user-select:text;user-select:text;font-variant-numeric:tabular-nums;
+  }
+  .mc-sel{
+    flex:0 0 auto;border:1.5px solid var(--line);background:var(--card);color:var(--ink);border-radius:11px;
+    font:inherit;font-size:13px;font-weight:800;padding:7px 6px;min-height:38px;
+  }
+  .mc-stage{position:relative;flex:1 1 auto;min-height:160px;border-radius:14px;overflow:hidden;background:#1d1f27;touch-action:none}
+  #mcCanvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair}
+  .mc-time{flex:1 1 auto;min-width:0;font-size:12.5px;font-weight:800;color:var(--muted);font-variant-numeric:tabular-nums;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #mcSeek{width:100%;margin:2px 0 6px;accent-color:var(--pink);flex:0 0 auto}
+  .mc-help{font-size:11.5px;color:var(--muted);text-align:center;margin:0;line-height:1.4;flex:0 0 auto}
 
   .wrap{width:100%;max-width:560px;margin:0 auto;flex:1;display:flex;flex-direction:column}
 
@@ -895,9 +929,61 @@
 
       <p class="hint" id="songLen" style="text-align:center;margin:0 0 12px;font-variant-numeric:tabular-nums"></p>
       <button class="btn pink" id="autoChartBtn" disabled><span class="ic">✨</span>Auto Chart Song</button>
+      <button class="btn" id="manualChartBtn" disabled><span class="ic">✍️</span>Manual Chart V1.00</button>
       <button class="btn ghost" id="openSongs"><span class="ic">📀</span><span id="songsCount">My Mod</span></button>
       <p class="center-note" id="editorHint">Import the instrumental and at least one vocal track.</p>
     </div>
+  </section>
+
+  <!-- ============ MANUAL CHART ============ -->
+  <section class="screen" id="manualScreen">
+    <header class="mc-top">
+      <button class="back" id="mcBack"><span>←</span></button>
+      <h2>Manual Chart<small>V1.00</small></h2>
+      <button class="mc-b" id="mcUndo" title="Undo (Ctrl+Z)">↶ Undo</button>
+      <button class="mc-b save" id="mcSave">✓ Done</button>
+    </header>
+    <div class="mc-row">
+      <span class="mc-lbl">BPM</span>
+      <button class="mc-b" id="mcBpmDown">−</button>
+      <input class="mc-in" id="mcBpm" type="number" inputmode="decimal" min="30" max="400" step="0.01" value="120">
+      <button class="mc-b" id="mcBpmUp">+</button>
+      <button class="mc-b" id="mcDetect">🎯 Detect</button>
+      <span class="mc-lbl">Offset ms</span>
+      <input class="mc-in" id="mcOffset" type="number" inputmode="numeric" step="1" value="0">
+    </div>
+    <div class="mc-row">
+      <button class="mc-b on" id="mcInst">🎹 Instrumental</button>
+      <button class="mc-b on" id="mcPlr">🎤 Vocals</button>
+      <button class="mc-b on" id="mcOpp">🎤 Opponent Vocals</button>
+      <button class="mc-b" id="mcHits">🔔 Hitsounds</button>
+    </div>
+    <div class="mc-row">
+      <span class="mc-lbl">Snap</span>
+      <select class="mc-sel" id="mcSnap">
+        <option value="4">4th</option><option value="8">8th</option><option value="12">12th</option>
+        <option value="16" selected>16th</option><option value="24">24th</option><option value="32">32nd</option>
+      </select>
+      <span class="mc-lbl">Zoom</span>
+      <select class="mc-sel" id="mcZoom">
+        <option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="1.5">1.5x</option><option value="2">2x</option><option value="3">3x</option>
+      </select>
+      <span class="mc-lbl">Speed</span>
+      <select class="mc-sel" id="mcRate">
+        <option value="1" selected>1x</option><option value="0.75">0.75x</option><option value="0.5">0.5x</option>
+      </select>
+      <button class="mc-b" id="mcClear">🗑 Clear</button>
+    </div>
+    <div class="mc-stage" id="mcStage"><canvas id="mcCanvas"></canvas></div>
+    <input type="range" id="mcSeek" min="0" max="1000" value="0">
+    <div class="mc-row" style="margin-bottom:4px">
+      <button class="mc-b" id="mcStart" title="Back to the start">⏮</button>
+      <button class="mc-b" id="mcPrev" title="Back one bar">⏪</button>
+      <button class="mc-b play" id="mcPlay" title="Play / pause (Space)">▶</button>
+      <button class="mc-b" id="mcNext" title="Forward one bar">⏩</button>
+      <span class="mc-time" id="mcTime">0:00.0</span>
+    </div>
+    <p class="mc-help">Tap a square to place a note · tap a note to delete it · drag a note down for a hold · drag the grid to scroll</p>
   </section>
 
   <!-- ============ PROGRESS ============ -->
@@ -928,6 +1014,7 @@
       <div class="note" id="readyNote"></div>
       <p class="center-note" id="readyCheck" style="margin:-6px 0 14px"></p>
       <button class="btn green" id="playBtn"><span class="ic">▶</span>Play Chart</button>
+      <button class="btn" id="editManualBtn"><span class="ic">✍️</span>Edit in Manual Chart</button>
       <button class="btn" id="rechartBtn"><span class="ic">🔁</span>Rechart Song</button>
       <div class="seg" id="rechartDiff" style="margin:-4px 0 14px">
         <button data-diff="easy">Easy</button>
@@ -1620,7 +1707,7 @@ let currentScreen = "menuScreen";
 const SCREEN_DEPTH = {
   menuScreen: 0,
   editorScreen: 1, weeksScreen: 1, modScreen: 1, spritesScreen: 1, settingsScreen: 1, searchScreen: 1,
-  makerScreen: 2, mineScreen: 2, buildScreen: 3, sprevScreen: 3,
+  makerScreen: 2, mineScreen: 2, buildScreen: 3, sprevScreen: 3, manualScreen: 3,
   cutsceneScreen: 2, cutPlayScreen: 3,
   signinScreen: 0, profileScreen: 1, vsScreen: 1,
   songsScreen: 2, progressScreen: 2, readyScreen: 2, creditsScreen: 2,
@@ -2302,6 +2389,7 @@ wireFormat("plrVocFormat", "plrVocFile");
 function refreshEditor(){
   const vocals = (picked.oppVoc ? 1 : 0) + (picked.plrVoc ? 1 : 0);
   $("#autoChartBtn").disabled = !(picked.inst && vocals > 0);
+  $("#manualChartBtn").disabled = !picked.inst;
   const d = pickedDur.inst;
   $("#songLen").textContent = picked.inst && d != null
     ? "Song length: " + fmtTime(d) + " / " + fmtTime(MAX_SONG_SEC)
@@ -2311,7 +2399,7 @@ function refreshEditor(){
     !picked.inst ? "Import the instrumental and at least one vocal track."
     : vocals === 2 ? "Both voices loaded — each one's notes go straight to its own character.<br>Charting usually takes a few seconds, and up to <b>1–3 minutes</b> for a long song on an older phone."
     : vocals === 1 ? "One vocal track loaded. Add the other for an exact split, or chart now and the phrases will be shared out between both characters."
-    : "Import the instrumental and at least one vocal track.";
+    : "Instrumental loaded. Add a vocal track to Auto Chart, or chart it yourself with <b>Manual Chart</b>.";
 }
 
 /* The cap on how long a song may be, and the one place it is written down.
@@ -4391,12 +4479,16 @@ function paintReady(chart){
   $("#stSecLbl").textContent = "Sections";
   $("#stDiff").textContent  = (chart.difficulty || "normal").replace(/^./, ch => ch.toUpperCase());
   const mine = chart.notes.filter(n => n.mustHit).length;
-  $("#readyNote").innerHTML = (
+  $("#readyNote").innerHTML = chart.manual
+    ? "Charted by hand in <b>Manual Chart V1.00</b>. You hit " + mine + " of " + chart.notes.length +
+      " notes at " + (+chart.bpm.toFixed(2)) + " BPM."
+    : (
       chart.stems === 2 ? "Charted from <b>both vocal tracks</b> — every note came from the voice that sings it, so the sides are exact."
     : chart.singerSplit ? "One combined vocal track: <b>two voices told apart</b> and given a side each."
     : "One combined vocal track with a single voice, so phrases trade back and forth between you and the opponent.")
     + " You sing " + mine + " of " + chart.notes.length + " notes, snapped to the detected beat grid.";
   const v = chart.validation;
+  $("#readyCheck").innerHTML = "";
   if (v){
     const fixes = [];
     if (v.outOfRange) fixes.push(v.outOfRange + " outside the song");
@@ -5541,7 +5633,7 @@ async function loadSongById(id){
     if (rec.opp && rec.plr){
       tracks.push({ buf: await decodeBlob(rec.opp), side:"opp", combined:false });
       tracks.push({ buf: await decodeBlob(rec.plr), side:"plr", combined:false });
-    } else {
+    } else if (rec.opp || rec.plr){
       tracks.push({ buf: await decodeBlob(rec.opp || rec.plr), side:"plr", combined:true });
     }
     setProgress(100, "Finalizing chart...", rec.name);
@@ -10179,6 +10271,641 @@ drawMenuBg();
 resizeCanvas();
 window.addEventListener("pageshow", resizeCanvas);
 document.addEventListener("gesturestart", e => e.preventDefault());
+/* =====================================================================
+   MANUAL CHART V1.00
+   Chart a song by hand, the way the mobile chart editors do it: an
+   eight-column grid scrolling under a fixed line, the opponent's four
+   lanes on the left and Boyfriend's on the right. Tap a square to put a
+   note there, tap a note to take it away, drag a note down to hold it.
+   The instrumental and each vocal track can be switched on and off while
+   it plays, and the grid is drawn from whatever BPM and offset you set.
+   ===================================================================== */
+let MC = null;          // the chart being edited; kept when you leave so nothing is lost
+let mcRAF = 0;
+
+const MC_HEAD = 34;     // gutter on the left for bar numbers
+
+/* Loudness at 100 points a second, for the waveform drawn behind each half
+   of the grid — the easiest way to see where a line starts. */
+function mcEnvelope(buf){
+  if (!buf) return null;
+  const sr = buf.sampleRate, n = buf.length;
+  const a = buf.getChannelData(0), b = buf.numberOfChannels > 1 ? buf.getChannelData(1) : null;
+  const block = Math.max(1, Math.round(sr / 100));
+  const out = new Float32Array(Math.ceil(n / block));
+  let mx = 0;
+  for (let i = 0, j = 0; i < n; i += block, j++){
+    let pk = 0;
+    const end = Math.min(n, i + block);
+    for (let k = i; k < end; k += 4){
+      const v = Math.abs(b ? (a[k] + b[k]) * 0.5 : a[k]);
+      if (v > pk) pk = v;
+    }
+    out[j] = pk;
+  }
+  // Level it between the stem's quiet floor and its loud end, so the band
+  // leaking through a vocal file does not fill the picture and only the
+  // singing stands out.
+  const sorted = Float32Array.from(out).sort();
+  const lo = sorted[Math.floor(sorted.length * 0.3)] || 0;
+  const hi = sorted[Math.floor(sorted.length * 0.99)] || 1;
+  for (let j = 0; j < out.length; j++) out[j] = clamp((out[j] - lo * 1.3) / Math.max(1e-6, hi - lo * 1.3), 0, 1);
+  return out;
+}
+
+function mcTrack(side){
+  if (!MC) return null;
+  if (side === "opp") return MC.tracks.find(t => t.side === "opp" && !t.combined) || null;
+  return MC.tracks.find(t => t.side === "plr" || t.combined) || null;
+}
+
+/* Open the editor on a set of decoded tracks. `chart`, if given, is loaded
+   for editing; otherwise the grid starts empty. */
+function mcOpen(src, from){
+  mcStop();
+  const dur = Math.max(src.instBuf.duration, ...src.tracks.map(t => t.buf.duration));
+  const c = src.chart;
+  MC = {
+    instBuf: src.instBuf, tracks: src.tracks, sourceFiles: src.sourceFiles, name: src.name,
+    duration: dur,
+    bpm: c ? c.bpm : (src.bpm || 120),
+    offset: c ? c.offset : (src.offset || 0),
+    notes: c ? c.notes.map(n => ({ t:n.t, lane:n.lane, mustHit:!!n.mustHit, len:n.len || 0 })) : [],
+    time: 0, playing: false, startedAt: 0, startPos: 0, nodes: null, lastHit: 0,
+    mute: { inst:false, plr:false, opp:false },
+    hits: false, snap: 16, zoom: 1, rate: 1,
+    undo: [], dirty: false, from: from || "editorScreen",
+    flash: new Float32Array(8), vel: 0, drag: null, hover: null
+  };
+  MC.env = { opp: mcEnvelope(mcTrack("opp") && mcTrack("opp").buf),
+             plr: mcEnvelope(mcTrack("plr") && mcTrack("plr").buf) };
+  mcPaintControls();
+  show("manualScreen");
+  mcResize();
+  mcKick();
+}
+
+function mcPaintControls(){
+  if (!MC) return;
+  $("#mcBpm").value = +MC.bpm.toFixed(2);
+  $("#mcOffset").value = Math.round(MC.offset * 1000);
+  $("#mcSnap").value = String(MC.snap);
+  $("#mcZoom").value = String(MC.zoom);
+  $("#mcRate").value = String(MC.rate);
+  const opp = mcTrack("opp"), plr = mcTrack("plr");
+  const combined = plr && plr.combined;
+  $("#mcPlr").disabled = !plr;
+  $("#mcOpp").disabled = !opp;
+  $("#mcPlr").textContent = combined ? "🎤 Vocals (both)" : "🎤 Vocals";
+  for (const [id, key] of [["#mcInst","inst"],["#mcPlr","plr"],["#mcOpp","opp"]]){
+    $(id).classList.toggle("on", !MC.mute[key]);
+    $(id).classList.toggle("off", !!MC.mute[key]);
+  }
+  $("#mcHits").classList.toggle("on", MC.hits);
+  $("#mcPlay").textContent = MC.playing ? "⏸" : "▶";
+}
+
+/* ---------- grid geometry ---------- */
+function mcGeom(){
+  const cv = $("#mcCanvas");
+  const w = cv.clientWidth, h = cv.clientHeight;
+  const gap = 8;
+  const colW = Math.min(64, (w - MC_HEAD - gap - 6) / 8);
+  const gridW = colW * 8 + gap;
+  const x0 = MC_HEAD + Math.max(0, (w - MC_HEAD - gridW) / 2);
+  const step = 60 / MC.bpm / (MC.snap / 4);
+  const pps = (colW * 4 * MC.zoom) / (60 / MC.bpm);       // a 16th is one square at 1x
+  return { w, h, colW, gap, x0, playY: Math.round(h * 0.2), pps, step,
+           colX: c => x0 + c * colW + (c >= 4 ? gap : 0) };
+}
+function mcColAt(G, x){
+  for (let c = 0; c < 8; c++){
+    const cx = G.colX(c);
+    if (x >= cx && x < cx + G.colW) return c;
+  }
+  return -1;
+}
+const mcTimeAt = (G, y) => MC.time + (y - G.playY) / G.pps;
+const mcYAt = (G, t) => G.playY + (t - MC.time) * G.pps;
+function mcSnapT(G, t){
+  const k = Math.round((t - MC.offset) / G.step);
+  return clamp(MC.offset + k * G.step, 0, MC.duration - 0.05);
+}
+
+function mcResize(){
+  const cv = $("#mcCanvas");
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (!w || !h) return;
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  MC && (MC.dpr = dpr);
+}
+window.addEventListener("resize", () => { if (currentScreen === "manualScreen" && MC) mcResize(); });
+
+/* ---------- audio ---------- */
+function mcVol(key){
+  if (!MC || MC.mute[key]) return 0;
+  return key === "inst" ? settings.music / 100 : settings.vocal / 100;
+}
+function mcApplyMute(){
+  if (!MC || !MC.nodes) return;
+  for (const nd of MC.nodes) nd.gain.gain.value = mcVol(nd.key);
+}
+function mcPlay(){
+  if (!MC || MC.playing) return;
+  const ctx = getCtx();
+  if (MC.time >= MC.duration - 0.05) MC.time = 0;
+  const at = ctx.currentTime + 0.05;
+  const list = [{ buf: MC.instBuf, key:"inst" }];
+  const opp = mcTrack("opp"), plr = mcTrack("plr");
+  if (plr) list.push({ buf: plr.buf, key:"plr" });
+  if (opp) list.push({ buf: opp.buf, key:"opp" });
+  MC.nodes = list.map(it => {
+    const gain = ctx.createGain();
+    gain.gain.value = mcVol(it.key);
+    gain.connect(ctx.destination);
+    const src = ctx.createBufferSource();
+    src.buffer = it.buf;
+    src.playbackRate.value = MC.rate;
+    src.connect(gain);
+    if (MC.time < it.buf.duration) src.start(at, MC.time);
+    return { src, gain, key: it.key };
+  });
+  MC.startedAt = at; MC.startPos = MC.time; MC.lastHit = MC.time;
+  MC.playing = true; MC.vel = 0;
+  mcPaintControls();
+  mcKick();
+}
+function mcPause(){
+  if (!MC) return;
+  if (MC.nodes){
+    for (const nd of MC.nodes){
+      try{ nd.src.stop(); }catch(e){}
+      try{ nd.src.disconnect(); nd.gain.disconnect(); }catch(e){}
+    }
+  }
+  MC.nodes = null;
+  MC.playing = false;
+  mcPaintControls();
+}
+function mcStop(){ if (MC) mcPause(); }
+function mcSeek(t){
+  if (!MC) return;
+  const was = MC.playing;
+  if (was) mcPause();
+  MC.time = clamp(t, 0, MC.duration);
+  if (was) mcPlay();
+  mcKick();
+}
+function mcClick(when){
+  const ctx = getCtx();
+  const osc = ctx.createOscillator(), g = ctx.createGain();
+  osc.type = "square"; osc.frequency.value = 1760;
+  g.gain.setValueAtTime(0.0001, when);
+  g.gain.exponentialRampToValueAtTime(0.18 * Math.max(0.2, settings.vocal / 100), when + 0.004);
+  g.gain.exponentialRampToValueAtTime(0.0001, when + 0.05);
+  osc.connect(g); g.connect(ctx.destination);
+  osc.start(when); osc.stop(when + 0.06);
+}
+
+/* ---------- editing ---------- */
+function mcPushUndo(){
+  MC.undo.push(MC.notes.map(n => ({ ...n })));
+  if (MC.undo.length > 120) MC.undo.shift();
+  MC.dirty = true;
+}
+function mcNoteAt(G, col, y){
+  const mustHit = col >= 4, lane = col & 3;
+  let best = null, bd = Infinity;
+  for (const n of MC.notes){
+    if (n.mustHit !== mustHit || n.lane !== lane) continue;
+    const ny = mcYAt(G, n.t);
+    const d = Math.abs(ny - y);
+    // the head, or anywhere along the hold
+    const onTail = n.len > 0 && y > ny && y < mcYAt(G, n.t + n.len) + 4;
+    if ((d < G.colW * 0.5 || onTail) && d < bd){ bd = d; best = n; }
+  }
+  return best;
+}
+function mcAddNote(G, col, y){
+  const t = mcSnapT(G, mcTimeAt(G, y));
+  const mustHit = col >= 4, lane = col & 3;
+  if (MC.notes.some(n => n.mustHit === mustHit && n.lane === lane && Math.abs(n.t - t) < 0.002)) return;
+  mcPushUndo();
+  MC.notes.push({ t, lane, mustHit, len: 0 });
+  MC.notes.sort((a, b) => a.t - b.t);
+}
+
+/* ---------- pointer: tap places or removes, drag scrolls or holds ---------- */
+(function wireManualPointer(){
+  const cv = $("#mcCanvas");
+  const pos = e => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  cv.addEventListener("pointerdown", e => {
+    if (!MC) return;
+    cv.setPointerCapture(e.pointerId);
+    const G = mcGeom(), p = pos(e);
+    const col = mcColAt(G, p.x);
+    const note = col >= 0 ? mcNoteAt(G, col, p.y) : null;
+    MC.vel = 0;
+    MC.drag = { id: e.pointerId, x: p.x, y: p.y, lastY: p.y, lastT: performance.now(),
+                startTime: MC.time, col, note, mode: "pending", moved: false };
+  });
+  cv.addEventListener("pointermove", e => {
+    if (!MC) return;
+    const G = mcGeom(), p = pos(e);
+    if (!MC.drag || MC.drag.id !== e.pointerId){
+      // desktop hover: show where a note would land
+      const col = mcColAt(G, p.x);
+      MC.hover = col >= 0 ? { col, t: mcSnapT(G, mcTimeAt(G, p.y)) } : null;
+      mcKick();
+      return;
+    }
+    const d = MC.drag;
+    if (d.mode === "pending" && Math.hypot(p.x - d.x, p.y - d.y) > 8){
+      if (d.note){ d.mode = "hold"; mcPushUndo(); }
+      else { d.mode = "scroll"; if (MC.playing) mcPause(); }
+    }
+    if (d.mode === "hold"){
+      const end = mcSnapT(G, mcTimeAt(G, p.y));
+      d.note.len = Math.max(0, end - d.note.t);
+      if (d.note.len < G.step * 0.99) d.note.len = 0;
+    } else if (d.mode === "scroll"){
+      const now = performance.now();
+      MC.time = clamp(d.startTime - (p.y - d.y) / G.pps, 0, MC.duration);
+      const dt = Math.max(1, now - d.lastT);
+      MC.vel = -((p.y - d.lastY) / G.pps) / (dt / 1000) * 0.6 + MC.vel * 0.4;
+      d.lastY = p.y; d.lastT = now;
+    }
+    mcKick();
+  });
+  const end = e => {
+    if (!MC || !MC.drag || MC.drag.id !== e.pointerId) return;
+    const d = MC.drag, G = mcGeom();
+    MC.drag = null;
+    if (d.mode === "pending" && d.col >= 0){
+      if (d.note){
+        mcPushUndo();
+        MC.notes.splice(MC.notes.indexOf(d.note), 1);
+      } else mcAddNote(G, d.col, d.y);
+    } else if (d.mode === "scroll"){
+      if (performance.now() - d.lastT > 80) MC.vel = 0;    // stopped before letting go
+    } else MC.vel = 0;
+    mcKick();
+  };
+  cv.addEventListener("pointerup", end);
+  cv.addEventListener("pointercancel", e => { if (MC && MC.drag) { MC.drag.mode = "cancel"; end(e); } });
+  cv.addEventListener("pointerleave", () => { if (MC){ MC.hover = null; mcKick(); } });
+  cv.addEventListener("wheel", e => {
+    if (!MC) return;
+    e.preventDefault();
+    const G = mcGeom();
+    if (MC.playing) mcPause();
+    MC.time = clamp(MC.time + e.deltaY / G.pps, 0, MC.duration);
+    mcKick();
+  }, { passive: false });
+})();
+
+/* ---------- drawing ---------- */
+function mcKick(){ if (!mcRAF) mcRAF = requestAnimationFrame(mcFrame); }
+let mcLastFrame = 0;
+function mcFrame(now){
+  mcRAF = 0;
+  if (!MC || currentScreen !== "manualScreen"){ if (MC && MC.playing) mcPause(); return; }
+  const dt = Math.min(0.05, ((now || performance.now()) - (mcLastFrame || now || 0)) / 1000);
+  mcLastFrame = now || performance.now();
+  const cv = $("#mcCanvas");
+  if (cv.width !== Math.round(cv.clientWidth * (MC.dpr || 1))) mcResize();
+  const G = mcGeom();
+
+  if (MC.playing){
+    const ctx = getCtx();
+    const t = MC.startPos + Math.max(0, ctx.currentTime - MC.startedAt) * MC.rate;
+    // hitsounds and receptor flashes for notes crossing the line
+    for (const n of MC.notes){
+      if (n.t > MC.lastHit && n.t <= t){
+        MC.flash[(n.mustHit ? 4 : 0) + n.lane] = 1;
+        if (MC.hits) mcClick(ctx.currentTime);
+      }
+    }
+    MC.lastHit = t;
+    MC.time = t;
+    if (t >= MC.duration){ MC.time = MC.duration; mcPause(); }
+  } else if (Math.abs(MC.vel) > 0.01 && !MC.drag){
+    MC.time = clamp(MC.time + MC.vel * dt, 0, MC.duration);
+    MC.vel *= Math.pow(0.04, dt);
+    if (MC.time <= 0 || MC.time >= MC.duration) MC.vel = 0;
+  }
+  for (let i = 0; i < 8; i++) MC.flash[i] = Math.max(0, MC.flash[i] - dt * 5);
+
+  mcDraw(G);
+  mcPaintTime();
+  if (MC.playing || Math.abs(MC.vel) > 0.01 || MC.flash.some(f => f > 0)) mcKick();
+}
+
+function mcDraw(G){
+  const cv = $("#mcCanvas"), g = cv.getContext("2d"), dpr = MC.dpr || 1;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.fillStyle = "#1d1f27";
+  g.fillRect(0, 0, G.w, G.h);
+
+  const tTop = mcTimeAt(G, -G.colW), tBot = mcTimeAt(G, G.h + G.colW);
+  const beat = 60 / MC.bpm;
+
+  // the checkerboard, one square per snap step
+  const k0 = Math.floor((Math.max(tTop, -beat) - MC.offset) / G.step);
+  const k1 = Math.ceil((tBot - MC.offset) / G.step);
+  const rowH = G.step * G.pps;
+  for (let k = k0; k <= k1; k++){
+    const t = MC.offset + k * G.step;
+    if (t < 0 - G.step || t > MC.duration) continue;
+    const y = mcYAt(G, t) - rowH / 2;
+    for (let c = 0; c < 8; c++){
+      g.fillStyle = ((k + c) & 1) ? "#d9d5e0" : "#e9e6ee";
+      g.fillRect(G.colX(c), y, G.colW, rowH + 0.5);
+    }
+  }
+  // outside the song
+  const yEnd = mcYAt(G, MC.duration), yStart = mcYAt(G, 0);
+  g.fillStyle = "#1d1f27";
+  if (yStart > 0) g.fillRect(0, 0, G.w, yStart - (rowH / 2));
+  if (yEnd < G.h) g.fillRect(0, yEnd, G.w, G.h - yEnd);
+
+  // waveforms, the opponent's voice behind the left half and yours behind the right
+  const drawWave = (env, c0, col) => {
+    if (!env) return;
+    const xMid = G.colX(c0) + G.colW * 2, half = G.colW * 2 - 3;
+    g.fillStyle = col;
+    for (let y = 0; y < G.h; y += 2){
+      const t = mcTimeAt(G, y);
+      if (t < 0 || t > MC.duration) continue;
+      const v = env[Math.floor(t * 100)] || 0;
+      if (v < 0.06) continue;
+      const w = v * half;
+      g.fillRect(xMid - w, y, w * 2, 2);
+    }
+  };
+  const opp = mcTrack("opp"), plr = mcTrack("plr");
+  // a muted track's waveform fades, so it is clear what you are hearing
+  const oa = MC.mute.opp ? 0.1 : 0.32, pa = MC.mute.plr ? 0.1 : 0.32;
+  drawWave(MC.env.opp, 0, "rgba(120,80,200," + oa + ")");
+  drawWave(MC.env.plr, 4, "rgba(40,120,220," + pa + ")");
+  if (plr && plr.combined) drawWave(MC.env.plr, 0, "rgba(120,80,200," + (pa * 0.7) + ")");
+
+  // beat and bar lines, with bar numbers in the gutter
+  const b0 = Math.floor((tTop - MC.offset) / beat), b1 = Math.ceil((tBot - MC.offset) / beat);
+  g.font = "800 11px -apple-system,Segoe UI,Roboto,sans-serif";
+  g.textAlign = "right"; g.textBaseline = "middle";
+  const left = G.colX(0), right = G.colX(7) + G.colW;
+  for (let b = b0; b <= b1; b++){
+    const t = MC.offset + b * beat;
+    if (t < -0.001 || t > MC.duration) continue;
+    const y = Math.round(mcYAt(G, t) - rowH / 2) + 0.5;
+    const bar = ((b % 4) + 4) % 4 === 0;
+    g.strokeStyle = bar ? "rgba(214,40,90,.85)" : "rgba(40,40,60,.35)";
+    g.lineWidth = bar ? 2 : 1;
+    g.beginPath(); g.moveTo(left, y); g.lineTo(right, y); g.stroke();
+    if (bar){
+      g.fillStyle = "#c9cbd6";
+      g.fillText(String(Math.floor(b / 4) + 1), MC_HEAD - 6, y);
+    }
+  }
+  // the divider between the two characters
+  g.fillStyle = "#1d1f27";
+  g.fillRect(G.colX(3) + G.colW, 0, G.gap, G.h);
+
+  // ghost of where a tap would land
+  if (MC.hover && !MC.drag){
+    const c = MC.hover.col;
+    drawArrow(g, G.colX(c) + G.colW / 2, mcYAt(G, MC.hover.t), G.colW * 0.8, c & 3, "filled", 0.35);
+  }
+
+  // notes: holds first, heads on top
+  const size = G.colW * 0.82;
+  const vis = MC.notes.filter(n => n.t + n.len >= tTop && n.t <= tBot);
+  for (const n of vis){
+    if (n.len <= 0) continue;
+    const c = (n.mustHit ? 4 : 0) + n.lane;
+    const x = G.colX(c) + G.colW / 2;
+    const y0 = mcYAt(G, n.t), y1 = mcYAt(G, n.t + n.len);
+    const bw = Math.max(6, G.colW * 0.26);
+    g.fillStyle = LANE_COLORS[n.lane];
+    g.globalAlpha = 0.85;
+    g.fillRect(x - bw / 2, y0, bw, y1 - y0);
+    g.globalAlpha = 1;
+    g.fillRect(x - bw / 2 - 2, y1 - 3, bw + 4, 3);
+  }
+  for (const n of vis){
+    const c = (n.mustHit ? 4 : 0) + n.lane;
+    drawArrow(g, G.colX(c) + G.colW / 2, mcYAt(G, n.t), size, n.lane, "filled", 1);
+  }
+
+  // the line everything plays at, with the receptors on it
+  g.fillStyle = "rgba(29,31,39,.55)";
+  g.fillRect(0, 0, G.w, G.playY - G.colW * 0.55);
+  for (let c = 0; c < 8; c++){
+    const x = G.colX(c) + G.colW / 2;
+    const f = MC.flash[c];
+    drawArrow(g, x, G.playY, size * (1 + f * 0.12), c & 3, f > 0.05 ? "filled" : "outline", f > 0.05 ? 0.5 + f * 0.5 : 0.9);
+  }
+  g.fillStyle = "#ff5c9a";
+  g.fillRect(left - 6, G.playY - 1, right - left + 12, 2);
+
+  // who is who
+  g.textAlign = "center"; g.textBaseline = "top";
+  g.font = "800 10.5px -apple-system,Segoe UI,Roboto,sans-serif";
+  g.fillStyle = "#c9cbd6";
+  g.fillText("OPPONENT", G.colX(0) + G.colW * 2, 6);
+  g.fillText("BOYFRIEND", G.colX(4) + G.colW * 2, 6);
+}
+
+function mcPaintTime(){
+  const t = MC.time, beat = 60 / MC.bpm;
+  const b = Math.floor((t - MC.offset) / beat + 1e-6);
+  const s = Math.max(0, t);
+  const fmt = x => Math.floor(x / 60) + ":" + (x % 60).toFixed(1).padStart(4, "0");
+  $("#mcTime").textContent = fmt(s) + " / " + fmtTime(MC.duration) +
+    " · Bar " + (Math.floor(b / 4) + 1) + " Beat " + ((((b % 4) + 4) % 4) + 1) +
+    " · " + MC.notes.length + " notes";
+  const seek = $("#mcSeek");
+  if (document.activeElement !== seek) seek.value = String(Math.round(t / Math.max(0.001, MC.duration) * 1000));
+}
+
+/* ---------- controls ---------- */
+function mcSetBpm(v){
+  v = +v;
+  if (!MC || !isFinite(v) || v < 30 || v > 400) return;
+  MC.bpm = v; MC.dirty = true;
+  $("#mcBpm").value = +v.toFixed(2);
+  mcKick();
+}
+$("#mcBpm").addEventListener("change", e => mcSetBpm(e.target.value));
+$("#mcBpmDown").addEventListener("click", () => MC && mcSetBpm(Math.round(MC.bpm) - 1));
+$("#mcBpmUp").addEventListener("click", () => MC && mcSetBpm(Math.round(MC.bpm) + 1));
+$("#mcOffset").addEventListener("change", e => {
+  if (!MC) return;
+  const v = +e.target.value;
+  if (isFinite(v)){ MC.offset = clamp(v / 1000, -5, 30); MC.dirty = true; }
+  $("#mcOffset").value = Math.round(MC.offset * 1000);
+  mcKick();
+});
+$("#mcDetect").addEventListener("click", async () => {
+  if (!MC) return;
+  const btn = $("#mcDetect");
+  btn.disabled = true; btn.textContent = "🎯 Listening…";
+  try{
+    await nextFrame();
+    chartCancelled = false;
+    const A = await analyzeTrack(MC.instBuf);
+    const tp = detectTempo(normalise(A.flux), A.fps);
+    MC.bpm = tp.bpm; MC.offset = tp.offset; MC.dirty = true;
+    mcPaintControls();
+  }catch(e){}
+  btn.disabled = false; btn.textContent = "🎯 Detect";
+  mcKick();
+});
+for (const [id, key] of [["#mcInst","inst"],["#mcPlr","plr"],["#mcOpp","opp"]]){
+  $(id).addEventListener("click", () => {
+    if (!MC) return;
+    MC.mute[key] = !MC.mute[key];
+    mcApplyMute(); mcPaintControls();
+  });
+}
+$("#mcHits").addEventListener("click", () => { if (MC){ MC.hits = !MC.hits; mcPaintControls(); } });
+$("#mcSnap").addEventListener("change", e => { if (MC){ MC.snap = +e.target.value; mcKick(); } });
+$("#mcZoom").addEventListener("change", e => { if (MC){ MC.zoom = +e.target.value; mcKick(); } });
+$("#mcRate").addEventListener("change", e => {
+  if (!MC) return;
+  MC.rate = +e.target.value;
+  if (MC.playing){ mcPause(); mcPlay(); }
+});
+$("#mcPlay").addEventListener("click", () => { if (!MC) return; MC.playing ? mcPause() : mcPlay(); });
+$("#mcStart").addEventListener("click", () => mcSeek(0));
+$("#mcPrev").addEventListener("click", () => {
+  if (!MC) return;
+  const bar = 4 * 60 / MC.bpm;
+  const k = Math.ceil((MC.time - MC.offset) / bar - 1e-3) - 1;
+  mcSeek(Math.max(0, MC.offset + k * bar));
+});
+$("#mcNext").addEventListener("click", () => {
+  if (!MC) return;
+  const bar = 4 * 60 / MC.bpm;
+  const k = Math.floor((MC.time - MC.offset) / bar + 1e-3) + 1;
+  mcSeek(MC.offset + k * bar);
+});
+$("#mcSeek").addEventListener("input", e => { if (MC) mcSeek(+e.target.value / 1000 * MC.duration); });
+$("#mcUndo").addEventListener("click", () => {
+  if (!MC || !MC.undo.length) return;
+  MC.notes = MC.undo.pop();
+  mcKick();
+});
+$("#mcClear").addEventListener("click", () => {
+  if (!MC || !MC.notes.length) return;
+  if (!confirm("Clear every note? (Undo brings them back.)")) return;
+  mcPushUndo();
+  MC.notes = [];
+  mcKick();
+});
+$("#mcBack").addEventListener("click", () => {
+  mcStop();
+  show(MC ? MC.from : "editorScreen");
+});
+document.addEventListener("keydown", e => {
+  if (currentScreen !== "manualScreen" || !MC) return;
+  const typing = e.target && (e.target.tagName === "INPUT" || e.target.tagName === "SELECT");
+  if (e.code === "Space" && !typing){ e.preventDefault(); MC.playing ? mcPause() : mcPlay(); }
+  else if ((e.ctrlKey || e.metaKey) && e.code === "KeyZ"){ e.preventDefault(); $("#mcUndo").click(); }
+  else if (!typing && (e.code === "ArrowUp" || e.code === "ArrowDown")){
+    e.preventDefault();
+    const G = mcGeom();
+    mcSeek(mcSnapT(G, MC.time + (e.code === "ArrowDown" ? G.step : -G.step)));
+  }
+});
+
+/* Done: the hand-made chart becomes the song's chart, ready to play, save
+   to My Mod or export, exactly like an auto chart. */
+$("#mcSave").addEventListener("click", async () => {
+  if (!MC) return;
+  if (!MC.notes.length){
+    await notify("Nothing charted yet", "Place some notes on the grid first.",
+      { icon:"✍️", fix:"Tap a square in the left half for the opponent, or the right half for you." });
+    return;
+  }
+  mcStop();
+  const notes = MC.notes.map(n => ({ t:n.t, lane:n.lane, mustHit:n.mustHit, len:n.len, src:"manual" }))
+                        .sort((a, b) => a.t - b.t);
+  let sections = 0;
+  for (const side of [false, true]){
+    let prev = null;
+    for (const n of notes){
+      if (n.mustHit !== side) continue;
+      if (prev === null || n.t - prev > 1.1) sections++;
+      prev = n.t;
+    }
+  }
+  const chart = {
+    bpm: MC.bpm, offset: MC.offset, beatLen: 60 / MC.bpm, duration: MC.duration,
+    notes, sections, difficulty: "manual", manual: true,
+    stems: MC.tracks.filter(t => !t.combined).length || MC.tracks.length,
+    singerSplit: true
+  };
+  SONG = { instBuf: MC.instBuf, tracks: MC.tracks, chart, name: MC.name, sourceFiles: MC.sourceFiles };
+  MC.dirty = false;
+  paintReady(chart);
+  show("readyScreen");
+});
+
+/* From the Editor: chart the files that are loaded. Coming back with the same
+   files picks up the chart you left, so leaving never throws work away. */
+$("#manualChartBtn").addEventListener("click", async () => {
+  if (!picked.inst) return;
+  if (MC && MC.sourceFiles && MC.sourceFiles.inst === picked.inst &&
+      MC.sourceFiles.opp === picked.oppVoc && MC.sourceFiles.plr === picked.plrVoc){
+    MC.from = "editorScreen";
+    mcPaintControls();
+    show("manualScreen");
+    mcResize(); mcKick();
+    return;
+  }
+  const btn = $("#manualChartBtn");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="ic">⏳</span>Loading audio…';
+  try{
+    getCtx();
+    const instBuf = await decode(picked.inst);
+    const tracks = [];
+    if (picked.oppVoc && picked.plrVoc){
+      tracks.push({ buf: await decode(picked.oppVoc), side:"opp", combined:false });
+      tracks.push({ buf: await decode(picked.plrVoc), side:"plr", combined:false });
+    } else if (picked.oppVoc || picked.plrVoc){
+      tracks.push({ buf: await decode(picked.oppVoc || picked.plrVoc), side:"plr", combined:true });
+    }
+    // a first guess at the tempo, so the grid already lines up; change it freely
+    btn.innerHTML = '<span class="ic">⏳</span>Finding the beat…';
+    let bpm = 120, offset = 0;
+    try{
+      chartCancelled = false;
+      const A = await analyzeTrack(instBuf);
+      const tp = detectTempo(normalise(A.flux), A.fps);
+      bpm = tp.bpm; offset = tp.offset;
+    }catch(e){}
+    mcOpen({ instBuf, tracks, name: picked.inst.name.replace(/\.[^.]+$/, ""), bpm, offset,
+             sourceFiles: { inst: picked.inst, opp: picked.oppVoc, plr: picked.plrVoc } }, "editorScreen");
+  }catch(err){
+    await notify("Could not open that audio", (err && err.message ? err.message : String(err)),
+      { fix:"Try a different file, or export it again as M4A, MP3 or OGG." });
+  }finally{
+    btn.innerHTML = '<span class="ic">✍️</span>Manual Chart V1.00';
+    refreshEditor();
+  }
+});
+
+/* From Chart Ready: fix up any chart by hand, auto or manual. */
+$("#editManualBtn").addEventListener("click", () => {
+  if (!SONG) return;
+  mcOpen({ instBuf: SONG.instBuf, tracks: SONG.tracks, chart: SONG.chart, name: SONG.name,
+           sourceFiles: SONG.sourceFiles }, "readyScreen");
+});
+
 </script>
 </body>
 </html>
