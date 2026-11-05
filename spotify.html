@@ -2,85 +2,139 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>My Playlist Player</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0d0f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="My Music">
+<title>Nick's Music</title>
 <style>
   :root {
-    --bg: #0d0d0f; --panel: #18181c; --panel2: #222228; --text: #f2f2f4;
+    --bg: #0d0d0f; --panel: #18181c; --panel2: #24242a; --text: #f2f2f4;
     --muted: #9a9aa5; --accent: #1ed760; --accent-ink: #062b14; --line: #2c2c33;
   }
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
   body {
-    margin: 0; min-height: 100vh; background: radial-gradient(1200px 600px at 20% -10%, #1d3a29 0%, var(--bg) 55%);
-    color: var(--text); font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column;
+    background: var(--bg); color: var(--text);
+    font: 16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   }
-  .wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 60px; }
-  h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.5px; }
-  .sub { color: var(--muted); margin: 0 0 20px; }
-  form { display: flex; gap: 8px; flex-wrap: wrap; }
+  button, input { font: inherit; }
+
+  header {
+    padding: calc(16px + env(safe-area-inset-top)) 16px 4px;
+    background: linear-gradient(180deg, #1d3a29 0%, var(--bg) 100%);
+  }
+  h1 { font-size: 22px; margin: 0; letter-spacing: -0.3px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 2px 0 0; }
+
+  /* Playlist chips (swipe sideways) */
+  .chips { display: flex; gap: 8px; overflow-x: auto; padding: 12px 16px 4px; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip {
+    flex: 0 0 auto; display: flex; align-items: center; height: 40px; padding: 0 4px 0 14px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
+    font-size: 14px; white-space: nowrap; color: var(--text);
+  }
+  .chip.active { border-color: var(--accent); color: var(--accent); }
+  .chip span { cursor: pointer; max-width: 200px; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; }
+  .chip .x { border: 0; background: none; color: var(--muted); width: 32px; height: 32px; border-radius: 50%; cursor: pointer; }
+  .chip.add { padding: 0 16px; cursor: pointer; color: var(--accent); font-weight: 600; }
+
+  /* Add-a-link form */
+  form { display: none; flex-direction: column; gap: 8px; padding: 8px 16px 0; }
+  form.open { display: flex; }
   input {
-    flex: 1 1 260px; min-width: 0; padding: 12px 14px; border-radius: 999px; border: 1px solid var(--line);
-    background: var(--panel); color: var(--text); font-size: 15px; outline: none;
+    width: 100%; height: 46px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--text); font-size: 16px; outline: none;
   }
   input:focus { border-color: var(--accent); }
-  button {
-    border: 0; border-radius: 999px; padding: 12px 20px; font-weight: 700; font-size: 15px;
-    background: var(--accent); color: var(--accent-ink); cursor: pointer;
+  .row { display: flex; gap: 8px; }
+  .btn {
+    height: 46px; padding: 0 20px; border: 0; border-radius: 999px; font-weight: 700; cursor: pointer;
+    background: var(--accent); color: var(--accent-ink);
   }
-  button.ghost { background: var(--panel2); color: var(--text); }
-  button:active { transform: scale(0.97); }
-  .err { color: #ff6b6b; min-height: 22px; margin: 6px 4px 0; font-size: 14px; }
-  .saved { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 18px; }
-  .chip {
-    display: inline-flex; align-items: center; gap: 6px; background: var(--panel); border: 1px solid var(--line);
-    border-radius: 999px; padding: 6px 6px 6px 12px; font-size: 13px; max-width: 100%;
+  .btn.ghost { background: var(--panel2); color: var(--text); }
+  .err { color: #ff6b6b; font-size: 14px; min-height: 0; margin: 0; }
+
+  /* Spotify player fills the free space */
+  main { flex: 1; display: flex; flex-direction: column; padding: 10px 16px; min-height: 0; }
+  #embed { position: relative; flex: 1; min-height: 380px; border-radius: 12px; overflow: hidden; background: var(--panel); }
+  #embed iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .msg { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--muted); }
+
+  /* Bottom control dock */
+  .dock {
+    position: sticky; bottom: 0; z-index: 5;
+    padding: 10px 16px calc(12px + env(safe-area-inset-bottom));
+    background: rgba(13, 13, 15, 0.92); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+    border-top: 1px solid var(--line);
   }
-  .chip span { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
-  .chip.active { border-color: var(--accent); }
-  .chip b { cursor: pointer; color: var(--muted); padding: 0 6px; font-weight: 400; }
-  .player { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 12px; }
-  #embed iframe { border-radius: 12px; display: block; width: 100%; }
-  .controls { display: flex; gap: 8px; justify-content: center; margin-top: 12px; flex-wrap: wrap; }
-  .bar { height: 6px; background: var(--panel2); border-radius: 3px; margin-top: 12px; cursor: pointer; }
-  .bar i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 3px; }
-  .time { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 4px; }
-  .empty { text-align: center; color: var(--muted); padding: 48px 16px; }
-  .tip { color: var(--muted); font-size: 13px; margin-top: 18px; }
+  .bar { padding: 10px 0; cursor: pointer; touch-action: none; }
+  .bar .track { height: 5px; background: var(--panel2); border-radius: 3px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--accent); }
+  .time { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: -4px; }
+  .controls { display: flex; align-items: center; justify-content: center; gap: 28px; margin-top: 6px; }
+  .skip { width: 52px; height: 52px; border-radius: 50%; border: 0; background: var(--panel2); color: var(--text); font-size: 13px; font-weight: 700; cursor: pointer; }
+  .play { width: 68px; height: 68px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-ink); cursor: pointer; display: grid; place-items: center; }
+  .play svg { width: 30px; height: 30px; }
+  button:active { transform: scale(0.95); }
+  .tip { color: var(--muted); font-size: 12px; text-align: center; margin: 10px 0 0; }
+
+  @media (min-width: 700px) {
+    header, .chips, form, main, .dock-inner { max-width: 760px; width: 100%; margin-left: auto; margin-right: auto; }
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>🎧 My Playlist Player</h1>
-  <p class="sub">Paste a Spotify playlist, album or track link and hit play.</p>
+  <header>
+    <h1>🎧 Nick's Music</h1>
+    <p class="sub">Your playlists, one tap away.</p>
+  </header>
 
-  <form id="f">
-    <input id="url" placeholder="https://open.spotify.com/playlist/..." autocomplete="off">
-    <button type="submit">Load</button>
+  <div class="chips" id="chips"></div>
+
+  <form id="f" autocomplete="off">
+    <input id="url" inputmode="url" placeholder="Paste a Spotify playlist / album / song link">
+    <div class="row">
+      <input id="name" placeholder="Name (optional)">
+      <button class="btn" type="submit">Add</button>
+    </div>
+    <p class="err" id="err"></p>
   </form>
-  <div class="err" id="err"></div>
-  <div class="saved" id="saved"></div>
 
-  <div class="player">
-    <div id="embed"><div class="empty">No playlist loaded yet.</div></div>
-    <div class="bar" id="bar"><i id="fill"></i></div>
-    <div class="time"><span id="cur">0:00</span><span id="dur">0:00</span></div>
-    <div class="controls">
-      <button class="ghost" id="back">⏪ 15s</button>
-      <button id="toggle">▶ Play / Pause</button>
-      <button class="ghost" id="fwd">15s ⏩</button>
+  <main>
+    <div id="embed"><div class="msg" id="msg">Loading Spotify…</div></div>
+  </main>
+
+  <div class="dock">
+    <div class="dock-inner">
+      <div class="bar" id="bar"><div class="track"><i id="fill"></i></div></div>
+      <div class="time"><span id="cur">0:00</span><span id="dur">0:00</span></div>
+      <div class="controls">
+        <button class="skip" id="back" aria-label="Back 15 seconds">-15</button>
+        <button class="play" id="toggle" aria-label="Play or pause">
+          <svg id="icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+        <button class="skip" id="fwd" aria-label="Forward 15 seconds">+15</button>
+      </div>
+      <p class="tip">Log in at open.spotify.com in this browser for full songs. Skip tracks with the player's own buttons.</p>
     </div>
   </div>
 
-  <p class="tip">Tip: log in at open.spotify.com in this same browser to hear full songs. Logged out, Spotify only plays 30-second previews. Use the player's own buttons to skip tracks and shuffle.</p>
-</div>
-
 <script>
-  const KEY = 'playlistPlayer.saved';
+  const DEFAULT = { uri: 'spotify:playlist:7sC9W2MHa9QLMS92HX5SQI', name: "Nick's Favorite Songs", fixed: true };
+  const KEY = 'nicksMusic.saved', LAST = 'nicksMusic.last';
   const $ = id => document.getElementById(id);
-  let controller = null, state = { position: 0, duration: 0, paused: true }, current = null;
+  const PLAY = '<path d="M8 5v14l11-7z"/>', PAUSE = '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>';
+  let controller = null, state = { position: 0, duration: 0, isPaused: true }, current = null;
 
-  const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
-  const save = list => { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch {} };
+  const get = k => { try { return localStorage.getItem(k); } catch { return null; } };
+  const set = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+  const saved = () => { try { return JSON.parse(get(KEY)) || []; } catch { return []; } };
+  const all = () => [DEFAULT, ...saved().filter(i => i.uri !== DEFAULT.uri)];
   const fmt = ms => { const s = Math.floor((ms || 0) / 1000); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
 
   // Turns a share link or spotify: URI into "spotify:type:id"
@@ -92,39 +146,54 @@
     return m ? `spotify:${m[1]}:${m[2]}` : null;
   }
 
-  function renderSaved() {
-    const box = $('saved'); box.innerHTML = '';
-    load().forEach((item, i) => {
+  function renderChips() {
+    const box = $('chips'); box.innerHTML = '';
+    all().forEach(item => {
       const c = document.createElement('div');
       c.className = 'chip' + (item.uri === current ? ' active' : '');
       const label = document.createElement('span');
-      label.textContent = item.name; label.title = item.uri;
+      label.textContent = item.name;
       label.onclick = () => play(item.uri);
-      const x = document.createElement('b'); x.textContent = '×'; x.title = 'Remove';
-      x.onclick = () => { const l = load(); l.splice(i, 1); save(l); renderSaved(); };
-      c.append(label, x); box.append(c);
+      c.append(label);
+      if (!item.fixed) {
+        const x = document.createElement('button');
+        x.className = 'x'; x.textContent = '×'; x.setAttribute('aria-label', 'Remove ' + item.name);
+        x.onclick = () => { set(KEY, JSON.stringify(saved().filter(i => i.uri !== item.uri))); renderChips(); };
+        c.append(x);
+      } else {
+        label.style.paddingRight = '14px';
+      }
+      box.append(c);
     });
-  }
-
-  function remember(uri) {
-    const list = load();
-    if (!list.some(i => i.uri === uri)) {
-      const type = uri.split(':')[1];
-      const name = prompt('Name this ' + type + ':', 'My ' + type + ' ' + (list.length + 1)) || ('My ' + type);
-      list.unshift({ uri, name }); save(list.slice(0, 12));
-    }
+    const add = document.createElement('button');
+    add.className = 'chip add'; add.textContent = '+ Add';
+    add.onclick = () => { $('f').classList.toggle('open'); if ($('f').classList.contains('open')) $('url').focus(); };
+    box.append(add);
   }
 
   function play(uri) {
-    current = uri; renderSaved();
+    current = uri; set(LAST, uri); renderChips();
     if (controller) { controller.loadUri(uri); controller.play(); }
   }
 
   $('f').onsubmit = e => {
     e.preventDefault();
-    const uri = toUri($('url').value);
-    if (!uri) { $('err').textContent = "That doesn't look like a Spotify link."; return; }
-    $('err').textContent = ''; remember(uri); play(uri); $('url').value = '';
+    const raw = $('url').value;
+    const uri = toUri(raw);
+    if (!uri) {
+      $('err').textContent = /spotify\.link/.test(raw)
+        ? 'Short spotify.link links don\'t work here. Open it, then copy the full open.spotify.com link.'
+        : 'That doesn\'t look like a Spotify link.';
+      return;
+    }
+    $('err').textContent = '';
+    if (!all().some(i => i.uri === uri)) {
+      const list = saved();
+      list.push({ uri, name: $('name').value.trim() || 'Playlist ' + (list.length + 2) });
+      set(KEY, JSON.stringify(list.slice(-15)));
+    }
+    $('url').value = ''; $('name').value = ''; $('f').classList.remove('open');
+    play(uri);
   };
 
   $('toggle').onclick = () => controller && controller.togglePlay();
@@ -133,24 +202,35 @@
   $('bar').onclick = e => {
     if (!controller || !state.duration) return;
     const r = e.currentTarget.getBoundingClientRect();
-    controller.seek(((e.clientX - r.left) / r.width) * state.duration / 1000);
+    controller.seek(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * state.duration / 1000);
   };
 
-  // Spotify's official embed API
+  // Show a message if Spotify never loads (offline, blocked, etc.)
+  const failTimer = setTimeout(() => {
+    if (!controller) $('msg').textContent = "Couldn't reach Spotify. Check your connection and reload.";
+  }, 12000);
+
+  // Spotify's official embed player
   window.onSpotifyIframeApiReady = IFrameAPI => {
-    const first = load()[0];
-    current = first ? first.uri : null;
-    $('embed').innerHTML = '<div id="spot"></div>';
-    IFrameAPI.createController($('spot'), { width: '100%', height: 420, uri: current || 'spotify:playlist:37i9dQZF1DXcBWIGoYBM5M' }, c => {
-      controller = c;
+    const last = get(LAST);
+    current = all().some(i => i.uri === last) ? last : DEFAULT.uri;
+    renderChips();
+    const spot = document.createElement('div');
+    $('embed').append(spot);
+    IFrameAPI.createController(spot, { width: '100%', height: '100%', uri: current }, c => {
+      controller = c; clearTimeout(failTimer);
+      const m = $('msg'); if (m) m.remove();
       c.addListener('playback_update', e => {
         state = e.data;
         $('fill').style.width = (state.duration ? state.position / state.duration * 100 : 0) + '%';
         $('cur').textContent = fmt(state.position); $('dur').textContent = fmt(state.duration);
+        $('icon').innerHTML = state.isPaused ? PLAY : PAUSE;
       });
     });
-    renderSaved();
   };
+
+  current = get(LAST) || DEFAULT.uri;
+  renderChips();
 </script>
 <script src="https://open.spotify.com/embed/iframe-api/v1" async></script>
 </body>
