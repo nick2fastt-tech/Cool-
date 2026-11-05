@@ -63,7 +63,8 @@
   main { flex: 1; display: flex; flex-direction: column; padding: 10px 16px; min-height: 0; }
   #embed { position: relative; flex: 1; min-height: 380px; border-radius: 12px; overflow: hidden; background: var(--panel); }
   #embed iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-  .msg { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--muted); }
+  .note { color: #ffb4a8; font-size: 13px; margin: 8px 2px 0; }
+  .dock.off .bar, .dock.off .controls { opacity: 0.35; pointer-events: none; }
 
   /* Bottom control dock */
   .dock {
@@ -106,10 +107,11 @@
   </form>
 
   <main>
-    <div id="embed"><div class="msg" id="msg">Loading Spotify…</div></div>
+    <div id="embed"></div>
+    <p class="note" id="note" hidden>Player not loading? File previews (like the Files app or the Claude app) block Spotify. Open this page in a web browser like Chrome or Safari.</p>
   </main>
 
-  <div class="dock">
+  <div class="dock off" id="dock">
     <div class="dock-inner">
       <div class="bar" id="bar"><div class="track"><i id="fill"></i></div></div>
       <div class="time"><span id="cur">0:00</span><span id="dur">0:00</span></div>
@@ -171,9 +173,23 @@
     box.append(add);
   }
 
+  // Basic Spotify embed, shown right away. Works even if the controls script can't load.
+  const embedUrl = uri => { const [, type, id] = uri.split(':'); return `https://open.spotify.com/embed/${type}/${id}`; };
+  function showPlain(uri) {
+    let f = $('plain');
+    if (!f) {
+      f = document.createElement('iframe');
+      f.id = 'plain'; f.title = 'Spotify player';
+      f.allow = 'autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture';
+      $('embed').append(f);
+    }
+    f.src = embedUrl(uri);
+  }
+
   function play(uri) {
     current = uri; set(LAST, uri); renderChips();
     if (controller) { controller.loadUri(uri); controller.play(); }
+    else showPlain(uri);
   }
 
   $('f').onsubmit = e => {
@@ -205,21 +221,25 @@
     controller.seek(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * state.duration / 1000);
   };
 
-  // Show a message if Spotify never loads (offline, blocked, etc.)
-  const failTimer = setTimeout(() => {
-    if (!controller) $('msg').textContent = "Couldn't reach Spotify. Check your connection and reload.";
-  }, 12000);
+  // Start with the basic player right away
+  const last = get(LAST);
+  current = all().some(i => i.uri === last) ? last : DEFAULT.uri;
+  renderChips();
+  showPlain(current);
 
-  // Spotify's official embed player
+  // If the full player never connects, explain how to fix it
+  const noteTimer = setTimeout(() => { if (!controller) $('note').hidden = false; }, 10000);
+
+  // Upgrade to Spotify's controllable player so the bottom buttons work
   window.onSpotifyIframeApiReady = IFrameAPI => {
-    const last = get(LAST);
-    current = all().some(i => i.uri === last) ? last : DEFAULT.uri;
-    renderChips();
+    const startUri = current;
     const spot = document.createElement('div');
     $('embed').append(spot);
-    IFrameAPI.createController(spot, { width: '100%', height: '100%', uri: current }, c => {
-      controller = c; clearTimeout(failTimer);
-      const m = $('msg'); if (m) m.remove();
+    IFrameAPI.createController(spot, { width: '100%', height: '100%', uri: startUri }, c => {
+      controller = c; clearTimeout(noteTimer);
+      $('note').hidden = true; $('dock').classList.remove('off');
+      const p = $('plain'); if (p) p.remove();
+      if (current !== startUri) c.loadUri(current);
       c.addListener('playback_update', e => {
         state = e.data;
         $('fill').style.width = (state.duration ? state.position / state.duration * 100 : 0) + '%';
@@ -229,8 +249,6 @@
     });
   };
 
-  current = get(LAST) || DEFAULT.uri;
-  renderChips();
 </script>
 <script src="https://open.spotify.com/embed/iframe-api/v1" async></script>
 </body>
