@@ -104,7 +104,12 @@ class AISystem {
       try {
         if (npc.lifeState === 'zombie') this.updateZombie(npc, b, dt);
         else if (npc.horror && npc.lifeState === 'alive') { if (game.horror) game.horror.think(npc, b, dt); }
-        else if (npc.lifeState === 'alive') this.updateAlive(npc, b, dt);
+        else if (npc.lifeState === 'alive') {
+          // big crowds: calm people far away and off screen think every other frame (they still move every frame)
+          b.thinkAcc = (b.thinkAcc || 0) + dt;
+          const lazy = list.length > 14 && !npc.onScreen && npc.camD2 > 1225 && (b.state === 'idle' || b.state === 'wander' || b.state === 'chat') && !npc.grabbedBy && ((game.frame + npc.id) & 1) === 1 && b.thinkAcc < 0.05;
+          if (!lazy) { const tdt = b.thinkAcc; b.thinkAcc = 0; this.updateAlive(npc, b, tdt); }
+        }
         else if (npc.lifeState === 'vampire') game.vampires.think(npc, b, dt);
         else { b.state = 'dead'; }
         if (npc.physMode === 'anim' && npc.active) this.steer(npc, b, dt);

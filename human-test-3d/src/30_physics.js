@@ -348,6 +348,18 @@ class PhysicsWorld {
       this.solveContactVelocities(h);
       for (const j of this.joints) if (j.enabled) j.solveVel(h);
     }
+    // safety net against launches: a body that has not just been shot, blasted or thrown cannot pick up more
+    // than a running pace sideways or upward (from being wedged between moving characters, a wall and a
+    // character, ...). Falling is never limited.
+    for (const o of this.owners) {
+      if (o.physKind !== 'npc' || this.time - (o.forceT || -99) < 1.5) continue;
+      for (const b of o.bodies) {
+        if (b.kinematic || b.sleeping) continue;
+        const v = b.vel, h2 = v.x * v.x + v.z * v.z;
+        if (h2 > 64) { const k = 8 / Math.sqrt(h2); v.x *= k; v.z *= k; }
+        if (v.y > 6) v.y = 6;
+      }
+    }
     this.updateSleep(dt);
     this.frameIndex++;
     this.time += dt;
@@ -690,6 +702,7 @@ class PhysicsWorld {
   applyImpulse(b, impulse, point) {
     if (!b || b.kinematic || b.invMass === 0) return;
     if (b.sleeping) this.wakeOwner(b.owner);
+    if (b.owner && impulse.lengthSq() > b.mass * b.mass * 4) b.owner.forceT = this.time; // a real hit: free to fly for a moment
     applyBodyPairCorrection(b, null, impulse, 0, 1, point || null, null, true);
   }
   // radial explosion impulse

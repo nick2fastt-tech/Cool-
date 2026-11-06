@@ -7032,6 +7032,18 @@ class PhysicsWorld {
       this.solveContactVelocities(h);
       for (const j of this.joints) if (j.enabled) j.solveVel(h);
     }
+    // safety net against launches: a body that has not just been shot, blasted or thrown cannot pick up more
+    // than a running pace sideways or upward (from being wedged between moving characters, a wall and a
+    // character, ...). Falling is never limited.
+    for (const o of this.owners) {
+      if (o.physKind !== 'npc' || this.time - (o.forceT || -99) < 1.5) continue;
+      for (const b of o.bodies) {
+        if (b.kinematic || b.sleeping) continue;
+        const v = b.vel, h2 = v.x * v.x + v.z * v.z;
+        if (h2 > 64) { const k = 8 / Math.sqrt(h2); v.x *= k; v.z *= k; }
+        if (v.y > 6) v.y = 6;
+      }
+    }
     this.updateSleep(dt);
     this.frameIndex++;
     this.time += dt;
@@ -7374,6 +7386,7 @@ class PhysicsWorld {
   applyImpulse(b, impulse, point) {
     if (!b || b.kinematic || b.invMass === 0) return;
     if (b.sleeping) this.wakeOwner(b.owner);
+    if (b.owner && impulse.lengthSq() > b.mass * b.mass * 4) b.owner.forceT = this.time; // a real hit: free to fly for a moment
     applyBodyPairCorrection(b, null, impulse, 0, 1, point || null, null, true);
   }
   // radial explosion impulse
@@ -9972,6 +9985,13 @@ class NPC {
         this.computeWorldBones();
         if (this.gore && this.gore.anyCut) this.syncDetached();
         this.rag.setFromBones(this.boneWPos, this.boneWRot, false);
+      } else {
+        // pose held from the last solve, but carried along with the root every frame: the mesh moves
+        // smoothly and the physics bodies follow at the real speed (they used to jump every other
+        // frame, which kicked nearby bodies hard)
+        this.bones[0].position.copy(this.root.pos); this.bones[0].quaternion.setFromAxisAngle(UP, this.root.yaw);
+        this.computeWorldBones();
+        this.rag.setFromBones(this.boneWPos, this.boneWRot, false);
       }
     } else { this.animAcc = 0; const us = this.material.userData.u.uSway; if (us) us.value.multiplyScalar(Math.max(0, 1 - dt * 6)); } // a limp body: hems settle
     // overlapping pairs (grapples / feeding) collide again once apart
@@ -10580,7 +10600,12 @@ class AISystem {
       try {
         if (npc.lifeState === 'zombie') this.updateZombie(npc, b, dt);
         else if (npc.horror && npc.lifeState === 'alive') { if (game.horror) game.horror.think(npc, b, dt); }
-        else if (npc.lifeState === 'alive') this.updateAlive(npc, b, dt);
+        else if (npc.lifeState === 'alive') {
+          // big crowds: calm people far away and off screen think every other frame (they still move every frame)
+          b.thinkAcc = (b.thinkAcc || 0) + dt;
+          const lazy = list.length > 14 && !npc.onScreen && npc.camD2 > 1225 && (b.state === 'idle' || b.state === 'wander' || b.state === 'chat') && !npc.grabbedBy && ((game.frame + npc.id) & 1) === 1 && b.thinkAcc < 0.05;
+          if (!lazy) { const tdt = b.thinkAcc; b.thinkAcc = 0; this.updateAlive(npc, b, tdt); }
+        }
         else if (npc.lifeState === 'vampire') game.vampires.think(npc, b, dt);
         else { b.state = 'dead'; }
         if (npc.physMode === 'anim' && npc.active) this.steer(npc, b, dt);
@@ -15437,6 +15462,7 @@ class Weapons {
     if (throwIt) {
       const f = g.camera.getWorldDirection(new V3());
       for (const b of gr.owner.bodies) b.vel.addScaledVector(f, gr.npc ? 11 : 14).add(_v1.set(0, 2, 0));
+      gr.owner.forceT = g.physics.time; // thrown on purpose: no speed cap
       g.audio.play('throw', { gain: 0.8 });
       if (gr.npc) HT.log('sys', `Threw ${gr.npc.idStr} ${gr.npc.name}`);
     }
@@ -17463,6 +17489,8 @@ const TIPS = [
   'Open the <b>Sandbox</b> menu to spawn a man or a woman. Every body and height is random.',
   'Zombies grab and bite. Survivors who break free are infected: they sweat, cough and slowly turn green, then collapse and rise about a minute later.',
   'The Physician never attacks. He walks up to people, injects them, and watches them turn. Sometimes a closing fist is all it takes to finish the change.',
+  'People remember where bad things happened, chat with each other, and panic when they see others run.',
+  'Save Scene and Load Scene in the Sandbox menu keep your map, weather and every character.',
   'Zombies follow the Physician. When he points at someone, his zombies go after that person and no one else; then he beckons them back.',
   'Zombies kneel and feed on bodies. A destroyed head stops a body from rising.',
   'Shoot limbs to sever them. A subject who loses a leg can only crawl.',

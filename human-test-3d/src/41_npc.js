@@ -128,6 +128,13 @@ class NPC {
         this.computeWorldBones();
         if (this.gore && this.gore.anyCut) this.syncDetached();
         this.rag.setFromBones(this.boneWPos, this.boneWRot, false);
+      } else {
+        // pose held from the last solve, but carried along with the root every frame: the mesh moves
+        // smoothly and the physics bodies follow at the real speed (they used to jump every other
+        // frame, which kicked nearby bodies hard)
+        this.bones[0].position.copy(this.root.pos); this.bones[0].quaternion.setFromAxisAngle(UP, this.root.yaw);
+        this.computeWorldBones();
+        this.rag.setFromBones(this.boneWPos, this.boneWRot, false);
       }
     } else { this.animAcc = 0; const us = this.material.userData.u.uSway; if (us) us.value.multiplyScalar(Math.max(0, 1 - dt * 6)); } // a limp body: hems settle
     // overlapping pairs (grapples / feeding) collide again once apart
