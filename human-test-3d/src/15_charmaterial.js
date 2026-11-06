@@ -188,7 +188,10 @@ const GLSL_HT_ALBEDO = /* glsl */`
     float pol = puv.y;
     float irisR = 0.50, pupilR = 0.18;
     float fib = htNoise(vec2(puv.x * 12.0, pol * 40.0));
-    vec3 iris = vColor2 * (0.65 + 0.6 * fib);
+    // V1.12: radial fibres (streaks from the pupil out to the rim) and a lighter collarette round the pupil
+    float streak = htNoise(vec2(puv.x * 46.0, pol * 5.0)) * 0.6 + htNoise(vec2(puv.x * 97.0, pol * 9.0)) * 0.4;
+    vec3 iris = vColor2 * (0.6 + 0.45 * fib + 0.35 * streak);
+    iris = mix(iris, vColor2 * 1.35 + 0.02, exp(-pow((pol - pupilR - 0.09) / 0.035, 2.0)) * 0.35);
     iris = mix(iris, iris * 0.45, smoothstep(irisR - 0.1, irisR, pol));
     iris = mix(iris, vColor2 * 1.25 + 0.03, (1.0 - smoothstep(pupilR, pupilR + 0.12, pol)) * 0.35);
     vec3 sclera = base * (0.94 + 0.06 * htNoise(puv * 30.0));
@@ -400,7 +403,7 @@ if (aFlex > 0.001) {
 // facial expressions, applied in bind space before skinning (so they ride with the head and jaw):
 // brows (and the skin round them) lift, knit or tilt; mouth corners lift, drop or stretch sideways
 const GLSL_HT_EXPR = /* glsl */`
-if (dot(uExpr, uExpr) + uExpr2.x * uExpr2.x > 1e-5) {
+if (dot(uExpr, uExpr) + dot(uExpr2.xy, uExpr2.xy) > 1e-5) {
   vec3 fq = (transformed - uFaceC.xyz) / uFaceC.w;
   bool faceMat = aMat.x < 0.5 || (aMat.x > 7.5 && aMat.x < 8.5) || (aMat.x > 11.5 && aMat.x < 12.5);
   if (faceMat && fq.z > 0.03 && length(fq) < 0.135) {
@@ -414,6 +417,10 @@ if (dot(uExpr, uExpr) + uExpr2.x * uExpr2.x > 1e-5) {
     transformed.y += (uExpr.z > 0.0 ? 0.0058 : 0.0042) * uExpr.z * cw * uFaceC.w;
     transformed.x += sx * (0.0028 * uExpr2.x + 0.0022 * max(uExpr.z, 0.0)) * cw * uFaceC.w;
     transformed.z -= 0.0018 * max(uExpr.z, 0.0) * cw * uFaceC.w;
+    // rounded lips (o/u): the mouth narrows and the lips push forward
+    float lipsW = exp(-pow((fq.y - uMouth.x) / 0.012, 2.0)) * (1.0 - smoothstep(uMouth.y * 0.7, uMouth.y * 1.5, ax)) * smoothstep(0.07, 0.085, fq.z);
+    transformed.x -= sx * 0.0042 * uExpr2.y * lipsW * smoothstep(0.0, uMouth.y, ax) * uFaceC.w;
+    transformed.z += 0.0032 * uExpr2.y * lipsW * uFaceC.w;
     // a smile lifts the cheeks a little too
     float ck = exp(-(pow((ax - 0.036) / 0.016, 2.0) + pow((fq.y + 0.028) / 0.014, 2.0)));
     transformed.y += 0.0022 * max(uExpr.z, 0.0) * ck * uFaceC.w;
@@ -496,7 +503,7 @@ function createCharacterMaterial() {
           totalEmissiveRadiance += vec3(1.0, 0.28, 0.12) * pow(rim, 0.8) * uHeat * 0.9; // heat sense (vampire player)
         }`);
   };
-  m.customProgramCacheKey = () => 'ht3d-char-v11';
+  m.customProgramCacheKey = () => 'ht3d-char-v12';
   return m;
 }
 

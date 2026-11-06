@@ -20,8 +20,8 @@ const TIPS = [
   'Tap a weapon on the bar (or press <b>1-7</b>) to equip it: Pistol, Sniper, Knife, Grenade, Bazooka, Grab, Move.',
   'Hold <b>right mouse</b> (or AIM) to aim. A sniper headshot destroys the head.',
   'Open the <b>Sandbox</b> menu to spawn a man or a woman. Every body and height is random.',
-  'Zombies grab and bite. Survivors who break free are infected: they sweat, cough and slowly turn green, then collapse and rise about a minute later.',
-  'The Physician never attacks. He walks up to people, injects them, and watches them turn. Sometimes a closing fist is all it takes to finish the change.',
+  'A zombie bite or scratch infects for exactly 90 seconds: sweating, coughing, a slow change to green, a collapse at 77 s, and the rise at 90 s.',
+  'The Physician never attacks. He walks up to people, injects them, and watches them turn. When he closes his fist, the infected convulse, and the zombie they become follows him.',
   'People remember where bad things happened, chat with each other, and panic when they see others run.',
   'Save Scene and Load Scene in the Sandbox menu keep your map, weather and every character.',
   'Zombies follow the Physician. When he points at someone, his zombies go after that person and no one else; then he beckons them back.',
@@ -29,7 +29,8 @@ const TIPS = [
   'Shoot limbs to sever them. A subject who loses a leg can only crawl.',
   'Grenades tear bodies apart at close range. Hold the throw button longer to throw farther.',
   'Gore level, graphics, audio and controls are in <b>Settings</b>. Choices are saved.',
-  'Switch between the <b>White Testing Room</b>, the <b>Sunny Grassy Field</b> and the <b>Atlantic Av–Barclays Center subway</b> in the Sandbox menu.',
+  'Switch between the <b>White Testing Room</b>, the <b>Sunny Grassy Field</b>, the <b>Atlantic Av–Barclays Center subway</b> and the <b>Playground</b> in the Sandbox menu.',
+  'At the <b>Playground</b> the swings, seesaws and spring riders move when bodies, shots or blasts hit them. People sit on the benches and at the picnic tables.',
   'Vampires stalk, rush and bite. Bitten people faint, recover, then turn. A knife to the chest is a vampire\'s weakness.',
   'Chucky laughs and rushes in with his knife. Jason walks, tilts his head, and only runs when his prey keeps getting away. Both hunt zombies and vampires too.',
   'In the subway, people sit on the benches and ride the trains: they board, take a seat, and get off when the train comes back round. Zombies never sit.',
@@ -197,7 +198,8 @@ class UI {
           st = `${life.toUpperCase()} · ${Math.round(npc.health)}HP`;
         }
         const V = npc.vamp;
-        const cd = V && V.state === 'bitten' && Settings.data.vampires.turning ? `BITTEN ${Math.max(0, V.dur - V.t).toFixed(1)}s` : (V && V.state === 'turning' ? 'TURNING (VAMPIRE)...' : (r.state === 'pending' ? `REINCARNATION ${Math.max(0, r.timer).toFixed(1)}s` : (r.state === 'transforming' ? 'TURNING...' : (npc.lifeState === 'dead' && Settings.data.zombies.reincarnation && (r.state === 'ineligible' || r.state === 'inert') && !npc.horror ? 'NO REINCARNATION' : ''))));
+        const inf = npc.infection && Settings.data.zombies.infection && (npc.lifeState === 'alive' || (npc.lifeState === 'dead' && !(r.state === 'transforming' && r.rebased) && r.state !== 'inert' && r.state !== 'ineligible') || (npc.lifeState === 'reanimating' && !r.rebased)) ? npc.infection : null;
+        const cd = inf ? (npc.lifeState === 'alive' ? `INFECTED ${Math.ceil(Math.max(0, INFECTION.dur - inf.t))}s · STAGE ${Math.min(6, 1 + Math.floor(inf.t / INFECTION.stageLen))}/6` : `TURNING ${Math.ceil(Math.max(0, INFECTION.dur - inf.t))}s`) : V && V.state === 'bitten' && Settings.data.vampires.turning ? `BITTEN ${Math.max(0, V.dur - V.t).toFixed(1)}s` : (V && V.state === 'turning' ? 'TURNING (VAMPIRE)...' : (r.state === 'pending' ? `REINCARNATION ${Math.max(0, r.timer).toFixed(1)}s` : (r.state === 'transforming' ? 'TURNING...' : (npc.lifeState === 'dead' && Settings.data.zombies.reincarnation && (r.state === 'ineligible' || r.state === 'inert') && !npc.horror ? 'NO REINCARNATION' : ''))));
         const key = npc.name + st + cd + npc.lifeState;
         if (el._key !== key) {
           el._key = key;
@@ -271,6 +273,7 @@ class UI {
             <span>Reaction</span><span>${npc.lastReaction}</span>
             <span>Last hit</span><span>${lh ? lh.regionName + ' (' + lh.weapon + ')' : '-'}</span>
             <span>Reincarn.</span><span>${reincTxt}</span>
+            ${npc.infection ? `<span>Infection</span><span>${Math.min(INFECTION.dur, npc.infection.t).toFixed(1)} / 90 s · stage ${Math.min(6, 1 + Math.floor(npc.infection.t / INFECTION.stageLen))} of 6${npc.infection.collapsed ? ' · collapsed' : ''}</span>` : ''}
             ${npc.isZombie ? `<span>Target</span><span>${npc.zombieTarget ? npc.zombieTarget.idStr + ' ' + npc.zombieTarget.name : 'none'}</span>` : ''}
           </div>
         </div>
@@ -383,8 +386,9 @@ class UI {
     s = this.sec(b, 'World');
     const cur = g.env.current.kind;
     this.buttons(s, [{ label: 'White Room', cls: cur === 'room' ? 'pri' : '', fn: () => { g.switchEnvironment('room'); this.renderDrawer(); } }, { label: 'Grassy Field', cls: cur === 'field' ? 'pri' : '', fn: () => { g.switchEnvironment('field'); this.renderDrawer(); } },
-      { label: 'Subway: Atlantic Av–Barclays', cls: cur === 'subway' ? 'pri' : '', fn: () => { HT.toast('Loading Atlantic Av–Barclays Ctr...'); setTimeout(() => { g.switchEnvironment('subway'); this.renderDrawer(); }, 30); } }]);
-    if (cur === 'field') {
+      { label: 'Subway: Atlantic Av–Barclays', cls: cur === 'subway' ? 'pri' : '', fn: () => { HT.toast('Loading Atlantic Av–Barclays Ctr...'); setTimeout(() => { g.switchEnvironment('subway'); this.renderDrawer(); }, 30); } },
+      { label: 'Playground', cls: cur === 'playground' ? 'pri' : '', fn: () => { HT.toast('Loading the playground...'); setTimeout(() => { g.switchEnvironment('playground'); this.renderDrawer(); }, 30); } }]);
+    if (cur === 'field' || cur === 'playground') {
       const F = Settings.data.environment.field;
       this.slider(s, 'Time of day', 'environment.field.timeOfDay', 0, 24, 0.25, x => { const h = Math.floor(x), m = Math.round((x - h) * 60); return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0'); }, () => g.env.current.applyTimeWeather());
       this.select(s, 'Weather', [['clear', 'Sunny'], ['cloudy', 'Cloudy'], ['overcast', 'Overcast'], ['rain', 'Rain'], ['fog', 'Fog']], F.weather, v => { Settings.set('environment.field.weather', v); g.env.current.applyTimeWeather(); g.audio.startAmbience(); });
@@ -411,7 +415,8 @@ class UI {
     if (h && h.npc.lifeState === 'alive') n = h.npc;
     if (!n) { const alive = g.npcs.list.filter(x => x.lifeState === 'alive'); if (alive.length) n = alive[Math.floor(Math.random() * alive.length)]; }
     if (!n) { HT.toast('Spawn someone first'); return; }
-    n.infection = { t: 0, dur: 2.5, src: 'outbreak' };
+    // patient zero turns at once; everyone they bite or scratch after that gets the fixed 90 s infection
+    if (!g.zombies.patientZero(n)) { HT.toast('Spawn someone first'); return; }
     if (!Settings.data.zombies.infection) Settings.set('zombies.infection', true);
     HT.toast(`${n.name} is turning...`, 'z');
     HT.log('zombie', `Outbreak started with ${n.idStr} ${n.name}`);
@@ -467,7 +472,6 @@ class UI {
     s = this.sec(b, 'Zombies');
     this.slider(s, 'Zombie speed', 'zombies.speed', 0.3, 2.5, 0.05, x => x.toFixed(2) + 'x');
     this.slider(s, 'Bite damage', 'zombies.biteDamage', 5, 60, 1);
-    this.slider(s, 'Infection time', 'zombies.infectionTime', 5, 120, 1, x => x + ' s');
     this.select(s, 'Rise delay (zombie mode)', [['immediate', 'Immediate'], ['short', 'Short (5s)'], ['medium', 'Medium (15s)'], ['long', 'Long (45s)']], Settings.data.zombies.delayPreset, v => Settings.set('zombies.delayPreset', v));
     this.toggle(s, 'Destroyed head stops rising', 'zombies.headTraumaPrevents');
     this.slider(s, 'Zombie detection range', 'zombies.detection', 2, 40, 0.5, x => x.toFixed(1) + ' m');

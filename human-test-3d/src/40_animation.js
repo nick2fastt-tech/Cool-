@@ -50,6 +50,9 @@ const EXPRESSIONS = {
   disgust: [-0.25, -0.35, -0.55, 0.4, 0.35, 0.1, 0.02],
   confused: [0.15, -0.25, -0.15, 0.85, 0, 0.02, 0.02],
   sick: [-0.1, 0.6, -0.35, 0, 0.1, 0.12, 0.02],
+  discomfort: [-0.2, 0.45, -0.3, 0.15, 0.3, 0.1, 0],
+  tired: [-0.15, 0.3, -0.25, 0, 0, 0.24, 0.03],
+  ill: [-0.25, 0.65, -0.45, 0, 0.2, 0.28, 0.05],
   snarl: [-0.7, -0.6, -0.75, 0, 0.9, 0.05, 0],
   blank: [-0.2, 0, -0.3, 0, 0.2, 0, 0],
   slack: [0, 0, -0.2, 0, 0, 0, 0]
@@ -527,7 +530,7 @@ class Animator {
     const lvx = this.vel.x * c - this.vel.z * s, lvz = this.vel.x * s + this.vel.z * c;
     const lax = clamp(ax * c - az * s, -12, 12), laz = clamp(ax * s + az * c, -12, 12), spd = Math.hypot(lvx, lvz);
     const T = S.t.set(-lvx * 0.012 - lax * 0.005 - (this.yawRate || 0) * spd * 0.01, spd * 0.004, -lvz * 0.012 - laz * 0.005);
-    const cur = env.current, w = cur && cur.kind === 'field' && cur.windStrength != null ? cur.windStrength : 0;
+    const cur = env.current, w = cur && cur.outdoor && cur.windStrength != null ? cur.windStrength : 0;
     if (w > 0 && cur.windDir) { const wd = cur.windDir; T.x += (wd.x * c - wd.z * s) * w * 0.022; T.z += (wd.x * s + wd.z * c) * w * 0.022; }
     S.v.addScaledVector(T.sub(S.x), 70 * dt).multiplyScalar(Math.max(0, 1 - 9 * dt));
     S.x.addScaledVector(S.v, dt);
@@ -559,7 +562,12 @@ class Animator {
     if (st === 'chat') return 'friendly';
     if (st === 'inspect') return 'disgust';
     if (b.puzzledT > 0) return 'confused';
-    if ((this.sick || 0) > 0.25) return 'sick';
+    // infection: a wince with each bout of discomfort, then tired, then plainly ill
+    const sk = this.sick || 0;
+    if (sk > 0.01 && this.action && this.action.type === 'ill' && !this.action.ending) return sk < 0.3 ? 'discomfort' : 'ill';
+    if (sk > 0.5) return 'ill';
+    if (sk > 0.3) return 'tired';
+    if (sk > 0.12) return 'sick';
     if (n.fear > 0.35) return 'worried';
     return 'neutral';
   }
@@ -581,17 +589,25 @@ class Animator {
       if (E.microK > 0) { E.microK -= dt; const w = Math.min(1, E.microK * 3); if (E.micro < 0.35) tv[0] += 0.5 * w; else if (E.micro < 0.75) tv[2] += 0.3 * w; else tv[3] += (E.micro < 0.87 ? 0.35 : -0.35) * w; }
     }
     // talking: syllables on the jaw, short pauses between words, emphasis on the brows and lips
-    let tj = 0;
+    let tj = 0, pk = 0;
     if (this.talking && em) {
+      // V1.12 mouth shapes per syllable: closed (m/b/p), open (a), rounded (o/u, lips pushed forward), wide (e/i)
       E.syl -= dt;
-      if (E.syl <= 0) { E.syl = 0.08 + Math.random() * 0.15; E.sylA = Math.random() < 0.2 ? 0 : 0.035 + Math.random() * 0.1; if (Math.random() < 0.12) tv[0] += 0.4; }
-      tj = E.sylA; tv[4] += E.sylA * 1.6;
+      if (E.syl <= 0) {
+        E.syl = 0.08 + Math.random() * 0.15; const r = Math.random();
+        E.vis = r < 0.18 ? 0 : r < 0.42 ? 2 : r < 0.75 ? 1 : 3;
+        E.sylA = E.vis === 0 ? 0 : E.vis === 1 ? 0.06 + Math.random() * 0.08 : E.vis === 2 ? 0.035 + Math.random() * 0.03 : 0.025 + Math.random() * 0.035;
+        if (Math.random() < 0.12) tv[0] += 0.4;
+      }
+      tj = E.sylA; pk = E.vis === 2 ? 0.85 : 0;
+      tv[4] += E.vis === 3 ? 0.7 : E.vis === 2 ? -0.3 : E.sylA * 1.6;
     }
     this.talkJaw = damp(this.talkJaw || 0, tj, 26, dt);
+    E.pk = damp(E.pk || 0, pk, 22, dt);
     const k = 1 - Math.exp(-dt * (E.startle > 0 ? 18 : 6.5));
     for (let i = 0; i < 7; i++) E.v[i] += (tv[i] - E.v[i]) * k;
     const u = this.npc.material && this.npc.material.userData.u;
-    if (u && u.uExpr) { u.uExpr.value.set(E.v[0], E.v[1], E.v[2], E.v[3]); u.uExpr2.value.x = E.v[4]; }
+    if (u && u.uExpr) { u.uExpr.value.set(E.v[0], E.v[1], E.v[2], E.v[3]); u.uExpr2.value.x = E.v[4]; u.uExpr2.value.y = E.pk || 0; }
   }
 
   // --- locomotion -------------------------------------------------------------------
@@ -1718,6 +1734,12 @@ class Animator {
       P.spine.x += 0.28 * k; P.chest.x += 0.24 * k; P.head.x += 0.2 * k; P.neck.x += 0.08 * k;
       for (const [h, k2] of [[hp, s], [ho, 1 - s]]) { _vb.set(SIDE_SIGN[k2] * 0.11 * this.rig.H, -0.33 * this.rig.H, 0.16 * this.rig.H); toward(h, _vb); h.fing = lerp(h.fing, 0.5, env); }
       P.jaw = Math.max(P.jaw, 0.26 * env);
+    } else if (m === 'stagger') { // the knees give for a moment: a dip and a lurch, an arm out to catch the balance
+      const d = a.dur || 1.5, dip = Math.sin(clamp(t / Math.max(0.5, d - 0.2), 0, 1) * Math.PI) * env;
+      P.hipsOff.y -= 0.075 * this.rig.legLen * dip; P.hipsRot.z += sg * 0.07 * dip;
+      P.spine.x += 0.14 * dip; P.chest.x += 0.08 * dip; P.spine.z -= sg * 0.1 * dip; P.head.x += 0.16 * dip; P.head.z += sg * 0.12 * dip;
+      hp.pos.x += sg * 0.12 * dip; hp.pos.y += 0.06 * dip; ho.pos.x -= sg * 0.05 * dip;
+      this.blink = Math.max(this.blink, 0.02 * dip);
     } else if (m === 'loll') { // drowsy: the head drops and rolls, eyelids heavy
       P.head.x += (0.22 + Math.sin(t * 0.9) * 0.12) * env; P.head.z += Math.sin(t * 0.6 + (a.ph || 0)) * 0.24 * env; P.neck.x += 0.1 * env;
       this.blink = Math.max(this.blink, 0.012 * env);

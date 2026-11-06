@@ -42,7 +42,7 @@ class ContactShadows {
     this.n = 0;
     const cam = g.camera.position;
     // brighter rooms read contact shadows more strongly than sunlit grass
-    this.uniforms.uStrength.value = env.current && env.current.kind === 'field' ? 0.85 : 0.78;
+    this.uniforms.uStrength.value = env.current && env.current.outdoor ? 0.85 : 0.78;
     for (const npc of g.npcs.list) {
       if (npc.removed) continue;
       const dc = Math.hypot(npc.root.pos.x - cam.x, npc.root.pos.z - cam.z);

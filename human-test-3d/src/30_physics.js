@@ -472,7 +472,7 @@ class PhysicsWorld {
       for (const P of pts) {
         const hgt = this.heightfield(P.x, P.z, P.y - r);
         if (P.y - r - hgt > 0.05) continue;
-        const nrm = this.heightNormal(P.x, P.z, _p3);
+        const nrm = this.heightNormal(P.x, P.z, _p3, P.y - r);
         const d = nrm.x * P.x + nrm.y * hgt + nrm.z * P.z;
         const dist = nrm.dot(P) - d - r;
         if (dist < 0) {
@@ -605,7 +605,7 @@ class PhysicsWorld {
     if (pbDyn) this.addContact(pb, bx, pSph, pBox, n);
     else if (bxDyn) { n.negate(); this.addContact(bx, pb, pBox, pSph, n); }
   }
-  heightNormal(x, z, out) { return this.heightNormalFn ? this.heightNormalFn(x, z, out) : out.set(0, 1, 0); }
+  heightNormal(x, z, out, y) { return this.heightNormalFn ? this.heightNormalFn(x, z, out, y) : out.set(0, 1, 0); }
   solveContacts(h) {
     this.generateContacts();
     const contacts = this.contacts;

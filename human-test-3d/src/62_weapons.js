@@ -50,7 +50,7 @@ class Weapons {
     const g = this.game;
     this.vmScene = new THREE.Scene();
     this.vmCam = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.01, 10);
-    this.vmScene.add(new THREE.HemisphereLight(0xffffff, 0x666660, 1.3));
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x666660, 1.3); this.vmScene.add(hemi);
     const dl = new THREE.DirectionalLight(0xffffff, 1.8); dl.position.set(0.5, 1, 0.6); this.vmScene.add(dl);
     const rim = new THREE.DirectionalLight(0xbfe6ff, 1.2); rim.position.set(-0.8, 0.4, -1); this.vmScene.add(rim);
     this.vmLight = new THREE.PointLight(0xffbb66, 0, 2, 2); this.vmLight.position.set(0.1, -0.05, -0.6); this.vmScene.add(this.vmLight);
@@ -71,33 +71,26 @@ class Weapons {
     this.M = M;
     const box = (w, h, d, m) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
     const cyl = (r1, r2, h, m, seg = 12) => new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, h, seg), m);
-    const arm = (side) => { // glove + sleeve
-      const grp = new THREE.Group();
-      const hand = box(0.05, 0.03, 0.085, M.glove); grp.add(hand);
-      const fing = box(0.048, 0.022, 0.05, M.glove); fing.position.set(0, -0.012, -0.055); fing.rotation.x = 0.9; grp.add(fing);
-      const thumb = box(0.016, 0.016, 0.05, M.glove); thumb.position.set(-side * 0.025, 0.008, -0.03); thumb.rotation.y = side * 0.5; grp.add(thumb);
-      const sl = cyl(0.033, 0.036, 0.42, M.sleeve, 14); sl.rotation.x = Math.PI / 2; sl.position.set(0, -0.005, 0.24); grp.add(sl);
-      const cuff = cyl(0.031, 0.031, 0.03, M.glove, 14); cuff.rotation.x = Math.PI / 2; cuff.position.set(0, -0.004, 0.05); grp.add(cuff);
-      return grp;
-    };
+    // hand anchors: the wrist of a first-person hand (64_fparms.js) sits here; placed per weapon below
+    const arm = (side) => { const a = new THREE.Group(); a.userData.side = side; return a; };
     const models = {};
     // PISTOL ------------------------------------------------------------
     {
       const m = new THREE.Group();
       const slide = box(0.03, 0.032, 0.19, M.metal); slide.position.set(0, 0.03, -0.08); m.add(slide); m.userData.slide = slide;
       const frame = box(0.028, 0.022, 0.165, M.poly); frame.position.set(0, 0.005, -0.07); m.add(frame);
-      const grip = box(0.029, 0.11, 0.048, M.poly); grip.position.set(0, -0.05, 0.0); grip.rotation.x = 0.28; m.add(grip);
+      const grip = box(0.029, 0.11, 0.048, M.poly); grip.position.set(0, -0.05, 0.012); grip.rotation.x = -0.28; m.add(grip);
       const tg = box(0.006, 0.006, 0.05, M.poly); tg.position.set(0, -0.018, -0.04); m.add(tg);
       const trig = box(0.005, 0.02, 0.006, M.metal2); trig.position.set(0, -0.008, -0.035); m.add(trig);
       const sight1 = box(0.006, 0.008, 0.006, M.metal); sight1.position.set(0, 0.05, -0.165); m.add(sight1);
       const sight2 = box(0.018, 0.008, 0.006, M.metal); sight2.position.set(0, 0.05, 0.005); m.add(sight2);
       const muzzle = cyl(0.007, 0.007, 0.01, M.metal2); muzzle.rotation.x = Math.PI / 2; muzzle.position.set(0, 0.03, -0.177); m.add(muzzle);
-      const mag = box(0.024, 0.11, 0.038, M.metal2); mag.position.set(0, -0.052, 0.0); mag.rotation.x = 0.28; m.add(mag); m.userData.mag = mag; m.userData.magHome = mag.position.clone();
-      const ra = arm(1); ra.position.set(0.0, -0.065, 0.045); ra.rotation.set(-0.2, 0, 0); m.add(ra);
+      const mag = box(0.024, 0.11, 0.038, M.metal2); mag.position.set(0, -0.052, 0.012); mag.rotation.x = -0.28; m.add(mag); m.userData.mag = mag; m.userData.magHome = mag.position.clone();
+      const ra = arm(1); ra.position.set(0.0, -0.065, 0.045); ra.rotation.set(-0.2, 0, 0); m.add(ra); m.userData.rightArm = ra;
       const la = arm(-1); la.position.set(-0.03, -0.075, 0.03); la.rotation.set(-0.15, -0.35, 0.4); m.add(la); m.userData.leftArm = la; m.userData.leftHome = la.position.clone();
       const fl = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 0.09), M.flash); fl.position.set(0, 0.03, -0.215); m.add(fl); m.userData.flash = fl;
       const fl2 = fl.clone(); fl2.rotation.y = Math.PI / 2; fl.add(fl2);
-      m.userData.hip = new V3(0.15, -0.15, -0.42); m.userData.ads = new V3(0.0, -0.052, -0.33);
+      m.userData.hip = new V3(0.125, -0.112, -0.37); m.userData.ads = new V3(0.0, -0.052, -0.33);
       models.pistol = m;
     }
     // SNIPER ------------------------------------------------------------
@@ -106,7 +99,7 @@ class Weapons {
       const rec = box(0.04, 0.05, 0.26, M.poly); rec.position.set(0, 0.0, -0.05); m.add(rec);
       const stock = box(0.038, 0.07, 0.3, M.poly); stock.position.set(0, -0.02, 0.24); m.add(stock);
       const cheek = box(0.036, 0.03, 0.16, M.poly); cheek.position.set(0, 0.025, 0.24); m.add(cheek);
-      const grip = box(0.03, 0.09, 0.04, M.poly); grip.position.set(0, -0.06, 0.07); grip.rotation.x = 0.35; m.add(grip);
+      const grip = box(0.03, 0.09, 0.04, M.poly); grip.position.set(0, -0.06, 0.075); grip.rotation.x = -0.35; m.add(grip);
       const fore = box(0.042, 0.045, 0.3, M.poly); fore.position.set(0, -0.005, -0.33); m.add(fore);
       const barrel = cyl(0.011, 0.013, 0.62, M.metal, 14); barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 0.008, -0.62); m.add(barrel);
       const brake = cyl(0.017, 0.017, 0.06, M.metal2, 14); brake.rotation.x = Math.PI / 2; brake.position.set(0, 0.008, -0.94); m.add(brake);
@@ -120,11 +113,11 @@ class Weapons {
       const knob = new THREE.Mesh(new THREE.SphereGeometry(0.01, 10, 8), M.metal2); knob.position.x = 0.05; bolt.add(knob);
       bolt.position.set(0.0, 0.015, 0.03); m.add(bolt); m.userData.bolt = bolt;
       const mag = box(0.03, 0.05, 0.07, M.metal2); mag.position.set(0, -0.045, -0.06); m.add(mag); m.userData.mag = mag; m.userData.magHome = mag.position.clone();
-      const ra = arm(1); ra.position.set(0.0, -0.075, 0.1); ra.rotation.set(-0.35, 0, 0); m.add(ra);
+      const ra = arm(1); ra.position.set(0.0, -0.075, 0.1); ra.rotation.set(-0.35, 0, 0); m.add(ra); m.userData.rightArm = ra;
       const la = arm(-1); la.position.set(-0.005, -0.05, -0.3); la.rotation.set(-0.1, 0, 0.6); m.add(la); m.userData.leftArm = la; m.userData.leftHome = la.position.clone();
       const fl = new THREE.Mesh(new THREE.PlaneGeometry(0.14, 0.14), M.flash); fl.position.set(0, 0.008, -0.99); m.add(fl); m.userData.flash = fl;
       const fl2 = fl.clone(); fl2.rotation.y = Math.PI / 2; fl.add(fl2);
-      m.userData.hip = new V3(0.17, -0.165, -0.36); m.userData.ads = new V3(0.0, -0.075, -0.16);
+      m.userData.hip = new V3(0.15, -0.13, -0.34); m.userData.ads = new V3(0.0, -0.075, -0.16);
       models.sniper = m;
     }
     // KNIFE -------------------------------------------------------------
@@ -138,17 +131,17 @@ class Weapons {
       const guard = box(0.012, 0.05, 0.012, M.metal); guard.position.set(0, 0, -0.03); m.add(guard);
       const handle = box(0.022, 0.03, 0.11, M.poly); handle.position.set(0, 0, 0.03); m.add(handle);
       const pommel = box(0.024, 0.034, 0.012, M.metal); pommel.position.set(0, 0, 0.09); m.add(pommel);
-      const ra = arm(1); ra.position.set(0.0, -0.01, 0.06); ra.rotation.set(-0.1, 0, 0); m.add(ra);
+      const ra = arm(1); ra.position.set(0.0, -0.01, 0.06); ra.rotation.set(-0.1, 0, 0); m.add(ra); m.userData.rightArm = ra;
       m.rotation.set(0.15, 0.25, -0.45);
-      m.userData.hip = new V3(0.21, -0.18, -0.42); m.userData.ads = m.userData.hip;
+      m.userData.hip = new V3(0.19, -0.15, -0.4); m.userData.ads = m.userData.hip;
       models.knife = m;
     }
     // GRENADE -----------------------------------------------------------
     {
       const m = new THREE.Group();
       const gm = this.makeGrenadeMesh(); gm.position.set(0, 0.03, -0.02); m.add(gm); m.userData.nade = gm;
-      const ra = arm(1); ra.position.set(0.0, -0.01, 0.05); ra.rotation.set(-0.4, 0, 0); m.add(ra);
-      m.userData.hip = new V3(0.21, -0.19, -0.44); m.userData.ads = m.userData.hip;
+      const ra = arm(1); ra.position.set(0.0, -0.01, 0.05); ra.rotation.set(-0.4, 0, 0); m.add(ra); m.userData.rightArm = ra;
+      m.userData.hip = new V3(0.18, -0.14, -0.39); m.userData.ads = m.userData.hip;
       models.grenade = m;
     }
     // BAZOOKA -----------------------------------------------------------
@@ -161,7 +154,7 @@ class Weapons {
       const rear = cyl(0.068, 0.05, 0.16, M.olive2, 20); rear.rotation.x = Math.PI / 2; rear.position.set(0, 0.0, 0.39); m.add(rear);
       const band1 = cyl(0.054, 0.054, 0.03, M.metal2, 20); band1.rotation.x = Math.PI / 2; band1.position.set(0, 0, -0.66); m.add(band1);
       const band2 = cyl(0.054, 0.054, 0.025, M.metal2, 20); band2.rotation.x = Math.PI / 2; band2.position.set(0, 0, 0.06); m.add(band2);
-      const grip = box(0.03, 0.1, 0.045, M.poly); grip.position.set(0, -0.08, 0.0); grip.rotation.x = 0.25; m.add(grip);
+      const grip = box(0.03, 0.1, 0.045, M.poly); grip.position.set(0, -0.08, 0.01); grip.rotation.x = -0.25; m.add(grip);
       const grip2 = box(0.03, 0.085, 0.04, M.poly); grip2.position.set(0, -0.075, -0.32); m.add(grip2);
       const sight = box(0.018, 0.06, 0.03, M.metal); sight.position.set(-0.065, 0.06, -0.24); m.add(sight);
       const sightArm = box(0.03, 0.012, 0.03, M.metal); sightArm.position.set(-0.045, 0.035, -0.24); m.add(sightArm);
@@ -170,11 +163,11 @@ class Weapons {
       const wc = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.16, 16), M.warhead); wc.rotation.x = -Math.PI / 2; wc.position.z = -0.13; war.add(wc);
       const wt = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6), M.tip); wt.position.z = -0.21; war.add(wt);
       war.position.set(0, 0, -0.73); m.add(war); m.userData.warhead = war;
-      const ra = arm(1); ra.position.set(0.0, -0.13, 0.05); ra.rotation.set(-0.15, 0, 0); m.add(ra);
+      const ra = arm(1); ra.position.set(0.0, -0.13, 0.05); ra.rotation.set(-0.15, 0, 0); m.add(ra); m.userData.rightArm = ra;
       const la = arm(-1); la.position.set(-0.01, -0.12, -0.28); la.rotation.set(-0.1, 0, 0.35); m.add(la); m.userData.leftArm = la; m.userData.leftHome = la.position.clone();
       const fl = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.3), M.flash); fl.position.set(0, 0, -0.95); m.add(fl); m.userData.flash = fl;
       const fl2 = fl.clone(); fl2.rotation.y = Math.PI / 2; fl.add(fl2);
-      m.userData.hip = new V3(0.17, -0.13, -0.36); m.userData.ads = new V3(0.065, -0.115, -0.3);
+      m.userData.hip = new V3(0.16, -0.105, -0.36); m.userData.ads = new V3(0.065, -0.115, -0.3);
       models.bazooka = m;
       // flying rocket template
       const rk = new THREE.Group();
@@ -187,13 +180,19 @@ class Weapons {
     // HAND + MOVE -------------------------------------------------------
     for (const id of ['hand', 'move']) {
       const m = new THREE.Group();
-      const ra = arm(1); ra.position.set(0, 0, 0.0); ra.rotation.set(-0.2, 0, -0.3); m.add(ra);
+      const ra = arm(1); ra.position.set(0, 0, 0.0); ra.rotation.set(-0.2, 0, -0.3); m.add(ra); m.userData.rightArm = ra;
       const ring = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.004, 8, 24), M.glow); ring.position.set(0, 0.02, -0.09); m.add(ring); m.userData.glow = ring;
-      m.userData.hip = new V3(0.22, -0.2, -0.44); m.userData.ads = m.userData.hip;
+      m.userData.hip = new V3(0.2, -0.165, -0.4); m.userData.ads = m.userData.hip;
       models[id] = m;
     }
     for (const k in models) { models[k].visible = false; this.vmRoot.add(models[k]); }
     this.models = models;
+    // the player's own arms: skin tone and sleeves from their appearance; hands placed on each weapon
+    this.look = fpLookFromAppearance(playerAppearance());
+    this.fpArms = [new FPArm(1, this.look), new FPArm(-1, this.look)];
+    for (const A of this.fpArms) this.vmRoot.add(A.group);
+    for (const id in FP_HOLDS) if (models[id]) this.placeHolds(models[id], FP_HOLDS[id]);
+    this.vmSun = dl; this.vmHemi = hemi;
     // grab beam
     const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
     this.beam = new THREE.Line(bg, new THREE.LineBasicMaterial({ color: 0x4fd1ff, transparent: true, opacity: 0.6 }));
@@ -202,6 +201,87 @@ class Weapons {
     this.moveRing = new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: 0x4fd1ff, transparent: true, opacity: 0.6, depthWrite: false }));
     this.moveRing.visible = false; g.scene.add(this.moveRing);
     this.select(0, true);
+  }
+  // put the anchors where each hand holds this weapon
+  placeHolds(m, H) {
+    const M4 = new THREE.Matrix4();
+    for (const [key, side] of [['R', 1], ['L', -1]]) {
+      const h = H[key]; if (!h) continue;
+      const anc = side > 0 ? m.userData.rightArm : m.userData.leftArm; if (!anc) continue;
+      fpHoldMatrix(h, side, M4); M4.decompose(anc.position, anc.quaternion, anc.scale);
+      anc.rotation.setFromQuaternion(anc.quaternion);
+      anc.userData.pose = h.pose;
+      if (side < 0) m.userData.leftHome = anc.position.clone();
+    }
+  }
+  // the two hands go onto the current weapon (a one-handed tool leaves the left hand down, out of view)
+  attachHands(m) {
+    for (const A of this.fpArms) {
+      const anc = m ? (A.side > 0 ? m.userData.rightArm : m.userData.leftArm) : null;
+      if (anc) { anc.add(A.hand.group); A.anchor = anc; A.group.visible = true; A.hand.group.visible = true; A.hand.setPose(anc.userData.pose || 'relaxed'); }
+      else {
+        if (!this.freeL) { this.freeL = new THREE.Group(); this.vmRoot.add(this.freeL); }
+        this.freeL.add(A.hand.group); A.anchor = this.freeL; A.group.visible = false; A.hand.group.visible = false;
+      }
+    }
+  }
+  // fingers, trigger, reload hands, interaction and gestures, then the arms solved to the wrists
+  updateHands(dt, m, t, run) {
+    const R = this.fpArms[0], L = this.fpArms[1], g = this.game;
+    this.triggerT = Math.max(0, (this.triggerT || 0) - dt);
+    R.hand.trigger = damp(R.hand.trigger, this.triggerT > 0 ? 1 : (t.isGun || t.launcher ? 0.08 : 0), 40, dt);
+    if (t.grab || t.move) {
+      const active = !!(this.grab || this.moving);
+      this.reachK = damp(this.reachK || 0, active ? 1 : 0, 9, dt);
+      R.hand.blendPose('relaxed', 'claw', this.reachK);
+      if (R.anchor) { R.anchor.position.set(0, 0, -this.reachK * 0.05); }
+    } else if (t.throwable) R.hand.blendPose('ball', 'fist', this.charging ? Math.min(1, this.charge) * 0.35 : 0);
+    else if (t.melee) R.hand.setPose('fist');
+    else if (R.anchor && R.anchor.userData.pose) R.hand.setPose(R.anchor.userData.pose);
+    // reload: the support hand lets go, takes the new magazine (closes) and seats it (opens again)
+    if (L.anchor && L.anchor.userData.pose) {
+      if (this.reloading > 0 && t.isGun) {
+        const prog = 1 - this.reloading / t.reload;
+        L.hand.setPose(prog > 0.15 && prog < 0.7 ? 'pinch' : prog >= 0.7 && prog < 0.8 ? 'open' : L.anchor.userData.pose);
+      } else if (this.inspectT > 0) L.hand.setPose('relaxed');
+      else L.hand.setPose(L.anchor.userData.pose);
+    }
+    // pointing at someone just selected: the free left hand comes up and points
+    this.gestureT = Math.max(0, (this.gestureT || 0) - dt);
+    const freeL = L.anchor === this.freeL;
+    if (freeL) {
+      const gk = this.gestureT > 0 ? Math.sin(Math.PI * Math.min(1, (1.3 - this.gestureT) / 1.3)) : 0, rk = run ? 1 : 0;
+      this.gestK = damp(this.gestK || 0, Math.max(gk, rk * 0.6), 10, dt);
+      const show = this.gestK > 0.02;
+      L.group.visible = show; L.hand.group.visible = show;
+      if (show) {
+        const k = this.gestK, sw = run ? Math.sin(this.vmTime * 9 * 0.5 + Math.PI) : 0;
+        const pos = _v2.set(-0.13, lerp(-0.42, -0.12, k) + sw * 0.04, -0.4 + sw * 0.05);
+        this.freeL.position.copy(pos);
+        // a pointing hand: fingers toward the crosshair, back of the hand up and out
+        const M4 = this._gm || (this._gm = new THREE.Matrix4());
+        fpHoldMatrix({ g: [0, 0, 0], x: [0.75, -0.6, 0.2], d: [-0.35, 0.7, 0.6] }, -1, M4);
+        M4.decompose(_v3, this.freeL.quaternion, _v4);
+        L.hand.group.position.set(0, 0, 0); L.hand.group.quaternion.identity();
+        L.hand.setPose(run && gk < 0.1 ? 'fist' : 'point');
+      }
+    }
+    m.updateMatrixWorld(true); if (this.freeL) this.freeL.updateMatrixWorld(true);
+    const W = _v2, X = _v3;
+    for (const A of this.fpArms) {
+      if (!A.group.visible) continue;
+      A.hand.update(dt);
+      const mw = A.hand.group.matrixWorld;
+      W.setFromMatrixPosition(mw); X.setFromMatrixColumn(mw, 0).normalize();
+      A.solve(W, X);
+    }
+    // the hands are lit like the world around the player
+    const env = g.env.current;
+    if (env && env.outdoor && env.sun && env.hemi) {
+      _v4.copy(env.sun.position).sub(env.sun.target.position).normalize().applyQuaternion(_q1.copy(g.camera.quaternion).invert());
+      this.vmSun.position.copy(_v4); this.vmSun.color.copy(env.sun.color); this.vmSun.intensity = 0.3 + env.sun.intensity * 0.4;
+      this.vmHemi.color.copy(env.hemi.color); this.vmHemi.groundColor.copy(env.hemi.groundColor); this.vmHemi.intensity = 0.3 + env.hemi.intensity * 0.9;
+    } else { this.vmSun.position.set(0.5, 1, 0.6); this.vmSun.color.set(0xffffff); this.vmSun.intensity = env && env.kind === 'subway' ? 1.1 : 1.45; this.vmHemi.color.set(0xffffff); this.vmHemi.groundColor.set(0x5a5a56); this.vmHemi.intensity = env && env.kind === 'subway' ? 0.75 : 0.95; }
   }
   makeGrenadeMesh() {
     const M = this.M;
@@ -225,6 +305,7 @@ class Weapons {
     this.index = i; this.current = this.tools[i];
     this.reloading = 0; this.charging = false; this.charge = 0; this.swingT = 0;
     for (const k in this.models) this.models[k].visible = k === this.current.id;
+    if (this.fpArms) this.attachHands(this.models[this.current.id]);
     this.equipT = 0.35;
     this.game.player.aiming = false; this.game.player.zoom = 1;
     if (!silent) { this.game.audio.play('equip', { bus: 'ui', gain: 0.5 }); }
@@ -254,6 +335,7 @@ class Weapons {
     if (inp.mouse.wheel !== 0 && !this.grab && !this.moving && !(t.isGun && this.game.player.aiming)) this.cycle(inp.mouse.wheel > 0 ? 1 : -1);
     if (inp.wasPressed('KeyR') || inp.touch.reload) { inp.touch.reload = false; if (t.isGun) this.startReload(); else if (t.move && this.moving) this.rotateMoved(Math.PI / 4); }
     if (inp.wasPressed('KeyF') || inp.touch.select) { inp.touch.select = false; this.selectAtCrosshair(); }
+    if (inp.wasPressed('KeyI') && this.reloading <= 0 && !this.charging) this.inspectT = 2.6;   // look the weapon over
     // aiming
     if ((t.isGun || t.launcher) && this.reloading <= 0) { g.player.aiming = aimHeld; g.player.zoom = t.zoom; }
     else { g.player.aiming = false; }
@@ -311,7 +393,7 @@ class Weapons {
       return;
     }
     if (!W.infiniteAmmo) a.mag--;
-    this.cooldown = t.rate;
+    this.cooldown = t.rate; this.triggerT = 0.12; this.inspectT = 0;
     const cam = g.camera;
     const origin = cam.position.clone();
     const dir = cam.getWorldDirection(new V3());
@@ -383,10 +465,12 @@ class Weapons {
           g.audio.play('hitWood', { pos: propHit.point, gain: 0.8 });
           g.ai.emit('impact', propHit.point, { threatPos: g.camera.position });
         } else {
+          const envC = g.env.current, surf = envC.impactSurface ? envC.impactSurface(envHit.point) : envC.surface;
           g.fx.decal(envHit.point, envHit.normal, pr.tool.id === 'sniper' ? 0.09 : 0.06, 'hole');
-          g.fx.impactDust(envHit.point, envHit.normal, g.env.current.surface, pr.tool.id === 'sniper' ? 1.4 : 1);
-          g.audio.play(g.env.current.surface === 'grass' ? 'hitDirt' : 'hitHard', { pos: envHit.point, gain: 0.9 });
-          if (Math.random() < 0.18 && g.env.current.surface !== 'grass') g.audio.play('ricochet', { pos: envHit.point, gain: 0.5 });
+          g.fx.impactDust(envHit.point, envHit.normal, surf === 'metal' ? 'hard' : surf, pr.tool.id === 'sniper' ? 1.4 : 1);
+          g.audio.play(surf === 'grass' ? 'hitDirt' : 'hitHard', { pos: envHit.point, gain: 0.9 });
+          if (Math.random() < (surf === 'metal' ? 0.4 : 0.18) && surf !== 'grass') g.audio.play(surf === 'metal' && Math.random() < 0.5 ? 'clink' : 'ricochet', { pos: envHit.point, gain: 0.5 });
+          if (envC.onImpact) envC.onImpact(envHit.point, dir, pr.tool.id === 'sniper' ? 2.2 : 1);
           g.ai.emit('impact', envHit.point, { threatPos: g.camera.position });
         }
         if (pr.tracer) g.fx.stopTracer(pr.tracer, pr.travelled);
@@ -671,7 +755,7 @@ class Weapons {
   selectAtCrosshair() {
     const g = this.game;
     const h = g.hits.raycastNPCs(g.camera.position, g.camera.getWorldDirection(new V3()), 60, null);
-    if (h) { g.npcs.select(h.npc); g.audio.play('select', { bus: 'ui', gain: 0.5 }); }
+    if (h) { g.npcs.select(h.npc); g.audio.play('select', { bus: 'ui', gain: 0.5 }); this.gestureT = 1.3; }
     else { g.npcs.select(null); }
   }
   // --- physics hand -----------------------------------------------------------------
@@ -865,9 +949,21 @@ class Weapons {
     this.sway = this.sway || new V3();
     this.sway.x = damp(this.sway.x, -lagX, 10, dt); this.sway.y = damp(this.sway.y, lagY, 10, dt);
     pos.x += this.sway.x * (1 - aw); pos.y += this.sway.y * (1 - aw);
+    // sprinting: the weapon comes down and across, the arms pump with the stride
+    const run = !!((g.input.keys.ShiftLeft || g.input.keys.ShiftRight) && pl.vel.length() > 4.5 && !pl.aiming);
+    this.runK = damp(this.runK || 0, run ? 1 : 0, 8, dt);
+    if (this.runK > 0.001) { const k = this.runK; pos.y -= 0.045 * k - Math.sin(bobT) * 0.012 * k; pos.x += 0.02 * k + Math.cos(bobT * 0.5) * 0.01 * k; rx -= 0.32 * k; ry += 0.35 * k; rz += 0.18 * k; }
+    // inspecting: turn it to look at one side, then the other
+    if (this.inspectT > 0) {
+      this.inspectT = Math.max(0, this.inspectT - dt);
+      const u = 1 - this.inspectT / 2.6, w = Math.sin(Math.PI * u), side = u < 0.5 ? 1 : -1, ph = Math.sin(Math.PI * Math.min(1, (u < 0.5 ? u : u - 0.5) * 2));
+      pos.x -= 0.06 * w; pos.y += 0.025 * w; pos.z += 0.05 * w;
+      ry += side * 0.75 * ph; rz += side * 0.45 * ph; rx += 0.15 * w;
+    }
     m.position.copy(pos);
     const base = t.id === 'knife' ? new THREE.Euler(0.15, 0.25, -0.45) : new THREE.Euler(0, 0, 0);
     m.rotation.set(base.x + rx, base.y + ry + this.sway.x * 2, base.z + rz);
+    if (this.fpArms) this.updateHands(dt, m, t, run);
     // hide viewmodel when scoped
     this.vmRoot.visible = !(t.scope && pl.aiming && pl.cam.fov < Settings.data.controls.fov / 2.2);
   }

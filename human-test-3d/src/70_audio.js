@@ -153,7 +153,7 @@ class AudioEngine {
   }
   // V1.11 surfaces and movement: station tile, a train's metal floor, wet ground, clothing, a dragged foot
   synthSurfaceStep(name, kind) {
-    const sr = this.sr, dur = { tile: 0.16, metal: 0.3, wet: 0.24, rustle: 0.2, scuff: 0.42 }[kind], b = this.buf(dur), L = b.L, r = this.rng.next();
+    const sr = this.sr, dur = { tile: 0.16, metal: 0.3, wet: 0.24, rustle: 0.2, scuff: 0.42, rubber: 0.14 }[kind], b = this.buf(dur), L = b.L, r = this.rng.next();
     const hi = new Biquad('bp', 2400 + r * 1200, 1.4, sr), lp = new Biquad('lp', 170, 0.7, sr);
     const m1 = new Biquad('bp', 2050 + r * 500, 18, sr), m2 = new Biquad('bp', 3550 + r * 700, 22, sr), m3 = new Biquad('bp', 780 + r * 160, 9, sr);
     const sp = new Biquad('bp', 900 + r * 700, 1.1, sr), cl = new Biquad('bp', 3200 + r * 1500, 0.9, sr), sc = new Biquad('bp', 600 + r * 300, 0.7, sr);
@@ -162,6 +162,7 @@ class AudioEngine {
       if (kind === 'tile') L[i] = hi.p(n) * Math.exp(-t / 0.009) * 1.6 + lp.p(n) * Math.exp(-t / 0.025) * 2.4 + (t > 0.028 ? hi.p(n) * Math.exp(-(t - 0.028) / 0.008) * 0.6 : 0);
       else if (kind === 'metal') { const ex = n * Math.exp(-t / 0.004); L[i] = m1.p(ex) * 9 * Math.exp(-t / 0.09) + m2.p(ex) * 7 * Math.exp(-t / 0.06) + m3.p(ex) * 6 * Math.exp(-t / 0.12) + lp.p(n) * Math.exp(-t / 0.03) * 2.6; }
       else if (kind === 'wet') { const grain = this.rng.next() < 0.18 ? 1.4 : 0.4; L[i] = sp.p(n) * grain * Math.exp(-t / 0.06) * (1 - Math.exp(-t / 0.006)) + lp.p(n) * Math.exp(-t / 0.035) * 1.8 + (t > 0.05 ? sp.p(n) * Math.exp(-(t - 0.05) / 0.03) * 0.5 : 0); }
+      else if (kind === 'rubber') L[i] = lp.p(n) * Math.exp(-t / 0.03) * 2.2 * (1 - Math.exp(-t / 0.004)) + sp.p(n) * Math.exp(-t / 0.012) * 0.25;
       else if (kind === 'rustle') L[i] = cl.p(n) * Math.sin(Math.PI * Math.min(1, t / dur)) * (0.6 + 0.4 * Math.sin(t * 90 + r * 6));
       else L[i] = sc.p(n) * Math.min(1, t / 0.05) * Math.exp(-t / 0.18) * (0.7 + 0.3 * this.rng.next()) + lp.p(n) * Math.exp(-t / 0.05);
     }
@@ -225,7 +226,7 @@ class AudioEngine {
       this.synthThud('hitWood', { lp: 1400, t: 0.03, f: 320, t2: 0.08, sub: 0.8, click: 0.5, dur: 0.3 });
       this.synthThud('thud', { lp: 260, t: 0.11, f: 62, t2: 0.12, sub: 1.0, click: 0.1, dur: 0.45 });
       this.synthThud('thudLight', { lp: 500, t: 0.05, f: 110, t2: 0.05, sub: 0.6, click: 0.2, dur: 0.2 });
-      for (let i = 0; i < 4; i++) { this.synthStep('stepHard' + i, false); this.synthStep('stepGrass' + i, true); this.synthSurfaceStep('stepTile' + i, 'tile'); this.synthSurfaceStep('stepMetal' + i, 'metal'); this.synthSurfaceStep('stepWet' + i, 'wet'); }
+      for (let i = 0; i < 4; i++) { this.synthStep('stepHard' + i, false); this.synthStep('stepGrass' + i, true); this.synthSurfaceStep('stepTile' + i, 'tile'); this.synthSurfaceStep('stepMetal' + i, 'metal'); this.synthSurfaceStep('stepWet' + i, 'wet'); this.synthSurfaceStep('stepRubber' + i, 'rubber'); }
       for (let i = 0; i < 2; i++) { this.synthSurfaceStep('rustle' + i, 'rustle'); this.synthSurfaceStep('scuff' + i, 'scuff'); }
       // ricochet
       { const b = this.buf(0.45), L = b.L; let ph = 0; for (let i = 0; i < L.length; i++) { const t = i / sr; const f = 3200 * Math.exp(-t * 2.2) + 900; ph += TAU * f * (1 + 0.02 * Math.sin(t * 90)) / sr; L[i] = Math.sin(ph) * Math.exp(-t / 0.18) * (1 - Math.exp(-t / 0.005)); } this.finish('ricochet', b, 0.5); }
@@ -258,6 +259,11 @@ class AudioEngine {
       { const b = this.buf(4.5, 2); for (const [arr, o] of [[b.L, 0], [b.R, 0.8]]) { const lp = new Biquad('lp', 120, 0.9, sr), bp = new Biquad('bp', 380, 1.4, sr); let br = 0; for (let i = 0; i < arr.length; i++) { const t = i / sr, n = this.noise(); br = (br + n * 0.05) * 0.996; const env = Math.sin(Math.PI * Math.min(1, t / 4.5)) ** 1.5; arr[i] = (lp.p(br * 10) * 1.2 + bp.p(n) * 0.25 * (0.5 + 0.5 * Math.sin(t * 31 + o))) * env; } } this.finish('rumble', b, 0.8); }
       this.synthLoop('crickets', 3, (b) => { for (let i = 0; i < b.L.length; i++) { const t = i / sr; const pulse = (Math.sin(TAU * 32 * t) > 0.6 ? 1 : 0) * (Math.sin(TAU * 0.9 * t) > -0.2 ? 1 : 0); b.L[i] = Math.sin(TAU * 4500 * t) * pulse * 0.4 + Math.sin(TAU * 4700 * t + 1) * (Math.sin(TAU * 27 * t + 2) > 0.7 ? 1 : 0) * 0.25; } });
       this.synthLoop('drone', 6, (b) => { for (const [arr, dt] of [[b.L, 0], [b.R, 0.7]]) { const lp = new Biquad('lp', 500, 1.2, sr); let p1 = 0, p2 = 0, p3 = 0; for (let i = 0; i < arr.length; i++) { const t = i / sr; p1 = (p1 + 55 / sr) % 1; p2 = (p2 + (55.4 + dt * 0.3) / sr) % 1; p3 = (p3 + 82.5 / sr) % 1; arr[i] = lp.p((p1 * 2 - 1) + (p2 * 2 - 1) * 0.8 + (p3 * 2 - 1) * 0.4) * (0.7 + 0.3 * Math.sin(t * TAU / 6 + dt)); } } }, true);
+      // V1.12 neighbourhood: a swing's chain hooks creaking, a car going by, a dog, wings taking off
+      { const b = this.buf(0.5), L = b.L; let ph = 0; for (let i = 0; i < L.length; i++) { const t = i / sr, u = t / 0.5; const f = 1450 + 380 * Math.sin(u * Math.PI) + 60 * Math.sin(t * 90); ph += TAU * f / sr; const g = (0.5 + 0.5 * Math.sin(t * 160)) * Math.sin(Math.PI * u) ** 1.5; L[i] = (Math.sin(ph) + 0.35 * Math.sin(ph * 2.01) + 0.2 * this.noise()) * g; } this.finish('creak', b, 0.3); }
+      { const b = this.buf(5.5, 2); for (const [arr, o] of [[b.L, -1], [b.R, 1]]) { const lp = new Biquad('lp', 600, 0.7, sr), bp = new Biquad('bp', 1100, 0.8, sr); let br = 0; for (let i = 0; i < arr.length; i++) { const t = i / sr, u = t / 5.5, n = this.noise(); br = (br + n * 0.05) * 0.996; const pass = Math.exp(-(((u - 0.5) * 4) ** 2)), pan = 0.5 + 0.5 * o * Math.tanh((u - 0.5) * 6); arr[i] = (lp.p(br * 8) * 1.2 + bp.p(n) * 0.35) * pass * pan; } } this.finish('carPass', b, 0.5); }
+      { const b = this.buf(0.9), L = b.L, F = [new Biquad('bp', 650, 3, sr), new Biquad('bp', 1250, 4, sr), new Biquad('bp', 2400, 5, sr)]; let ph = 0; for (let i = 0; i < L.length; i++) { const t = i / sr; const on = t < 0.16 ? 1 : (t > 0.4 && t < 0.56 ? 1 : 0), k = on ? Math.sin(Math.PI * ((t < 0.3 ? t : t - 0.4) / 0.16)) : 0; ph += TAU * (420 - 160 * ((t < 0.3 ? t : t - 0.4) / 0.16)) / sr; const src = ((ph / TAU) % 1) * 2 - 1 + this.noise() * 0.5; L[i] = Math.tanh((F[0].p(src) + F[1].p(src) * 0.7 + F[2].p(src) * 0.3) * k * 3); } this.finish('dogBark', b, 0.5); }
+      { const b = this.buf(0.7), L = b.L, bp = new Biquad('bp', 900, 0.9, sr); for (let i = 0; i < L.length; i++) { const t = i / sr; const beat = Math.max(0, Math.sin(t * TAU * 18)) ** 3; L[i] = bp.p(this.noise()) * beat * Math.exp(-t / 0.3) * (1 - Math.exp(-t / 0.01)); } this.finish('flutter', b, 0.45); }
       // bird chirps
       for (let k = 0; k < 4; k++) { const b = this.buf(0.6), L = b.L; let ph = 0; const n = 2 + k; for (let i = 0; i < L.length; i++) { const t = i / sr; const seg = Math.floor(t / 0.11); const u = (t % 0.11) / 0.11; if (seg >= n) { L[i] = 0; continue; } const f = 2600 + k * 400 + Math.sin(u * Math.PI) * 1500 * (seg % 2 ? -0.5 : 1); ph += TAU * f / sr; L[i] = Math.sin(ph) * Math.sin(Math.PI * u) ** 2; } this.finish('bird' + k, b, 0.35); }
     } else if (group === 6) {
@@ -479,8 +485,9 @@ class AudioEngine {
   setEnvironment(kind) {
     if (!this.ctx) return;
     this.envKind = kind;
-    try { this.reverb.buffer = this.makeIR(kind === 'field' ? 'field' : kind === 'subway' ? 'subway' : 'room'); } catch (e) { reportError(e, 'reverb'); }
-    this.reverbGain.gain.value = kind === 'room' ? 0.42 : (kind === 'subway' ? 0.5 : 0.12);
+    const outdoor = kind === 'field' || kind === 'playground';
+    try { this.reverb.buffer = this.makeIR(outdoor ? 'field' : kind === 'subway' ? 'subway' : 'room'); } catch (e) { reportError(e, 'reverb'); }
+    this.reverbGain.gain.value = kind === 'room' ? 0.42 : (kind === 'subway' ? 0.5 : kind === 'playground' ? 0.16 : 0.12);
     if (this.unlocked) this.startAmbience();
   }
   startLoadingDrone() { if (!this.drone && this.buffers.drone) this.drone = this.loop('drone', 0.35, 'ui'); }
@@ -502,11 +509,20 @@ class AudioEngine {
         if (Math.random() < 0.7) this.play('drip' + (Math.random() < 0.5 ? 0 : 1), { pos: p, gain: 0.35, ref: 2, reverbAmt: 1.4 });
         else this.play('rumble', { gain: 0.25, reverbAmt: 0.6 });
       }
-    } else if (env.kind === 'field') {
+    } else if (env.outdoor) {
       const F = Settings.data.environment.field, wet = env.rainK || 0;
       if (this.ambience.wind) { this.gustPh = (this.gustPh || 0) + dt * (0.15 + F.wind * 0.3); const gust = 0.75 + 0.25 * Math.sin(this.gustPh) * Math.sin(this.gustPh * 0.37 + 1); this.ambience.wind.g.gain.setTargetAtTime((0.2 + F.wind * 0.5) * gust, t, 0.5); }
       if (wet > 0.01 && !this.ambience.rain) this.ambience.rain = this.loop('rain', 0);
       if (this.ambience.rain) this.ambience.rain.g.gain.setTargetAtTime(0.5 * wet, t, 0.8);
+      // the neighbourhood round the playground: cars along the street, a dog now and then
+      if (env.kind === 'playground') {
+        this.hoodT = (this.hoodT == null ? 3 : this.hoodT) - dt;
+        if (this.hoodT <= 0) {
+          this.hoodT = 6 + Math.random() * 12;
+          if (Math.random() < 0.72) this.play('carPass', { bus: 'ambience', pos: _v2.set(cam.position.x + (Math.random() - 0.5) * 30, 1, -39), gain: 0.55 * (1 - wet * 0.3), ref: 12, reverb: false, vary: true });
+          else this.play('dogBark', { bus: 'ambience', pos: _v2.set(cam.position.x + (Math.random() < 0.5 ? -1 : 1) * (40 + Math.random() * 20), 1, -58 + Math.random() * 110), gain: 0.4, ref: 10 });
+        }
+      }
     }
   }
   thunder(delay, gain) { setTimeout(() => this.play('thunder', { gain, reverbAmt: 0.3, important: true, rate: 0.85 + Math.random() * 0.3 }), delay * 1000); }
@@ -518,7 +534,7 @@ class AudioEngine {
     if (env.kind === 'room') this.ambience.hum = this.loop('roomHum', 0.32);
     else if (env.kind === 'subway') { this.ambience.hum = this.loop('subwayHum', 0.45); this.ambience.city = this.loop('wind', 0.08); }
     else {
-      this.ambience.wind = this.loop('wind', 0.2 + Settings.data.environment.field.wind * 0.5);
+      this.ambience.wind = this.loop('wind', (0.2 + Settings.data.environment.field.wind * 0.5) * (env.kind === 'playground' ? 0.8 : 1));
       if (Settings.data.environment.field.weather === 'rain') this.ambience.rain = this.loop('rain', 0.4);
       const t = Settings.data.environment.field.timeOfDay;
       if (t < 6 || t > 19.5) this.ambience.crickets = this.loop('crickets', 0.12);
@@ -536,11 +552,11 @@ class AudioEngine {
     } else { L.setPosition(cam.position.x, cam.position.y, cam.position.z); L.setOrientation(f.x, f.y, f.z, 0, 1, 0); }
     // birds in field daytime
     const env = this.game.env.current;
-    if (env && env.kind === 'field') {
+    if (env && env.outdoor) {
       const t = Settings.data.environment.field.timeOfDay, w = Settings.data.environment.field.weather;
       this.birdT -= dt;
       if (this.birdT <= 0 && t > 6 && t < 19 && w !== 'rain') {
-        this.birdT = 2 + Math.random() * 7;
+        this.birdT = (env.kind === 'playground' ? 1.5 : 2) + Math.random() * (env.kind === 'playground' ? 5 : 7);
         const a = Math.random() * TAU, d = 20 + Math.random() * 40;
         this.play('bird' + Math.floor(Math.random() * 4), { bus: 'ambience', pos: _v2.set(cam.position.x + Math.cos(a) * d, 8 + Math.random() * 10, cam.position.z + Math.sin(a) * d), gain: 0.5, ref: 10, reverb: false });
       }

@@ -26,9 +26,9 @@ const DEFAULT_SETTINGS = {
   zombies: {
     reincarnation: true, delayPreset: 'short', delay: 5, headTraumaPrevents: true,
     aggression: true, targetNPCs: true, detection: 18, speed: 1.0, targetMode: 'nearest',
-    attackDamage: 18, vocalize: true, infection: true, infectionTime: 60, feeding: true, biteDamage: 24
+    attackDamage: 18, vocalize: true, infection: true, feeding: true, biteDamage: 24
   },
-  gore: { level: 'extreme', dismember: true, gibs: true, pools: true, screenBlood: true, blood: 1.0 },
+  gore: { level: 'normal', dismember: true, gibs: true, pools: true, screenBlood: true, blood: 1.0 },
   weapons: {
     enabled: { pistol: true, sniper: true, knife: true, grenade: true, bazooka: true, hand: true, move: true },
     infiniteAmmo: true, autoReload: true, damageScale: 1.0, simulatedDamage: true,
@@ -41,6 +41,7 @@ const DEFAULT_SETTINGS = {
     room: { width: 32, depth: 32, height: 9, grid: true, markers: true, light: 1.0, colorTemp: 5600 },
     field: { timeOfDay: 14.0, weather: 'clear', wind: 0.45 }
   },
+  player: { seed: 0 },   // the player's own look (first-person arms); picked once, no UI
   spawn: {
     count: 1, mode: 'crosshair', pose: 'idle', gender: 'random',
     heightMinM: 1.62, heightMaxM: 1.95, heightMinF: 1.50, heightMaxF: 1.80
@@ -80,11 +81,13 @@ const Settings = {
       const raw = localStorage.getItem(SETTINGS_KEY);
       if (raw) {
         const saved = JSON.parse(raw);
-        // V1.10: infections take about a minute (the old 12 s default is moved to the new one)
-        if (!(saved.rev >= 110) && saved.zombies && saved.zombies.infectionTime === 12) saved.zombies.infectionTime = 60;
+        // V1.12: the infection time is fixed at 90 s and is no longer a setting
+        if (saved.zombies) delete saved.zombies.infectionTime;
+        // V1.12: effects are non-graphic by default (no exposed anatomy); Extreme stays available in Settings > Gore
+        if (!(saved.rev >= 112) && saved.gore && saved.gore.level === 'extreme') saved.gore.level = 'normal';
         deepMerge(this.data, saved);
       }
-      this.data.rev = 110;
+      this.data.rev = 112;
     } catch (e) { this.storageOk = false; }
     return this.data;
   },

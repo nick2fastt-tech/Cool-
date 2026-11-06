@@ -23,7 +23,7 @@ class SceneStore {
       if (n.horror) e.horror = n.horror.kind;
       if (e.kind === 'zombie') { e.zlook = n.zlook || null; e.zgait = n.anim.zstyle ? n.anim.zstyle.name : null; }
       if (e.kind === 'vampire') e.vstyle = n.anim.vstyle ? n.anim.vstyle.name : null;
-      if (n.infection && e.kind === 'human') e.inf = { t: +n.infection.t.toFixed(2), dur: +n.infection.dur.toFixed(2), src: n.infection.src === 'doctor' ? 'doctor' : 'saved' };
+      if (n.infection && e.kind === 'human') e.inf = { t: +n.infection.t.toFixed(2), src: n.infection.src === 'doctor' ? 'doctor' : 'saved' };
       if (n.spawnKind) e.spawnKind = n.spawnKind;
       npcs.push(e);
     }
@@ -59,9 +59,9 @@ class SceneStore {
       if (typeof F.weather === 'string') Settings.set('environment.field.weather', F.weather);
       if (typeof F.wind === 'number') Settings.set('environment.field.wind', clamp(F.wind, 0, 1));
     }
-    const kind = ['room', 'field', 'subway'].indexOf(data.env) >= 0 ? data.env : g.env.current.kind;
+    const kind = ['room', 'field', 'subway', 'playground'].indexOf(data.env) >= 0 ? data.env : g.env.current.kind;
     if (g.env.current.kind !== kind) g.switchEnvironment(kind);
-    else if (kind === 'field' && g.env.current.applyTimeWeather) { g.env.current.applyTimeWeather(); g.audio.startAmbience(); }
+    else if ((kind === 'field' || kind === 'playground') && g.env.current.applyTimeWeather) { g.env.current.applyTimeWeather(); g.audio.startAmbience(); }
     let ok = 0;
     for (const e of data.npcs) {
       try { if (this.restoreOne(e)) ok++; } catch (err) { reportError(err, 'scene load npc'); }
@@ -83,7 +83,7 @@ class SceneStore {
         if (e.zlook && ZOMBIE_LOOKS[e.zlook]) applyZombieLook(n, e.zlook);
         const zg = e.zgait && ZOMBIE_GAITS.find(z => z.name === e.zgait); if (zg) n.anim.zstyle = zg;
       } else if (e.kind === 'vampire') g.vampires.makeVampire(n, { instant: true, why: 'restored', style: e.vstyle });
-      else if (e.inf && Settings.data.zombies.infection) n.infection = { t: e.inf.t, dur: e.inf.dur, src: e.inf.src };
+      else if (e.inf && Settings.data.zombies.infection) n.infection = { t: clamp(+e.inf.t || 0, 0, INFECTION.collapseT - 0.5), dur: INFECTION.dur, src: e.inf.src };
     }
     if (!n) return false;
     if (e.spawnKind) n.spawnKind = e.spawnKind;

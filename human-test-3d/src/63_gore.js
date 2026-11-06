@@ -119,23 +119,27 @@ class BloodDecals {
     const geo = new THREE.PlaneGeometry(1, 1);
     this.aTile = new THREE.InstancedBufferAttribute(new Float32Array(max), 1);
     this.aBirth = new THREE.InstancedBufferAttribute(new Float32Array(max), 1);
-    geo.setAttribute('aTile', this.aTile); geo.setAttribute('aBirth', this.aBirth);
+    this.aSurf = new THREE.InstancedBufferAttribute(new Float32Array(max), 1);   // V1.12: 0 hard and glossy .. 1 soaks in (grass, soil)
+    geo.setAttribute('aTile', this.aTile); geo.setAttribute('aBirth', this.aBirth); geo.setAttribute('aSurf', this.aSurf);
     this.uTime = { value: 0 }; this.uLife = { value: 120 };
     const mat = new THREE.MeshStandardMaterial({ map: makeBloodAtlas(), color: 0x5a0807, roughness: 0.15, metalness: 0, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6 });
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = this.uTime; sh.uniforms.uLife = this.uLife;
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aTile; attribute float aBirth; uniform float uTime; varying float vAge;')
-        .replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_MAP\n vMapUv = vMapUv * 0.25 + vec2(mod(aTile, 4.0), 3.0 - floor(aTile / 4.0)) * 0.25;\n#endif\n vAge = uTime - aBirth;');
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vAge; uniform float uLife;')
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aTile; attribute float aBirth; attribute float aSurf; uniform float uTime; varying float vAge; varying float vSurf;')
+        .replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_MAP\n vMapUv = vMapUv * 0.25 + vec2(mod(aTile, 4.0), 3.0 - floor(aTile / 4.0)) * 0.25;\n#endif\n vAge = uTime - aBirth; vSurf = aSurf;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vAge; varying float vSurf; uniform float uLife;')
         .replace('#include <map_fragment>', `#include <map_fragment>
-          float htDry = smoothstep(6.0, 80.0, vAge);
+          float htDry = max(smoothstep(6.0, 80.0, vAge), vSurf * smoothstep(0.5, 12.0, vAge));
+          // soaked into grass or soil: darker and browner, broken up, never a glossy film
+          diffuseColor.rgb *= mix(vec3(1.0), vec3(0.62, 0.5, 0.42), vSurf);
+          diffuseColor.a *= 1.0 - vSurf * 0.3 * smoothstep(0.3, 0.8, fract(sin(dot(floor(vMapUv * 96.0), vec2(12.9898, 78.233))) * 43758.5453));
           diffuseColor.rgb *= mix(vec3(1.0), vec3(0.5, 0.42, 0.42), htDry);
           float htMin = max(length(dFdx(vMapUv)), length(dFdy(vMapUv))) * 1024.0;
           float htA = min(1.0, diffuseColor.a * (1.0 + 0.9 * log2(max(htMin, 1.0))));
           diffuseColor.a = smoothstep(0.02, 0.3, htA) * smoothstep(0.0, 0.08, vAge) * (1.0 - smoothstep(uLife - 12.0, uLife, vAge));`)
-        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n roughnessFactor = mix(0.08, 0.55, htDry);');
+        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n roughnessFactor = mix(mix(0.08, 0.55, htDry), 0.85, vSurf);');
     };
-    mat.customProgramCacheKey = () => 'ht3d-blood-decal';
+    mat.customProgramCacheKey = () => 'ht3d-blood-decal2';
     this.mesh = new THREE.InstancedMesh(geo, mat, max);
     this.mesh.count = 0; this.mesh.frustumCulled = false; this.mesh.receiveShadow = true; this.mesh.renderOrder = 1;
     this.mesh.name = 'bloodDecals';
@@ -166,10 +170,18 @@ class BloodDecals {
     this.mesh.setMatrixAt(slot, this._m);
     this.aTile.array[slot] = k[0] + Math.floor(Math.random() * k[1]);
     this.aBirth.array[slot] = this.game.time; this.lastAdd = this.game.time;
-    this.aTile.needsUpdate = true; this.aBirth.needsUpdate = true; this.mesh.instanceMatrix.needsUpdate = true;
+    this.aSurf.array[slot] = opts && opts.surf != null ? opts.surf : this.surfAt(p, n);
+    this.aTile.needsUpdate = true; this.aBirth.needsUpdate = true; this.aSurf.needsUpdate = true; this.mesh.instanceMatrix.needsUpdate = true;
     this.mesh.count = this.used;
     if (grow) this.growing.push({ slot, t: 0, dur: opts.grow, sx, sy, pos: pos.clone(), q: q.clone() });
     return slot;
+  }
+  // how much a surface soaks blood up: grass and soil yes, rubber a little, floors, tiles and metal no
+  surfAt(p, n) {
+    const env = this.game.env.current; if (!env || (n && n.y < 0.7)) return 0;
+    if (env.baseHeight && p.y - env.baseHeight(p.x, p.z) > 0.08) return 0;   // on a bench, a table or equipment: a hard top
+    if (env.surfaceAt) { const s = env.surfaceAt(p); return s === 'grass' ? 1 : s === 'rubber' ? 0.45 : 0; }
+    return env.surface === 'grass' ? 1 : 0;
   }
   update(dt) {
     this.uTime.value = this.game.time;
@@ -199,20 +211,20 @@ class BloodDrops {
     this.aSize = new THREE.BufferAttribute(new Float32Array(max), 1).setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute('position', this.aPos); geo.setAttribute('aSize', this.aSize);
     geo.boundingSphere = new THREE.Sphere(new V3(), 1e5);
-    this.uniforms = { uScale: { value: 400 } };
+    this.uniforms = { uScale: { value: 400 }, uLight: { value: 1 } };
     const mat = new THREE.ShaderMaterial({
       uniforms: this.uniforms, transparent: true, depthWrite: false,
       vertexShader: `attribute float aSize; uniform float uScale; varying float vS; varying float vTone;
         void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mv; vS = aSize;
           vTone = fract(sin(aSize * 91731.7) * 43758.5);   // stable per drop: some darker, some brighter
           gl_PointSize = clamp(aSize * uScale / max(0.05, -mv.z), 1.5, 64.0); }`,
-      fragmentShader: `varying float vS; varying float vTone;
+      fragmentShader: `varying float vS; varying float vTone; uniform float uLight;
         void main() { vec2 c = gl_PointCoord - 0.5; float r = length(c); if (r > 0.5) discard;
           float a = (1.0 - smoothstep(0.3, 0.5, r)) * (0.85 + 0.15 * smoothstep(0.3, 0.0, r));
           vec3 deep = mix(vec3(0.2, 0.008, 0.01), vec3(0.36, 0.02, 0.015), vTone);
           vec3 col = deep * (0.75 + 0.5 * (0.5 - c.y)) * (0.85 + 0.3 * smoothstep(0.5, 0.15, r));
           col += vec3(0.55, 0.3, 0.3) * smoothstep(0.1, 0.0, length(c - vec2(-0.13, -0.15))) * (0.6 + 0.4 * vTone);
-          gl_FragColor = vec4(col, a);
+          gl_FragColor = vec4(col * uLight, a);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
         }`
@@ -246,6 +258,7 @@ class BloodDrops {
       let hitN = null;
       const gy = env.groundHeight(x, z, this.p[k + 1] + 0.05);
       if (y <= gy + 0.004) { y = gy + 0.004; hitN = env.groundNormal(x, z, _gv3); }
+      else if (this.boxHit(x, y, z, _gv3, _gv2)) { x = _gv2.x; y = _gv2.y; z = _gv2.z; hitN = _gv3; }
       else for (const pl of planes) {
         if (pl.n.y > 0.5) continue; // floor handled above
         const d = pl.n.x * x + pl.n.y * y + pl.n.z * z - pl.d;
@@ -273,6 +286,20 @@ class BloodDrops {
     this.aPos.needsUpdate = true; this.aSize.needsUpdate = true;
     const h = g.renderer.domElement.height;
     this.uniforms.uScale.value = h / (2 * Math.tan(g.camera.fov * DEG / 2));
+  }
+  // a drop inside a static box (a bench, a slide, a fixture) sticks to the nearest face
+  boxHit(x, y, z, outN, outP) {
+    const G = this.game.physics.staticGrid; if (!G) return false;
+    const l = G.get(Math.floor(x / 4) * 4099 + Math.floor(z / 4)); if (!l) return false;
+    for (const b of l) {
+      if (x < b.min.x - 0.004 || x > b.max.x + 0.004 || y < b.min.y - 0.004 || y > b.max.y + 0.004 || z < b.min.z - 0.004 || z > b.max.z + 0.004) continue;
+      const f = [x - b.min.x, b.max.x - x, y - b.min.y, b.max.y - y, z - b.min.z, b.max.z - z];
+      let k = 3; for (let i = 0; i < 6; i++) if (f[i] < f[k] - 0.01) k = i;   // prefer the top face
+      outN.set(k === 0 ? -1 : k === 1 ? 1 : 0, k === 2 ? -1 : k === 3 ? 1 : 0, k === 4 ? -1 : k === 5 ? 1 : 0);
+      outP.set(k === 0 ? b.min.x - 0.004 : k === 1 ? b.max.x + 0.004 : x, k === 2 ? b.min.y - 0.004 : k === 3 ? b.max.y + 0.004 : y, k === 4 ? b.min.z - 0.004 : k === 5 ? b.max.z + 0.004 : z);
+      return true;
+    }
+    return false;
   }
   clear() { this.n = 0; this.points.geometry.setDrawRange(0, 0); }
 }
@@ -1197,7 +1224,8 @@ class GoreSystem {
   update(dt) {
     const g = this.game;
     // decals and chunks are temporary; extreme keeps them longer
-    this.decals.uLife.value = this.extreme ? 240 : 100;
+    this.decals.uLife.value = (this.extreme ? 240 : 100) * (1 - 0.55 * smoothstep(0.3, 0.9, (g.env.current && g.env.current.rainK) || 0));   // rain washes it away
+    { const env = g.env.current; this.drops.uniforms.uLight.value = !env ? 1 : env.outdoor ? lerp(0.22, 1, env.dayK != null ? env.dayK : 1) : env.kind === 'subway' ? 0.8 : 1; }
     this.gibs.life = this.extreme ? 120 : 45;
     this.decals.update(dt);
     this.drops.update(dt, this);

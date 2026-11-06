@@ -14,7 +14,7 @@ const SIT_MODES = {
 
 class TransitSystem {
   constructor(game) { this.game = game; this._v = new V3(); this._w = new V3(); this._g = new V3(); this._s = new V3(); }
-  get env() { const e = this.game.env && this.game.env.current; return e && e.kind === 'subway' && e.trains ? e : null; }
+  get env() { const e = this.game.env && this.game.env.current; return e && ((e.kind === 'subway' && e.trains) || (e.seatsOnly && e.benchSeats)) ? e : null; }
   get anyOpen() { const e = this.env; return !!(e && e.anyOpen); }
   reset() { if (this.game.npcs) for (const n of this.game.npcs.list) { n.riding = null; n.seatLock = null; n.transit = null; } }
   insideCar(p) { const e = this.env; return e ? e.carAt(p.x, p.z, p.y) : null; }
@@ -58,6 +58,7 @@ class TransitSystem {
   release(n, limp) {
     const T = n.transit;
     if (T && T.seat && T.seat.occupant === n) T.seat.occupant = null;
+    if (T || n.seatLock) n.seatExitT = this.game.time;
     n.transit = null; n.seatLock = null;
     if (limp) n.riding = null;
   }
@@ -105,7 +106,7 @@ class TransitSystem {
       }
       return e.carToWorld(car, dc, side * (car.iw - 0.8), g);
     }
-    return e.navGoal(P, dest);
+    return e.navGoal(P, dest, npc);
   }
   wantsOut(npc, b, car) { return b.speed > 0.01 && this.env.carAt(b.dest.x, b.dest.z, b.dest.y + 0.1) !== car; }
   wantsIn(npc, b) { const c = this.env.carAt(b.dest.x, b.dest.z, b.dest.y + 0.1); return c && this.open(c.train) ? c : null; }
@@ -195,7 +196,7 @@ class TransitSystem {
     // a train standing with its doors open: get on
     if (this.anyOpen && Math.random() < (k === 'human' ? 0.6 : 0.4)) { const d = this.findDoor(npc); if (d) { this.startBoard(npc, b, d); return true; } }
     // a free seat nearby: sit a while
-    if (Math.random() < (k === 'human' ? 0.3 : 0.18) && !(b.satAt && this.game.time - b.satAt < 30)) { const s = this.findSeat(npc); if (s) { this.startSeat(npc, b, s); return true; } }
+    if (Math.random() < (k === 'human' ? 0.3 : 0.18) * (e.seatChance || 1) && !(b.satAt && this.game.time - b.satAt < 30)) { const s = this.findSeat(npc); if (s) { this.startSeat(npc, b, s); return true; } }
     return false;
   }
   startSeat(npc, b, s) {
@@ -219,7 +220,7 @@ class TransitSystem {
     const a = npc.anim.action;
     if (a && (a.type === 'sit' || a.type === 'ridehold')) npc.anim.setAction(null);
     if (T.seat && T.seat.occupant === npc) T.seat.occupant = null;
-    npc.seatLock = null; T.seat = null;
+    npc.seatLock = null; T.seat = null; npc.seatExitT = this.game.time;
   }
   drive(npc, b, dt, T) {
     const e = this.env, P = npc.root.pos, anim = npc.anim, k = this.kindOf(npc);

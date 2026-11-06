@@ -41,6 +41,7 @@ function makeHeadShape(app, rig) {
   };
   P.tipY = -0.0415 - P.noseLen; P.tipZ = 0.1045 + P.noseProj;
   P.upLipY = -0.0672; P.loLipY = -0.0808; P.mouthY = -0.0742;
+  const lipBow = (x) => 0.0009 * Math.exp(-(((Math.abs(x) - 0.0058) / 0.0034) ** 2)) - 0.0004 * Math.exp(-((x / 0.0024) ** 2));
   P.mouthHalf = 0.0205 * P.mouthW;
   // exact culling: smin(d, a, k) == d whenever a > d + k; bounding spheres give lower bounds of a
   const bs = (cx, cy, cz, r) => ({ cx, cy, cz, r });
@@ -67,7 +68,7 @@ function makeHeadShape(app, rig) {
     if (!far(BNOSE, x, y, z, d, 0.0072)) d = smin(d, sdCapR(x, y, z, 0, 0.0055, 0.0825, 0, tipY, tipZ, 0.0052 * P.noseBridge, 0.0097 * P.noseW), 0.0072);
     if (!far(BALA, ax, y, z, d, 0.0045)) d = smin(d, sdEll(ax, y, z, 0.0108 * P.noseW, tipY - 0.004, tipZ - 0.0135, 0.0058 * P.noseW, 0.0055, 0.0075), 0.0045);
     if (!far(BLIP, x, y, z, d, 0.0045)) {
-      d = smin(d, sdEll(x, y, z, 0, P.upLipY, 0.0892, 0.0215 * P.mouthW, 0.0066 * P.lips, 0.0121 * Math.sqrt(P.lips)), 0.004);
+      d = smin(d, sdEll(x, y, z, 0, P.upLipY + lipBow(x), 0.0892, 0.0215 * P.mouthW, 0.0066 * P.lips, 0.0121 * Math.sqrt(P.lips)), 0.004);
       d = smin(d, sdEll(x, y, z, 0, P.loLipY - 0.0006, 0.0884, 0.0194 * P.mouthW, 0.0083 * P.lips, 0.0122 * Math.sqrt(P.lips)), 0.004);
     }
     // eye socket subtraction: smax(d, -s, k) only differs when s < -d + k
@@ -76,7 +77,7 @@ function makeHeadShape(app, rig) {
   };
   const lipDist = (x, y0, z) => {
     const y = y0 < -0.02 ? -0.02 + (y0 + 0.02) / P.faceLen : y0;
-    return Math.min(sdEll(x, y, z, 0, P.upLipY + 0.0004, 0.0892, 0.0206 * P.mouthW, 0.0058 * P.lips, 0.0111 * Math.sqrt(P.lips)),
+    return Math.min(sdEll(x, y, z, 0, P.upLipY + 0.0004 + lipBow(x), 0.0892, 0.0206 * P.mouthW, 0.0058 * P.lips, 0.0111 * Math.sqrt(P.lips)),
       sdEll(x, y, z, 0, P.loLipY - 0.001, 0.0884, 0.0185 * P.mouthW, 0.0073 * P.lips, 0.0112 * Math.sqrt(P.lips)));
   };
   P.sdf = sdf; P.lipDist = lipDist;
@@ -242,6 +243,13 @@ function buildHead(mb, app, rig, Q) {
     c.r *= 1 + 0.12 * red; c.g *= 1 - 0.06 * red; c.b *= 1 - 0.05 * red;
     const socket = gauss(ax, P.eye.x, 0.012) * gauss(y, P.eye.y - 0.006, 0.006) * smoothstep(0.04, 0.07, z);
     c.multiplyScalar(1 - 0.12 * socket);
+    // V1.12: nostrils (dark openings under the tip), the philtrum groove, the shadowed line between the lips
+    const nost = gauss(ax, 0.0062 * P.noseW, 0.0024) * gauss(y, P.tipY - 0.0062, 0.0024) * gauss(z, P.tipZ - 0.0095, 0.0042);
+    c.multiplyScalar(1 - 0.7 * Math.min(1, nost * 1.3));
+    const phil = gauss(ax, 0, 0.0018) * smoothstep(P.upLipY + 0.004, P.upLipY + 0.009, y) * smoothstep(P.tipY - 0.004, P.tipY - 0.012, y) * smoothstep(0.08, 0.095, z);
+    c.multiplyScalar(1 - 0.06 * phil);
+    const stom = gauss(y, P.mouthYScaled, 0.0011) * (1 - smoothstep(P.mouthHalf * 0.85, P.mouthHalf * 1.08, ax)) * smoothstep(0.075, 0.09, z);
+    c.multiplyScalar(1 - 0.32 * stom);
     // lips
     const ld = P.lipDist(x, y, z);
     const lm = 1 - smoothstep(-0.0005, 0.0024, ld);
@@ -635,40 +643,61 @@ function buildPlagueMask(mb, app, rig, P) {
 
 function buildMouthInside(mb, app, rig, P) {
   const S = rig.sHead, HC = rig.headCenter;
-  const dark = C(0x2a0c0c), teeth = C(0xe9e4d6);
+  const dark = C(0x2a0c0c);
   const cx = 0, cy = P.mouthYScaled - 0.004, cz = 0.068;
   addSphereLike(mb, 8, 12, (th, ph) => new V3(HC.x + (cx + Math.sin(ph) * Math.sin(th) * 0.019) * S, HC.y + (cy + Math.cos(ph) * 0.012) * S, HC.z + (cz + Math.sin(ph) * Math.cos(th) * 0.018) * S),
     (th, ph, p) => ({ col: dark, mat: [MAT.MOUTH, 0.6, 0, 1], col2: dark, wts: ph > Math.PI * 0.5 ? [[B.jaw, 1]] : [[B.head, 1]], reg: REGION.HEAD }));
-  // teeth arcs
-  for (let k = 0; k < 2; k++) {
-    const up = k === 0;
-    const y0 = P.mouthYScaled + (up ? 0.0005 : -0.0005), h = up ? 0.0065 : -0.0055;
-    const rings = [];
-    const n = 8;
-    for (let i = 0; i <= n; i++) {
-      const a = lerp(-0.95, 0.95, i / n);
-      const r = 0.0215;
-      const x = Math.sin(a) * r, z = 0.0655 + Math.cos(a) * r * 0.85;
-      rings.push([x, z]);
-    }
+  // V1.12: individual teeth on the dental arch (upper ones a little in front of the lower), gums, a tongue
+  const rng = new RNG((app.seed * 7 + 3) >>> 0);
+  const yellow = rng.range(0, 0.16) + (app.age > 50 ? 0.12 : 0);
+  const toothCol = C(0xeee8da).lerp(C(0xd8c69c), yellow), gumCol = C(0xc06468).lerp(C(app.skin.hex), 0.2), tongueCol = C(0xb4585e);
+  const my = P.mouthYScaled;
+  const archPt = (a, r, dz) => [Math.sin(a) * r, 0.0655 + dz + Math.cos(a) * r * 0.85];
+  const emitBox = (corners, col, mat, w) => { // corners: 8 points [x,y,z] (0-3 one end, 4-7 the other)
     mb.beginPart();
-    const st = mb.I.length;
-    const base = mb.n;
-    for (const [x, z] of rings) {
-      for (const yy of [y0, y0 + h]) {
-        mb.v(HC.x + x * S, HC.y + yy * S, HC.z + z * S, x, yy, teeth, [MAT.TEETH, 0.3, 0, 1], teeth, up ? [[B.head, 1]] : [[B.jaw, 1]], REGION.HEAD);
-      }
+    const st = mb.I.length, base = mb.n;
+    for (const [x, y, z] of corners) mb.v(HC.x + x * S, HC.y + y * S, HC.z + z * S, x * 40, y * 40, col, mat, col, w, REGION.HEAD);
+    const q = (a, b2, c2, d) => mb.quad(base + a, base + b2, base + c2, base + d);
+    q(0, 1, 2, 3); q(7, 6, 5, 4); q(0, 4, 5, 1); q(1, 5, 6, 2); q(2, 6, 7, 3); q(3, 7, 4, 0);
+    let mx = 0, my2 = 0, mz = 0; for (const c of corners) { mx += c[0]; my2 += c[1]; mz += c[2]; }
+    orientPartOutward(mb, st, new V3(HC.x + mx / 8 * S, HC.y + my2 / 8 * S, HC.z + mz / 8 * S));
+    mb.endPart();
+  };
+  const tooth = (a, w, h, t, up, r, dz, jitter) => {
+    const [x, z] = archPt(a, r, dz), tx = Math.cos(a), tz = -Math.sin(a) * 0.85, tl = Math.hypot(tx, tz), ux = tx / tl, uz = tz / tl;
+    const nx = -uz, nz = ux; // outward (toward the lips)
+    const sgn = up ? -1 : 1, y0 = up ? my + 0.0082 : my - 0.0078, y1 = y0 + sgn * (h + jitter), hw = w / 2, ht = t / 2;
+    const ring = (yy, k, kt) => [[x - ux * hw * k + nx * ht * kt, yy, z - uz * hw * k + nz * ht * kt], [x + ux * hw * k + nx * ht * kt, yy, z + uz * hw * k + nz * ht * kt],
+      [x + ux * hw * k - nx * ht, yy, z + uz * hw * k - nz * ht], [x - ux * hw * k - nx * ht, yy, z - uz * hw * k - nz * ht]];
+    emitBox(ring(y0, 0.92, 1).concat(ring(y1, 0.86, 0.45)), toothCol, [MAT.TEETH, 0.28, 0, 1], up ? [[B.head, 1]] : [[B.jaw, 1]]);
+  };
+  const U = [[0.165, 0.0084, 0.0074], [0.47, 0.0066, 0.0066], [0.77, 0.0074, 0.0078], [1.02, 0.0068, 0.0064], [1.24, 0.0066, 0.006]];
+  const L = [[0.12, 0.0052, 0.0062], [0.345, 0.0056, 0.0062], [0.6, 0.0066, 0.007], [0.86, 0.0066, 0.006], [1.08, 0.0066, 0.0058]];
+  for (const sg of [-1, 1]) {
+    for (const [a, w, h] of U) tooth(sg * a, w, h, 0.0062, true, 0.0215, 0, rng.range(-0.0004, 0.0004));
+    for (const [a, w, h] of L) tooth(sg * a, w, h, 0.0055, false, 0.0196, -0.0016, rng.range(-0.0004, 0.0003));
+  }
+  // gums: a band along each arch at the roots of the teeth
+  for (const up of [true, false]) {
+    const r = up ? 0.0219 : 0.0199, dz = up ? 0 : -0.0016, y0 = up ? my + 0.0078 : my - 0.0074, y1 = up ? my + 0.0118 : my - 0.0112;
+    mb.beginPart(); const st = mb.I.length, base = mb.n, n = 14;
+    for (let i = 0; i <= n; i++) {
+      const a = lerp(-1.32, 1.32, i / n);
+      for (const [yy, rr] of [[y0, r + 0.0006], [y1, r - 0.0018]]) { const [x, z] = archPt(a, rr, dz); mb.v(HC.x + x * S, HC.y + yy * S, HC.z + z * S, i / n, yy * 40, gumCol, [MAT.LIPS, 0.4, 0, 1], gumCol, up ? [[B.head, 1]] : [[B.jaw, 1]], REGION.HEAD); }
     }
     for (let i = 0; i < n; i++) mb.quad(base + i * 2, base + i * 2 + 1, base + i * 2 + 3, base + i * 2 + 2);
-    orientPartOutward(mb, st, new V3(HC.x, HC.y + y0 * S, HC.z + 0.04 * S));
+    orientPartOutward(mb, st, new V3(HC.x, HC.y + (y0 + y1) / 2 * S, HC.z + 0.05 * S));
     mb.endPart();
   }
+  // the tongue resting on the floor of the mouth, behind the lower teeth
+  addSphereLike(mb, 6, 10, (th, ph) => new V3(HC.x + Math.sin(ph) * Math.sin(th) * 0.0145 * S, HC.y + (my - 0.0085 + Math.cos(ph) * 0.0045) * S, HC.z + (0.059 + Math.sin(ph) * Math.cos(th) * 0.017) * S),
+    () => ({ col: tongueCol, mat: [MAT.MOUTH, 0.45, 0, 1], col2: tongueCol, wts: [[B.jaw, 1]], reg: REGION.HEAD }));
   // fangs (everyone has them hidden behind the upper lip; the shader extends them for vampires:
   // aMat.w on the tip = how far it grows, in metres)
   const fangCol = C(0xf2eee2), y0 = P.mouthYScaled + 0.0025;
   for (const sg of [1, -1]) {
-    const a = sg * 0.56, r = 0.0213;
-    const fx = Math.sin(a) * r, fz = 0.0655 + Math.cos(a) * r * 0.85 + 0.001;
+    const a = sg * 0.77, r = 0.0212;
+    const fx = Math.sin(a) * r, fz = 0.0655 + Math.cos(a) * r * 0.85 + 0.0004;
     mb.beginPart();
     const st = mb.I.length, base = mb.n, n = 6, rad = 0.0025;
     for (let i = 0; i < n; i++) {
@@ -774,33 +803,62 @@ function buildEye(mb, app, rig, P, side, Q) {
   }
 }
 
+// V1.12 ears: an outline wider at the top and narrowing to a soft lobe, tilted back about 16 deg, with the
+// real relief on the outer face - the rolled rim (helix) and the groove inside it, the inner ridge
+// (antihelix) with its upper fork, the bowl (concha) leading into the canal, the small flap in front
+// (tragus) and the one below it (antitragus). The front edge joins the head; the back edge stands out
+// from it (less under long hair, which then lies over the ear instead of being pierced by it).
 function buildEar(mb, app, rig, P, side) {
   const sg = SIDE_SIGN[side];
   const S = rig.sHead, HC = rig.headCenter;
   const k = 1 + 0.08 * app.face.ear;
-  const c = new V3(sg * 0.068, -0.016, -0.014);
-  const skin = skinColorAt(C(app.skin.hex), 0.45, 0.03);
-  const rotBack = -0.28;
-  const cr = Math.cos(rotBack), sr = Math.sin(rotBack);
-  const H2 = 0.031 * k, W2 = 0.0175 * k;
+  const c = new V3(sg * 0.0675, -0.017, -0.013);
+  const base = C(app.skin.hex), skin = skinColorAt(base, 0.45, 0.03);
+  const deep = skin.clone().multiplyScalar(0.62), rimCol = skin.clone().multiply(new THREE.Color(1.06, 0.9, 0.86));
+  const longHair = /long|medium|bob|curly_long/.test(app.hairStyle) && app.hairStyle !== 'medium_short';
+  const rotBack = -0.28, cr = Math.cos(rotBack), sr = Math.sin(rotBack);
+  const H2 = 0.031 * k, W2 = 0.0178 * k;
+  const flare = longHair ? 0.0042 : 0.0095;
+  const g = (x, s2) => Math.exp(-x * x / (s2 * s2));
+  // relief of the outer face at normalised ear coordinates (ny up, nz forward), d = 1 - radius
+  const relief = (ny, nz, d) => {
+    const hMask = smoothstep(-0.78, -0.4, ny) * (1 - 0.8 * smoothstep(0.15, 0.75, nz) * smoothstep(0.0, 0.6, ny));
+    const helix = 0.0042 * g(d - 0.065, 0.06) * hMask;
+    const scapha = -0.0019 * g(d - 0.2, 0.065) * hMask;
+    const anti = 0.0025 * g(d - 0.37, 0.08) * smoothstep(-0.6, -0.25, ny) * (1 - smoothstep(0.05, 0.55, nz));
+    const fork = 0.0015 * g(ny - 0.42, 0.11) * smoothstep(-0.35, 0.15, nz) * (1 - smoothstep(0.45, 0.8, nz)) * smoothstep(0.2, 0.35, d);
+    const concha = -0.0062 * Math.exp(-(((ny + 0.06) / 0.37) ** 2 + ((nz - 0.12) / 0.33) ** 2));
+    const canal = -0.0036 * Math.exp(-(((ny + 0.12) / 0.11) ** 2 + ((nz - 0.36) / 0.1) ** 2));
+    const tragus = 0.0034 * Math.exp(-(((ny + 0.12) / 0.13) ** 2 + ((nz - 0.72) / 0.1) ** 2));
+    const antitragus = 0.0018 * Math.exp(-(((ny + 0.43) / 0.1) ** 2 + ((nz - 0.24) / 0.12) ** 2));
+    const lobe = 0.0016 * smoothstep(-0.55, -0.9, ny);
+    return { r: 0.0017 + helix + scapha + anti + fork + concha + canal + tragus + antitragus + lobe, rim: helix / 0.0042, hollow: Math.min(0, concha + canal + scapha) };
+  };
   const st = mb.I.length;
-  addSphereLike(mb, 10, 14, (th, ph) => {
-    // local: lx outward (thickness), ly up, lz forward
+  addSphereLike(mb, 14, 22, (th, ph) => {
+    // local: lx outward, ly up, lz forward
     const cy = Math.cos(th), sz = Math.sin(th);
-    // C-shaped outline: wider at top, narrower lobe
-    const wz = W2 * (cy > 0 ? 1.0 : 0.78 + 0.22 * (1 + cy));
-    let ly = Math.sin(ph) * cy * H2, lz = Math.sin(ph) * sz * wz;
-    if (app.vampEars) { const tip = Math.pow(Math.max(0, cy), 3) * clamp(0.5 - sz * 0.7, 0, 1) * Math.sin(ph); ly += tip * 0.017; lz -= tip * 0.011; } // pointed tips
-    const rad = Math.sin(ph);
-    let lx = Math.cos(ph) * 0.0055;
-    if (lx > 0) lx = 0.0012 + lx * (0.15 + 0.85 * smoothstep(0.55, 0.92, rad)); // cupped outer face with rim
-    // flare: back edge sticks out from the head
-    lx += Math.max(0, -lz) * 0.55 + 0.0025;
+    const wz = W2 * (cy > 0 ? 1.0 : 0.76 + 0.24 * (1 + cy)) * (sz > 0 ? 0.88 : 1.0);
+    const rad = Math.sin(ph), front = Math.cos(ph);
+    let ly = rad * cy * H2, lz = rad * sz * wz;
+    if (app.vampEars) { const tip = Math.pow(Math.max(0, cy), 3) * clamp(0.5 - sz * 0.7, 0, 1) * rad; ly += tip * 0.017; lz -= tip * 0.011; } // pointed tips
+    let lx;
+    if (front > 0) { const R = relief(rad * cy, rad * sz, 1 - rad); lx = R.r * Math.pow(front, 0.35); }
+    else lx = front * (sz > 0.45 ? 0.0065 : 0.0034);   // the back is smooth; its front part sinks into the head
+    // the back edge stands out from the head
+    lx += Math.max(0, -lz) / W2 * flare + 0.0022;
     const y2 = ly * cr - lz * sr, z2 = ly * sr + lz * cr;
-    const x = c.x + sg * lx, y = c.y + y2, z = c.z + z2;
-    return new V3(HC.x + x * S, HC.y + y * S, HC.z + z * S);
-  }, (th, ph) => ({ col: Math.cos(ph) > 0.3 && Math.sin(ph) < 0.6 ? skinColorAt(skin, 0.3, 0.12) : skin, mat: [MAT.SKIN, 0.5, 0, 1], col2: skin, wts: [[B.head, 1]], reg: REGION.HEAD }));
-  orientPartOutward(mb, st, new V3(HC.x + (c.x - sg * 0.01) * S, HC.y + c.y * S, HC.z + c.z * S));
+    return new V3(HC.x + (c.x + sg * lx) * S, HC.y + (c.y + y2) * S, HC.z + (c.z + z2) * S);
+  }, (th, ph) => {
+    const cy = Math.cos(th), sz = Math.sin(th), rad = Math.sin(ph), front = Math.cos(ph);
+    let col = skin;
+    if (front > 0) {
+      const R = relief(rad * cy, rad * sz, 1 - rad);
+      col = skin.clone().lerp(deep, clamp(-R.hollow / 0.0062, 0, 1) * 0.75).lerp(rimCol, clamp(R.rim, 0, 1) * 0.5);
+    } else col = skin.clone().multiplyScalar(0.92);
+    return { col, mat: [MAT.SKIN, 0.5, 0, 1], col2: skin, wts: [[B.head, 1]], reg: REGION.HEAD };
+  });
+  orientPartOutward(mb, st, new V3(HC.x + (c.x - sg * 0.012) * S, HC.y + c.y * S, HC.z + c.z * S));
 }
 
 function buildBrow(mb, app, rig, P, side) {
@@ -809,7 +867,7 @@ function buildBrow(mb, app, rig, P, side) {
   const F = app.face;
   const col = C(app.hairColor.hex).clone();
   if (app.hairColor.name === 'Platinum' || app.hairColor.name === 'White') col.multiplyScalar(0.8);
-  if (app.hairColor.name.startsWith('Dyed')) col.lerp(C(0x2a1b12), 0.6);
+  if (app.hairColor.name.startsWith('Dyed')) col.copy(C(0x2a1b12)).lerp(C(0x4a3424), (app.seed % 5) / 8); // dyed hair, natural brows
   const n = 12;
   const thick = (app.male ? 0.0058 : 0.0042) * (1 + 0.25 * F.browThick);
   const arch = (app.male ? 0.0035 : 0.0062) * (1 + 0.4 * F.browArch);
@@ -874,6 +932,8 @@ function buildHair(mb, app, rig, grid, Q) {
     if (style2.afro) t *= 0.85 + 0.25 * smoothstep(-0.05, 0.08, y);
     if (style2.curl) t += style2.curl * (noise3(x * 160, y * 160, z * 160) - 0.5) * 2;
     if (style2.curtain) t += 0.0028 * (noise3(x * 70, y * 22, z * 70) - 0.5) * 2 + 0.0015 * Math.sin(Math.atan2(x, z) * 26 + y * 40); // locks, not a shell
+    // long hair lies over the ears: the scalp hair bulges with the curtain there (no seam between them)
+    if (style2.curtain) { const ap = Math.abs(wrapAngle(phi)); t += 0.0072 * Math.exp(-(((ap - 1.62) / 0.36) ** 2) - (((y + 0.024) / 0.03) ** 2)) * smoothstep(0.012, -0.004, y); }
     // thin out at the hairline edge
     return t * (0.55 + 0.45 * m);
   };
@@ -943,6 +1003,8 @@ function buildHairCurtain(mb, app, rig, grid, st, col, Q) {
           const bx = Math.abs(Math.sin(phi)) * shoulderW, bz = Math.max(0, -Math.cos(phi)) * backD;
           r = Math.max(r, lerp(r, Math.hypot(bx * 0.6, bz) + 0.016, below));
         }
+        // hair lies over the ears (never pierced by them): a bulge where each ear stands out
+        { const ap = Math.abs(wrapAngle(phi)); r += 0.0072 * Math.exp(-(((ap - 1.62) / 0.36) ** 2) - (((y + 0.024) / 0.03) ** 2)) * smoothstep(0.012, -0.004, y); }
         if (st.wave) r += st.wave * Math.sin(y * 90 + phi * 3) * smoothstep(0.0, -0.05, y);
         if (st.curl) r += st.curl * (noise3(Math.cos(phi) * 30, y * 60, Math.sin(phi) * 30) - 0.5) * 2;
         // lie on top of the clothed neck/back/shoulders (never through the collar, hood or shirt)

@@ -46,7 +46,7 @@ class ReincarnationSystem {
       if (r.state === 'transforming') { this.updateTransform(npc, r, dt, Z); continue; }
       if (npc.lifeState !== 'dead') continue;
       const infected = !!(npc.infection && Z.infection);   // bitten bodies always turn
-      if (!Z.reincarnation && !infected) {
+      if (!Z.reincarnation && !infected && !r.forced) {
         if (r.state === 'pending') { r.state = 'cancelled'; HT.log('zombie', `${npc.idStr} reincarnation cancelled (mode disabled)`); }
         continue;
       }
@@ -57,10 +57,11 @@ class ReincarnationSystem {
         if (e.ok) {
           const inf = npc.infection;
           r.state = 'pending';
-          // passed out from the infection: the turn starts at once and is paced to finish as the infection
-          // time runs out; otherwise (killed while infected, or plain reincarnation) as before
-          r.delay = infected ? (inf.collapsed ? 1.2 + Math.random() * 0.6 : (inf.t >= inf.dur ? 1.5 + Math.random() * 1.5 : clamp(inf.dur - inf.t, 2, 8))) : this.delay() * (0.85 + Math.random() * 0.3);
-          r.fitDur = infected && inf.collapsed ? clamp(inf.dur - inf.t - r.delay, 8, 16) : null;
+          // infected (V1.12): the body keeps the 90 s clock. The turn starts on the ground at 78 s (at once
+          // for a later collapse or death) so that the check, and the rise, come at exactly 90 s.
+          // The sandbox outbreak turns its patient zero at once; plain reincarnation uses the rise delay.
+          r.delay = infected ? Math.max(inf.collapsed ? 0.8 : 1.5, INFECTION.turnT - inf.t) : r.forced ? 0.9 : this.delay() * (0.85 + Math.random() * 0.3);
+          r.fitDur = null;
           r.timer = r.delay; r.infected = infected;
           HT.log('zombie', `${npc.idStr} ${npc.name}: ${infected ? 'infection will turn them' : 'reincarnation scheduled'} in ${r.timer.toFixed(1)}s`);
         } else if (r.state !== 'ineligible') {
@@ -85,7 +86,10 @@ class ReincarnationSystem {
     if (r.state !== 'pending' || npc.lifeState !== 'dead' || npc.isZombie) return false; // duplicate guard
     r.inert = !this.canRise(npc);   // turns on the ground, never gets up
     if (!r.inert && !npc.setLife('reanimating', 'transformation')) return false;
-    r.state = 'transforming'; r.t = 0; r.dur = r.fitDur || TRANSFORM_TIME * (0.94 + Math.random() * 0.12);
+    r.state = 'transforming'; r.t = 0; r.rebased = false;
+    // infected: the ground phase (the first 45 % of the sequence) is stretched to end at 90 s
+    r.timed = !!(r.infected && npc.infection);
+    r.dur = r.timed ? Math.max(2, INFECTION.dur - npc.infection.t) / 0.45 : TRANSFORM_TIME * (0.94 + Math.random() * 0.12);
     r.sick0 = npc.material.userData.u.uSick ? npc.material.userData.u.uSick.value : 0;
     r.clip = false; r.twitchT = 0.7 + Math.random() * 0.6; r.cue = 0; r.rollDir = Math.random() < 0.5 ? 1 : -1;
     r.tint0 = npc.material.userData.u.uZombie.value;
@@ -106,7 +110,7 @@ class ReincarnationSystem {
     // for good, but the turning itself carries on to completion
     if (!r.inert && !this.canRise(npc)) this.makeInert(npc, r);
     if (r.inert ? npc.lifeState !== 'dead' : npc.lifeState !== 'reanimating') { this.failTransform(npc, 'Interrupted'); return; }
-    if (!Z.reincarnation && !(npc.infection && Z.infection) && !r.clip) { this.failTransform(npc, 'Zombie mode disabled'); return; }
+    if (!Z.reincarnation && !(npc.infection && Z.infection) && !r.forced && !r.clip) { this.failTransform(npc, 'Zombie mode disabled'); return; }
     if (npc.carried) return; // paused while held
     const u = npc.material.userData.u;
     if (u.uSick) { const f = 1 - smoothstep(0, r.dur * 0.8, r.t); u.uSick.value = (r.sick0 || 0) * f; u.uSweat.value = Math.min(u.uSweat.value, 0.9 * f); npc.anim.sick = 0; }
@@ -117,7 +121,7 @@ class ReincarnationSystem {
       if (tl < 7.5) this.twitch(npc, r, Math.min(tl, 3.9), dt); // restrained, never strong enough to rise
       u.uZombie.value = lerp(r.tint0 || 0, 1, smoothstep(0.3, 4.2, tl));
       if (r.cue === 0 && tl > 2.2) { r.cue = 1; this.game.audio.play('gurgle', { pos: npc.boneWPos[B.head].clone(), gain: 0.4 }); }
-      if (tl >= TRANSFORM_TIME) {
+      if (tl >= TRANSFORM_TIME || (r.timed && npc.infection && npc.infection.t >= INFECTION.dur)) {
         r.state = 'inert'; u.uZombie.value = 1;
         npc.lastReaction = 'Turned (Inactive - Head Trauma)';
         HT.log('zombie', `${npc.idStr} ${npc.name} turned but will never rise (critical head trauma)`);
@@ -132,9 +136,18 @@ class ReincarnationSystem {
       r.t += dt;
       const tl = r.t / r.dur * TRANSFORM_TIME;
       this.twitch(npc, r, tl, dt);
-      // begin the rise once the stillness/convulsion phase is over and the body has settled
+      // begin the rise once the stillness/convulsion phase is over and the body has settled;
+      // an infected body waits for the 90 s mark, when it is checked once more
       const settled = npc.rag.asleep || npc.rag.maxSpeed() < 1.1;
-      if ((tl >= 4.5 && settled) || tl >= 5.6) {
+      const timed = r.timed && !r.rebased && npc.infection;
+      const due = timed ? npc.infection.t >= INFECTION.dur : tl >= 4.5, late = timed ? npc.infection.t >= INFECTION.dur + 1.2 : tl >= 5.6;
+      if ((due && settled) || late) {
+        if (timed) {
+          const e = this.checkEligible(npc);
+          if (!e.ok) { this.failTransform(npc, e.reason); return; }
+          r.rebased = true; r.dur = TRANSFORM_TIME; r.t = TRANSFORM_TIME * 0.45;   // the rise on the usual 10 s scale
+          HT.log('zombie', `${npc.idStr} ${npc.name}: infection complete (${npc.infection.t.toFixed(1)} s) - eligible, rising`);
+        }
         npc.anim.zombie = 1;
         npc.startTransformRise(Math.max(2.8, r.dur - r.t));
         r.clip = true;
@@ -244,6 +257,15 @@ class ReincarnationSystem {
     n.anim.zstyle = pickZombieGait(); n.anim.zMirror = Math.random() < 0.5 ? 1 : 0; n.anim.zvar = makeZombieVariation();
     applyZombieLook(n, null);
     return this.completeTransform(n);
+  }
+  // sandbox outbreak: the first zombie, turned at once (no infection timer involved)
+  patientZero(npc) {
+    if (npc.lifeState !== 'alive' || npc.horror || (npc.vamp && npc.vamp.state !== 'none')) return false;
+    if (this.game.ai && npc.infection) this.game.ai.clearInfection(npc);
+    npc.reinc.forced = true; npc.criticalHead = false;
+    if (npc.grabbedBy && npc.grabbedBy.brain && this.game.ai) this.game.ai.endGrab(npc.grabbedBy);
+    if (this.game.transit) this.game.transit.interrupt(npc);
+    return npc.die({ weapon: 'outbreak' });
   }
   makeZombieNow(npc) {
     if (npc.lifeState === 'alive') { npc.applyHit({ region: REGION.TORSO, damage: 9999, weapon: 'sandbox' }); }

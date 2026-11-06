@@ -434,7 +434,7 @@ function makeFarTree() {
 
 class FieldEnvironment {
   constructor(game) {
-    this.game = game; this.kind = 'field'; this.name = 'Sunny Grassy Field'; this.surface = 'grass';
+    this.game = game; this.kind = 'field'; this.name = 'Sunny Grassy Field'; this.surface = 'grass'; this.outdoor = true;
     this.group = new THREE.Group(); this.group.name = 'field';
     this.planes = []; this.spawnPoints = []; this.reverb = 'field';
     this.half = 95;
@@ -448,7 +448,47 @@ class FieldEnvironment {
     const q = GFX.tier; // HIGH MAX: density tuned per device class internally
     const R = q === 'low' ? 14 : q === 'ultra' ? 26 : 19;
     this.fieldU = { uCenter: { value: new THREE.Vector2() }, uR: { value: R } };
-    // sky (its horizon takes the fog colour exactly, so distant terrain melts into it)
+    this.buildSkyLights();
+    // terrain: broad flat test area in the middle, rolling hills further out
+    const T = 1000, seg = q === 'low' ? 110 : 180;
+    const tg = new THREE.PlaneGeometry(T, T, seg, seg);
+    tg.rotateX(-Math.PI / 2);
+    const pos = tg.attributes.position;
+    const cols = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), z = pos.getZ(i);
+      pos.setY(i, terrainHeight(x, z));
+      const n = fbm2(x * 0.02 + 40, z * 0.02, 3);
+      cols[i * 3] = 0.88 + n * 0.24; cols[i * 3 + 1] = 0.95 + n * 0.12; cols[i * 3 + 2] = 0.88 + n * 0.16;
+    }
+    tg.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+    tg.computeVertexNormals();
+    this.groundMat = this.makeGroundMaterial(T);
+    this.terrain = new THREE.Mesh(tg, this.groundMat);
+    this.terrain.receiveShadow = true; this.terrain.name = 'terrain';
+    g.add(this.terrain);
+    this.buildGrass(q, R);
+    this.buildTrees(q);
+    this.buildHills();
+    this.buildClouds();
+    this.buildRain();
+    this.buildPuddles();
+    // physics: heightfield ground + invisible boundary walls (vegetation never blocks movement)
+    const h = this.half;
+    this.planes = [
+      { n: new V3(1, 0, 0), d: -h }, { n: new V3(-1, 0, 0), d: -h }, { n: new V3(0, 0, 1), d: -h }, { n: new V3(0, 0, -1), d: -h }
+    ];
+    this.heightfield = true;
+    this.spawnPoints = [new V3(0, 0, 0)];
+    for (let i = 0; i < 8; i++) { const a = i / 8 * TAU; this.spawnPoints.push(new V3(Math.sin(a) * 6, 0, Math.cos(a) * 6)); }
+    this.game.scene.environment = null;
+    this.applyTimeWeather();
+  }
+  // ground height without equipment (the playground overrides it): grass, puddles and splashes sit on it
+  baseHeight(x, z) { return terrainHeight(x, z); }
+  // sky (its horizon takes the fog colour exactly, so distant terrain melts into it), sun and sky light
+  buildSkyLights() {
+    const g = this.group;
     const su = THREE.UniformsUtils.clone(SkyShader.uniforms);
     const skyMat = new THREE.ShaderMaterial({ uniforms: su, vertexShader: SkyShader.vertexShader, fragmentShader: SkyShader.fragmentShader, side: THREE.BackSide, depthWrite: false });
     this.sky = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), skyMat);
@@ -466,23 +506,11 @@ class FieldEnvironment {
     g.add(this.sun); g.add(this.sun.target);
     this.hemi = new THREE.HemisphereLight(0xbfd8ff, 0x55683a, 0.9);
     g.add(this.hemi);
-    // terrain: broad flat test area in the middle, rolling hills further out
-    const T = 1000, seg = q === 'low' ? 110 : 180;
-    const tg = new THREE.PlaneGeometry(T, T, seg, seg);
-    tg.rotateX(-Math.PI / 2);
-    const pos = tg.attributes.position;
-    const cols = new Float32Array(pos.count * 3);
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i), z = pos.getZ(i);
-      pos.setY(i, terrainHeight(x, z));
-      const n = fbm2(x * 0.02 + 40, z * 0.02, 3);
-      cols[i * 3] = 0.88 + n * 0.24; cols[i * 3 + 1] = 0.95 + n * 0.12; cols[i * 3 + 2] = 0.88 + n * 0.16;
-    }
-    tg.setAttribute('color', new THREE.BufferAttribute(cols, 3));
-    tg.computeVertexNormals();
+  }
+  makeGroundMaterial(T) {
     const gt = Tex.grass().clone(); gt.needsUpdate = true; gt.repeat.set(T / 6, T / 6); gt.anisotropy = this.game.maxAniso || 4;
-    this.groundMat = new THREE.MeshStandardMaterial({ map: gt, vertexColors: true, roughness: 0.93, metalness: 0, envMapIntensity: 0.35 });
-    this.groundMat.onBeforeCompile = (sh) => {
+    const mat = new THREE.MeshStandardMaterial({ map: gt, vertexColors: true, roughness: 0.93, metalness: 0, envMapIntensity: 0.35 });
+    mat.onBeforeCompile = (sh) => {
       sh.uniforms.uCenter = this.fieldU.uCenter; sh.uniforms.uR = this.fieldU.uR;
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vTW;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvTW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -497,14 +525,11 @@ class FieldEnvironment {
           // soil under the blades reads darker; past the blade radius the ground carries the meadow tone
           diffuseColor.rgb *= mix(0.72, 0.98, smoothstep(uR * 0.45, uR * 1.02, length(vTW.xz - uCenter)));`);
     };
-    this.groundMat.customProgramCacheKey = () => 'ht3d-ground';
-    this.terrain = new THREE.Mesh(tg, this.groundMat);
-    this.terrain.receiveShadow = true; this.terrain.name = 'terrain';
-    g.add(this.terrain);
-    this.buildGrass(q, R);
-    this.buildTrees(q);
-    this.buildHills();
-    // clouds
+    mat.customProgramCacheKey = () => 'ht3d-ground';
+    return mat;
+  }
+  buildClouds() {
+    const g = this.group;
     this.clouds = new THREE.Group();
     const cr = new RNG(1234);
     for (let i = 0; i < 26; i++) {
@@ -517,18 +542,6 @@ class FieldEnvironment {
       this.clouds.add(s);
     }
     g.add(this.clouds);
-    this.buildRain();
-    this.buildPuddles();
-    // physics: heightfield ground + invisible boundary walls (vegetation never blocks movement)
-    const h = this.half;
-    this.planes = [
-      { n: new V3(1, 0, 0), d: -h }, { n: new V3(-1, 0, 0), d: -h }, { n: new V3(0, 0, 1), d: -h }, { n: new V3(0, 0, -1), d: -h }
-    ];
-    this.heightfield = true;
-    this.spawnPoints = [new V3(0, 0, 0)];
-    for (let i = 0; i < 8; i++) { const a = i / 8 * TAU; this.spawnPoints.push(new V3(Math.sin(a) * 6, 0, Math.cos(a) * 6)); }
-    this.game.scene.environment = null;
-    this.applyTimeWeather();
   }
   syncSkyFog(r) {
     const su = this.sky.material.uniforms;
@@ -573,7 +586,8 @@ class FieldEnvironment {
         attribute vec4 aOff; uniform vec2 uCenter; uniform float uTime; uniform float uWind; uniform vec2 uWindDir; uniform float uR; uniform float uBlade; uniform vec4 uPush[HT_PUSH]; uniform int uPushN;
         varying float vGrassT; varying float vGrassShade; varying float vDry; varying float vFlower; varying float vPushAO; varying float vGust;
         ${GLSL_TERRAIN}
-        ${GLSL_FIELD}`)
+        ${GLSL_FIELD}
+        ${this.grassMask || ''}`)
         .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = normalize(vec3(-sin(aOff.z) * 0.5, 1.0, cos(aOff.z) * 0.5));')
         .replace('#include <begin_vertex>', `
           vec2 base = aOff.xy;
@@ -593,7 +607,7 @@ class FieldEnvironment {
             float k = (1.0 - smoothstep(P.z * 0.5, P.z, dl)) * P.w;
             if (k > press) { press = k; away = d / max(dl, 0.001); }
           }
-          float hgt = uBlade * aOff.w * fade * htLen(wp) * mix(1.0, 0.72, flower) * (1.0 - press * 0.6);
+          float hgt = uBlade * aOff.w * fade * htLen(wp) * mix(1.0, 0.72, flower) * (1.0 - press * 0.6)${this.grassMask ? ' * htGrassMask(wp)' : ''};
           float c = cos(aOff.z), s = sin(aOff.z);
           float wid = 1.0 + flower * smoothstep(0.7, 0.85, t) * 2.6;
           vec3 lp = vec3(position.x * wid * c, t * hgt, position.x * wid * s);
@@ -605,7 +619,7 @@ class FieldEnvironment {
           float bend = ((0.06 + uWind * 0.26) * sway + gust * uWind * 0.6) * t * t * (1.0 - press);
           lp.xz += uWindDir * bend * hgt * 2.2 + away * press * t * hgt * 1.1;
           lp.y -= (bend * bend * 0.8 + press * 0.25 * t) * hgt;
-          vec3 transformed = vec3(wp.x, htTerrain(wp), wp.y) + lp;
+          vec3 transformed = vec3(wp.x, ${this.flatGround ? '0.0' : 'htTerrain(wp)'}, wp.y) + lp;
           vGrassT = t; vGrassShade = rnd; vDry = dry; vPushAO = press; vGust = gust * uWind;
           vFlower = flower * (0.05 + 0.95 * htHash(base * 1.37 + 4.4));
         `);
@@ -624,7 +638,7 @@ class FieldEnvironment {
           // sunlight through the blades when looking toward the sun
           totalEmissiveRadiance += diffuseColor.rgb * uSunCol * pow(max(0.0, dot(normalize(-vViewPosition), uSunView)), 4.0) * smoothstep(0.2, 1.0, vGrassT);`);
     };
-    mat.customProgramCacheKey = () => 'ht3d-grass2-' + this.pushMax;
+    mat.customProgramCacheKey = () => 'ht3d-grass2-' + this.pushMax + this.kind;
     this.grass = new THREE.Mesh(ig, mat);
     this.grass.frustumCulled = false; this.grass.receiveShadow = true;
     this.group.add(this.grass);
@@ -741,8 +755,10 @@ class FieldEnvironment {
           normal = normalize(normal + vec3(slope.x, 0.0, slope.y) * 0.18 * uRain);
         }`);
     };
-    for (let k = 0; k < 11; k++) {
-      const a = rr.range(0, TAU), d = rr.range(3, 26), cx = Math.sin(a) * d, cz = Math.cos(a) * d, R = rr.range(0.7, 2.1);
+    const spots = this.puddleSpots ? this.puddleSpots(rr) : null;
+    for (let k = 0; k < (spots ? spots.length : 11); k++) {
+      let a = rr.range(0, TAU), d = rr.range(3, 26), cx = Math.sin(a) * d, cz = Math.cos(a) * d, R = rr.range(0.7, 2.1);
+      if (spots) { cx = spots[k][0]; cz = spots[k][1]; R = spots[k][2]; }
       // a fan of two rings (inner rim keeps full water, outer rim fades) so the edge is soft
       const n = 24, pos = [0, 0, 0], edge = [0], idx = [];
       for (let i = 0; i <= n; i++) {
@@ -752,7 +768,7 @@ class FieldEnvironment {
       }
       const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('aEdge', new THREE.Float32BufferAttribute(edge, 1)); geo.setIndex(idx); geo.computeVertexNormals();
       for (let i = 0; i < geo.attributes.normal.count; i++) geo.attributes.normal.setXYZ(i, 0, 1, 0);
-      const m = new THREE.Mesh(geo, mat); m.position.set(cx, terrainHeight(cx, cz) + 0.035, cz); m.renderOrder = 1; m.visible = false;
+      const m = new THREE.Mesh(geo, mat); m.position.set(cx, this.baseHeight(cx, cz) + 0.035, cz); m.renderOrder = 1; m.visible = false;
       this.group.add(m); list.push(m);
     }
     this.puddles = list; this.puddleMat = mat;
@@ -878,7 +894,7 @@ class FieldEnvironment {
       const sm = this.game.fx.smoke;
       while (this.splashAcc >= 1) {
         this.splashAcc -= 1;
-        const a = Math.random() * TAU, r = 1.5 + Math.random() * 11, x = cam.position.x + Math.sin(a) * r, z = cam.position.z + Math.cos(a) * r, y = terrainHeight(x, z) + 0.03;
+        const a = Math.random() * TAU, r = 1.5 + Math.random() * 11, x = cam.position.x + Math.sin(a) * r, z = cam.position.z + Math.cos(a) * r, y = this.baseHeight(x, z) + 0.03;
         for (let k = 0; k < 3; k++) sm.emit(x, y, z, (Math.random() - 0.5) * 0.7, 0.7 + Math.random() * 0.9, (Math.random() - 0.5) * 0.7, 0.22 + Math.random() * 0.12, 0.012, 0.03, 0.78, 0.82, 0.88, 0.5, 6, 1.5);
       }
     }
@@ -911,14 +927,14 @@ class FieldEnvironment {
       const S = npc.rig.H / 1.75;
       if (npc.physMode === 'ragdoll') {
         for (const bi of [RAG.CHEST, RAG.PELVIS, RAG.HEAD, RAG.SHIN_L, RAG.SHIN_R]) {
-          const b = npc.rag.bodies[bi]; const h = b.pos.y - terrainHeight(b.pos.x, b.pos.z);
+          const b = npc.rag.bodies[bi]; const h = b.pos.y - this.baseHeight(b.pos.x, b.pos.z);
           add(b.pos.x, b.pos.z, (bi === RAG.CHEST || bi === RAG.PELVIS ? 0.42 : 0.26) * S, 1 - smoothstep(0.2, 0.7, h));
         }
       } else {
-        for (const fb of [B.foot_L, B.foot_R]) { const f = npc.boneWPos[fb]; add(f.x, f.z, 0.2 * S, 0.85 * (1 - smoothstep(0.12, 0.4, f.y - terrainHeight(f.x, f.z)))); }
+        for (const fb of [B.foot_L, B.foot_R]) { const f = npc.boneWPos[fb]; add(f.x, f.z, 0.2 * S, 0.85 * (1 - smoothstep(0.12, 0.4, f.y - this.baseHeight(f.x, f.z)))); }
       }
     }
-    for (const p of this.game.props.list) { const b = p.body; if (b) add(b.pos.x, b.pos.z, (p.radius || 0.3) * 1.3, 1 - smoothstep(0.3, 1.0, b.pos.y - terrainHeight(b.pos.x, b.pos.z) - (p.radius || 0.3))); }
+    for (const p of this.game.props.list) { const b = p.body; if (b) add(b.pos.x, b.pos.z, (p.radius || 0.3) * 1.3, 1 - smoothstep(0.3, 1.0, b.pos.y - this.baseHeight(b.pos.x, b.pos.z) - (p.radius || 0.3))); }
     const n = cand.length / 5;
     // keep the closest to the camera when there are too many
     const order = this._ord || (this._ord = []); order.length = 0;
@@ -1013,7 +1029,7 @@ class EnvironmentManager {
   get() { return this.current; }
   load(kind) {
     if (this.current) { this.current.dispose(); }
-    const env = kind === 'field' ? new FieldEnvironment(this.game) : (kind === 'subway' ? new SubwayEnvironment(this.game) : new RoomEnvironment(this.game));
+    const env = kind === 'field' ? new FieldEnvironment(this.game) : kind === 'playground' ? new PlaygroundEnvironment(this.game) : (kind === 'subway' ? new SubwayEnvironment(this.game) : new RoomEnvironment(this.game));
     env.build();
     this.game.scene.add(env.group);
     this.current = env;

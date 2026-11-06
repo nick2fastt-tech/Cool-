@@ -399,8 +399,8 @@ class HorrorSystem {
   }
   // the needle goes in: a jolt and a gasp, no wound - the subject now carries the infection
   inject(h, v, b) {
-    const g = this.game, Z = Settings.data.zombies, p = this.injectorTip(h, new V3()), nd = this.needleDir(h, new V3());
-    if (!v.infection) v.infection = { t: 0, dur: Z.infectionTime * (0.92 + Math.random() * 0.16), src: 'doctor' };
+    const g = this.game, p = this.injectorTip(h, new V3()), nd = this.needleDir(h, new V3());
+    infectNpc(v, 'doctor');   // the same fixed 90 s infection as a bite (an existing one keeps its timer)
     v.injectedBy = h;
     v.anim.kick(B.neck, _hz2.set(0.35, (Math.random() - 0.5) * 1.2, 0)); v.anim.kick(B.chest, _hz2.set(-0.5, 0, 0));
     g.fx.serum(p, nd.negate(), 4, 0.35);
@@ -408,7 +408,7 @@ class HorrorSystem {
     g.audio.play('scream' + Math.floor(Math.random() * 3), { pos: v.boneWPos[B.head].clone(), gain: 0.7, rate: 1.15 });
     v.lastReaction = 'Injected'; Events.emit('reaction', { npc: v, reaction: v.lastReaction });
     g.ai.emit('scream', v.boneWPos[B.head].clone(), { threatPos: h.root.pos.clone(), source: v });
-    HT.log('horror', `${h.idStr} ${h.horror.label} injected ${v.idStr} ${v.name}: infected (${v.infection.dur.toFixed(0)} s)`);
+    HT.log('horror', `${h.idStr} ${h.horror.label} injected ${v.idStr} ${v.name}: ${v.infection ? `infected (${Math.round(INFECTION.dur - v.infection.t)} s left)` : "not infected"}`);
   }
   endInject(h, b) {
     const v = b.victim;
@@ -542,9 +542,9 @@ class HorrorSystem {
       const inf = sj && !sj.removed && sj.lifeState === 'alive' ? sj.infection : null;
       if (inf && !inf.collapsed) {
         sj.injectedBy = h; // his now: the zombie it becomes will follow him
-        // the sickness jumps ahead to the point of collapse; the turning itself runs as normal
-        inf.t = Math.max(inf.t, inf.dur * INFECTION.collapse);
+        // a seizure in answer to the closing fist; the 90 s clock itself is never moved (V1.12)
         sj.anim.kick(B.chest, _hz1.set(-1.2, 0, 0)); sj.anim.kick(B.neck, _hz1.set(0.8, (Math.random() - 0.5) * 1.5, 0));
+        if (sj.physMode === 'anim' && !sj.grabbedBy && !sj.seatLock) sj.anim.setAction('ill', { mode: 'stagger', side: Math.random() < 0.5 ? 0 : 1, dur: 1.6, inT: 0.2, outT: 0.5 });
         HT.log('horror', `${h.idStr} ${h.horror.label} triggered ${sj.idStr} ${sj.name}'s turning`);
       }
     }

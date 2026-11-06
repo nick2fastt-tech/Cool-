@@ -137,7 +137,7 @@ class Game {
     this.transit = new TransitSystem(this);
     this.env = new EnvironmentManager(this);
     const last = Settings.data.environment.current;
-    this.switchEnvironment(last === 'field' || last === 'subway' ? last : 'room', true, true);
+    this.switchEnvironment(last === 'field' || last === 'subway' || last === 'playground' ? last : 'room', true, true);
   }
   initNPCs() {
     this.ai = new AISystem(this);
@@ -258,7 +258,7 @@ class Game {
     ph.planes = env.planes;
     ph.heightfield = env.heightfield ? terrainHeight : null;
     ph.heightNormalFn = env.heightfield ? (x, z, out) => env.groundNormal(x, z, out) : null;
-    if (env.floorAt) { ph.heightfield = (x, z, y) => env.floorAt(x, z, y); ph.heightNormalFn = (x, z, out) => env.groundNormal(x, z, out); }
+    if (env.floorAt) { ph.heightfield = (x, z, y) => env.floorAt(x, z, y); ph.heightNormalFn = (x, z, out, y) => env.groundNormal(x, z, out, y); }
     ph.setStaticBoxes(env.boxes || null);
     ph.movers = null;
     if (env.attachPhysics) env.attachPhysics(ph);
@@ -268,7 +268,7 @@ class Game {
       let si = 0;
       for (const n of this.npcs.list) {
         const p = n.root.pos.clone();
-        if (env.spawnPoints && env.kind === 'subway') { const sp = env.spawnPoints[si++ % env.spawnPoints.length]; p.set(sp.x + (Math.random() - 0.5) * 2, sp.y, sp.z + (Math.random() - 0.5) * 2); }
+        if (env.spawnPoints && (env.kind === 'subway' || env.spreadSpawn)) { const sp = env.spawnPoints[si++ % env.spawnPoints.length]; p.set(sp.x + (Math.random() - 0.5) * 2, sp.y, sp.z + (Math.random() - 0.5) * 2); }
         this.env.clampToBounds(p, 0.6);
         // a body in the middle of getting up (or turning) falls back to the ground and restarts safely
         if (n.physMode === 'getup') { n.anim.clip = null; n.goRagdoll('Moved', !n.active); }
@@ -490,6 +490,7 @@ class Game {
   surfaceAt(p, n) {
     const env = this.env.current;
     if (env.kind === 'field') return (env.rainK || 0) > 0.35 ? 'stepWet' : 'stepGrass';
+    if (env.surfaceAt) { const s = env.surfaceAt(p); return (env.rainK || 0) > 0.35 && s !== 'metal' ? 'stepWet' : s === 'grass' ? 'stepGrass' : s === 'rubber' ? 'stepRubber' : s === 'metal' ? 'stepMetal' : 'stepHard'; }
     if (env.kind === 'subway') {
       if (n.riding || (env.carAt && env.carAt(p.x, p.z, p.y + 0.3))) return 'stepMetal';
       return p.y > -1 ? 'stepHard' : 'stepTile';
