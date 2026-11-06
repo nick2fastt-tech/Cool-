@@ -352,12 +352,13 @@ class PhysicsWorld {
     // than a running pace sideways or upward (from being wedged between moving characters, a wall and a
     // character, ...). Falling is never limited.
     for (const o of this.owners) {
-      if (o.physKind !== 'npc' || this.time - (o.forceT || -99) < 1.5) continue;
+      if (o.physKind !== 'npc') continue;
+      const lim = Math.max(8, (o.allowV || 0) - 12 * (this.time - (o.allowT || 0))), up = Math.max(6, lim - 2);
       for (const b of o.bodies) {
         if (b.kinematic || b.sleeping) continue;
         const v = b.vel, h2 = v.x * v.x + v.z * v.z;
-        if (h2 > 64) { const k = 8 / Math.sqrt(h2); v.x *= k; v.z *= k; }
-        if (v.y > 6) v.y = 6;
+        if (h2 > lim * lim) { const k = lim / Math.sqrt(h2); v.x *= k; v.z *= k; }
+        if (v.y > up) v.y = up;
       }
     }
     this.updateSleep(dt);
@@ -702,7 +703,8 @@ class PhysicsWorld {
   applyImpulse(b, impulse, point) {
     if (!b || b.kinematic || b.invMass === 0) return;
     if (b.sleeping) this.wakeOwner(b.owner);
-    if (b.owner && impulse.lengthSq() > b.mass * b.mass * 4) b.owner.forceT = this.time; // a real hit: free to fly for a moment
+    // a hit allows the body to move as fast as the hit itself pushed it (fading quickly), see the speed cap in step()
+    if (b.owner) { const dv = Math.sqrt(impulse.lengthSq()) / b.mass, o = b.owner, cur = Math.max(0, (o.allowV || 0) - 12 * (this.time - (o.allowT || 0))); if (dv + 2 > cur) { o.allowV = dv + 2; o.allowT = this.time; } }
     applyBodyPairCorrection(b, null, impulse, 0, 1, point || null, null, true);
   }
   // radial explosion impulse

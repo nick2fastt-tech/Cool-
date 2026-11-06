@@ -720,7 +720,7 @@ class Weapons {
     if (throwIt) {
       const f = g.camera.getWorldDirection(new V3());
       for (const b of gr.owner.bodies) b.vel.addScaledVector(f, gr.npc ? 11 : 14).add(_v1.set(0, 2, 0));
-      gr.owner.forceT = g.physics.time; // thrown on purpose: no speed cap
+      gr.owner.allowV = 18; gr.owner.allowT = g.physics.time; // thrown on purpose: let it fly
       g.audio.play('throw', { gain: 0.8 });
       if (gr.npc) HT.log('sys', `Threw ${gr.npc.idStr} ${gr.npc.name}`);
     }
