@@ -12,6 +12,7 @@ const PATTERN_IDS = { plain: 0, stripes: 1, plaid: 2, heather: 3, pinstripe: 4, 
 class MeshBuilder {
   constructor() {
     this.P = []; this.UV = []; this.C = []; this.MT = []; this.C2 = []; this.SI = []; this.SW = []; this.RG = [];
+    this.FX = []; this.flexFn = null; // per-vertex freedom to sway (skirt / coat hems, hanging hair), 0..1
     this.I = []; this.n = 0;
     this.weld = [];        // vertex -> canonical vertex for normal smoothing
     this.partV = 0; this.partI = 0;
@@ -40,6 +41,7 @@ class MeshBuilder {
       else { this.SI.push(0); this.SW.push(0); }
     }
     this.RG.push(region);
+    this.FX.push(this.flexFn ? this.flexFn(x, y, z) : 0);
     this.weld.push(this.n);
     return this.n++;
   }
@@ -85,6 +87,7 @@ class MeshBuilder {
     g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(this.SI, 4));
     g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(this.SW, 4));
     g.setAttribute('aRegion', new THREE.Float32BufferAttribute(this.RG, 1));
+    g.setAttribute('aFlex', new THREE.Float32BufferAttribute(this.FX, 1));
     g.setIndex(this.n > 65535 ? new THREE.Uint32BufferAttribute(this.I, 1) : new THREE.Uint16BufferAttribute(this.I, 1));
     g.computeBoundingSphere();
     return g;

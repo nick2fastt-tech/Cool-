@@ -385,7 +385,7 @@ class UI {
     if (cur === 'field') {
       const F = Settings.data.environment.field;
       this.slider(s, 'Time of day', 'environment.field.timeOfDay', 0, 24, 0.25, x => { const h = Math.floor(x), m = Math.round((x - h) * 60); return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0'); }, () => g.env.current.applyTimeWeather());
-      this.select(s, 'Weather', [['clear', 'Clear'], ['cloudy', 'Cloudy'], ['overcast', 'Overcast'], ['rain', 'Rain'], ['fog', 'Fog']], F.weather, v => { Settings.set('environment.field.weather', v); g.env.current.applyTimeWeather(); g.audio.startAmbience(); });
+      this.select(s, 'Weather', [['clear', 'Sunny'], ['cloudy', 'Cloudy'], ['overcast', 'Overcast'], ['rain', 'Rain'], ['fog', 'Fog']], F.weather, v => { Settings.set('environment.field.weather', v); g.env.current.applyTimeWeather(); g.audio.startAmbience(); });
     }
     s = this.sec(b, 'Scene');
     this.buttons(s, [
@@ -395,6 +395,11 @@ class UI {
       { label: 'Remove Everyone', cls: 'bad', fn: () => { g.npcs.removeAll(); g.gore.clear(); } },
       { label: 'Reset Scene', cls: 'bad', fn: () => { g.resetScene(); this.renderDrawer(); } }
     ]);
+    this.buttons(s, [
+      { label: 'Save Scene', fn: () => { g.store.save(); this.renderDrawer(); } },
+      { label: 'Load Scene', fn: () => { if (g.store.load()) this.renderDrawer(); } }
+    ]);
+    this.note(s, g.store.has() ? 'Save keeps the map, weather, camera and every living character (people, zombies, vampires, Chucky, Jason, the doctor).' : 'Save keeps the map, weather, camera and every living character. No scene saved yet.');
   }
   // turn the subject under the crosshair (or a random survivor) into the first zombie
   startOutbreak() {

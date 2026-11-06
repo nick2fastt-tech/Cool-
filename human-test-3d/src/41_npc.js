@@ -70,7 +70,9 @@ class NPC {
       this.mesh.bind(new THREE.Skeleton(bones));
       this.bones = bones;
     }
-    { const u = this.material.userData.u; if (u.uDoll) { u.uDoll.value = this.app.doll ? 1 : 0; const hc = this.rig.headCenter; u.uFaceC.value.set(hc.x, hc.y, hc.z, this.rig.sHead); } }
+    { const u = this.material.userData.u; if (u.uDoll) { u.uDoll.value = this.app.doll ? 1 : 0; const hc = this.rig.headCenter; u.uFaceC.value.set(hc.x, hc.y, hc.z, this.rig.sHead); }
+      if (u.uMouth && this.rig.mouth) u.uMouth.value.set(this.rig.mouth.y, this.rig.mouth.half, 0, 0);
+      if (u.uExpr) { u.uExpr.value.set(0, 0, 0, 0); u.uExpr2.value.set(0, 0, 0, 0); } }
     this.mesh.castShadow = true; this.mesh.receiveShadow = true;
     this.mesh.boundingSphere = new THREE.Sphere(new V3(), 2);
     this.mesh.userData.npc = this;
@@ -127,7 +129,7 @@ class NPC {
         if (this.gore && this.gore.anyCut) this.syncDetached();
         this.rag.setFromBones(this.boneWPos, this.boneWRot, false);
       }
-    } else this.animAcc = 0;
+    } else { this.animAcc = 0; const us = this.material.userData.u.uSway; if (us) us.value.multiplyScalar(Math.max(0, 1 - dt * 6)); } // a limp body: hems settle
     // overlapping pairs (grapples / feeding) collide again once apart
     const nc = this.rag.noCollideWith;
     if (nc && !(this.brain && (this.brain.victim || this.brain.victim2 || this.brain.corpse)) && !this.grabbedBy && !(this.pilers > 0)) {
@@ -139,7 +141,8 @@ class NPC {
     const u = this.material.userData.u;
     u.uFlash.value = this.flash;
     u.uHighlight.value = damp(u.uHighlight.value, this.highlight, 10, dt);
-    u.uWet.value = env.current && env.current.wet ? damp(u.uWet.value, 1, 0.3, dt) : damp(u.uWet.value, 0, 0.5, dt);
+    const wetT = env.current ? (+env.current.wet || 0) : 0; // the field soaks people gradually in rain
+    u.uWet.value = damp(u.uWet.value, wetT, wetT > u.uWet.value ? 0.3 : 0.5, dt);
     if (this.isZombie) u.uZombie.value = Math.min(1, u.uZombie.value + dt * 0.6);
   }
   postPhysics(dt) {
@@ -485,6 +488,41 @@ class NPCManager {
     Events.emit('npcSpawned', npc);
     return npc;
   }
+  // --- spawn placement: walkable ground, clear of walls, fixtures, props and other people ---------
+  spotOk(p, clearR) {
+    const g = this.game, env = g.env.current, y = p.y;
+    if (env.regionAt && !env.regionAt(p.x, p.z, true, y + 0.3)) return false;
+    if (env.boxes) for (const bx of env.boxes) {
+      if (p.x > bx.min.x - 0.32 && p.x < bx.max.x + 0.32 && p.z > bx.min.z - 0.32 && p.z < bx.max.z + 0.32 && y + 1.7 > bx.min.y && y + 0.2 < bx.max.y) return false;
+    }
+    if (env.obstaclesNear) for (const o of env.obstaclesNear(p.x, p.z, y)) if (p.x > o.x0 - 0.35 && p.x < o.x1 + 0.35 && p.z > o.z0 - 0.35 && p.z < o.z1 + 0.35) return false;
+    if (env.carAt && env.carAt(p.x, p.z, y + 0.3)) return false;
+    for (const o of this.list) {
+      if (o.removed) continue;
+      const q = o.physMode === 'ragdoll' ? o.boneWPos[B.hips] : o.root.pos;
+      if (Math.abs(q.y - y) < 1.6 && Math.hypot(q.x - p.x, q.z - p.z) < clearR) return false;
+    }
+    for (const pr of g.props.list) if (pr.body && Math.hypot(pr.body.pos.x - p.x, pr.body.pos.z - p.z) < (pr.radius || 0.3) + 0.45) return false;
+    return true;
+  }
+  // the nearest such spot to p (searching outward on the same level), or p itself if none is found
+  freeSpot(p, clearR = 0.8) {
+    const env = this.game.env, q = p.clone();
+    env.clampToBounds(q, 0.6); q.y = env.groundHeight(q.x, q.z, q.y + 0.5);
+    if (this.spotOk(q, clearR)) return q;
+    const c = new V3(), a0 = Math.random() * TAU;
+    for (let ring = 1; ring <= 11; ring++) {
+      const r = ring * 0.5, n = 6 + ring * 3;
+      for (let k = 0; k < n; k++) {
+        const a = a0 + k / n * TAU;
+        c.set(q.x + Math.sin(a) * r, q.y, q.z + Math.cos(a) * r); env.clampToBounds(c, 0.6);
+        c.y = env.groundHeight(c.x, c.z, q.y + 0.5);
+        if (Math.abs(c.y - q.y) > 0.9) continue; // stay on the same level
+        if (this.spotOk(c, clearR)) return c.clone();
+      }
+    }
+    return q;
+  }
   spawnMany(count, opts = {}) {
     const game = this.game, env = game.env.current;
     const mode = opts.mode || Settings.data.spawn.mode;
@@ -503,6 +541,7 @@ class NPCManager {
         p = c.clone().add(new V3(Math.sin(a) * r, 0, Math.cos(a) * r));
       }
       game.env.clampToBounds(p, 0.6);
+      if (!opts.exact) p = this.freeSpot(p);
       const yaw = opts.faceCamera === false ? Math.random() * TAU : Math.atan2(game.camera.position.x - p.x, game.camera.position.z - p.z) + (Math.random() - 0.5) * 0.6;
       const npc = this.spawn(Object.assign({}, opts, { pos: p, yaw }));
       if (npc) out.push(npc);

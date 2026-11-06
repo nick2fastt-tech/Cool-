@@ -36,6 +36,24 @@ const ARM_POSES = {
   waveR: [{ pos: [0.10, -0.93, 0.07], pole: [0.25, 0, -1], pron: 0, flex: 0.12, dev: 0, fing: 0.35, thumb: 0.25 },
     { pos: [0.42, 0.32, 0.18], pole: [1, -1, -0.3], pron: -1.5, flex: -0.2, dev: 0, fing: 0.05, thumb: 0.1, wave: 1 }]
 };
+// facial expressions: [brow raise, inner brows (+ up / - knit), mouth corners (+ up / - down), brow asymmetry,
+// lips stretched sideways, eyelids (- wide / + narrowed), jaw open]
+const EXPRESSIONS = {
+  neutral: [0, 0, 0.05, 0, 0, 0, 0],
+  worried: [0.25, 0.55, -0.2, 0, 0.15, -0.03, 0],
+  fear: [0.7, 0.9, -0.45, 0, 0.8, -0.1, 0.05],
+  terror: [1, 1, -0.6, 0, 1, -0.14, 0.13],
+  surprise: [1, 0.25, 0, 0, 0.1, -0.15, 0.14],
+  pain: [-0.45, 0.75, -0.7, 0, 0.85, 0.25, 0.04],
+  angry: [-0.8, -1, -0.4, 0, 0.4, 0.06, 0.02],
+  friendly: [0.2, 0.05, 0.75, 0, 0.1, 0.06, 0],
+  disgust: [-0.25, -0.35, -0.55, 0.4, 0.35, 0.1, 0.02],
+  confused: [0.15, -0.25, -0.15, 0.85, 0, 0.02, 0.02],
+  sick: [-0.1, 0.6, -0.35, 0, 0.1, 0.12, 0.02],
+  snarl: [-0.7, -0.6, -0.75, 0, 0.9, 0.05, 0],
+  blank: [-0.2, 0, -0.3, 0, 0.2, 0, 0],
+  slack: [0, 0, -0.2, 0, 0, 0, 0]
+};
 // body postures (overlay): crouch (m), spine/chest/head pitch (rad, + = forward), stance width scale
 const POSTURES = {
   stand: { crouch: 0, spine: 0, chest: 0, head: 0, lean: 0 },
@@ -441,6 +459,7 @@ class Animator {
     this.vamp = damp(this.vamp, this.vampTarget, 2.2, dt);
     const po = this.posture; po.w = Math.min(1, po.w + dt / Math.max(0.05, po.dur));
     this.exertion = clamp(this.exertion + (this.speed > 2.5 ? dt * 0.12 : -dt * 0.05), 0, 1);
+    this.updateSway(dt, root, env);
     // 1) base locomotion
     const P = this.P;
     if (this.crawl > 0.5 && !this.clip) this.crawlPose(dt, root, env, P);
@@ -483,11 +502,96 @@ class Animator {
 
   // --- face: blink, jaw, breathing --------------------------------------------------
   updateFace(dt) {
+    // natural blinks: a quick close and a slower open, every 2-6 s; more often when talking or frightened,
+    // sometimes twice in a row. (this.blink > 0 is a held close requested by other poses.)
+    const fearK = this.npc.fear || 0;
     this.blinkT -= dt;
-    if (this.blinkT <= 0) { this.blink = 0.14; this.blinkT = 1.5 + Math.random() * 4.5; }
+    if (this.blinkT <= 0) {
+      this.nbT = 0;
+      this.blinkT = (this.talking ? 1.6 + Math.random() * 2.4 : 2 + Math.random() * 4.2) * (1 - 0.45 * fearK);
+      if (Math.random() < 0.14) this.blinkT = 0.3;
+    }
+    if (this.nbT != null) { this.nbT += dt; if (this.nbT > 0.18) this.nbT = null; }
     if (this.blink > 0) this.blink -= dt;
-    this.breath += dt * TAU * (0.24 + this.exertion * 0.35 + (this.npc.fear || 0) * 0.25);
+    this.breath += dt * TAU * (0.24 + this.exertion * 0.35 + fearK * 0.25);
     this.jaw = damp(this.jaw, this.jawTarget, 12, dt);
+    this.updateExpression(dt);
+  }
+  // cloth and hair sway: a damped spring driven by the body's speed, acceleration and turning, plus the
+  // wind outdoors. Free hems and hair ends (aFlex) follow it in the vertex shader.
+  updateSway(dt, root, env) {
+    const u = this.npc.material && this.npc.material.userData.u; if (!u || !u.uSway) return;
+    const S = this.sway || (this.sway = { x: new V3(), v: new V3(), pv: new V3().copy(this.vel), t: new V3() });
+    const c = Math.cos(root.yaw), s = Math.sin(root.yaw), idt = 1 / Math.max(dt, 1e-3);
+    const ax = (this.vel.x - S.pv.x) * idt, az = (this.vel.z - S.pv.z) * idt; S.pv.copy(this.vel);
+    const lvx = this.vel.x * c - this.vel.z * s, lvz = this.vel.x * s + this.vel.z * c;
+    const lax = clamp(ax * c - az * s, -12, 12), laz = clamp(ax * s + az * c, -12, 12), spd = Math.hypot(lvx, lvz);
+    const T = S.t.set(-lvx * 0.012 - lax * 0.005 - (this.yawRate || 0) * spd * 0.01, spd * 0.004, -lvz * 0.012 - laz * 0.005);
+    const cur = env.current, w = cur && cur.kind === 'field' && cur.windStrength != null ? cur.windStrength : 0;
+    if (w > 0 && cur.windDir) { const wd = cur.windDir; T.x += (wd.x * c - wd.z * s) * w * 0.022; T.z += (wd.x * s + wd.z * c) * w * 0.022; }
+    S.v.addScaledVector(T.sub(S.x), 70 * dt).multiplyScalar(Math.max(0, 1 - 9 * dt));
+    S.x.addScaledVector(S.v, dt);
+    if (S.x.lengthSq() > 0.0081) S.x.setLength(0.09);
+    u.uSway.value.set(S.x.x, S.x.y, S.x.z, w * 0.7 + spd * 0.25);
+  }
+  // 0..1 lid closure from natural blinks and held closes
+  blinkClose() {
+    if (this.blink > 0) return 1;
+    const t = this.nbT; if (t == null) return 0;
+    return t < 0.06 ? t / 0.06 : t < 0.08 ? 1 : Math.max(0, 1 - (t - 0.08) / 0.1);
+  }
+  // which face to make, from what the character is doing (masked characters and vampires keep theirs)
+  pickEmotion() {
+    const n = this.npc, b = n.brain, ls = n.lifeState;
+    if (this.hstyle || ls === 'vampire' || (n.vamp && n.vamp.state === 'turning')) return null;
+    if (ls === 'dead' || ls === 'destroyed' || ls === 'reanimating') return 'slack';
+    if (ls === 'zombie') {
+      const a = this.action, at = a && !a.ending ? a.type : '';
+      return at === 'bite' || at === 'scratch' || at === 'gutpunch' || at === 'notice' || at === 'feed' || (b && (b.state === 'zChase' || b.state === 'zGrab' || b.state === 'zPile')) ? 'snarl' : 'blank';
+    }
+    if (!b) return 'neutral';
+    const st = b.state;
+    if (n.grabbedBy || st === 'grabbed') return 'terror';
+    if (st === 'hurt' || n.physMode !== 'anim') return 'pain';
+    if (st === 'flee' || st === 'cower' || st === 'handsUp' || b.mesmerT > 0) return 'fear';
+    if (st === 'react') return 'surprise';
+    if (st === 'fight') return 'angry';
+    if (st === 'chat') return 'friendly';
+    if (st === 'inspect') return 'disgust';
+    if (b.puzzledT > 0) return 'confused';
+    if ((this.sick || 0) > 0.25) return 'sick';
+    if (n.fear > 0.35) return 'worried';
+    return 'neutral';
+  }
+  // blend toward the emotion's face; a startle (surprise) comes first when fear arrives out of calm
+  updateExpression(dt) {
+    const E = this.expr || (this.expr = { v: [0, 0, 0, 0, 0, 0, 0], tv: [0, 0, 0, 0, 0, 0, 0], cur: 'neutral', startle: 0, microT: 2 + Math.random() * 4, microK: 0, micro: 0, syl: 0, sylA: 0 });
+    const em = this.pickEmotion();
+    if (em !== E.cur) {
+      if ((em === 'fear' || em === 'terror') && (E.cur === 'neutral' || E.cur === 'friendly' || E.cur === 'worried' || E.cur === 'confused')) E.startle = 0.45;
+      E.cur = em;
+    }
+    if (E.startle > 0) E.startle -= dt;
+    const T = E.startle > 0 ? EXPRESSIONS.surprise : (em ? EXPRESSIONS[em] : null), tv = E.tv;
+    for (let i = 0; i < 7; i++) tv[i] = T ? T[i] : 0;
+    // life in a calm face: a brief brow flash or a drifting half-smile now and then
+    if (em === 'neutral' || em === 'friendly') {
+      E.microT -= dt;
+      if (E.microT <= 0) { E.microT = 2.5 + Math.random() * 5.5; E.micro = Math.random(); E.microK = 0.5 + Math.random() * 0.9; }
+      if (E.microK > 0) { E.microK -= dt; const w = Math.min(1, E.microK * 3); if (E.micro < 0.35) tv[0] += 0.5 * w; else if (E.micro < 0.75) tv[2] += 0.3 * w; else tv[3] += (E.micro < 0.87 ? 0.35 : -0.35) * w; }
+    }
+    // talking: syllables on the jaw, short pauses between words, emphasis on the brows and lips
+    let tj = 0;
+    if (this.talking && em) {
+      E.syl -= dt;
+      if (E.syl <= 0) { E.syl = 0.08 + Math.random() * 0.15; E.sylA = Math.random() < 0.2 ? 0 : 0.035 + Math.random() * 0.1; if (Math.random() < 0.12) tv[0] += 0.4; }
+      tj = E.sylA; tv[4] += E.sylA * 1.6;
+    }
+    this.talkJaw = damp(this.talkJaw || 0, tj, 26, dt);
+    const k = 1 - Math.exp(-dt * (E.startle > 0 ? 18 : 6.5));
+    for (let i = 0; i < 7; i++) E.v[i] += (tv[i] - E.v[i]) * k;
+    const u = this.npc.material && this.npc.material.userData.u;
+    if (u && u.uExpr) { u.uExpr.value.set(E.v[0], E.v[1], E.v[2], E.v[3]); u.uExpr2.value.x = E.v[4]; }
   }
 
   // --- locomotion -------------------------------------------------------------------
@@ -1918,7 +2022,8 @@ class Animator {
     // jaw, eyes, lids
     const zv = this.zombie > 0 && this.zvar ? this.zvar : null;
     // (the doctor's jaw stays shut inside the rigid hood)
-    this.setLocalEuler(B.jaw, this.hstyle === 'doctor' ? 0 : clamp(P.jaw + this.jaw + (zv ? (zv.jawRest || 0) * this.zombie : 0) + (this.sick || 0) * 0.04, 0, 0.45), 0, 0);
+    const ex = this.expr ? this.expr.v : null;
+    this.setLocalEuler(B.jaw, this.hstyle === 'doctor' ? 0 : clamp(P.jaw + this.jaw + (zv ? (zv.jawRest || 0) * this.zombie : 0) + (this.sick || 0) * 0.04 + (ex ? ex[6] : 0) + (this.talkJaw || 0), 0, 0.45), 0, 0);
     this.saccadeT -= dt;
     if (this.saccadeT <= 0) { this.saccade.set((Math.random() - 0.5) * 0.12, (Math.random() - 0.5) * 0.08, 0); this.saccadeT = 0.4 + Math.random() * 2; }
     this.eyeYaw = damp(this.eyeYaw, (this.eyeYawT || 0) + this.saccade.x, 25, dt);
@@ -1926,8 +2031,8 @@ class Animator {
     const dead = npc.lifeState === 'dead' || npc.lifeState === 'destroyed';
     for (let s = 0; s < 2; s++) {
       this.setLocalEuler(SB('eye', s), this.eyePitch, this.eyeYaw, 0);
-      const lidClose = dead ? 0.55 : (this.blink > 0 ? 1 : 0) * 0.62 + (npc.fear ? -0.08 : 0) + (this.zombie ? (zv && zv.lid != null ? zv.lid : 0.1) * this.zombie : 0) + (this.sick || 0) * 0.2;
-      this.setLocalEuler(SB('lid', s), clamp(lidClose, -0.1, 0.62), 0, 0);
+      const lidClose = dead ? 0.55 : this.blinkClose() * 0.62 + (ex ? ex[5] : 0) + (this.zombie ? (zv && zv.lid != null ? zv.lid : 0.1) * this.zombie : 0) + (this.sick || 0) * 0.2;
+      this.setLocalEuler(SB('lid', s), clamp(lidClose, -0.17, 0.62), 0, 0);
     }
     // hair bone (spring)
     this.solveHair(root, dt);

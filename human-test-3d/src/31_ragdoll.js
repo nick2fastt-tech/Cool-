@@ -8,7 +8,7 @@ const RAG = {
   THIGH_L: 10, SHIN_L: 11, FOOT_L: 12, THIGH_R: 13, SHIN_R: 14, FOOT_R: 15
 };
 const RAG_COUNT = 16;
-const _rgMv = new V3(); // ragdoll-private scratch (setDynamic runs inside callers that hold the shared ones)
+const _rgMv = new V3(), _rgJ = new V3(); // ragdoll-private scratch (setDynamic runs inside callers that hold the shared ones)
 const RAG_NAMES = ['Pelvis', 'Abdomen', 'Chest', 'Head', 'L Upper Arm', 'L Forearm', 'L Hand', 'R Upper Arm', 'R Forearm', 'R Hand', 'L Thigh', 'L Shin', 'L Foot', 'R Thigh', 'R Shin', 'R Foot'];
 const RAG_BONE = [B.hips, B.spine, B.chest, B.head, B.upperarm_L, B.forearm_L, B.hand_L, B.upperarm_R, B.forearm_R, B.hand_R, B.thigh_L, B.shin_L, B.foot_L, B.thigh_R, B.shin_R, B.foot_R];
 const RAG_MASS = [0.142, 0.139, 0.216, 0.081, 0.028, 0.016, 0.006, 0.028, 0.016, 0.006, 0.100, 0.0465, 0.0145, 0.100, 0.0465, 0.0145];
@@ -197,6 +197,15 @@ class Ragdoll {
   applyImpulseAt(i, impulse, point) {
     const b = this.bodies[i];
     if (!this.dynamic || !this.world) return;
+    // a light part (a hand, a foot) only takes so much before the whole body has to move with it: the
+    // excess becomes a modest shove of the whole ragdoll instead of flinging one limb (and the rest) away
+    const J = impulse.length(), cap = b.mass * 8;
+    if (J > cap && !this.detached[i] && this.totalMass > 0) {
+      this.world.applyImpulse(b, _rgJ.copy(impulse).multiplyScalar(cap / J), point);
+      _rgJ.copy(impulse).multiplyScalar(Math.min((J - cap) / this.totalMass, 6) / J);
+      for (const o of this.bodies) if (!this.detached[o.index]) o.vel.add(_rgJ);
+      return;
+    }
     this.world.applyImpulse(b, impulse, point);
   }
   centerOfMass(out) {

@@ -37,13 +37,14 @@ class HorrorSystem {
   get S() { return Settings.data.horror; }
   setState(n, b, s) { if (b.state !== s) { b.state = s; b.t = 0; } }
 
-  spawn(kind, pos) {
+  spawn(kind, pos, opts = {}) {
     const g = this.game;
     if (!this.S.enabled) { HT.toast('Horror characters are turned off (Settings > Gameplay)', 'bad'); return null; }
-    const p = pos ? pos.clone() : g.player.groundTarget(8);
+    let p = pos ? pos.clone() : g.player.groundTarget(8);
     g.env.clampToBounds(p, 0.6);
-    const yaw = Math.atan2(g.camera.position.x - p.x, g.camera.position.z - p.z);
-    const npc = g.npcs.spawn({ gender: 'male', pos: p, yaw, overrides: { special: HORROR_DEFS[kind] ? kind : 'doll' } });
+    if (!opts.exact) p = g.npcs.freeSpot(p);
+    const yaw = opts.yaw != null ? opts.yaw : Math.atan2(g.camera.position.x - p.x, g.camera.position.z - p.z);
+    const npc = g.npcs.spawn({ gender: 'male', seed: opts.seed, pos: p, yaw, overrides: { special: HORROR_DEFS[kind] ? kind : 'doll' } });
     if (!npc) return null;
     npc.spawnKind = kind;
     HT.log('horror', `${npc.idStr} ${npc.horror.label} appeared`);

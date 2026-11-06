@@ -35,9 +35,10 @@ class VampireSystem {
   spawn(pos, opts = {}) {
     const g = this.game;
     if (!this.S.enabled) { HT.toast('Vampires are turned off (Settings > Gameplay)', 'bad'); return null; }
-    const p = pos ? pos.clone() : g.player.groundTarget(8);
+    let p = pos ? pos.clone() : g.player.groundTarget(8);
     g.env.clampToBounds(p, 0.6);
-    const yaw = Math.atan2(g.camera.position.x - p.x, g.camera.position.z - p.z) + (Math.random() - 0.5) * 0.5;
+    if (!opts.exact) p = g.npcs.freeSpot(p); // never inside walls, fixtures or other people
+    const yaw = opts.yaw != null ? opts.yaw : Math.atan2(g.camera.position.x - p.x, g.camera.position.z - p.z) + (Math.random() - 0.5) * 0.5;
     const npc = g.npcs.spawn({ seed: opts.seed, gender: opts.gender || 'random', pos: p, yaw, overrides: { outfit: VAMP_OUTFIT } });
     if (!npc) return null;
     npc.spawnKind = 'vampire';

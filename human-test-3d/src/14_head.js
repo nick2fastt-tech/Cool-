@@ -143,6 +143,7 @@ function buildHead(mb, app, rig, Q) {
   const P = makeHeadShape(app, rig);
   const sdf = P.sdf;
   rig.headSdf = sdf; // head-local SDF (metres at sHead = 1), used to fit hats
+  rig.mouth = { y: P.mouthYScaled, half: P.mouthHalf }; // for facial expressions (vertex shader)
   const S = rig.sHead, HC = rig.headCenter;
   const skinBase = C(app.skin.hex);
   const skinMat = [MAT.SKIN, 0.5, 0, 1];
@@ -877,7 +878,13 @@ function buildHair(mb, app, rig, grid, Q) {
     return t * (0.55 + 0.45 * m);
   };
   addShell(mb, app, rig, grid, sdHair, thick, col, MAT.HAIR, false, style2.afro ? 1.4 : 0.75);
-  if (style2.curtain) buildHairCurtain(mb, app, rig, grid, style2, col, Q);
+  if (style2.curtain) {
+    // hanging hair moves more toward its ends (nothing above the ears)
+    const HC = rig.headCenter, S = rig.sHead;
+    mb.flexFn = (x, y) => Math.pow(clamp((-0.02 - (y - HC.y) / S) / 0.2, 0, 1), 1.2) * 0.8;
+    buildHairCurtain(mb, app, rig, grid, style2, col, Q);
+    mb.flexFn = null;
+  }
   if (style2.tail) buildPonytail(mb, app, rig, col, Q);
   if (style2.bun) buildBun(mb, app, rig, col);
 }

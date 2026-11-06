@@ -518,6 +518,7 @@ class FieldEnvironment {
     }
     g.add(this.clouds);
     this.buildRain();
+    this.buildPuddles();
     // physics: heightfield ground + invisible boundary walls (vegetation never blocks movement)
     const h = this.half;
     this.planes = [
@@ -717,6 +718,45 @@ class FieldEnvironment {
     this.hillsNear = ring(520, 8, 30, 4.5, 31);
     this.group.add(this.hills); this.group.add(this.hillsNear);
   }
+  // shallow puddles that gather in the grass once the ground is soaked; rain rings ripple across them
+  buildPuddles() {
+    const rr = new RNG(4242), list = [];
+    this.puddleU = { uTime: { value: 0 }, uRain: { value: 0 } };
+    const mat = new THREE.MeshStandardMaterial({ color: 0x141a1e, roughness: 0.05, metalness: 0, transparent: true, opacity: 0, depthWrite: false, envMapIntensity: 1.3, polygonOffset: true, polygonOffsetFactor: -2 });
+    mat.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, this.puddleU);
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec2 vPW; attribute float aEdge; varying float vEdge;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvPW = (modelMatrix * vec4(transformed, 1.0)).xz; vEdge = aEdge;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec2 vPW; varying float vEdge; uniform float uTime; uniform float uRain;\nfloat phash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }')
+        .replace('#include <alphatest_fragment>', '#include <alphatest_fragment>\ndiffuseColor.a *= 1.0 - smoothstep(0.55, 1.0, vEdge); diffuseColor.rgb *= mix(0.6, 1.0, smoothstep(0.2, 0.9, vEdge));')
+        .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        {
+          // expanding rings where drops land (one per cell, each on its own clock)
+          vec2 g = vPW * 2.2, gi = floor(g); vec2 slope = vec2(0.0);
+          for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+            vec2 c = gi + vec2(float(i), float(j)), o = vec2(phash(c), phash(c + 17.3));
+            float ph = fract(uTime * 0.8 + phash(c + 5.1)), r = ph * 0.9, d = length(g - c - o);
+            float w = sin((d - r) * 28.0) * exp(-abs(d - r) * 9.0) * (1.0 - ph);
+            slope += (g - c - o) / max(d, 1e-3) * w;
+          }
+          normal = normalize(normal + vec3(slope.x, 0.0, slope.y) * 0.18 * uRain);
+        }`);
+    };
+    for (let k = 0; k < 11; k++) {
+      const a = rr.range(0, TAU), d = rr.range(3, 26), cx = Math.sin(a) * d, cz = Math.cos(a) * d, R = rr.range(0.7, 2.1);
+      // a fan of two rings (inner rim keeps full water, outer rim fades) so the edge is soft
+      const n = 24, pos = [0, 0, 0], edge = [0], idx = [];
+      for (let i = 0; i <= n; i++) {
+        const t = i / n * TAU, rr2 = R * (0.75 + 0.25 * Math.sin(t * 3 + k) + 0.12 * Math.sin(t * 7 + k * 2));
+        pos.push(Math.cos(t) * rr2 * 0.7, 0, Math.sin(t) * rr2 * 0.7, Math.cos(t) * rr2, 0, Math.sin(t) * rr2); edge.push(0.6, 1);
+        if (i > 0) { const a0 = 1 + (i - 1) * 2, a1 = 1 + i * 2; idx.push(0, a1, a0, a0, a1, a1 + 1, a0, a1 + 1, a0 + 1); }
+      }
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('aEdge', new THREE.Float32BufferAttribute(edge, 1)); geo.setIndex(idx); geo.computeVertexNormals();
+      for (let i = 0; i < geo.attributes.normal.count; i++) geo.attributes.normal.setXYZ(i, 0, 1, 0);
+      const m = new THREE.Mesh(geo, mat); m.position.set(cx, terrainHeight(cx, cz) + 0.035, cz); m.renderOrder = 1; m.visible = false;
+      this.group.add(m); list.push(m);
+    }
+    this.puddles = list; this.puddleMat = mat;
+  }
   buildRain() {
     const N = 2400;
     const pos = new Float32Array(N * 6);
@@ -794,7 +834,7 @@ class FieldEnvironment {
     const skyCol = new THREE.Color(0x9ec6ff).lerp(new THREE.Color(0xb7bcc4), cloud).lerp(new THREE.Color(0x1a2438), night);
     this.hemi.color.copy(skyCol); this.hemi.groundColor.set(0x4d5f33).lerp(new THREE.Color(0x10140c), night);
     // the sky env map now carries much of the ambient; the hemisphere fill stays for the grass
-    this.hemi.intensity = lerp(0.95, 1.3, cloud) * lerp(1, 0.35, night) * 0.72;
+    this.hemi.intensity = lerp(0.95, 1.3, cloud) * lerp(1, 0.35, night) * 0.72; this.hemiBase = this.hemi.intensity;
     const fogCol = new THREE.Color(0xc4d6ea).lerp(new THREE.Color(0xb3b8bf), cloud).lerp(new THREE.Color(0xe0a070), warm * day * 0.35 * (1 - cloud)).lerp(new THREE.Color(0x0a0e16), night);
     const dens = W === 'fog' ? 0.035 : W === 'rain' ? 0.012 : W === 'overcast' ? 0.006 : 0.0024;
     this.game.scene.fog = new THREE.FogExp2(fogCol, dens);
@@ -808,14 +848,51 @@ class FieldEnvironment {
       c.material.opacity = clamp(0.25 + cloud * 0.9, 0, 0.95) * (W === 'clear' ? 0.6 : 1);
       c.material.color.set(0xffffff).lerp(new THREE.Color(0x8d939b), cloud * 0.7).lerp(new THREE.Color(0x202634), night);
     }
-    this.rain.visible = W === 'rain';
-    this.wet = W === 'rain' ? 1 : 0;
-    this.groundMat.roughness = W === 'rain' ? 0.55 : 0.93;
+    // rain eases in and out and the ground soaks up / dries off gradually (see update)
+    this.rainTarget = W === 'rain' ? 1 : 0;
+    if (this.rainK == null) { this.rainK = this.rainTarget; this.wetness = this.rainTarget; }
     this.game.renderer.toneMappingExposure = lerp(0.82, 1.05, cloud) * lerp(1, 1.8, night);
     this.windStrength = P.wind;
     // blades glow when back-lit by a low, clear sun
     this.sunGlow = sunCol.clone().multiplyScalar(day * (1 - cloud * 0.85) * 0.55);
     this.buildSkyEnv(day);
+  }
+  // gradual weather: rain intensity, soaked ground and grass, splashes round the camera, lightning
+  updateWeather(dt, cam) {
+    const rt = this.rainTarget || 0;
+    this.rainK = clamp((this.rainK || 0) + clamp(rt - (this.rainK || 0), -dt / 9, dt / 5), 0, 1);
+    this.wetness = clamp((this.wetness || 0) + (this.rainK > 0.2 ? dt / 35 * this.rainK : -dt / 150), 0, 1);
+    this.wet = this.wetness; // characters' skin and clothes read this
+    const wk = this.wetness;
+    this.groundMat.roughness = lerp(0.93, 0.4, wk); this.groundMat.color.setScalar(1 - 0.3 * wk);
+    if (this.grass) this.grass.material.color.setScalar(1 - 0.17 * wk);
+    this.rain.visible = this.rainK > 0.02; this.rain.material.opacity = 0.45 * this.rainK;
+    if (this.puddles) {
+      const pv = smoothstep(0.35, 0.9, wk);
+      this.puddleMat.opacity = 0.82 * pv; this.puddleU.uTime.value = this.time; this.puddleU.uRain.value = this.rainK;
+      for (const p of this.puddles) { p.visible = pv > 0.01; p.scale.setScalar(0.55 + 0.45 * pv); }
+    }
+    // splashes where the drops land, near the camera
+    if (this.rainK > 0.1 && this.game.fx) {
+      this.splashAcc = (this.splashAcc || 0) + dt * 55 * this.rainK;
+      const sm = this.game.fx.smoke;
+      while (this.splashAcc >= 1) {
+        this.splashAcc -= 1;
+        const a = Math.random() * TAU, r = 1.5 + Math.random() * 11, x = cam.position.x + Math.sin(a) * r, z = cam.position.z + Math.cos(a) * r, y = terrainHeight(x, z) + 0.03;
+        for (let k = 0; k < 3; k++) sm.emit(x, y, z, (Math.random() - 0.5) * 0.7, 0.7 + Math.random() * 0.9, (Math.random() - 0.5) * 0.7, 0.22 + Math.random() * 0.12, 0.012, 0.03, 0.78, 0.82, 0.88, 0.5, 6, 1.5);
+      }
+    }
+    // lightning in a downpour: a double flicker, then thunder after a delay that tells the distance
+    if (this.rainK > 0.6 && this.game.audio) {
+      this.boltT = (this.boltT == null ? 6 + Math.random() * 10 : this.boltT) - dt;
+      if (this.boltT <= 0) { this.boltT = 14 + Math.random() * 28; this.flashT = 0.42; const far = Math.random(); this.game.audio.thunder(0.5 + far * 3.2, 1 - far * 0.55); }
+    }
+    if (this.hemiBase == null) this.hemiBase = this.hemi.intensity;
+    if (this.flashT > 0) {
+      this.flashT -= dt;
+      const t = 0.42 - this.flashT, k = (t < 0.07 ? 1 : t < 0.14 ? 0.25 : t < 0.22 ? 0.85 : Math.max(0, 1 - (t - 0.22) / 0.2)) * Math.max(0, Math.sign(this.flashT));
+      this.hemi.intensity = this.hemiBase * (1 + 3.5 * k);
+    } else this.hemi.intensity = this.hemiBase;
   }
   groundHeight(x, z) { return terrainHeight(x, z); }
   groundNormal(x, z, out) {
@@ -865,6 +942,7 @@ class FieldEnvironment {
       this.updateGrassPush(cam);
     }
     if (this.treeU) { this.treeU.uTime.value = this.time; this.treeU.uWind.value = w; }
+    this.updateWeather(dt, cam);
     this.sky.material.uniforms.uTime.value = this.time;
     this.sky.position.copy(cam.position);
     // shadow follows camera focus

@@ -326,7 +326,13 @@ function buildBody(mb, app, rig, Q) {
     : isSkirt ? { u0: waistband, len: bot.def.skirtLen, layer: bottomLayer }
       : tdef.hem === 'coat' ? { u0: 0.30, len: top.type === 'longcoat' ? (app.coatLen || 0.38) : 0.30, layer: topLayer, slit: true, open: !!app.coatOpen, slitHalf: app.coatOpen ? 0.2 : 0 }
         : tdef.hem === 'low' ? { u0: 0.24, len: 0.035, layer: topLayer, slit: true, slitHalf: 0.22 } : null;
-  if (skirtSpec) buildSkirt(mb, app, rig, Q, skirtSpec, torsoXZ, torsoP, crotchY, span);
+  if (skirtSpec) {
+    // the hem swings freely, the waist not at all
+    const y0 = crotchY + skirtSpec.u0 * span, y1 = rig.hipJY - skirtSpec.len * H;
+    if (skirtSpec.len > 0.08) mb.flexFn = (x, y) => Math.pow(clamp((y0 - y) / Math.max(0.05, y0 - y1), 0, 1), 1.4);
+    buildSkirt(mb, app, rig, Q, skirtSpec, torsoXZ, torsoP, crotchY, span);
+    mb.flexFn = null;
+  }
 
   // ---------------- COLLAR / HOOD ----------------
   if (tdef.neck === 'collar' || tdef.neck === 'lapel') buildCollar(mb, rig, Q, topLayer, tdef.neck === 'lapel', torsoXZ, crotchY, span, topOff(1.0));

@@ -27,6 +27,7 @@ const FEED_SLOTS = [
   { part: RAG.SPINE, side: 1, along: 0 }, { part: RAG.SPINE, side: -1, along: 0.05 },
   { part: RAG.THIGH_R, side: 1, along: -0.1 }, { part: RAG.CHEST, side: -1, along: 0.15 }
 ];
+const _avoidParts = [RAG.HEAD, RAG.CHEST, RAG.PELVIS, RAG.SHIN_L, RAG.SHIN_R, RAG.FOOT_L, RAG.FOOT_R];
 class AISystem {
   constructor(game) { this.game = game; this.stimuli = []; this._tmp = new V3(); this.aimed = null; }
   attach(npc) { npc.brain = new Brain(npc); npc.brain.home.copy(npc.root.pos); }
@@ -160,11 +161,24 @@ class AISystem {
       }
       b.mesmerT = 0;
     }
+    if (b.state !== 'chat' && anim.talking) { anim.talking = false; b.speaking = false; }
+    if (b.puzzledT > 0) b.puzzledT -= dt;
     // process pending stimuli
     for (let i = b.pending.length - 1; i >= 0; i--) {
       const st = b.pending[i];
       if (game.time >= st.at) { b.pending.splice(i, 1); this.react(npc, b, st); }
     }
+    // panic spreads: people who see others running start running too, a moment later
+    const calm = b.state === 'idle' || b.state === 'wander' || b.state === 'chat' || b.state === 'inspect';
+    if (calm && S.reactions) {
+      b.scanT = (b.scanT || 0) - dt;
+      if (b.scanT <= 0) { b.scanT = 0.25 + Math.random() * 0.15; if (!b.panicAt) this.panicCheck(npc, b); }
+      if (b.panicAt && game.time >= b.panicAt) {
+        b.panicAt = 0;
+        if (npc.fear > 0.32 && S.flee) { this.setState(npc, b, 'flee'); b.fleeT = 3 + Math.random() * 2.5; npc.lastReaction = 'Fleeing (Panic)'; Events.emit('reaction', { npc, reaction: npc.lastReaction }); }
+        else { b.puzzledT = 2.5; anim.lookAt(_v3.copy(b.threat).setY(npc.rig.eyeY + b.threat.y), 1); anim.setPosture('alert'); }
+      }
+    } else b.panicAt = 0;
     // hands-up when aimed at
     if (S.reactions && b.aimTime > 0.55 && b.state !== 'flee' && b.state !== 'hurt') {
       if (b.state !== 'handsUp') { this.setState(npc, b, 'handsUp'); npc.lastReaction = 'Hands Up (Aimed At)'; Events.emit('reaction', { npc, reaction: npc.lastReaction }); }
@@ -210,13 +224,20 @@ class AISystem {
           }
         } else anim.setUpper(b.holdPose);
         this.idleLook(npc, b, dt);
+        b.socialT = (b.socialT == null ? Math.random() * 2 : b.socialT) - dt;
+        if (b.socialT <= 0) {
+          b.socialT = 1.2 + Math.random() * 0.8;
+          if (this.tryInspect(npc, b) || this.tryChat(npc, b)) break;
+        }
         if (b.idleTime <= 0 && S.wander && Math.random() < S.wanderRate) {
           this.pickWander(npc, b); this.setState(npc, b, 'wander');
         } else if (b.idleTime <= 0) b.idleTime = 3 + Math.random() * 6;
         break;
       }
+      case 'chat': this.updateChat(npc, b, dt); break;
+      case 'inspect': this.updateInspect(npc, b, dt); break;
       case 'wander': {
-        b.speed = npc.personality.walkSpeed * Math.sqrt(npc.rig.legLen / 0.84) * (1 - 0.45 * Math.max(anim.limp[0], anim.limp[1])) * (1 - 0.4 * smoothstep(0.4, 0.75, anim.sick || 0));
+        b.speed = npc.personality.walkSpeed * Math.sqrt(npc.rig.legLen / 0.84) * (1 - 0.45 * Math.max(anim.limp[0], anim.limp[1])) * (1 - 0.4 * smoothstep(0.4, 0.75, anim.sick || 0)) * (1 + 0.22 * Math.min(1, npc.fear * 1.5));
         if (!b.holdPose) anim.setUpper('hang');
         anim.setPosture('stand');
         this.idleLook(npc, b, dt);
@@ -229,23 +250,15 @@ class AISystem {
         break;
       }
       case 'flee': {
-        const run = npc.personality.runSpeed * Math.sqrt(npc.rig.legLen / 0.84) * (1 - 0.5 * Math.max(anim.limp[0], anim.limp[1])) * (1 - 0.45 * smoothstep(0.4, 0.75, anim.sick || 0));
+        // a long sprint tires them (the animator's exertion builds while running)
+        const run = npc.personality.runSpeed * Math.sqrt(npc.rig.legLen / 0.84) * (1 - 0.5 * Math.max(anim.limp[0], anim.limp[1])) * (1 - 0.45 * smoothstep(0.4, 0.75, anim.sick || 0)) * (1 - 0.32 * (anim.exertion || 0));
         b.speed = run;
         anim.setPosture('stand'); anim.setUpper(npc.fear > 0.85 && b.t < 1.2 ? 'flail' : 'hang');
-        // direction away from threat
         if (b.threatNpc && !b.threatNpc.removed && b.threatNpc.hostile) b.threat.copy(b.threatNpc.root.pos);
-        const away = _v1.subVectors(npc.root.pos, b.threat); away.y = 0;
-        if (away.lengthSq() < 1e-4) away.set(Math.random() - 0.5, 0, Math.random() - 0.5);
-        away.normalize();
-        // wall-aware: rotate away vector if heading into bounds
-        const look = _v2.copy(npc.root.pos).addScaledVector(away, 4);
-        const bb = game.env.current.bounds;
-        if (look.x < bb.minX + 1 || look.x > bb.maxX - 1 || look.z < bb.minZ + 1 || look.z > bb.maxZ - 1) {
-          const side = (npc.id % 2 ? 1 : -1);
-          away.set(away.z * side, 0, -away.x * side);
-        }
-        b.dest.copy(npc.root.pos).addScaledVector(away, 5);
-        game.env.clampToBounds(b.dest, 1);
+        if (b.t < 0.05) this.remember(npc, 'threat', b.threat, 0.6);
+        // escape route: away from everything dangerous it knows of, round walls and off the map's edges
+        b.routeT = (b.routeT || 0) - dt;
+        if (b.routeT <= 0 || b.t < 0.05) { b.routeT = 0.4; this.fleeDir(npc, b, _v1); b.dest.copy(npc.root.pos).addScaledVector(_v1, 5); game.env.clampToBounds(b.dest, 1); }
         anim.lookAt(_v3.copy(b.threat).setY(npc.rig.eyeY), 0.35);
         if (b.t > (b.fleeT || 5) && npc.root.pos.distanceTo(b.threat) > 10) { this.setState(npc, b, 'idle'); b.idleTime = 4 + Math.random() * 4; npc.lastReaction = 'Alert'; }
         break;
@@ -301,6 +314,9 @@ class AISystem {
     if (b.lookTimer <= 0) {
       b.lookTimer = 2 + Math.random() * 4;
       const r = Math.random();
+      const mm = this.recentMemory(npc, 40);
+      if (mm && r < 0.45) { b.lookKind = 'around'; b.lookPos.set(mm.pos.x, mm.pos.y + npc.rig.eyeY * 0.7, mm.pos.z); if (b.state === 'idle') npc.anim.setPosture('alert'); }
+      else {
       const cam = game.camera.position;
       const dCam = npc.root.pos.distanceTo(cam);
       if (dCam < 5 && r < 0.35 * (0.5 + npc.personality.curiosity)) { b.lookKind = 'camera'; }
@@ -318,6 +334,7 @@ class AISystem {
         const a = npc.root.yaw + (Math.random() - 0.5) * 2.2;
         b.lookPos.set(npc.root.pos.x + Math.sin(a) * 5, npc.rig.eyeY + (Math.random() - 0.5) * 1.2, npc.root.pos.z + Math.cos(a) * 5);
       } else b.lookKind = 'none';
+      }
     }
     if (b.lookKind === 'camera') anim.lookAt(game.camera.position, 0.85);
     else if (b.lookKind === 'npc' && b.lookNpc && !b.lookNpc.removed) anim.lookAt(b.lookNpc.boneWPos[B.head], 0.8);
@@ -326,6 +343,7 @@ class AISystem {
   }
   react(npc, b, st) {
     const S = Settings.data.ai, anim = npc.anim;
+    this.remember(npc, st.type, st.threatPos, clamp(st.intensity * 1.6, 0.15, 1));
     npc.fear = clamp(npc.fear + st.intensity * (1.2 - npc.personality.bravery * 0.5), 0, 1);
     b.threat.copy(st.threatPos); b.hasThreat = true; b.threatNpc = null;
     anim.lookAt(_v1.copy(st.pos).setY(Math.max(st.pos.y, 0.8)), 1);
@@ -345,6 +363,7 @@ class AISystem {
     } else {
       npc.lastReaction = 'Look Toward Sound';
       if (b.state === 'idle') anim.setPosture('alert');
+      if (b.state === 'idle' || b.state === 'wander') { b.puzzledT = 2 + Math.random() * 2; if (npc.personality.curiosity > 0.5 && b.state === 'wander') { b.speed = 0; this.setState(npc, b, 'idle'); b.idleTime = 2 + Math.random() * 2; } }
     }
   }
   decide(npc, b, afterHurt) {
@@ -361,7 +380,15 @@ class AISystem {
     }
     Events.emit('reaction', { npc, reaction: npc.lastReaction });
   }
+  // wandering steers clear of places where something bad happened (up to a few tries)
   pickWander(npc, b) {
+    const mem = npc.lifeState === 'alive' && b.mem && b.mem.length;
+    for (let k = 0; k < (mem ? 5 : 1); k++) {
+      this.pickWanderRaw(npc, b);
+      if (!mem || this.danger(npc, b.dest, 8) < 0.3) break;
+    }
+  }
+  pickWanderRaw(npc, b) {
     const env = this.game.env.current, bb = env.bounds;
     if (env.pickWander) return env.pickWander(npc, b);
     const r = Math.min(10, (bb.maxX - bb.minX) * 0.35);
@@ -553,6 +580,157 @@ class AISystem {
       }
       if (b.lookPos && b.speed < 0.3) anim.lookAt(b.lookPos, 0.7); else anim.clearLook();
     }
+  }
+  // --- V1.11 people: memory, panic, curiosity, conversation, escape routes -----------------
+  // remember where something bad happened (merging nearby events); 8 places at most
+  remember(npc, kind, pos, w) {
+    const b = npc.brain; if (!b || !pos) return;
+    const M = b.mem || (b.mem = []), t = this.game.time;
+    for (const m of M) if (Math.hypot(m.pos.x - pos.x, m.pos.z - pos.z) < 4 && Math.abs(m.pos.y - pos.y) < 2) {
+      m.w = Math.min(1.5, m.w * Math.exp(-(t - m.t) / 60) + w); m.t = t; m.kind = kind; m.pos.lerp(pos, 0.3); return;
+    }
+    if (M.length >= 8) { let oi = 0; for (let i = 1; i < M.length; i++) if (M[i].t < M[oi].t) oi = i; M.splice(oi, 1); }
+    M.push({ kind, pos: pos.clone(), t, w });
+  }
+  // how dangerous a place feels from memory (fades over a couple of minutes)
+  danger(npc, p, r = 7) {
+    const M = npc.brain && npc.brain.mem; if (!M) return 0;
+    const t = this.game.time; let s = 0;
+    for (const m of M) { const age = t - m.t; if (age > 150 || Math.abs(m.pos.y - p.y) > 2.5) continue; const d = Math.hypot(m.pos.x - p.x, m.pos.z - p.z); if (d < r) s += m.w * Math.exp(-age / 60) * (1 - d / r); }
+    return s;
+  }
+  recentMemory(npc, maxAge) {
+    const M = npc.brain && npc.brain.mem; if (!M) return null;
+    let best = null; for (const m of M) if (this.game.time - m.t < maxAge && m.w > 0.3 && (!best || m.t > best.t)) best = m;
+    return best;
+  }
+  // an escape direction: away from the attacker, other monsters close by and remembered danger, tested
+  // against the map so they run along walls and out of corners instead of into them
+  fleeDir(npc, b, out) {
+    const P = npc.root.pos, rx = { x: 0, z: 0 };
+    const add = (q, w) => { const dx = P.x - q.x, dz = P.z - q.z, d2 = Math.max(0.25, dx * dx + dz * dz); rx.x += dx / d2 * w; rx.z += dz / d2 * w; };
+    add(b.threat, 3);
+    for (const o of this.game.npcs.list) {
+      if (o === npc || o.removed || o.physMode !== 'anim' || Math.abs(o.root.pos.y - P.y) > 2) continue;
+      const hostile = o.lifeState === 'zombie' || (o.lifeState === 'vampire' && o.brain && o.brain.state && o.brain.state[1] !== 'I') || (o.horror && o.brain && o.brain.hunting);
+      if (hostile && o.root.pos.distanceTo(P) < 12) add(o.root.pos, 2);
+    }
+    if (b.mem) for (const m of b.mem) if (this.game.time - m.t < 60) add(m.pos, m.w * 0.8);
+    let base = Math.atan2(rx.x, rx.z);
+    if (!isFinite(base) || (rx.x === 0 && rx.z === 0)) base = Math.random() * TAU;
+    const env = this.game.env, cur = env.current, q = _v2;
+    let bestA = base, bestS = -1e9;
+    for (const da of [0, 0.45, -0.45, 0.9, -0.9, 1.4, -1.4, 2.0, -2.0]) {
+      const a = base + da, sx = Math.sin(a), sz = Math.cos(a);
+      q.set(P.x + sx * 4, P.y, P.z + sz * 4); env.clampToBounds(q, 1);
+      const free = Math.hypot(q.x - P.x, q.z - P.z) / 4; // how far it really gets before the edge
+      let sc = free * 2 - Math.abs(da) * 0.35;
+      if (cur.regionAt && !cur.regionAt(P.x + sx * 2.5, P.z + sz * 2.5, true, P.y + 0.3)) sc -= 1.5;
+      sc -= this.danger(npc, q, 6) * 0.8;
+      if (sc > bestS) { bestS = sc; bestA = a; }
+    }
+    return out.set(Math.sin(bestA), 0, Math.cos(bestA));
+  }
+  // seeing others run: fear climbs, and after a reaction delay they may run too
+  panicCheck(npc, b) {
+    const P = npc.root.pos, fx = Math.sin(npc.root.yaw), fz = Math.cos(npc.root.yaw);
+    for (const o of this.game.npcs.list) {
+      if (o === npc || o.lifeState !== 'alive' || !o.brain || o.brain.state !== 'flee' || o.brain.t > 4 || o.horror) continue;
+      const dx = o.root.pos.x - P.x, dz = o.root.pos.z - P.z, d = Math.hypot(dx, dz);
+      if (d > 8 || Math.abs(o.root.pos.y - P.y) > 1.5) continue;
+      if (d > 3 && (dx * fx + dz * fz) / d < -0.2) continue; // not looking that way
+      npc.fear = Math.min(1, npc.fear + 0.32 * (1.15 - npc.personality.bravery * 0.6));
+      b.threat.copy(o.brain.threat); b.hasThreat = true; b.threatNpc = o.brain.threatNpc || null;
+      b.panicAt = this.game.time + 0.25 + npc.personality.reaction + Math.random() * 0.35;
+      npc.anim.lookAt(o.boneWPos[B.head], 1);
+      npc.lastReaction = 'Alarmed (Others Fleeing)';
+      this.remember(npc, 'panic', b.threat, 0.4);
+      return true;
+    }
+    return false;
+  }
+  // the curious walk over to look at a body (never with a monster about), then back away
+  tryInspect(npc, b) {
+    if (npc.fear > 0.3 || npc.personality.curiosity < 0.45 || npc.transit || npc.seatLock || npc.infection) return false;
+    if (this.nearestZombie(npc, 14)) return false;
+    let best = null, bd = 14;
+    for (const o of this.game.npcs.list) {
+      if (o.lifeState !== 'dead' || o.physMode !== 'ragdoll' || o.removed || (o.feeders || 0) > 0 || o.grabbedBy || (o.reinc && o.reinc.state === 'transforming')) continue;
+      if (b.inspected && b.inspected.indexOf(o) >= 0) continue;
+      const cp = o.boneWPos[B.chest], d = Math.hypot(cp.x - npc.root.pos.x, cp.z - npc.root.pos.z);
+      if (d < bd && Math.abs(cp.y - npc.root.pos.y) < 1.5) { bd = d; best = o; }
+    }
+    if (!best) return false;
+    (b.inspected || (b.inspected = [])).push(best); if (b.inspected.length > 6) b.inspected.shift();
+    b.inspectBody = best; b.inspPhase = 'go'; b.inspT = 0; this.setState(npc, b, 'inspect');
+    npc.lastReaction = 'Approaching a Body';
+    return true;
+  }
+  updateInspect(npc, b, dt) {
+    const c = b.inspectBody, anim = npc.anim;
+    const rising = c && !c.removed && (c.lifeState === 'reanimating' || c.lifeState === 'zombie' || (c.reinc && c.reinc.state === 'transforming'));
+    if (rising) { b.threat.copy(c.root.pos); b.hasThreat = true; b.threatNpc = c; npc.fear = Math.min(1, npc.fear + 0.6); this.setState(npc, b, 'flee'); b.fleeT = 5; npc.lastReaction = 'Fleeing (The Body Moved)'; return; }
+    if (!c || c.removed || c.lifeState !== 'dead' || (c.feeders || 0) > 0 || b.t > 25) { this.setState(npc, b, 'idle'); b.idleTime = 2; anim.setUpper('hang'); return; }
+    const cp = c.boneWPos[B.chest], dx = npc.root.pos.x - cp.x, dz = npc.root.pos.z - cp.z, d = Math.hypot(dx, dz) || 1;
+    if (b.inspPhase === 'go') {
+      b.dest.set(cp.x + dx / d * 1.45, npc.root.pos.y, cp.z + dz / d * 1.45);
+      b.speed = npc.personality.walkSpeed * 0.75; anim.setUpper('hang'); anim.lookAt(c.boneWPos[B.head], 0.7);
+      if (d < 1.85) { b.inspPhase = 'look'; b.inspT = 0; b.inspDur = 3 + Math.random() * 3.5; anim.setUpper(npc.personality.bravery > 0.55 ? 'hips' : 'cover'); }
+    } else {
+      b.speed = 0; b.dest.copy(npc.root.pos); b.faceTarget = cp;
+      anim.lookAt(c.boneWPos[B.head], 1); anim.setPosture('slouch');
+      b.inspT += dt;
+      if (b.inspT > b.inspDur) {
+        this.remember(npc, 'body', cp, 0.6); npc.fear = Math.min(1, npc.fear + 0.18);
+        anim.setUpper('hang'); anim.setPosture('alert'); npc.lastReaction = 'Backing Away';
+        this.pickWander(npc, b); this.setState(npc, b, 'wander');
+      }
+    }
+  }
+  // two calm people near each other stop for a chat: face to face, taking turns, gesturing and nodding
+  tryChat(npc, b) {
+    if (npc.fear > 0.15 || npc.personality.sociable < 0.3 || npc.transit || npc.seatLock || this.game.time < (b.chatCd || 0) || (npc.anim.sick || 0) > 0.3) return false;
+    for (const o of this.game.npcs.list) {
+      const ob = o.brain;
+      if (o === npc || o.lifeState !== 'alive' || o.horror || !ob || ob.state !== 'idle' || o.physMode !== 'anim' || o.fear > 0.15 || o.transit || o.seatLock) continue;
+      if (this.game.time < (ob.chatCd || 0) || o.personality.sociable < 0.2 || (o.anim.sick || 0) > 0.3 || o.grabbedBy) continue;
+      const d = Math.hypot(o.root.pos.x - npc.root.pos.x, o.root.pos.z - npc.root.pos.z);
+      if (d > 6 || Math.abs(o.root.pos.y - npc.root.pos.y) > 0.8) continue;
+      const end = this.game.time + 7 + Math.random() * 9;
+      for (const [x, y] of [[npc, o], [o, npc]]) {
+        const xb = x.brain; this.setState(x, xb, 'chat'); xb.chatWith = y; xb.chatEnd = end; xb.speaking = x === npc; xb.turnT = 1.5 + Math.random() * 2; xb.gestT = 0; xb.nodT = 1 + Math.random() * 2;
+        x.lastReaction = 'Chatting';
+      }
+      return true;
+    }
+    return false;
+  }
+  updateChat(npc, b, dt) {
+    const o = b.chatWith, anim = npc.anim, ob = o && o.brain;
+    if (!o || o.removed || o.lifeState !== 'alive' || !ob || ob.state !== 'chat' || ob.chatWith !== npc || this.game.time > b.chatEnd || npc.fear > 0.3 || o.physMode !== 'anim') { this.endChat(npc); return; }
+    const dx = npc.root.pos.x - o.root.pos.x, dz = npc.root.pos.z - o.root.pos.z, d = Math.hypot(dx, dz) || 1;
+    if (d > 1.35 && npc.id < o.id) { b.dest.set(o.root.pos.x + dx / d * 1.1, npc.root.pos.y, o.root.pos.z + dz / d * 1.1); b.speed = npc.personality.walkSpeed * 0.8; }
+    else { b.speed = 0; b.dest.copy(npc.root.pos); b.faceTarget = o.root.pos; }
+    anim.setPosture('stand');
+    anim.lookAt(o.boneWPos[B.head], 0.9);
+    // turns (the lower id keeps time for both)
+    if (npc.id < o.id) { b.turnT -= dt; if (b.turnT <= 0) { b.speaking = !b.speaking; ob.speaking = !b.speaking; b.turnT = 1.4 + Math.random() * 2.8; } }
+    anim.talking = !!b.speaking && d < 1.7;
+    if (anim.talking) {
+      b.gestT -= dt;
+      if (b.gestT <= 0) { b.gestT = 1.1 + Math.random() * 1.8; const g = ['hang', 'hang', 'hips', 'crossed', 'clasp'][Math.floor(Math.random() * 5)]; anim.setUpper(g); }
+    } else {
+      b.nodT -= dt;
+      if (b.nodT <= 0) { b.nodT = 1.3 + Math.random() * 2.2; anim.kick(B.head, _v1.set(-1.6, (Math.random() - 0.5) * 0.4, 0)); }
+    }
+  }
+  endChat(npc) {
+    const b = npc.brain, o = b && b.chatWith;
+    if (!b) return;
+    b.chatWith = null; b.speaking = false; npc.anim.talking = false;
+    b.chatCd = this.game.time + 25 + Math.random() * 45;
+    if (b.state === 'chat') { this.setState(npc, b, 'idle'); b.idleTime = 0.5 + Math.random() * 1.5; npc.anim.setUpper('hang'); }
+    if (o && o.brain && o.brain.chatWith === npc) this.endChat(o);
   }
   // --- the doctor's zombies ---------------------------------------------------------------
   masterOk(z, m) {
@@ -1103,12 +1281,27 @@ class AISystem {
       const d2 = dx * dx + dz * dz;
       const minD = (o.physMode === 'ragdoll' ? 0.55 : 0.62);
       if (d2 < minD * minD && d2 > 1e-6) {
-        const d = Math.sqrt(d2), push = (minD - d) / minD * 2.2;
-        if (isZ && (o === npc.zombieTarget || o === b.victim || o === b.corpse || (b.corpse && o.brain && o.brain.corpse === b.corpse))) continue;
+        const d = Math.sqrt(d2), push = (minD - d) / minD * Math.max(2.2, b.speed * 1.3); // runners swerve harder
+        let own = false;
+        if (isZ && (o === npc.zombieTarget || o === b.victim || o === b.corpse || (b.corpse && o.brain && o.brain.corpse === b.corpse))) own = true;
         if (isV && (o === b.vVictim || o === b.vTarget)) continue;
-        if (b.hTarget === o || b.hVictim === o) continue;
+        if (b.hTarget === o || b.hVictim === o || b.subject === o) own = true;
         if (o === npc.grabbedBy) continue;
+        if (own) {
+          // its own target may come close, but never inside it (grapples turn collision off between the pair)
+          const paired = npc.rag.noCollideWith === o.rag || o.rag.noCollideWith === npc.rag || (o.grabbedBy && o.grabbedBy.lifeState === 'vampire');
+          if (!paired && o.physMode === 'anim' && d < 0.44) { const k = (0.44 - d) / 0.44 * 3.2; desired.x += dx / d * k; desired.z += dz / d * k; }
+          continue;
+        }
         desired.x += dx / d * push; desired.z += dz / d * push;
+      }
+      // step round a body on the ground (head, chest, legs - not just its hips) instead of kicking it along
+      if (o.physMode === 'ragdoll' && d2 < 6.5 && !isV && o !== b.corpse && o !== npc.zombieTarget && !(b.corpse && o.brain && o.brain.corpse === b.corpse) && Math.abs(o.root.pos.y - root.pos.y) < 1.2) {
+        for (const ri of _avoidParts) {
+          if (o.rag.detached[ri]) continue;
+          const bp = o.rag.bodies[ri].pos, ex = root.pos.x - bp.x, ez = root.pos.z - bp.z, dd = Math.hypot(ex, ez);
+          if (dd < 0.42 && dd > 1e-4 && bp.y - root.pos.y < 0.6) { const k = (0.42 - dd) / 0.42 * 1.6; desired.x += ex / dd * k; desired.z += ez / dd * k; }
+        }
       }
     }
     // props

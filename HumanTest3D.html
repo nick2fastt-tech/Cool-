@@ -1044,6 +1044,7 @@ const PATTERN_IDS = { plain: 0, stripes: 1, plaid: 2, heather: 3, pinstripe: 4, 
 class MeshBuilder {
   constructor() {
     this.P = []; this.UV = []; this.C = []; this.MT = []; this.C2 = []; this.SI = []; this.SW = []; this.RG = [];
+    this.FX = []; this.flexFn = null; // per-vertex freedom to sway (skirt / coat hems, hanging hair), 0..1
     this.I = []; this.n = 0;
     this.weld = [];        // vertex -> canonical vertex for normal smoothing
     this.partV = 0; this.partI = 0;
@@ -1072,6 +1073,7 @@ class MeshBuilder {
       else { this.SI.push(0); this.SW.push(0); }
     }
     this.RG.push(region);
+    this.FX.push(this.flexFn ? this.flexFn(x, y, z) : 0);
     this.weld.push(this.n);
     return this.n++;
   }
@@ -1117,6 +1119,7 @@ class MeshBuilder {
     g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(this.SI, 4));
     g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(this.SW, 4));
     g.setAttribute('aRegion', new THREE.Float32BufferAttribute(this.RG, 1));
+    g.setAttribute('aFlex', new THREE.Float32BufferAttribute(this.FX, 1));
     g.setIndex(this.n > 65535 ? new THREE.Uint32BufferAttribute(this.I, 1) : new THREE.Uint16BufferAttribute(this.I, 1));
     g.computeBoundingSphere();
     return g;
@@ -1579,7 +1582,13 @@ function buildBody(mb, app, rig, Q) {
     : isSkirt ? { u0: waistband, len: bot.def.skirtLen, layer: bottomLayer }
       : tdef.hem === 'coat' ? { u0: 0.30, len: top.type === 'longcoat' ? (app.coatLen || 0.38) : 0.30, layer: topLayer, slit: true, open: !!app.coatOpen, slitHalf: app.coatOpen ? 0.2 : 0 }
         : tdef.hem === 'low' ? { u0: 0.24, len: 0.035, layer: topLayer, slit: true, slitHalf: 0.22 } : null;
-  if (skirtSpec) buildSkirt(mb, app, rig, Q, skirtSpec, torsoXZ, torsoP, crotchY, span);
+  if (skirtSpec) {
+    // the hem swings freely, the waist not at all
+    const y0 = crotchY + skirtSpec.u0 * span, y1 = rig.hipJY - skirtSpec.len * H;
+    if (skirtSpec.len > 0.08) mb.flexFn = (x, y) => Math.pow(clamp((y0 - y) / Math.max(0.05, y0 - y1), 0, 1), 1.4);
+    buildSkirt(mb, app, rig, Q, skirtSpec, torsoXZ, torsoP, crotchY, span);
+    mb.flexFn = null;
+  }
 
   // ---------------- COLLAR / HOOD ----------------
   if (tdef.neck === 'collar' || tdef.neck === 'lapel') buildCollar(mb, rig, Q, topLayer, tdef.neck === 'lapel', torsoXZ, crotchY, span, topOff(1.0));
@@ -2377,6 +2386,7 @@ function buildHead(mb, app, rig, Q) {
   const P = makeHeadShape(app, rig);
   const sdf = P.sdf;
   rig.headSdf = sdf; // head-local SDF (metres at sHead = 1), used to fit hats
+  rig.mouth = { y: P.mouthYScaled, half: P.mouthHalf }; // for facial expressions (vertex shader)
   const S = rig.sHead, HC = rig.headCenter;
   const skinBase = C(app.skin.hex);
   const skinMat = [MAT.SKIN, 0.5, 0, 1];
@@ -3111,7 +3121,13 @@ function buildHair(mb, app, rig, grid, Q) {
     return t * (0.55 + 0.45 * m);
   };
   addShell(mb, app, rig, grid, sdHair, thick, col, MAT.HAIR, false, style2.afro ? 1.4 : 0.75);
-  if (style2.curtain) buildHairCurtain(mb, app, rig, grid, style2, col, Q);
+  if (style2.curtain) {
+    // hanging hair moves more toward its ends (nothing above the ears)
+    const HC = rig.headCenter, S = rig.sHead;
+    mb.flexFn = (x, y) => Math.pow(clamp((-0.02 - (y - HC.y) / S) / 0.2, 0, 1), 1.2) * 0.8;
+    buildHairCurtain(mb, app, rig, grid, style2, col, Q);
+    mb.flexFn = null;
+  }
   if (style2.tail) buildPonytail(mb, app, rig, col, Q);
   if (style2.bun) buildBun(mb, app, rig, col);
 }
@@ -3619,6 +3635,38 @@ const GLSL_HT_ALBEDO = /* glsl */`
   diffuseColor.rgb = base;
 `;
 
+// free hems and hair ends lag behind the body's movement and flutter in the wind (bind space, before skinning)
+const GLSL_HT_SWAY = /* glsl */`
+if (aFlex > 0.001) {
+  float fl = aFlex;
+  vec3 flut = vec3(sin(uTime * 6.1 + position.y * 9.0 + position.x * 7.0), 0.35 * sin(uTime * 4.3 + position.z * 6.0), cos(uTime * 5.3 + position.y * 8.0 + position.z * 5.0));
+  transformed += (uSway.xyz + flut * uSway.w * 0.012) * fl;
+}
+`;
+// facial expressions, applied in bind space before skinning (so they ride with the head and jaw):
+// brows (and the skin round them) lift, knit or tilt; mouth corners lift, drop or stretch sideways
+const GLSL_HT_EXPR = /* glsl */`
+if (dot(uExpr, uExpr) + uExpr2.x * uExpr2.x > 1e-5) {
+  vec3 fq = (transformed - uFaceC.xyz) / uFaceC.w;
+  bool faceMat = aMat.x < 0.5 || (aMat.x > 7.5 && aMat.x < 8.5) || (aMat.x > 11.5 && aMat.x < 12.5);
+  if (faceMat && fq.z > 0.03 && length(fq) < 0.135) {
+    float ax = abs(fq.x), sx = fq.x < 0.0 ? -1.0 : 1.0;
+    float browW = aMat.x > 11.5 ? 1.0 : exp(-pow((fq.y - 0.021) / 0.013, 2.0)) * (1.0 - smoothstep(0.05, 0.068, ax)) * 0.8;
+    float inner = 1.0 - smoothstep(0.012, 0.046, ax);
+    float dy = 0.0048 * uExpr.x + 0.0042 * uExpr.y * inner + 0.0062 * uExpr.w * sx * (0.3 + 0.7 * smoothstep(0.01, 0.04, ax));
+    transformed.y += dy * browW * uFaceC.w;
+    transformed.x -= sx * 0.0024 * max(0.0, -uExpr.y) * inner * browW * uFaceC.w;
+    float cw = exp(-(pow((ax - uMouth.y) / 0.011, 2.0) + pow((fq.y - uMouth.x) / 0.011, 2.0)));
+    transformed.y += (uExpr.z > 0.0 ? 0.0058 : 0.0042) * uExpr.z * cw * uFaceC.w;
+    transformed.x += sx * (0.0028 * uExpr2.x + 0.0022 * max(uExpr.z, 0.0)) * cw * uFaceC.w;
+    transformed.z -= 0.0018 * max(uExpr.z, 0.0) * cw * uFaceC.w;
+    // a smile lifts the cheeks a little too
+    float ck = exp(-(pow((ax - 0.036) / 0.016, 2.0) + pow((fq.y + 0.028) / 0.014, 2.0)));
+    transformed.y += 0.0022 * max(uExpr.z, 0.0) * ck * uFaceC.w;
+  }
+}
+`;
+
 // extra direct lighting for skin and hair: light bleeding warm and red a little past the terminator (a cheap
 // subsurface look, so faces stop reading as plastic), and a Kajiya-Kay strand highlight on hair
 const GLSL_HT_LIGHT = /* glsl */`
@@ -3657,14 +3705,19 @@ function createCharacterMaterial() {
     uVampire: { value: 0 }, uEyeGlow: { value: 0 }, uFang: { value: 0 }, uHeat: { value: 0 }, uAsh: { value: 0 },
     uDoll: { value: 0 }, uFaceC: { value: new THREE.Vector4(0, 1.6, 0, 1) },
     uSick: { value: 0 }, uSweat: { value: 0 }, uZTint: { value: new THREE.Vector3(0.78, 0.9, 0.7) }, uZLook: { value: new THREE.Vector4(0, 0, 0, 0) },
-    uSkinZ: { value: new THREE.Vector3(0.5, 0.55, 0.45) }
+    uSkinZ: { value: new THREE.Vector3(0.5, 0.55, 0.45) },
+    // facial expression: brow raise, inner brows (+ up / - furrowed), mouth corners (+ smile / - down), brow asymmetry;
+    // uExpr2.x: lips stretched sideways. uMouth: mouth height and half-width in face units
+    uExpr: { value: new THREE.Vector4() }, uExpr2: { value: new THREE.Vector4() }, uMouth: { value: new THREE.Vector4(-0.06, 0.021, 0, 0) },
+    // cloth / hair sway: xyz = lagging offset of free hems and hair ends (character space, metres), w = flutter
+    uSway: { value: new THREE.Vector4() }
   };
   m.userData.u = U;
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, U);
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec4 aMat;\nattribute vec3 aColor2;\nvarying vec4 vMat;\n' + GLSL_MAT_ID + 'varying vec3 vColor2;\nvarying vec2 vUvP;\nvarying vec3 vRest;\nuniform float uFang;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMat = aMat; vMatId = aMat.x; vColor2 = aColor2; vUvP = uv; vRest = position;\nif (aMat.x > 14.5 && aMat.x < 15.5) { transformed.y -= uFang * aMat.w; transformed.z += uFang * aMat.w * 0.22; } // fangs extend');
+      .replace('#include <common>', '#include <common>\nattribute vec4 aMat;\nattribute vec3 aColor2;\nvarying vec4 vMat;\n' + GLSL_MAT_ID + 'varying vec3 vColor2;\nvarying vec2 vUvP;\nvarying vec3 vRest;\nuniform float uFang;\nuniform vec4 uFaceC; uniform vec4 uExpr; uniform vec4 uExpr2; uniform vec4 uMouth; uniform vec4 uSway; uniform float uTime; attribute float aFlex;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMat = aMat; vMatId = aMat.x; vColor2 = aColor2; vUvP = uv; vRest = position;\nif (aMat.x > 14.5 && aMat.x < 15.5) { transformed.y -= uFang * aMat.w; transformed.z += uFang * aMat.w * 0.22; } // fangs extend\n' + GLSL_HT_SWAY + GLSL_HT_EXPR);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\n' + GLSL_MAT_ID + GLSL_HT_COMMON)
       .replace('#include <lights_physical_pars_fragment>', '#include <lights_physical_pars_fragment>\n' + GLSL_HT_LIGHT)
@@ -3689,7 +3742,7 @@ function createCharacterMaterial() {
           totalEmissiveRadiance += vec3(1.0, 0.28, 0.12) * pow(rim, 0.8) * uHeat * 0.9; // heat sense (vampire player)
         }`);
   };
-  m.customProgramCacheKey = () => 'ht3d-char-v9';
+  m.customProgramCacheKey = () => 'ht3d-char-v11';
   return m;
 }
 
@@ -4390,6 +4443,7 @@ class FieldEnvironment {
     }
     g.add(this.clouds);
     this.buildRain();
+    this.buildPuddles();
     // physics: heightfield ground + invisible boundary walls (vegetation never blocks movement)
     const h = this.half;
     this.planes = [
@@ -4589,6 +4643,45 @@ class FieldEnvironment {
     this.hillsNear = ring(520, 8, 30, 4.5, 31);
     this.group.add(this.hills); this.group.add(this.hillsNear);
   }
+  // shallow puddles that gather in the grass once the ground is soaked; rain rings ripple across them
+  buildPuddles() {
+    const rr = new RNG(4242), list = [];
+    this.puddleU = { uTime: { value: 0 }, uRain: { value: 0 } };
+    const mat = new THREE.MeshStandardMaterial({ color: 0x141a1e, roughness: 0.05, metalness: 0, transparent: true, opacity: 0, depthWrite: false, envMapIntensity: 1.3, polygonOffset: true, polygonOffsetFactor: -2 });
+    mat.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, this.puddleU);
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec2 vPW; attribute float aEdge; varying float vEdge;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvPW = (modelMatrix * vec4(transformed, 1.0)).xz; vEdge = aEdge;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec2 vPW; varying float vEdge; uniform float uTime; uniform float uRain;\nfloat phash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }')
+        .replace('#include <alphatest_fragment>', '#include <alphatest_fragment>\ndiffuseColor.a *= 1.0 - smoothstep(0.55, 1.0, vEdge); diffuseColor.rgb *= mix(0.6, 1.0, smoothstep(0.2, 0.9, vEdge));')
+        .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        {
+          // expanding rings where drops land (one per cell, each on its own clock)
+          vec2 g = vPW * 2.2, gi = floor(g); vec2 slope = vec2(0.0);
+          for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+            vec2 c = gi + vec2(float(i), float(j)), o = vec2(phash(c), phash(c + 17.3));
+            float ph = fract(uTime * 0.8 + phash(c + 5.1)), r = ph * 0.9, d = length(g - c - o);
+            float w = sin((d - r) * 28.0) * exp(-abs(d - r) * 9.0) * (1.0 - ph);
+            slope += (g - c - o) / max(d, 1e-3) * w;
+          }
+          normal = normalize(normal + vec3(slope.x, 0.0, slope.y) * 0.18 * uRain);
+        }`);
+    };
+    for (let k = 0; k < 11; k++) {
+      const a = rr.range(0, TAU), d = rr.range(3, 26), cx = Math.sin(a) * d, cz = Math.cos(a) * d, R = rr.range(0.7, 2.1);
+      // a fan of two rings (inner rim keeps full water, outer rim fades) so the edge is soft
+      const n = 24, pos = [0, 0, 0], edge = [0], idx = [];
+      for (let i = 0; i <= n; i++) {
+        const t = i / n * TAU, rr2 = R * (0.75 + 0.25 * Math.sin(t * 3 + k) + 0.12 * Math.sin(t * 7 + k * 2));
+        pos.push(Math.cos(t) * rr2 * 0.7, 0, Math.sin(t) * rr2 * 0.7, Math.cos(t) * rr2, 0, Math.sin(t) * rr2); edge.push(0.6, 1);
+        if (i > 0) { const a0 = 1 + (i - 1) * 2, a1 = 1 + i * 2; idx.push(0, a1, a0, a0, a1, a1 + 1, a0, a1 + 1, a0 + 1); }
+      }
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('aEdge', new THREE.Float32BufferAttribute(edge, 1)); geo.setIndex(idx); geo.computeVertexNormals();
+      for (let i = 0; i < geo.attributes.normal.count; i++) geo.attributes.normal.setXYZ(i, 0, 1, 0);
+      const m = new THREE.Mesh(geo, mat); m.position.set(cx, terrainHeight(cx, cz) + 0.035, cz); m.renderOrder = 1; m.visible = false;
+      this.group.add(m); list.push(m);
+    }
+    this.puddles = list; this.puddleMat = mat;
+  }
   buildRain() {
     const N = 2400;
     const pos = new Float32Array(N * 6);
@@ -4666,7 +4759,7 @@ class FieldEnvironment {
     const skyCol = new THREE.Color(0x9ec6ff).lerp(new THREE.Color(0xb7bcc4), cloud).lerp(new THREE.Color(0x1a2438), night);
     this.hemi.color.copy(skyCol); this.hemi.groundColor.set(0x4d5f33).lerp(new THREE.Color(0x10140c), night);
     // the sky env map now carries much of the ambient; the hemisphere fill stays for the grass
-    this.hemi.intensity = lerp(0.95, 1.3, cloud) * lerp(1, 0.35, night) * 0.72;
+    this.hemi.intensity = lerp(0.95, 1.3, cloud) * lerp(1, 0.35, night) * 0.72; this.hemiBase = this.hemi.intensity;
     const fogCol = new THREE.Color(0xc4d6ea).lerp(new THREE.Color(0xb3b8bf), cloud).lerp(new THREE.Color(0xe0a070), warm * day * 0.35 * (1 - cloud)).lerp(new THREE.Color(0x0a0e16), night);
     const dens = W === 'fog' ? 0.035 : W === 'rain' ? 0.012 : W === 'overcast' ? 0.006 : 0.0024;
     this.game.scene.fog = new THREE.FogExp2(fogCol, dens);
@@ -4680,14 +4773,51 @@ class FieldEnvironment {
       c.material.opacity = clamp(0.25 + cloud * 0.9, 0, 0.95) * (W === 'clear' ? 0.6 : 1);
       c.material.color.set(0xffffff).lerp(new THREE.Color(0x8d939b), cloud * 0.7).lerp(new THREE.Color(0x202634), night);
     }
-    this.rain.visible = W === 'rain';
-    this.wet = W === 'rain' ? 1 : 0;
-    this.groundMat.roughness = W === 'rain' ? 0.55 : 0.93;
+    // rain eases in and out and the ground soaks up / dries off gradually (see update)
+    this.rainTarget = W === 'rain' ? 1 : 0;
+    if (this.rainK == null) { this.rainK = this.rainTarget; this.wetness = this.rainTarget; }
     this.game.renderer.toneMappingExposure = lerp(0.82, 1.05, cloud) * lerp(1, 1.8, night);
     this.windStrength = P.wind;
     // blades glow when back-lit by a low, clear sun
     this.sunGlow = sunCol.clone().multiplyScalar(day * (1 - cloud * 0.85) * 0.55);
     this.buildSkyEnv(day);
+  }
+  // gradual weather: rain intensity, soaked ground and grass, splashes round the camera, lightning
+  updateWeather(dt, cam) {
+    const rt = this.rainTarget || 0;
+    this.rainK = clamp((this.rainK || 0) + clamp(rt - (this.rainK || 0), -dt / 9, dt / 5), 0, 1);
+    this.wetness = clamp((this.wetness || 0) + (this.rainK > 0.2 ? dt / 35 * this.rainK : -dt / 150), 0, 1);
+    this.wet = this.wetness; // characters' skin and clothes read this
+    const wk = this.wetness;
+    this.groundMat.roughness = lerp(0.93, 0.4, wk); this.groundMat.color.setScalar(1 - 0.3 * wk);
+    if (this.grass) this.grass.material.color.setScalar(1 - 0.17 * wk);
+    this.rain.visible = this.rainK > 0.02; this.rain.material.opacity = 0.45 * this.rainK;
+    if (this.puddles) {
+      const pv = smoothstep(0.35, 0.9, wk);
+      this.puddleMat.opacity = 0.82 * pv; this.puddleU.uTime.value = this.time; this.puddleU.uRain.value = this.rainK;
+      for (const p of this.puddles) { p.visible = pv > 0.01; p.scale.setScalar(0.55 + 0.45 * pv); }
+    }
+    // splashes where the drops land, near the camera
+    if (this.rainK > 0.1 && this.game.fx) {
+      this.splashAcc = (this.splashAcc || 0) + dt * 55 * this.rainK;
+      const sm = this.game.fx.smoke;
+      while (this.splashAcc >= 1) {
+        this.splashAcc -= 1;
+        const a = Math.random() * TAU, r = 1.5 + Math.random() * 11, x = cam.position.x + Math.sin(a) * r, z = cam.position.z + Math.cos(a) * r, y = terrainHeight(x, z) + 0.03;
+        for (let k = 0; k < 3; k++) sm.emit(x, y, z, (Math.random() - 0.5) * 0.7, 0.7 + Math.random() * 0.9, (Math.random() - 0.5) * 0.7, 0.22 + Math.random() * 0.12, 0.012, 0.03, 0.78, 0.82, 0.88, 0.5, 6, 1.5);
+      }
+    }
+    // lightning in a downpour: a double flicker, then thunder after a delay that tells the distance
+    if (this.rainK > 0.6 && this.game.audio) {
+      this.boltT = (this.boltT == null ? 6 + Math.random() * 10 : this.boltT) - dt;
+      if (this.boltT <= 0) { this.boltT = 14 + Math.random() * 28; this.flashT = 0.42; const far = Math.random(); this.game.audio.thunder(0.5 + far * 3.2, 1 - far * 0.55); }
+    }
+    if (this.hemiBase == null) this.hemiBase = this.hemi.intensity;
+    if (this.flashT > 0) {
+      this.flashT -= dt;
+      const t = 0.42 - this.flashT, k = (t < 0.07 ? 1 : t < 0.14 ? 0.25 : t < 0.22 ? 0.85 : Math.max(0, 1 - (t - 0.22) / 0.2)) * Math.max(0, Math.sign(this.flashT));
+      this.hemi.intensity = this.hemiBase * (1 + 3.5 * k);
+    } else this.hemi.intensity = this.hemiBase;
   }
   groundHeight(x, z) { return terrainHeight(x, z); }
   groundNormal(x, z, out) {
@@ -4737,6 +4867,7 @@ class FieldEnvironment {
       this.updateGrassPush(cam);
     }
     if (this.treeU) { this.treeU.uTime.value = this.time; this.treeU.uWind.value = w; }
+    this.updateWeather(dt, cam);
     this.sky.material.uniforms.uTime.value = this.time;
     this.sky.position.copy(cam.position);
     // shadow follows camera focus
@@ -7362,7 +7493,7 @@ const RAG = {
   THIGH_L: 10, SHIN_L: 11, FOOT_L: 12, THIGH_R: 13, SHIN_R: 14, FOOT_R: 15
 };
 const RAG_COUNT = 16;
-const _rgMv = new V3(); // ragdoll-private scratch (setDynamic runs inside callers that hold the shared ones)
+const _rgMv = new V3(), _rgJ = new V3(); // ragdoll-private scratch (setDynamic runs inside callers that hold the shared ones)
 const RAG_NAMES = ['Pelvis', 'Abdomen', 'Chest', 'Head', 'L Upper Arm', 'L Forearm', 'L Hand', 'R Upper Arm', 'R Forearm', 'R Hand', 'L Thigh', 'L Shin', 'L Foot', 'R Thigh', 'R Shin', 'R Foot'];
 const RAG_BONE = [B.hips, B.spine, B.chest, B.head, B.upperarm_L, B.forearm_L, B.hand_L, B.upperarm_R, B.forearm_R, B.hand_R, B.thigh_L, B.shin_L, B.foot_L, B.thigh_R, B.shin_R, B.foot_R];
 const RAG_MASS = [0.142, 0.139, 0.216, 0.081, 0.028, 0.016, 0.006, 0.028, 0.016, 0.006, 0.100, 0.0465, 0.0145, 0.100, 0.0465, 0.0145];
@@ -7551,6 +7682,15 @@ class Ragdoll {
   applyImpulseAt(i, impulse, point) {
     const b = this.bodies[i];
     if (!this.dynamic || !this.world) return;
+    // a light part (a hand, a foot) only takes so much before the whole body has to move with it: the
+    // excess becomes a modest shove of the whole ragdoll instead of flinging one limb (and the rest) away
+    const J = impulse.length(), cap = b.mass * 8;
+    if (J > cap && !this.detached[i] && this.totalMass > 0) {
+      this.world.applyImpulse(b, _rgJ.copy(impulse).multiplyScalar(cap / J), point);
+      _rgJ.copy(impulse).multiplyScalar(Math.min((J - cap) / this.totalMass, 6) / J);
+      for (const o of this.bodies) if (!this.detached[o.index]) o.vel.add(_rgJ);
+      return;
+    }
     this.world.applyImpulse(b, impulse, point);
   }
   centerOfMass(out) {
@@ -7600,6 +7740,24 @@ const ARM_POSES = {
     { pos: [0.10, -0.93, 0.07], pole: [0.25, 0, -1], pron: 0, flex: 0.12, dev: 0, fing: 0.35, thumb: 0.25 }],
   waveR: [{ pos: [0.10, -0.93, 0.07], pole: [0.25, 0, -1], pron: 0, flex: 0.12, dev: 0, fing: 0.35, thumb: 0.25 },
     { pos: [0.42, 0.32, 0.18], pole: [1, -1, -0.3], pron: -1.5, flex: -0.2, dev: 0, fing: 0.05, thumb: 0.1, wave: 1 }]
+};
+// facial expressions: [brow raise, inner brows (+ up / - knit), mouth corners (+ up / - down), brow asymmetry,
+// lips stretched sideways, eyelids (- wide / + narrowed), jaw open]
+const EXPRESSIONS = {
+  neutral: [0, 0, 0.05, 0, 0, 0, 0],
+  worried: [0.25, 0.55, -0.2, 0, 0.15, -0.03, 0],
+  fear: [0.7, 0.9, -0.45, 0, 0.8, -0.1, 0.05],
+  terror: [1, 1, -0.6, 0, 1, -0.14, 0.13],
+  surprise: [1, 0.25, 0, 0, 0.1, -0.15, 0.14],
+  pain: [-0.45, 0.75, -0.7, 0, 0.85, 0.25, 0.04],
+  angry: [-0.8, -1, -0.4, 0, 0.4, 0.06, 0.02],
+  friendly: [0.2, 0.05, 0.75, 0, 0.1, 0.06, 0],
+  disgust: [-0.25, -0.35, -0.55, 0.4, 0.35, 0.1, 0.02],
+  confused: [0.15, -0.25, -0.15, 0.85, 0, 0.02, 0.02],
+  sick: [-0.1, 0.6, -0.35, 0, 0.1, 0.12, 0.02],
+  snarl: [-0.7, -0.6, -0.75, 0, 0.9, 0.05, 0],
+  blank: [-0.2, 0, -0.3, 0, 0.2, 0, 0],
+  slack: [0, 0, -0.2, 0, 0, 0, 0]
 };
 // body postures (overlay): crouch (m), spine/chest/head pitch (rad, + = forward), stance width scale
 const POSTURES = {
@@ -8006,6 +8164,7 @@ class Animator {
     this.vamp = damp(this.vamp, this.vampTarget, 2.2, dt);
     const po = this.posture; po.w = Math.min(1, po.w + dt / Math.max(0.05, po.dur));
     this.exertion = clamp(this.exertion + (this.speed > 2.5 ? dt * 0.12 : -dt * 0.05), 0, 1);
+    this.updateSway(dt, root, env);
     // 1) base locomotion
     const P = this.P;
     if (this.crawl > 0.5 && !this.clip) this.crawlPose(dt, root, env, P);
@@ -8048,11 +8207,96 @@ class Animator {
 
   // --- face: blink, jaw, breathing --------------------------------------------------
   updateFace(dt) {
+    // natural blinks: a quick close and a slower open, every 2-6 s; more often when talking or frightened,
+    // sometimes twice in a row. (this.blink > 0 is a held close requested by other poses.)
+    const fearK = this.npc.fear || 0;
     this.blinkT -= dt;
-    if (this.blinkT <= 0) { this.blink = 0.14; this.blinkT = 1.5 + Math.random() * 4.5; }
+    if (this.blinkT <= 0) {
+      this.nbT = 0;
+      this.blinkT = (this.talking ? 1.6 + Math.random() * 2.4 : 2 + Math.random() * 4.2) * (1 - 0.45 * fearK);
+      if (Math.random() < 0.14) this.blinkT = 0.3;
+    }
+    if (this.nbT != null) { this.nbT += dt; if (this.nbT > 0.18) this.nbT = null; }
     if (this.blink > 0) this.blink -= dt;
-    this.breath += dt * TAU * (0.24 + this.exertion * 0.35 + (this.npc.fear || 0) * 0.25);
+    this.breath += dt * TAU * (0.24 + this.exertion * 0.35 + fearK * 0.25);
     this.jaw = damp(this.jaw, this.jawTarget, 12, dt);
+    this.updateExpression(dt);
+  }
+  // cloth and hair sway: a damped spring driven by the body's speed, acceleration and turning, plus the
+  // wind outdoors. Free hems and hair ends (aFlex) follow it in the vertex shader.
+  updateSway(dt, root, env) {
+    const u = this.npc.material && this.npc.material.userData.u; if (!u || !u.uSway) return;
+    const S = this.sway || (this.sway = { x: new V3(), v: new V3(), pv: new V3().copy(this.vel), t: new V3() });
+    const c = Math.cos(root.yaw), s = Math.sin(root.yaw), idt = 1 / Math.max(dt, 1e-3);
+    const ax = (this.vel.x - S.pv.x) * idt, az = (this.vel.z - S.pv.z) * idt; S.pv.copy(this.vel);
+    const lvx = this.vel.x * c - this.vel.z * s, lvz = this.vel.x * s + this.vel.z * c;
+    const lax = clamp(ax * c - az * s, -12, 12), laz = clamp(ax * s + az * c, -12, 12), spd = Math.hypot(lvx, lvz);
+    const T = S.t.set(-lvx * 0.012 - lax * 0.005 - (this.yawRate || 0) * spd * 0.01, spd * 0.004, -lvz * 0.012 - laz * 0.005);
+    const cur = env.current, w = cur && cur.kind === 'field' && cur.windStrength != null ? cur.windStrength : 0;
+    if (w > 0 && cur.windDir) { const wd = cur.windDir; T.x += (wd.x * c - wd.z * s) * w * 0.022; T.z += (wd.x * s + wd.z * c) * w * 0.022; }
+    S.v.addScaledVector(T.sub(S.x), 70 * dt).multiplyScalar(Math.max(0, 1 - 9 * dt));
+    S.x.addScaledVector(S.v, dt);
+    if (S.x.lengthSq() > 0.0081) S.x.setLength(0.09);
+    u.uSway.value.set(S.x.x, S.x.y, S.x.z, w * 0.7 + spd * 0.25);
+  }
+  // 0..1 lid closure from natural blinks and held closes
+  blinkClose() {
+    if (this.blink > 0) return 1;
+    const t = this.nbT; if (t == null) return 0;
+    return t < 0.06 ? t / 0.06 : t < 0.08 ? 1 : Math.max(0, 1 - (t - 0.08) / 0.1);
+  }
+  // which face to make, from what the character is doing (masked characters and vampires keep theirs)
+  pickEmotion() {
+    const n = this.npc, b = n.brain, ls = n.lifeState;
+    if (this.hstyle || ls === 'vampire' || (n.vamp && n.vamp.state === 'turning')) return null;
+    if (ls === 'dead' || ls === 'destroyed' || ls === 'reanimating') return 'slack';
+    if (ls === 'zombie') {
+      const a = this.action, at = a && !a.ending ? a.type : '';
+      return at === 'bite' || at === 'scratch' || at === 'gutpunch' || at === 'notice' || at === 'feed' || (b && (b.state === 'zChase' || b.state === 'zGrab' || b.state === 'zPile')) ? 'snarl' : 'blank';
+    }
+    if (!b) return 'neutral';
+    const st = b.state;
+    if (n.grabbedBy || st === 'grabbed') return 'terror';
+    if (st === 'hurt' || n.physMode !== 'anim') return 'pain';
+    if (st === 'flee' || st === 'cower' || st === 'handsUp' || b.mesmerT > 0) return 'fear';
+    if (st === 'react') return 'surprise';
+    if (st === 'fight') return 'angry';
+    if (st === 'chat') return 'friendly';
+    if (st === 'inspect') return 'disgust';
+    if (b.puzzledT > 0) return 'confused';
+    if ((this.sick || 0) > 0.25) return 'sick';
+    if (n.fear > 0.35) return 'worried';
+    return 'neutral';
+  }
+  // blend toward the emotion's face; a startle (surprise) comes first when fear arrives out of calm
+  updateExpression(dt) {
+    const E = this.expr || (this.expr = { v: [0, 0, 0, 0, 0, 0, 0], tv: [0, 0, 0, 0, 0, 0, 0], cur: 'neutral', startle: 0, microT: 2 + Math.random() * 4, microK: 0, micro: 0, syl: 0, sylA: 0 });
+    const em = this.pickEmotion();
+    if (em !== E.cur) {
+      if ((em === 'fear' || em === 'terror') && (E.cur === 'neutral' || E.cur === 'friendly' || E.cur === 'worried' || E.cur === 'confused')) E.startle = 0.45;
+      E.cur = em;
+    }
+    if (E.startle > 0) E.startle -= dt;
+    const T = E.startle > 0 ? EXPRESSIONS.surprise : (em ? EXPRESSIONS[em] : null), tv = E.tv;
+    for (let i = 0; i < 7; i++) tv[i] = T ? T[i] : 0;
+    // life in a calm face: a brief brow flash or a drifting half-smile now and then
+    if (em === 'neutral' || em === 'friendly') {
+      E.microT -= dt;
+      if (E.microT <= 0) { E.microT = 2.5 + Math.random() * 5.5; E.micro = Math.random(); E.microK = 0.5 + Math.random() * 0.9; }
+      if (E.microK > 0) { E.microK -= dt; const w = Math.min(1, E.microK * 3); if (E.micro < 0.35) tv[0] += 0.5 * w; else if (E.micro < 0.75) tv[2] += 0.3 * w; else tv[3] += (E.micro < 0.87 ? 0.35 : -0.35) * w; }
+    }
+    // talking: syllables on the jaw, short pauses between words, emphasis on the brows and lips
+    let tj = 0;
+    if (this.talking && em) {
+      E.syl -= dt;
+      if (E.syl <= 0) { E.syl = 0.08 + Math.random() * 0.15; E.sylA = Math.random() < 0.2 ? 0 : 0.035 + Math.random() * 0.1; if (Math.random() < 0.12) tv[0] += 0.4; }
+      tj = E.sylA; tv[4] += E.sylA * 1.6;
+    }
+    this.talkJaw = damp(this.talkJaw || 0, tj, 26, dt);
+    const k = 1 - Math.exp(-dt * (E.startle > 0 ? 18 : 6.5));
+    for (let i = 0; i < 7; i++) E.v[i] += (tv[i] - E.v[i]) * k;
+    const u = this.npc.material && this.npc.material.userData.u;
+    if (u && u.uExpr) { u.uExpr.value.set(E.v[0], E.v[1], E.v[2], E.v[3]); u.uExpr2.value.x = E.v[4]; }
   }
 
   // --- locomotion -------------------------------------------------------------------
@@ -9483,7 +9727,8 @@ class Animator {
     // jaw, eyes, lids
     const zv = this.zombie > 0 && this.zvar ? this.zvar : null;
     // (the doctor's jaw stays shut inside the rigid hood)
-    this.setLocalEuler(B.jaw, this.hstyle === 'doctor' ? 0 : clamp(P.jaw + this.jaw + (zv ? (zv.jawRest || 0) * this.zombie : 0) + (this.sick || 0) * 0.04, 0, 0.45), 0, 0);
+    const ex = this.expr ? this.expr.v : null;
+    this.setLocalEuler(B.jaw, this.hstyle === 'doctor' ? 0 : clamp(P.jaw + this.jaw + (zv ? (zv.jawRest || 0) * this.zombie : 0) + (this.sick || 0) * 0.04 + (ex ? ex[6] : 0) + (this.talkJaw || 0), 0, 0.45), 0, 0);
     this.saccadeT -= dt;
     if (this.saccadeT <= 0) { this.saccade.set((Math.random() - 0.5) * 0.12, (Math.random() - 0.5) * 0.08, 0); this.saccadeT = 0.4 + Math.random() * 2; }
     this.eyeYaw = damp(this.eyeYaw, (this.eyeYawT || 0) + this.saccade.x, 25, dt);
@@ -9491,8 +9736,8 @@ class Animator {
     const dead = npc.lifeState === 'dead' || npc.lifeState === 'destroyed';
     for (let s = 0; s < 2; s++) {
       this.setLocalEuler(SB('eye', s), this.eyePitch, this.eyeYaw, 0);
-      const lidClose = dead ? 0.55 : (this.blink > 0 ? 1 : 0) * 0.62 + (npc.fear ? -0.08 : 0) + (this.zombie ? (zv && zv.lid != null ? zv.lid : 0.1) * this.zombie : 0) + (this.sick || 0) * 0.2;
-      this.setLocalEuler(SB('lid', s), clamp(lidClose, -0.1, 0.62), 0, 0);
+      const lidClose = dead ? 0.55 : this.blinkClose() * 0.62 + (ex ? ex[5] : 0) + (this.zombie ? (zv && zv.lid != null ? zv.lid : 0.1) * this.zombie : 0) + (this.sick || 0) * 0.2;
+      this.setLocalEuler(SB('lid', s), clamp(lidClose, -0.17, 0.62), 0, 0);
     }
     // hair bone (spring)
     this.solveHair(root, dt);
@@ -9669,7 +9914,9 @@ class NPC {
       this.mesh.bind(new THREE.Skeleton(bones));
       this.bones = bones;
     }
-    { const u = this.material.userData.u; if (u.uDoll) { u.uDoll.value = this.app.doll ? 1 : 0; const hc = this.rig.headCenter; u.uFaceC.value.set(hc.x, hc.y, hc.z, this.rig.sHead); } }
+    { const u = this.material.userData.u; if (u.uDoll) { u.uDoll.value = this.app.doll ? 1 : 0; const hc = this.rig.headCenter; u.uFaceC.value.set(hc.x, hc.y, hc.z, this.rig.sHead); }
+      if (u.uMouth && this.rig.mouth) u.uMouth.value.set(this.rig.mouth.y, this.rig.mouth.half, 0, 0);
+      if (u.uExpr) { u.uExpr.value.set(0, 0, 0, 0); u.uExpr2.value.set(0, 0, 0, 0); } }
     this.mesh.castShadow = true; this.mesh.receiveShadow = true;
     this.mesh.boundingSphere = new THREE.Sphere(new V3(), 2);
     this.mesh.userData.npc = this;
@@ -9726,7 +9973,7 @@ class NPC {
         if (this.gore && this.gore.anyCut) this.syncDetached();
         this.rag.setFromBones(this.boneWPos, this.boneWRot, false);
       }
-    } else this.animAcc = 0;
+    } else { this.animAcc = 0; const us = this.material.userData.u.uSway; if (us) us.value.multiplyScalar(Math.max(0, 1 - dt * 6)); } // a limp body: hems settle
     // overlapping pairs (grapples / feeding) collide again once apart
     const nc = this.rag.noCollideWith;
     if (nc && !(this.brain && (this.brain.victim || this.brain.victim2 || this.brain.corpse)) && !this.grabbedBy && !(this.pilers > 0)) {
@@ -9738,7 +9985,8 @@ class NPC {
     const u = this.material.userData.u;
     u.uFlash.value = this.flash;
     u.uHighlight.value = damp(u.uHighlight.value, this.highlight, 10, dt);
-    u.uWet.value = env.current && env.current.wet ? damp(u.uWet.value, 1, 0.3, dt) : damp(u.uWet.value, 0, 0.5, dt);
+    const wetT = env.current ? (+env.current.wet || 0) : 0; // the field soaks people gradually in rain
+    u.uWet.value = damp(u.uWet.value, wetT, wetT > u.uWet.value ? 0.3 : 0.5, dt);
     if (this.isZombie) u.uZombie.value = Math.min(1, u.uZombie.value + dt * 0.6);
   }
   postPhysics(dt) {
@@ -10084,6 +10332,41 @@ class NPCManager {
     Events.emit('npcSpawned', npc);
     return npc;
   }
+  // --- spawn placement: walkable ground, clear of walls, fixtures, props and other people ---------
+  spotOk(p, clearR) {
+    const g = this.game, env = g.env.current, y = p.y;
+    if (env.regionAt && !env.regionAt(p.x, p.z, true, y + 0.3)) return false;
+    if (env.boxes) for (const bx of env.boxes) {
+      if (p.x > bx.min.x - 0.32 && p.x < bx.max.x + 0.32 && p.z > bx.min.z - 0.32 && p.z < bx.max.z + 0.32 && y + 1.7 > bx.min.y && y + 0.2 < bx.max.y) return false;
+    }
+    if (env.obstaclesNear) for (const o of env.obstaclesNear(p.x, p.z, y)) if (p.x > o.x0 - 0.35 && p.x < o.x1 + 0.35 && p.z > o.z0 - 0.35 && p.z < o.z1 + 0.35) return false;
+    if (env.carAt && env.carAt(p.x, p.z, y + 0.3)) return false;
+    for (const o of this.list) {
+      if (o.removed) continue;
+      const q = o.physMode === 'ragdoll' ? o.boneWPos[B.hips] : o.root.pos;
+      if (Math.abs(q.y - y) < 1.6 && Math.hypot(q.x - p.x, q.z - p.z) < clearR) return false;
+    }
+    for (const pr of g.props.list) if (pr.body && Math.hypot(pr.body.pos.x - p.x, pr.body.pos.z - p.z) < (pr.radius || 0.3) + 0.45) return false;
+    return true;
+  }
+  // the nearest such spot to p (searching outward on the same level), or p itself if none is found
+  freeSpot(p, clearR = 0.8) {
+    const env = this.game.env, q = p.clone();
+    env.clampToBounds(q, 0.6); q.y = env.groundHeight(q.x, q.z, q.y + 0.5);
+    if (this.spotOk(q, clearR)) return q;
+    const c = new V3(), a0 = Math.random() * TAU;
+    for (let ring = 1; ring <= 11; ring++) {
+      const r = ring * 0.5, n = 6 + ring * 3;
+      for (let k = 0; k < n; k++) {
+        const a = a0 + k / n * TAU;
+        c.set(q.x + Math.sin(a) * r, q.y, q.z + Math.cos(a) * r); env.clampToBounds(c, 0.6);
+        c.y = env.groundHeight(c.x, c.z, q.y + 0.5);
+        if (Math.abs(c.y - q.y) > 0.9) continue; // stay on the same level
+        if (this.spotOk(c, clearR)) return c.clone();
+      }
+    }
+    return q;
+  }
   spawnMany(count, opts = {}) {
     const game = this.game, env = game.env.current;
     const mode = opts.mode || Settings.data.spawn.mode;
@@ -10102,6 +10385,7 @@ class NPCManager {
         p = c.clone().add(new V3(Math.sin(a) * r, 0, Math.cos(a) * r));
       }
       game.env.clampToBounds(p, 0.6);
+      if (!opts.exact) p = this.freeSpot(p);
       const yaw = opts.faceCamera === false ? Math.random() * TAU : Math.atan2(game.camera.position.x - p.x, game.camera.position.z - p.z) + (Math.random() - 0.5) * 0.6;
       const npc = this.spawn(Object.assign({}, opts, { pos: p, yaw }));
       if (npc) out.push(npc);
@@ -10219,6 +10503,7 @@ const FEED_SLOTS = [
   { part: RAG.SPINE, side: 1, along: 0 }, { part: RAG.SPINE, side: -1, along: 0.05 },
   { part: RAG.THIGH_R, side: 1, along: -0.1 }, { part: RAG.CHEST, side: -1, along: 0.15 }
 ];
+const _avoidParts = [RAG.HEAD, RAG.CHEST, RAG.PELVIS, RAG.SHIN_L, RAG.SHIN_R, RAG.FOOT_L, RAG.FOOT_R];
 class AISystem {
   constructor(game) { this.game = game; this.stimuli = []; this._tmp = new V3(); this.aimed = null; }
   attach(npc) { npc.brain = new Brain(npc); npc.brain.home.copy(npc.root.pos); }
@@ -10352,11 +10637,24 @@ class AISystem {
       }
       b.mesmerT = 0;
     }
+    if (b.state !== 'chat' && anim.talking) { anim.talking = false; b.speaking = false; }
+    if (b.puzzledT > 0) b.puzzledT -= dt;
     // process pending stimuli
     for (let i = b.pending.length - 1; i >= 0; i--) {
       const st = b.pending[i];
       if (game.time >= st.at) { b.pending.splice(i, 1); this.react(npc, b, st); }
     }
+    // panic spreads: people who see others running start running too, a moment later
+    const calm = b.state === 'idle' || b.state === 'wander' || b.state === 'chat' || b.state === 'inspect';
+    if (calm && S.reactions) {
+      b.scanT = (b.scanT || 0) - dt;
+      if (b.scanT <= 0) { b.scanT = 0.25 + Math.random() * 0.15; if (!b.panicAt) this.panicCheck(npc, b); }
+      if (b.panicAt && game.time >= b.panicAt) {
+        b.panicAt = 0;
+        if (npc.fear > 0.32 && S.flee) { this.setState(npc, b, 'flee'); b.fleeT = 3 + Math.random() * 2.5; npc.lastReaction = 'Fleeing (Panic)'; Events.emit('reaction', { npc, reaction: npc.lastReaction }); }
+        else { b.puzzledT = 2.5; anim.lookAt(_v3.copy(b.threat).setY(npc.rig.eyeY + b.threat.y), 1); anim.setPosture('alert'); }
+      }
+    } else b.panicAt = 0;
     // hands-up when aimed at
     if (S.reactions && b.aimTime > 0.55 && b.state !== 'flee' && b.state !== 'hurt') {
       if (b.state !== 'handsUp') { this.setState(npc, b, 'handsUp'); npc.lastReaction = 'Hands Up (Aimed At)'; Events.emit('reaction', { npc, reaction: npc.lastReaction }); }
@@ -10402,13 +10700,20 @@ class AISystem {
           }
         } else anim.setUpper(b.holdPose);
         this.idleLook(npc, b, dt);
+        b.socialT = (b.socialT == null ? Math.random() * 2 : b.socialT) - dt;
+        if (b.socialT <= 0) {
+          b.socialT = 1.2 + Math.random() * 0.8;
+          if (this.tryInspect(npc, b) || this.tryChat(npc, b)) break;
+        }
         if (b.idleTime <= 0 && S.wander && Math.random() < S.wanderRate) {
           this.pickWander(npc, b); this.setState(npc, b, 'wander');
         } else if (b.idleTime <= 0) b.idleTime = 3 + Math.random() * 6;
         break;
       }
+      case 'chat': this.updateChat(npc, b, dt); break;
+      case 'inspect': this.updateInspect(npc, b, dt); break;
       case 'wander': {
-        b.speed = npc.personality.walkSpeed * Math.sqrt(npc.rig.legLen / 0.84) * (1 - 0.45 * Math.max(anim.limp[0], anim.limp[1])) * (1 - 0.4 * smoothstep(0.4, 0.75, anim.sick || 0));
+        b.speed = npc.personality.walkSpeed * Math.sqrt(npc.rig.legLen / 0.84) * (1 - 0.45 * Math.max(anim.limp[0], anim.limp[1])) * (1 - 0.4 * smoothstep(0.4, 0.75, anim.sick || 0)) * (1 + 0.22 * Math.min(1, npc.fear * 1.5));
         if (!b.holdPose) anim.setUpper('hang');
         anim.setPosture('stand');
         this.idleLook(npc, b, dt);
@@ -10421,23 +10726,15 @@ class AISystem {
         break;
       }
       case 'flee': {
-        const run = npc.personality.runSpeed * Math.sqrt(npc.rig.legLen / 0.84) * (1 - 0.5 * Math.max(anim.limp[0], anim.limp[1])) * (1 - 0.45 * smoothstep(0.4, 0.75, anim.sick || 0));
+        // a long sprint tires them (the animator's exertion builds while running)
+        const run = npc.personality.runSpeed * Math.sqrt(npc.rig.legLen / 0.84) * (1 - 0.5 * Math.max(anim.limp[0], anim.limp[1])) * (1 - 0.45 * smoothstep(0.4, 0.75, anim.sick || 0)) * (1 - 0.32 * (anim.exertion || 0));
         b.speed = run;
         anim.setPosture('stand'); anim.setUpper(npc.fear > 0.85 && b.t < 1.2 ? 'flail' : 'hang');
-        // direction away from threat
         if (b.threatNpc && !b.threatNpc.removed && b.threatNpc.hostile) b.threat.copy(b.threatNpc.root.pos);
-        const away = _v1.subVectors(npc.root.pos, b.threat); away.y = 0;
-        if (away.lengthSq() < 1e-4) away.set(Math.random() - 0.5, 0, Math.random() - 0.5);
-        away.normalize();
-        // wall-aware: rotate away vector if heading into bounds
-        const look = _v2.copy(npc.root.pos).addScaledVector(away, 4);
-        const bb = game.env.current.bounds;
-        if (look.x < bb.minX + 1 || look.x > bb.maxX - 1 || look.z < bb.minZ + 1 || look.z > bb.maxZ - 1) {
-          const side = (npc.id % 2 ? 1 : -1);
-          away.set(away.z * side, 0, -away.x * side);
-        }
-        b.dest.copy(npc.root.pos).addScaledVector(away, 5);
-        game.env.clampToBounds(b.dest, 1);
+        if (b.t < 0.05) this.remember(npc, 'threat', b.threat, 0.6);
+        // escape route: away from everything dangerous it knows of, round walls and off the map's edges
+        b.routeT = (b.routeT || 0) - dt;
+        if (b.routeT <= 0 || b.t < 0.05) { b.routeT = 0.4; this.fleeDir(npc, b, _v1); b.dest.copy(npc.root.pos).addScaledVector(_v1, 5); game.env.clampToBounds(b.dest, 1); }
         anim.lookAt(_v3.copy(b.threat).setY(npc.rig.eyeY), 0.35);
         if (b.t > (b.fleeT || 5) && npc.root.pos.distanceTo(b.threat) > 10) { this.setState(npc, b, 'idle'); b.idleTime = 4 + Math.random() * 4; npc.lastReaction = 'Alert'; }
         break;
@@ -10493,6 +10790,9 @@ class AISystem {
     if (b.lookTimer <= 0) {
       b.lookTimer = 2 + Math.random() * 4;
       const r = Math.random();
+      const mm = this.recentMemory(npc, 40);
+      if (mm && r < 0.45) { b.lookKind = 'around'; b.lookPos.set(mm.pos.x, mm.pos.y + npc.rig.eyeY * 0.7, mm.pos.z); if (b.state === 'idle') npc.anim.setPosture('alert'); }
+      else {
       const cam = game.camera.position;
       const dCam = npc.root.pos.distanceTo(cam);
       if (dCam < 5 && r < 0.35 * (0.5 + npc.personality.curiosity)) { b.lookKind = 'camera'; }
@@ -10510,6 +10810,7 @@ class AISystem {
         const a = npc.root.yaw + (Math.random() - 0.5) * 2.2;
         b.lookPos.set(npc.root.pos.x + Math.sin(a) * 5, npc.rig.eyeY + (Math.random() - 0.5) * 1.2, npc.root.pos.z + Math.cos(a) * 5);
       } else b.lookKind = 'none';
+      }
     }
     if (b.lookKind === 'camera') anim.lookAt(game.camera.position, 0.85);
     else if (b.lookKind === 'npc' && b.lookNpc && !b.lookNpc.removed) anim.lookAt(b.lookNpc.boneWPos[B.head], 0.8);
@@ -10518,6 +10819,7 @@ class AISystem {
   }
   react(npc, b, st) {
     const S = Settings.data.ai, anim = npc.anim;
+    this.remember(npc, st.type, st.threatPos, clamp(st.intensity * 1.6, 0.15, 1));
     npc.fear = clamp(npc.fear + st.intensity * (1.2 - npc.personality.bravery * 0.5), 0, 1);
     b.threat.copy(st.threatPos); b.hasThreat = true; b.threatNpc = null;
     anim.lookAt(_v1.copy(st.pos).setY(Math.max(st.pos.y, 0.8)), 1);
@@ -10537,6 +10839,7 @@ class AISystem {
     } else {
       npc.lastReaction = 'Look Toward Sound';
       if (b.state === 'idle') anim.setPosture('alert');
+      if (b.state === 'idle' || b.state === 'wander') { b.puzzledT = 2 + Math.random() * 2; if (npc.personality.curiosity > 0.5 && b.state === 'wander') { b.speed = 0; this.setState(npc, b, 'idle'); b.idleTime = 2 + Math.random() * 2; } }
     }
   }
   decide(npc, b, afterHurt) {
@@ -10553,7 +10856,15 @@ class AISystem {
     }
     Events.emit('reaction', { npc, reaction: npc.lastReaction });
   }
+  // wandering steers clear of places where something bad happened (up to a few tries)
   pickWander(npc, b) {
+    const mem = npc.lifeState === 'alive' && b.mem && b.mem.length;
+    for (let k = 0; k < (mem ? 5 : 1); k++) {
+      this.pickWanderRaw(npc, b);
+      if (!mem || this.danger(npc, b.dest, 8) < 0.3) break;
+    }
+  }
+  pickWanderRaw(npc, b) {
     const env = this.game.env.current, bb = env.bounds;
     if (env.pickWander) return env.pickWander(npc, b);
     const r = Math.min(10, (bb.maxX - bb.minX) * 0.35);
@@ -10745,6 +11056,157 @@ class AISystem {
       }
       if (b.lookPos && b.speed < 0.3) anim.lookAt(b.lookPos, 0.7); else anim.clearLook();
     }
+  }
+  // --- V1.11 people: memory, panic, curiosity, conversation, escape routes -----------------
+  // remember where something bad happened (merging nearby events); 8 places at most
+  remember(npc, kind, pos, w) {
+    const b = npc.brain; if (!b || !pos) return;
+    const M = b.mem || (b.mem = []), t = this.game.time;
+    for (const m of M) if (Math.hypot(m.pos.x - pos.x, m.pos.z - pos.z) < 4 && Math.abs(m.pos.y - pos.y) < 2) {
+      m.w = Math.min(1.5, m.w * Math.exp(-(t - m.t) / 60) + w); m.t = t; m.kind = kind; m.pos.lerp(pos, 0.3); return;
+    }
+    if (M.length >= 8) { let oi = 0; for (let i = 1; i < M.length; i++) if (M[i].t < M[oi].t) oi = i; M.splice(oi, 1); }
+    M.push({ kind, pos: pos.clone(), t, w });
+  }
+  // how dangerous a place feels from memory (fades over a couple of minutes)
+  danger(npc, p, r = 7) {
+    const M = npc.brain && npc.brain.mem; if (!M) return 0;
+    const t = this.game.time; let s = 0;
+    for (const m of M) { const age = t - m.t; if (age > 150 || Math.abs(m.pos.y - p.y) > 2.5) continue; const d = Math.hypot(m.pos.x - p.x, m.pos.z - p.z); if (d < r) s += m.w * Math.exp(-age / 60) * (1 - d / r); }
+    return s;
+  }
+  recentMemory(npc, maxAge) {
+    const M = npc.brain && npc.brain.mem; if (!M) return null;
+    let best = null; for (const m of M) if (this.game.time - m.t < maxAge && m.w > 0.3 && (!best || m.t > best.t)) best = m;
+    return best;
+  }
+  // an escape direction: away from the attacker, other monsters close by and remembered danger, tested
+  // against the map so they run along walls and out of corners instead of into them
+  fleeDir(npc, b, out) {
+    const P = npc.root.pos, rx = { x: 0, z: 0 };
+    const add = (q, w) => { const dx = P.x - q.x, dz = P.z - q.z, d2 = Math.max(0.25, dx * dx + dz * dz); rx.x += dx / d2 * w; rx.z += dz / d2 * w; };
+    add(b.threat, 3);
+    for (const o of this.game.npcs.list) {
+      if (o === npc || o.removed || o.physMode !== 'anim' || Math.abs(o.root.pos.y - P.y) > 2) continue;
+      const hostile = o.lifeState === 'zombie' || (o.lifeState === 'vampire' && o.brain && o.brain.state && o.brain.state[1] !== 'I') || (o.horror && o.brain && o.brain.hunting);
+      if (hostile && o.root.pos.distanceTo(P) < 12) add(o.root.pos, 2);
+    }
+    if (b.mem) for (const m of b.mem) if (this.game.time - m.t < 60) add(m.pos, m.w * 0.8);
+    let base = Math.atan2(rx.x, rx.z);
+    if (!isFinite(base) || (rx.x === 0 && rx.z === 0)) base = Math.random() * TAU;
+    const env = this.game.env, cur = env.current, q = _v2;
+    let bestA = base, bestS = -1e9;
+    for (const da of [0, 0.45, -0.45, 0.9, -0.9, 1.4, -1.4, 2.0, -2.0]) {
+      const a = base + da, sx = Math.sin(a), sz = Math.cos(a);
+      q.set(P.x + sx * 4, P.y, P.z + sz * 4); env.clampToBounds(q, 1);
+      const free = Math.hypot(q.x - P.x, q.z - P.z) / 4; // how far it really gets before the edge
+      let sc = free * 2 - Math.abs(da) * 0.35;
+      if (cur.regionAt && !cur.regionAt(P.x + sx * 2.5, P.z + sz * 2.5, true, P.y + 0.3)) sc -= 1.5;
+      sc -= this.danger(npc, q, 6) * 0.8;
+      if (sc > bestS) { bestS = sc; bestA = a; }
+    }
+    return out.set(Math.sin(bestA), 0, Math.cos(bestA));
+  }
+  // seeing others run: fear climbs, and after a reaction delay they may run too
+  panicCheck(npc, b) {
+    const P = npc.root.pos, fx = Math.sin(npc.root.yaw), fz = Math.cos(npc.root.yaw);
+    for (const o of this.game.npcs.list) {
+      if (o === npc || o.lifeState !== 'alive' || !o.brain || o.brain.state !== 'flee' || o.brain.t > 4 || o.horror) continue;
+      const dx = o.root.pos.x - P.x, dz = o.root.pos.z - P.z, d = Math.hypot(dx, dz);
+      if (d > 8 || Math.abs(o.root.pos.y - P.y) > 1.5) continue;
+      if (d > 3 && (dx * fx + dz * fz) / d < -0.2) continue; // not looking that way
+      npc.fear = Math.min(1, npc.fear + 0.32 * (1.15 - npc.personality.bravery * 0.6));
+      b.threat.copy(o.brain.threat); b.hasThreat = true; b.threatNpc = o.brain.threatNpc || null;
+      b.panicAt = this.game.time + 0.25 + npc.personality.reaction + Math.random() * 0.35;
+      npc.anim.lookAt(o.boneWPos[B.head], 1);
+      npc.lastReaction = 'Alarmed (Others Fleeing)';
+      this.remember(npc, 'panic', b.threat, 0.4);
+      return true;
+    }
+    return false;
+  }
+  // the curious walk over to look at a body (never with a monster about), then back away
+  tryInspect(npc, b) {
+    if (npc.fear > 0.3 || npc.personality.curiosity < 0.45 || npc.transit || npc.seatLock || npc.infection) return false;
+    if (this.nearestZombie(npc, 14)) return false;
+    let best = null, bd = 14;
+    for (const o of this.game.npcs.list) {
+      if (o.lifeState !== 'dead' || o.physMode !== 'ragdoll' || o.removed || (o.feeders || 0) > 0 || o.grabbedBy || (o.reinc && o.reinc.state === 'transforming')) continue;
+      if (b.inspected && b.inspected.indexOf(o) >= 0) continue;
+      const cp = o.boneWPos[B.chest], d = Math.hypot(cp.x - npc.root.pos.x, cp.z - npc.root.pos.z);
+      if (d < bd && Math.abs(cp.y - npc.root.pos.y) < 1.5) { bd = d; best = o; }
+    }
+    if (!best) return false;
+    (b.inspected || (b.inspected = [])).push(best); if (b.inspected.length > 6) b.inspected.shift();
+    b.inspectBody = best; b.inspPhase = 'go'; b.inspT = 0; this.setState(npc, b, 'inspect');
+    npc.lastReaction = 'Approaching a Body';
+    return true;
+  }
+  updateInspect(npc, b, dt) {
+    const c = b.inspectBody, anim = npc.anim;
+    const rising = c && !c.removed && (c.lifeState === 'reanimating' || c.lifeState === 'zombie' || (c.reinc && c.reinc.state === 'transforming'));
+    if (rising) { b.threat.copy(c.root.pos); b.hasThreat = true; b.threatNpc = c; npc.fear = Math.min(1, npc.fear + 0.6); this.setState(npc, b, 'flee'); b.fleeT = 5; npc.lastReaction = 'Fleeing (The Body Moved)'; return; }
+    if (!c || c.removed || c.lifeState !== 'dead' || (c.feeders || 0) > 0 || b.t > 25) { this.setState(npc, b, 'idle'); b.idleTime = 2; anim.setUpper('hang'); return; }
+    const cp = c.boneWPos[B.chest], dx = npc.root.pos.x - cp.x, dz = npc.root.pos.z - cp.z, d = Math.hypot(dx, dz) || 1;
+    if (b.inspPhase === 'go') {
+      b.dest.set(cp.x + dx / d * 1.45, npc.root.pos.y, cp.z + dz / d * 1.45);
+      b.speed = npc.personality.walkSpeed * 0.75; anim.setUpper('hang'); anim.lookAt(c.boneWPos[B.head], 0.7);
+      if (d < 1.85) { b.inspPhase = 'look'; b.inspT = 0; b.inspDur = 3 + Math.random() * 3.5; anim.setUpper(npc.personality.bravery > 0.55 ? 'hips' : 'cover'); }
+    } else {
+      b.speed = 0; b.dest.copy(npc.root.pos); b.faceTarget = cp;
+      anim.lookAt(c.boneWPos[B.head], 1); anim.setPosture('slouch');
+      b.inspT += dt;
+      if (b.inspT > b.inspDur) {
+        this.remember(npc, 'body', cp, 0.6); npc.fear = Math.min(1, npc.fear + 0.18);
+        anim.setUpper('hang'); anim.setPosture('alert'); npc.lastReaction = 'Backing Away';
+        this.pickWander(npc, b); this.setState(npc, b, 'wander');
+      }
+    }
+  }
+  // two calm people near each other stop for a chat: face to face, taking turns, gesturing and nodding
+  tryChat(npc, b) {
+    if (npc.fear > 0.15 || npc.personality.sociable < 0.3 || npc.transit || npc.seatLock || this.game.time < (b.chatCd || 0) || (npc.anim.sick || 0) > 0.3) return false;
+    for (const o of this.game.npcs.list) {
+      const ob = o.brain;
+      if (o === npc || o.lifeState !== 'alive' || o.horror || !ob || ob.state !== 'idle' || o.physMode !== 'anim' || o.fear > 0.15 || o.transit || o.seatLock) continue;
+      if (this.game.time < (ob.chatCd || 0) || o.personality.sociable < 0.2 || (o.anim.sick || 0) > 0.3 || o.grabbedBy) continue;
+      const d = Math.hypot(o.root.pos.x - npc.root.pos.x, o.root.pos.z - npc.root.pos.z);
+      if (d > 6 || Math.abs(o.root.pos.y - npc.root.pos.y) > 0.8) continue;
+      const end = this.game.time + 7 + Math.random() * 9;
+      for (const [x, y] of [[npc, o], [o, npc]]) {
+        const xb = x.brain; this.setState(x, xb, 'chat'); xb.chatWith = y; xb.chatEnd = end; xb.speaking = x === npc; xb.turnT = 1.5 + Math.random() * 2; xb.gestT = 0; xb.nodT = 1 + Math.random() * 2;
+        x.lastReaction = 'Chatting';
+      }
+      return true;
+    }
+    return false;
+  }
+  updateChat(npc, b, dt) {
+    const o = b.chatWith, anim = npc.anim, ob = o && o.brain;
+    if (!o || o.removed || o.lifeState !== 'alive' || !ob || ob.state !== 'chat' || ob.chatWith !== npc || this.game.time > b.chatEnd || npc.fear > 0.3 || o.physMode !== 'anim') { this.endChat(npc); return; }
+    const dx = npc.root.pos.x - o.root.pos.x, dz = npc.root.pos.z - o.root.pos.z, d = Math.hypot(dx, dz) || 1;
+    if (d > 1.35 && npc.id < o.id) { b.dest.set(o.root.pos.x + dx / d * 1.1, npc.root.pos.y, o.root.pos.z + dz / d * 1.1); b.speed = npc.personality.walkSpeed * 0.8; }
+    else { b.speed = 0; b.dest.copy(npc.root.pos); b.faceTarget = o.root.pos; }
+    anim.setPosture('stand');
+    anim.lookAt(o.boneWPos[B.head], 0.9);
+    // turns (the lower id keeps time for both)
+    if (npc.id < o.id) { b.turnT -= dt; if (b.turnT <= 0) { b.speaking = !b.speaking; ob.speaking = !b.speaking; b.turnT = 1.4 + Math.random() * 2.8; } }
+    anim.talking = !!b.speaking && d < 1.7;
+    if (anim.talking) {
+      b.gestT -= dt;
+      if (b.gestT <= 0) { b.gestT = 1.1 + Math.random() * 1.8; const g = ['hang', 'hang', 'hips', 'crossed', 'clasp'][Math.floor(Math.random() * 5)]; anim.setUpper(g); }
+    } else {
+      b.nodT -= dt;
+      if (b.nodT <= 0) { b.nodT = 1.3 + Math.random() * 2.2; anim.kick(B.head, _v1.set(-1.6, (Math.random() - 0.5) * 0.4, 0)); }
+    }
+  }
+  endChat(npc) {
+    const b = npc.brain, o = b && b.chatWith;
+    if (!b) return;
+    b.chatWith = null; b.speaking = false; npc.anim.talking = false;
+    b.chatCd = this.game.time + 25 + Math.random() * 45;
+    if (b.state === 'chat') { this.setState(npc, b, 'idle'); b.idleTime = 0.5 + Math.random() * 1.5; npc.anim.setUpper('hang'); }
+    if (o && o.brain && o.brain.chatWith === npc) this.endChat(o);
   }
   // --- the doctor's zombies ---------------------------------------------------------------
   masterOk(z, m) {
@@ -11295,12 +11757,27 @@ class AISystem {
       const d2 = dx * dx + dz * dz;
       const minD = (o.physMode === 'ragdoll' ? 0.55 : 0.62);
       if (d2 < minD * minD && d2 > 1e-6) {
-        const d = Math.sqrt(d2), push = (minD - d) / minD * 2.2;
-        if (isZ && (o === npc.zombieTarget || o === b.victim || o === b.corpse || (b.corpse && o.brain && o.brain.corpse === b.corpse))) continue;
+        const d = Math.sqrt(d2), push = (minD - d) / minD * Math.max(2.2, b.speed * 1.3); // runners swerve harder
+        let own = false;
+        if (isZ && (o === npc.zombieTarget || o === b.victim || o === b.corpse || (b.corpse && o.brain && o.brain.corpse === b.corpse))) own = true;
         if (isV && (o === b.vVictim || o === b.vTarget)) continue;
-        if (b.hTarget === o || b.hVictim === o) continue;
+        if (b.hTarget === o || b.hVictim === o || b.subject === o) own = true;
         if (o === npc.grabbedBy) continue;
+        if (own) {
+          // its own target may come close, but never inside it (grapples turn collision off between the pair)
+          const paired = npc.rag.noCollideWith === o.rag || o.rag.noCollideWith === npc.rag || (o.grabbedBy && o.grabbedBy.lifeState === 'vampire');
+          if (!paired && o.physMode === 'anim' && d < 0.44) { const k = (0.44 - d) / 0.44 * 3.2; desired.x += dx / d * k; desired.z += dz / d * k; }
+          continue;
+        }
         desired.x += dx / d * push; desired.z += dz / d * push;
+      }
+      // step round a body on the ground (head, chest, legs - not just its hips) instead of kicking it along
+      if (o.physMode === 'ragdoll' && d2 < 6.5 && !isV && o !== b.corpse && o !== npc.zombieTarget && !(b.corpse && o.brain && o.brain.corpse === b.corpse) && Math.abs(o.root.pos.y - root.pos.y) < 1.2) {
+        for (const ri of _avoidParts) {
+          if (o.rag.detached[ri]) continue;
+          const bp = o.rag.bodies[ri].pos, ex = root.pos.x - bp.x, ez = root.pos.z - bp.z, dd = Math.hypot(ex, ez);
+          if (dd < 0.42 && dd > 1e-4 && bp.y - root.pos.y < 0.6) { const k = (0.42 - dd) / 0.42 * 1.6; desired.x += ex / dd * k; desired.z += ez / dd * k; }
+        }
       }
     }
     // props
@@ -11675,9 +12152,10 @@ class VampireSystem {
   spawn(pos, opts = {}) {
     const g = this.game;
     if (!this.S.enabled) { HT.toast('Vampires are turned off (Settings > Gameplay)', 'bad'); return null; }
-    const p = pos ? pos.clone() : g.player.groundTarget(8);
+    let p = pos ? pos.clone() : g.player.groundTarget(8);
     g.env.clampToBounds(p, 0.6);
-    const yaw = Math.atan2(g.camera.position.x - p.x, g.camera.position.z - p.z) + (Math.random() - 0.5) * 0.5;
+    if (!opts.exact) p = g.npcs.freeSpot(p); // never inside walls, fixtures or other people
+    const yaw = opts.yaw != null ? opts.yaw : Math.atan2(g.camera.position.x - p.x, g.camera.position.z - p.z) + (Math.random() - 0.5) * 0.5;
     const npc = g.npcs.spawn({ seed: opts.seed, gender: opts.gender || 'random', pos: p, yaw, overrides: { outfit: VAMP_OUTFIT } });
     if (!npc) return null;
     npc.spawnKind = 'vampire';
@@ -12359,13 +12837,14 @@ class HorrorSystem {
   get S() { return Settings.data.horror; }
   setState(n, b, s) { if (b.state !== s) { b.state = s; b.t = 0; } }
 
-  spawn(kind, pos) {
+  spawn(kind, pos, opts = {}) {
     const g = this.game;
     if (!this.S.enabled) { HT.toast('Horror characters are turned off (Settings > Gameplay)', 'bad'); return null; }
-    const p = pos ? pos.clone() : g.player.groundTarget(8);
+    let p = pos ? pos.clone() : g.player.groundTarget(8);
     g.env.clampToBounds(p, 0.6);
-    const yaw = Math.atan2(g.camera.position.x - p.x, g.camera.position.z - p.z);
-    const npc = g.npcs.spawn({ gender: 'male', pos: p, yaw, overrides: { special: HORROR_DEFS[kind] ? kind : 'doll' } });
+    if (!opts.exact) p = g.npcs.freeSpot(p);
+    const yaw = opts.yaw != null ? opts.yaw : Math.atan2(g.camera.position.x - p.x, g.camera.position.z - p.z);
+    const npc = g.npcs.spawn({ gender: 'male', seed: opts.seed, pos: p, yaw, overrides: { special: HORROR_DEFS[kind] ? kind : 'doll' } });
     if (!npc) return null;
     npc.spawnKind = kind;
     HT.log('horror', `${npc.idStr} ${npc.horror.label} appeared`);
@@ -13435,6 +13914,102 @@ class TransitSystem {
   }
 }
 HT.TransitSystem = TransitSystem;
+
+// ===== 48_scenestore.js =====
+// ============================================================================
+// Scene save / restore (V1.11): one sandbox slot in local storage. Saves the
+// map, the field's time of day and weather, the camera, and every living
+// character: its seed and overrides (so it rebuilds with the same body, face
+// and clothes), position, facing, health, what it is (person, zombie with its
+// look and gait, vampire with its style, Chucky / Jason / the doctor) and an
+// infection in progress. Bodies on the ground are not saved.
+// ============================================================================
+const SCENE_KEY = 'ht3d-scene-v1';
+
+class SceneStore {
+  constructor(game) { this.game = game; }
+  available() { try { return !!window.localStorage; } catch (e) { return false; } }
+  has() { try { return !!localStorage.getItem(SCENE_KEY); } catch (e) { return false; } }
+  // a plain JSON snapshot of the scene
+  snapshot() {
+    const g = this.game, F = Settings.data.environment.field, cam = g.camera.position;
+    const npcs = [];
+    for (const n of g.npcs.list) {
+      if (n.removed || (n.lifeState !== 'alive' && n.lifeState !== 'zombie' && n.lifeState !== 'vampire')) continue;
+      const p = n.physMode === 'ragdoll' ? n.boneWPos[B.hips] : n.root.pos;
+      const e = { seed: n.seed, ov: JSON.parse(JSON.stringify(n.overrides || {})), pos: [+p.x.toFixed(3), +n.root.pos.y.toFixed(3), +p.z.toFixed(3)], yaw: +n.root.yaw.toFixed(3), health: Math.round(n.health), kind: n.horror ? 'horror' : n.lifeState === 'zombie' ? 'zombie' : n.lifeState === 'vampire' ? 'vampire' : 'human' };
+      if (n.horror) e.horror = n.horror.kind;
+      if (e.kind === 'zombie') { e.zlook = n.zlook || null; e.zgait = n.anim.zstyle ? n.anim.zstyle.name : null; }
+      if (e.kind === 'vampire') e.vstyle = n.anim.vstyle ? n.anim.vstyle.name : null;
+      if (n.infection && e.kind === 'human') e.inf = { t: +n.infection.t.toFixed(2), dur: +n.infection.dur.toFixed(2), src: n.infection.src === 'doctor' ? 'doctor' : 'saved' };
+      if (n.spawnKind) e.spawnKind = n.spawnKind;
+      npcs.push(e);
+    }
+    return { v: 1, savedAt: Date.now(), env: g.env.current.kind, field: { timeOfDay: F.timeOfDay, weather: F.weather, wind: F.wind },
+      cam: [+cam.x.toFixed(2), +cam.y.toFixed(2), +cam.z.toFixed(2)], yaw: +g.player.yaw.toFixed(3), pitch: +g.player.pitch.toFixed(3), npcs };
+  }
+  save() {
+    let data;
+    try { data = this.snapshot(); } catch (e) { reportError(e, 'scene save'); HT.toast('Could not save the scene', 'bad'); return false; }
+    try { localStorage.setItem(SCENE_KEY, JSON.stringify(data)); }
+    catch (e) { HT.toast('Saving is not available in this browser (storage blocked or full)', 'bad'); return false; }
+    HT.log('sys', `Scene saved: ${data.npcs.length} character(s), ${data.env}`);
+    HT.toast(`Scene saved (${data.npcs.length} character${data.npcs.length === 1 ? '' : 's'})`);
+    return true;
+  }
+  load() {
+    let data = null;
+    try { const raw = localStorage.getItem(SCENE_KEY); data = raw ? JSON.parse(raw) : null; } catch (e) { data = null; }
+    if (!data || data.v !== 1 || !Array.isArray(data.npcs)) { HT.toast('No saved scene yet', 'bad'); return false; }
+    try { this.restore(data); } catch (e) { reportError(e, 'scene load'); HT.toast('The saved scene could not be fully restored', 'bad'); return false; }
+    HT.toast(`Scene restored (${data.npcs.length} character${data.npcs.length === 1 ? '' : 's'})`);
+    return true;
+  }
+  restore(data) {
+    const g = this.game;
+    // a clean slate: the same clearing the reset does, without the default set
+    g.weapons.clearAll();
+    g.npcs.removeAll(); g.props.clear(); g.fx.clear(); g.hits.clear(); g.gore.clear();
+    g.vampires.ashes.length = 0;
+    if (data.field) {
+      const F = data.field;
+      if (typeof F.timeOfDay === 'number') Settings.set('environment.field.timeOfDay', clamp(F.timeOfDay, 0, 24));
+      if (typeof F.weather === 'string') Settings.set('environment.field.weather', F.weather);
+      if (typeof F.wind === 'number') Settings.set('environment.field.wind', clamp(F.wind, 0, 1));
+    }
+    const kind = ['room', 'field', 'subway'].indexOf(data.env) >= 0 ? data.env : g.env.current.kind;
+    if (g.env.current.kind !== kind) g.switchEnvironment(kind);
+    else if (kind === 'field' && g.env.current.applyTimeWeather) { g.env.current.applyTimeWeather(); g.audio.startAmbience(); }
+    let ok = 0;
+    for (const e of data.npcs) {
+      try { if (this.restoreOne(e)) ok++; } catch (err) { reportError(err, 'scene load npc'); }
+    }
+    if (Array.isArray(data.cam)) { g.camera.position.set(data.cam[0], data.cam[1], data.cam[2]); g.player.yaw = data.yaw || 0; g.player.pitch = data.pitch || 0; }
+    HT.log('sys', `Scene restored: ${ok}/${data.npcs.length} character(s), ${kind}`);
+  }
+  restoreOne(e) {
+    const g = this.game;
+    if (!Array.isArray(e.pos) || typeof e.seed !== 'number') return false;
+    const pos = new V3(e.pos[0], e.pos[1], e.pos[2]), yaw = e.yaw || 0;
+    let n = null;
+    if (e.kind === 'horror') n = g.horror.spawn(e.horror, pos, { exact: true, seed: e.seed, yaw });
+    else {
+      n = g.npcs.spawn({ seed: e.seed, overrides: e.ov || {}, pos, yaw });
+      if (!n) return false;
+      if (e.kind === 'zombie') {
+        g.zombies.zombifyInstant(n);
+        if (e.zlook && ZOMBIE_LOOKS[e.zlook]) applyZombieLook(n, e.zlook);
+        const zg = e.zgait && ZOMBIE_GAITS.find(z => z.name === e.zgait); if (zg) n.anim.zstyle = zg;
+      } else if (e.kind === 'vampire') g.vampires.makeVampire(n, { instant: true, why: 'restored', style: e.vstyle });
+      else if (e.inf && Settings.data.zombies.infection) n.infection = { t: e.inf.t, dur: e.inf.dur, src: e.inf.src };
+    }
+    if (!n) return false;
+    if (e.spawnKind) n.spawnKind = e.spawnKind;
+    if (typeof e.health === 'number' && e.health > 0) n.health = Math.min(n.maxHealth || 100, e.health);
+    return true;
+  }
+}
+HT.SceneStore = SceneStore;
 
 // ===== 50_player.js =====
 // ============================================================================
@@ -16315,6 +16890,8 @@ HT.GoreSystem = GoreSystem;
 // Procedural audio: all sounds synthesized at load time with Web Audio buffers.
 // Buses: effects (with reverb send), ambience, ui -> master -> compressor.
 // ============================================================================
+// voices and creature sounds get head-related panning (clearer direction), the rest the cheaper model
+const VOICE_RE = /^(groan|growl|scream|hiss|dollLaugh|gurgle|cough|inject|dtrigger|breath|moan|laugh|shriek|snarl)/;
 class Biquad {
   constructor(type, f, q, sr) {
     const w = TAU * f / sr, c = Math.cos(w), s = Math.sin(w), a = s / (2 * q);
@@ -16462,6 +17039,22 @@ class AudioEngine {
     }
     this.finish(name, b, grass ? 0.5 : 0.6);
   }
+  // V1.11 surfaces and movement: station tile, a train's metal floor, wet ground, clothing, a dragged foot
+  synthSurfaceStep(name, kind) {
+    const sr = this.sr, dur = { tile: 0.16, metal: 0.3, wet: 0.24, rustle: 0.2, scuff: 0.42 }[kind], b = this.buf(dur), L = b.L, r = this.rng.next();
+    const hi = new Biquad('bp', 2400 + r * 1200, 1.4, sr), lp = new Biquad('lp', 170, 0.7, sr);
+    const m1 = new Biquad('bp', 2050 + r * 500, 18, sr), m2 = new Biquad('bp', 3550 + r * 700, 22, sr), m3 = new Biquad('bp', 780 + r * 160, 9, sr);
+    const sp = new Biquad('bp', 900 + r * 700, 1.1, sr), cl = new Biquad('bp', 3200 + r * 1500, 0.9, sr), sc = new Biquad('bp', 600 + r * 300, 0.7, sr);
+    for (let i = 0; i < L.length; i++) {
+      const t = i / sr, n = this.noise();
+      if (kind === 'tile') L[i] = hi.p(n) * Math.exp(-t / 0.009) * 1.6 + lp.p(n) * Math.exp(-t / 0.025) * 2.4 + (t > 0.028 ? hi.p(n) * Math.exp(-(t - 0.028) / 0.008) * 0.6 : 0);
+      else if (kind === 'metal') { const ex = n * Math.exp(-t / 0.004); L[i] = m1.p(ex) * 9 * Math.exp(-t / 0.09) + m2.p(ex) * 7 * Math.exp(-t / 0.06) + m3.p(ex) * 6 * Math.exp(-t / 0.12) + lp.p(n) * Math.exp(-t / 0.03) * 2.6; }
+      else if (kind === 'wet') { const grain = this.rng.next() < 0.18 ? 1.4 : 0.4; L[i] = sp.p(n) * grain * Math.exp(-t / 0.06) * (1 - Math.exp(-t / 0.006)) + lp.p(n) * Math.exp(-t / 0.035) * 1.8 + (t > 0.05 ? sp.p(n) * Math.exp(-(t - 0.05) / 0.03) * 0.5 : 0); }
+      else if (kind === 'rustle') L[i] = cl.p(n) * Math.sin(Math.PI * Math.min(1, t / dur)) * (0.6 + 0.4 * Math.sin(t * 90 + r * 6));
+      else L[i] = sc.p(n) * Math.min(1, t / 0.05) * Math.exp(-t / 0.18) * (0.7 + 0.3 * this.rng.next()) + lp.p(n) * Math.exp(-t / 0.05);
+    }
+    this.finish(name, b, kind === 'rustle' ? 0.35 : kind === 'scuff' ? 0.5 : 0.6);
+  }
   synthVoice(name, o) {
     // source-filter: glottal pulse train (saw w/ jitter) -> formant bandpasses
     const sr = this.sr, b = this.buf(o.dur), L = b.L;
@@ -16520,7 +17113,8 @@ class AudioEngine {
       this.synthThud('hitWood', { lp: 1400, t: 0.03, f: 320, t2: 0.08, sub: 0.8, click: 0.5, dur: 0.3 });
       this.synthThud('thud', { lp: 260, t: 0.11, f: 62, t2: 0.12, sub: 1.0, click: 0.1, dur: 0.45 });
       this.synthThud('thudLight', { lp: 500, t: 0.05, f: 110, t2: 0.05, sub: 0.6, click: 0.2, dur: 0.2 });
-      for (let i = 0; i < 4; i++) { this.synthStep('stepHard' + i, false); this.synthStep('stepGrass' + i, true); }
+      for (let i = 0; i < 4; i++) { this.synthStep('stepHard' + i, false); this.synthStep('stepGrass' + i, true); this.synthSurfaceStep('stepTile' + i, 'tile'); this.synthSurfaceStep('stepMetal' + i, 'metal'); this.synthSurfaceStep('stepWet' + i, 'wet'); }
+      for (let i = 0; i < 2; i++) { this.synthSurfaceStep('rustle' + i, 'rustle'); this.synthSurfaceStep('scuff' + i, 'scuff'); }
       // ricochet
       { const b = this.buf(0.45), L = b.L; let ph = 0; for (let i = 0; i < L.length; i++) { const t = i / sr; const f = 3200 * Math.exp(-t * 2.2) + 900; ph += TAU * f * (1 + 0.02 * Math.sin(t * 90)) / sr; L[i] = Math.sin(ph) * Math.exp(-t / 0.18) * (1 - Math.exp(-t / 0.005)); } this.finish('ricochet', b, 0.5); }
     } else if (group === 3) {
@@ -16540,6 +17134,16 @@ class AudioEngine {
       this.synthLoop('roomHum', 6, (b) => { let br = 0; const lp = new Biquad('lp', 180, 0.7, sr); for (let i = 0; i < b.L.length; i++) { const t = i / sr; br = (br + this.noise() * 0.03) * 0.997; b.L[i] = lp.p(br * 8) * 0.8 + Math.sin(TAU * 120 * t) * 0.025 + Math.sin(TAU * 60 * t) * 0.04 + Math.sin(TAU * 240 * t) * 0.006; } });
       this.synthLoop('wind', 8, (b) => { for (const [arr, s] of [[b.L, 0.3], [b.R, 1.7]]) { const bp = new Biquad('bp', 380, 0.6, sr); let pk = 0; for (let i = 0; i < arr.length; i++) { const t = i / sr; pk = pk * 0.97 + this.noise() * 0.03; const m = 0.5 + 0.35 * Math.sin(t * TAU * 0.13 + s) + 0.15 * Math.sin(t * TAU * 0.41 + s * 2); arr[i] = bp.p(pk * 6) * m; } } }, true);
       this.synthLoop('rain', 4, (b) => { for (const arr of [b.L, b.R]) { const hp = new Biquad('hp', 1400, 0.6, sr); for (let i = 0; i < arr.length; i++) { arr[i] = hp.p(this.noise()) * 0.5 + (this.rng.next() < 0.0012 ? this.noise() * 2 : 0); } } }, true);
+      // thunder: a crack, then a long rolling rumble (stereo)
+      { const b = this.buf(5.0, 2);
+        for (const [arr, o] of [[b.L, 0], [b.R, 1]]) { const lp = new Biquad('lp', 140, 0.8, sr), lp2 = new Biquad('lp', 900, 0.7, sr); let br = 0;
+          for (let i = 0; i < arr.length; i++) { const t = i / sr, n = this.noise(); br = (br + n * 0.06) * 0.995;
+            const roll = (0.55 + 0.45 * Math.sin(t * 5.3 + o) * Math.sin(t * 2.1 + o * 2)) * Math.exp(-t / 1.7) * Math.min(1, t / 0.12);
+            arr[i] = Math.tanh(lp.p(br * 14) * roll * 2.2 + lp2.p(n) * Math.exp(-t / 0.09) * 1.4); } }
+        this.finish('thunder', b, 0.95); }
+      // a water drip in the station, and a distant train under the street
+      for (let k = 0; k < 2; k++) { const b = this.buf(0.35), L = b.L; let ph = 0; for (let i = 0; i < L.length; i++) { const t = i / sr; ph += TAU * (1700 + k * 450) * (1 + 0.9 * Math.exp(-t / 0.012)) / sr; L[i] = Math.sin(ph) * Math.exp(-t / 0.05) * Math.min(1, t / 0.001); } this.finish('drip' + k, b, 0.45); }
+      { const b = this.buf(4.5, 2); for (const [arr, o] of [[b.L, 0], [b.R, 0.8]]) { const lp = new Biquad('lp', 120, 0.9, sr), bp = new Biquad('bp', 380, 1.4, sr); let br = 0; for (let i = 0; i < arr.length; i++) { const t = i / sr, n = this.noise(); br = (br + n * 0.05) * 0.996; const env = Math.sin(Math.PI * Math.min(1, t / 4.5)) ** 1.5; arr[i] = (lp.p(br * 10) * 1.2 + bp.p(n) * 0.25 * (0.5 + 0.5 * Math.sin(t * 31 + o))) * env; } } this.finish('rumble', b, 0.8); }
       this.synthLoop('crickets', 3, (b) => { for (let i = 0; i < b.L.length; i++) { const t = i / sr; const pulse = (Math.sin(TAU * 32 * t) > 0.6 ? 1 : 0) * (Math.sin(TAU * 0.9 * t) > -0.2 ? 1 : 0); b.L[i] = Math.sin(TAU * 4500 * t) * pulse * 0.4 + Math.sin(TAU * 4700 * t + 1) * (Math.sin(TAU * 27 * t + 2) > 0.7 ? 1 : 0) * 0.25; } });
       this.synthLoop('drone', 6, (b) => { for (const [arr, dt] of [[b.L, 0], [b.R, 0.7]]) { const lp = new Biquad('lp', 500, 1.2, sr); let p1 = 0, p2 = 0, p3 = 0; for (let i = 0; i < arr.length; i++) { const t = i / sr; p1 = (p1 + 55 / sr) % 1; p2 = (p2 + (55.4 + dt * 0.3) / sr) % 1; p3 = (p3 + 82.5 / sr) % 1; arr[i] = lp.p((p1 * 2 - 1) + (p2 * 2 - 1) * 0.8 + (p3 * 2 - 1) * 0.4) * (0.7 + 0.3 * Math.sin(t * TAU / 6 + dt)); } } }, true);
       // bird chirps
@@ -16711,7 +17315,13 @@ class AudioEngine {
     let node = src;
     node.connect(g); node = g;
     if (o.pos) {
-      const p = c.createPanner(); p.panningModel = 'equalpower'; p.distanceModel = 'inverse'; p.refDistance = o.ref || 3; p.rolloffFactor = 1.1; p.maxDistance = 200;
+      // far sounds lose their highs (air absorption, and walls in between)
+      const cam = this.game.camera ? this.game.camera.position : null;
+      if (cam) {
+        const d = cam.distanceTo(o.pos), fc = clamp(17000 * Math.exp(-d / 38), 1100, 17000);
+        if (fc < 16000) { const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = fc; lp.Q.value = 0.5; node.connect(lp); node = lp; }
+      }
+      const p = c.createPanner(); p.panningModel = o.hrtf || VOICE_RE.test(name) ? 'HRTF' : 'equalpower'; p.distanceModel = 'inverse'; p.refDistance = o.ref || 3; p.rolloffFactor = 1.1; p.maxDistance = 200;
       if (p.positionX) { p.positionX.value = o.pos.x; p.positionY.value = o.pos.y; p.positionZ.value = o.pos.z; } else p.setPosition(o.pos.x, o.pos.y, o.pos.z);
       node.connect(p); node = p;
     }
@@ -16734,6 +17344,12 @@ class AudioEngine {
   }
   makeIR(kind) {
     const c = this.ctx, sr = this.sr;
+    if (kind === 'subway') { // a long, bright, diffuse tiled hall
+      const buf = c.createBuffer(2, Math.floor(3.4 * sr), sr);
+      for (let ch = 0; ch < 2; ch++) { const d = buf.getChannelData(ch), lp = new Biquad('lp', 6500, 0.7, sr);
+        for (let i = 0; i < d.length; i++) { const t = i / sr; let s = this.noise() * Math.exp(-t / 0.75); for (const er of [0.017, 0.029, 0.043, 0.067, 0.091, 0.13]) if (Math.abs(t - er - ch * 0.003) < 0.0008) s += 0.6; d[i] = lp.p(s) * (1 - Math.exp(-t / 0.006)); } }
+      return buf;
+    }
     const dur = kind === 'room' ? 2.2 : 0.7;
     const buf = c.createBuffer(2, Math.floor(dur * sr), sr);
     for (let ch = 0; ch < 2; ch++) {
@@ -16751,12 +17367,37 @@ class AudioEngine {
   setEnvironment(kind) {
     if (!this.ctx) return;
     this.envKind = kind;
-    try { this.reverb.buffer = this.makeIR(kind === 'field' ? 'field' : 'room'); } catch (e) { reportError(e, 'reverb'); }
+    try { this.reverb.buffer = this.makeIR(kind === 'field' ? 'field' : kind === 'subway' ? 'subway' : 'room'); } catch (e) { reportError(e, 'reverb'); }
     this.reverbGain.gain.value = kind === 'room' ? 0.42 : (kind === 'subway' ? 0.5 : 0.12);
     if (this.unlocked) this.startAmbience();
   }
   startLoadingDrone() { if (!this.drone && this.buffers.drone) this.drone = this.loop('drone', 0.35, 'ui'); }
   stopLoadingDrone() { if (this.drone) { this.drone.stop(); this.drone = null; } }
+  // per-frame acoustics and ambience: the subway's echo fades out at street level; drips and distant
+  // trains underground; wind gusts and rain that follows the weather; thunder after lightning
+  updateAmbience(dt, cam) {
+    const env = this.game.env.current; if (!env || !this.ctx || !this.reverbGain) return;
+    const t = this.ctx.currentTime;
+    if (env.kind === 'subway') {
+      const under = cam.position.y < -1.5;
+      this.reverbGain.gain.setTargetAtTime(under ? 0.55 : 0.14, t, 0.4);
+      if (this.ambience.hum) this.ambience.hum.g.gain.setTargetAtTime(under ? 0.45 : 0.12, t, 0.6);
+      if (this.ambience.city) this.ambience.city.g.gain.setTargetAtTime(under ? 0.05 : 0.22, t, 0.6);
+      this.oneShotT = (this.oneShotT == null ? 4 : this.oneShotT) - dt;
+      if (under && this.oneShotT <= 0) {
+        this.oneShotT = 5 + Math.random() * 9;
+        const a = Math.random() * TAU, r = 8 + Math.random() * 18, p = new V3(cam.position.x + Math.sin(a) * r, cam.position.y + 2, cam.position.z + Math.cos(a) * r);
+        if (Math.random() < 0.7) this.play('drip' + (Math.random() < 0.5 ? 0 : 1), { pos: p, gain: 0.35, ref: 2, reverbAmt: 1.4 });
+        else this.play('rumble', { gain: 0.25, reverbAmt: 0.6 });
+      }
+    } else if (env.kind === 'field') {
+      const F = Settings.data.environment.field, wet = env.rainK || 0;
+      if (this.ambience.wind) { this.gustPh = (this.gustPh || 0) + dt * (0.15 + F.wind * 0.3); const gust = 0.75 + 0.25 * Math.sin(this.gustPh) * Math.sin(this.gustPh * 0.37 + 1); this.ambience.wind.g.gain.setTargetAtTime((0.2 + F.wind * 0.5) * gust, t, 0.5); }
+      if (wet > 0.01 && !this.ambience.rain) this.ambience.rain = this.loop('rain', 0);
+      if (this.ambience.rain) this.ambience.rain.g.gain.setTargetAtTime(0.5 * wet, t, 0.8);
+    }
+  }
+  thunder(delay, gain) { setTimeout(() => this.play('thunder', { gain, reverbAmt: 0.3, important: true, rate: 0.85 + Math.random() * 0.3 }), delay * 1000); }
   startAmbience() {
     this.stopLoadingDrone();
     for (const k in this.ambience) { this.ambience[k].stop(); }
@@ -16766,7 +17407,7 @@ class AudioEngine {
     else if (env.kind === 'subway') { this.ambience.hum = this.loop('subwayHum', 0.45); this.ambience.city = this.loop('wind', 0.08); }
     else {
       this.ambience.wind = this.loop('wind', 0.2 + Settings.data.environment.field.wind * 0.5);
-      if (Settings.data.environment.field.weather === 'rain') this.ambience.rain = this.loop('rain', 0.45);
+      if (Settings.data.environment.field.weather === 'rain') this.ambience.rain = this.loop('rain', 0.4);
       const t = Settings.data.environment.field.timeOfDay;
       if (t < 6 || t > 19.5) this.ambience.crickets = this.loop('crickets', 0.12);
     }
@@ -16791,8 +17432,8 @@ class AudioEngine {
         const a = Math.random() * TAU, d = 20 + Math.random() * 40;
         this.play('bird' + Math.floor(Math.random() * 4), { bus: 'ambience', pos: _v2.set(cam.position.x + Math.cos(a) * d, 8 + Math.random() * 10, cam.position.z + Math.sin(a) * d), gain: 0.5, ref: 10, reverb: false });
       }
-      if (this.ambience.wind) this.ambience.wind.g.gain.setTargetAtTime(0.2 + Settings.data.environment.field.wind * 0.6, this.ctx.currentTime, 0.5);
     }
+    this.updateAmbience(dt, cam);
   }
 }
 HT.AudioEngine = AudioEngine;
@@ -17185,7 +17826,7 @@ class UI {
     if (cur === 'field') {
       const F = Settings.data.environment.field;
       this.slider(s, 'Time of day', 'environment.field.timeOfDay', 0, 24, 0.25, x => { const h = Math.floor(x), m = Math.round((x - h) * 60); return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0'); }, () => g.env.current.applyTimeWeather());
-      this.select(s, 'Weather', [['clear', 'Clear'], ['cloudy', 'Cloudy'], ['overcast', 'Overcast'], ['rain', 'Rain'], ['fog', 'Fog']], F.weather, v => { Settings.set('environment.field.weather', v); g.env.current.applyTimeWeather(); g.audio.startAmbience(); });
+      this.select(s, 'Weather', [['clear', 'Sunny'], ['cloudy', 'Cloudy'], ['overcast', 'Overcast'], ['rain', 'Rain'], ['fog', 'Fog']], F.weather, v => { Settings.set('environment.field.weather', v); g.env.current.applyTimeWeather(); g.audio.startAmbience(); });
     }
     s = this.sec(b, 'Scene');
     this.buttons(s, [
@@ -17195,6 +17836,11 @@ class UI {
       { label: 'Remove Everyone', cls: 'bad', fn: () => { g.npcs.removeAll(); g.gore.clear(); } },
       { label: 'Reset Scene', cls: 'bad', fn: () => { g.resetScene(); this.renderDrawer(); } }
     ]);
+    this.buttons(s, [
+      { label: 'Save Scene', fn: () => { g.store.save(); this.renderDrawer(); } },
+      { label: 'Load Scene', fn: () => { if (g.store.load()) this.renderDrawer(); } }
+    ]);
+    this.note(s, g.store.has() ? 'Save keeps the map, weather, camera and every living character (people, zombies, vampires, Chucky, Jason, the doctor).' : 'Save keeps the map, weather, camera and every living character. No scene saved yet.');
   }
   // turn the subject under the crosshair (or a random survivor) into the first zombie
   startOutbreak() {
@@ -17707,6 +18353,7 @@ class Game {
     this.zombies = new ReincarnationSystem(this);
     this.vampires = new VampireSystem(this);
     this.horror = new HorrorSystem(this);
+    this.store = new SceneStore(this);
     this.accessories = new AccessorySystem(this);
     this.diag = new Diagnostics(this);
     this.spawnDefaultSet();
@@ -18048,6 +18695,15 @@ class Game {
       }
     }
   }
+  surfaceAt(p, n) {
+    const env = this.env.current;
+    if (env.kind === 'field') return (env.rainK || 0) > 0.35 ? 'stepWet' : 'stepGrass';
+    if (env.kind === 'subway') {
+      if (n.riding || (env.carAt && env.carAt(p.x, p.z, p.y + 0.3))) return 'stepMetal';
+      return p.y > -1 ? 'stepHard' : 'stepTile';
+    }
+    return 'stepHard';
+  }
   footsteps(dt) {
     const env = this.env.current; if (!env) return;
     const grass = env.surface === 'grass';
@@ -18063,7 +18719,14 @@ class Game {
           const sp = n.anim.speed;
           const hk = n.horror ? n.horror.kind : null;
           if (hk === 'slasher') this.audio.play('heavyStep', { pos: f.pos.clone(), gain: 0.9, ref: 3, reverbAmt: 0.7 });
-          else this.audio.play((grass ? 'stepGrass' : 'stepHard') + Math.floor(Math.random() * 4), { pos: f.pos.clone(), gain: clamp(0.25 + sp * 0.18, 0.2, 0.9) * (n.isZombie ? 1.3 : (hk === 'doll' ? 0.45 : (n.lifeState === 'vampire' ? 0.55 : 1))), rate: hk === 'doll' ? 1.6 : 1, ref: 2, reverbAmt: 0.5 });
+          else {
+            // the surface underfoot: wet or dry grass, station tile, street concrete, a train's metal floor
+            const zs = n.isZombie ? n.anim.zstyle : null, drag = zs && zs.drag && zs.drag[s] > 0.5;
+            const surf = drag && Math.random() < 0.7 ? 'scuff' : this.surfaceAt(f.pos, n);
+            this.audio.play(surf + Math.floor(Math.random() * (surf === 'scuff' ? 2 : 4)), { pos: f.pos.clone(), gain: clamp(0.25 + sp * 0.18, 0.2, 0.9) * (n.isZombie ? 1.3 : (hk === 'doll' ? 0.45 : (n.lifeState === 'vampire' ? 0.55 : 1))), rate: hk === 'doll' ? 1.6 : 1, ref: 2, reverbAmt: 0.5 });
+            // clothes rustle when someone runs past
+            if (sp > 2.6 && s === 0 && Math.random() < 0.6) this.audio.play('rustle' + (Math.random() < 0.5 ? 0 : 1), { pos: n.boneWPos[B.hips].clone(), gain: 0.22, ref: 1.5, reverbAmt: 0.2 });
+          }
         }
       }
     }

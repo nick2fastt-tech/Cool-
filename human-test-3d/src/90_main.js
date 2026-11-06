@@ -145,6 +145,7 @@ class Game {
     this.zombies = new ReincarnationSystem(this);
     this.vampires = new VampireSystem(this);
     this.horror = new HorrorSystem(this);
+    this.store = new SceneStore(this);
     this.accessories = new AccessorySystem(this);
     this.diag = new Diagnostics(this);
     this.spawnDefaultSet();
@@ -486,6 +487,15 @@ class Game {
       }
     }
   }
+  surfaceAt(p, n) {
+    const env = this.env.current;
+    if (env.kind === 'field') return (env.rainK || 0) > 0.35 ? 'stepWet' : 'stepGrass';
+    if (env.kind === 'subway') {
+      if (n.riding || (env.carAt && env.carAt(p.x, p.z, p.y + 0.3))) return 'stepMetal';
+      return p.y > -1 ? 'stepHard' : 'stepTile';
+    }
+    return 'stepHard';
+  }
   footsteps(dt) {
     const env = this.env.current; if (!env) return;
     const grass = env.surface === 'grass';
@@ -501,7 +511,14 @@ class Game {
           const sp = n.anim.speed;
           const hk = n.horror ? n.horror.kind : null;
           if (hk === 'slasher') this.audio.play('heavyStep', { pos: f.pos.clone(), gain: 0.9, ref: 3, reverbAmt: 0.7 });
-          else this.audio.play((grass ? 'stepGrass' : 'stepHard') + Math.floor(Math.random() * 4), { pos: f.pos.clone(), gain: clamp(0.25 + sp * 0.18, 0.2, 0.9) * (n.isZombie ? 1.3 : (hk === 'doll' ? 0.45 : (n.lifeState === 'vampire' ? 0.55 : 1))), rate: hk === 'doll' ? 1.6 : 1, ref: 2, reverbAmt: 0.5 });
+          else {
+            // the surface underfoot: wet or dry grass, station tile, street concrete, a train's metal floor
+            const zs = n.isZombie ? n.anim.zstyle : null, drag = zs && zs.drag && zs.drag[s] > 0.5;
+            const surf = drag && Math.random() < 0.7 ? 'scuff' : this.surfaceAt(f.pos, n);
+            this.audio.play(surf + Math.floor(Math.random() * (surf === 'scuff' ? 2 : 4)), { pos: f.pos.clone(), gain: clamp(0.25 + sp * 0.18, 0.2, 0.9) * (n.isZombie ? 1.3 : (hk === 'doll' ? 0.45 : (n.lifeState === 'vampire' ? 0.55 : 1))), rate: hk === 'doll' ? 1.6 : 1, ref: 2, reverbAmt: 0.5 });
+            // clothes rustle when someone runs past
+            if (sp > 2.6 && s === 0 && Math.random() < 0.6) this.audio.play('rustle' + (Math.random() < 0.5 ? 0 : 1), { pos: n.boneWPos[B.hips].clone(), gain: 0.22, ref: 1.5, reverbAmt: 0.2 });
+          }
         }
       }
     }

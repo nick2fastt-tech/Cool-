@@ -389,6 +389,38 @@ const GLSL_HT_ALBEDO = /* glsl */`
   diffuseColor.rgb = base;
 `;
 
+// free hems and hair ends lag behind the body's movement and flutter in the wind (bind space, before skinning)
+const GLSL_HT_SWAY = /* glsl */`
+if (aFlex > 0.001) {
+  float fl = aFlex;
+  vec3 flut = vec3(sin(uTime * 6.1 + position.y * 9.0 + position.x * 7.0), 0.35 * sin(uTime * 4.3 + position.z * 6.0), cos(uTime * 5.3 + position.y * 8.0 + position.z * 5.0));
+  transformed += (uSway.xyz + flut * uSway.w * 0.012) * fl;
+}
+`;
+// facial expressions, applied in bind space before skinning (so they ride with the head and jaw):
+// brows (and the skin round them) lift, knit or tilt; mouth corners lift, drop or stretch sideways
+const GLSL_HT_EXPR = /* glsl */`
+if (dot(uExpr, uExpr) + uExpr2.x * uExpr2.x > 1e-5) {
+  vec3 fq = (transformed - uFaceC.xyz) / uFaceC.w;
+  bool faceMat = aMat.x < 0.5 || (aMat.x > 7.5 && aMat.x < 8.5) || (aMat.x > 11.5 && aMat.x < 12.5);
+  if (faceMat && fq.z > 0.03 && length(fq) < 0.135) {
+    float ax = abs(fq.x), sx = fq.x < 0.0 ? -1.0 : 1.0;
+    float browW = aMat.x > 11.5 ? 1.0 : exp(-pow((fq.y - 0.021) / 0.013, 2.0)) * (1.0 - smoothstep(0.05, 0.068, ax)) * 0.8;
+    float inner = 1.0 - smoothstep(0.012, 0.046, ax);
+    float dy = 0.0048 * uExpr.x + 0.0042 * uExpr.y * inner + 0.0062 * uExpr.w * sx * (0.3 + 0.7 * smoothstep(0.01, 0.04, ax));
+    transformed.y += dy * browW * uFaceC.w;
+    transformed.x -= sx * 0.0024 * max(0.0, -uExpr.y) * inner * browW * uFaceC.w;
+    float cw = exp(-(pow((ax - uMouth.y) / 0.011, 2.0) + pow((fq.y - uMouth.x) / 0.011, 2.0)));
+    transformed.y += (uExpr.z > 0.0 ? 0.0058 : 0.0042) * uExpr.z * cw * uFaceC.w;
+    transformed.x += sx * (0.0028 * uExpr2.x + 0.0022 * max(uExpr.z, 0.0)) * cw * uFaceC.w;
+    transformed.z -= 0.0018 * max(uExpr.z, 0.0) * cw * uFaceC.w;
+    // a smile lifts the cheeks a little too
+    float ck = exp(-(pow((ax - 0.036) / 0.016, 2.0) + pow((fq.y + 0.028) / 0.014, 2.0)));
+    transformed.y += 0.0022 * max(uExpr.z, 0.0) * ck * uFaceC.w;
+  }
+}
+`;
+
 // extra direct lighting for skin and hair: light bleeding warm and red a little past the terminator (a cheap
 // subsurface look, so faces stop reading as plastic), and a Kajiya-Kay strand highlight on hair
 const GLSL_HT_LIGHT = /* glsl */`
@@ -427,14 +459,19 @@ function createCharacterMaterial() {
     uVampire: { value: 0 }, uEyeGlow: { value: 0 }, uFang: { value: 0 }, uHeat: { value: 0 }, uAsh: { value: 0 },
     uDoll: { value: 0 }, uFaceC: { value: new THREE.Vector4(0, 1.6, 0, 1) },
     uSick: { value: 0 }, uSweat: { value: 0 }, uZTint: { value: new THREE.Vector3(0.78, 0.9, 0.7) }, uZLook: { value: new THREE.Vector4(0, 0, 0, 0) },
-    uSkinZ: { value: new THREE.Vector3(0.5, 0.55, 0.45) }
+    uSkinZ: { value: new THREE.Vector3(0.5, 0.55, 0.45) },
+    // facial expression: brow raise, inner brows (+ up / - furrowed), mouth corners (+ smile / - down), brow asymmetry;
+    // uExpr2.x: lips stretched sideways. uMouth: mouth height and half-width in face units
+    uExpr: { value: new THREE.Vector4() }, uExpr2: { value: new THREE.Vector4() }, uMouth: { value: new THREE.Vector4(-0.06, 0.021, 0, 0) },
+    // cloth / hair sway: xyz = lagging offset of free hems and hair ends (character space, metres), w = flutter
+    uSway: { value: new THREE.Vector4() }
   };
   m.userData.u = U;
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, U);
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec4 aMat;\nattribute vec3 aColor2;\nvarying vec4 vMat;\n' + GLSL_MAT_ID + 'varying vec3 vColor2;\nvarying vec2 vUvP;\nvarying vec3 vRest;\nuniform float uFang;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMat = aMat; vMatId = aMat.x; vColor2 = aColor2; vUvP = uv; vRest = position;\nif (aMat.x > 14.5 && aMat.x < 15.5) { transformed.y -= uFang * aMat.w; transformed.z += uFang * aMat.w * 0.22; } // fangs extend');
+      .replace('#include <common>', '#include <common>\nattribute vec4 aMat;\nattribute vec3 aColor2;\nvarying vec4 vMat;\n' + GLSL_MAT_ID + 'varying vec3 vColor2;\nvarying vec2 vUvP;\nvarying vec3 vRest;\nuniform float uFang;\nuniform vec4 uFaceC; uniform vec4 uExpr; uniform vec4 uExpr2; uniform vec4 uMouth; uniform vec4 uSway; uniform float uTime; attribute float aFlex;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMat = aMat; vMatId = aMat.x; vColor2 = aColor2; vUvP = uv; vRest = position;\nif (aMat.x > 14.5 && aMat.x < 15.5) { transformed.y -= uFang * aMat.w; transformed.z += uFang * aMat.w * 0.22; } // fangs extend\n' + GLSL_HT_SWAY + GLSL_HT_EXPR);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\n' + GLSL_MAT_ID + GLSL_HT_COMMON)
       .replace('#include <lights_physical_pars_fragment>', '#include <lights_physical_pars_fragment>\n' + GLSL_HT_LIGHT)
@@ -459,7 +496,7 @@ function createCharacterMaterial() {
           totalEmissiveRadiance += vec3(1.0, 0.28, 0.12) * pow(rim, 0.8) * uHeat * 0.9; // heat sense (vampire player)
         }`);
   };
-  m.customProgramCacheKey = () => 'ht3d-char-v9';
+  m.customProgramCacheKey = () => 'ht3d-char-v11';
   return m;
 }
 
