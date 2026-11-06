@@ -1080,7 +1080,9 @@
           <option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="1.5">1.5x</option><option value="2">2x</option><option value="3">3x</option>
         </select>
         <button class="mc-b" id="mcClear">🗑 Clear</button>
+        <button class="mc-b" id="mcSwapAll">⇄ Swap All Sides</button>
       </div>
+      <p class="mc-note">Tap a bar number on the left to move that bar's notes to the other side.</p>
     </div>
     <div class="mc-panel" data-panel="auto">
       <div class="mc-row">
@@ -1092,6 +1094,14 @@
         </div>
       </div>
       <p class="mc-note" id="diffHint" style="margin:6px 0 2px"></p>
+      <div class="mc-row" id="mcVocRow" hidden>
+        <span class="mc-lbl">Vocals</span>
+        <div class="seg" id="mcVoc">
+          <button class="on" data-voc="both">Both singers</button>
+          <button data-voc="opp">Only opponent</button>
+          <button data-voc="plr">Only Boyfriend</button>
+        </div>
+      </div>
       <div class="mc-row">
         <span class="mc-lbl">Fill</span>
         <div class="seg" id="mcScope">
@@ -1128,7 +1138,7 @@
       <button class="mc-b icon" id="mcNext" title="Forward one bar">⏩</button>
       <div class="mc-time" id="mcTime"><b>0:00.0</b></div>
     </div>
-    <p class="mc-help">Tap a square to place · tap a note to delete · drag a note down to hold · drag the grid to scroll</p>
+    <p class="mc-help">Tap a square to place · tap a note to delete · drag a note down to hold · tap a bar number to swap sides</p>
   </section>
 
   <!-- ============ ASK / MOD PICKER ============ -->
@@ -2124,9 +2134,9 @@ function keyLabel(code){
 
 
 const DIFF_HINTS = {
-  easy:   "Single notes, the strongest syllables only, no jumps.",
-  normal: "Alternating runs and stairs, the odd jump on a hard downbeat.",
-  hard:   "Streams and rolls, finer vocal detail kept, jumps where they land."
+  easy:   "A simpler rhythm: the strongest syllables, on the beat, nothing too close together.",
+  normal: "Every note the vocals sing, one arrow per note, following the melody.",
+  hard:   "Every note the vocals sing, plus a double on the biggest downbeat accents."
 };
 const MODE_HINTS = {
   pc: "Traditional four-lane keyboard layout. Keys are yours to set — see Controls below.",
@@ -2840,6 +2850,11 @@ function normalise(arr){
   return out;
 }
 
+/* Tempo from a track's analysis. */
+function tempoOf(A){
+  return detectTempo(normalise(A.flux), A.fps);
+}
+
 /* tempo + downbeat phase from an onset envelope */
 function detectTempo(env, fps){
   // subtract a moving average so the autocorrelation sees pulses, not loudness
@@ -2913,6 +2928,58 @@ function detectTempo(env, fps){
     }
   }
 
+  // Ratio check. Autocorrelation can lock onto a period of one and a half
+  // beats (a 180 BPM song read as 120) or three quarters of one (125 read as
+  // 166.7), because a strong off-beat lines up nearly as well as the beat.
+  // The test that tells them apart is the grid: at the true tempo nearly
+  // every hit — kicks, snares, hats, eighths and sixteenths — lands on a
+  // sixteenth of the beat, while at a 3:2 or 4:3 reading half of them fall
+  // between grid lines. So each related tempo is tried, with its own best
+  // phase, and the one whose sixteenth grid catches the most onset energy
+  // wins, provided it does so clearly.
+  {
+    let total = 0;
+    for (let i = 0; i < n; i++) total += d[i];
+    const sig = Math.max(0.6, fps * 0.011);           // ~11ms either side of a grid line
+    const phaseOf = lag => {
+      let off = 0, best = -1;
+      const steps = Math.max(12, Math.round(lag));
+      for (let k = 0; k < steps; k++){
+        const o = k * lag / steps;
+        const v = comb(lag, o);
+        if (v > best){ best = v; off = o; }
+      }
+      return off;
+    };
+    const alignment = cand => {
+      const lag = fps * 60 / cand;
+      const off = phaseOf(lag);
+      const step = lag / 4;
+      let hit = 0;
+      for (let i = 0; i < n; i++){
+        if (d[i] <= 0) continue;
+        let x = ((i - off) % step + step) % step;
+        if (x > step / 2) x = step - x;
+        hit += d[i] * Math.exp(-0.5 * (x / sig) * (x / sig));
+      }
+      return { score: total > 0 ? hit / total : 0, off };
+    };
+    const here = alignment(bpm);
+    let pick = null;
+    for (const r of [3/2, 2/3, 4/3, 3/4]){
+      const cand = bpm * r;
+      if (cand < 70 || cand > 230) continue;
+      // the ratio is exact only if the first reading was; let it settle
+      let bestC = null;
+      for (const f of [0.996, 0.998, 1, 1.002, 1.004]){
+        const a = alignment(cand * f);
+        if (!bestC || a.score > bestC.score) bestC = { ...a, bpm: cand * f };
+      }
+      if (bestC.score > here.score * 1.12 && (!pick || bestC.score > pick.score)) pick = bestC;
+    }
+    if (pick){ bpm = pick.bpm; bestOff = pick.off; }
+  }
+
   // Octave check. An alternating kick/snare pattern autocorrelates ~2x better
   // at half tempo (kick against kick beats kick against snare), so the peak
   // often lands an octave low. The honest test is whether the half-beat
@@ -2926,10 +2993,30 @@ function detectTempo(env, fps){
     }
   }
 
+  // Which half of the beat is the beat. Hats, claps and off-beat bass can
+  // out-score the beat itself, which draws every beat line of the grid half
+  // a beat late. The notes still land on the right sixteenths, but the bars
+  // and beats are in the wrong place. An FNF song starts on a beat, so when
+  // the other half of the beat is a plausible beat too, the one whose grid
+  // runs through the start of the song wins.
+  {
+    const lag = fps * 60 / bpm;
+    const centreF = WIN / (2 * HOP);
+    const here = comb(lag, bestOff), half = comb(lag, bestOff + lag / 2);
+    const fromZero = off => { const t = ((((off + centreF) / fps) % (60 / bpm)) + 60 / bpm) % (60 / bpm); return Math.min(t, 60 / bpm - t); };
+    if (half >= here * 0.5 && fromZero(bestOff + lag / 2) < fromZero(bestOff)) bestOff += lag / 2;
+  }
+
   // Frame f covers samples [f*HOP, f*HOP+WIN), so its true centre sits half a
   // window later. pickOnsets applies the same shift — keep them consistent.
   const centre = WIN / (2 * HOP);
-  return { bpm, offset: (bestOff + centre) / fps, beatLen: 60 / bpm };
+  // Bars counted from the start of the song: an FNF song begins on a
+  // downbeat, so the first beat line at or after zero starts bar one.
+  const beatLen = 60 / bpm;
+  let offset = (bestOff + centre) / fps;
+  offset = ((offset % beatLen) + beatLen) % beatLen;
+  if (offset > beatLen - 0.02) offset -= beatLen;
+  return { bpm, offset, beatLen };
 }
 
 /* ------------------- who is singing this phrase? -------------------
@@ -3147,6 +3234,21 @@ function cleanVocal(A, instA){
     if (had > 0 && took / had > 0.33) OVER *= 0.33 / (took / had);
   }
 
+  // How much of this stem is leak at all. An official stem, or a clean
+  // split, carries next to none — and on one of those, a voice that simply
+  // sounds like the band (a chiptune singer over a chiptune track) must not
+  // be mistaken for a leak. Only a stem that genuinely leaks gets the leak
+  // tests below.
+  {
+    let leak = 0, all = 0;
+    for (let f = 0; f < F; f++){
+      for (let b = 0; b < NB; b++){
+        const x = V[f * NB + b];
+        all += x; leak += Math.min(x, gain[b] * imax[f * NB + b]);
+      }
+    }
+    A.leakFrac = all > 0 ? leak / all : 0;
+  }
   const vol = new Float32Array(F), low = new Float32Array(F), took = new Float32Array(F);
   const L = new Float32Array(F * NB);
   for (let f = 0; f < F; f++){
@@ -3180,6 +3282,9 @@ function cleanVocal(A, instA){
     }
     cflux[f] = s;
   }
+  // a clean stem has no leak to look for: switch the leak tests off
+  A.clean = A.leakFrac < 0.03;
+  if (A.clean) like.fill(0);
   A.vol = vol;
   A.logBands = L;                 // log-compressed below: the cleaned spectrum, a voice's colour
   A.like = like;
@@ -3271,6 +3376,7 @@ async function vocalEvents(A, oneVoice){
     lpk[i] = mx;
   }
   const peakAt = f => lpk[clamp((f / BL) | 0, 0, nb - 1)];
+  const fr = s => Math.max(1, Math.round(s * fps));
   const floorAt = f => Math.max(peakAt(f) * 0.10, p99 * 0.025);
   const active = new Uint8Array(F);
   for (let f = 0; f < F; f++) active[f] = vol[f] > floorAt(f) ? 1 : 0;
@@ -3332,6 +3438,22 @@ async function vocalEvents(A, oneVoice){
     xs.sort((x, y) => x - y);
     return { m: xs[xs.length >> 1], n: xs.length };
   };
+  // The pitch just before / just after frame f, read from the nearest
+  // pitched frames and stepping over short unpitched gaps — a consonant
+  // between two notes has no pitch, and a fixed window that lands on it
+  // sees nothing to compare.
+  const pitchBefore = (f, span) => {
+    const xs = [];
+    for (let k = f - 1; k >= Math.max(0, f - fr(span)) && xs.length < 5; k--) if (!isNaN(semi[k])) xs.push(semi[k]);
+    xs.sort((a, b) => a - b);
+    return { m: xs.length ? xs[xs.length >> 1] : NaN, n: xs.length };
+  };
+  const pitchAfter = (f, span) => {
+    const xs = [];
+    for (let k = f; k <= Math.min(F - 1, f + fr(span)) && xs.length < 5; k++) if (!isNaN(semi[k])) xs.push(semi[k]);
+    xs.sort((a, b) => a - b);
+    return { m: xs.length ? xs[xs.length >> 1] : NaN, n: xs.length };
+  };
   const maxV = (from, to) => { let mx = 0; for (let k = Math.max(0, from); k <= Math.min(F - 1, to); k++) if (vol[k] > mx) mx = vol[k]; return mx; };
   const minV = (from, to, arr) => { arr = arr || vol; let mn = Infinity; for (let k = Math.max(0, from); k <= Math.min(F - 1, to); k++) if (arr[k] < mn) mn = arr[k]; return mn === Infinity ? 0 : mn; };
   // the stem as recorded, held the same way through frames that are only band
@@ -3340,7 +3462,6 @@ async function vocalEvents(A, oneVoice){
   const maxR = (from, to) => { let mx = 0; for (let k = Math.max(0, from); k <= Math.min(F - 1, to); k++) if (rawV[k] > mx) mx = rawV[k]; return mx; };
 
   // ---- candidates: anything that might be a syllable starting ----
-  const fr = s => Math.max(1, Math.round(s * fps));
   const cands = [];
   {
     const fl99 = pctOf(cf, 0.99) || 1e-9;
@@ -3357,16 +3478,21 @@ async function vocalEvents(A, oneVoice){
       if (active[f]){ if (off >= fr(0.05)) cands.push({ f, s: 0 }); off = 0; }
       else off++;
     }
-    // the pitch moving to a new note without the voice stopping — legato
+    // the pitch moving to a new note without the voice stopping — legato.
+    // Read across a short unpitched gap (a consonant), and placed at the
+    // start of that gap, which is where the new syllable begins.
     const P = fr(0.045);
-    for (let f = P; f < F - P; f++){
-      if (isNaN(semi[f])) continue;
-      const pre = med(f - P, f - 1), post = med(f, f + P - 1);
-      if (pre.n < 2 || post.n < P - 1) continue;
-      if (Math.abs(post.m - pre.m) < 1.2) continue;
+    for (let f = 1; f < F - P; f++){
+      if (isNaN(semi[f]) || !isNaN(semi[f - 1]) && Math.abs(semi[f] - semi[f - 1]) < 0.5) continue;
+      const pre = pitchBefore(f, 0.1), post = pitchAfter(f, 0.07);
+      if (pre.n < 2 || post.n < 3) continue;
+      if (Math.abs(post.m - pre.m) < 1.0) continue;
       let steady = true;
       for (let k = f; k < f + P; k++) if (!isNaN(semi[k]) && Math.abs(semi[k] - post.m) > 0.8){ steady = false; break; }
-      if (steady) cands.push({ f, s: 0 });
+      if (!steady) continue;
+      let g = f;
+      while (g > 0 && isNaN(semi[g - 1]) && f - g < fr(0.06)) g--;
+      cands.push({ f: g, s: 0 });
     }
   }
   cands.sort((a, b) => a.f - b.f);
@@ -3399,19 +3525,28 @@ async function vocalEvents(A, oneVoice){
     // consonant or a breath that drops the level by well over half.
     // The dip has to be in the stem as recorded too: a hole a drum left in
     // a held note when it was taken out is not a dip the singer made.
-    const dipped = after >= Math.max(before, 1e-12) * 2.5 &&
-                   maxR(f, f + fr(0.12)) >= Math.max(minV(f - fr(0.07), f - 1, A.raw), 1e-12) * 1.8;
-    const pre = med(f - fr(0.12), f - fr(0.025)), post = med(f + fr(0.025), f + fr(0.14));
+    // On a clean stem there are no holes left by a removed drum, so a
+    // smaller dip is already a real one: the same note sung again with a
+    // consonant between rarely drops the level by more than half.
+    const dipNeed = A.clean ? 1.6 : 2.5, rawNeed = A.clean ? 1.3 : 1.8;
+    const dipped = after >= Math.max(before, 1e-12) * dipNeed &&
+                   maxR(f, f + fr(0.12)) >= Math.max(minV(f - fr(0.07), f - 1, A.raw), 1e-12) * rawNeed;
+    const pre = pitchBefore(f, 0.1), post = pitchAfter(f + 1, 0.08);
     const moved = pre.n >= 2 && post.n >= 3 && Math.abs(post.m - pre.m) >= 1.0;
-    // the voice was already sounding, did not dip and did not move: this is
-    // the same note carrying on, whatever the spectrum did
-    if (!(fromSilence || dipped || moved)) continue;
+    // ...and on a clean stem a sharp attack is a syllable by itself: a
+    // consonant re-striking a held vowel changes the spectrum at once even
+    // where the level hardly moves, and with no band in the stem nothing
+    // else can make that happen.
+    const attack = A.clean && c.s >= 0.35;
+    // the voice was already sounding, did not dip, did not move and was not
+    // struck again: this is the same note carrying on
+    if (!(fromSilence || dipped || moved || attack)) continue;
     // A voice puts most of its energy above ~250Hz. A kick or a bass note
     // coming through the stem puts nearly all of it below, and has a pitch
     // too, so pitch alone cannot tell them apart.
     let lowSum = 0, lowN = 0;
     for (let k = f; k <= Math.min(F - 1, f + fr(0.05)); k++){ lowSum += A.low[k]; lowN++; }
-    if (lowN && lowSum / lowN > 0.55) continue;
+    if (!A.clean && lowN && lowSum / lowN > 0.55) continue;
     // Looks just like the band the whole way through: a leak, not a voice.
     // Judged over the first 150ms rather than at the attack, because a
     // syllable sung on a kick IS mostly kick for its first few frames — the
@@ -3434,7 +3569,7 @@ async function vocalEvents(A, oneVoice){
       if (after < lp * 0.35 || on < fr(0.08)) continue;
     }
     events.push({ f, s: c.s, after, lp, pitched, rearticulated: !fromSilence && !moved,
-                  why: fromSilence ? "start" : moved ? "pitch" : "dip" });
+                  why: fromSilence ? "start" : moved ? "pitch" : dipped ? "dip" : "attack" });
   }
 
   // ---- where each one really starts ----
@@ -3528,7 +3663,7 @@ async function vocalEvents(A, oneVoice){
   // A short low thump right in front of a sung note is a kick that came
   // through with the syllable, not a syllable of its own.
   const kept = out.filter(e => !e.echo).filter((e, i, arr) => {
-    const kick = (e.f0 === 0 || e.f0 < 100) && e.len < 0.12;
+    const kick = !A.clean && (e.f0 === 0 || e.f0 < 100) && e.len < 0.12;
     if (!kick) return true;
     const nx = arr[i + 1];
     return !(nx && nx.t - e.t < 0.15);
@@ -3555,10 +3690,12 @@ async function chartFromBuffers(instBuf, stems, diff, onProg, tempoIn){
   const an = await analyzeForChart(instBuf, stems, onProg);
   prog(72, 1);
   await nextFrame();
-  const tempo = tempoIn || detectTempo(normalise(an.instA.flux), an.instA.fps);
+  const tempo = tempoIn || tempoOf(an.instA);
   prog(86, 5);
   await nextFrame();
-  return buildChart(an.instA, stems.map(s => ({ A: s.A, side: s.side })), tempo, an.duration, diff);
+  const chart = buildChart(an.instA, stems.map(s => ({ A: s.A, side: s.side, solo: s.solo })), tempo, an.duration, diff);
+  chart.twin = an.twin;
+  return chart;
 }
 
 /* Everything up to the notes themselves: each track analysed, the vocals
@@ -3566,6 +3703,13 @@ async function chartFromBuffers(instBuf, stems, diff, onProg, tempoIn){
    and then lay the chart out at any difficulty in a moment. */
 async function analyzeForChart(instBuf, stems, onProg, instAIn){
   const prog = onProg || (() => {});
+  let twin = false;
+  if (stems.length === 2 && sameAudio(stems[0].buf, stems[1].buf)){
+    stems.splice(1, 1);
+    stems[0].side = "opp";
+    stems[0].solo = false;
+    twin = true;
+  }
   const instA = instAIn || await analyzeTrack(instBuf, p => prog(18 + p * 22, 2));
   if (chartCancelled) throw new Error("cancelled");
   for (let i = 0; i < stems.length; i++){
@@ -3584,7 +3728,227 @@ async function analyzeForChart(instBuf, stems, onProg, instAIn){
   }
   let duration = instBuf.duration;
   for (const s of stems) duration = Math.max(duration, s.buf.duration);
-  return { instA, stems, duration };
+  return { instA, stems, duration, twin };
+}
+
+/* ------------------- who sings each note of a combined track -------------------
+   Most mods ship one Voices file with both characters in it. Telling them
+   apart by the sound of the voice alone is unreliable — two characters can
+   sound alike, and one character's vowels differ more than the two voices
+   do. What is reliable is how FNF songs are built: call and answer. The
+   opponent sings a few bars and Boyfriend answers for the same number of
+   bars, usually with the same rhythm, and the length of those turns changes
+   from section to section (two bars, then four, then one...).
+
+   So the song is cut into bars and then into call/answer pairs — the
+   split that best explains it, scored by how closely each answer repeats
+   its call's rhythm and by how well each half matches the voice it is
+   given. The voices are learned from the song itself, from that split, and
+   the split is made again with them. The caller of a pair is always the
+   opponent, which also settles who is who. */
+function assignSingers(onsets, A, tempo){
+  const n = onsets.length;
+  if (!n) return [];
+  const barLen = tempo.beatLen * 4;
+  // a sixteenth early, so a pickup note counts with the bar it leads into
+  const pos = o => (o.t - tempo.offset + tempo.beatLen * 0.25) / barLen;
+  const barOf = onsets.map(o => Math.floor(pos(o) + 1e-6));
+  const k0 = Math.min(...barOf), N = Math.max(...barOf) - k0 + 1;
+  const reg = o => o.f0 > 0 ? 12 * Math.log2(o.f0 / 55) : NaN;
+  const allP = onsets.map(reg).filter(isFinite).sort((a, b) => a - b);
+  const midP = allP.length ? allP[allP.length >> 1] : 30;
+
+  // the voice of one note: the cleaned spectrum through its first moments,
+  // levelled so only its shape counts
+  const B0 = 3, B1 = 21;
+  const voiceOf = o => {
+    const env = new Array(B1 - B0).fill(0);
+    if (!A.logBands) return env;
+    const t = o.raw !== undefined ? o.raw : o.t;
+    const len = o.held || 0;
+    const a = clamp(Math.round((t + 0.02) * A.fps), 0, A.vol.length - 1);
+    const z = clamp(Math.round((t + Math.min(0.14, Math.max(0.06, len))) * A.fps), a, A.vol.length - 1);
+    let frames = 0;
+    for (let k = a; k <= z; k++){
+      let m = 0;
+      for (let b = 0; b < NB; b++) m += A.logBands[k * NB + b];
+      m /= NB;
+      for (let b = B0; b < B1; b++) env[b - B0] += A.logBands[k * NB + b] - m;
+      frames++;
+    }
+    return frames ? env.map(x => x / frames) : env;
+  };
+
+  const bars = [];
+  for (let q = 0; q < N; q++) bars.push({ idx: [], R: new Uint8Array(16), feat: null });
+  onsets.forEach((o, i) => {
+    const b = bars[barOf[i] - k0];
+    b.idx.push(i);
+    const x = pos(o) - barOf[i];
+    b.R[Math.min(15, Math.floor(x * 16 + 0.5) % 16)] = 1;
+  });
+  for (const b of bars){
+    if (!b.idx.length) continue;
+    const env = new Array(B1 - B0).fill(0);
+    for (const i of b.idx) voiceOf(onsets[i]).forEach((v, j) => env[j] += v / b.idx.length);
+    const ps = b.idx.map(i => reg(onsets[i])).filter(isFinite).sort((x, y) => x - y);
+    b.feat = env.concat([ps.length ? ps[ps.length >> 1] : midP]);
+  }
+  const sim = (a, b) => { let i = 0, u = 0; for (let k = 0; k < 16; k++){ i += a[k] & b[k]; u += a[k] | b[k]; } return u ? i / u : 0; };
+
+  // a two-voice model from a labelling: per-dimension means and spreads
+  const fit = lab => {
+    const st = [];
+    for (const c of [0, 1]){
+      const vs = bars.filter((b, q) => b.feat && lab[q] === c).map(b => b.feat);
+      if (vs.length < 2) return null;
+      const d = vs[0].length, m = [], sd = [];
+      for (let j = 0; j < d; j++){
+        let a = 0; for (const v of vs) a += v[j]; a /= vs.length;
+        let s2 = 0; for (const v of vs) s2 += (v[j] - a) * (v[j] - a);
+        m.push(a); sd.push(Math.sqrt(s2 / vs.length) + 0.25);
+      }
+      st.push({ m, sd });
+    }
+    return st;
+  };
+  const ll = (v, s) => { let x = 0; for (let j = 0; j < v.length; j++){ const z = (v[j] - s.m[j]) / s.sd[j]; x -= 0.5 * z * z + Math.log(s.sd[j]); } return x; };
+
+  const PAIR_L = [1, 2, 3, 4, 6, 8];
+  const PRIOR = { 1: 0, 2: 0, 3: -1.5, 4: 0, 6: -1.5, 8: -0.3 };
+  const ECHO = 3, VOICE = 0.5, EMPTY = 2, SOLO = 4;
+  const decode = st => {
+    const em0 = new Float64Array(N), em1 = new Float64Array(N);
+    if (st) bars.forEach((b, q) => {
+      if (!b.feat) return;
+      const d = clamp(ll(b.feat, st[0]) - ll(b.feat, st[1]), -6, 6) * VOICE * Math.min(1, b.idx.length / 3);
+      em0[q] = d / 2; em1[q] = -d / 2;
+    });
+    const c0 = new Float64Array(N + 1), c1 = new Float64Array(N + 1);
+    for (let q = 0; q < N; q++){ c0[q + 1] = c0[q] + em0[q]; c1[q + 1] = c1[q] + em1[q]; }
+    const best = new Float64Array(N + 1).fill(-1e18), how = new Array(N + 1);
+    best[0] = 0;
+    for (let j = 1; j <= N; j++){
+      // a bar nobody sings in costs nothing
+      if (!bars[j - 1].idx.length && best[j - 1] > best[j]){ best[j] = best[j - 1]; how[j] = { type: "rest" }; }
+      // a call and its answer, L bars each
+      for (const L of PAIR_L){
+        const i = j - 2 * L;
+        if (i < 0) continue;
+        let echo = 0, emptyA = 0, emptyB = 0;
+        for (let q = 0; q < L; q++){
+          const a = bars[i + q], b = bars[i + L + q];
+          if (!a.idx.length) emptyA++;
+          if (!b.idx.length) emptyB++;
+          if (a.idx.length && b.idx.length) echo += sim(a.R, b.R);
+        }
+        if (emptyA === L || emptyB === L) continue;
+        const v = best[i] + ECHO * echo + (c0[i + L] - c0[i]) + (c1[j] - c1[i + L]) + PRIOR[L] - EMPTY * (emptyA + emptyB);
+        if (v > best[j]){ best[j] = v; how[j] = { type: "pair", L }; }
+      }
+      // a turn that does not pair up — an intro, a solo, a duet's edge
+      for (const L of [1, 2, 4, 8]){
+        const i = j - L;
+        if (i < 0) continue;
+        for (const s of [0, 1]){
+          const v = best[i] + (s ? c1[j] - c1[i] : c0[j] - c0[i]) - SOLO - 0.3 * L;
+          if (v > best[j]){ best[j] = v; how[j] = { type: "solo", L, s }; }
+        }
+      }
+    }
+    const lab = new Array(N).fill(0);
+    lab.score = best[N];
+    let j = N;
+    while (j > 0){
+      const h = how[j];
+      if (!h || h.type === "rest"){ j--; continue; }
+      if (h.type === "pair"){
+        for (let q = j - 2 * h.L; q < j - h.L; q++) lab[q] = 0;
+        for (let q = j - h.L; q < j; q++) lab[q] = 1;
+        j -= 2 * h.L;
+      } else {
+        for (let q = j - h.L; q < j; q++) lab[q] = h.s;
+        j -= h.L;
+      }
+    }
+    return lab;
+  };
+
+  // Where the answers do not echo their calls, the rhythm alone cannot line
+  // the pairs up, so the voices get a say from the start as well: the bars
+  // grouped by voice, tried both ways round. Whichever start explains the
+  // song best wins.
+  const byVoice = (() => {
+    const F = [];
+    bars.forEach((b, q) => { if (b.feat) F.push({ q, v: b.feat }); });
+    if (F.length < 4) return null;
+    const d = F[0].v.length, m = [], sd = [];
+    for (let j = 0; j < d; j++){
+      let a = 0; for (const f of F) a += f.v[j]; a /= F.length;
+      let s2 = 0; for (const f of F) s2 += (f.v[j] - a) * (f.v[j] - a);
+      m.push(a); sd.push(Math.sqrt(s2 / F.length) || 1);
+    }
+    const Z = F.map(f => f.v.map((x, j) => (x - m[j]) / sd[j]));
+    const dist = (v, c) => { let s2 = 0; for (let j = 0; j < d; j++) s2 += (v[j] - c[j]) * (v[j] - c[j]); return s2; };
+    let ia = 0, ib = 1, far = -1;
+    for (let i = 0; i < Z.length; i++) for (let k = i + 1; k < Z.length; k++){
+      const s2 = dist(Z[i], Z[k]); if (s2 > far){ far = s2; ia = i; ib = k; }
+    }
+    let c0 = Z[ia].slice(), c1 = Z[ib].slice();
+    const lab = new Array(Z.length).fill(0);
+    for (let it = 0; it < 15; it++){
+      for (let i = 0; i < Z.length; i++) lab[i] = dist(Z[i], c0) <= dist(Z[i], c1) ? 0 : 1;
+      const s0 = new Array(d).fill(0), s1 = new Array(d).fill(0);
+      let n0 = 0, n1 = 0;
+      for (let i = 0; i < Z.length; i++){ const t = lab[i] ? s1 : s0; for (let j = 0; j < d; j++) t[j] += Z[i][j]; if (lab[i]) n1++; else n0++; }
+      if (!n0 || !n1) break;
+      for (let j = 0; j < d; j++){ c0[j] = s0[j] / n0; c1[j] = s1[j] / n1; }
+    }
+    const out = new Array(N).fill(0);
+    F.forEach((f, i) => { out[f.q] = lab[i]; });
+    return out;
+  })();
+  const starts = [decode(null)];
+  if (byVoice){ starts.push(byVoice); starts.push(byVoice.map(x => 1 - x)); }
+  let best = null;
+  for (const start of starts){
+    let lab = start;
+    for (let it = 0; it < 2; it++){
+      const st = fit(lab);
+      if (!st) break;
+      lab = decode(st);
+    }
+    if (lab.score === undefined) continue;
+    if (!best || lab.score > best.score) best = lab;
+  }
+  const lab = best || starts[0];
+  return onsets.map((o, i) => lab[barOf[i] - k0] === 1);
+}
+
+/* Two vocal slots holding the same recording — one Voices file imported
+   twice — would chart every syllable on both sides. Spot it, and treat it
+   as the single combined track it is. */
+function sameAudio(a, b){
+  if (!a || !b) return false;
+  if (Math.abs(a.duration - b.duration) > 0.25) return false;
+  const env = buf => {
+    const d = buf.getChannelData(0), sr = buf.sampleRate, step = Math.max(1, Math.round(sr / 50));
+    const out = new Float32Array(Math.floor(d.length / step));
+    for (let j = 0; j < out.length; j++){
+      let s2 = 0;
+      for (let i = j * step; i < (j + 1) * step; i += 4) s2 += d[i] * d[i];
+      out[j] = Math.sqrt(s2);
+    }
+    return out;
+  };
+  const x = env(a), y = env(b), n = Math.min(x.length, y.length);
+  if (n < 50) return false;
+  let mx = 0, my = 0;
+  for (let i = 0; i < n; i++){ mx += x[i]; my += y[i]; }
+  mx /= n; my /= n;
+  let sxy = 0, sxx = 0, syy = 0;
+  for (let i = 0; i < n; i++){ const p = x[i] - mx, q = y[i] - my; sxy += p * q; sxx += p * p; syy += q * q; }
+  return sxx > 0 && syy > 0 && sxy / Math.sqrt(sxx * syy) > 0.97;
 }
 
 /* =====================================================================
@@ -3617,10 +3981,8 @@ function quantise(t, offset, step){
    keep is the local strength percentile an onset must clear: 0 keeps every
    detected event, 0.55 keeps only the stronger half-and-more of whatever is
    happening right there. Local, so a quiet verse is thinned against itself
-   and not against the loudest chorus. Normal's is deliberately near zero —
-   it exists to shave the weakest few percent, the ones sitting closest to
-   the noise floor, not to drop syllables the singer actually sang. Easy is
-   where the real simplifying happens.
+   and not against the loudest chorus. Normal and Hard keep every note the
+   vocals sing; Easy is where the simplifying happens.
 
    minStep is the closest two notes may sit, in grid steps, so the same
    setting means the same thing at 90 BPM and at 180.
@@ -3634,7 +3996,7 @@ function quantise(t, offset, step){
 const DETECT = { sens: 1.28, detail: 0.18 };   // one detection pass for all three
 const DIFFS = {
   easy:   { keep: 0.55, minStep: 3, jumpPct: 0,    onBeat: 2.2 },
-  normal: { keep: 0.05, minStep: 1, jumpPct: 0 },
+  normal: { keep: 0,    minStep: 1, jumpPct: 0 },
   hard:   { keep: 0,    minStep: 1, jumpPct: 0.05 }
 };
 
@@ -3857,7 +4219,9 @@ function refineAgainstAudio(checked, tracks, duration, step, report){
 
 function buildChart(instA, tracks, tempo, duration, difficulty){
   const DIFF = DIFFS[difficulty] || DIFFS.normal;
-  const split = tracks.length > 1;
+  // Two stems, or one stem the user says is a single character, mean the
+  // sides are already known; only a combined stem has to be split up.
+  const split = tracks.length > 1 || !!tracks[0].solo;
 
   /* ---- what the band is doing, so the voices can be told from it ----
      A vocal stem out of a splitter is rarely clean: the drums bleed through,
@@ -4093,111 +4457,16 @@ function buildChart(instA, tracks, tempo, duration, difficulty){
   const vocalOnsets = q.filter(o => o.src === "voc");
   let singerFound = split, voiceQuality = 0, voiceBalance = 0;
 
-  // With one combined stem nothing tells us who is singing, so fall back to
-  // splitting it by voice. With two stems this whole step disappears.
+  // With one combined stem nothing tells us who is singing, so the song's
+  // call-and-answer structure and the two voices decide (assignSingers).
+  // With two stems this whole step disappears.
   if (!split){
-    const vocA = tracks[0].A;
-    // Turns in this game run straight into each other as often as not — one
-    // character's last note and the other's first with no breath between —
-    // so a silence is not enough to find where a turn changes. The game
-    // itself hands the sides over a bar at a time, so the unit here is a
-    // stretch of singing cut at every bar line as well as at every gap.
-    const barLen = tempo.beatLen * 4;
-    const barOf = t => Math.floor((t - tempo.offset) / barLen + 1e-6);
-    const phrases = [];
-    for (const ph of phrasesOf(vocalOnsets)){
-      let cur = [];
-      for (const i of ph){
-        if (cur.length && barOf(vocalOnsets[i].t) !== barOf(vocalOnsets[cur[0]].t)){ phrases.push(cur); cur = []; }
-        cur.push(i);
-      }
-      if (cur.length) phrases.push(cur);
-    }
-    const owners = new Array(phrases.length).fill(false);
-    // the register each stretch is sung in: two characters rarely sing in the
-    // same one, and it is the one thing a voice's colour does not change
-    const allP = vocalOnsets.filter(o => o.f0 > 0).map(o => 12 * Math.log2(o.f0 / 55)).sort((a, b) => a - b);
-    const midP = allP.length ? allP[allP.length >> 1] : 0;
-
-    const feat = idxs => {
-      const med = pick => {
-        const a = idxs.map(i => {
-          const f = clamp(Math.round(vocalOnsets[i].t * vocA.fps), 0, vocA.centroid.length - 1);
-          return pick(f);
-        }).sort((x,y) => x-y);
-        return a.length ? a[a.length >> 1] : 0;
-      };
-      const ps = idxs.map(i => vocalOnsets[i].f0).filter(x => x > 0)
-                     .map(x => 12 * Math.log2(x / 55)).sort((x, y) => x - y);
-      const reg = ps.length ? ps[ps.length >> 1] : midP;
-      const out = [ med(f => vocA.centroid[f]), med(f => vocA.rolloff[f]), med(f => vocA.lowRatio[f]), reg, reg ];
-      // The shape of the voice itself: the cleaned spectrum through the
-      // middle of each note, levelled so only its shape counts, averaged over
-      // the stretch. Two characters' voices differ here even where they sing
-      // the same notes.
-      if (vocA.logBands){
-        const env = new Float64Array(NB);
-        let frames = 0;
-        for (const i of idxs){
-          const o = vocalOnsets[i];
-          const a = clamp(Math.round((o.t + 0.03) * vocA.fps), 0, vocA.vol.length - 1);
-          const z = clamp(Math.round((o.t + Math.max(0.08, Math.min(0.3, o.held || 0))) * vocA.fps), a, vocA.vol.length - 1);
-          for (let k = a; k <= z; k++){
-            let m = 0;
-            for (let b = 0; b < NB; b++) m += vocA.logBands[k * NB + b];
-            m /= NB;
-            for (let b = 0; b < NB; b++) env[b] += vocA.logBands[k * NB + b] - m;
-            frames++;
-          }
-        }
-        for (let b = LOW_BANDS; b < NB - 2; b++) out.push(frames ? env[b] / frames : 0);
-      }
-      return out;
-    };
-
-    if (phrases.length >= 4){
-      const raw = phrases.map(feat);
-      // z-normalise each dimension so centroid Hz does not swamp a 0..1 ratio
-      const dims = raw[0].length, mean = [], sd = [];
-      for (let k = 0; k < dims; k++){
-        let m = 0; for (const v of raw) m += v[k]; m /= raw.length;
-        let sq = 0; for (const v of raw) sq += (v[k]-m)*(v[k]-m);
-        mean.push(m); sd.push(Math.sqrt(sq/raw.length) || 1);
-      }
-      const norm = raw.map(v => v.map((x,k) => (x - mean[k]) / sd[k]));
-      const { label, quality } = kmeans2(norm, 14);
-
-      let n1 = 0; for (const l of label) n1 += l;
-      const balance = Math.min(n1, label.length - n1) / label.length;
-      voiceQuality = quality; voiceBalance = balance;
-
-      // Only trust the split when the two groups are genuinely far apart and
-      // both sides carry a real share of the song. One singer ranging over a
-      // wide pitch span will also cluster into two — it just clusters weakly
-      // and lopsidedly, which is what these thresholds reject.
-      if (quality > 1.6 && balance >= 0.3){
-        // A turn lasts longer than one bar. A single bar that disagrees with
-        // the bars either side of it, with no break around it, is the
-        // clustering wobbling, not the other character cutting in.
-        const lab = label.slice();
-        for (let pi = 1; pi < phrases.length - 1; pi++){
-          const a = phrases[pi - 1], b = phrases[pi], c = phrases[pi + 1];
-          const joined = vocalOnsets[b[0]].t - vocalOnsets[a[a.length - 1]].t < 1.1 &&
-                         vocalOnsets[c[0]].t - vocalOnsets[b[b.length - 1]].t < 1.1;
-          if (joined && label[pi - 1] === label[pi + 1] && label[pi] !== label[pi - 1]) lab[pi] = label[pi - 1];
-        }
-        const oppLabel = lab[0];          // FNF opens with the opponent
-        phrases.forEach((_, pi) => { owners[pi] = lab[pi] !== oppLabel; });
-        singerFound = true;
-      }
-    }
-    if (!singerFound){
-      let alt = false;
-      for (let pi = 0; pi < phrases.length; pi++){ owners[pi] = alt; alt = !alt; }
-    }
-    phrases.forEach((idxs, pi) => {
-      for (const i of idxs) vocalOnsets[i].side = owners[pi] ? "plr" : "opp";
-    });
+    const owners = assignSingers(vocalOnsets, tracks[0].A, tempo);
+    vocalOnsets.forEach((o, i) => { o.side = owners[i] ? "plr" : "opp"; });
+    singerFound = true;
+    const nPlr = owners.filter(Boolean).length;
+    voiceBalance = owners.length ? Math.min(nPlr, owners.length - nPlr) / owners.length : 0;
+    voiceQuality = 0;
   }
 
   // ---- per side: thin to difficulty, shape into patterns, add sustains ----
@@ -10630,6 +10899,8 @@ function mcOpen(src, from){
   };
   MC.env = { opp: mcEnvelope(mcTrack("opp") && mcTrack("opp").buf),
              plr: mcEnvelope(mcTrack("plr") && mcTrack("plr").buf) };
+  MC.twin = MC.tracks.length === 2 && sameAudio(MC.tracks[0].buf, MC.tracks[1].buf);
+  MC.vocMode = "both";
   mcPaintControls();
   mcPaintSaved();
   show("manualScreen");
@@ -10661,6 +10932,9 @@ function mcPaintControls(){
   $("#mcUndo").disabled = !MC.undo.length;
   $("#mcRedo").disabled = !MC.redo.length;
   const vocals = MC.tracks.length > 0;
+  // one vocal file (or the same file in both slots): say what is in it
+  $("#mcVocRow").hidden = !(MC.tracks.length === 1 || MC.twin);
+  $$("#mcVoc button").forEach(b => b.classList.toggle("on", b.dataset.voc === (MC.vocMode || "both")));
   $("#mcAuto").disabled = !vocals;
   $("#mcAutoNote").textContent = vocals
     ? "Reads the vocal tracks and charts every note they sing. It replaces the notes on the sides you pick — Undo brings them back."
@@ -11012,6 +11286,26 @@ function mcAddNote(G, col, y){
     if (!MC || !MC.drag || MC.drag.id !== e.pointerId) return;
     const d = MC.drag, G = mcGeom();
     MC.drag = null;
+    if (d.mode === "pending" && d.col < 0 && d.x < G.colX(0) - 2){
+      // a tap on the bar numbers: that bar's notes go to the other side
+      const barLen = 4 * 60 / MC.bpm;
+      const b = Math.floor((mcTimeAt(G, d.y) - MC.offset) / barLen + G.step / barLen / 2);
+      const a = MC.offset + b * barLen - G.step / 2, z = a + barLen;
+      const inBar = MC.notes.filter(n => n.t >= a && n.t < z);
+      if (inBar.length){
+        mcPushUndo();
+        // every note in the bar crosses to the other side, lanes kept
+        for (const n of inBar) n.mustHit = !n.mustHit;
+        const toPlr = inBar.filter(n => n.mustHit).length >= inBar.length / 2;
+        const el = $("#mcToast");
+        el.innerHTML = "<b>Bar " + (b + 1) + "</b> moved to " + (toPlr ? "Boyfriend" : "the opponent") + ". Undo puts it back.";
+        el.classList.add("show");
+        clearTimeout(mcToastTimer);
+        mcToastTimer = setTimeout(() => el.classList.remove("show"), 2600);
+      }
+      mcKick();
+      return;
+    }
     if (d.mode === "pending" && d.col >= 0){
       if (d.note){
         mcPushUndo();
@@ -11252,7 +11546,7 @@ $("#mcDetect").addEventListener("click", async () => {
   try{
     await nextFrame();
     const A = await mcInstAnalysis();
-    const tp = detectTempo(normalise(A.flux), A.fps);
+    const tp = tempoOf(A);
     MC.bpm = tp.bpm; MC.offset = tp.offset; MC.bpmTouched = false;
     mcPaintControls(); mcDirty();
   }catch(e){}
@@ -11301,6 +11595,12 @@ $("#mcRedo").addEventListener("click", () => {
   MC.notes = MC.redo.pop();
   mcDirty(); mcPaintControls(); mcKick();
 });
+$("#mcSwapAll").addEventListener("click", () => {
+  if (!MC || !MC.notes.length) return;
+  mcPushUndo();
+  for (const n of MC.notes) n.mustHit = !n.mustHit;
+  mcKick();
+});
 $("#mcClear").addEventListener("click", () => {
   if (!MC || !MC.notes.length) return;
   if (!confirm("Clear every note? (Undo brings them back.)")) return;
@@ -11338,6 +11638,11 @@ document.addEventListener("keydown", e => {
    quick after the first run. If you set the BPM yourself, the notes snap to
    your grid; otherwise the detected tempo is used and shown. */
 let mcAutoScope = "both";
+$$("#mcVoc button").forEach(b => b.addEventListener("click", () => {
+  if (!MC) return;
+  MC.vocMode = b.dataset.voc;
+  mcPaintControls();
+}));
 $$("#mcScope button").forEach(b => b.addEventListener("click", () => {
   $$("#mcScope button").forEach(x => x.classList.toggle("on", x === b));
   mcAutoScope = b.dataset.scope;
@@ -11367,9 +11672,11 @@ $("#mcAuto").addEventListener("click", async () => {
     const an = me.analysis;
     const tempo = me.bpmTouched
       ? { bpm: me.bpm, offset: me.offset, beatLen: 60 / me.bpm }
-      : detectTempo(normalise(an.instA.flux), an.instA.fps);
-    const chart = buildChart(an.instA, an.stems.map(s => ({ A: s.A, side: s.side })), tempo, an.duration,
-                             settings.difficulty);
+      : tempoOf(an.instA);
+    const one = an.stems.length === 1;
+    const soloSide = one && me.vocMode && me.vocMode !== "both" ? me.vocMode : null;
+    const chart = buildChart(an.instA, an.stems.map(s => ({ A: s.A, side: soloSide || s.side, solo: !!soloSide })),
+                             tempo, an.duration, settings.difficulty);
     if (!chart.notes.length) throw new Error("No notes could be found in the vocal tracks.");
     mcPushUndo();
     const fresh = chart.notes.map(n => ({ t:n.t, lane:n.lane, mustHit:!!n.mustHit, len:n.len || 0 }));
@@ -11383,7 +11690,9 @@ $("#mcAuto").addEventListener("click", async () => {
     mcBusy(false);
     const el = $("#mcToast");
     el.innerHTML = "<b>Auto Chart</b> placed " + add.length + " notes (" +
-      settings.difficulty + ") at " + (+me.bpm.toFixed(2)) + " BPM. Tap any note to remove it, or Undo.";
+      settings.difficulty + ") at " + (+me.bpm.toFixed(2)) + " BPM." +
+      (an.twin ? " Both vocal slots hold the same file, so it was split by singer." : "") +
+      (one && !soloSide ? " Sides were worked out from the song's call and answer — tap a bar number to swap one." : " Tap any note to remove it, or Undo.");
     el.classList.add("show");
     clearTimeout(mcToastTimer);
     mcToastTimer = setTimeout(() => el.classList.remove("show"), 4500);
@@ -11566,7 +11875,7 @@ $("#toChartBtn").addEventListener("click", async () => {
     try{
       chartCancelled = false;
       instA = await analyzeTrack(instBuf);
-      const tp = detectTempo(normalise(instA.flux), instA.fps);
+      const tp = tempoOf(instA);
       bpm = tp.bpm; offset = tp.offset;
     }catch(e){}
     mcOpen({ instBuf, tracks, name: typed || picked.inst.name.replace(/\.[^.]+$/, ""), bpm, offset, instA,
