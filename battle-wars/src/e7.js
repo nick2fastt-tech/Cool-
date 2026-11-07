@@ -424,12 +424,16 @@ export function buildWarehouse() {
   mk(new THREE.SphereGeometry(0.17, 16, 10, 0, P * 2, 0, P / 2), gold, trophy, [0, 0.38, 0], [P, 0, 0]);
   mk(new THREE.OctahedronGeometry(0.2, 0), mat(0x6af0ff, { e: 0x2ab0ff, ei: 0.8, r: 0.1, m: 0.3 }), lootP, [1.4, 0.65, -0.5]);
   const lootLight = new THREE.PointLight(0xffd070, 4, 4, 1.5); lootLight.position.set(0, 1.4, -10); g.add(lootLight);
+  const purpleL = new THREE.PointLight(0xa040ff, 0, 22, 1.2); purpleL.position.set(0, 3.5, -5); g.add(purpleL);
+  const purpleL2 = new THREE.PointLight(0x8a40ff, 0, 16, 1.2); purpleL2.position.set(0.4, 2.8, 4.2); g.add(purpleL2);
   return {
     name: 'warehouse', group: g, bg: new THREE.Color(0x05060a), fog: [0x0c0e14, 16, 40], exposure: 1.3,
     update(t, X) {
       const v = X.val;
-      const heat = v('wh.heat', 0);
-      for (const l of lamps) l.intensity = 26 * (1 - 0.15 * heat * (0.5 + 0.5 * Math.sin(t * 9)));
+      const heat = v('wh.heat', 0), pu = v('wh.purple', 0);
+      for (const l of lamps) l.intensity = 26 * (1 - 0.15 * heat * (0.5 + 0.5 * Math.sin(t * 9))) * (1 - 0.85 * pu);
+      lootP.visible = v('wh.loot', 1) > 0.5; lootLight.intensity = lootP.visible ? 4 : 0;
+      purpleL.intensity = pu * 34 * (0.85 + 0.15 * Math.sin(t * 3.3)); purpleL2.intensity = pu * 12;
     },
   };
 }
@@ -494,13 +498,17 @@ export function buildWarehouseExt() {
   const moon = new THREE.DirectionalLight(0x9aaaff, 1.1); moon.position.set(-8, 20, 14); moon.castShadow = true; moon.shadow.mapSize.set(1024, 1024);
   Object.assign(moon.shadow.camera, { left: -18, right: 18, top: 18, bottom: -18, near: 1, far: 60 }); g.add(moon);
   const wallLamp = new THREE.PointLight(0xffc888, 26, 14, 1.3); wallLamp.position.set(0, 6.2, 1.5); g.add(wallLamp);
+  const gateLamp = new THREE.PointLight(0xffd8a0, 16, 18, 1.3); gateLamp.position.set(6.4, 5.0, 17); g.add(gateLamp);
+  streetLamp(g, 7.4, 17, -1);
   plane(g, 70, 50, new THREE.MeshStandardMaterial({ map: concrete(31, '#34363c', [8, 6], 16), roughness: 0.75 }), [0, 0, 12]);
   const wall = new THREE.MeshStandardMaterial({ map: corrugatedTex('#4a5058', [14, 1]), roughness: 0.6, metalness: 0.3 });
   box(g, 13, 9, 0.4, 0, [-9.5, 4.5, -0.2], { material: wall }); box(g, 13, 9, 0.4, 0, [9.5, 4.5, -0.2], { material: wall });
   box(g, 6, 4.4, 0.4, 0, [0, 6.8, -0.2], { material: wall });
   box(g, 32, 0.4, 20, 0x2a2e34, [0, 9.1, -10]);
   box(g, 0.4, 9, 20, 0, [-16, 4.5, -10], { material: wall }); box(g, 0.4, 9, 20, 0, [16, 4.5, -10], { material: wall });
-  plane(g, 6, 4.6, mat(0x050608), [0, 2.3, -1.5], [0, 0, 0], false);
+  const doorDark = new THREE.MeshStandardMaterial({ color: 0x050608, emissive: 0x9030ff, emissiveIntensity: 0 });
+  plane(g, 6, 4.6, doorDark, [0, 2.3, -1.5], [0, 0, 0], false);
+  const doorGlow = new THREE.PointLight(0xa040ff, 0, 16, 1.2); doorGlow.position.set(0, 2.2, 1.2); g.add(doorGlow);
   box(g, 3.2, 4.6, 0.14, 0x5a3a2a, [3.6, 2.3, 0.15], { r: 0.7 });
   box(g, 0.9, 0.12, 0.5, 0x2a2a30, [0, 6.4, 0.3], { m: 0.6 });
   mk(new THREE.SphereGeometry(0.14, 10, 8), mat(0xfff0c0, { e: 0xffd890, ei: 2 }), g, [0, 6.3, 0.45]);
@@ -524,6 +532,8 @@ export function buildWarehouseExt() {
     name: 'whExt', group: g, bg: new THREE.Color(0x05070f), fog: [0x0a0e1c, 20, 60], exposure: 1.45, cars,
     update(t, X) {
       const v = X.val;
+      const pd = v('whExt.purple', 0);
+      doorDark.emissiveIntensity = pd * (0.5 + 0.2 * Math.sin(t * 3)); doorGlow.intensity = pd * 30 * (0.85 + 0.15 * Math.sin(t * 2.7));
       cars.forEach((c, i) => {
         c.root.visible = v(`pcar${i}.vis`, 1) > 0.5;
         c.root.position.x = v(`pcar${i}.x`, i ? 5.0 : -4.5); c.root.position.z = v(`pcar${i}.z`, i ? 8.5 : 7.5); c.root.rotation.y = v(`pcar${i}.ry`, i ? P - 0.5 : 0.35);

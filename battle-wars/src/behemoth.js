@@ -94,7 +94,7 @@ export function buildBehemoth() {
   bolts.frustumCulled = false; root.add(bolts);
   const bodyLight = new THREE.PointLight(0xb040ff, 0, 30, 1.4); root.add(bodyLight);
   const fw = new THREE.Vector3(), tmp = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
-  const cyan = new THREE.Color(0x7ff0ff), red = new THREE.Color(0xff2a2a), col = new THREE.Color();
+  const cyan = new THREE.Color(0x7ff0ff), purpleEye = new THREE.Color(0xd060ff), red = new THREE.Color(0xff2a2a), col = new THREE.Color();
   const seamPurple = new THREE.Color(0xb040ff), seamBlue = new THREE.Color(0x3aa8ff);
   return {
     root, head,
@@ -104,6 +104,9 @@ export function buildBehemoth() {
       const s = rig.s;
       metal.color.copy(BASE.metal).lerp(DARK.metal, st.dark);
       plateM.color.copy(BASE.plate).lerp(DARK.plate, st.dark);
+      // purple energy glowing through the armor (Episode 8)
+      const au = (st.aura ?? 0) * (0.8 + 0.2 * Math.sin(t * 5));
+      metal.emissive.setRGB(0.35 * au, 0.08 * au, 0.6 * au); plateM.emissive.setRGB(0.5 * au, 0.12 * au, 0.85 * au);
       const fb = st.flickerBlue ?? 0, bl = Math.max(st.blue ?? 0, fb);
       seamM.emissive.copy(seamPurple).lerp(seamBlue, bl);
       seamM.emissiveIntensity = Math.max(st.cracks, bl * 0.8) * (2.2 + 0.8 * Math.sin(t * 7)) * (fb > 0 ? (Math.sin(t * 29) * Math.sin(t * 11) > 0 ? 1.6 : 0.2) : 1);
@@ -140,7 +143,7 @@ export function buildBehemoth() {
       jaw.rotation.x = st.jaw * 0.85;
       throat.visible = st.jaw > 0.15;
       throatM.color.setRGB(0.45 + 0.3 * Math.sin(t * 6), 0.1, 0.65);
-      col.copy(cyan).lerp(red, st.eyesRed);
+      col.copy(cyan).lerp(red, st.eyesRed).lerp(purpleEye, st.eyesPurple ?? 0);
       eyeM.color.copy(col);
       for (const e of eyes) { e.glow.material.color.copy(col); e.glow.material.opacity = st.eyes * (0.75 + 0.25 * Math.sin(t * 8)); e.glow.scale.setScalar(0.8 + st.eyes * 0.6); }
       headLight.color.copy(col); headLight.intensity = Math.min(1.2, st.eyes) * s * 0.12; headLight.distance = 0.5 * s;
@@ -168,7 +171,7 @@ export function buildBehemoth() {
       const mid = rig.pts[Math.floor(BEH_N * 0.6)];
       bodyLight.position.set(mid[0], mid[1] + rig.rad[10] * 2, mid[2]);
       bodyLight.color.copy(seamPurple).lerp(seamBlue, bl);
-      bodyLight.intensity = (Math.max(st.cracks, bl) * 0.5 + bk * (hash(Math.floor(t * 14)) > 0.4 ? 1 : 0.2)) * s * 0.06;
+      bodyLight.intensity = (Math.max(st.cracks, bl, (st.aura ?? 0) * 0.8) * 0.5 + bk * (hash(Math.floor(t * 14)) > 0.4 ? 1 : 0.2)) * s * 0.06;
       bodyLight.distance = 2.5 * s;
     },
   };
@@ -654,7 +657,14 @@ export function buildDowntown() {
   const skyShade = TX.skyTex('#33405a', '#5d6d88', '#8e9db4');
   const skyDark = TX.skyTex('#07040e', '#1d0b33', '#3a1a55');
   const skyEve = TX.skyTex('#2b2f6e', '#a0507a', '#ff9a5a');
+  const skyNight = TX.skyTex('#02040e', '#0a1430', '#1a2448');
   const darkBg = new THREE.Color();
+  // night: building windows glow faintly, street lamps get real light
+  const sideMats = new Set();
+  g.traverse((o) => { if (o.isMesh && Array.isArray(o.material) && o.material[0].map) sideMats.add(o.material[0]); });
+  let wasNight = false;
+  const nightLamps = [];
+  for (const [x, z] of [[-10, -3.6], [9, 3.6], [24, -3.6], [-24, 3.6]]) { const l = new THREE.PointLight(0xffc880, 0, 18, 1.3); l.position.set(x, 4.2, z); g.add(l); nightLamps.push(l); }
   return {
     name: 'downtown', group: g, bg: skyDay, fog: [0xcfe4f5, 60, 220], exposure: 1.0,
     update(t, X) {
@@ -675,6 +685,14 @@ export function buildDowntown() {
         L.hemi.intensity = 0.4 + flash * 0.8;
         fillPurple.intensity = 0.45 + flash * 1.2;
         purple.intensity = 60 * (0.5 + flash * 3);
+      } else if (mode > 2.5) {
+        // night (Episode 8): moonlight, warm street lamps, faint lit windows, purple glow of the Soul Stealer's energy
+        X.scene.background = skyNight;
+        X.scene.fog.color.set(0x0c1226);
+        L.sun.intensity = 0.55 + flash * 2; L.sun.color.set(0x9ab0ff); L.sun.position.set(-20, 30, 16);
+        L.hemi.intensity = 0.5 + flash * 0.6;
+        fillPurple.intensity = 0.18 + v('night.purple', 0) * 0.5;
+        purple.intensity = 40 * v('night.purple', 0) + 300 * flash;
       } else {
         X.scene.background = skyEve;
         X.scene.fog.color.set(0xb07888);
@@ -683,6 +701,12 @@ export function buildDowntown() {
         fillPurple.intensity = 0.25 + flash * 1.2;
         purple.intensity = 300 * flash;
       }
+      const night = mode > 2.5;
+      if (night !== wasNight) {
+        wasNight = night;
+        for (const m of sideMats) { m.color.setHex(night ? 0x4a5468 : 0xffffff); m.emissive.setHex(night ? 0x2a3450 : 0x000000); m.emissiveMap = night ? m.map : null; m.emissiveIntensity = night ? 0.9 : 0; m.needsUpdate = true; }
+      }
+      for (const l of nightLamps) l.intensity = night ? 26 : 0;
       // facade
       const fb = v('facade.break', 0) > 0.5;
       for (const f of facPieces) { const keep = !fb || f.iy >= 3 || (f.ix === 0 && f.iy >= 1) || (f.ix === 3 && f.iy >= 2); f.p.visible = keep; f.w.visible = keep; }

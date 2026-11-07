@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
-import { buildHero, buildWaterGuy, buildSoulStealer, buildProp, buildDog, buildShadow, COSTUMES, OUTFITS, CAST, ACTIONS, EXPRESSIONS, pose, blendPose, locomotion, attachProp } from './characters.js';
+import { buildHero, buildWaterGuy, buildSoulStealer, buildProp, buildDog, buildShadow, COSTUMES, OUTFITS, CAST, ACTIONS, EXPRESSIONS, POSE_KEYS, pose, blendPose, locomotion, attachProp } from './characters.js';
 import { buildCity, buildCoffee, buildHQExterior, buildLiving, buildControl, buildTitle, buildReactor, buildCavern, buildTunnels, buildMachineRoom, buildPlatform, buildDiamondChamber, buildPark } from './sets.js';
 import { soulSymbolTex } from './textures.js';
 import { buildBedroom, buildStore, buildNewarkExt, buildParty } from './halloween.js';
@@ -10,10 +10,11 @@ import { buildBehemoth, buildCrown, buildUFO, buildTiger, buildGregRoom, buildDo
 import { behemothRig, behParams } from './behemothRig.js';
 import { buildHorse, buildCat, buildLair, buildAlley } from './e6.js';
 import { buildBank, buildOldStreet, buildWarehouse, buildWarehouseExt, buildBird, buildClayBits } from './e7.js';
+import { buildShopStreet, buildMart, buildPrison, buildPrisonExt, buildDowntownExtras } from './e8.js';
 import { buildFX } from './fx.js';
 import { evalTrack, evalStep, buildGaitTables, gaitAt } from './director.js';
 import { drawOverlay } from './overlay.js';
-import { clamp, lerp, smoothstep, noise1, mk, mat, canvasTex } from './util.js';
+import { clamp, lerp, smoothstep, noise1, hash, mk, mat, canvasTex } from './util.js';
 
 const P = Math.PI;
 const LEG_KEYS = ['y', 'lean', 'lLF', 'lLO', 'kL', 'fL', 'lRF', 'lRO', 'kR', 'fR'];
@@ -52,15 +53,18 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     ...(META?.behemoth ? { gregRoom: buildGregRoom(), downtown: buildDowntown(), parkRuin: buildParkRuin() } : {}),
     ...(META?.e6 ? { lair: buildLair(), alley: buildAlley() } : {}),
     ...(META?.e7 ? { bank: buildBank(), oldStreet: buildOldStreet(), warehouse: buildWarehouse(), whExt: buildWarehouseExt() } : {}),
+    ...(META?.e8 ? { shopSt: buildShopStreet(), mart: buildMart(), prison: buildPrison(), prisonExt: buildPrisonExt() } : {}),
     black: { name: 'black', group: new THREE.Group(), bg: new THREE.Color(0x000000), update() {} },
   };
   for (const s of Object.values(SETS)) { s.group.visible = false; scene.add(s.group); }
+  const dtExtras = META?.e8 && SETS.downtown ? buildDowntownExtras() : null;
+  if (dtExtras) SETS.downtown.group.add(dtExtras.group);
 
   // cast
   // each hero can have outfit variants (pajamas, party costumes); the `${name}.outfit` track picks one per frame
   const heroes = {}, heroSets = {};
   const CLAYS = META?.e7 ? ['clay1', 'clay2', 'clay3', 'clay4', 'clay5', 'clay6', 'clay7', 'clay8'] : [];
-  const HERO_NAMES = ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy', ...(META?.e7 ? ['guard', 'officer', 'officer2'] : []), ...CLAYS];
+  const HERO_NAMES = ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy', ...(META?.e7 ? ['guard', 'officer', 'officer2'] : []), ...(META?.e8 ? ['guard2', 'ped1', 'ped2', 'ped3'] : []), ...CLAYS];
   for (const n of HERO_NAMES) {
     const extras = [...(CAST[n].extras ?? []), ...(META?.extras?.[n] ?? [])];
     heroSets[n] = { base: buildHero({ ...CAST[n], ...(costume[n] ?? {}), extras }) };
@@ -74,8 +78,9 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   const PROP_KINDS = ['notebook', 'pen', 'scanner', 'pipe', 'case', 'diamond', 'bar', 'buzzer', 'phone', 'bowl', 'towels', 'capeFold', 'dinoPack', 'maskHeld', 'candy', 'plate', 'pizza', 'mic', 'clock', 'canister', 'table', 'clay', 'controller'];
   const handProps = {};
   if (META?.e7) PROP_KINDS.push('sack', 'flashlight', 'toast');
+  if (META?.e8) PROP_KINDS.push('box', 'mop', 'bucket', 'spray', 'paper');
   for (const n of Object.keys(heroes)) for (const side of ['L', 'R']) for (const k of PROP_KINDS) {
-    if (CLAYS.includes(n)) continue;
+    if (CLAYS.includes(n) || n.startsWith('ped')) continue;
     const m = buildProp(k); m.visible = false; heroes[n].J.hand[side].add(m); handProps[`${n}.${side}.${k}`] = onHand(n, side, m);
   }
   const water = buildWaterGuy();
@@ -194,7 +199,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     slices[n] = onHand(n, 'R', attachProp(heroes[n], 'R', m, [0, -0.12, 0.08], [0.4, 0, 0]));
   }
 
-  const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy', 'water', 'dog', 'birddog', 'tiger', 'horse', 'cat', ...(META?.e7 ? ['guard', 'officer', 'officer2'] : []), ...CLAYS]);
+  const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy', 'water', 'dog', 'birddog', 'tiger', 'horse', 'cat', ...(META?.e7 ? ['guard', 'officer', 'officer2'] : []), ...(META?.e8 ? ['guard2', 'ped1', 'ped2', 'ped3'] : []), ...CLAYS]);
   const val = (name, d = 0) => { const v = evalTrack(T.tracks[name], curT); return v === undefined ? d : v; };
   let curT = 0;
   const X = { T, scene, val: (n, d = 0) => val(n, d), hand: (n, side = 'R') => { const v = new THREE.Vector3(); heroes[n].J.hand[side].getWorldPosition(v); return v; }, rig: () => rig, crownPos: () => crown ? crown.root.position.clone() : new THREE.Vector3() };
@@ -210,6 +215,35 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     }
     return 0;
   }
+
+  // ---------- the "life" layer (every episode): listeners look at whoever is talking, breathing,
+  // small head drift, eye darts, two-handed talk gestures and snappier gesture blends.
+  const UPPER = new Set(['aLF', 'aLO', 'aLT', 'eL', 'aRF', 'aRO', 'aRT', 'eR', 'hdN', 'hdY', 'hdT', 'spF', 'spT', 'spS']);
+  const NO_LIFE = new Set(['lieBack', 'lieSide', 'lieSleep', 'sitSleep', 'carried', 'knockBack', 'tumble', 'fly', 'hover', 'dive', 'dodge', 'freeze', 'freezeStand', 'freezeStep', 'climb', 'hang', 'climbHead', 'mount', 'melt', 'pinned', 'golem', 'golemReach', 'golemSwipe', 'heroLand', 'flail', 'dragged', 'struggle', 'stretchArms', 'jumpScare', 'stumble', 'frozenStare', 'lieFront', 'standUp']);
+  const lines = T.captions.filter((c) => c.who && !c.sound).sort((a, b) => a.t0 - b.t0);
+  const vAt = (n, tt, d = 0) => { const v = evalTrack(T.tracks[n], tt); return v === undefined ? d : v; };
+  function speakerHead(who, tt) {
+    if (who === 'soul') return vAt('soul.vis', tt) > 0.5 ? [vAt('soul.x', tt), vAt('soul.y', tt) + 2.0, vAt('soul.z', tt)] : null;
+    if (!heroes[who] || vAt(`${who}.vis`, tt) < 0.5) return null;
+    const sit = (ACTIONS[evalStep(T.tracks[`${who}.act`], tt).v] ?? {}).sit;
+    return [vAt(`${who}.x`, tt), vAt(`${who}.y`, tt) + (sit ? 1.1 : 1.5), vAt(`${who}.z`, tt)];
+  }
+  // where `name` would look at time tt: toward the person speaking (relative to the body), or null
+  function gazeAt(name, tt, sitting) {
+    let c = null;
+    for (const l of lines) { if (l.t0 > tt) break; if (tt < l.t1 + 0.3 && l.who !== name) c = l; }
+    if (!c) return null;
+    const sp = speakerHead(c.who, tt); if (!sp) return null;
+    const x = vAt(`${name}.x`, tt), z = vAt(`${name}.z`, tt);
+    const dx = sp[0] - x, dz = sp[2] - z, dist = Math.hypot(dx, dz);
+    if (dist < 0.3 || dist > 9) return null;
+    let yaw = Math.atan2(dx, dz) - vAt(`${name}.ry`, tt);
+    while (yaw > P) yaw -= P * 2; while (yaw < -P) yaw += P * 2;
+    if (Math.abs(yaw) > 2.1) return null;
+    const pitch = -Math.atan2(sp[1] - (vAt(`${name}.y`, tt) + (sitting ? 1.1 : 1.5)), dist);
+    return [clamp(yaw, -1.1, 1.1), clamp(pitch, -0.45, 0.35)];
+  }
+  const GAZE_DT = [0, 0.1, 0.2, 0.3, 0.4, 0.5];
 
   function updateHero(name, t) {
     const outfit = evalStep(T.tracks[`${name}.outfit`], t).v ?? 'base';
@@ -240,8 +274,12 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     const cur = ACTIONS[st.v] ?? ACTIONS.idle, prev = ACTIONS[st.prev] ?? ACTIONS.idle;
     const ctx = { seed: h.seed };
     let p = pose(cur.f(st.since, t, ctx));
-    const w = smoothstep(0, 0.28, st.since);
-    if (w < 1) p = blendPose(pose(prev.f(st.since + 2, t, ctx)), p, w);
+    if (st.since < 0.4) {
+      const pp = pose(prev.f(st.since + 2, t, ctx));
+      const w = smoothstep(0, 0.28, st.since);
+      const k = clamp(st.since / 0.36), wu = 1 + 2.2 * Math.pow(k - 1, 3) + 1.2 * Math.pow(k - 1, 2);
+      for (const key of POSE_KEYS) { const ww = UPPER.has(key) ? wu : w; p[key] = pp[key] + (p[key] - pp[key]) * ww; }
+    }
     const g = gaitAt(gait[name], t);
     const moveW = (cur.sit || val(`${name}.y`) > 0.25) ? 0 : smoothstep(0.12, 0.6, g.speed);
     if (moveW > 0) {
@@ -250,24 +288,52 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
       else p = blendPose(p, loco, moveW);
     }
     const talk = talkAmount(name, t);
-    if (talk > 0 && (cur.gest) && moveW < 0.5) {
+    const alive = !NO_LIFE.has(st.v);
+    if (talk > 0 && moveW < 0.5) {
       const n1 = noise1(t * 1.3 + h.seed * 5), n2 = noise1(t * 1.1 + h.seed * 9);
-      p.aRF += 0.35 + 0.25 * n1; p.eR += 0.7 + 0.35 * n2; p.aRT += 0.3;
-      p.aLF += 0.12 * n2; p.eL += 0.25 * Math.max(0, n1);
-      p.hdN += 0.04 * Math.sin(t * 6.5); p.hdT += 0.06 * n1;
+      if (cur.gest) {
+        // talk with one hand, then the other, now and then both
+        const seg = Math.floor((t + h.seed) / 2.4), hl = hash(seg * 1.7 + h.seed), both = hl > 0.82;
+        if (hl < 0.6 || both) { p.aRF += 0.35 + 0.25 * n1; p.eR += 0.7 + 0.35 * n2; p.aRT += 0.3; }
+        if (hl >= 0.6) { p.aLF += 0.35 + 0.25 * n2; p.eL += 0.7 + 0.35 * n1; p.aLT += 0.3; }
+        if (hl < 0.6) { p.aLF += 0.12 * n2; p.eL += 0.25 * Math.max(0, n1); }
+      }
+      if (alive) { p.hdN += 0.045 * Math.sin(t * 6.5 + h.seed) * Math.min(1, talk * 2.5); p.hdT += 0.06 * n1; p.spF += 0.025 * Math.max(0, n2); }
     }
-    p.hdY += val(`${name}.hy`); p.hdN += val(`${name}.hn`);
+    const hy = val(`${name}.hy`), hn = val(`${name}.hn`);
+    let lookX = val(`${name}.lookX`), lookY = val(`${name}.lookY`);
+    if (alive) {
+      const still = 1 - moveW * 0.7;
+      // breathing and a little drift so nobody freezes like a statue
+      const br = Math.sin(t * 1.55 + h.seed * 1.7);
+      p.spF += 0.012 * br * still; p.aLO += 0.012 * br; p.aRO += 0.012 * br;
+      p.hdY += 0.05 * noise1(t * 0.3 + h.seed * 3.3) * still; p.hdN += 0.025 * noise1(t * 0.27 + h.seed * 5.1); p.hdT += 0.02 * noise1(t * 0.23 + h.seed * 7.7);
+      p.tilt += 0.012 * noise1(t * 0.21 + h.seed * 2.3) * still;
+      // listeners turn their head (and eyes) toward whoever is talking
+      let gy = 0, gp = 0;
+      if (talk <= 0) { for (const d of GAZE_DT) { const gz = gazeAt(name, t - d, cur.sit); if (gz) { gy += gz[0]; gp += gz[1]; } } gy /= GAZE_DT.length; gp /= GAZE_DT.length; }
+      const wExp = 1 - clamp((Math.abs(hy) + Math.abs(hn)) * 4);
+      p.hdY += gy * 0.7 * wExp; p.hdN += gp * 0.6 * wExp;
+      lookX += clamp(gy * 0.9, -0.8, 0.8) * wExp;
+      // little eye darts
+      const ph = t * 0.55 + h.seed * 0.37, sg = Math.floor(ph), fr = ph - sg, mix = smoothstep(0, 0.05, fr);
+      const dx = (k) => (hash(k * 7.3 + h.seed) - 0.5) * 0.6, dy = (k) => (hash(k * 3.1 + h.seed * 2) - 0.5) * 0.35;
+      const dartW = 1 - Math.min(1, Math.abs(gy) * 2);
+      lookX += lerp(dx(sg - 1), dx(sg), mix) * dartW; lookY += lerp(dy(sg - 1), dy(sg), mix) * dartW;
+    }
+    p.hdY += hy; p.hdN += hn;
     h.applyPose(p);
     const es = evalStep(T.tracks[`${name}.expr`], t);
     const e0 = EXPRESSIONS[es.prev] ?? EXPRESSIONS.neutral, e1 = EXPRESSIONS[es.v] ?? EXPRESSIONS.neutral;
     const ew = smoothstep(0, 0.25, es.since);
     const e = {}; for (const k in e1) e[k] = e0[k] + (e1[k] - e0[k]) * ew;
+    if (talk > 0) e.brow += 0.007 * Math.max(0, Math.sin(t * 3.1 + h.seed)) * (1 + (e.brow > 0.02 ? 0.5 : 0));
     const bp = (t + h.seed * 1.37) % 3.9;
     const blink = bp < 0.14 ? Math.sin((bp / 0.14) * P) : 0;
-    h.applyFace(e, talk, blink, { x: val(`${name}.lookX`), y: val(`${name}.lookY`) });
+    h.applyFace(e, talk, blink, { x: clamp(lookX, -1, 1), y: clamp(lookY, -1, 1) });
     const fl = val(`${name}.flicker`, 0);
     h.applyGlow({ hair: val(`${name}.hairGlow`), suit: val(`${name}.suitGlow`), eyes: val(`${name}.eyeGlow`), glove: val(`${name}.gloveGlow`), red: val(`${name}.redEyes`), dim: val(`${name}.dim`), flicker: fl > 0 ? (Math.sin(t * 37) * Math.sin(t * 13.7) > 0 ? 1 : 1 - fl) : 0 });
-    h.applyExtras({ mask: val(`${name}.mask`), milk: val(`${name}.milk`), slime: val(`${name}.slime`), scuff: val(`${name}.scuff`) });
+    h.applyExtras({ mask: val(`${name}.mask`), milk: val(`${name}.milk`), slime: val(`${name}.slime`), scuff: val(`${name}.scuff`), reveal: val(`${name}.reveal`), hatTilt: val(`${name}.hatTilt`), bucket: val(`${name}.bucket`) });
   }
 
   // Water Guy "actions" produce arm targets etc.
@@ -362,6 +428,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
       pos = new THREE.Vector3(...s.pos);
       look = new THREE.Vector3(...s.look);
       if (s.pos2) pos.lerp(new THREE.Vector3(...s.pos2), k);
+      else if (!s.still) pos.lerp(look, 0.03 * kRaw); // gentle push-in keeps still shots alive
       if (s.look2) look.lerp(new THREE.Vector3(...s.look2), k);
     }
     const hand = (s.hand ?? 1) * 0.012;
@@ -375,6 +442,10 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     camera.updateProjectionMatrix();
   }
 
+  // soft glow around bright lights and effects: blur a thresholded, downscaled copy and add it back
+  const BLOOM = { title: 0.35, lair: 0.42, alley: 0.42, bank: 0.3, oldStreet: 0.42, warehouse: 0.36, whExt: 0.42, cavern: 0.4, tunnel: 0.38, reactor: 0.4, machines: 0.35, platform: 0.35, chamber: 0.4, newarkExt: 0.4, party: 0.38, black: 0 };
+  const gcan = document.createElement('canvas'); gcan.width = Math.round(canvasW / 4); gcan.height = Math.round(canvasH / 4);
+  const gctx = gcan.getContext('2d');
   let activeSet = null;
   function frame(t) {
     curT = t;
@@ -391,6 +462,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
       renderer.toneMappingExposure = set.exposure ?? 1;
     }
     set.update(t, X);
+    if (dtExtras && setEntry.set === 'downtown') dtExtras.update(t, X);
     for (const n of Object.keys(heroes)) updateHero(n, t);
     updateWater(t);
     soul.root.visible = val('soul.vis', 0) > 0.5;
@@ -412,7 +484,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
       const vis = val('beh.vis', 0) > 0.5;
       beh.root.visible = vis;
       rig = vis ? behemothRig(behParams((n, tt, d) => { const v = evalTrack(T.tracks[n], tt); return v === undefined ? d : v; }, t)) : null;
-      if (vis) beh.update({ t, rig, jaw: val('beh.jaw', 0), plates: val('beh.plates', 0), dark: val('beh.dark', 0), cracks: val('beh.cracks', 0), eyesRed: val('beh.eyesRed', 0), eyes: val('beh.eyes', 1), crest: val('beh.crest', 0), bolts: val('beh.bolts', 0), claws: val('beh.claws', 1), goo: val('beh.goo', 0), blue: val('beh.blue', 0), dissolve: val('beh.dissolve', 0), flickerBlue: val('beh.flickerBlue', 0) });
+      if (vis) beh.update({ t, rig, jaw: val('beh.jaw', 0), plates: val('beh.plates', 0), dark: val('beh.dark', 0), cracks: val('beh.cracks', 0), eyesRed: val('beh.eyesRed', 0), eyes: val('beh.eyes', 1), crest: val('beh.crest', 0), bolts: val('beh.bolts', 0), claws: val('beh.claws', 1), goo: val('beh.goo', 0), blue: val('beh.blue', 0), dissolve: val('beh.dissolve', 0), flickerBlue: val('beh.flickerBlue', 0), aura: val('beh.aura', 0), eyesPurple: val('beh.eyesPurple', 0) });
       const mode = evalStep(T.tracks['crown.mode'], t).v ?? 'head';
       const cs = { t, vis: false, x: 0, y: 0, z: 0, size: 1, glow: val('crown.glow', 0.3), blue: val('crown.blue', 0) };
       if (mode === 'head' && vis) {
@@ -467,7 +539,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
       if (horse.root.visible) {
         horse.root.position.set(val('horse.x'), val('horse.y'), val('horse.z')); horse.root.rotation.set(0, val('horse.ry'), 0);
         const st = evalStep(T.tracks['horse.act'], t), g = gaitAt(gait.horse, t);
-        horse.update({ t, act: st.v, a: st.since, speed: g.speed, phase: g.phase * 0.9, glow: val('horse.glow', 0), alpha: val('horse.alpha', 1) });
+        horse.update({ t, act: st.v, a: st.since, speed: g.speed, phase: g.phase * 0.9, glow: val('horse.glow', 0), alpha: val('horse.alpha', 1), purple: val('horse.purple', 0) });
       }
       cat.root.visible = val('cat.vis', 0) > 0.5;
       if (cat.root.visible) {
@@ -540,6 +612,14 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     updateCamera(t);
     renderer.render(scene, camera);
     octx.drawImage(renderer.domElement, 0, 0);
+    const bloom = (BLOOM[setEntry.set] ?? 0.14) * val('bloom', 1);
+    if (bloom > 0.01) {
+      gctx.globalCompositeOperation = 'copy';
+      gctx.filter = `brightness(0.6) contrast(3.4) saturate(1.4) blur(${Math.max(2, Math.round(canvasH / 216))}px)`;
+      gctx.drawImage(out, 0, 0, gcan.width, gcan.height);
+      gctx.filter = 'none';
+      octx.save(); octx.globalCompositeOperation = 'lighter'; octx.globalAlpha = Math.min(1, bloom); octx.drawImage(gcan, 0, 0, canvasW, canvasH); octx.restore();
+    }
     drawOverlay(octx, canvasW, canvasH, t, T, X.val);
     return out;
   }

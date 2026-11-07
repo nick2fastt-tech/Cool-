@@ -21,6 +21,7 @@ const music = { L: new Float32Array(N), R: new Float32Array(N) };
 let seed = 12345;
 const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
 const noise = () => rnd() * 2 - 1;
+const hash01 = (n) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
 const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 const TAU = Math.PI * 2;
 
@@ -274,6 +275,15 @@ const SFX = {
   gameFall: () => mix(sweep(1.0, 900, 120, 'square', (t) => Math.min(1, (1 - t) * 4) * 0.08), Float32Array.from([...new Float32Array(Math.floor(1.0 * SR)), ...mix(...[67, 63, 60, 55].map((n, i) => Float32Array.from([...new Float32Array(Math.floor(i * 0.22 * SR)), ...tone(mtof(n), 0.2, 'square', 0.06)])))])),
   crownBreak: () => mix(SFX.glassShatter(), partials(1.6, [660, 990, 1320, 1760], 0.5, [0.15, 0.12, 0.1, 0.08]), sweep(1.2, 80, 40, 'sine', (t) => env(t, 0.005, 0.4) * 0.5)),
   energyArrive: () => mix(sweep(1.6, 120, 900, 'saw', (t) => Math.sin(Math.PI * t / 1.6) * 0.1), highpass(nbuf(1.6, (t) => Math.sin(Math.PI * t / 1.6) * 0.3), 2000), partials(1.6, [523, 784, 1046], 0.6, [0.08, 0.06, 0.05])),
+  // Episode 8
+  bzzt: () => mix(make(0.7, (t) => (Math.sin(TAU * 120 * t) > 0.3 ? 0.3 : -0.3) * (hash01(Math.floor(t * 40)) > 0.35 ? 1 : 0.1) * Math.min(1, (0.7 - t) * 6)), highpass(nbuf(0.7, (t) => (hash01(Math.floor(t * 60) + 7) > 0.6 ? 0.35 : 0.02) * Math.min(1, (0.7 - t) * 6)), 2500)),
+  cellSlide: () => mix(lowpass(nbuf(1.3, (t) => Math.sin(Math.PI * t / 1.3) * 0.5 * (0.7 + 0.3 * Math.sin(t * 80))), 900), sweep(1.3, 140, 110, 'saw', (t) => Math.sin(Math.PI * t / 1.3) * 0.08), Float32Array.from([...new Float32Array(Math.floor(1.2 * SR)), ...SFX.clunk()])),
+  prisonAlarm: () => make(3.2, (t) => { const f = Math.floor(t / 0.4) % 2 ? 960 : 720; const ph = TAU * f * t; return (Math.sin(ph) * 0.5 + (Math.sin(ph) > 0 ? 0.12 : -0.12)) * Math.min(1, t * 10) * Math.min(1, (3.2 - t) * 4) * 0.32; }),
+  bucketClonk: () => mix(partials(0.5, [310, 520, 870], 0.09, [0.5, 0.3, 0.15]), lowpass(nbuf(0.08, (t) => env(t, 0.001, 0.02) * 0.4), 1500)),
+  autoDoor: () => lowpass(nbuf(0.9, (t) => Math.sin(Math.PI * t / 0.9) * 0.3), (t) => 600 + 900 * Math.sin(Math.PI * t / 0.9)),
+  scanBeep: () => sweep(0.12, 1560, 1560, 'sine', (t) => env(t, 0.002, 0.08) * 0.35),
+  beamCharge: () => mix(sweep(1.4, 90, 1400, 'saw', (t) => (t / 1.4) * (t / 1.4) * 0.12), lowpass(nbuf(1.4, (t) => (t / 1.4) * 0.35), (t) => 300 + 2500 * t / 1.4), sweep(1.4, 55, 110, 'sine', (t) => (t / 1.4) * 0.35)),
+  lampCreak: () => bandpass(make(1.0, (t) => (Math.sin(TAU * (90 + 50 * t) * t) * 0.5 + noise() * 0.3) * Math.sin(Math.PI * t / 1.0) * 0.4), 120, 1400),
   // Episode 7
   siren: () => make(4.0, (t) => { const f = 700 + 450 * (0.5 + 0.5 * Math.sin(TAU * 0.55 * t)); return (Math.sin(TAU * f * t) * 0.6 + Math.sin(TAU * f * 2 * t) * 0.15) * Math.min(1, t * 3) * Math.min(1, (4 - t) * 2) * 0.32; }),
   policeRadio: () => mix(bandpass(nbuf(1.6, (t) => (Math.sin(t * 40) > 0 ? 0.35 : 0.12) * Math.min(1, (1.6 - t) * 4)), 600, 3000), sweep(0.12, 1400, 1400, 'square', (t) => env(t, 0.002, 0.05) * 0.08)),
@@ -307,7 +317,7 @@ for (const e of T.sfx) {
 
 // ------------------------------------------------------------ footsteps from the animation
 const setAt = (t) => { let s = T.sets[0].set; for (const e of T.sets) if (e.t0 <= t) s = e.set; return s; };
-const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy', 'guard', 'officer', 'officer2', 'clay1', 'clay2', 'clay3', 'clay4', 'clay5', 'clay6', 'clay7', 'clay8'], 1 / 96);
+const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy', 'guard', 'officer', 'officer2', 'clay1', 'clay2', 'clay3', 'clay4', 'clay5', 'clay6', 'clay7', 'clay8', 'guard2', 'ped1', 'ped2', 'ped3'], 1 / 96);
 const step = { soft: sweep(0.09, 140, 70, 'sine', (t) => env(t, 0.002, 0.025) * 0.5), tap: highpass(nbuf(0.04, (t) => env(t, 0.001, 0.008) * 0.25), 2500) };
 for (const c of Object.keys(gait)) {
   const tab = gait[c];
@@ -502,7 +512,7 @@ fs.mkdirSync(OUT, { recursive: true });
 fs.writeFileSync(path.join(OUT, 'audio.wav'), Buffer.concat([hdr, data]));
 
 // ------------------------------------------------------------ captions file (soft subtitles)
-const NAMES = { aaron: 'AARON', flare: 'FLARE', eric: 'ERIC', water: 'WATER GUY', barista: 'BARISTA', leon: 'LEON', greg: 'GREG', soul: 'SOUL STEALER', computer: 'COMPUTER', shadow: 'UNKNOWN VOICE', newark: 'NEWARK', dj: 'DJ', boss: 'GAME BOSS', skeleton: 'SKELETON', crowd: 'CROWD', everyone: 'EVERYONE', behemoth: 'BEHEMOTH', citizen: 'CITIZEN', guard: 'SECURITY GUARD', officer: 'OFFICER' };
+const NAMES = { aaron: 'AARON', flare: 'FLARE', eric: 'ERIC', water: 'WATER GUY', barista: 'BARISTA', leon: 'LEON', greg: 'GREG', soul: 'SOUL STEALER', computer: 'COMPUTER', shadow: 'UNKNOWN VOICE', newark: 'NEWARK', dj: 'DJ', boss: 'GAME BOSS', skeleton: 'SKELETON', crowd: 'CROWD', everyone: 'EVERYONE', behemoth: 'BEHEMOTH', citizen: 'CITIZEN', guard: 'SECURITY GUARD', officer: 'OFFICER', cowboy: 'FRED', guard2: 'GUARD 2' };
 const ts = (s) => { const ms = Math.round(s * 1000); const h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60, sec = Math.floor(ms / 1000) % 60; return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')},${String(ms % 1000).padStart(3, '0')}`; };
 const srt = [...T.captions].sort((a, b) => a.t0 - b.t0).map((c, i) => `${i + 1}\n${ts(c.t0)} --> ${ts(c.t1)}\n${c.sound ? `[${c.text}]` : `${c.label ?? NAMES[c.who]}: ${c.text}`}\n`).join('\n');
 fs.writeFileSync(path.join(OUT, 'captions.srt'), srt);

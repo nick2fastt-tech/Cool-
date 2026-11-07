@@ -117,7 +117,7 @@ export function buildHorse() {
     if (o.material !== glowM) o.material = o.material.clone();
     fadeList.push({ m: o.material, em: o.material.emissive.clone() });
   });
-  const TEAL = new THREE.Color(0x40e8ff);
+  const TEAL = new THREE.Color(0x40e8ff), PURPLE_GLOW = new THREE.Color(0xb050ff);
   let lastA = 1;
   const fade = (al, t) => {
     if (al >= 0.999 && lastA >= 0.999) return;
@@ -166,9 +166,10 @@ export function buildHorse() {
       }
       fade(st.alpha ?? 1, t);
       root.visible = (st.alpha ?? 1) > 0.01;
-      const gl = st.glow ?? 0;
+      const gl = st.glow ?? 0, pu = st.purple ?? 0;
       glowM.emissiveIntensity = gl * (0.85 + 0.15 * Math.sin(t * 7));
-      glowM.color.setHex(gl > 0.05 ? 0x7af0ff : 0x1a2a30);
+      glowM.emissive.setHex(0x2ad8ff).lerp(PURPLE_GLOW, pu);
+      glowM.color.setHex(gl > 0.05 ? 0x7af0ff : 0x1a2a30).lerp(PURPLE_GLOW, gl > 0.05 ? pu : 0);
     },
   };
 }

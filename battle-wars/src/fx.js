@@ -321,6 +321,34 @@ export function buildFX(parent) {
             }
           }
           light(e.x, (e.y ?? 0) + 1.5, e.z, 0xff8a30, (e.light ?? 25) * k * (0.85 + 0.15 * Math.sin(t * 25)), 18);
+        } else if (e.kind === 'chargeBeam' && a >= 0 && a <= (e.charge ?? 1.2) + (e.dur ?? 0.6) + 0.2) {
+          // energy gathers into a glowing ball (e.from), then fires as a thick beam to e.to
+          const ch = e.charge ?? 1.2, dur = e.dur ?? 0.6, sz = e.size ?? 1, col = e.color ?? 0xa040ff;
+          const [fx, fy, fz] = e.from, [tx, ty, tz] = e.to;
+          if (a < ch) {
+            const k = a / ch;
+            for (let j = 0; j < 60; j++) {
+              const h1 = hash(j * 2.3 + e.t), h2 = hash(j * 5.1 + e.t), h3 = hash(j * 7.7 + e.t);
+              const ag = (t * 1.3 + h1) % 1, r = (1 - ag) * (e.gather ?? 2.2) * sz, th = h2 * Math.PI * 2 + t * 2, ph = (h3 - 0.5) * Math.PI;
+              addG(fx + Math.cos(th) * Math.cos(ph) * r, fy + Math.sin(ph) * r, fz + Math.sin(th) * Math.cos(ph) * r, (0.07 * ag + 0.015) * sz, j % 4 ? (e.color2 ?? 0xd8a0ff) : 0xffffff);
+            }
+            addG(fx, fy, fz, (0.15 + 0.7 * k) * sz * (0.9 + 0.1 * Math.sin(t * 31)), col);
+            addG(fx, fy, fz, (0.08 + 0.35 * k) * sz, 0xffffff);
+            light(fx, fy, fz, col, 10 * k * sz, 12 * sz);
+          } else if (a < ch + dur) {
+            const k = Math.min(1, (a - ch) / 0.08, (ch + dur - a) / 0.15);
+            const n2 = 70;
+            for (let j = 0; j < n2; j++) {
+              const u = ((j / n2) + t * 4) % 1;
+              const jx = (hash(j + Math.floor(t * 40)) - 0.5) * 0.25 * sz, jy = (hash(j * 3 + Math.floor(t * 40)) - 0.5) * 0.25 * sz;
+              const x = fx + (tx - fx) * u + jx, y = fy + (ty - fy) * u + jy, z = fz + (tz - fz) * u;
+              addG(x, y, z, (e.width ?? 0.5) * sz * k * (0.8 + 0.4 * hash(j)), col);
+              addG(x, y, z, (e.width ?? 0.5) * 0.4 * sz * k, 0xffffff);
+            }
+            addG(fx, fy, fz, 0.9 * sz * k, col);
+            light(fx, fy, fz, col, 16 * k, 14 * sz);
+            light(tx, ty + 0.5, tz, col, 26 * k, 16);
+          }
         } else if (e.kind === 'flashBurst' && a >= 0 && a <= (e.dur ?? 0.8)) {
           // blinding flash of light (Aaron's Blue Flash)
           const d = e.dur ?? 0.8, k = 1 - a / d;

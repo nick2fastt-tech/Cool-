@@ -202,6 +202,20 @@ export const ACTIONS = {
   floatSit: { sit: true, gest: true, f: (a, t) => ({ ...sitLegs, spF: 0.05, aLO: 0.5, aRO: 0.5, aLF: 0.35, aRF: 0.35, eL: 0.4, eR: 0.4, hdN: -0.05 + 0.03 * S(t * 2) }) },
   catchSide: { f: (a) => { const k = smoothstep(0, 0.15, a); return { aRF: 1.4 * k, aRO: 0.7 * k, eR: 0.5, aLO: 0.12, eL: 0.2, hdY: 0.2 }; } },
   pointMap: { gest: false, f: (a, t) => { const k = smoothstep(0, 0.4, a); return { lean: 0.05, spF: 0.3, aRF: 1.0 + 0.1 * k, aRO: 0.0, eR: 0.15, aLF: 0.85, aLO: 0.22, eL: 0.2, hdN: 0.2, lLO: 0.1, lRO: 0.1 }; } },
+  // Episode 8
+  standUp: { f: (a) => { const k = smoothstep(0, 1.3, a), u = 1 - k; return { y: -0.3 * u, lLF: 1.55 * u, lRF: 1.55 * u, kL: 1.5 * u, kR: 1.5 * u, lLO: 0.12 * u, lRO: 0.12 * u, spF: 0.4 * Math.sin(k * P) + 0.02, aLF: 0.35 * u, aRF: 0.35 * u, eL: 0.6 * u, eR: 0.6 * u, aLO: 0.12, aRO: 0.12, hdN: 0.15 * u }; } },
+  sitRead: { sit: true, gest: true, f: (a, t) => ({ ...sitLegs, aLF: 1.0, aLT: 0.7, eL: 1.6, aRF: 0.65, aRT: 0.35, eR: 1.25, hdN: 0.3, aLO: 0.05, aRO: 0.1, spF: 0.05 }) },
+  holdBox: { upper: true, gest: false, f: (a, t) => ({ aLF: 0.85, aRF: 0.85, aLO: 0.28, aRO: 0.28, aLT: 0.35, aRT: 0.35, eL: 1.05, eR: 1.05, spF: -0.04, hdN: 0.05 }) },
+  holdMop: { upper: true, gest: true, f: (a, t) => ({ aRF: 0.55, aRO: 0.15, eR: 1.15, aRT: 0.25, aLO: 0.12, eL: 0.25, hdN: 0.02 }) },
+  frozenStare: { f: (a, t) => ({ aLO: 0.1, aRO: 0.1, eL: 0.12, eR: 0.12, hdN: -0.12, spF: 0.0 }) },
+  thinkChin: { gest: false, f: (a, t) => { const k = smoothstep(0, 0.4, a); return { aRF: 1.2 * k, aRT: 0.9 * k, eR: 2.2 * k, aRO: -0.05, aLF: 0.4 * k, aLT: 0.9 * k, eL: 1.4 * k, aLO: 0.1, hdN: -0.3 * k, hdT: 0.1 * k }; } },
+  idea: { gest: false, f: (a, t) => { const k = smoothstep(0, 0.2, a); return { aRF: 2.4 * k, aRO: 0.3, eR: 0.3, aLO: 0.5 * k, aLF: 0.3, eL: 0.4, spF: -0.12 * k, hdN: -0.2 * k, y: 0.05 * Math.max(0, S(a * 9)) * (1 - smoothstep(0.3, 0.8, a)) }; } },
+  runScared: { upper: true, f: (a, t) => ({ aLF: 0.4 * S(t * 9), aRF: -0.4 * S(t * 9), eL: 1.3, eR: 1.3, aLO: 0.25, aRO: 0.25, hdY: 0.9 + 0.1 * S(t * 2), spT: 0.3, hdN: -0.1 }) },
+  catchBreath: { f: (a, t) => ({ spF: 0.5 + 0.04 * S(t * 5), hdN: -0.1, aLF: 0.6, aRF: 0.6, aLT: 0.6, aRT: 0.6, eL: 0.3, eR: 0.3, lLF: 0.25, kL: 0.4, kR: 0.35, y: -0.08 + 0.015 * S(t * 5), lean: 0.12 }) },
+  tryPower: { gest: false, f: (a, t) => { const k = smoothstep(0, 0.35, a); return { aRF: 1.55 * k, aRO: 0.05, eR: 0.1, aLF: 0.3, aLO: 0.15, eL: 0.5, spF: 0.06, lean: 0.08 * k, y: 0.006 * S(t * 31) * k, hdN: 0.05 }; } },
+  shield: { gest: false, f: (a, t) => { const k = smoothstep(0, 0.2, a); return { aLF: 1.6 * k, aRF: 1.6 * k, aLT: 1.1, aRT: 1.1, eL: 1.9, eR: 1.9, aLO: 0.1, aRO: 0.1, spF: 0.3 * k, hdN: 0.35 * k, y: -0.12 * k, kL: 0.4 * k, kR: 0.4 * k, lLF: 0.3 * k, lRF: 0.2 * k }; } },
+  lieFront: { f: (a, t) => ({ y: -0.82, lean: 1.45, spF: 0.1, aLF: 2.6, aRF: 2.4, aLO: 0.4, aRO: 0.4, eL: 0.6, eR: 0.5, hdN: -0.6, lLF: -0.1, lRF: 0.1, kL: 0.3, kR: 0.2 }) },
+  gesture: { gest: true, f: (a, t) => ({ aRF: 0.9, eR: 1.0, aRT: 0.3, aRO: 0.1, aLF: 0.5, eL: 0.8, aLO: 0.15, spF: 0.04 }) },
   // Episode 7
   rideSummon: { sit: true, gest: false, f: (a, t) => { const k = smoothstep(0, 0.45, a); return { y: -0.32, lLF: 1.2, lRF: 1.2, lLO: 0.45, lRO: 0.45, kL: 1.3, kR: 1.3, fL: 0.2, fR: 0.2, spF: 0.06, aLF: 0.7, aLO: 0.1, eL: 1.2, aLT: 0.4, aRF: 0.75 + 1.25 * k, aRO: 0.12, eR: 1.1 * (1 - k) + 0.15 * k, aRT: 0.4 * (1 - k) - 0.3 * k, hdN: 0.0 }; } },
   rideTip: { sit: true, gest: false, f: (a) => { const k = smoothstep(0, 0.5, a) - 0.25 * smoothstep(1.2, 1.7, a); return { y: -0.32, lLF: 1.2, lRF: 1.2, lLO: 0.45, lRO: 0.45, kL: 1.3, kR: 1.3, fL: 0.2, fR: 0.2, spF: 0.06, aLF: 0.7, aLO: 0.1, eL: 1.2, aLT: 0.4, aRF: 0.75 + 1.6 * k, aRO: 0.1 + 0.18 * k, eR: 1.1 + 0.85 * k, aRT: 0.4 * (1 - k) - 0.15 * k, hdN: 0.14 * k }; } },
@@ -257,6 +271,9 @@ export const EXPRESSIONS = {
   mischief: { smile: 1, open: 0.2, brow: 0, tilt: 0.3, lid: 0.15, wide: 1 },
   sleep: { smile: 0, open: 0, brow: -0.01, tilt: 0, lid: 0.95, wide: 1 },
   serious: { smile: -0.1, open: 0, brow: -0.012, tilt: 0.2, lid: 0.2, wide: 1 },
+  sad: { smile: -0.55, open: 0, brow: 0.012, tilt: -0.4, lid: 0.3, wide: 1 },
+  scared: { smile: -0.45, open: 0.35, brow: 0.035, tilt: -0.4, lid: -0.1, wide: 1.15 },
+  thinking: { smile: 0, open: 0, brow: 0.01, tilt: 0.25, lid: 0.25, wide: 1 },
 };
 
 function blendExpr(a, b, w) {
@@ -498,7 +515,7 @@ export function buildHero(cfg) {
     name: cfg.name, root, J, face, cfg, seed: cfg.seed ?? 1,
     extras,
     // costume pieces that move: the monster mask (0 off, 1 on the face, 2 pushed up)
-    applyExtras(x) { if (extras.mask) { const m = x.mask ?? 0; extras.mask.visible = m > 0.5; const up = m > 1.5 ? 1 : 0; extras.maskPivot.rotation.x = -2.4 * up; extras.maskPivot.position.set(0, extras.maskHc + 0.05 * up, -0.03 * up); } if (extras.milk) extras.milk.visible = (x.milk ?? 0) > 0.5; if (extras.slimeParts) for (const m of extras.slimeParts) m.visible = (x.slime ?? 0) > 0.5; if (extras.scuffs) for (const m of extras.scuffs) m.visible = (x.scuff ?? 0) > 0.5; },
+    applyExtras(x) { if (extras.mask) { const m = x.mask ?? 0; extras.mask.visible = m > 0.5; const up = m > 1.5 ? 1 : 0; extras.maskPivot.rotation.x = -2.4 * up; extras.maskPivot.position.set(0, extras.maskHc + 0.05 * up, -0.03 * up); } if (extras.milk) extras.milk.visible = (x.milk ?? 0) > 0.5; if (extras.slimeParts) for (const m of extras.slimeParts) m.visible = (x.slime ?? 0) > 0.5; if (extras.scuffs) for (const m of extras.scuffs) m.visible = (x.scuff ?? 0) > 0.5; if (extras.faceShade) { const rv = x.reveal ?? 0; extras.faceShade.visible = rv < 0.98; extras.faceShade.material.opacity = 1 - rv; extras.bandana.position.y = extras.bandanaY - 0.13 * rv; extras.bandana.position.z = 0.2 * 0.42 + 0.02 * rv; extras.bandana.scale.set(1 - 0.08 * rv, 1 - 0.45 * rv, 1 + 0.1 * rv); } if (extras.hat) extras.hat.rotation.set(0.12 - 0.12 * (x.reveal ?? 0), 0, x.hatTilt ?? 0); if (extras.bucket) extras.bucket.visible = (x.bucket ?? 0) > 0.5; },
     props: {},
     applyPose(p) {
       J.hips.position.y = 0.95 + p.y;
@@ -693,7 +710,7 @@ function buildExtras(cfg, J, neck, hc, r) {
     }
   }
   if (has('wideHat')) {
-    const h = grp(head, 0, hc + r * 0.86, 0.01); h.rotation.set(0.12, 0, 0);
+    const h = grp(head, 0, hc + r * 0.86, 0.01); h.rotation.set(0.12, 0, 0); ex.hat = h;
     const felt = mat(0x2a1c12, { r: 0.85 });
     mk(new THREE.CylinderGeometry(0.42, 0.42, 0.02, 30), felt, h, [0, 0, 0], [0, 0, 0], [1, 1, 0.92]);
     mk(new THREE.CylinderGeometry(0.15, 0.18, 0.2, 22), felt, h, [0, 0.1, 0]);
@@ -703,8 +720,9 @@ function buildExtras(cfg, J, neck, hc, r) {
   }
   if (has('faceShadow')) {
     // the face stays hidden in the hat's shadow
-    mk(new THREE.SphereGeometry(r * 1.04, 22, 14, 0, P, 0, P * 0.8), new THREE.MeshBasicMaterial({ color: 0x050407 }), head, [0, hc - 0.005, 0.015], [0, 0, 0], [0.98, 1.08, 1.04], false);
-    mk(new THREE.BoxGeometry(0.34, 0.12, 0.14), mat(0x3a1a12, { r: 0.9 }), head, [0, hc - r * 0.62, r * 0.42], [0.2, 0, 0]);
+    ex.faceShade = mk(new THREE.SphereGeometry(r * 1.04, 22, 14, 0, P, 0, P * 0.8), new THREE.MeshBasicMaterial({ color: 0x050407, transparent: true }), head, [0, hc - 0.005, 0.015], [0, 0, 0], [0.98, 1.08, 1.04], false);
+    ex.bandana = mk(new THREE.BoxGeometry(0.34, 0.12, 0.14), mat(0x3a1a12, { r: 0.9 }), head, [0, hc - r * 0.62, r * 0.42], [0.2, 0, 0]);
+    ex.bandanaY = hc - r * 0.62;
   }
   if (has('policeCap') || has('guardCap')) {
     const police = has('policeCap');
@@ -727,6 +745,27 @@ function buildExtras(cfg, J, neck, hc, r) {
     for (let i = 0; i < 5; i++) mk(new THREE.SphereGeometry(0.05 + rr(i) * 0.04, 8, 6), c, J.spine, [(rr(i + 7) - 0.5) * 0.3, 0.1 + rr(i + 3) * 0.4, 0.1 + rr(i + 9) * 0.06]);
     for (let i = 0; i < 3; i++) mk(new THREE.SphereGeometry(0.05 + rr(i + 20) * 0.04, 8, 6), c, head, [(rr(i + 30) - 0.5) * 0.25, hc + 0.12 + rr(i + 40) * 0.08, -0.05 + rr(i + 50) * 0.1]);
     for (const sd of ['L', 'R']) mk(new THREE.SphereGeometry(0.07, 8, 6), c, J.sh[sd], [0, 0.02, 0], [0, 0, 0], [1.2, 0.8, 1.1]);
+  }
+  if (has('mustache')) {
+    const m = mat(cfg.hairColor ?? 0x2a1a10, { r: 0.8 });
+    for (const sd of [1, -1]) mk(new THREE.CapsuleGeometry(0.018, 0.06, 4, 8), m, head, [sd * 0.035, hc - r * 0.3, r * 0.93], [0, 0, sd * 1.2]);
+    mk(new THREE.SphereGeometry(0.028, 8, 6), m, head, [0, hc - r * 0.5, r * 0.88], [0, 0, 0], [1.6, 0.7, 0.6]);
+  }
+  if (has('dusty')) {
+    ex.scuffs = ex.scuffs ?? [];
+    const dust = mat(0xb8aa90, { r: 1, opacity: 0.7 });
+    for (const [par, x, y, z, r0, ry] of [[J.spine, 0.08, 0.2, 0.17, 0.05, 0], [J.spine, -0.1, 0.38, 0.165, 0.04, 0], [J.spine, 0.02, 0.1, -0.17, 0.06, P], [J.kn.L, 0, -0.2, 0.08, 0.04, 0], [J.kn.R, 0, -0.1, 0.08, 0.035, 0], [J.el.R, 0, -0.08, 0.062, 0.03, 0], [J.el.L, 0, -0.1, 0.062, 0.03, 0], [J.hips, 0.14, -0.3, 0.26, 0.06, 0.3], [J.hips, -0.16, -0.45, 0.28, 0.05, -0.3]]) {
+      const m = mk(new THREE.CircleGeometry(r0, 10), dust, par, [x, y, z], [0, ry, 0], [1.4, 1, 1], false); m.visible = false; ex.scuffs.push(m);
+    }
+  }
+  if (has('bucketHat')) {
+    const b = grp(head, 0, hc + r * 0.55, 0.0); b.rotation.set(P - 0.15, 0, 0.08);
+    const bm = mat(0x2f8cff, { r: 0.45 });
+    mk(new THREE.CylinderGeometry(r * 1.35, r * 1.05, r * 1.5, 22, 1, true), mat(0x2f8cff, { r: 0.45, side: THREE.DoubleSide }), b, [0, 0, 0]);
+    mk(new THREE.CircleGeometry(r * 1.05, 22), bm, b, [0, -r * 0.75, 0], [P / 2, 0, 0], null, false);
+    mk(new THREE.TorusGeometry(r * 1.36, 0.012, 6, 24), mat(0x1a5ad0, { r: 0.4 }), b, [0, r * 0.75, 0], [P / 2, 0, 0]);
+    mk(new THREE.TorusGeometry(r * 1.2, 0.006, 4, 24, P), mat(0xc0c4cc, { m: 0.7, r: 0.3 }), b, [0, r * 0.4, 0], [0, 0, 0]);
+    b.visible = false; ex.bucket = b;
   }
   if (has('milkStain')) {
     ex.milk = grp(J.spine, 0.03, 0.27, 0.142);
@@ -1062,6 +1101,22 @@ export const COSTUMES = {
 };
 
 // Props held in a hand. Hand-local axes: -y runs toward the fingers.
+function box(parent, w, h, d, color, pos, o = {}) {
+  return mk(new THREE.BoxGeometry(w, h, d), o.material ?? mat(color, { r: o.r ?? 0.62, m: o.m ?? 0 }), parent, pos, o.rot ?? [0, 0, 0]);
+}
+let _partyTex = null;
+function partyListTex() {
+  if (_partyTex) return _partyTex;
+  _partyTex = canvasTex(256, 340, (c, w, h) => {
+    c.fillStyle = '#faf8f0'; c.fillRect(0, 0, w, h);
+    c.strokeStyle = '#9ac0e8'; c.lineWidth = 2; for (let y = 60; y < h; y += 28) { c.beginPath(); c.moveTo(14, y); c.lineTo(w - 14, y); c.stroke(); }
+    c.fillStyle = '#e8402a'; c.font = 'bold 30px sans-serif'; c.fillText('PARTY!!', 30, 44);
+    c.fillStyle = '#223'; c.font = '22px sans-serif';
+    ['- snacks', '- music', '- balloons', '- pizza x5', '- NO cleaning', '- cake?'].forEach((tx, i) => c.fillText(tx, 22, 84 + i * 28));
+  });
+  return _partyTex;
+}
+
 export function buildProp(kind) {
   const g = new THREE.Group();
   if (kind === 'notebook') {
@@ -1150,6 +1205,32 @@ export function buildProp(kind) {
   } else if (kind === 'clay') {
     g.add(buildClayFigure(0.9, true));
     g.position.set(0, -0.11, 0.06); g.rotation.set(1.8, 0, 0);
+  } else if (kind === 'box') {
+    const cb = mat(0xc49a62, { r: 0.95 });
+    box(g, 0.55, 0.4, 0.42, 0, [0, 0, 0], { material: cb });
+    box(g, 0.56, 0.02, 0.06, 0xa8804a, [0, 0.2, 0]);
+    for (const sd of [1, -1]) box(g, 0.2, 0.012, 0.4, 0xd8b078, [sd * 0.17, 0.205, 0], { rot: [0, 0, sd * -0.5] });
+    g.position.set(0.24, -0.08, 0.2); g.rotation.set(0, 0, 0);
+  } else if (kind === 'mop') {
+    mk(new THREE.CylinderGeometry(0.018, 0.018, 1.5, 8), mat(0x2f8cff, { r: 0.4 }), g, [0, 0.25, 0]);
+    mk(new THREE.CylinderGeometry(0.05, 0.05, 0.06, 10), mat(0x9aa0a8, { m: 0.6, r: 0.3 }), g, [0, -0.52, 0]);
+    for (let i = 0; i < 14; i++) { const a2 = (i / 14) * P * 2; mk(new THREE.CapsuleGeometry(0.012, 0.2, 3, 5), mat(0xf2f0ea, { r: 0.9 }), g, [Math.cos(a2) * 0.035, -0.66, Math.sin(a2) * 0.035], [Math.sin(a2) * 0.25, 0, -Math.cos(a2) * 0.25]); }
+    g.position.set(0, 0.05, 0.05); g.rotation.set(0.12, 0, 0);
+  } else if (kind === 'bucket') {
+    mk(new THREE.CylinderGeometry(0.17, 0.13, 0.26, 20, 1, true), mat(0x2f8cff, { r: 0.45, side: THREE.DoubleSide }), g, [0, -0.2, 0]);
+    mk(new THREE.CircleGeometry(0.13, 20), mat(0x1a5ad0, { r: 0.5 }), g, [0, -0.33, 0], [-P / 2, 0, 0], null, false);
+    mk(new THREE.TorusGeometry(0.16, 0.006, 4, 20, P), mat(0xc0c4cc, { m: 0.7, r: 0.3 }), g, [0, -0.07, 0], [0, 0, 0]);
+    g.position.set(0, -0.02, 0.02);
+  } else if (kind === 'spray') {
+    mk(new THREE.CylinderGeometry(0.04, 0.045, 0.16, 12), mat(0x3ad0a0, { r: 0.35 }), g, [0, -0.04, 0]);
+    mk(new THREE.CylinderGeometry(0.025, 0.035, 0.04, 10), mat(0xf2f2f2, { r: 0.4 }), g, [0, 0.06, 0]);
+    box(g, 0.025, 0.03, 0.07, 0xf2f2f2, [0, 0.085, 0.03]);
+    box(g, 0.012, 0.05, 0.02, 0xff5a3a, [0, 0.055, 0.045]);
+    mk(new THREE.PlaneGeometry(0.06, 0.07), mat(0xffffff, { r: 0.6 }), g, [0, -0.04, 0.046], [0, 0, 0], null, false);
+    g.position.set(0, -0.08, 0.05);
+  } else if (kind === 'paper') {
+    mk(new THREE.PlaneGeometry(0.21, 0.28), new THREE.MeshStandardMaterial({ color: 0xfaf8f0, roughness: 0.9, side: THREE.DoubleSide, map: partyListTex() }), g, [0, 0, 0], [0, 0, 0], null, false);
+    g.position.set(-0.02, -0.1, 0.08); g.rotation.set(-1.0, 0.0, 0);
   } else if (kind === 'sack') {
     const c = mat(0xb8a47a, { r: 0.95 });
     mk(new THREE.SphereGeometry(0.2, 14, 10), c, g, [0, -0.28, 0], [0, 0, 0], [1, 1.15, 0.9]);
@@ -1274,5 +1355,9 @@ export const CAST = {
   clay4: { name: 'clay4', seed: 34, scale: 0.98, face: 'golem', skin: 0x846448, skinDark: 0x644a36, eyeColor: 0x2a9cff, casual: true, emblem: false, shirt: 0x846448, pants: 0x644a36, boot: 0x644a36, belt: 0x644a36, bareHands: true, extras: ['clayLumps'] },
   clay5: { name: 'clay5', seed: 35, scale: 1.02, face: 'golem', skin: 0x8e6c50, skinDark: 0x6c5040, eyeColor: 0x2a9cff, casual: true, emblem: false, shirt: 0x8e6c50, pants: 0x6c5040, boot: 0x6c5040, belt: 0x6c5040, bareHands: true, extras: ['clayLumps'] },
   clay6: { name: 'clay6', seed: 36, scale: 0.95, face: 'golem', skin: 0x7c6048, skinDark: 0x5e4636, eyeColor: 0x2a9cff, casual: true, emblem: false, shirt: 0x7c6048, pants: 0x5e4636, boot: 0x5e4636, belt: 0x5e4636, bareHands: true, extras: ['clayLumps'] },
+  guard2: { name: 'guard2', seed: 24, scale: 0.95, hair: 'spiky', hairColor: 0x3a2a1a, browColor: 0x2a1a10, skin: 0xc48a62, skinDark: 0xb07a52, eyeColor: 0x2a1a10, casual: true, emblem: false, shirt: 0x3a4a3a, shirtDark: 0x22301f, pants: 0x232a22, boot: 0x111111, belt: 0x0c0c0c, bareHands: true, extras: ['guardCap', 'badge'] },
+  ped1: { name: 'ped1', seed: 41, scale: 0.9, hair: 'wavy', hairColor: 0x8a4a1a, browColor: 0x5a2a10, skin: 0xf0c8a0, skinDark: 0xe0b48a, eyeColor: 0x2a5a3a, casual: true, emblem: false, shirt: 0xd04a6a, pants: 0x2a3a5a, boot: 0xf2f2f2, belt: 0x1a1a1a, bareHands: true, sleeves: 'short' },
+  ped2: { name: 'ped2', seed: 42, scale: 0.95, hair: 'spiky', hairColor: 0x1a1410, browColor: 0x120d0a, skin: 0x8a5a3a, skinDark: 0x7a4a2e, eyeColor: 0x1a100a, casual: true, emblem: false, shirt: 0xf2c84a, pants: 0x3a3a40, boot: 0x2a2a2a, belt: 0x1a1a1a, bareHands: true },
+  ped3: { name: 'ped3', seed: 43, scale: 0.88, hair: 'tall', hairColor: 0x5a3a20, browColor: 0x3a2410, skin: 0xd9a07a, skinDark: 0xc98e68, eyeColor: 0x3a2412, casual: true, emblem: false, shirt: 0x4aa86a, pants: 0x5a4a3a, boot: 0x3a2a1a, belt: 0x1a1a1a, bareHands: true, sleeves: 'short' },
   barista: { name: 'barista', seed: 4, hair: 'wavy', hairColor: 0x2b1d14, skin: 0xc98d68, skinDark: 0xb87d5a, eyeColor: 0x2d1a10, casual: true, emblem: false, shirt: 0xf4f1ea, pants: 0x4a3a2c, apron: 0x2f7d4f, boot: 0x2a2420, bareHands: true, sleeves: 'short' },
 };

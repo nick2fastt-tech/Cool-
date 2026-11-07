@@ -23,6 +23,8 @@ export const SPEAKERS = {
   behemoth: { name: 'BEHEMOTH', color: '#c78bff' },
   guard: { name: 'SECURITY GUARD', color: '#b8d0e8' },
   officer: { name: 'OFFICER', color: '#8fb8ff' },
+  cowboy: { name: 'FRED', color: '#f0b46a' },
+  guard2: { name: 'GUARD 2', color: '#b8e0a8' },
 };
 
 function wrap(ctx, text, maxW) {

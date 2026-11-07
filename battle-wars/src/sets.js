@@ -786,6 +786,7 @@ export function buildLiving() {
       lamp.intensity = night ? 11 : eve > 0.5 ? 9 : 0;
       ceil.intensity = night ? 9 : 0;
       win.material.emissive.set(night ? 0x1a2a50 : eve > 0.5 ? 0xffb08a : 0xeef6ff);
+      win.material.color.set(night ? 0x1a2238 : 0xffffff);
       steel.visible = v('steelTable', 0) > 0.5;
       ctable.visible = v('table.held', 0) < 0.5;
       laptop.visible = v('laptop.on', 0) > 0.5; if (laptop.visible) drawLap(v('laptop.mode', 0) > 0.5 ? 1 : 0);
@@ -908,6 +909,9 @@ export function buildTitle(font, TextGeometry) {
   const sub6 = mkText('WESTERN DISASTER', 0.5, 0.2, [new THREE.MeshStandardMaterial({ color: 0xffe2a0, metalness: 0.4, roughness: 0.3, emissive: 0xff9a2a, emissiveIntensity: 0.7 }), new THREE.MeshStandardMaterial({ color: 0x6a3a1a, metalness: 0.6, roughness: 0.35 })]);
   sub6.position.set(0, -1.2, 0.3);
   g.add(sub6);
+  const sub7 = mkText('THE ESCAPE', 0.56, 0.22, [new THREE.MeshStandardMaterial({ color: 0xe8f4ff, metalness: 0.4, roughness: 0.3, emissive: 0x5a9aff, emissiveIntensity: 0.7 }), new THREE.MeshStandardMaterial({ color: 0x2a3a5a, metalness: 0.7, roughness: 0.3 })]);
+  sub7.position.set(0, -1.2, 0.3);
+  g.add(sub7);
   const westMats = [new THREE.MeshStandardMaterial({ color: 0xfff0d0, metalness: 0.5, roughness: 0.25, emissive: 0xd88a2a, emissiveIntensity: 0.7 }), new THREE.MeshStandardMaterial({ color: 0x8a4a1a, metalness: 0.7, roughness: 0.3, emissive: 0x3a1800, emissiveIntensity: 0.6 })];
   const westBg = new THREE.Color(0x1a0c04);
   const orangeMats = [new THREE.MeshStandardMaterial({ color: 0xffe0b0, metalness: 0.5, roughness: 0.2, emissive: 0xff7a10, emissiveIntensity: 0.8 }), new THREE.MeshStandardMaterial({ color: 0xd05a08, metalness: 0.8, roughness: 0.25, emissive: 0x602000, emissiveIntensity: 0.7 })];
@@ -938,8 +942,8 @@ export function buildTitle(font, TextGeometry) {
       title.position.x = red ? Math.sin(t * 61) * 0.03 * v('title.jolt', 0) : 0;
       const ks = v('title.sub', 0);
       const which = v('title.subText', 'BE READY!');
-      sub.visible = which === 'BE READY!'; sub2.visible = which === 'THE RED DIAMOND HUNT'; sub3.visible = which === "THE SOUL STEALER'S SECRET"; sub4.visible = which === 'SPOOKY HALLOWEEN PARTY'; sub5.visible = which === 'BEHEMOTH AWAKENS'; sub6.visible = which === 'WESTERN DISASTER';
-      for (const m of [sub, sub2, sub3, sub4, sub5, sub6]) { m.scale.setScalar(Math.max(0.001, ks)); m.position.y = v('title.subY', -1.2); }
+      sub.visible = which === 'BE READY!'; sub2.visible = which === 'THE RED DIAMOND HUNT'; sub3.visible = which === "THE SOUL STEALER'S SECRET"; sub4.visible = which === 'SPOOKY HALLOWEEN PARTY'; sub5.visible = which === 'BEHEMOTH AWAKENS'; sub6.visible = which === 'WESTERN DISASTER'; sub7.visible = which === 'THE ESCAPE';
+      for (const m of [sub, sub2, sub3, sub4, sub5, sub6, sub7]) { m.scale.setScalar(Math.max(0.001, ks)); m.position.y = v('title.subY', -1.2); }
       title.position.y = v('title.y', 0.25);
       emb.material.opacity = 0.35 * k;
       rays.rotation.z = t * 0.15;

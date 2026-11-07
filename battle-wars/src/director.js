@@ -9,6 +9,15 @@ export const EASE = {
   back: (k) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); },
 };
 
+// walking ease: speeds up over the first a0 of the span and slows down over the last a1 (fractions), constant speed between
+export function softEase(k, a0 = 0, a1 = 0) {
+  const v = 1 / (1 - a0 / 2 - a1 / 2);
+  if (a0 > 0 && k < a0) return v * k * k / (2 * a0);
+  if (a1 > 0 && k > 1 - a1) { const r = 1 - k; return 1 - v * r * r / (2 * a1); }
+  return v * (k - a0 / 2);
+}
+const easeFn = (e, k) => (typeof e === 'object' ? softEase(k, e.a0, e.a1) : EASE[e](k));
+
 export function evalTrack(keys, t) {
   if (!keys || !keys.length) return undefined;
   if (t < keys[0].t) return undefined;
@@ -20,7 +29,7 @@ export function evalTrack(keys, t) {
   if (typeof k0.v !== 'number' || k1.ease === 'step') return k0.v;
   const span = k1.t - k0.t;
   const k = span <= 0 ? 1 : (t - k0.t) / span;
-  return k0.v + (k1.v - k0.v) * EASE[k1.ease](k);
+  return k0.v + (k1.v - k0.v) * easeFn(k1.ease, k);
 }
 
 // For discrete tracks: current value, previous value and time since the change.
@@ -112,12 +121,14 @@ export function createDirector() {
     path(c, pts, speed, dt = 0, opts = {}) {
       let t = dt;
       let px = val(`${c}.x`, now + dt), pz = val(`${c}.z`, now + dt);
-      for (const p of pts) {
+      pts.forEach((p, i) => {
         const d = Math.hypot(p[0] - px, p[1] - pz);
         const dur = Math.max(0.05, d / speed);
-        D.move(c, p[0], p[1], dur, t, { ...opts, y: p[2] });
+        const ramp = Math.min(0.42, 0.32 / dur);
+        const ease = opts.ease ?? ((i === 0 || i === pts.length - 1) ? { a0: i === 0 ? ramp : 0, a1: i === pts.length - 1 ? ramp : 0 } : 'linear');
+        D.move(c, p[0], p[1], dur, t, { ...opts, y: p[2], ease });
         t += dur; px = p[0]; pz = p[1];
-      }
+      });
       return t - dt;
     },
     look(c, yaw, nod = 0, dur = 0.4, dt = 0) { D.anim(`${c}.hy`, yaw, dur, dt); D.anim(`${c}.hn`, nod, dur, dt); return D; },
@@ -154,14 +165,18 @@ export function createDirector() {
 export function buildGaitTables(T, chars, dt = 1 / 48) {
   const tables = {};
   for (const c of chars) {
-    const xs = T.tracks[`${c}.x`], zs = T.tracks[`${c}.z`];
+    const xs = T.tracks[`${c}.x`], zs = T.tracks[`${c}.z`], rys = T.tracks[`${c}.ry`];
     const n = Math.ceil(T.duration / dt) + 2;
     const phase = new Float32Array(n), speed = new Float32Array(n);
-    let ph = 0, px = evalTrack(xs, 0) ?? 0, pz = evalTrack(zs, 0) ?? 0;
+    let ph = 0, px = evalTrack(xs, 0) ?? 0, pz = evalTrack(zs, 0) ?? 0, pry = evalTrack(rys, 0) ?? 0;
     for (let i = 0; i < n; i++) {
       const t = i * dt;
-      const x = evalTrack(xs, t) ?? 0, z = evalTrack(zs, t) ?? 0;
-      const d = Math.hypot(x - px, z - pz);
+      const x = evalTrack(xs, t) ?? 0, z = evalTrack(zs, t) ?? 0, ry = evalTrack(rys, t) ?? 0;
+      let dr = ry - pry; while (dr > Math.PI) dr -= Math.PI * 2; while (dr < -Math.PI) dr += Math.PI * 2;
+      // turning on the spot takes little steps (instant spins / teleports do not)
+      const turn = Math.abs(dr) < 0.5 ? Math.abs(dr) * 0.28 : 0;
+      const d = Math.hypot(x - px, z - pz) + turn;
+      pry = ry;
       const v = d / dt;
       const sp = v > 12 ? 0 : v; // teleports are not movement
       const stride = 1.25 + Math.min(1, Math.max(0, (sp - 1.6) / 2)) * 1.5;
