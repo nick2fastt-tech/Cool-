@@ -275,6 +275,24 @@ const SFX = {
   gameFall: () => mix(sweep(1.0, 900, 120, 'square', (t) => Math.min(1, (1 - t) * 4) * 0.08), Float32Array.from([...new Float32Array(Math.floor(1.0 * SR)), ...mix(...[67, 63, 60, 55].map((n, i) => Float32Array.from([...new Float32Array(Math.floor(i * 0.22 * SR)), ...tone(mtof(n), 0.2, 'square', 0.06)])))])),
   crownBreak: () => mix(SFX.glassShatter(), partials(1.6, [660, 990, 1320, 1760], 0.5, [0.15, 0.12, 0.1, 0.08]), sweep(1.2, 80, 40, 'sine', (t) => env(t, 0.005, 0.4) * 0.5)),
   energyArrive: () => mix(sweep(1.6, 120, 900, 'saw', (t) => Math.sin(Math.PI * t / 1.6) * 0.1), highpass(nbuf(1.6, (t) => Math.sin(Math.PI * t / 1.6) * 0.3), 2000), partials(1.6, [523, 784, 1046], 0.6, [0.08, 0.06, 0.05])),
+  // Episode 9
+  knock: () => mix(...[0, 0.42, 0.84].map((d) => Float32Array.from([...new Float32Array(Math.floor(d * SR)), ...mix(lowpass(nbuf(0.14, (t) => env(t, 0.001, 0.03) * 1.0), 650), sweep(0.16, 150, 70, 'sine', (t) => env(t, 0.001, 0.05) * 0.9))]))),
+  glitch: () => make(0.7, (t) => { const k = Math.floor(t * 38); if (hash01(k) < 0.35) return 0; const f = 180 + hash01(k + 3) * 1600; return (Math.sin(TAU * f * t) > 0 ? 0.16 : -0.16) * (1 - t / 0.7) + (hash01(Math.floor(t * 4000) + k) - 0.5) * 0.12 * (1 - t / 0.7); }),
+  illusionWarp: () => mix(sweep(2.2, 900, 110, 'sine', (t) => Math.sin(Math.PI * t / 2.2) * 0.2 * (0.6 + 0.4 * Math.sin(t * 38))), sweep(2.2, 1340, 150, 'sine', (t) => Math.sin(Math.PI * t / 2.2) * 0.1), lowpass(nbuf(2.2, (t) => Math.sin(Math.PI * t / 2.2) * 0.25), (t) => 300 + 1800 * (1 - t / 2.2))),
+  heartbeat: () => mix(...[0, 0.26].map((d, i) => Float32Array.from([...new Float32Array(Math.floor(d * SR)), ...sweep(0.2, 68 - i * 8, 38, 'sine', (t) => env(t, 0.004, 0.07) * (0.9 - i * 0.3))]))),
+  titanRoar: () => mix(lowpass(sweep(3.4, 64, 30, 'saw', (t) => Math.sin(Math.PI * Math.min(1, t / 3.4)) * 0.55 * (0.6 + 0.4 * Math.sin(t * 21))), 480), lowpass(nbuf(3.4, (t) => Math.sin(Math.PI * t / 3.4) * 0.55 * (0.7 + 0.3 * Math.sin(t * 13))), 380), sweep(3.4, 44, 26, 'sine', (t) => Math.sin(Math.PI * t / 3.4) * 0.5)),
+  titanStep: () => mix(sweep(0.7, 52, 24, 'sine', (t) => env(t, 0.004, 0.2) * 1.0), lowpass(nbuf(0.5, (t) => env(t, 0.002, 0.09) * 0.7), 260), highpass(nbuf(0.3, (t) => env(Math.max(0, t - 0.03), 0.01, 0.06) * 0.12), 1200)),
+  giantNeigh: () => mix(make(2.4, (t) => { const f = 230 + 120 * Math.sin(t * 13) * Math.exp(-t * 1.1) - 60 * t; return (Math.sin(TAU * f * t) * 0.5 + Math.sin(TAU * f * 2.01 * t) * 0.22 + Math.sin(TAU * f * 3.02 * t) * 0.1) * Math.sin(Math.PI * Math.min(1, t / 2.4)) * 0.6; }), lowpass(nbuf(2.4, (t) => Math.sin(Math.PI * t / 2.4) * 0.3), 700)),
+  electricHum: () => mix(make(5.0, (t) => (Math.sin(TAU * 60 * t) * 0.3 + Math.sin(TAU * 120 * t) * 0.16 + Math.sin(TAU * 180 * t) * 0.06) * Math.min(1, t * 1.2) * Math.min(1, (5 - t) * 1.2) * (0.85 + 0.15 * Math.sin(t * 7))), highpass(nbuf(5.0, (t) => (hash01(Math.floor(t * 30)) > 0.85 ? 0.12 : 0.01) * Math.min(1, t) * Math.min(1, 5 - t)), 3000)),
+  muffled: () => lowpass(make(3.2, (t) => { const syl = Math.max(0, Math.sin(t * 8.5 + Math.sin(t * 2.3) * 3)); const f = 92 + 22 * Math.sin(t * 3.1) + 10 * Math.sin(t * 7.3); return (((t * f) % 1) * 2 - 1) * syl * 0.5 * Math.min(1, (3.2 - t) * 3); }), 420),
+  barrierUp: () => mix(sweep(1.0, 180, 1500, 'sine', (t) => env(t, 0.01, 0.4) * 0.25), partials(1.8, [520, 780, 1040, 1560], 0.7, [0.1, 0.08, 0.06, 0.04]), highpass(nbuf(1.2, (t) => (hash01(Math.floor(t * 60)) > 0.7 ? 0.2 : 0.03) * Math.max(0, 1 - t / 1.2)), 2500)),
+  crownClink: () => mix(...[0, 0.32, 0.52, 0.64].map((d, i) => Float32Array.from([...new Float32Array(Math.floor(d * SR)), ...partials(0.35, [1240, 1870, 2610], 0.08, [0.3 - i * 0.06, 0.18 - i * 0.03, 0.1])]))),
+  tvOn: () => mix(sweep(0.25, 6000, 15000, 'sine', (t) => env(t, 0.002, 0.15) * 0.06), highpass(nbuf(0.6, (t) => env(t, 0.005, 0.3) * 0.25), 1500), sweep(0.4, 60, 60, 'square', (t) => env(t, 0.002, 0.15) * 0.08)),
+  tvOff: () => mix(sweep(0.2, 1200, 80, 'sine', (t) => env(t, 0.002, 0.08) * 0.25), highpass(nbuf(0.15, (t) => env(t, 0.001, 0.05) * 0.2), 2000)),
+  powerCut: () => mix(sweep(1.2, 220, 30, 'saw', (t) => env(t, 0.005, 0.5) * 0.25), lowpass(nbuf(0.5, (t) => env(t, 0.002, 0.15) * 0.5), 500), sweep(0.3, 120, 40, 'sine', (t) => env(t, 0.002, 0.1) * 0.6)),
+  emergencyOn: () => mix(...[0, 0.18].map((d) => Float32Array.from([...new Float32Array(Math.floor(d * SR)), ...sweep(0.12, 880, 880, 'square', (t) => env(t, 0.002, 0.08) * 0.08)])), sweep(0.6, 50, 50, 'sine', (t) => env(t, 0.01, 0.3) * 0.3)),
+  doorRattle: () => mix(...Array.from({ length: 10 }, (_, i) => Float32Array.from([...new Float32Array(Math.floor((i * 0.075 + hash01(i) * 0.02) * SR)), ...mix(lowpass(nbuf(0.06, (t) => env(t, 0.001, 0.02) * 0.6), 900), partials(0.08, [420, 690], 0.03, [0.15, 0.08]))]))),
+  shadowWhoosh: () => lowpass(nbuf(1.0, (t) => Math.sin(Math.PI * t) * 0.35 * (0.7 + 0.3 * Math.sin(t * 17))), (t) => 300 + 900 * Math.sin(Math.PI * t)),
   // Episode 8
   bzzt: () => mix(make(0.7, (t) => (Math.sin(TAU * 120 * t) > 0.3 ? 0.3 : -0.3) * (hash01(Math.floor(t * 40)) > 0.35 ? 1 : 0.1) * Math.min(1, (0.7 - t) * 6)), highpass(nbuf(0.7, (t) => (hash01(Math.floor(t * 60) + 7) > 0.6 ? 0.35 : 0.02) * Math.min(1, (0.7 - t) * 6)), 2500)),
   cellSlide: () => mix(lowpass(nbuf(1.3, (t) => Math.sin(Math.PI * t / 1.3) * 0.5 * (0.7 + 0.3 * Math.sin(t * 80))), 900), sweep(1.3, 140, 110, 'saw', (t) => Math.sin(Math.PI * t / 1.3) * 0.08), Float32Array.from([...new Float32Array(Math.floor(1.2 * SR)), ...SFX.clunk()])),
@@ -317,7 +335,7 @@ for (const e of T.sfx) {
 
 // ------------------------------------------------------------ footsteps from the animation
 const setAt = (t) => { let s = T.sets[0].set; for (const e of T.sets) if (e.t0 <= t) s = e.set; return s; };
-const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy', 'guard', 'officer', 'officer2', 'clay1', 'clay2', 'clay3', 'clay4', 'clay5', 'clay6', 'clay7', 'clay8', 'guard2', 'ped1', 'ped2', 'ped3'], 1 / 96);
+const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy', 'guard', 'officer', 'officer2', 'clay1', 'clay2', 'clay3', 'clay4', 'clay5', 'clay6', 'clay7', 'clay8', 'guard2', 'ped1', 'ped2', 'ped3', 'soulX'], 1 / 96);
 const step = { soft: sweep(0.09, 140, 70, 'sine', (t) => env(t, 0.002, 0.025) * 0.5), tap: highpass(nbuf(0.04, (t) => env(t, 0.001, 0.008) * 0.25), 2500) };
 for (const c of Object.keys(gait)) {
   const tab = gait[c];
@@ -425,6 +443,7 @@ const STYLES = {
   behemoth: { bpm: 92, key: 45, prog: [[0, 'min'], [1, 'maj'], [-2, 'maj'], [0, 'min']], drums: { kick: 'x..x....x..x..x.', snare: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.' }, bass: 'x..x....x..x..x.', bassKind: 'tuba', pad: 0.07, comp: { kind: 'brass', rhythm: 'x.....x.........', vol: 0.12, len: 0.3 }, lead: null },
   showdown: { bpm: 128, key: 52, prog: [[0, 'min'], [0, 'min'], [-4, 'maj'], [-5, 'maj']], drums: { kick: 'x...x...x...x...', snare: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.' }, bass: 'x..x..x.x..x..x.', bassKind: 'sub', pad: 0.03, comp: { kind: 'pluck', rhythm: 'x.xx.xx.x.xx.xx.', vol: 0.09, arp: true }, lead: { kind: 'lead', notes: [64, -1, 67, -1, 69, -1, 71, 69, 67, -1, 64, -1, 62, -1, 64, -1], vol: 0.05 } },
   western: { bpm: 72, key: 52, prog: [[0, 'min'], [-2, 'maj'], [-4, 'maj'], [-5, 'maj']], drums: { kick: 'x.......x.......', hat: '....x.......x...' }, bass: 'x.......x...x...', bassKind: 'sub', pad: 0.04, comp: { kind: 'pluck', rhythm: 'x..x..x.x..x..x.', vol: 0.1, arp: true }, lead: { kind: 'lead', notes: [64, -1, -1, 67, -1, 69, -1, -1, 71, -1, 69, 67, 64, -1, -1, -1], vol: 0.05 } },
+  eerie: { bpm: 72, key: 51, prog: [[0, 'min'], [1, 'maj'], [0, 'min'], [6, 'dom']], drums: { kick: 'x.........x.....' }, bass: 'x...............', bassKind: 'sub', pad: 0.08, comp: { kind: 'bell', rhythm: 'x..x....x..x....', vol: 0.05, arp: true }, lead: null },
   chill: { bpm: 84, key: 53, prog: [[0, 'maj7'], [-1, 'min7'], [-3, 'min7'], [-5, 'maj7']], drums: { kick: 'x.........x.....', snare: '....x.......x...', hat: '..x...x...x...x.' }, bass: 'x.......x..x....', bassKind: 'sub', comp: { kind: 'marimba', rhythm: 'x...x.x...x...x.', vol: 0.1 }, lead: null },
 };
 
@@ -512,7 +531,7 @@ fs.mkdirSync(OUT, { recursive: true });
 fs.writeFileSync(path.join(OUT, 'audio.wav'), Buffer.concat([hdr, data]));
 
 // ------------------------------------------------------------ captions file (soft subtitles)
-const NAMES = { aaron: 'AARON', flare: 'FLARE', eric: 'ERIC', water: 'WATER GUY', barista: 'BARISTA', leon: 'LEON', greg: 'GREG', soul: 'SOUL STEALER', computer: 'COMPUTER', shadow: 'UNKNOWN VOICE', newark: 'NEWARK', dj: 'DJ', boss: 'GAME BOSS', skeleton: 'SKELETON', crowd: 'CROWD', everyone: 'EVERYONE', behemoth: 'BEHEMOTH', citizen: 'CITIZEN', guard: 'SECURITY GUARD', officer: 'OFFICER', cowboy: 'FRED', guard2: 'GUARD 2' };
+const NAMES = { aaron: 'AARON', flare: 'FLARE', eric: 'ERIC', water: 'WATER GUY', barista: 'BARISTA', leon: 'LEON', greg: 'GREG', soul: 'SOUL STEALER', computer: 'COMPUTER', shadow: 'UNKNOWN VOICE', newark: 'NEWARK', dj: 'DJ', boss: 'GAME BOSS', skeleton: 'SKELETON', crowd: 'CROWD', everyone: 'EVERYONE', behemoth: 'BEHEMOTH', citizen: 'CITIZEN', guard: 'SECURITY GUARD', officer: 'OFFICER', cowboy: 'FRED', guard2: 'GUARD 2', soulX: 'SOUL STEALER' };
 const ts = (s) => { const ms = Math.round(s * 1000); const h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60, sec = Math.floor(ms / 1000) % 60; return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')},${String(ms % 1000).padStart(3, '0')}`; };
 const srt = [...T.captions].sort((a, b) => a.t0 - b.t0).map((c, i) => `${i + 1}\n${ts(c.t0)} --> ${ts(c.t1)}\n${c.sound ? `[${c.text}]` : `${c.label ?? NAMES[c.who]}: ${c.text}`}\n`).join('\n');
 fs.writeFileSync(path.join(OUT, 'captions.srt'), srt);

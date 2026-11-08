@@ -191,6 +191,7 @@ export function buildCrown() {
     mk(new THREE.OctahedronGeometry(0.09, 0), runeM, root, [Math.sin(a) * 1.0, 0.36, Math.cos(a) * 1.0]);
   }
   const light = new THREE.PointLight(0xb040ff, 0, 4, 1.6); light.position.y = 0.4; root.add(light);
+  const RUST = new THREE.Color(0xb88a2a), RUST_DARK = new THREE.Color(0x4a2a10);
   return {
     root,
     update(st) {
@@ -199,10 +200,14 @@ export function buildCrown() {
       root.position.set(st.x, st.y, st.z);
       root.rotation.set(st.pitch ?? 0, st.yaw ?? 0, st.roll ?? 0);
       root.scale.setScalar(Math.max(0.001, st.size));
-      const g = st.glow;
+      // Episode 9: a fake, rusty yellow copy of the crown with no glow
+      const rust = st.rust ?? 0;
+      gold.color.setHex(0x8a7a8a).lerp(RUST, rust); gold.metalness = lerp(0.75, 0.35, rust); gold.roughness = lerp(0.3, 0.75, rust);
+      runeM.color.setHex(0x2a0a40).lerp(RUST_DARK, rust);
+      const g = st.glow * (1 - rust);
       runeM.emissive.setRGB(lerp(0.69, 0.23, st.blue ?? 0), lerp(0.25, 0.66, st.blue ?? 0), 1);
       light.color.copy(runeM.emissive);
-      runeM.emissiveIntensity = 0.4 + g * (2.2 + 0.8 * Math.sin(st.t * 9));
+      runeM.emissiveIntensity = (0.4 + g * (2.2 + 0.8 * Math.sin(st.t * 9))) * (1 - 0.95 * rust);
       light.intensity = Math.min(g, 2.5) * 2.2 * Math.min(4, st.size * 3);
       light.distance = 2 + st.size * 3;
     },

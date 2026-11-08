@@ -1,7 +1,7 @@
 // Environments. Each set: { group, update(t, ctx), bg, fog, exposure }
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { mat, mk, grp, rng, canvasTex, clamp, smoothstep, lerp, roundRect } from './util.js';
+import { mat, mk, grp, rng, hash, canvasTex, clamp, smoothstep, lerp, roundRect } from './util.js';
 import * as TX from './textures.js';
 
 const P = Math.PI;
@@ -376,6 +376,9 @@ export function buildHQExterior() {
   for (let i = 0; i < 6; i++) tree(i === 2 || i === 3 ? centerG : g, -12 + i * 4.8 + (i > 2 ? 0 : 0), -0.8, 0.9, i * 13 + 2);
   for (let x = -24; x <= 24; x += 12) streetLamp(x === 0 ? centerG : g, x, 1.9, 1);
   const car = buildCar(); g.add(car);
+  // Episode 9: purple light from the Soul Stealer's portal across the street
+  const purpleL = new THREE.PointLight(0xa040ff, 0, 80, 1.1); purpleL.position.set(0, 9, 17); g.add(purpleL);
+  const purpleFill = new THREE.PointLight(0x8a50ff, 0, 30, 1.3); purpleFill.position.set(0, 4, 3); g.add(purpleFill);
   // Episode 5: front doors that swing open (and get bashed by Leon), a balcony, a distant skyline
   const doors = [];
   for (const sd of [-1, 1]) {
@@ -420,6 +423,8 @@ export function buildHQExterior() {
       car.position.set(v('hcar.x', -40), 0, v('hcar.z', 5.5));
       for (const w of car.userData.wheels) w.rotation.z = -v('hcar.x', -40) / 0.4;
       car.visible = v('hcar.vis', 1) > 0.5;
+      const pp = v('hq.purple', 0);
+      purpleL.intensity = pp * 70 * (0.9 + 0.1 * Math.sin(t * 3)); purpleFill.intensity = pp * 5;
     },
   };
 }
@@ -509,6 +514,23 @@ function cityMap() {
   const hyd = [[180, 120], [300, 360], [520, 220], [700, 140], [820, 380], [430, 430], [620, 300], [260, 230]];
   tex.draw = (t, mode, zoom, blip) => {
     const w = 1024, h = 512;
+    if (mode >= 3) {
+      ctx.fillStyle = '#05010a'; ctx.fillRect(0, 0, w, h);
+      if (mode < 3.5) {
+        // a strange purple eye
+        const f = Math.floor(t * 18), pulse = 0.85 + 0.15 * Math.sin(t * 5);
+        for (let i = 0; i < 300; i++) { ctx.fillStyle = `rgba(160,60,255,${0.1 * hash(i + f)})`; ctx.fillRect(hash(i * 3 + f) * w, hash(i * 7 + f) * h, 4, 2); }
+        ctx.save(); ctx.translate(w / 2, h / 2); ctx.scale(pulse, pulse);
+        ctx.shadowColor = '#b040ff'; ctx.shadowBlur = 40; ctx.strokeStyle = '#c070ff'; ctx.lineWidth = 10;
+        ctx.beginPath(); ctx.moveTo(-260, 0); ctx.quadraticCurveTo(0, -200, 260, 0); ctx.quadraticCurveTo(0, 200, -260, 0); ctx.stroke();
+        ctx.fillStyle = '#6a1ab0'; ctx.beginPath(); ctx.arc(0, 0, 92, 0, 7); ctx.fill();
+        ctx.fillStyle = '#05010a'; ctx.beginPath(); ctx.ellipse(0, 0, 22, 78, 0, 0, 7); ctx.fill();
+        ctx.strokeStyle = '#e0b0ff'; ctx.lineWidth = 4; for (let k = 0; k < 12; k++) { const a = (k / 12) * Math.PI * 2; ctx.beginPath(); ctx.moveTo(Math.cos(a) * 300, Math.sin(a) * 230); ctx.lineTo(Math.cos(a) * 340, Math.sin(a) * 260); ctx.stroke(); }
+        ctx.restore(); ctx.shadowBlur = 0;
+        for (let k = 0; k < 3; k++) { const y = hash(f * 5 + k) * h; ctx.drawImage(ctx.canvas, 0, y, w, 10, (hash(f + k * 2) - 0.5) * 50, y, w, 10); }
+      }
+      tex.needsUpdate = true; return;
+    }
     if (mode >= 2) {
       // security camera grid
       ctx.fillStyle = '#04070f'; ctx.fillRect(0, 0, w, h);
@@ -647,12 +669,16 @@ export function buildLiving() {
   const tvLight = new THREE.PointLight(0x8fb8ff, 3, 6, 1.6); tvLight.position.set(0, 1.6, -3.2); g.add(tvLight);
   const floor = new THREE.MeshStandardMaterial({ map: TX.planksTex('#c69a6a', '#b98d5f'), roughness: 0.7 });
   plane(g, 15, 11, floor, [0, 0, 0]);
-  const wall = mat(0xd5def0, { r: 0.9 });
+  const wall = mat(0xd5def0, { r: 0.9 }).clone();
   box(g, 15, 3.6, 0.2, 0, [0, 1.8, -4.8], { material: wall, noShadow: true });
   box(g, 15, 3.6, 0.2, 0, [0, 1.8, 5.5], { material: wall, noShadow: true });
-  box(g, 0.2, 3.6, 11, 0, [-7.2, 1.8, 0], { material: wall, noShadow: true });
+  // left wall in pieces around the front door (z 2.0..3.2)
+  box(g, 0.2, 3.6, 7.5, 0, [-7.2, 1.8, -1.75], { material: wall, noShadow: true });
+  box(g, 0.2, 3.6, 2.3, 0, [-7.2, 1.8, 4.35], { material: wall, noShadow: true });
+  box(g, 0.2, 1.3, 1.2, 0, [-7.2, 2.95, 2.6], { material: wall, noShadow: true });
   box(g, 0.2, 3.6, 11, 0, [7.2, 1.8, 0], { material: wall, noShadow: true });
-  box(g, 15, 0.1, 11, 0, [0, 3.62, 0.35], { material: mat(0xeef2fa), noShadow: true });
+  const ceilM = mat(0xeef2fa).clone();
+  box(g, 15, 0.1, 11, 0, [0, 3.62, 0.35], { material: ceilM, noShadow: true });
   for (const [x, t] of [[-3, 'HEROES'], [3, 'ACTION']]) mk(new THREE.PlaneGeometry(1.0, 1.4), new THREE.MeshStandardMaterial({ map: TX.posterTex(t, '#3a8a5a', '#0b2a20'), roughness: 0.8 }), g, [x, 2.0, 5.38], [0, P, 0], null, false);
   box(g, 2.4, 0.9, 0.5, 0x3a2c22, [-1, 0.45, 5.15], { round: 0.03 });
   for (let i = 0; i < 4; i++) mk(new THREE.CylinderGeometry(0.08, 0.1, 0.3, 10), mat(0xffc21a, { m: 0.7, r: 0.3 }), g, [-1.8 + i * 0.5, 1.05, 5.15]);
@@ -668,7 +694,7 @@ export function buildLiving() {
   const tvScreen = plane(g, 3.3, 1.85, new THREE.MeshBasicMaterial({ map: tv }), [0, 1.75, -4.55], [0, 0, 0], false);
   box(g, 3.2, 0.5, 0.6, 0x3a2c22, [0, 0.25, -4.35], { round: 0.03 });
   // couch, table, rug
-  couch(g, 0, 0.75, P);
+  const couchG = couch(g, 0, 0.75, P);
   mk(new THREE.CylinderGeometry(2.6, 2.6, 0.02, 32), mat(0x9a4f4f, { r: 1 }), g, [0, 0.01, -0.4], [0, 0, 0], [1, 1, 0.7]);
   const ctable = grp(g);
   box(ctable, 2.0, 0.08, 0.9, 0x7a5232, [0, 0.42, -0.85], { round: 0.03 });
@@ -715,8 +741,62 @@ export function buildLiving() {
   const stairM = mat(0x8a6a4a, { r: 0.7 });
   for (let i = 0; i < 10; i++) box(g, 1.3, 0.3, 0.45, 0, [5.0, 0.15 + i * 0.3, 1.6 - i * 0.45], { material: stairM });
   box(g, 0.08, 1.0, 5.0, 0x1d2a7a, [4.3, 2.0, -0.6], { rot: [0.585, 0, 0] });
-  // door left
-  box(g, 0.1, 2.3, 1.2, 0x1d2a7a, [-7.08, 1.15, 2.6]);
+  // front door (left wall): it can shake, glow, show a silhouette through its glass, and swing open
+  const doorG = grp(g, -7.12, 0, 2.0);
+  box(doorG, 0.1, 2.3, 1.2, 0x1d2a7a, [0, 1.15, 0.6]);
+  const glassTex = canvasTex(128, 176, () => {});
+  let glassState = -1;
+  const drawGlass = (st) => {
+    if (st === glassState) return; glassState = st;
+    const c = glassTex.userData.ctx, w = 128, h = 176;
+    const gr = c.createLinearGradient(0, 0, 0, h);
+    if (st === 0) { gr.addColorStop(0, '#cfe8ff'); gr.addColorStop(1, '#8ab4e0'); } else { gr.addColorStop(0, '#d08aff'); gr.addColorStop(1, '#5a1aa0'); }
+    c.fillStyle = gr; c.fillRect(0, 0, w, h);
+    if (st === 2) { c.fillStyle = 'rgba(10,4,20,0.92)'; c.beginPath(); c.ellipse(64, 46, 20, 25, 0, 0, 7); c.fill(); c.beginPath(); c.moveTo(22, h); c.lineTo(30, 92); c.quadraticCurveTo(64, 66, 98, 92); c.lineTo(106, h); c.fill(); c.fillStyle = '#e0a0ff'; c.fillRect(54, 42, 7, 4); c.fillRect(68, 42, 7, 4); }
+    c.strokeStyle = '#1d2a7a'; c.lineWidth = 8; c.strokeRect(0, 0, w, h);
+    glassTex.needsUpdate = true;
+  };
+  drawGlass(0);
+  mk(new THREE.PlaneGeometry(0.55, 0.76), new THREE.MeshBasicMaterial({ map: glassTex }), doorG, [0.06, 1.55, 0.6], [0, P / 2, 0], null, false);
+  mk(new THREE.CylinderGeometry(0.025, 0.025, 0.2, 8), mat(0xd9b24a, { m: 0.8 }), doorG, [0.1, 1.05, 1.05], [0, 0, P / 2]);
+  const outsideM = new THREE.MeshBasicMaterial({ color: 0xdfeeff });
+  plane(g, 3.2, 3.4, outsideM, [-8.2, 1.6, 2.6], [0, P / 2, 0], false);
+  // the hallway (right wall) and the shadows that move in the house
+  const hallTex = canvasTex(128, 256, (c, w, h) => { const gr = c.createRadialGradient(64, 120, 6, 64, 120, 120); gr.addColorStop(0, '#05060a'); gr.addColorStop(1, '#2a2f3c'); c.fillStyle = gr; c.fillRect(0, 0, w, h); c.fillStyle = 'rgba(255,255,255,0.05)'; c.fillRect(40, 60, 48, 120); });
+  plane(g, 1.3, 2.4, new THREE.MeshBasicMaterial({ map: hallTex }), [7.09, 1.2, 3.6], [0, -P / 2, 0], false);
+  for (const [y, h, z, d] of [[2.45, 0.1, 3.6, 1.5], [1.2, 2.5, 2.9, 0.1], [1.2, 2.5, 4.3, 0.1]]) box(g, 0.06, h, d, 0x1d2a7a, [7.07, y, z]);
+  const shadowTex = canvasTex(128, 256, (c, w, h) => {
+    c.clearRect(0, 0, w, h); c.filter = 'blur(5px)'; c.fillStyle = 'rgba(0,0,0,0.85)';
+    c.beginPath(); c.ellipse(64, 46, 22, 26, 0, 0, 7); c.fill();
+    c.beginPath(); c.moveTo(26, 250); c.lineTo(30, 100); c.quadraticCurveTo(64, 70, 98, 100); c.lineTo(102, 250); c.fill();
+  });
+  const shM = new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false });
+  const hallShadow = mk(new THREE.PlaneGeometry(0.8, 2.1), shM, g, [7.075, 1.1, 3.6], [0, -P / 2, 0], null, false);
+  const wallShadow = mk(new THREE.PlaneGeometry(1.2, 2.6), shM, g, [0, 1.4, 5.38], [0, P, 0], null, false);
+  // the haunted TV picture
+  const soulTvTex = canvasTex(512, 288, () => {});
+  const soulTv = plane(g, 3.3, 1.85, new THREE.MeshBasicMaterial({ map: soulTvTex }), [0, 1.75, -4.54], [0, 0, 0], false);
+  const drawSoulTv = (t) => {
+    const c = soulTvTex.userData.ctx, w = 512, h = 288, f = Math.floor(t * 20);
+    const bgG = c.createRadialGradient(w / 2, h * 0.45, 20, w / 2, h * 0.45, w * 0.6); bgG.addColorStop(0, '#8a3ad0'); bgG.addColorStop(0.6, '#3a1060'); bgG.addColorStop(1, '#12041e');
+    c.fillStyle = bgG; c.fillRect(0, 0, w, h);
+    for (let i = 0; i < 500; i++) { const r = hash(f * 31 + i); c.fillStyle = `rgba(${180 + r * 75},${120 + 100 * r},${230 + r * 25},${0.15 + 0.3 * hash(i * 7 + f)})`; c.fillRect(hash(i * 3 + f) * w, hash(i * 5 + f * 2) * h, 3, 2); }
+    const jx = (hash(f) - 0.5) * 18;
+    c.fillStyle = '#06020a'; c.beginPath(); c.ellipse(w / 2 + jx, 120, 70, 84, 0, 0, 7); c.fill();
+    c.beginPath(); c.moveTo(w / 2 - 150 + jx, h); c.quadraticCurveTo(w / 2 + jx, 150, w / 2 + 150 + jx, h); c.fill();
+    c.fillStyle = '#000'; c.beginPath(); c.ellipse(w / 2 + jx, 128, 50, 58, 0, 0, 7); c.fill();
+    c.fillStyle = '#ffd0ff'; c.shadowColor = '#e080ff'; c.shadowBlur = 24; c.fillRect(w / 2 - 32 + jx, 117, 22, 9); c.fillRect(w / 2 + 10 + jx, 117, 22, 9); c.shadowBlur = 0;
+    for (let k = 0; k < 4; k++) { const y = hash(f * 3 + k) * h; c.drawImage(c.canvas, 0, y, w, 12, (hash(f + k) - 0.5) * 60, y, w, 12); }
+    c.fillStyle = 'rgba(255,255,255,0.06)'; for (let y = (t * 120) % 6; y < h; y += 6) c.fillRect(0, y, w, 2);
+    soulTvTex.needsUpdate = true;
+  };
+  // illusion light and emergency lights
+  const redL = new THREE.PointLight(0xff2030, 0, 16, 1.2); redL.position.set(0, 3.0, 0.5); g.add(redL);
+  const emM = mat(0xff2020, { e: 0xff1010, ei: 0 }).clone();
+  const emL = [];
+  for (const [x, z] of [[-6.9, -4.5], [6.9, 5.2]]) { box(g, 0.3, 0.18, 0.3, 0, [x, 3.3, z], { material: emM, noShadow: true }); const l = new THREE.PointLight(0xff2020, 0, 12, 1.3); l.position.set(x * 0.9, 3.0, z * 0.9); g.add(l); emL.push(l); }
+  const WALL0 = new THREE.Color(0xd5def0), ILL_WALL = new THREE.Color(0x2a0f44), CEIL0 = new THREE.Color(0xeef2fa), ILL_FLOOR = new THREE.Color(0x3a2448), WHITE = new THREE.Color(0xffffff);
+  const OUT_DAY = new THREE.Color(0xdfeeff), OUT_PURPLE = new THREE.Color(0x7a2ad0);
   // Episode 5: night lighting + the reinforced steel table for the crown
   const ceil = new THREE.PointLight(0xffe0b8, 0, 12, 1.3); ceil.position.set(-1.5, 3.2, 0); g.add(ceil);
   const steel = grp(g, -3.6, 0, -1.7); steel.visible = false;
@@ -730,10 +810,20 @@ export function buildLiving() {
   const ctrl = grp(g); box(ctrl, 0.22, 0.05, 0.12, 0x222831, [0, 0, 0], { round: 0.02 });
   const pizza = grp(g, 0, 0.46, -0.85);
   const boxM = new THREE.MeshStandardMaterial({ map: TX.boxTopTex(), roughness: 0.8 });
+  const pizzaStack = [];
   for (let i = 0; i < 3; i++) {
-    box(pizza, 0.6, 0.07, 0.6, 0, [-0.35 + (i === 2 ? 0.7 : 0), 0.035 + (i === 1 ? 0.075 : 0), 0], { material: mat(0xe8dcc4) });
+    const b = box(pizza, 0.6, 0.07, 0.6, 0, [-0.35 + (i === 2 ? 0.7 : 0), 0.035 + (i === 1 ? 0.075 : 0), 0], { material: mat(0xe8dcc4) });
+    if (i < 2) pizzaStack.push(b);
   }
-  plane(pizza, 0.58, 0.58, boxM, [-0.35, 0.152, 0]);
+  pizzaStack.push(plane(pizza, 0.58, 0.58, boxM, [-0.35, 0.152, 0]));
+  // Episode 9: Aaron's equipment case and a cheeseburger on the coffee table
+  const equip = grp(g, -0.62, 0.46, -0.88); equip.visible = false;
+  box(equip, 0.56, 0.14, 0.36, 0, [0, 0.07, 0], { material: mat(0xc0c6d0, { r: 0.25, m: 0.8 }), round: 0.02 });
+  box(equip, 0.5, 0.012, 0.3, 0, [0, 0.145, 0], { material: mat(0x16223a, { e: 0x3fd2ff, ei: 0.5 }) });
+  mk(new THREE.TorusGeometry(0.06, 0.012, 6, 18), mat(0x7fe8ff, { e: 0x3fd2ff, ei: 1.2 }), equip, [0.36, 0.02, 0.05], [P / 2, 0, 0]);
+  box(equip, 0.12, 0.03, 0.08, 0, [0.38, 0.015, -0.12], { material: mat(0x2a3040, { r: 0.4 }) });
+  const burgerT = grp(g, -0.08, 0.46, -0.62); burgerT.visible = false;
+  { const bun = mat(0xd88a3a, { r: 0.6 }); mk(new THREE.CylinderGeometry(0.06, 0.055, 0.025, 16), bun, burgerT, [0, 0.012, 0]); mk(new THREE.CylinderGeometry(0.062, 0.062, 0.022, 16), mat(0x5a2e18, { r: 0.8 }), burgerT, [0, 0.034, 0]); mk(new THREE.BoxGeometry(0.11, 0.006, 0.11), mat(0xffc81a, { r: 0.5 }), burgerT, [0, 0.048, 0], [0, 0.4, 0]); mk(new THREE.SphereGeometry(0.062, 16, 8, 0, P * 2, 0, P / 2), bun, burgerT, [0, 0.058, 0], [0, 0, 0], [1, 0.75, 1]); }
   const open = mk(new THREE.CircleGeometry(0.27, 24), new THREE.MeshStandardMaterial({ map: TX.pizzaTex(), roughness: 0.7 }), pizza, [0.35, 0.075, 0], [-P / 2, 0, 0]);
   box(pizza, 0.6, 0.6, 0.02, 0xe8dcc4, [0.35, 0.36, -0.3], { rot: [-0.2, 0, 0] });
 
@@ -807,6 +897,25 @@ export function buildLiving() {
       ctrl.position.set(v('ctrl.x', 0.6), 0.47, 0.6);
       ctrl.rotation.y = 0.5;
       pizza.visible = v('pizza', 0) > 0.5;
+      for (const b of pizzaStack) b.visible = v('pizza.single', 0) < 0.5;
+      equip.visible = v('living.equip', 0) > 0.5; burgerT.visible = v('living.burger', 0) > 0.5;
+      // Episode 9: illusions, flickers, darkness and emergency lights
+      const ill = v('illusion', 0), dark = v('living.dark', 0), emg = v('living.emergency', 0);
+      const flick = v('living.flicker', 0) > 0.5 ? (hash(Math.floor(t * 14) + 3) > 0.4 ? 1 : 0.06) : 1;
+      const lk = flick * (1 - dark) * (1 - 0.85 * ill);
+      L.sun.intensity *= lk; L.hemi.intensity *= flick * (1 - 0.9 * dark) * (1 - 0.6 * ill); lamp.intensity *= lk; ceil.intensity *= lk; tvLight.intensity *= flick * (1 - dark);
+      wall.color.copy(WALL0).lerp(ILL_WALL, ill); ceilM.color.copy(CEIL0).lerp(ILL_WALL, ill); floor.color.copy(WHITE).lerp(ILL_FLOOR, ill);
+      couchG.visible = ill < 0.5;
+      redL.intensity = ill * 34 * (0.8 + 0.2 * Math.sin(t * 6));
+      const blinkE = Math.sin(t * 5) > 0 ? 1 : 0.35;
+      for (const l of emL) l.intensity = emg * 16 * blinkE;
+      emM.emissiveIntensity = emg * 2.5 * blinkE;
+      hallShadow.visible = v('hallShadow.vis', 0) > 0.5; hallShadow.position.z = v('hallShadow.z', 3.6);
+      wallShadow.visible = v('wallShadow.vis', 0) > 0.5; wallShadow.position.x = v('wallShadow.x', 0);
+      soulTv.visible = v('tv.soul', 0) > 0.5; if (soulTv.visible) { drawSoulTv(t); tvLight.color.set(0xb050ff); tvLight.intensity = 6; } else tvLight.color.set(0x8fb8ff);
+      doorG.rotation.y = 1.35 * v('door.open', 0) + Math.sin(t * 47) * 0.035 * v('door.shake', 0);
+      drawGlass(Math.round(v('door.glass', 0)));
+      outsideM.color.copy(OUT_DAY).lerp(OUT_PURPLE, v('door.purple', 0)).multiplyScalar(night ? (v('door.purple', 0) > 0.5 ? 1 : 0.25) : eve > 0.5 ? 0.85 : 1);
     },
   };
 }
@@ -865,8 +974,8 @@ export function buildControl() {
       const mode = v('map.mode', 0);
       map.draw(t, mode, v('map.zoom', 0), v('map.blip', 0));
       ds.forEach((d) => d.draw(t, mode));
-      screenLight.color.set(mode >= 1 ? 0x40ff9a : 0xff4040);
-      screenLight.intensity = mode >= 1 ? 1.5 : 2.2 + 1.2 * Math.sin(t * 7);
+      screenLight.color.set(mode >= 3 ? 0xa040ff : mode >= 1 ? 0x40ff9a : 0xff4040);
+      screenLight.intensity = mode >= 3.5 ? 0 : mode >= 3 ? 3.2 : mode >= 1 ? 1.5 : 2.2 + 1.2 * Math.sin(t * 7);
       btns.forEach((b, i) => { b.material.emissiveIntensity = Math.sin(t * 3 + i * 1.7) > 0 ? 0.9 : 0.2; });
     },
   };
@@ -912,6 +1021,9 @@ export function buildTitle(font, TextGeometry) {
   const sub7 = mkText('THE ESCAPE', 0.56, 0.22, [new THREE.MeshStandardMaterial({ color: 0xe8f4ff, metalness: 0.4, roughness: 0.3, emissive: 0x5a9aff, emissiveIntensity: 0.7 }), new THREE.MeshStandardMaterial({ color: 0x2a3a5a, metalness: 0.7, roughness: 0.3 })]);
   sub7.position.set(0, -1.2, 0.3);
   g.add(sub7);
+  const sub8 = mkText('THE ILLUSION', 0.56, 0.22, [new THREE.MeshStandardMaterial({ color: 0xf2e0ff, metalness: 0.4, roughness: 0.3, emissive: 0xa040ff, emissiveIntensity: 0.75 }), new THREE.MeshStandardMaterial({ color: 0x3a1a5a, metalness: 0.7, roughness: 0.3 })]);
+  sub8.position.set(0, -1.2, 0.3);
+  g.add(sub8);
   const westMats = [new THREE.MeshStandardMaterial({ color: 0xfff0d0, metalness: 0.5, roughness: 0.25, emissive: 0xd88a2a, emissiveIntensity: 0.7 }), new THREE.MeshStandardMaterial({ color: 0x8a4a1a, metalness: 0.7, roughness: 0.3, emissive: 0x3a1800, emissiveIntensity: 0.6 })];
   const westBg = new THREE.Color(0x1a0c04);
   const orangeMats = [new THREE.MeshStandardMaterial({ color: 0xffe0b0, metalness: 0.5, roughness: 0.2, emissive: 0xff7a10, emissiveIntensity: 0.8 }), new THREE.MeshStandardMaterial({ color: 0xd05a08, metalness: 0.8, roughness: 0.25, emissive: 0x602000, emissiveIntensity: 0.7 })];
@@ -942,8 +1054,12 @@ export function buildTitle(font, TextGeometry) {
       title.position.x = red ? Math.sin(t * 61) * 0.03 * v('title.jolt', 0) : 0;
       const ks = v('title.sub', 0);
       const which = v('title.subText', 'BE READY!');
-      sub.visible = which === 'BE READY!'; sub2.visible = which === 'THE RED DIAMOND HUNT'; sub3.visible = which === "THE SOUL STEALER'S SECRET"; sub4.visible = which === 'SPOOKY HALLOWEEN PARTY'; sub5.visible = which === 'BEHEMOTH AWAKENS'; sub6.visible = which === 'WESTERN DISASTER'; sub7.visible = which === 'THE ESCAPE';
-      for (const m of [sub, sub2, sub3, sub4, sub5, sub6, sub7]) { m.scale.setScalar(Math.max(0.001, ks)); m.position.y = v('title.subY', -1.2); }
+      sub.visible = which === 'BE READY!'; sub2.visible = which === 'THE RED DIAMOND HUNT'; sub3.visible = which === "THE SOUL STEALER'S SECRET"; sub4.visible = which === 'SPOOKY HALLOWEEN PARTY'; sub5.visible = which === 'BEHEMOTH AWAKENS'; sub6.visible = which === 'WESTERN DISASTER'; sub7.visible = which === 'THE ESCAPE'; sub8.visible = which === 'THE ILLUSION';
+      for (const m of [sub, sub2, sub3, sub4, sub5, sub6, sub7, sub8]) { m.scale.setScalar(Math.max(0.001, ks)); m.position.y = v('title.subY', -1.2); }
+      // the illusion title shimmers and slips sideways now and then
+      const gl = v('title.glitch', 0);
+      sub8.position.x = gl * (Math.sin(t * 3.1) * 0.05 + (Math.sin(Math.floor(t * 12) * 91.7) > 0.8 ? 0.25 * Math.sin(t * 77) : 0));
+      sub8.rotation.y = gl * 0.08 * Math.sin(t * 2.3);
       title.position.y = v('title.y', 0.25);
       emb.material.opacity = 0.35 * k;
       rays.rotation.z = t * 0.15;

@@ -195,12 +195,12 @@ export function buildFX(parent) {
           light(e.x + Math.sin(e.dir ?? 0) * rl, 0.8, e.z + Math.cos(e.dir ?? 0) * rl, 0xff7a20, 14 * k, 10);
         } else if (e.kind === 'portal' && a >= 0 && a <= e.dur) {
           const k = Math.min(1, a / 0.5, (e.dur - a) / 0.5), r = (e.radius ?? 1.2) * k;
-          const ry = e.ry ?? 0, cx = Math.cos(ry), sx = Math.sin(ry);
-          for (let j = 0; j < 160; j++) {
+          const ry = e.ry ?? 0, cx = Math.cos(ry), sx = Math.sin(ry), ps = Math.max(1, (e.radius ?? 1.2) / 1.6);
+          for (let j = 0, nP = Math.min(900, Math.round(160 * ps)); j < nP; j++) {
             const h1 = hash(j * 2.7), h2 = hash(j * 9.3);
             const ang = h1 * Math.PI * 2 + t * (2 + h2 * 3), rr = r * (0.25 + 0.75 * Math.sqrt(h2));
             const lx = Math.cos(ang) * rr, ly = Math.sin(ang) * rr * 1.3;
-            addG(e.x + lx * cx, (e.y ?? 1.3) + ly, e.z - lx * sx, 0.035 + 0.04 * (1 - h2), j % 3 ? (e.color ?? 0xa050ff) : 0xffffff);
+            addG(e.x + lx * cx, (e.y ?? 1.3) + ly, e.z - lx * sx, (0.035 + 0.04 * (1 - h2)) * Math.pow(ps, 0.35), j % 3 ? (e.color ?? 0xa050ff) : 0xffffff);
           }
           light(e.x, e.y ?? 1.3, e.z, e.color ?? 0xa050ff, 6 * k);
         } else if (e.kind === 'beam' && a >= 0 && a <= e.dur) {

@@ -574,10 +574,10 @@ export function buildBird(o = {}) {
   return {
     root, head,
     update({ t, act = 'perch', a = 0, speed = 0, seed = 0 }) {
-      const flying = act === 'fly' || act === 'glide' || act === 'takeoff';
-      const flap = act === 'fly' || act === 'takeoff' ? Math.sin(t * 26 + seed) : act === 'glide' ? 0.15 * Math.sin(t * 3) : 0;
+      const flying = act === 'fly' || act === 'glide' || act === 'takeoff' || act === 'hover';
+      const flap = act === 'fly' || act === 'takeoff' ? Math.sin(t * 26 + seed) : act === 'hover' ? Math.sin(t * 20 + seed) : act === 'glide' ? 0.15 * Math.sin(t * 3) : 0;
       for (const { w, sd } of wings) { w.rotation.z = sd * (flying ? 0.9 * flap + 0.1 : -0.05); w.rotation.y = flying ? 0 : sd * 0.15; }
-      body.rotation.x = flying ? -0.25 : 0;
+      body.rotation.x = act === 'hover' ? -0.55 : flying ? -0.25 : 0;
       for (const l of legs) l.rotation.x = flying ? 1.2 : 0;
       body.position.y = 0.12 + (flying ? 0.02 * flap : 0);
       tail.rotation.x = flying ? -0.2 : 0.25 + 0.05 * Math.sin(t * 3 + seed);

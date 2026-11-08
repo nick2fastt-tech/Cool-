@@ -16,6 +16,7 @@ Every episode is delivered as one **1080p MP4** (1920×1080) with stereo sound a
 | `s1e6-the-power-returns` | Season 1, Episode 6: "THE POWER RETURNS" | 10:19 |
 | `s1e7-western-disaster` | Season 1, Episode 7: "WESTERN DISASTER" | 7:05 |
 | `s1e8-the-escape` | Season 1, Episode 8: "THE ESCAPE" | 9:11 |
+| `s1e9-the-illusion` | Season 1, Episode 9: "THE ILLUSION" | 12:26 |
 | `s1-red-diamonds` | Early Red Diamonds teaser scene (blue suits) | 1:02 |
 
 Finished videos go to `output/<episode-id>/` (not stored in git — GitHub's 100 MB file limit).
@@ -27,6 +28,8 @@ Finished videos go to `output/<episode-id>/` (not stored in git — GitHub's 100
 - Talking characters gesture with one hand, then the other, and nod along with their words.
 - Gestures snap into place with a tiny overshoot; walks speed up and slow down instead of starting at full speed; turning on the spot takes little steps.
 - Still camera shots slowly push in, and bright lights and energy effects get a soft glow.
+- Blinks come at random moments (now and then a quick double blink), and speakers look at the person they are answering.
+- Standing characters shift their weight from one leg to the other every few seconds; mouths change shape while talking.
 
 ## Characters
 
@@ -38,7 +41,7 @@ Finished videos go to `output/<episode-id>/` (not stored in git — GitHub's 100
 | **Greg** | white round head, two line eyes, black trench coat, usually sleepy | white |
 | **Leon** | the team's mentor: dark hair with a gray streak, navy suit with gold piping | amber |
 | **Water Guy** (villain) | body of flowing water, cartoon face | blue |
-| **Soul Stealer** (villain) | tall hooded cloak, glowing eyes (red, or violet in his sanctuary), symbol in his palm | red |
+| **Soul Stealer** (villain) | tall hooded cloak, glowing eyes (red, or violet in his sanctuary), symbol in his palm. In Episode 9 he throws off the cloak and shows his true form: a white head, blazing violet eyes, shoulder spikes and blue-and-purple energy spreading across his body | red |
 | **The Dog** | a very normal-looking park dog... that can float | — |
 | **Bird-dog Eric** | Eric's transformation: a blue dog with wings that chirp-barks | — |
 | **Newark** | the team's friend and party host: wavy hair, black coat with orange trim, top hat and bow tie | purple |
@@ -48,11 +51,12 @@ Finished videos go to `output/<episode-id>/` (not stored in git — GitHub's 100
 | **Fred Yeehaw** (the Cowboy) | long coat, wide-brimmed hat and a mustache. A regular person with powers, not a villain. His face stayed hidden in shadow until Episode 8, when he speaks for the first time. His strange horse has glowing markings and can turn them both invisible, and he could bring clay to life | orange |
 | **Clay creatures** | Fred's clay army: lumpy clay figures with glowing blue eyes that fall apart and rebuild themselves, and melt under Flare's heat | — |
 | **Bird Eric** | Eric's bird form: a green bird with his brown tuft | — |
+| **The blue-eyed titan** | a 20-meter giant of dark stone with four glowing blue eyes, crystal spikes and arms that reach the ground (Episode 9) | — |
 | **Security Guard / Officers** | the bank guard with his flashlight, and the police officers who take Fred away | light blue / blue |
 
 ## Locations
 
-Aetherfall City streets · Aetherfall City Park · Aetherfall Coffee · Battle Wars HQ (outside, living room on floor 1, Controller Room on floor 3, hidden reactor room below) · Red Team HQ (with a lounge couch and TV) · abandoned subway tunnels, lower machine chamber and platform · the ancient diamond chamber · the Soul Stealer's crystal cavern (red or violet) · title card (blue, red "electric", or orange-and-purple Halloween style) · Flare and Aaron's bedroom · the Halloween store · Newark's house (outside at night, and the party room with stage and dance floor). Halloween episodes also decorate the living room and add pajama and costume outfits. Episode 5 adds Greg's HQ bedroom, a downtown intersection with a city-center plaza, a damaged city park, the UFO, and upgraded blue uniforms with armor. Episode 6 adds the Soul Stealer's lair with the Behemoth's cage, a dark city alley at night, a city view from the living-room window, and a little clay Behemoth figure. Episode 8 adds the street outside Aether Mart (with Battle Wars HQ at the far end), the store inside, the city prison (cell block and outside with a searchlight), downtown at night with a moon, and the Soul Stealer's rooftop. Episode 7 adds the Aetherfall City Bank (street, lobby and storage room), an abandoned street, an abandoned warehouse (inside and out), police cars, a security-camera look and a western title card.
+Aetherfall City streets · Aetherfall City Park · Aetherfall Coffee · Battle Wars HQ (outside, living room on floor 1, Controller Room on floor 3, hidden reactor room below) · Red Team HQ (with a lounge couch and TV) · abandoned subway tunnels, lower machine chamber and platform · the ancient diamond chamber · the Soul Stealer's crystal cavern (red or violet) · title card (blue, red "electric", or orange-and-purple Halloween style) · Flare and Aaron's bedroom · the Halloween store · Newark's house (outside at night, and the party room with stage and dance floor). Halloween episodes also decorate the living room and add pajama and costume outfits. Episode 5 adds Greg's HQ bedroom, a downtown intersection with a city-center plaza, a damaged city park, the UFO, and upgraded blue uniforms with armor. Episode 6 adds the Soul Stealer's lair with the Behemoth's cage, a dark city alley at night, a city view from the living-room window, and a little clay Behemoth figure. Episode 8 adds the street outside Aether Mart (with Battle Wars HQ at the far end), the store inside, the city prison (cell block and outside with a searchlight), downtown at night with a moon, and the Soul Stealer's rooftop. Episode 9 adds the Soul Stealer's dungeon (seen through Fred's blurry vision), the endless purple hallway from Greg's illusion, a haunted version of the living room (moving shadows, a TV that turns on by itself, red emergency lights, a front door with a glass window) and the street outside HQ at night, lit by a giant purple portal. Episode 7 adds the Aetherfall City Bank (street, lobby and storage room), an abandoned street, an abandoned warehouse (inside and out), police cars, a security-camera look and a western title card.
 
 ## How it's made
 

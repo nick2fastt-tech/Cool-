@@ -25,6 +25,7 @@ export const SPEAKERS = {
   officer: { name: 'OFFICER', color: '#8fb8ff' },
   cowboy: { name: 'FRED', color: '#f0b46a' },
   guard2: { name: 'GUARD 2', color: '#b8e0a8' },
+  soulX: { name: 'SOUL STEALER', color: '#ff4a5a' },
 };
 
 function wrap(ctx, text, maxW) {
@@ -291,8 +292,46 @@ function drawCCTV(ctx, W, H, t, val) {
   ctx.restore();
 }
 
+// Fred's vision (Episode 9): blurry, wobbly, washed-out picture like an old camera, with static and a dark eye-shaped edge
+let visCan = null;
+function drawVision(ctx, W, H, t, k) {
+  const s = H / 720;
+  if (!visCan || visCan.width !== W) { visCan = document.createElement('canvas'); visCan.width = W; visCan.height = H; }
+  const v = visCan.getContext('2d');
+  v.filter = `blur(${Math.round((1.5 + 2.0 * k) * s)}px) grayscale(${0.45 * k}) sepia(${0.25 * k}) contrast(1.15) brightness(${1 + 0.25 * k})`;
+  v.drawImage(ctx.canvas, 0, 0);
+  v.filter = 'none';
+  const h1 = (n) => { const x = Math.sin(n * 12.9898) * 43758.5453; return x - Math.floor(x); };
+  const fr = Math.floor(t * 24);
+  ctx.save();
+  // wobbling horizontal strips, now and then a hard glitch jump
+  const strips = 30, sh = H / strips;
+  for (let i = 0; i < strips; i++) {
+    let off = Math.sin(t * 2.6 + i * 0.45) * 7 * s * k;
+    if (h1(fr * 3 + i) > 0.93) off += (h1(fr + i * 7) - 0.5) * 60 * s * k;
+    ctx.drawImage(visCan, 0, i * sh, W, sh + 1, off, i * sh, W, sh + 1);
+  }
+  // ghost double image
+  ctx.globalAlpha = 0.22 * k; ctx.drawImage(visCan, 10 * s * Math.sin(t * 1.7), 3 * s * Math.cos(t * 1.3)); ctx.globalAlpha = 1;
+  // pale violet wash
+  ctx.fillStyle = `rgba(150,110,200,${0.12 * k})`; ctx.fillRect(0, 0, W, H);
+  // static + scanlines + a rolling bar
+  for (let i = 0; i < 420; i++) { ctx.fillStyle = i % 2 ? `rgba(255,255,255,${0.2 * k})` : `rgba(0,0,0,${0.25 * k})`; ctx.fillRect(h1(fr * 131 + i * 17) * W, h1(fr * 71 + i * 29) * H, 2.5 * s, 2 * s); }
+  ctx.fillStyle = `rgba(0,0,0,${0.16 * k})`; for (let y = 0; y < H; y += 4 * s) ctx.fillRect(0, y, W, 1.5 * s);
+  const bandY = ((t * 0.4) % 1) * H; ctx.fillStyle = `rgba(255,255,255,${0.06 * k})`; ctx.fillRect(0, bandY, W, 40 * s);
+  // the edge of Fred's sight: a dark, soft eye-shaped frame
+  const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.28, W / 2, H / 2, H * 0.92);
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.72, `rgba(10,4,20,${0.3 * k})`); g.addColorStop(1, `rgba(4,0,10,${0.85 * k})`);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // flicker
+  if (h1(fr * 5 + 1) > 0.9) { ctx.fillStyle = `rgba(255,255,255,${0.08 * k})`; ctx.fillRect(0, 0, W, H); }
+  ctx.restore();
+}
+
 export function drawOverlay(ctx, W, H, t, T, val) {
   if (val('cctv', 0) > 0.5) drawCCTV(ctx, W, H, t, val);
+  const vk = val('vision', 0);
+  if (vk > 0.01) drawVision(ctx, W, H, t, vk);
   for (const c of T.cards) drawCard(ctx, W, H, c, t);
   for (const c of T.comics) drawComic(ctx, W, H, c, t);
   const fade = val('fade', 0);

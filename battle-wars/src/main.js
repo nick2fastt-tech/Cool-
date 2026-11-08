@@ -11,6 +11,7 @@ import { behemothRig, behParams } from './behemothRig.js';
 import { buildHorse, buildCat, buildLair, buildAlley } from './e6.js';
 import { buildBank, buildOldStreet, buildWarehouse, buildWarehouseExt, buildBird, buildClayBits } from './e7.js';
 import { buildShopStreet, buildMart, buildPrison, buildPrisonExt, buildDowntownExtras } from './e8.js';
+import { buildDungeon, buildEndlessHall, buildTitan, buildDome, buildCloak } from './e9.js';
 import { buildFX } from './fx.js';
 import { evalTrack, evalStep, buildGaitTables, gaitAt } from './director.js';
 import { drawOverlay } from './overlay.js';
@@ -54,6 +55,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     ...(META?.e6 ? { lair: buildLair(), alley: buildAlley() } : {}),
     ...(META?.e7 ? { bank: buildBank(), oldStreet: buildOldStreet(), warehouse: buildWarehouse(), whExt: buildWarehouseExt() } : {}),
     ...(META?.e8 ? { shopSt: buildShopStreet(), mart: buildMart(), prison: buildPrison(), prisonExt: buildPrisonExt() } : {}),
+    ...(META?.e9 ? { dungeon: buildDungeon(), hall9: buildEndlessHall() } : {}),
     black: { name: 'black', group: new THREE.Group(), bg: new THREE.Color(0x000000), update() {} },
   };
   for (const s of Object.values(SETS)) { s.group.visible = false; scene.add(s.group); }
@@ -64,7 +66,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   // each hero can have outfit variants (pajamas, party costumes); the `${name}.outfit` track picks one per frame
   const heroes = {}, heroSets = {};
   const CLAYS = META?.e7 ? ['clay1', 'clay2', 'clay3', 'clay4', 'clay5', 'clay6', 'clay7', 'clay8'] : [];
-  const HERO_NAMES = ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy', ...(META?.e7 ? ['guard', 'officer', 'officer2'] : []), ...(META?.e8 ? ['guard2', 'ped1', 'ped2', 'ped3'] : []), ...CLAYS];
+  const HERO_NAMES = ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy', ...(META?.e7 ? ['guard', 'officer', 'officer2'] : []), ...(META?.e8 ? ['guard2', 'ped1', 'ped2', 'ped3'] : []), ...(META?.e9 ? ['soulX'] : []), ...CLAYS];
   for (const n of HERO_NAMES) {
     const extras = [...(CAST[n].extras ?? []), ...(META?.extras?.[n] ?? [])];
     heroSets[n] = { base: buildHero({ ...CAST[n], ...(costume[n] ?? {}), extras }) };
@@ -79,8 +81,9 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   const handProps = {};
   if (META?.e7) PROP_KINDS.push('sack', 'flashlight', 'toast');
   if (META?.e8) PROP_KINDS.push('box', 'mop', 'bucket', 'spray', 'paper');
+  if (META?.e9) PROP_KINDS.push('burger', 'foodStack');
   for (const n of Object.keys(heroes)) for (const side of ['L', 'R']) for (const k of PROP_KINDS) {
-    if (CLAYS.includes(n) || n.startsWith('ped')) continue;
+    if (CLAYS.includes(n) || n.startsWith('ped') || n === 'soulX') continue;
     const m = buildProp(k); m.visible = false; heroes[n].J.hand[side].add(m); handProps[`${n}.${side}.${k}`] = onHand(n, side, m);
   }
   const water = buildWaterGuy();
@@ -114,10 +117,13 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
       const list = [];
       heroSets[n].base.root.traverse((o) => {
         if (!o.isMesh) return;
-        o.material = o.material.clone();
+        const src = o.material; o.material = src.clone(); o.material.userData = { src };
         list.push({ m: o.material, op: o.material.opacity, tr: o.material.transparent, dw: o.material.depthWrite, em: o.material.emissive ? o.material.emissive.clone() : null });
       });
       fadeable[n] = { list, last: 1, TEAL };
+      // the face's iris material is changed by glow effects: point it at the copy the mesh now uses
+      const f = heroSets[n].base.face;
+      heroSets[n].base.root.traverse((o) => { if (o.isMesh && o.material.userData.src === f.iris) f.iris = o.material; });
     }
   }
   const applyFade = (n, al, t) => {
@@ -138,6 +144,9 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     for (let i = 1; i <= 4; i++) birds[`pigeon${i}`] = buildBird({ body: 0x8a8e9a, wing: 0x6a6e7a, belly: 0xb0b4be, beak: 0xd0a080, scale: 1.1 });
     for (const b of Object.values(birds)) { b.root.visible = false; scene.add(b.root); }
   }
+  // Episode 9: the blue-eyed titan, Aaron's barrier dome, the Soul Stealer's thrown-off cloak
+  const titan = META?.e9 ? buildTitan() : null, dome = META?.e9 ? buildDome() : null, cloak = META?.e9 ? buildCloak() : null;
+  for (const o of [titan, dome, cloak]) if (o) { o.root.visible = false; scene.add(o.root); }
   const gadget = {};
   if (META?.e6) {
     const holoTex = canvasTex(256, 160, (c, w, h) => {
@@ -174,6 +183,9 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     const hand = mk(new THREE.SphereGeometry(0.075, 14, 10), mat(0xf2f2f4, { r: 0.55 }), scene); hand.visible = false;
     stretchArms[side] = { beads, hand };
   }
+  // Episode 9: Greg's arms coiled around Behemoth's body (rings that follow the creature)
+  const coils = [], ZAXIS = new THREE.Vector3(0, 0, 1), tmpDir = new THREE.Vector3();
+  if (META?.e9) for (let i = 0; i < 4; i++) { const m = mk(new THREE.TorusGeometry(1, 0.09, 8, 36), mat(0x16161a, { r: 0.6 }), scene); m.visible = false; coils.push(m); }
   // Leon's time-freeze field
   const field = new THREE.Mesh(new THREE.SphereGeometry(1.15, 32, 20), new THREE.MeshBasicMaterial({ color: 0xa050ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
   scene.add(field);
@@ -199,7 +211,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     slices[n] = onHand(n, 'R', attachProp(heroes[n], 'R', m, [0, -0.12, 0.08], [0.4, 0, 0]));
   }
 
-  const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy', 'water', 'dog', 'birddog', 'tiger', 'horse', 'cat', ...(META?.e7 ? ['guard', 'officer', 'officer2'] : []), ...(META?.e8 ? ['guard2', 'ped1', 'ped2', 'ped3'] : []), ...CLAYS]);
+  const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy', 'water', 'dog', 'birddog', 'tiger', 'horse', 'cat', ...(META?.e7 ? ['guard', 'officer', 'officer2'] : []), ...(META?.e8 ? ['guard2', 'ped1', 'ped2', 'ped3'] : []), ...(META?.e9 ? ['soulX', 'titan'] : []), ...CLAYS]);
   const val = (name, d = 0) => { const v = evalTrack(T.tracks[name], curT); return v === undefined ? d : v; };
   let curT = 0;
   const X = { T, scene, val: (n, d = 0) => val(n, d), hand: (n, side = 'R') => { const v = new THREE.Vector3(); heroes[n].J.hand[side].getWorldPosition(v); return v; }, rig: () => rig, crownPos: () => crown ? crown.root.position.clone() : new THREE.Vector3() };
@@ -219,7 +231,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   // ---------- the "life" layer (every episode): listeners look at whoever is talking, breathing,
   // small head drift, eye darts, two-handed talk gestures and snappier gesture blends.
   const UPPER = new Set(['aLF', 'aLO', 'aLT', 'eL', 'aRF', 'aRO', 'aRT', 'eR', 'hdN', 'hdY', 'hdT', 'spF', 'spT', 'spS']);
-  const NO_LIFE = new Set(['lieBack', 'lieSide', 'lieSleep', 'sitSleep', 'carried', 'knockBack', 'tumble', 'fly', 'hover', 'dive', 'dodge', 'freeze', 'freezeStand', 'freezeStep', 'climb', 'hang', 'climbHead', 'mount', 'melt', 'pinned', 'golem', 'golemReach', 'golemSwipe', 'heroLand', 'flail', 'dragged', 'struggle', 'stretchArms', 'jumpScare', 'stumble', 'frozenStare', 'lieFront', 'standUp']);
+  const NO_LIFE = new Set(['lieBack', 'lieSide', 'lieSleep', 'sitSleep', 'carried', 'knockBack', 'tumble', 'fly', 'hover', 'dive', 'dodge', 'freeze', 'freezeStand', 'freezeStep', 'climb', 'hang', 'climbHead', 'mount', 'melt', 'pinned', 'golem', 'golemReach', 'golemSwipe', 'heroLand', 'flail', 'dragged', 'struggle', 'stretchArms', 'jumpScare', 'stumble', 'frozenStare', 'lieFront', 'standUp', 'hoverPull', 'grabHem', 'pullOff']);
   const lines = T.captions.filter((c) => c.who && !c.sound).sort((a, b) => a.t0 - b.t0);
   const vAt = (n, tt, d = 0) => { const v = evalTrack(T.tracks[n], tt); return v === undefined ? d : v; };
   function speakerHead(who, tt) {
@@ -244,6 +256,38 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     return [clamp(yaw, -1.1, 1.1), clamp(pitch, -0.45, 0.35)];
   }
   const GAZE_DT = [0, 0.1, 0.2, 0.3, 0.4, 0.5];
+  // natural blinking: random gaps (about every 2-6 s), now and then a quick double blink
+  function blinkAt(seed, t) {
+    const slot = Math.floor(t / 0.5);
+    let b = 0;
+    for (const s2 of [slot, slot - 1]) {
+      const hs = hash(s2 * 1.37 + seed * 7.1);
+      if (hs >= 0.12) continue;
+      const st = s2 * 0.5 + hash(s2 * 3.3 + seed) * 0.3;
+      for (const off of hs < 0.03 ? [0, 0.24] : [0]) { const a = t - st - off; if (a >= 0 && a < 0.14) b = Math.max(b, Math.sin((a / 0.14) * P)); }
+    }
+    return b;
+  }
+  // who a speaker is answering: the last person who spoke before this line (within 10 s)
+  function addresseeAt(name, tt) {
+    let cur = null;
+    for (const l of lines) { if (l.t0 > tt) break; if (l.who === name && tt < l.t1) cur = l; }
+    if (!cur) return null;
+    let prev = null;
+    for (const l of lines) { if (l.t0 >= cur.t0) break; if (l.who !== name && l.t0 > cur.t0 - 10) prev = l; }
+    return prev ? prev.who : null;
+  }
+  function lookToward(name, who, tt, sitting) {
+    const sp = speakerHead(who, tt); if (!sp) return null;
+    const x = vAt(`${name}.x`, tt), z = vAt(`${name}.z`, tt);
+    const dx = sp[0] - x, dz = sp[2] - z, dist = Math.hypot(dx, dz);
+    if (dist < 0.3 || dist > 9) return null;
+    let yaw = Math.atan2(dx, dz) - vAt(`${name}.ry`, tt);
+    while (yaw > P) yaw -= P * 2; while (yaw < -P) yaw += P * 2;
+    if (Math.abs(yaw) > 2.1) return null;
+    const pitch = -Math.atan2(sp[1] - (vAt(`${name}.y`, tt) + (sitting ? 1.1 : 1.5)), dist);
+    return [clamp(yaw, -1.1, 1.1), clamp(pitch, -0.45, 0.35)];
+  }
 
   function updateHero(name, t) {
     const outfit = evalStep(T.tracks[`${name}.outfit`], t).v ?? 'base';
@@ -309,9 +353,22 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
       p.spF += 0.012 * br * still; p.aLO += 0.012 * br; p.aRO += 0.012 * br;
       p.hdY += 0.05 * noise1(t * 0.3 + h.seed * 3.3) * still; p.hdN += 0.025 * noise1(t * 0.27 + h.seed * 5.1); p.hdT += 0.02 * noise1(t * 0.23 + h.seed * 7.7);
       p.tilt += 0.012 * noise1(t * 0.21 + h.seed * 2.3) * still;
+      if (!cur.sit && moveW < 0.2) {
+        // every few seconds the weight moves from one leg to the other
+        const ws = (t + h.seed * 2.9) / 5.5, wseg = Math.floor(ws), wf = ws - wseg;
+        const side = (k) => (hash(k * 2.7 + h.seed) > 0.5 ? 1 : -1);
+        const sh = lerp(side(wseg - 1), side(wseg), smoothstep(0, 0.18, wf)) * (1 - moveW * 5);
+        p.tilt += 0.022 * sh; p.twist += 0.03 * sh;
+        if (sh > 0) { p.kR += 0.09 * sh; p.lRF += 0.04 * sh; } else { p.kL -= 0.09 * sh; p.lLF -= 0.04 * sh; }
+      }
       // listeners turn their head (and eyes) toward whoever is talking
       let gy = 0, gp = 0;
       if (talk <= 0) { for (const d of GAZE_DT) { const gz = gazeAt(name, t - d, cur.sit); if (gz) { gy += gz[0]; gp += gz[1]; } } gy /= GAZE_DT.length; gp /= GAZE_DT.length; }
+      else {
+        // while talking, look at the person being answered (a bit less than a listener would)
+        for (const d of GAZE_DT) { const who = addresseeAt(name, t - d); const gz = who ? lookToward(name, who, t - d, cur.sit) : null; if (gz) { gy += gz[0] * 0.75; gp += gz[1] * 0.6; } }
+        gy /= GAZE_DT.length; gp /= GAZE_DT.length;
+      }
       const wExp = 1 - clamp((Math.abs(hy) + Math.abs(hn)) * 4);
       p.hdY += gy * 0.7 * wExp; p.hdN += gp * 0.6 * wExp;
       lookX += clamp(gy * 0.9, -0.8, 0.8) * wExp;
@@ -328,12 +385,12 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     const ew = smoothstep(0, 0.25, es.since);
     const e = {}; for (const k in e1) e[k] = e0[k] + (e1[k] - e0[k]) * ew;
     if (talk > 0) e.brow += 0.007 * Math.max(0, Math.sin(t * 3.1 + h.seed)) * (1 + (e.brow > 0.02 ? 0.5 : 0));
-    const bp = (t + h.seed * 1.37) % 3.9;
-    const blink = bp < 0.14 ? Math.sin((bp / 0.14) * P) : 0;
-    h.applyFace(e, talk, blink, { x: clamp(lookX, -1, 1), y: clamp(lookY, -1, 1) });
+    const blink = blinkAt(h.seed, t);
+    const mw = talk > 0 ? 0.82 + 0.32 * Math.abs(Math.sin(t * 5.3 + h.seed)) : 1;
+    h.applyFace(e, talk, blink, { x: clamp(lookX, -1, 1), y: clamp(lookY, -1, 1), mw });
     const fl = val(`${name}.flicker`, 0);
-    h.applyGlow({ hair: val(`${name}.hairGlow`), suit: val(`${name}.suitGlow`), eyes: val(`${name}.eyeGlow`), glove: val(`${name}.gloveGlow`), red: val(`${name}.redEyes`), dim: val(`${name}.dim`), flicker: fl > 0 ? (Math.sin(t * 37) * Math.sin(t * 13.7) > 0 ? 1 : 1 - fl) : 0 });
-    h.applyExtras({ mask: val(`${name}.mask`), milk: val(`${name}.milk`), slime: val(`${name}.slime`), scuff: val(`${name}.scuff`), reveal: val(`${name}.reveal`), hatTilt: val(`${name}.hatTilt`), bucket: val(`${name}.bucket`) });
+    h.applyGlow({ hair: val(`${name}.hairGlow`), suit: val(`${name}.suitGlow`), eyes: val(`${name}.eyeGlow`), glove: val(`${name}.gloveGlow`), red: val(`${name}.redEyes`), white: val(`${name}.whiteEyes`), dim: val(`${name}.dim`), flicker: fl > 0 ? (Math.sin(t * 37) * Math.sin(t * 13.7) > 0 ? 1 : 1 - fl) : 0 });
+    h.applyExtras({ mask: val(`${name}.mask`), milk: val(`${name}.milk`), slime: val(`${name}.slime`), scuff: val(`${name}.scuff`), reveal: val(`${name}.reveal`), hatTilt: val(`${name}.hatTilt`), bucket: val(`${name}.bucket`), energy: val(`${name}.energy`), t });
   }
 
   // Water Guy "actions" produce arm targets etc.
@@ -396,6 +453,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     if (name === 'cat') { cat.headG.getWorldPosition(tmpV); return tmpV.clone(); }
     if (birds[name]) { birds[name].head.getWorldPosition(tmpV); return tmpV.clone(); }
     if (name === 'crown') return crown.root.position.clone();
+    if (name === 'titan' && titan) { titan.head.getWorldPosition(tmpV); return tmpV.clone(); }
     if (!heroes[name]) return new THREE.Vector3(0, 1.5, 0);
     heroes[name].J.head.getWorldPosition(tmpV);
     return tmpV.clone().add(new THREE.Vector3(0, 0.12, 0));
@@ -443,7 +501,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   }
 
   // soft glow around bright lights and effects: blur a thresholded, downscaled copy and add it back
-  const BLOOM = { title: 0.35, lair: 0.42, alley: 0.42, bank: 0.3, oldStreet: 0.42, warehouse: 0.36, whExt: 0.42, cavern: 0.4, tunnel: 0.38, reactor: 0.4, machines: 0.35, platform: 0.35, chamber: 0.4, newarkExt: 0.4, party: 0.38, black: 0 };
+  const BLOOM = { title: 0.35, lair: 0.42, alley: 0.42, bank: 0.3, oldStreet: 0.42, warehouse: 0.36, whExt: 0.42, cavern: 0.4, tunnel: 0.38, reactor: 0.4, machines: 0.35, platform: 0.35, chamber: 0.4, newarkExt: 0.4, party: 0.38, dungeon: 0.4, hall9: 0.42, black: 0 };
   const gcan = document.createElement('canvas'); gcan.width = Math.round(canvasW / 4); gcan.height = Math.round(canvasH / 4);
   const gctx = gcan.getContext('2d');
   let activeSet = null;
@@ -486,7 +544,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
       rig = vis ? behemothRig(behParams((n, tt, d) => { const v = evalTrack(T.tracks[n], tt); return v === undefined ? d : v; }, t)) : null;
       if (vis) beh.update({ t, rig, jaw: val('beh.jaw', 0), plates: val('beh.plates', 0), dark: val('beh.dark', 0), cracks: val('beh.cracks', 0), eyesRed: val('beh.eyesRed', 0), eyes: val('beh.eyes', 1), crest: val('beh.crest', 0), bolts: val('beh.bolts', 0), claws: val('beh.claws', 1), goo: val('beh.goo', 0), blue: val('beh.blue', 0), dissolve: val('beh.dissolve', 0), flickerBlue: val('beh.flickerBlue', 0), aura: val('beh.aura', 0), eyesPurple: val('beh.eyesPurple', 0) });
       const mode = evalStep(T.tracks['crown.mode'], t).v ?? 'head';
-      const cs = { t, vis: false, x: 0, y: 0, z: 0, size: 1, glow: val('crown.glow', 0.3), blue: val('crown.blue', 0) };
+      const cs = { t, vis: false, x: 0, y: 0, z: 0, size: 1, glow: val('crown.glow', 0.3), blue: val('crown.blue', 0), rust: val('crown.rust', 0) };
       if (mode === 'head' && vis) {
         const lift = val('crown.lift', 0);
         Object.assign(cs, { vis: true, x: rig.crown[0], y: rig.crown[1] + lift * rig.s * 0.05, z: rig.crown[2], yaw: rig.yaw, pitch: -rig.pitch * 0.6 + lift * 0.4, size: 0.028 * rig.s });
@@ -509,6 +567,20 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
         const g = gaitAt(gait.tiger, t);
         tiger.update({ t, act: st.v, a: st.since, speed: g.speed, phase: g.phase });
       }
+      for (const c of coils) c.visible = false;
+      const wk = val('greg.wrap', 0);
+      if (coils.length && wk > 0.01 && rig) {
+        const u0 = val('greg.wrapU', 0.6), n = rig.pts.length;
+        coils.forEach((c, j) => {
+          const f = clamp(u0 + (j - 1.5) * 0.05, 0, 0.99) * (n - 1), i = Math.min(n - 2, Math.floor(f)), k = f - i;
+          const a = rig.pts[i], b = rig.pts[i + 1];
+          c.position.set(lerp(a[0], b[0], k), lerp(a[1], b[1], k), lerp(a[2], b[2], k));
+          tmpDir.set(b[0] - a[0], b[1] - a[1], b[2] - a[2]).normalize();
+          c.quaternion.setFromUnitVectors(ZAXIS, tmpDir);
+          const r = lerp(rig.rad[i], rig.rad[i + 1], k) * 1.12, gk = clamp(wk * 4 - j * 0.6);
+          c.scale.setScalar(Math.max(0.001, r * (1 + 0.4 * (1 - gk)))); c.visible = gk > 0.02;
+        });
+      }
       // Greg's stretched arms
       const sk = val('greg.stretch', 0);
       for (const side of ['L', 'R']) {
@@ -520,6 +592,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
         heroes.greg.root.updateMatrixWorld(true);
         const h0 = X.hand('greg', side);
         const tg = new THREE.Vector3(val(`greg.t${side}x`), val(`greg.t${side}y`), val(`greg.t${side}z`));
+        if (wk > 0.3 && coils.length) tg.copy(coils[side === 'L' ? 0 : 3].position).add(new THREE.Vector3(0, coils[0].scale.x * 0.9, 0));
         const end = h0.clone().lerp(tg, sk);
         const bend = val(`greg.bend${side}`, 0);
         const mid = h0.clone().add(end).multiplyScalar(0.5);
@@ -537,9 +610,10 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     if (horse) {
       horse.root.visible = val('horse.vis', 0) > 0.5;
       if (horse.root.visible) {
-        horse.root.position.set(val('horse.x'), val('horse.y'), val('horse.z')); horse.root.rotation.set(0, val('horse.ry'), 0);
+        const hs = val('horse.scale', 1);
+        horse.root.position.set(val('horse.x'), val('horse.y'), val('horse.z')); horse.root.rotation.set(val('horse.rx', 0), val('horse.ry'), val('horse.rz', 0)); horse.root.scale.setScalar(Math.max(0.001, hs));
         const st = evalStep(T.tracks['horse.act'], t), g = gaitAt(gait.horse, t);
-        horse.update({ t, act: st.v, a: st.since, speed: g.speed, phase: g.phase * 0.9, glow: val('horse.glow', 0), alpha: val('horse.alpha', 1), purple: val('horse.purple', 0) });
+        horse.update({ t, act: st.v, a: st.since, speed: g.speed / hs, phase: g.phase * 0.9 / hs, glow: val('horse.glow', 0), alpha: val('horse.alpha', 1), purple: val('horse.purple', 0) });
       }
       cat.root.visible = val('cat.vis', 0) > 0.5;
       if (cat.root.visible) {
@@ -567,6 +641,16 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
       }
     }
     for (const n of CLAYS) clayBits[n].update({ t, x: val(`${n}.x`), z: val(`${n}.z`), ry: val(`${n}.ry`), mound: val(`${n}.mound`, 0), crumble: val(`${n}.crumble`, 0), melt: val(`${n}.melt`, 0) });
+    if (titan) {
+      titan.root.visible = val('titan.vis', 0) > 0.5;
+      if (titan.root.visible) {
+        const g = gaitAt(gait.titan, t), s = val('titan.s', 1);
+        titan.root.position.set(val('titan.x'), val('titan.y', 0), val('titan.z')); titan.root.rotation.set(0, val('titan.ry'), 0); titan.root.scale.setScalar(s);
+        titan.update({ t, jaw: val('titan.jaw', 0), look: val('titan.look', 0), nod: val('titan.nod', 0), eyes: val('titan.eyes', 1), roar: val('titan.roar', 0), walk: clamp(g.speed / (0.8 * s)), phase: g.phase * 0.2 / s });
+      }
+      dome.update({ t, on: val('dome.on', 0), x: val('dome.x', 0), z: val('dome.z', 0), r: val('dome.r', 3), hit: val('dome.hit', 0), flicker: val('dome.flicker', 0) > 0.5 });
+      cloak.update({ t, vis: val('cloak.vis', 0) > 0.5, x: val('cloak.x'), y: val('cloak.y', 0), z: val('cloak.z'), ry: val('cloak.ry', 0), rx: val('cloak.rx', 0), rz: val('cloak.rz', 0), spread: val('cloak.spread', 0), flutter: val('cloak.flutter', 0), alpha: val('cloak.alpha', 1) });
+    }
     for (const [n, b] of Object.entries(birds)) {
       b.root.visible = val(`${n}.vis`, 0) > 0.5;
       if (!b.root.visible) continue;
@@ -575,7 +659,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
       b.update({ t, act: st.v ?? 'perch', a: st.since, seed: n.length * 1.7 + (n.charCodeAt(n.length - 1) % 7) });
     }
     bigShadow.root.visible = val('shadow.vis', 0) > 0.5;
-    if (bigShadow.root.visible) { bigShadow.root.position.set(val('shadow.x'), 0, val('shadow.z')); bigShadow.update(t, val('shadow.eyes', 0)); }
+    if (bigShadow.root.visible) { bigShadow.root.position.set(val('shadow.x'), val('shadow.y', 0), val('shadow.z')); bigShadow.root.scale.setScalar(val('shadow.s', 1)); bigShadow.update(t, val('shadow.eyes', 0)); bigShadow.root.rotation.y += val('shadow.ry', 0); }
     const fk = val('leon.field', 0);
     field.visible = fk > 0.01 && heroes.leon.root.visible;
     if (field.visible) {

@@ -158,6 +158,8 @@ export function buildHorse() {
         legs[0].up.rotation.x = -0.9 * k; legs[0].lo.rotation.x = 1.2 * k; legs[1].up.rotation.x = -0.7 * k; legs[1].lo.rotation.x = 1.0 * k;
       }
       if (act === 'lookUp') { neck.rotation.x += -0.25; head.rotation.x += -0.2; }
+      if (act === 'raiseHead') { const k = smoothstep(0, 1.4, a); neck.rotation.x += -0.4 * k; head.rotation.x += -0.3 * k; }
+      if (act === 'panic') { const k = Math.sin(a * 9); neck.rotation.x += -0.3 + 0.1 * k; head.rotation.set(1.2, 0.3 * Math.sin(a * 6), 0); body.rotation.z = 0.04 * k; }
       if (act === 'rear') {
         const k = smoothstep(0, 0.4, a) * (1 - smoothstep(1.6, 2.2, a));
         body.rotation.x = -0.55 * k; body.position.y += 0.35 * k; neck.rotation.x += -0.3 * k; head.rotation.x += -0.3 * k; jaw.rotation.x = -0.4 * k;

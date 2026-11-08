@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mat, mk, grp, rng, clamp, lerp, smoothstep, noise1, canvasTex } from './util.js';
-import { emblemTex } from './textures.js';
+import { emblemTex, boxTopTex } from './textures.js';
 import { buildClayFigure } from './e6.js';
 
 // ---------------------------------------------------------------- pose model
@@ -202,6 +202,15 @@ export const ACTIONS = {
   floatSit: { sit: true, gest: true, f: (a, t) => ({ ...sitLegs, spF: 0.05, aLO: 0.5, aRO: 0.5, aLF: 0.35, aRF: 0.35, eL: 0.4, eR: 0.4, hdN: -0.05 + 0.03 * S(t * 2) }) },
   catchSide: { f: (a) => { const k = smoothstep(0, 0.15, a); return { aRF: 1.4 * k, aRO: 0.7 * k, eR: 0.5, aLO: 0.12, eL: 0.2, hdY: 0.2 }; } },
   pointMap: { gest: false, f: (a, t) => { const k = smoothstep(0, 0.4, a); return { lean: 0.05, spF: 0.3, aRF: 1.0 + 0.1 * k, aRO: 0.0, eR: 0.15, aLF: 0.85, aLO: 0.22, eL: 0.2, hdN: 0.2, lLO: 0.1, lRO: 0.1 }; } },
+  // Episode 9
+  hoverPull: { f: (a, t) => ({ aLF: 0.75, aRF: 0.75, aLO: 0.35, aRO: 0.35, eL: 0.25, eR: 0.25, lLF: 0.25 + 0.1 * S(t * 3), lRF: -0.05 - 0.1 * S(t * 3), kL: 0.45, kR: 0.55, fL: 0.3, fR: 0.3, spF: 0.3, hdN: 0.4, y: 0.03 * S(t * 2.4) }) },
+  grabHem: { gest: false, f: (a, t) => { const k = smoothstep(0, 0.5, a); return { aLF: 0.12, aRF: 0.12, aLO: 0.32 * k + 0.1, aRO: 0.32 * k + 0.1, eL: 0.35 * k, eR: 0.35 * k, aLT: -0.4 * k, aRT: -0.4 * k, spF: 0.18 * k, hdN: 0.25 * k, kL: 0.12 * k, kR: 0.12 * k, y: -0.02 * k }; } },
+  pullOff: { gest: false, f: (a, t) => { const k = smoothstep(0, 1.8, a), b = Math.sin(k * P); return { aLF: 0.12 + 2.8 * k, aRF: 0.12 + 2.8 * k, aLO: 0.42 - 0.2 * k, aRO: 0.42 - 0.2 * k, eL: 0.35 + 0.6 * b, eR: 0.35 + 0.6 * b, spF: 0.18 - 0.38 * k, hdN: 0.25 - 0.6 * k, lean: -0.06 * k, kL: 0.12 * (1 - k), kR: 0.12 * (1 - k) }; } },
+  powerStance: { gest: false, f: (a, t) => { const k = smoothstep(0, 0.8, a); return { aLO: 0.15 + 0.85 * k, aRO: 0.15 + 0.85 * k, aLF: 0.25 * k, aRF: 0.25 * k, aLT: -0.6 * k, aRT: -0.6 * k, eL: 0.35, eR: 0.35, spF: -0.14 * k, hdN: -0.12 * k + 0.02 * S(t * 2), lLO: 0.14 * k, lRO: 0.14 * k, y: 0.01 * S(t * 3) }; } },
+  soulReach: { gest: false, f: (a, t) => { const k = smoothstep(0, 0.9, a); return { aRF: 1.35 * k, aRO: 0.08, eR: 0.15, aRT: -0.2 * k, aLO: 0.15, eL: 0.25, spF: 0.1 * k, hdN: 0.12 * k, y: 0.004 * S(t * 23) * k }; } },
+  carryFood: { upper: true, gest: false, f: (a, t) => ({ aLF: 0.85, aRF: 0.85, aLO: 0.2, aRO: 0.2, aLT: 0, aRT: 0, eL: 1.1, eR: 1.1, spF: -0.06, hdN: 0.04 }) },
+  sitChew: { sit: true, f: (a, t, c) => ({ ...sitLegs, spF: 0.04, aLF: 0.5, aLO: 0.12, eL: 0.6, aRF: 0.8, aRO: 0.08, aRT: 0.5, eR: 1.55, hdN: 0.04 + 0.015 * S(t * 9) }) },
+  standLook: { f: (a, t) => { const k = smoothstep(0, 0.3, a); return { aLF: 0.35 * k, aRF: 0.55 * k, eL: 0.6 * k, eR: 0.9 * k, aLO: 0.2, aRO: 0.2, spF: -0.06 * k, hdN: -0.08 * k, lLF: 0.15 * k, kL: 0.15 * k }; } },
   // Episode 8
   standUp: { f: (a) => { const k = smoothstep(0, 1.3, a), u = 1 - k; return { y: -0.3 * u, lLF: 1.55 * u, lRF: 1.55 * u, kL: 1.5 * u, kR: 1.5 * u, lLO: 0.12 * u, lRO: 0.12 * u, spF: 0.4 * Math.sin(k * P) + 0.02, aLF: 0.35 * u, aRF: 0.35 * u, eL: 0.6 * u, eR: 0.6 * u, aLO: 0.12, aRO: 0.12, hdN: 0.15 * u }; } },
   sitRead: { sit: true, gest: true, f: (a, t) => ({ ...sitLegs, aLF: 1.0, aLT: 0.7, eL: 1.6, aRF: 0.65, aRT: 0.35, eR: 1.25, hdN: 0.3, aLO: 0.05, aRO: 0.1, spF: 0.05 }) },
@@ -286,7 +295,8 @@ function blendExpr(a, b, w) {
 function buildFace(head, cfg, hc, r) {
   const F = {};
   const skin = mat(cfg.skin, { r: 0.55 });
-  const white = mat(0xffffff, { r: 0.3 });
+  const white = mat(0xffffff, { r: 0.3 }).clone();
+  F.whiteM = white;
   const iris = mat(cfg.eyeColor, { r: 0.3 }).clone();
   const black = mat(0x0b0b10, { r: 0.2 });
   const shine = mat(0xffffff, { basic: true });
@@ -447,7 +457,7 @@ export function buildHero(cfg) {
   const r = 0.2, hc = 0.2;
   mk(new THREE.SphereGeometry(r, 32, 24), skin, head, [0, hc, 0], [0, 0, 0], [0.95, 1.07, 1.0]);
   // jaw/cheeks for a softer face shape
-  const face = cfg.face === 'greg' ? buildGregFace(head, hc, r) : cfg.face === 'golem' ? buildGolemFace(head, hc, r, cfg) : buildFace(head, cfg, hc, r);
+  const face = cfg.face === 'greg' ? buildGregFace(head, hc, r) : cfg.face === 'golem' ? buildGolemFace(head, hc, r, cfg) : cfg.face === 'soul' ? buildSoulFace(head, hc, r) : buildFace(head, cfg, hc, r);
   if (cfg.hair) buildHair(head, cfg, hc, r);
 
   // arms
@@ -491,7 +501,7 @@ export function buildHero(cfg) {
 
   const extras = buildExtras(cfg, J, neck, hc, r);
   const base = { hair: cfg._hairMat ? cfg._hairMat.color.clone() : null, accent: accent.color.clone(), accentE: accent.emissive.clone(), glove: glove.color.clone(), iris: face.iris.color.clone() };
-  const BLUE = new THREE.Color(0x4aa8ff), PURPLE = new THREE.Color(0xb050ff), DARKP = new THREE.Color(0x2a0a3a), REDEYE = new THREE.Color(0xff1a1a);
+  const WHITE_EYE = new THREE.Color(0xf4f8ff), BLUE = new THREE.Color(0x4aa8ff), PURPLE = new THREE.Color(0xb050ff), DARKP = new THREE.Color(0x2a0a3a), REDEYE = new THREE.Color(0xff1a1a);
   const hero = {
     // power glows driven by tracks: hair/suit turning blue, eyes and gloves turning purple
     applyGlow(g) {
@@ -502,8 +512,13 @@ export function buildHero(cfg) {
       accent.color.copy(base.accent).lerp(BLUE, g.suit);
       accent.emissive.copy(base.accentE).lerp(BLUE, g.suit);
       accent.emissiveIntensity = 0.6 + g.suit * 1.2;
-      face.iris.color.copy(base.iris).lerp(PURPLE, g.eyes);
+      face.iris.color.copy(base.iris).lerp(PURPLE, Math.min(1, g.eyes));
       face.iris.emissive.copy(PURPLE).multiplyScalar(g.eyes * 1.4);
+      // completely white glowing eyes (Fred's vision, Episode 9)
+      const wk = g.white ?? 0;
+      if (wk > 0) { face.iris.color.lerp(WHITE_EYE, wk); face.iris.emissive.lerp(WHITE_EYE, wk).multiplyScalar(1 + wk * 2.2); }
+      if (face.whiteM) face.whiteM.emissive.setRGB(0.9 * wk, 0.95 * wk, wk);
+      if (!cfg.face) for (const ey of face.eyes) { ey.ir.scale.setScalar(1 + wk * 0.2); const pu = ey.ir.children[1], sh = ey.ir.children[2]; if (pu) pu.scale.setScalar(Math.max(0.001, 1 - wk)); if (sh) sh.visible = wk < 0.5; }
       glove.color.copy(base.glove).lerp(DARKP, g.glove);
       glove.emissive.copy(PURPLE).multiplyScalar(g.glove * 0.6);
       // red power eyes (Greg) and dimmed accents after the power drain
@@ -515,7 +530,7 @@ export function buildHero(cfg) {
     name: cfg.name, root, J, face, cfg, seed: cfg.seed ?? 1,
     extras,
     // costume pieces that move: the monster mask (0 off, 1 on the face, 2 pushed up)
-    applyExtras(x) { if (extras.mask) { const m = x.mask ?? 0; extras.mask.visible = m > 0.5; const up = m > 1.5 ? 1 : 0; extras.maskPivot.rotation.x = -2.4 * up; extras.maskPivot.position.set(0, extras.maskHc + 0.05 * up, -0.03 * up); } if (extras.milk) extras.milk.visible = (x.milk ?? 0) > 0.5; if (extras.slimeParts) for (const m of extras.slimeParts) m.visible = (x.slime ?? 0) > 0.5; if (extras.scuffs) for (const m of extras.scuffs) m.visible = (x.scuff ?? 0) > 0.5; if (extras.faceShade) { const rv = x.reveal ?? 0; extras.faceShade.visible = rv < 0.98; extras.faceShade.material.opacity = 1 - rv; extras.bandana.position.y = extras.bandanaY - 0.13 * rv; extras.bandana.position.z = 0.2 * 0.42 + 0.02 * rv; extras.bandana.scale.set(1 - 0.08 * rv, 1 - 0.45 * rv, 1 + 0.1 * rv); } if (extras.hat) extras.hat.rotation.set(0.12 - 0.12 * (x.reveal ?? 0), 0, x.hatTilt ?? 0); if (extras.bucket) extras.bucket.visible = (x.bucket ?? 0) > 0.5; },
+    applyExtras(x) { if (extras.mask) { const m = x.mask ?? 0; extras.mask.visible = m > 0.5; const up = m > 1.5 ? 1 : 0; extras.maskPivot.rotation.x = -2.4 * up; extras.maskPivot.position.set(0, extras.maskHc + 0.05 * up, -0.03 * up); } if (extras.milk) extras.milk.visible = (x.milk ?? 0) > 0.5; if (extras.slimeParts) for (const m of extras.slimeParts) m.visible = (x.slime ?? 0) > 0.5; if (extras.scuffs) for (const m of extras.scuffs) m.visible = (x.scuff ?? 0) > 0.5; if (extras.faceShade) { const rv = x.reveal ?? 0; extras.faceShade.visible = rv < 0.98; extras.faceShade.material.opacity = 1 - rv; extras.bandana.position.y = extras.bandanaY - 0.13 * rv; extras.bandana.position.z = 0.2 * 0.42 + 0.02 * rv; extras.bandana.scale.set(1 - 0.08 * rv, 1 - 0.45 * rv, 1 + 0.1 * rv); } if (extras.hat) extras.hat.rotation.set(0.12 - 0.12 * (x.reveal ?? 0), 0, x.hatTilt ?? 0); if (extras.bucket) extras.bucket.visible = (x.bucket ?? 0) > 0.5; if (extras.veins) { const en = x.energy ?? 0, pul = 0.75 + 0.25 * Math.sin((x.t ?? 0) * 6); for (const v of extras.veins) { const k = clamp((en - v.th) * 6); v.g.visible = k > 0.01; v.g.scale.set(1, Math.max(0.01, k), 1); } for (const gl of extras.eyeGlows) { gl.material.opacity = (0.45 + 0.55 * en) * pul; gl.scale.setScalar(1 + en * 0.8); } } },
     props: {},
     applyPose(p) {
       J.hips.position.y = 0.95 + p.y;
@@ -544,7 +559,7 @@ export function buildHero(cfg) {
       }
       const open = clamp(e.open + talk, 0, 1);
       face.open.visible = open > 0.06;
-      face.open.scale.set(0.8 + 0.25 * Math.max(0, e.smile) - 0.3 * open * 0.3, open * 1.1, 1);
+      face.open.scale.set((0.8 + 0.25 * Math.max(0, e.smile) - 0.3 * open * 0.3) * (look?.mw ?? 1), open * 1.1, 1);
       face.smile.visible = open < 0.35;
       const sm = e.smile;
       face.smile.rotation.z = sm >= 0 ? P : 0;
@@ -767,6 +782,47 @@ function buildExtras(cfg, J, neck, hc, r) {
     mk(new THREE.TorusGeometry(r * 1.2, 0.006, 4, 24, P), mat(0xc0c4cc, { m: 0.7, r: 0.3 }), b, [0, r * 0.4, 0], [0, 0, 0]);
     b.visible = false; ex.bucket = b;
   }
+  if (has('soulTrue')) {
+    // Episode 9: the Soul Stealer's true form. Energy veins spread out from the chest as `energy` goes 0 -> 1.
+    const blueV = new THREE.MeshBasicMaterial({ color: 0x5ab8ff }), purpV = new THREE.MeshBasicMaterial({ color: 0xc870ff });
+    ex.veins = [];
+    const vein = (par, x, y, z, len, rz, th, rx = 0, ry = 0, w = 0.012) => {
+      const g = grp(par, x, y, z); g.rotation.set(rx, ry, rz);
+      const m = mk(new THREE.BoxGeometry(w, len, w), ex.veins.length % 2 ? purpV : blueV, g, [0, len / 2, 0], [0, 0, 0], null, false);
+      g.visible = false; ex.veins.push({ g, th, m });
+    };
+    // chest: a burst of lines from the middle
+    for (let i = 0; i < 8; i++) { const a = -P / 2 + (i / 7) * P * 1.6 - P * 0.3; vein(J.spine, 0, 0.28, 0.142, 0.09 + 0.05 * (i % 3), a, 0.02 + i * 0.015); }
+    for (let i = 0; i < 4; i++) vein(J.spine, (i - 1.5) * 0.07, 0.22, -0.14, 0.18, (i - 1.5) * 0.4, 0.15 + i * 0.02, 0, P);
+    for (const [side, sd] of [['L', 1], ['R', -1]]) {
+      vein(J.sh[side], sd * 0.02, -0.03, 0.065, 0.22, P, 0.3, 0, 0, 0.011);
+      vein(J.sh[side], -sd * 0.03, -0.05, -0.06, 0.2, P + sd * 0.2, 0.36, 0, 0, 0.011);
+      vein(J.el[side], 0, -0.02, 0.062, 0.2, P, 0.5, 0, 0, 0.01);
+      vein(J.el[side], sd * 0.03, -0.04, -0.05, 0.18, P - sd * 0.15, 0.56, 0, 0, 0.01);
+      vein(J.hip[side], sd * 0.02, -0.05, 0.088, 0.3, P, 0.42, 0, 0, 0.012);
+      vein(J.kn[side], 0, -0.02, 0.078, 0.28, P, 0.62, 0, 0, 0.011);
+      vein(head, sd * 0.07, hc - 0.02, r * 0.95, 0.09, P - sd * 0.25, 0.85, -0.2, sd * 0.3, 0.008);
+      vein(head, sd * 0.12, hc + 0.08, r * 0.8, 0.1, sd * 0.6, 0.9, 0.3, sd * 0.6, 0.008);
+    }
+    vein(neck, 0, -0.02, 0.06, 0.08, 0, 0.75, 0, 0, 0.01);
+    // shoulder spikes and a crown of horns
+    const dm = mat(0x22182e, { r: 0.35, m: 0.6 }), tip = mat(0xc870ff, { e: 0xa040ff, ei: 1.6 });
+    for (const sd of [1, -1]) for (let i = 0; i < 3; i++) {
+      const g = grp(J.spine, sd * (0.22 + i * 0.045), 0.47 - i * 0.02, -0.03 - i * 0.03); g.rotation.set(-0.35 - i * 0.2, 0, -sd * (0.35 + i * 0.25));
+      mk(new THREE.ConeGeometry(0.028, 0.16 - i * 0.025, 6), dm, g, [0, 0.08, 0]);
+      mk(new THREE.ConeGeometry(0.012, 0.05, 6), tip, g, [0, 0.165 - i * 0.025, 0], [0, 0, 0], null, false);
+    }
+    for (let i = 0; i < 5; i++) {
+      const a = (i - 2) * 0.42, g = grp(head, Math.sin(a) * r * 0.78, hc + r * 0.62, -Math.cos(a) * r * 0.55); g.rotation.set(-0.5, a, -Math.sin(a) * 0.4);
+      mk(new THREE.ConeGeometry(0.022, 0.14 + (i === 2 ? 0.06 : 0), 6), dm, g, [0, 0.07, 0]);
+      mk(new THREE.ConeGeometry(0.01, 0.04, 6), tip, g, [0, 0.15 + (i === 2 ? 0.06 : 0), 0], [0, 0, 0], null, false);
+    }
+    mk(new THREE.CylinderGeometry(0.1, 0.085, 0.1, 16, 1, true), mat(0x120c18, { r: 0.5, side: THREE.DoubleSide }), neck, [0, 0.05, -0.01], [0.15, 0, 0], [1.15, 1, 1]);
+    // soft glow sprites over the eyes
+    const gt = canvasTex(64, 64, (c, w, h) => { const g = c.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.3, 'rgba(255,255,255,0.45)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; c.fillRect(0, 0, w, h); });
+    ex.eyeGlows = [];
+    for (const sd of [1, -1]) ex.eyeGlows.push(mk(new THREE.PlaneGeometry(0.16, 0.1), new THREE.MeshBasicMaterial({ map: gt, color: 0xc070ff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.5 }), head, [sd * r * 0.37, hc + r * 0.12, r * 1.02], [0, sd * 0.3, 0], null, false));
+  }
   if (has('milkStain')) {
     ex.milk = grp(J.spine, 0.03, 0.27, 0.142);
     for (const [x, y, r] of [[0, 0, 0.07], [0.05, -0.06, 0.04], [-0.04, -0.08, 0.035], [0.02, -0.12, 0.025], [-0.06, 0.03, 0.03]]) mk(new THREE.CircleGeometry(r, 14), mat(0xf8f8ff, { r: 0.25 }), ex.milk, [x, y, 0.002], [0, 0, 0], null, false);
@@ -943,6 +999,36 @@ function buildGolemFace(head, hc, r, cfg) {
   mk(new THREE.BoxGeometry(r * 0.9, r * 0.14, r * 0.3), mat(cfg.skinDark ?? 0x6a5040, { r: 0.9 }), head, [0, hc + r * 0.38, r * 0.78], [0.25, 0, 0], null, false);
   const open = grp(mg); mk(new THREE.SphereGeometry(r * 0.16, 10, 8), hole, open, [0, -r * 0.05, 0], [0, 0, 0], [1.4, 1, 0.4], false);
   return { eyes, brows: [], smile: slit, open, mg, iris: glow };
+}
+
+// The Soul Stealer's true face (Episode 9): a smooth white head, sharp glowing violet eyes, dark brow ridges
+function buildSoulFace(head, hc, r) {
+  const glow = new THREE.MeshStandardMaterial({ color: 0xe8c8ff, emissive: 0xb050ff, emissiveIntensity: 1, roughness: 0.3 });
+  const dark = mat(0x120a1a, { r: 0.6 });
+  const eyes = [];
+  for (const sd of [1, -1]) {
+    const eg = grp(head, sd * r * 0.36, hc + r * 0.12, r * 0.86);
+    eg.rotation.set(-0.05, sd * 0.36, sd * -0.3);
+    const eye = grp(eg);
+    mk(new THREE.SphereGeometry(r * 0.25, 16, 10), dark, eye, [0, 0, 0], [0, 0, 0], [1.25, 0.52, 0.45], false);
+    const ir = grp(eye, 0, 0, r * 0.07);
+    mk(new THREE.SphereGeometry(r * 0.18, 14, 10), glow, ir, [0, 0, 0], [0, 0, 0], [1.25, 0.42, 0.5], false);
+    eyes.push({ eg, eye, ir });
+  }
+  const brows = [];
+  for (const s of [1, -1]) {
+    const bg = grp(head, s * r * 0.38, hc + r * 0.45, r * 0.93); bg.rotation.y = s * 0.36;
+    mk(new THREE.BoxGeometry(r * 0.46, r * 0.07, r * 0.1), dark, bg, [0, 0, 0], [0, 0, -s * 0.38], null, false);
+    brows.push({ bg, s });
+  }
+  // cheek markings
+  for (const s of [1, -1]) mk(new THREE.BoxGeometry(r * 0.04, r * 0.32, r * 0.04), dark, head, [s * r * 0.36, hc - r * 0.22, r * 0.9], [0.1, s * 0.36, s * 0.15], null, false);
+  const mg = grp(head, 0, hc - r * 0.5, r * 0.86); mg.rotation.x = -0.3;
+  const smile = mk(new THREE.TorusGeometry(r * 0.2, r * 0.025, 6, 18, P), dark, mg, [0, 0, 0.004], [0, 0, P], null, false);
+  const open = grp(mg, 0, r * 0.05, 0.006);
+  mk(new THREE.CircleGeometry(r * 0.26, 18, P, P), mat(0x1a0624, { r: 0.6 }), open, [0, 0, 0], [0, 0, 0], null, false);
+  mk(new THREE.CircleGeometry(r * 0.12, 14, P, P), glow, open, [0, -r * 0.05, 0.001], [0, 0, 0], null, false);
+  return { eyes, brows, smile, open, mg, iris: glow };
 }
 
 // Soul Stealer: tall hooded villain with glowing red eyes and a red symbol in his palm.
@@ -1228,6 +1314,26 @@ export function buildProp(kind) {
     box(g, 0.012, 0.05, 0.02, 0xff5a3a, [0, 0.055, 0.045]);
     mk(new THREE.PlaneGeometry(0.06, 0.07), mat(0xffffff, { r: 0.6 }), g, [0, -0.04, 0.046], [0, 0, 0], null, false);
     g.position.set(0, -0.08, 0.05);
+  } else if (kind === 'burger' || kind === 'foodStack') {
+    const burger = (par, x, y, z, s = 1) => {
+      const b = grp(par, x, y, z); b.scale.setScalar(s);
+      const bun = mat(0xd88a3a, { r: 0.6 });
+      mk(new THREE.CylinderGeometry(0.06, 0.055, 0.025, 16), bun, b, [0, 0, 0]);
+      mk(new THREE.CylinderGeometry(0.062, 0.062, 0.022, 16), mat(0x5a2e18, { r: 0.8 }), b, [0, 0.022, 0]);
+      mk(new THREE.BoxGeometry(0.11, 0.006, 0.11), mat(0xffc81a, { r: 0.5 }), b, [0, 0.036, 0], [0, 0.4, 0]);
+      mk(new THREE.CylinderGeometry(0.066, 0.066, 0.008, 16), mat(0x4ab83a, { r: 0.7 }), b, [0, 0.043, 0]);
+      mk(new THREE.SphereGeometry(0.062, 16, 8, 0, P * 2, 0, P / 2), bun, b, [0, 0.046, 0], [0, 0, 0], [1, 0.75, 1]);
+      for (let i = 0; i < 5; i++) mk(new THREE.SphereGeometry(0.005, 4, 3), mat(0xfff4d8), b, [Math.sin(i * 2.4) * 0.03, 0.088 - Math.abs(Math.sin(i * 2.4)) * 0.012, Math.cos(i * 2.4) * 0.03], [0, 0, 0], null, false);
+      return b;
+    };
+    if (kind === 'burger') { burger(g, 0, 0, 0, 1); g.position.set(0, -0.11, 0.07); g.rotation.set(0.5, 0, 0); }
+    else {
+      const bm = mat(0xe8dcc4, { r: 0.85 });
+      box(g, 0.42, 0.06, 0.42, 0, [0, 0, 0], { material: bm });
+      mk(new THREE.PlaneGeometry(0.3, 0.3), new THREE.MeshStandardMaterial({ map: boxTopTex(), roughness: 0.8 }), g, [0, 0.031, 0], [-P / 2, 0, 0], null, false);
+      burger(g, -0.09, 0.044, 0.03, 1.1); burger(g, 0.1, 0.044, -0.04, 1.1);
+      g.position.set(0.2, -0.05, 0.07); g.rotation.set(1.95, 0, 0);
+    }
   } else if (kind === 'paper') {
     mk(new THREE.PlaneGeometry(0.21, 0.28), new THREE.MeshStandardMaterial({ color: 0xfaf8f0, roughness: 0.9, side: THREE.DoubleSide, map: partyListTex() }), g, [0, 0, 0], [0, 0, 0], null, false);
     g.position.set(-0.02, -0.1, 0.08); g.rotation.set(-1.0, 0.0, 0);
@@ -1359,5 +1465,6 @@ export const CAST = {
   ped1: { name: 'ped1', seed: 41, scale: 0.9, hair: 'wavy', hairColor: 0x8a4a1a, browColor: 0x5a2a10, skin: 0xf0c8a0, skinDark: 0xe0b48a, eyeColor: 0x2a5a3a, casual: true, emblem: false, shirt: 0xd04a6a, pants: 0x2a3a5a, boot: 0xf2f2f2, belt: 0x1a1a1a, bareHands: true, sleeves: 'short' },
   ped2: { name: 'ped2', seed: 42, scale: 0.95, hair: 'spiky', hairColor: 0x1a1410, browColor: 0x120d0a, skin: 0x8a5a3a, skinDark: 0x7a4a2e, eyeColor: 0x1a100a, casual: true, emblem: false, shirt: 0xf2c84a, pants: 0x3a3a40, boot: 0x2a2a2a, belt: 0x1a1a1a, bareHands: true },
   ped3: { name: 'ped3', seed: 43, scale: 0.88, hair: 'tall', hairColor: 0x5a3a20, browColor: 0x3a2410, skin: 0xd9a07a, skinDark: 0xc98e68, eyeColor: 0x3a2412, casual: true, emblem: false, shirt: 0x4aa86a, pants: 0x5a4a3a, boot: 0x3a2a1a, belt: 0x1a1a1a, bareHands: true, sleeves: 'short' },
+  soulX: { name: 'soulX', seed: 61, scale: 1.12, face: 'soul', skin: 0xeceef6, skinDark: 0xd8dbe6, eyeColor: 0xe8c8ff, emblem: false, suit: 0x161020, suitDark: 0x0a0710, accent: 0xb050ff, accentGlow: 0x7020d0, pad: 0x2a1a3e, glove: 0x0e0a14, boot: 0x1a1226, belt: 0x0a0710, extras: ['soulTrue'] },
   barista: { name: 'barista', seed: 4, hair: 'wavy', hairColor: 0x2b1d14, skin: 0xc98d68, skinDark: 0xb87d5a, eyeColor: 0x2d1a10, casual: true, emblem: false, shirt: 0xf4f1ea, pants: 0x4a3a2c, apron: 0x2f7d4f, boot: 0x2a2420, bareHands: true, sleeves: 'short' },
 };
