@@ -46,7 +46,7 @@ const DEFAULT_SETTINGS = {
     count: 1, mode: 'crosshair', pose: 'idle', gender: 'random',
     heightMinM: 1.62, heightMaxM: 1.95, heightMinF: 1.50, heightMaxF: 1.80
   },
-  controls: { sensitivity: 1.0, invertY: false, touch: 'auto', fov: 70 },
+  controls: { sensitivity: 1.0, invertY: false, touch: 'auto', fov: 70, heightOn: false, heightFt: 5.75 },   // heightOn: walk at a set height (ft, max 11)
   ui: { hints: true }
 };
 

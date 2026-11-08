@@ -81,7 +81,7 @@ class UI {
     this.applyTouchVisibility();
     this.updateTool(this.game.weapons.current);
     this.renderDrawer();
-    this.updatePlayHint();
+    this.updatePlayHint(); this.applyHeightUI();
     this.refreshToggles();
     HT.toast = (msg, cls) => this.toast(msg, cls);
   }
@@ -455,10 +455,21 @@ class UI {
     const s = this.sec(b, 'Controls');
     this.slider(s, 'Look sensitivity', 'controls.sensitivity', 0.2, 3, 0.05, x => x.toFixed(2));
     this.toggle(s, 'Invert Y', 'controls.invertY');
+    // your height: type any height (up to 11 ft); the camera then stays that tall above the ground
+    this.toggle(s, 'Set my height', 'controls.heightOn', () => this.applyHeightUI());
+    { const r = document.createElement('div'); r.className = 'row';
+      r.innerHTML = `<label>My height (ft)</label><input type="number" min="1" max="11" step="0.1" inputmode="decimal" value="${Settings.data.controls.heightFt}"><span class="val"></span>`;
+      const inp = r.querySelector('input'), v = r.querySelector('.val');
+      const show = (ft) => { const tot = Math.round(ft * 12), m = (ft * 0.3048).toFixed(2); v.textContent = Math.floor(tot / 12) + "'" + (tot % 12) + '" · ' + m + ' m'; };
+      show(Settings.data.controls.heightFt);
+      inp.onchange = inp.oninput = () => { let x = parseFloat(inp.value); if (!isFinite(x)) return; if (x > 11) { x = 11; inp.value = 11; HT.toast('11 ft is the limit'); } if (x < 1) x = 1; Settings.set('controls.heightFt', x); show(x); };
+      s.appendChild(r); }
     this.select(s, 'Touch controls', [['auto', 'Auto'], ['on', 'On'], ['off', 'Off']], Settings.data.controls.touch, v => Settings.set('controls.touch', v));
     this.toggle(s, 'Control hints', 'ui.hints', () => this.updatePlayHint());
     this.note(s, 'PC: WASD move, mouse look, left click fire, right click aim, R reload, 1-7 weapons, Tab sandbox, O settings.<br>Phone: left thumb moves, right thumb looks, buttons fire/aim/reload, tap the weapon bar to switch.');
   }
+  // with a set height the up / down buttons are not needed
+  applyHeightUI() { const on = !!Settings.data.controls.heightOn; for (const id of ['tUp', 'tDown']) { const e = document.getElementById(id); if (e) e.style.visibility = on ? 'hidden' : ''; } }
   set_gameplay(b) {
     const g = this.game;
     let s = this.sec(b, 'Weapons');

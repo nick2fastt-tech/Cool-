@@ -117,6 +117,8 @@ All humans, textures, sounds and environments are generated procedurally at load
 | O | Settings |
 | Esc | Release the mouse |
 
+**Your height**: Settings → Controls → *Set my height*, then type any height in feet (11 ft is the limit). The camera stays that tall above the ground wherever you walk (up kerbs, down into the road, along station levels), and the up/down buttons are hidden while it is on.
+
 On touch screens, use the left side of the screen to move and the right side to look. The on-screen buttons fire, aim, reload and fly up/down; tap the weapon bar to switch weapons.
 
 ## Building

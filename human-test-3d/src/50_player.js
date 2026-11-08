@@ -166,6 +166,8 @@ class Player {
     if (inp.touch.move.lengthSq() > 0.01) { mv.addScaledVector(fwd, inp.touch.move.y); mv.addScaledVector(rgt, inp.touch.move.x); }
     let up = 0;
     if (k.Space || k.KeyE || inp.touch.up) up += 1; if (k.ControlLeft || k.KeyQ || k.KeyC || inp.touch.down) up -= 1;
+    const hOn = !!S.heightOn;
+    if (hOn) up = 0;
     const speed = (k.ShiftLeft || k.ShiftRight ? 9 : 4.2) * (this.aiming ? 0.5 : 1) * (this.game.vampires ? this.game.vampires.playerSpeedMul : 1);
     if (mv.lengthSq() > 1) mv.normalize();
     const target = _v4.copy(mv).multiplyScalar(speed); target.y = up * speed * 0.7;
@@ -182,6 +184,12 @@ class Player {
       if (p.y < gy) p.y = gy;
       const maxY = env.kind === 'room' ? env.Ht - 0.3 : 60;
       if (p.y > maxY) p.y = maxY;
+    }
+    // a set height: the eyes stay that far above whatever is underfoot (eyes ~ 93% of the height)
+    if (hOn) {
+      const eye = clamp(+S.heightFt || 5.75, 1, 11) * 0.3048 * 0.93, gy = game.env.groundHeight(p.x, p.z, p.y - eye + 0.4);
+      p.y = damp(p.y, gy + eye, 12, dt); this.vel.y = 0;
+      if (env && env.kind === 'room' && p.y > env.Ht - 0.3) p.y = env.Ht - 0.3;
     }
     if (this._prevCam) this._prevCam.copy(p);
     // recoil + shake
