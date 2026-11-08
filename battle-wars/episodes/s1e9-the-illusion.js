@@ -340,7 +340,7 @@ export function buildEpisode() {
   D.say('cowboy', 'I just want my horse back.', { ...FRED, expr: 'sad', dur: 1.6 });
   D.faceChar('cowboy', 'aaron', 0.4);
   D.say('aaron', "You're not from Earth?", { cam: R('aaron', 20, 2.0, 0.15), expr: 'surprised', dur: 1.3 });
-  D.say('cowboy', 'No.', { ...FRED, cam: R('cowboy', 20, 1.8, 0.05, { lookY: -0.05, fov: 38 }), expr: 'neutral', dur: 0.9 });
+  D.say('cowboy', 'No.', { ...FRED, cam: R('cowboy', -25, 1.8, 0.05, { lookY: -0.05, fov: 38 }), expr: 'neutral', dur: 0.9 });
   D.act('greg', 'idle');
   D.say('leon', "Okay, well, at least you aren't a bad person.", { cam: R('leon', -25, 2.0, 0.15), act: 'showItem', expr: 'neutral', dur: 2.0 });
   D.faceChar('leon', 'cowboy', 0.4); D.faceChar('cowboy', 'leon', 0.4);
@@ -354,7 +354,7 @@ export function buildEpisode() {
   D.faceTo('eric', 9.0, 4.2, 0.3);
   D.say('eric', 'So you can track your horse?', { cam: R('eric', 20, 2.0, 0.15), expr: 'surprised', dur: 1.4 });
   D.say('cowboy', "Yes. But I can't teleport, make clay, or throw my hat anymore.", { ...FRED, cam: R('cowboy', 20, 1.8, 0.05, { lookY: -0.05, fov: 38 }), expr: 'sad', dur: 3.0 });
-  D.say('greg', 'Wait, your hat does something?', { cam: R('greg', 20, 2.0, 0.15), expr: 'shocked', dur: 1.5 });
+  D.say('greg', 'Wait, your hat does something?', { cam: R('greg', -30, 2.0, 0.15), expr: 'shocked', dur: 1.5 });
   D.say('cowboy', 'It comes back like a boomerang.', { ...FRED, cam: R('cowboy', 30, 1.8, 0.05, { lookY: -0.05, fov: 38 }), act: 'tipHat', expr: 'smug', dur: 1.8 });
   D.act('cowboy', 'idle');
   D.say('leon', 'Wow. You\'re very useless.', { cam: R('leon', -25, 2.0, 0.15), act: 'showItem', expr: 'smug', dur: 1.5 });
@@ -496,7 +496,7 @@ export function buildEpisode() {
     D.fx('bodyAura', { who: 'horse', dur: 6.0, color: 0xa040ff, power: 1.1 }, 0.6); D.sfx('drainHum', 0.6, 0.7); D.sfx('horseNeigh', 1.2, 0.4);
     D.cam(FIX([-0.3, 1.8, 1.2], [0.3, 1.3, -2.0], { pos2: [-0.15, 1.75, 0.85], fov: 50 }));
     D.sound('He places his hand near the horse. Purple energy begins surrounding it', 3.4, 0.2); D.wait(3.8);
-    D.cam(FIX([1.3, 1.6, 1.0], [0.1, 1.5, -2.3], { pos2: [1.1, 1.6, 0.7], fov: 44 }));
+    D.cam(FIX([-1.0, 1.55, 0.9], [0.1, 1.4, -2.3], { pos2: [-0.85, 1.55, 0.6], fov: 44 }));
     D.sound('The horse struggles as the purple energy grows stronger', 2.6, 0.1); D.wait(2.8);
   }
   D.set('flashWhite', 0.8); D.anim('flashWhite', 0, 0.5); D.sfx('glitch', 0, 0.6);
@@ -755,7 +755,7 @@ export function buildEpisode() {
   {
     D.act('greg', 'idle');
     D.path('greg', [[-0.75, 0.0], [2.0, 0.0], [4.6, 3.0], [6.8, 3.6]], 4.5);
-    D.cam(FIX([-1.2, 1.6, 0.4], [6.0, 1.3, 3.4], { fov: 48 }));
+    D.cam(FIX([-3.4, 1.7, -1.8], [4.0, 1.3, 2.4], { fov: 50 }));
     D.sound('He runs toward the hallway...', 1.6, 0.1); D.wait(1.6);
   }
   // the endless hallway
