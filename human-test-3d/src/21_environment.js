@@ -869,6 +869,7 @@ class FieldEnvironment {
     if (this.rainK == null) { this.rainK = this.rainTarget; this.wetness = this.rainTarget; }
     this.game.renderer.toneMappingExposure = lerp(0.82, 1.05, cloud) * lerp(1, 1.8, night);
     this.windStrength = P.wind;
+    this.sunBase = this.sun.intensity;   // the passing clouds dim it from here (updateWeather)
     // blades glow when back-lit by a low, clear sun
     this.sunGlow = sunCol.clone().multiplyScalar(day * (1 - cloud * 0.85) * 0.55);
     this.buildSkyEnv(day);
@@ -902,6 +903,17 @@ class FieldEnvironment {
     if (this.rainK > 0.6 && this.game.audio) {
       this.boltT = (this.boltT == null ? 6 + Math.random() * 10 : this.boltT) - dt;
       if (this.boltT <= 0) { this.boltT = 14 + Math.random() * 28; this.flashT = 0.42; const far = Math.random(); this.game.audio.thunder(0.5 + far * 3.2, 1 - far * 0.55); }
+    }
+    // V1.15 changing light: on a cloudy day the sun goes in and out as clouds drift past (deep shade,
+    // then full sun); under an overcast or in the rain only a gentle swell
+    { const cc = this.cloudCover || 0;
+      if (this.sunBase != null && (this.dayK || 0) > 0.05 && cc > 0.2 && cc < 0.97) {
+        this.cloudT = (this.cloudT || 0) + dt * (0.6 + (Settings.data.environment.field.wind || 0) * 0.8);
+        const n = valueNoise2(this.cloudT * 0.045, 7.3) * 0.7 + valueNoise2(this.cloudT * 0.11, 2.1) * 0.3;
+        const shade = smoothstep(0.42, 0.6, n) * (cc < 0.5 ? 0.82 : 0.4);
+        this.sunShade = shade;
+        this.sun.intensity = this.sunBase * (1 - shade);
+      } else if (this.sunShade) { this.sunShade = 0; this.sun.intensity = this.sunBase; }
     }
     if (this.hemiBase == null) this.hemiBase = this.hemi.intensity;
     if (this.flashT > 0) {

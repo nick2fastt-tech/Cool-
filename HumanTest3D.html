@@ -3318,7 +3318,7 @@ function buildBun(mb, app, rig, col) {
 const CharShared = { uTime: { value: 0 }, uDetail: { value: 1 } };
 
 const GLSL_HT_COMMON = /* glsl */`
-uniform float uZombie; uniform float uFlash; uniform float uHighlight; uniform float uWet; uniform float uTime; uniform float uDetail;
+uniform float uZombie; uniform float uFlash; uniform float uHighlight; uniform float uWet; uniform float uTime; uniform float uDetail; uniform float uDirt;
 uniform float uVampire; uniform float uEyeGlow; uniform float uHeat; uniform float uAsh; uniform float uDoll; uniform vec4 uFaceC;
 uniform float uSick; uniform float uSweat; uniform vec3 uZTint; uniform vec4 uZLook; uniform vec3 uSkinZ; // uZLook: decay, dark eyes, clothing wear, seed
 uniform vec4 uWA[16]; uniform vec4 uWB[16]; uniform int uWN; uniform float uBlood;
@@ -3594,6 +3594,8 @@ const GLSL_HT_ALBEDO = /* glsl */`
     }
   }
   if (uWet > 0.0 && mT != 7) { base *= 1.0 - uWet * 0.25; htRough *= 1.0 - uWet * 0.45; }
+  // V1.15 dirt from falls and lying on the ground: dusty, grass-stained patches (non-graphic)
+  if (uDirt > 0.0 && mT != 7) { float dn = htFbm(vRest.xy * 6.5 + vRest.zx * 4.3 + 1.7); float dk = smoothstep(0.42, 0.72, dn) * uDirt; base = mix(base, base * vec3(0.66, 0.6, 0.5) + vec3(0.035, 0.03, 0.018), dk); htRough = mix(htRough, 0.92, dk * 0.6); }
   // ---- wounds & blood (bind space: they move with the skinned surface) ----
   if (uWN > 0 || uBlood > 0.0) {
     float gBl = 0.0, gFl = 0.0, gHo = 0.0, gGu = 0.0, gSo = 0.0, gTu = 1.0, gCo = 1.0; // gTu: stump bone, gCo: gut coils
@@ -3771,7 +3773,7 @@ void RE_Direct_HT( const in IncidentLight directLight, const in vec3 geometryPos
 function createCharacterMaterial() {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0.0, envMapIntensity: 0.8 });
   const U = {
-    uZombie: { value: 0 }, uFlash: { value: 0 }, uHighlight: { value: 0 }, uWet: { value: 0 },
+    uZombie: { value: 0 }, uFlash: { value: 0 }, uHighlight: { value: 0 }, uWet: { value: 0 }, uDirt: { value: 0 },
     uTime: CharShared.uTime, uDetail: CharShared.uDetail,
     uWA: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) }, uWB: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) },
     uWN: { value: 0 }, uBlood: { value: 0 },
@@ -4867,6 +4869,7 @@ class FieldEnvironment {
     if (this.rainK == null) { this.rainK = this.rainTarget; this.wetness = this.rainTarget; }
     this.game.renderer.toneMappingExposure = lerp(0.82, 1.05, cloud) * lerp(1, 1.8, night);
     this.windStrength = P.wind;
+    this.sunBase = this.sun.intensity;   // the passing clouds dim it from here (updateWeather)
     // blades glow when back-lit by a low, clear sun
     this.sunGlow = sunCol.clone().multiplyScalar(day * (1 - cloud * 0.85) * 0.55);
     this.buildSkyEnv(day);
@@ -4900,6 +4903,17 @@ class FieldEnvironment {
     if (this.rainK > 0.6 && this.game.audio) {
       this.boltT = (this.boltT == null ? 6 + Math.random() * 10 : this.boltT) - dt;
       if (this.boltT <= 0) { this.boltT = 14 + Math.random() * 28; this.flashT = 0.42; const far = Math.random(); this.game.audio.thunder(0.5 + far * 3.2, 1 - far * 0.55); }
+    }
+    // V1.15 changing light: on a cloudy day the sun goes in and out as clouds drift past (deep shade,
+    // then full sun); under an overcast or in the rain only a gentle swell
+    { const cc = this.cloudCover || 0;
+      if (this.sunBase != null && (this.dayK || 0) > 0.05 && cc > 0.2 && cc < 0.97) {
+        this.cloudT = (this.cloudT || 0) + dt * (0.6 + (Settings.data.environment.field.wind || 0) * 0.8);
+        const n = valueNoise2(this.cloudT * 0.045, 7.3) * 0.7 + valueNoise2(this.cloudT * 0.11, 2.1) * 0.3;
+        const shade = smoothstep(0.42, 0.6, n) * (cc < 0.5 ? 0.82 : 0.4);
+        this.sunShade = shade;
+        this.sun.intensity = this.sunBase * (1 - shade);
+      } else if (this.sunShade) { this.sunShade = 0; this.sun.intensity = this.sunBase; }
     }
     if (this.hemiBase == null) this.hemiBase = this.hemi.intensity;
     if (this.flashT > 0) {
@@ -6779,6 +6793,9 @@ function buildCarModelWithSeats(type) {
 // shots, blasts and bodies push them. People walk round the equipment on a navigation grid and
 // sit on the benches and at the picnic tables; birds peck on the paths and fly off when someone
 // comes near or a shot is fired. +X east, -Z north (the street and the houses are to the north).
+// V1.15: the street became real - a sunken road with kerbs, a zebra crossing, parking lanes and
+// traffic (26_traffic.js); houses with garages and driveways across it; hedges, flowers, a sandbox,
+// a rope climber and more round the park.
 // ============================================================================
 const PG = {
   bx0: -34.5, bx1: 34.5, bz0: -48.3, bz1: 31.5,   // walkable: the park, both sidewalks and the street between them
@@ -6867,6 +6884,7 @@ class PlaygroundEnvironment extends FieldEnvironment {
     this.buildTowerSlide();
     this.buildSeesaws();
     this.buildSpringRiders();
+    this.buildExtras();
     this.buildFurniture();
     this.buildFences();
     this.buildStreet();
@@ -6980,6 +6998,20 @@ class PlaygroundEnvironment extends FieldEnvironment {
       for (let i = 0; i < 4200; i++) { const g = 70 + r.next() * 95, x = r.next() * w, y = r.next() * h; g2.fillStyle = `rgba(${Math.round(g * 0.5)},${Math.round(g)},${Math.round(g * 0.3)},${0.55 + r.next() * 0.45})`; g2.beginPath(); g2.ellipse(x, y, 1.5 + r.next() * 2.5, 0.8 + r.next() * 1.4, r.next() * 3, 0, TAU); g2.fill(); }
       for (let i = 0; i < 900; i++) { g2.fillStyle = 'rgba(10,20,8,0.5)'; g2.fillRect(r.next() * w, r.next() * h, 1 + r.next() * 2, 1 + r.next() * 2); }
     });
+    const sand = tex('pgSand', 256, (g2, w, h) => {
+      g2.fillStyle = 'rgb(214,196,156)'; g2.fillRect(0, 0, w, h);
+      const r = new RNG(71);
+      for (let i = 0; i < 14000; i++) { const c = 150 + r.next() * 90; g2.fillStyle = `rgba(${Math.round(c)},${Math.round(c * 0.9)},${Math.round(c * 0.7)},0.6)`; g2.fillRect(r.next() * w, r.next() * h, 1, 1); }
+      for (let i = 0; i < 26; i++) { g2.fillStyle = `rgba(120,100,70,${0.06 + r.next() * 0.08})`; g2.beginPath(); g2.ellipse(r.next() * w, r.next() * h, 8 + r.next() * 20, 4 + r.next() * 10, r.next() * 3, 0, TAU); g2.fill(); }
+    });
+    const parkSign = Tex.make('pgParkSign', 512, 128, (g2, w, h) => {
+      g2.fillStyle = '#4a3220'; g2.fillRect(0, 0, w, h);
+      for (let y = 0; y < h; y += 3) { g2.fillStyle = `rgba(30,18,10,${0.15 + 0.15 * Math.sin(y * 0.7)})`; g2.fillRect(0, y, w, 1); }
+      g2.strokeStyle = '#d8c69a'; g2.lineWidth = 4; g2.strokeRect(10, 10, w - 20, h - 20);
+      g2.fillStyle = '#efe2bc'; g2.textAlign = 'center'; g2.font = 'bold 52px Georgia, serif'; g2.fillText('ELM STREET PARK', w / 2, 72);
+      g2.font = 'italic 22px Georgia, serif'; g2.fillText('Playground  ·  Open dawn to dusk', w / 2, 104);
+    });
+    parkSign.anisotropy = an;
     const std = (o) => new THREE.MeshStandardMaterial(Object.assign({ vertexColors: true, envMapIntensity: 0.6 }, o));
     M.rubber = std({ map: rubber, roughness: 0.95, metalness: 0, envMapIntensity: 0.25 });
     M.concrete = std({ map: concrete, roughness: 0.9, envMapIntensity: 0.3 });
@@ -6996,6 +7028,8 @@ class PlaygroundEnvironment extends FieldEnvironment {
     M.trim = std({ roughness: 0.6, metalness: 0 });
     M.window2 = std({ map: win, emissiveMap: winGlow, emissive: new THREE.Color(0, 0, 0), roughness: 0.18, metalness: 0.1, envMapIntensity: 1.2 });
     M.sign = std({ map: signs, alphaTest: 0.5, roughness: 0.45, metalness: 0.1 });
+    M.sand = std({ map: sand, roughness: 0.97, metalness: 0, envMapIntensity: 0.25 });
+    M.parkSign = std({ map: parkSign, roughness: 0.8, metalness: 0 });
     M.hedge = std({ map: hedge, roughness: 0.95, metalness: 0, envMapIntensity: 0.3, color: 0xe6f0dc });
     M.tactile = std({ map: deck, roughness: 0.7, metalness: 0, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
     M.glassPG = new THREE.MeshPhysicalMaterial({ color: 0xdde8ee, vertexColors: true, transparent: true, opacity: 0.22, roughness: 0.05, metalness: 0, depthWrite: false, envMapIntensity: 1.2 });
@@ -7004,7 +7038,7 @@ class PlaygroundEnvironment extends FieldEnvironment {
     M.mark = std({ roughness: 0.8, metalness: 0, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
     for (const k of ['rubber', 'concrete', 'asphalt']) { M[k].polygonOffset = true; M[k].polygonOffsetFactor = -1; M[k].polygonOffsetUnits = -1; }
     // texture scale per material (metres per repeat) for boxes and ground quads
-    this.tm = { rubber: 2, concrete: 1.5, asphalt: 6, wood: 1.2, deck: 0.5, siding: 2.4, roof: 3, brick: 2.4, mark: 1, tactile: 0.5, hedge: 1.4 };
+    this.tm = { rubber: 2, concrete: 1.5, asphalt: 6, wood: 1.2, deck: 0.5, siding: 2.4, roof: 3, brick: 2.4, mark: 1, tactile: 0.5, hedge: 1.4, sand: 1.2 };
     // what each material looks like dry (the rain darkens and polishes the hard surfaces, see update)
     this.dryState = {};
     for (const k of ['rubber', 'concrete', 'asphalt', 'wood', 'paint', 'deck', 'mark', 'tactile', 'brick', 'roof', 'siding']) this.dryState[k] = { r: M[k].roughness, e: M[k].envMapIntensity };
@@ -7078,6 +7112,7 @@ float htGrassMask(vec2 p) { float m = 1.0; ${rects} return m; }`;
   baseHeight(x, z) {
     const P = PG.play;
     this._rk = 0;
+    const SB = this.sandbox; if (SB && x > SB.x0 && x < SB.x1 && z > SB.z0 && z < SB.z1) return SB.y;
     if (x > P.x0 && x < P.x1 && z > P.z0 && z < P.z1) return 0.02;
     if (z < -32 && z > PG_ST.far) return this.streetY(x, z);
     return this.onPath(x, z) ? 0.012 : 0;
@@ -7725,6 +7760,59 @@ float htGrassMask(vec2 p) { float m = 1.0; ${rects} return m; }`;
     for (let k = 0; k < 3; k++) { const zc = lerp(z0 + 3, z1 - 3, (k + 0.5) / 3) + r.range(-1, 1), xc = lerp(x0, x1, 0.35 + r.next() * 0.3); this.box('paint', xc - 0.9, H, zc - 0.7, xc + 0.9, H + 1.2, zc + 0.7, 0x9aa0a4); this.box('paint', xc - 0.5, H + 1.2, zc - 0.5, xc + 0.5, H + 1.3, zc + 0.5, 0x3a3e42); }
     this.box('brick', lerp(x0, x1, 0.3), H, z0 + 2, lerp(x0, x1, 0.6), H + 2.6, z0 + 5, col);
   }
+  // V1.15: more to the park - a sandbox with toys, a rope net climber, a drinking fountain, a bike
+  // rack with bikes, the park's name board at the north entrance
+  buildExtras() {
+    const C = PG_COL, SB = this.sandbox = { x0: 5.2, z0: 4.4, x1: 8.3, z1: 8.8, y: 0.075 };
+    // the sandbox: a timber frame people step over, sand a little below its top
+    for (const [x0, z0, x1, z1] of [[SB.x0 - 0.12, SB.z0 - 0.12, SB.x1 + 0.12, SB.z0], [SB.x0 - 0.12, SB.z1, SB.x1 + 0.12, SB.z1 + 0.12], [SB.x0 - 0.12, SB.z0, SB.x0, SB.z1], [SB.x1, SB.z0, SB.x1 + 0.12, SB.z1]]) {
+      this.box('wood', x0, 0, z0, x1, 0.2, z1, 0xa77a50); this.tops.push({ x0, x1, z0, z1, h: 0.2 }); this.collider(x0, 0, z0, x1, 0.2, z1);
+    }
+    this.quad('sand', SB.x0, SB.z0, SB.x1, SB.z1, SB.y, 0xffffff);
+    { const b = new THREE.CylinderGeometry(0.11, 0.085, 0.17, 12, 1, true); _pgM.makeTranslation(6.1, SB.y + 0.085, 5.3); this.geo('plastic', b, _pgM, 0xd8342a);
+      const bb = new THREE.CircleGeometry(0.085, 12); bb.rotateX(-Math.PI / 2); _pgM.makeTranslation(6.1, SB.y + 0.003, 5.3); this.geo('plastic', bb, _pgM, 0xd8342a);
+      this.box('plastic', 6.5, SB.y, 5.05, 6.56, SB.y + 0.02, 5.4, 0x2a6ad0); this.box('plastic', 6.48, SB.y, 5.38, 6.6, SB.y + 0.02, 5.55, 0x2a6ad0);
+      for (const [x, z, r, h] of [[7.2, 7.6, 0.26, 0.22], [7.45, 7.75, 0.14, 0.3], [6.95, 7.85, 0.13, 0.26], [7.25, 8.05, 0.12, 0.24]]) { const c = new THREE.ConeGeometry(r, h, 10); _pgM.makeTranslation(x, SB.y + h / 2, z); this.geo('sand', c, _pgM, 0xd9c49a); }
+    }
+    // a rope pyramid on the lawn: a steel mast, ropes from its top to a ring of anchors, rings of rope between
+    { const cx = -24.5, cz = 15.5, R = 2.3, H = 4.2, n = 10, rc = 0xb3262a;
+      this.bar('steel', new V3(cx, 0, cz), new V3(cx, H + 0.25, cz), 0.06, 0xc0c4c8, 10);
+      const cap = new THREE.SphereGeometry(0.11, 10, 8); _pgM.makeTranslation(cx, H + 0.28, cz); this.geo('paint', cap, _pgM, C.yellow);
+      const top = new V3(cx, H, cz), pts = [];
+      for (let k = 0; k < n; k++) { const a = k / n * TAU; pts.push(new V3(cx + Math.cos(a) * R, 0.12, cz + Math.sin(a) * R)); this.box('paint', pts[k].x - 0.06, 0, pts[k].z - 0.06, pts[k].x + 0.06, 0.16, pts[k].z + 0.06, 0x3a3e42); }
+      for (const p of pts) this.bar('paint', p, top, 0.02, rc, 5);
+      for (let r = 1; r <= 4; r++) { const t = r / 5; for (let k = 0; k < n; k++) { const a = pts[k].clone().lerp(top, t), b = pts[(k + 1) % n].clone().lerp(top, t); this.bar('paint', a, b, 0.017, rc, 4); } }
+      this.collider(cx - 0.08, 0, cz - 0.08, cx + 0.08, H + 0.3, cz + 0.08);
+      this.obstacle(cx - R * 0.8, cz - R * 0.8, cx + R * 0.8, cz + R * 0.8);
+    }
+    // the drinking fountain by the south gate
+    { const x = 2.4, z = 12.9;
+      this.box('concrete', x - 0.2, 0, z - 0.2, x + 0.2, 0.82, z + 0.2, 0x9ea3a8);
+      const bowl = new THREE.CylinderGeometry(0.24, 0.17, 0.1, 16); _pgM.makeTranslation(x, 0.87, z); this.geo('steel', bowl, _pgM, 0xd0d4d8);
+      this.bar('steel', new V3(x + 0.05, 0.9, z), new V3(x - 0.04, 0.98, z), 0.012, 0xd0d4d8, 6);
+      this.collider(x - 0.24, 0, z - 0.24, x + 0.24, 0.92, z + 0.24); this.obstacle(x - 0.28, z - 0.28, x + 0.28, z + 0.28);
+    }
+    // a bike rack with two bikes by the north entrance
+    { const x0 = 3.0, z = -29.6;
+      for (let k = 0; k < 3; k++) { const x = x0 + k * 0.8; this.bar('steel', new V3(x, 0, z - 0.3), new V3(x, 0.75, z - 0.3), 0.025, 0xb8bcc0, 8); this.bar('steel', new V3(x, 0, z + 0.3), new V3(x, 0.75, z + 0.3), 0.025, 0xb8bcc0, 8); this.bar('steel', new V3(x, 0.75, z - 0.3), new V3(x, 0.75, z + 0.3), 0.025, 0xb8bcc0, 8); }
+      const bike = (x, col) => {
+        for (const dz of [-0.52, 0.52]) { const w = new THREE.TorusGeometry(0.31, 0.022, 6, 22); w.rotateY(Math.PI / 2); _pgM.makeTranslation(x, 0.33, z + dz); this.geo('seat', w, _pgM, 0x151617); }
+        const P = (dy, dz) => new V3(x, dy, z + dz);
+        for (const [a, b] of [[P(0.33, -0.52), P(0.62, -0.12)], [P(0.62, -0.12), P(0.33, 0.12)], [P(0.33, 0.12), P(0.33, -0.52)], [P(0.62, -0.12), P(0.66, 0.38)], [P(0.33, 0.12), P(0.66, 0.38)], [P(0.66, 0.38), P(0.33, 0.52)], [P(0.62, -0.12), P(0.74, -0.18)]]) this.bar('paint', a, b, 0.016, col, 5);
+        this.box('seat', x - 0.04, 0.74, z - 0.26, x + 0.04, 0.78, z - 0.1, 0x1a1a1a);
+        this.bar('steel', P(0.66, 0.38), P(0.86, 0.33), 0.014, 0xc0c4c8, 5); this.bar('steel', new V3(x - 0.24, 0.88, z + 0.33), new V3(x + 0.24, 0.88, z + 0.33), 0.013, 0x2a2a2a, 5);
+      };
+      bike(x0 + 0.4, 0x1f6fb8); bike(x0 + 1.2, 0xd84a2a);
+      this.collider(x0 - 0.1, 0, z - 0.6, x0 + 1.75, 0.95, z + 0.6); this.obstacle(x0 - 0.15, z - 0.62, x0 + 1.8, z + 0.62);
+    }
+    // the park's name board at the north entrance, facing the street
+    { const x = -3.4, z = -30.5;
+      for (const dx of [-0.9, 0.9]) this.box('wood', x + dx - 0.06, 0, z - 0.06, x + dx + 0.06, 1.7, z + 0.06, 0x6b4f35);
+      this.box('wood', x - 1.05, 0.95, z - 0.05, x + 1.05, 1.55, z + 0.03, 0x7a5a3c);
+      const g = new THREE.PlaneGeometry(1.94, 0.52); _pgM.makeTranslation(x, 1.25, z - 0.056); _pgQ.setFromAxisAngle(UP, Math.PI); _pgM.compose(_pgV.set(x, 1.25, z - 0.056), _pgQ, _pgS); this.geo('parkSign', g, _pgM, 0xffffff);
+      this.collider(x - 1.0, 0, z - 0.08, x + 1.0, 1.6, z + 0.08); this.obstacle(x - 1.05, z - 0.1, x + 1.05, z + 0.1);
+    }
+  }
   // clipped hedges along the park's street edge (open at the path and the bus shelter)
   buildHedges() {
     const z0 = -31.85, z1 = -31.05, h = 0.78, rt = (z1 - z0) / 2;
@@ -7863,7 +7951,8 @@ float htGrassMask(vec2 p) { float m = 1.0; ${rects} return m; }`;
   }
   puddleSpots(rr) {
     const out = [];
-    const cand = [[-6, 12.5, 0.8], [7, -12.4, 1.0], [16.4, 6, 0.7], [-16.5, -8, 0.9], [0.2, 20, 1.0], [0.1, -25, 0.8], [-3, -33.2, 1.1], [14, -33.3, 0.9], [9, -38, 1.8], [-14, -40, 2.2], [26, 0.3, 0.8], [-4, 2.5, 1.0], [6, 7.5, 0.8], [-11.5, 0, 0.7]];
+    const cand = [[-6, 12.5, 0.8], [7, -12.4, 1.0], [16.4, 6, 0.7], [-16.5, -8, 0.9], [0.2, 20, 1.0], [0.1, -25, 0.8], [-3, -33.2, 1.1], [14, -33.3, 0.9], [9, -38, 1.8], [-14, -40, 2.2], [26, 0.3, 0.8], [-4, 2.5, 1.0], [-11.5, 0, 0.7],
+      [-19, -35.1, 1.1], [24, -35.05, 0.9], [11, -45.55, 1.2], [-27, -45.6, 1.0], [4.5, -47.6, 0.7]];   // water along the gutters
     for (const c of cand) out.push(c);
     void rr; return out;
   }
@@ -7923,6 +8012,7 @@ float htGrassMask(vec2 p) { float m = 1.0; ${rects} return m; }`;
   }
   surfaceAt(p) {
     const P = PG.play;
+    const SB = this.sandbox; if (SB && p.x > SB.x0 && p.x < SB.x1 && p.z > SB.z0 && p.z < SB.z1 && p.y < 0.3) return 'grass';   // soft sand
     if (p.x > P.x0 && p.x < P.x1 && p.z > P.z0 && p.z < P.z1) return p.y > 0.3 ? 'metal' : 'rubber';
     if (p.z < -32 && p.z > PG_ST.far) return p.y > 0.3 ? 'metal' : 'hard';
     return this.onPath(p.x, p.z) ? 'hard' : 'grass';
@@ -8040,10 +8130,23 @@ float htGrassMask(vec2 p) { float m = 1.0; ${rects} return m; }`;
     this._navNpc = npc || null;
     if (!npc) return dest;
     const N = npc._pgNav || (npc._pgNav = { path: null, i: 0, t: -9, dx: 1e9, dz: 1e9, losT: -9, los: true, g: new V3(), cw: new V3() });
+    // into the road from a sidewalk (to someone lying there): through a gap between the parked cars
+    if (this.traffic) {
+      const pk = p.z > TR.kerb1 ? 1 : p.z < TR.kerb0 ? -1 : 0, dk = dest.z > TR.kerb1 ? 1 : dest.z < TR.kerb0 ? -1 : 0;
+      if (pk !== 0 && dk === 0) {
+        const lz = pk > 0 ? TR.lanes[0].park : TR.lanes[1].park, t = clamp((lz - p.z) / ((dest.z - p.z) || 1e-6), 0, 1), xl = p.x + (dest.x - p.x) * t;
+        const gx = this.traffic.kerbGap(xl, pk);
+        if (Math.abs(gx - xl) > 0.3) {
+          const kz = pk > 0 ? TR.kerb1 + 0.45 : TR.kerb0 - 0.45;
+          if (Math.abs(p.x - gx) > 0.35) return N.cw.set(gx, p.y, kz);
+          return N.cw.set(gx, p.y, pk > 0 ? lz - 1.3 : lz + 1.3);
+        }
+      }
+    }
     // across the street: by the zebra crossing - to the kerb at the crossing, then straight over;
     // anyone standing in the road off the crossing leaves it the shortest way
-    { const k0 = TR.kerb0, k1 = TR.kerb1, mid = TR.center, sD = dest.z > mid ? 1 : -1, onRoad = p.z < k1 && p.z > k0;
-      if (onRoad || (Math.sign(p.z - mid) !== sD && this.crossesRoad(p.x, p.z, dest.x, dest.z))) {
+    { const k0 = TR.kerb0, k1 = TR.kerb1, mid = TR.center, sD = dest.z > mid ? 1 : -1, onRoad = p.z < k1 && p.z > k0, destOnRoad = dest.z < k1 && dest.z > k0;
+      if ((onRoad && !destOnRoad) || (Math.sign(p.z - mid) !== sD && this.crossesRoad(p.x, p.z, dest.x, dest.z))) {
         const cx0 = TR.cross.x0 + 0.5, cx1 = TR.cross.x1 - 0.5, xc = clamp((p.x + dest.x) / 2, cx0, cx1);
         if (onRoad) {
           if (p.x > cx0 - 0.4 && p.x < cx1 + 0.4) N.cw.set(clamp(p.x, cx0, cx1), p.y, sD > 0 ? k1 + 0.8 : k0 - 0.8);
@@ -9078,8 +9181,8 @@ class TrafficSystem {
       if (c.mode === 'parked' || c.z < zl || c.z > zh) continue;
       const rel = (x - c.x) * c.dir - c.M.L / 2;   // distance the car still has to travel to reach x
       if (rel < -c.M.L - 1) continue;              // already past
+      if (c.v < 0.3 && (c.yielding || c.mode !== 'drive' || rel > 4)) continue;   // standing still (stopped, giving way, queued)
       if (rel < 1.5) return false;                 // right there
-      if (c.v < 0.3 && (c.yielding || c.mode !== 'drive' || rel > 4)) continue;
       if (c.yielding && rel > 3) continue;
       // at the zebra crossing a driver who can still stop comfortably will give way: not a danger
       if (atCross && c.mode === 'drive' && rel - 2.2 > c.v * c.v / (2 * 2.6) + 2) continue;
@@ -9129,6 +9232,12 @@ class TrafficSystem {
         _tq1.setFromAxisAngle(UP, L[3] > 0 ? 0 : Math.PI);
         _tm1.compose(_tv1.set(L[0], L[1], L[2]), _tq1, _tv2.set(1, L[6], L[5])); _tm1.premultiply(m);
         LM.setMatrixAt(li, _tm1); LM.instanceColor.setXYZ(li, r, gg, b); li++;
+      }
+      // spray off the tyres on a wet road
+      const wet = this.env.wetness || 0, fx = this.game.fx;
+      if (wet > 0.3 && c.v > 4 && fx && fx.smoke && Math.random() < wet * Math.min(1, c.v / 12) * 0.9) {
+        const w = M.wheels[2 + (Math.random() < 0.5 ? 0 : 1)]; _tv1.set(w[0] - 0.3, 0.05, w[2]).applyMatrix4(m);
+        fx.smoke.emit(_tv1.x, _tv1.y, _tv1.z, -c.dir * c.v * 0.18 + (Math.random() - 0.5) * 0.6, 0.4 + Math.random() * 0.6, (Math.random() - 0.5) * 0.6, 0.45 + Math.random() * 0.3, 0.06, 0.45, 0.78, 0.8, 0.84, 0.22 * wet, 2, 2.2);
       }
       if (c.head > 0.5) {
         _tq1.setFromAxisAngle(UP, (c.dir > 0 ? -Math.PI / 2 : Math.PI / 2) + c.yaw);
@@ -12481,7 +12590,7 @@ class NPC {
       this.mesh.updateMatrixWorld(true);
       this.mesh.skeleton.calculateInverses();
       this.mesh.bind(this.mesh.skeleton);
-      const u = this.material.userData.u; u.uZombie.value = 0; u.uFlash.value = 0; u.uHighlight.value = 0; u.uWet.value = 0; if (u.uWN) { u.uWN.value = 0; u.uBlood.value = 0; } for (const k of ['uVampire', 'uEyeGlow', 'uFang', 'uHeat', 'uAsh', 'uDoll', 'uSick', 'uSweat']) if (u[k]) u[k].value = 0;
+      const u = this.material.userData.u; u.uZombie.value = 0; u.uFlash.value = 0; u.uHighlight.value = 0; u.uWet.value = 0; this.dirt = 0; if (u.uDirt) u.uDirt.value = 0; if (u.uWN) { u.uWN.value = 0; u.uBlood.value = 0; } for (const k of ['uVampire', 'uEyeGlow', 'uFang', 'uHeat', 'uAsh', 'uDoll', 'uSick', 'uSweat']) if (u[k]) u[k].value = 0;
       if (u.uZTint) { u.uZTint.value.set(0.78, 0.9, 0.7); u.uZLook.value.set(0, 0, 0, 0); }
     } else {
       const bones = [];
@@ -12575,6 +12684,7 @@ class NPC {
     u.uHighlight.value = damp(u.uHighlight.value, this.highlight, 10, dt);
     const wetT = env.current ? (+env.current.wet || 0) : 0; // the field soaks people gradually in rain
     u.uWet.value = damp(u.uWet.value, wetT, wetT > u.uWet.value ? 0.3 : 0.5, dt);
+    if (u.uDirt) { this.dirt = Math.max(0, (this.dirt || 0) - dt * 0.0015); u.uDirt.value = this.dirt; }
     if (this.isZombie) u.uZombie.value = Math.min(1, u.uZombie.value + dt * 0.6);
   }
   postPhysics(dt) {
@@ -12714,7 +12824,7 @@ class NPC {
   updateCondition(dt) {
     const C = this.cond;
     if (C.state === 'ok') return;
-    if (this.lifeState !== 'alive') { C.state = 'ok'; return; }
+    if (this.lifeState !== 'alive') { C.state = 'ok'; if (this.downTimer > 1e6) this.downTimer = 0; return; }   // died, turned or was cured: their own systems take over
     C.t += dt * (this.helpedBy && !this.helpedBy.removed && this.helpedBy.brain && this.helpedBy.brain.state === 'help' ? 1.8 : 1);
     if (C.state === 'unconscious') {
       if (C.t >= C.dur && this.physMode === 'ragdoll' && !this.carried && !this.grabbedBy && !(this.feeders > 0)) {
@@ -12870,7 +12980,7 @@ class NPC {
   }
   die(info) {
     if (!this.setLife('dead', info && info.weapon)) return false;
-    this.cond.state = 'ok';
+    this.cond.state = 'ok'; if (this.downTimer > 1e6) this.downTimer = 0;
     this.deathTime = this.game.time;
     this.fear = 0;
     this.anim.jawTarget = 0.1;
@@ -13421,6 +13531,13 @@ class AISystem {
         const run = npc.personality.runSpeed * Math.sqrt(npc.rig.legLen / 0.84) * (1 - 0.5 * Math.max(anim.limp[0], anim.limp[1])) * (1 - 0.45 * smoothstep(0.4, 0.75, anim.sick || 0)) * (1 - 0.32 * (anim.exertion || 0));
         b.speed = run;
         anim.setPosture('stand'); anim.setUpper(npc.fear > 0.85 && b.t < 1.2 ? 'flail' : 'hang');
+        // V1.15 a misstep at a run (more often on wet ground): a lurch and arms out, then on they go
+        if (anim.speed > 2.6 && !anim.action && b.t > 0.8 && Math.random() < dt * (0.012 + 0.05 * (game.env.current.wetness || 0))) {
+          const dir = Math.random() < 0.5 ? 1 : -1;
+          anim.setAction('balance', { dur: 0.6 + Math.random() * 0.25, dir, inT: 0.08, outT: 0.3 });
+          b.stagger.add(_v1.set(Math.sin(npc.root.yaw), 0, Math.cos(npc.root.yaw)).multiplyScalar(0.5)).add(_v2.set(Math.cos(npc.root.yaw), 0, -Math.sin(npc.root.yaw)).multiplyScalar(dir * 0.4));
+          npc.lastReaction = 'Stumbled (Running)';
+        }
         if (b.threatNpc && !b.threatNpc.removed && b.threatNpc.hostile) b.threat.copy(b.threatNpc.root.pos);
         if (b.t < 0.05) this.remember(npc, 'threat', b.threat, 0.6);
         // escape route: away from everything dangerous it knows of, round walls and off the map's edges
@@ -13516,7 +13633,8 @@ class AISystem {
   react(npc, b, st) {
     const S = Settings.data.ai, anim = npc.anim;
     this.remember(npc, st.type, st.threatPos, clamp(st.intensity * 1.6, 0.15, 1));
-    npc.fear = clamp(npc.fear + st.intensity * (1.2 - npc.personality.bravery * 0.5), 0, 1);
+    const accident = st.type === 'crash' || st.type === 'collapse' || st.type === 'horn';   // shocking, not an attack
+    npc.fear = clamp(npc.fear + st.intensity * (1.2 - npc.personality.bravery * 0.5) * (accident ? 0.4 : 1), 0, 1);
     b.threat.copy(st.threatPos); b.hasThreat = true; b.threatNpc = null;
     anim.lookAt(_v1.copy(st.pos).setY(Math.max(st.pos.y, 0.8)), 1);
     b.lookKind = 'threat'; b.lookTimer = 3;
@@ -14532,7 +14650,7 @@ class AISystem {
   // for help, the rest keep back (or run, if something hunts nearby)
   scanForCasualties(npc, b) {
     const p = npc.personality;
-    if (npc.infection || npc.horror || npc.fear > 0.45 || npc.transit || npc.seatLock || (p.kindness != null ? p.kindness : 0.5) < 0.3 || (npc.anim.sick || 0) > 0.3) return false;
+    if (npc.infection || npc.horror || npc.fear > 0.6 || npc.transit || npc.seatLock || (p.kindness != null ? p.kindness : 0.5) < 0.3 || (npc.anim.sick || 0) > 0.3) return false;
     let best = null, bd = 18;
     for (const o of this.game.npcs.list) {
       if (o === npc || o.removed || o.lifeState !== 'alive' || o.physMode !== 'ragdoll' || o.horror || !o.cond || o.cond.state !== 'unconscious' || (o.feeders || 0) > 0 || o.grabbedBy || o.carried) continue;
@@ -14774,13 +14892,14 @@ class AISystem {
     const trf = envO && envO.traffic;
     if (trf && !npc.riding) {
       trf.avoid(npc, desired);
-      if (npc.lifeState === 'alive' && !npc.horror && b.speed > 0.01 && b.state !== 'dodge' && b.state !== 'help') {
+      if (npc.lifeState === 'alive' && !npc.horror && b.speed > 0.01 && b.state !== 'dodge') {
         const P = root.pos, len = Math.hypot(desired.x, desired.z);
         if (len > 0.05) {
           const ahead = 0.45 + Math.min(b.speed, 5) * 0.22, nx = P.x + desired.x / len * ahead, nz = P.z + desired.z / len * ahead;
           if (!trf.onRoad(P.x, P.z) && trf.onRoad(nx, nz)) {
             npc._wantsCross = game.time;
-            const toFar = P.z > TR.center, z1 = toFar ? TR.kerb0 - 0.3 : TR.kerb1 + 0.3;
+            // how far into the road they are going: across it, or just to something in it (someone lying there)
+            const toFar = P.z > TR.center, dz1 = b.dest.z, inRoad = dz1 < TR.kerb1 && dz1 > TR.kerb0, z1 = inRoad ? dz1 : toFar ? TR.kerb0 - 0.3 : TR.kerb1 + 0.3;
             const crossT = Math.abs(z1 - P.z) / Math.max(0.9, b.speed);
             const care = (b.state === 'flee' ? 0.6 : 1.0 + (npc.personality.caution != null ? npc.personality.caution : 0.5) * 0.6) * Math.max(0.65, 1 - (b.kerbWaitT || 0) / 25);   // impatience after a long wait
             if (!trf.crossingClear(P.x, P.z, z1, crossT * care)) {
@@ -22175,7 +22294,7 @@ class Game {
       npc.setLife('alive', 'revived');
     }
     npc.health = npc.maxHealth = 100; npc.regionDamage.fill(0); npc.hitCounts.fill(0); npc.criticalHead = false;
-    npc.cond.state = 'ok'; npc.cond.t = 0; npc.helpedBy = npc.calledBy = null; if (npc.downTimer > 1e6) npc.downTimer = 0;
+    npc.cond.state = 'ok'; npc.cond.t = 0; npc.helpedBy = npc.calledBy = null; if (npc.downTimer > 1e6) npc.downTimer = 0; npc.dirt = 0;
     npc.isZombie = false; npc.zombieTarget = null; npc.material.userData.u.uZombie.value = 0; npc.anim.zombie = 0; npc.fear = 0;
     { const u = npc.material.userData.u; if (u.uSick) { u.uSick.value = 0; u.uSweat.value = 0; } npc.anim.sick = 0; npc.infection = null; npc.zlook = null; if (u.uZTint) { u.uZTint.value.set(0.78, 0.9, 0.7); u.uZLook.value.set(0, 0, 0, 0); } }
     npc.reinc = { state: 'none', timer: 0, delay: 0, eligible: false, reason: '' };
@@ -22323,6 +22442,7 @@ class Game {
               const gn = this.env.groundNormal(ip.x, ip.z, _v3);
               this.fx.bodyDust(_v2.set(ip.x, gy, ip.z), gn, this.env.current.surface, clamp((imp - 2) / 5, 0.3, 1));
               const npc = b.owner && b.owner.npc, G = npc && npc.gore;
+              if (npc && !npc.horror) npc.dirt = Math.min(0.85, (npc.dirt || 0) + 0.025 * (imp - 2) * (1 + (this.env.current.wetness || 0)));   // V1.15: falls leave clothes dirty
               if (G && this.gore.on && G.blood > 0.3 && Settings.data.gore.pools && Math.random() < 0.6) this.gore.decals.add(_v2.set(ip.x, gy, ip.z), gn, 0.18 + Math.random() * 0.12, 'drop');
             }
           }

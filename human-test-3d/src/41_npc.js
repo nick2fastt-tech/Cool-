@@ -59,7 +59,7 @@ class NPC {
       this.mesh.updateMatrixWorld(true);
       this.mesh.skeleton.calculateInverses();
       this.mesh.bind(this.mesh.skeleton);
-      const u = this.material.userData.u; u.uZombie.value = 0; u.uFlash.value = 0; u.uHighlight.value = 0; u.uWet.value = 0; if (u.uWN) { u.uWN.value = 0; u.uBlood.value = 0; } for (const k of ['uVampire', 'uEyeGlow', 'uFang', 'uHeat', 'uAsh', 'uDoll', 'uSick', 'uSweat']) if (u[k]) u[k].value = 0;
+      const u = this.material.userData.u; u.uZombie.value = 0; u.uFlash.value = 0; u.uHighlight.value = 0; u.uWet.value = 0; this.dirt = 0; if (u.uDirt) u.uDirt.value = 0; if (u.uWN) { u.uWN.value = 0; u.uBlood.value = 0; } for (const k of ['uVampire', 'uEyeGlow', 'uFang', 'uHeat', 'uAsh', 'uDoll', 'uSick', 'uSweat']) if (u[k]) u[k].value = 0;
       if (u.uZTint) { u.uZTint.value.set(0.78, 0.9, 0.7); u.uZLook.value.set(0, 0, 0, 0); }
     } else {
       const bones = [];
@@ -153,6 +153,7 @@ class NPC {
     u.uHighlight.value = damp(u.uHighlight.value, this.highlight, 10, dt);
     const wetT = env.current ? (+env.current.wet || 0) : 0; // the field soaks people gradually in rain
     u.uWet.value = damp(u.uWet.value, wetT, wetT > u.uWet.value ? 0.3 : 0.5, dt);
+    if (u.uDirt) { this.dirt = Math.max(0, (this.dirt || 0) - dt * 0.0015); u.uDirt.value = this.dirt; }
     if (this.isZombie) u.uZombie.value = Math.min(1, u.uZombie.value + dt * 0.6);
   }
   postPhysics(dt) {
@@ -292,7 +293,7 @@ class NPC {
   updateCondition(dt) {
     const C = this.cond;
     if (C.state === 'ok') return;
-    if (this.lifeState !== 'alive') { C.state = 'ok'; return; }
+    if (this.lifeState !== 'alive') { C.state = 'ok'; if (this.downTimer > 1e6) this.downTimer = 0; return; }   // died, turned or was cured: their own systems take over
     C.t += dt * (this.helpedBy && !this.helpedBy.removed && this.helpedBy.brain && this.helpedBy.brain.state === 'help' ? 1.8 : 1);
     if (C.state === 'unconscious') {
       if (C.t >= C.dur && this.physMode === 'ragdoll' && !this.carried && !this.grabbedBy && !(this.feeders > 0)) {
@@ -448,7 +449,7 @@ class NPC {
   }
   die(info) {
     if (!this.setLife('dead', info && info.weapon)) return false;
-    this.cond.state = 'ok';
+    this.cond.state = 'ok'; if (this.downTimer > 1e6) this.downTimer = 0;
     this.deathTime = this.game.time;
     this.fear = 0;
     this.anim.jawTarget = 0.1;

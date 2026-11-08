@@ -300,6 +300,13 @@ class AISystem {
         const run = npc.personality.runSpeed * Math.sqrt(npc.rig.legLen / 0.84) * (1 - 0.5 * Math.max(anim.limp[0], anim.limp[1])) * (1 - 0.45 * smoothstep(0.4, 0.75, anim.sick || 0)) * (1 - 0.32 * (anim.exertion || 0));
         b.speed = run;
         anim.setPosture('stand'); anim.setUpper(npc.fear > 0.85 && b.t < 1.2 ? 'flail' : 'hang');
+        // V1.15 a misstep at a run (more often on wet ground): a lurch and arms out, then on they go
+        if (anim.speed > 2.6 && !anim.action && b.t > 0.8 && Math.random() < dt * (0.012 + 0.05 * (game.env.current.wetness || 0))) {
+          const dir = Math.random() < 0.5 ? 1 : -1;
+          anim.setAction('balance', { dur: 0.6 + Math.random() * 0.25, dir, inT: 0.08, outT: 0.3 });
+          b.stagger.add(_v1.set(Math.sin(npc.root.yaw), 0, Math.cos(npc.root.yaw)).multiplyScalar(0.5)).add(_v2.set(Math.cos(npc.root.yaw), 0, -Math.sin(npc.root.yaw)).multiplyScalar(dir * 0.4));
+          npc.lastReaction = 'Stumbled (Running)';
+        }
         if (b.threatNpc && !b.threatNpc.removed && b.threatNpc.hostile) b.threat.copy(b.threatNpc.root.pos);
         if (b.t < 0.05) this.remember(npc, 'threat', b.threat, 0.6);
         // escape route: away from everything dangerous it knows of, round walls and off the map's edges
@@ -395,7 +402,8 @@ class AISystem {
   react(npc, b, st) {
     const S = Settings.data.ai, anim = npc.anim;
     this.remember(npc, st.type, st.threatPos, clamp(st.intensity * 1.6, 0.15, 1));
-    npc.fear = clamp(npc.fear + st.intensity * (1.2 - npc.personality.bravery * 0.5), 0, 1);
+    const accident = st.type === 'crash' || st.type === 'collapse' || st.type === 'horn';   // shocking, not an attack
+    npc.fear = clamp(npc.fear + st.intensity * (1.2 - npc.personality.bravery * 0.5) * (accident ? 0.4 : 1), 0, 1);
     b.threat.copy(st.threatPos); b.hasThreat = true; b.threatNpc = null;
     anim.lookAt(_v1.copy(st.pos).setY(Math.max(st.pos.y, 0.8)), 1);
     b.lookKind = 'threat'; b.lookTimer = 3;
@@ -1411,7 +1419,7 @@ class AISystem {
   // for help, the rest keep back (or run, if something hunts nearby)
   scanForCasualties(npc, b) {
     const p = npc.personality;
-    if (npc.infection || npc.horror || npc.fear > 0.45 || npc.transit || npc.seatLock || (p.kindness != null ? p.kindness : 0.5) < 0.3 || (npc.anim.sick || 0) > 0.3) return false;
+    if (npc.infection || npc.horror || npc.fear > 0.6 || npc.transit || npc.seatLock || (p.kindness != null ? p.kindness : 0.5) < 0.3 || (npc.anim.sick || 0) > 0.3) return false;
     let best = null, bd = 18;
     for (const o of this.game.npcs.list) {
       if (o === npc || o.removed || o.lifeState !== 'alive' || o.physMode !== 'ragdoll' || o.horror || !o.cond || o.cond.state !== 'unconscious' || (o.feeders || 0) > 0 || o.grabbedBy || o.carried) continue;
@@ -1653,13 +1661,14 @@ class AISystem {
     const trf = envO && envO.traffic;
     if (trf && !npc.riding) {
       trf.avoid(npc, desired);
-      if (npc.lifeState === 'alive' && !npc.horror && b.speed > 0.01 && b.state !== 'dodge' && b.state !== 'help') {
+      if (npc.lifeState === 'alive' && !npc.horror && b.speed > 0.01 && b.state !== 'dodge') {
         const P = root.pos, len = Math.hypot(desired.x, desired.z);
         if (len > 0.05) {
           const ahead = 0.45 + Math.min(b.speed, 5) * 0.22, nx = P.x + desired.x / len * ahead, nz = P.z + desired.z / len * ahead;
           if (!trf.onRoad(P.x, P.z) && trf.onRoad(nx, nz)) {
             npc._wantsCross = game.time;
-            const toFar = P.z > TR.center, z1 = toFar ? TR.kerb0 - 0.3 : TR.kerb1 + 0.3;
+            // how far into the road they are going: across it, or just to something in it (someone lying there)
+            const toFar = P.z > TR.center, dz1 = b.dest.z, inRoad = dz1 < TR.kerb1 && dz1 > TR.kerb0, z1 = inRoad ? dz1 : toFar ? TR.kerb0 - 0.3 : TR.kerb1 + 0.3;
             const crossT = Math.abs(z1 - P.z) / Math.max(0.9, b.speed);
             const care = (b.state === 'flee' ? 0.6 : 1.0 + (npc.personality.caution != null ? npc.personality.caution : 0.5) * 0.6) * Math.max(0.65, 1 - (b.kerbWaitT || 0) / 25);   // impatience after a long wait
             if (!trf.crossingClear(P.x, P.z, z1, crossT * care)) {

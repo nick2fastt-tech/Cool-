@@ -742,8 +742,8 @@ class TrafficSystem {
       if (c.mode === 'parked' || c.z < zl || c.z > zh) continue;
       const rel = (x - c.x) * c.dir - c.M.L / 2;   // distance the car still has to travel to reach x
       if (rel < -c.M.L - 1) continue;              // already past
+      if (c.v < 0.3 && (c.yielding || c.mode !== 'drive' || rel > 4)) continue;   // standing still (stopped, giving way, queued)
       if (rel < 1.5) return false;                 // right there
-      if (c.v < 0.3 && (c.yielding || c.mode !== 'drive' || rel > 4)) continue;
       if (c.yielding && rel > 3) continue;
       // at the zebra crossing a driver who can still stop comfortably will give way: not a danger
       if (atCross && c.mode === 'drive' && rel - 2.2 > c.v * c.v / (2 * 2.6) + 2) continue;
@@ -793,6 +793,12 @@ class TrafficSystem {
         _tq1.setFromAxisAngle(UP, L[3] > 0 ? 0 : Math.PI);
         _tm1.compose(_tv1.set(L[0], L[1], L[2]), _tq1, _tv2.set(1, L[6], L[5])); _tm1.premultiply(m);
         LM.setMatrixAt(li, _tm1); LM.instanceColor.setXYZ(li, r, gg, b); li++;
+      }
+      // spray off the tyres on a wet road
+      const wet = this.env.wetness || 0, fx = this.game.fx;
+      if (wet > 0.3 && c.v > 4 && fx && fx.smoke && Math.random() < wet * Math.min(1, c.v / 12) * 0.9) {
+        const w = M.wheels[2 + (Math.random() < 0.5 ? 0 : 1)]; _tv1.set(w[0] - 0.3, 0.05, w[2]).applyMatrix4(m);
+        fx.smoke.emit(_tv1.x, _tv1.y, _tv1.z, -c.dir * c.v * 0.18 + (Math.random() - 0.5) * 0.6, 0.4 + Math.random() * 0.6, (Math.random() - 0.5) * 0.6, 0.45 + Math.random() * 0.3, 0.06, 0.45, 0.78, 0.8, 0.84, 0.22 * wet, 2, 2.2);
       }
       if (c.head > 0.5) {
         _tq1.setFromAxisAngle(UP, (c.dir > 0 ? -Math.PI / 2 : Math.PI / 2) + c.yaw);

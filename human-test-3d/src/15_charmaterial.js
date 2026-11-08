@@ -6,7 +6,7 @@
 const CharShared = { uTime: { value: 0 }, uDetail: { value: 1 } };
 
 const GLSL_HT_COMMON = /* glsl */`
-uniform float uZombie; uniform float uFlash; uniform float uHighlight; uniform float uWet; uniform float uTime; uniform float uDetail;
+uniform float uZombie; uniform float uFlash; uniform float uHighlight; uniform float uWet; uniform float uTime; uniform float uDetail; uniform float uDirt;
 uniform float uVampire; uniform float uEyeGlow; uniform float uHeat; uniform float uAsh; uniform float uDoll; uniform vec4 uFaceC;
 uniform float uSick; uniform float uSweat; uniform vec3 uZTint; uniform vec4 uZLook; uniform vec3 uSkinZ; // uZLook: decay, dark eyes, clothing wear, seed
 uniform vec4 uWA[16]; uniform vec4 uWB[16]; uniform int uWN; uniform float uBlood;
@@ -282,6 +282,8 @@ const GLSL_HT_ALBEDO = /* glsl */`
     }
   }
   if (uWet > 0.0 && mT != 7) { base *= 1.0 - uWet * 0.25; htRough *= 1.0 - uWet * 0.45; }
+  // V1.15 dirt from falls and lying on the ground: dusty, grass-stained patches (non-graphic)
+  if (uDirt > 0.0 && mT != 7) { float dn = htFbm(vRest.xy * 6.5 + vRest.zx * 4.3 + 1.7); float dk = smoothstep(0.42, 0.72, dn) * uDirt; base = mix(base, base * vec3(0.66, 0.6, 0.5) + vec3(0.035, 0.03, 0.018), dk); htRough = mix(htRough, 0.92, dk * 0.6); }
   // ---- wounds & blood (bind space: they move with the skinned surface) ----
   if (uWN > 0 || uBlood > 0.0) {
     float gBl = 0.0, gFl = 0.0, gHo = 0.0, gGu = 0.0, gSo = 0.0, gTu = 1.0, gCo = 1.0; // gTu: stump bone, gCo: gut coils
@@ -459,7 +461,7 @@ void RE_Direct_HT( const in IncidentLight directLight, const in vec3 geometryPos
 function createCharacterMaterial() {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0.0, envMapIntensity: 0.8 });
   const U = {
-    uZombie: { value: 0 }, uFlash: { value: 0 }, uHighlight: { value: 0 }, uWet: { value: 0 },
+    uZombie: { value: 0 }, uFlash: { value: 0 }, uHighlight: { value: 0 }, uWet: { value: 0 }, uDirt: { value: 0 },
     uTime: CharShared.uTime, uDetail: CharShared.uDetail,
     uWA: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) }, uWB: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) },
     uWN: { value: 0 }, uBlood: { value: 0 },

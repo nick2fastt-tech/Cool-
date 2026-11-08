@@ -6,6 +6,9 @@
 // shots, blasts and bodies push them. People walk round the equipment on a navigation grid and
 // sit on the benches and at the picnic tables; birds peck on the paths and fly off when someone
 // comes near or a shot is fired. +X east, -Z north (the street and the houses are to the north).
+// V1.15: the street became real - a sunken road with kerbs, a zebra crossing, parking lanes and
+// traffic (26_traffic.js); houses with garages and driveways across it; hedges, flowers, a sandbox,
+// a rope climber and more round the park.
 // ============================================================================
 const PG = {
   bx0: -34.5, bx1: 34.5, bz0: -48.3, bz1: 31.5,   // walkable: the park, both sidewalks and the street between them
@@ -94,6 +97,7 @@ class PlaygroundEnvironment extends FieldEnvironment {
     this.buildTowerSlide();
     this.buildSeesaws();
     this.buildSpringRiders();
+    this.buildExtras();
     this.buildFurniture();
     this.buildFences();
     this.buildStreet();
@@ -207,6 +211,20 @@ class PlaygroundEnvironment extends FieldEnvironment {
       for (let i = 0; i < 4200; i++) { const g = 70 + r.next() * 95, x = r.next() * w, y = r.next() * h; g2.fillStyle = `rgba(${Math.round(g * 0.5)},${Math.round(g)},${Math.round(g * 0.3)},${0.55 + r.next() * 0.45})`; g2.beginPath(); g2.ellipse(x, y, 1.5 + r.next() * 2.5, 0.8 + r.next() * 1.4, r.next() * 3, 0, TAU); g2.fill(); }
       for (let i = 0; i < 900; i++) { g2.fillStyle = 'rgba(10,20,8,0.5)'; g2.fillRect(r.next() * w, r.next() * h, 1 + r.next() * 2, 1 + r.next() * 2); }
     });
+    const sand = tex('pgSand', 256, (g2, w, h) => {
+      g2.fillStyle = 'rgb(214,196,156)'; g2.fillRect(0, 0, w, h);
+      const r = new RNG(71);
+      for (let i = 0; i < 14000; i++) { const c = 150 + r.next() * 90; g2.fillStyle = `rgba(${Math.round(c)},${Math.round(c * 0.9)},${Math.round(c * 0.7)},0.6)`; g2.fillRect(r.next() * w, r.next() * h, 1, 1); }
+      for (let i = 0; i < 26; i++) { g2.fillStyle = `rgba(120,100,70,${0.06 + r.next() * 0.08})`; g2.beginPath(); g2.ellipse(r.next() * w, r.next() * h, 8 + r.next() * 20, 4 + r.next() * 10, r.next() * 3, 0, TAU); g2.fill(); }
+    });
+    const parkSign = Tex.make('pgParkSign', 512, 128, (g2, w, h) => {
+      g2.fillStyle = '#4a3220'; g2.fillRect(0, 0, w, h);
+      for (let y = 0; y < h; y += 3) { g2.fillStyle = `rgba(30,18,10,${0.15 + 0.15 * Math.sin(y * 0.7)})`; g2.fillRect(0, y, w, 1); }
+      g2.strokeStyle = '#d8c69a'; g2.lineWidth = 4; g2.strokeRect(10, 10, w - 20, h - 20);
+      g2.fillStyle = '#efe2bc'; g2.textAlign = 'center'; g2.font = 'bold 52px Georgia, serif'; g2.fillText('ELM STREET PARK', w / 2, 72);
+      g2.font = 'italic 22px Georgia, serif'; g2.fillText('Playground  ·  Open dawn to dusk', w / 2, 104);
+    });
+    parkSign.anisotropy = an;
     const std = (o) => new THREE.MeshStandardMaterial(Object.assign({ vertexColors: true, envMapIntensity: 0.6 }, o));
     M.rubber = std({ map: rubber, roughness: 0.95, metalness: 0, envMapIntensity: 0.25 });
     M.concrete = std({ map: concrete, roughness: 0.9, envMapIntensity: 0.3 });
@@ -223,6 +241,8 @@ class PlaygroundEnvironment extends FieldEnvironment {
     M.trim = std({ roughness: 0.6, metalness: 0 });
     M.window2 = std({ map: win, emissiveMap: winGlow, emissive: new THREE.Color(0, 0, 0), roughness: 0.18, metalness: 0.1, envMapIntensity: 1.2 });
     M.sign = std({ map: signs, alphaTest: 0.5, roughness: 0.45, metalness: 0.1 });
+    M.sand = std({ map: sand, roughness: 0.97, metalness: 0, envMapIntensity: 0.25 });
+    M.parkSign = std({ map: parkSign, roughness: 0.8, metalness: 0 });
     M.hedge = std({ map: hedge, roughness: 0.95, metalness: 0, envMapIntensity: 0.3, color: 0xe6f0dc });
     M.tactile = std({ map: deck, roughness: 0.7, metalness: 0, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
     M.glassPG = new THREE.MeshPhysicalMaterial({ color: 0xdde8ee, vertexColors: true, transparent: true, opacity: 0.22, roughness: 0.05, metalness: 0, depthWrite: false, envMapIntensity: 1.2 });
@@ -231,7 +251,7 @@ class PlaygroundEnvironment extends FieldEnvironment {
     M.mark = std({ roughness: 0.8, metalness: 0, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
     for (const k of ['rubber', 'concrete', 'asphalt']) { M[k].polygonOffset = true; M[k].polygonOffsetFactor = -1; M[k].polygonOffsetUnits = -1; }
     // texture scale per material (metres per repeat) for boxes and ground quads
-    this.tm = { rubber: 2, concrete: 1.5, asphalt: 6, wood: 1.2, deck: 0.5, siding: 2.4, roof: 3, brick: 2.4, mark: 1, tactile: 0.5, hedge: 1.4 };
+    this.tm = { rubber: 2, concrete: 1.5, asphalt: 6, wood: 1.2, deck: 0.5, siding: 2.4, roof: 3, brick: 2.4, mark: 1, tactile: 0.5, hedge: 1.4, sand: 1.2 };
     // what each material looks like dry (the rain darkens and polishes the hard surfaces, see update)
     this.dryState = {};
     for (const k of ['rubber', 'concrete', 'asphalt', 'wood', 'paint', 'deck', 'mark', 'tactile', 'brick', 'roof', 'siding']) this.dryState[k] = { r: M[k].roughness, e: M[k].envMapIntensity };
@@ -305,6 +325,7 @@ float htGrassMask(vec2 p) { float m = 1.0; ${rects} return m; }`;
   baseHeight(x, z) {
     const P = PG.play;
     this._rk = 0;
+    const SB = this.sandbox; if (SB && x > SB.x0 && x < SB.x1 && z > SB.z0 && z < SB.z1) return SB.y;
     if (x > P.x0 && x < P.x1 && z > P.z0 && z < P.z1) return 0.02;
     if (z < -32 && z > PG_ST.far) return this.streetY(x, z);
     return this.onPath(x, z) ? 0.012 : 0;
@@ -952,6 +973,59 @@ float htGrassMask(vec2 p) { float m = 1.0; ${rects} return m; }`;
     for (let k = 0; k < 3; k++) { const zc = lerp(z0 + 3, z1 - 3, (k + 0.5) / 3) + r.range(-1, 1), xc = lerp(x0, x1, 0.35 + r.next() * 0.3); this.box('paint', xc - 0.9, H, zc - 0.7, xc + 0.9, H + 1.2, zc + 0.7, 0x9aa0a4); this.box('paint', xc - 0.5, H + 1.2, zc - 0.5, xc + 0.5, H + 1.3, zc + 0.5, 0x3a3e42); }
     this.box('brick', lerp(x0, x1, 0.3), H, z0 + 2, lerp(x0, x1, 0.6), H + 2.6, z0 + 5, col);
   }
+  // V1.15: more to the park - a sandbox with toys, a rope net climber, a drinking fountain, a bike
+  // rack with bikes, the park's name board at the north entrance
+  buildExtras() {
+    const C = PG_COL, SB = this.sandbox = { x0: 5.2, z0: 4.4, x1: 8.3, z1: 8.8, y: 0.075 };
+    // the sandbox: a timber frame people step over, sand a little below its top
+    for (const [x0, z0, x1, z1] of [[SB.x0 - 0.12, SB.z0 - 0.12, SB.x1 + 0.12, SB.z0], [SB.x0 - 0.12, SB.z1, SB.x1 + 0.12, SB.z1 + 0.12], [SB.x0 - 0.12, SB.z0, SB.x0, SB.z1], [SB.x1, SB.z0, SB.x1 + 0.12, SB.z1]]) {
+      this.box('wood', x0, 0, z0, x1, 0.2, z1, 0xa77a50); this.tops.push({ x0, x1, z0, z1, h: 0.2 }); this.collider(x0, 0, z0, x1, 0.2, z1);
+    }
+    this.quad('sand', SB.x0, SB.z0, SB.x1, SB.z1, SB.y, 0xffffff);
+    { const b = new THREE.CylinderGeometry(0.11, 0.085, 0.17, 12, 1, true); _pgM.makeTranslation(6.1, SB.y + 0.085, 5.3); this.geo('plastic', b, _pgM, 0xd8342a);
+      const bb = new THREE.CircleGeometry(0.085, 12); bb.rotateX(-Math.PI / 2); _pgM.makeTranslation(6.1, SB.y + 0.003, 5.3); this.geo('plastic', bb, _pgM, 0xd8342a);
+      this.box('plastic', 6.5, SB.y, 5.05, 6.56, SB.y + 0.02, 5.4, 0x2a6ad0); this.box('plastic', 6.48, SB.y, 5.38, 6.6, SB.y + 0.02, 5.55, 0x2a6ad0);
+      for (const [x, z, r, h] of [[7.2, 7.6, 0.26, 0.22], [7.45, 7.75, 0.14, 0.3], [6.95, 7.85, 0.13, 0.26], [7.25, 8.05, 0.12, 0.24]]) { const c = new THREE.ConeGeometry(r, h, 10); _pgM.makeTranslation(x, SB.y + h / 2, z); this.geo('sand', c, _pgM, 0xd9c49a); }
+    }
+    // a rope pyramid on the lawn: a steel mast, ropes from its top to a ring of anchors, rings of rope between
+    { const cx = -24.5, cz = 15.5, R = 2.3, H = 4.2, n = 10, rc = 0xb3262a;
+      this.bar('steel', new V3(cx, 0, cz), new V3(cx, H + 0.25, cz), 0.06, 0xc0c4c8, 10);
+      const cap = new THREE.SphereGeometry(0.11, 10, 8); _pgM.makeTranslation(cx, H + 0.28, cz); this.geo('paint', cap, _pgM, C.yellow);
+      const top = new V3(cx, H, cz), pts = [];
+      for (let k = 0; k < n; k++) { const a = k / n * TAU; pts.push(new V3(cx + Math.cos(a) * R, 0.12, cz + Math.sin(a) * R)); this.box('paint', pts[k].x - 0.06, 0, pts[k].z - 0.06, pts[k].x + 0.06, 0.16, pts[k].z + 0.06, 0x3a3e42); }
+      for (const p of pts) this.bar('paint', p, top, 0.02, rc, 5);
+      for (let r = 1; r <= 4; r++) { const t = r / 5; for (let k = 0; k < n; k++) { const a = pts[k].clone().lerp(top, t), b = pts[(k + 1) % n].clone().lerp(top, t); this.bar('paint', a, b, 0.017, rc, 4); } }
+      this.collider(cx - 0.08, 0, cz - 0.08, cx + 0.08, H + 0.3, cz + 0.08);
+      this.obstacle(cx - R * 0.8, cz - R * 0.8, cx + R * 0.8, cz + R * 0.8);
+    }
+    // the drinking fountain by the south gate
+    { const x = 2.4, z = 12.9;
+      this.box('concrete', x - 0.2, 0, z - 0.2, x + 0.2, 0.82, z + 0.2, 0x9ea3a8);
+      const bowl = new THREE.CylinderGeometry(0.24, 0.17, 0.1, 16); _pgM.makeTranslation(x, 0.87, z); this.geo('steel', bowl, _pgM, 0xd0d4d8);
+      this.bar('steel', new V3(x + 0.05, 0.9, z), new V3(x - 0.04, 0.98, z), 0.012, 0xd0d4d8, 6);
+      this.collider(x - 0.24, 0, z - 0.24, x + 0.24, 0.92, z + 0.24); this.obstacle(x - 0.28, z - 0.28, x + 0.28, z + 0.28);
+    }
+    // a bike rack with two bikes by the north entrance
+    { const x0 = 3.0, z = -29.6;
+      for (let k = 0; k < 3; k++) { const x = x0 + k * 0.8; this.bar('steel', new V3(x, 0, z - 0.3), new V3(x, 0.75, z - 0.3), 0.025, 0xb8bcc0, 8); this.bar('steel', new V3(x, 0, z + 0.3), new V3(x, 0.75, z + 0.3), 0.025, 0xb8bcc0, 8); this.bar('steel', new V3(x, 0.75, z - 0.3), new V3(x, 0.75, z + 0.3), 0.025, 0xb8bcc0, 8); }
+      const bike = (x, col) => {
+        for (const dz of [-0.52, 0.52]) { const w = new THREE.TorusGeometry(0.31, 0.022, 6, 22); w.rotateY(Math.PI / 2); _pgM.makeTranslation(x, 0.33, z + dz); this.geo('seat', w, _pgM, 0x151617); }
+        const P = (dy, dz) => new V3(x, dy, z + dz);
+        for (const [a, b] of [[P(0.33, -0.52), P(0.62, -0.12)], [P(0.62, -0.12), P(0.33, 0.12)], [P(0.33, 0.12), P(0.33, -0.52)], [P(0.62, -0.12), P(0.66, 0.38)], [P(0.33, 0.12), P(0.66, 0.38)], [P(0.66, 0.38), P(0.33, 0.52)], [P(0.62, -0.12), P(0.74, -0.18)]]) this.bar('paint', a, b, 0.016, col, 5);
+        this.box('seat', x - 0.04, 0.74, z - 0.26, x + 0.04, 0.78, z - 0.1, 0x1a1a1a);
+        this.bar('steel', P(0.66, 0.38), P(0.86, 0.33), 0.014, 0xc0c4c8, 5); this.bar('steel', new V3(x - 0.24, 0.88, z + 0.33), new V3(x + 0.24, 0.88, z + 0.33), 0.013, 0x2a2a2a, 5);
+      };
+      bike(x0 + 0.4, 0x1f6fb8); bike(x0 + 1.2, 0xd84a2a);
+      this.collider(x0 - 0.1, 0, z - 0.6, x0 + 1.75, 0.95, z + 0.6); this.obstacle(x0 - 0.15, z - 0.62, x0 + 1.8, z + 0.62);
+    }
+    // the park's name board at the north entrance, facing the street
+    { const x = -3.4, z = -30.5;
+      for (const dx of [-0.9, 0.9]) this.box('wood', x + dx - 0.06, 0, z - 0.06, x + dx + 0.06, 1.7, z + 0.06, 0x6b4f35);
+      this.box('wood', x - 1.05, 0.95, z - 0.05, x + 1.05, 1.55, z + 0.03, 0x7a5a3c);
+      const g = new THREE.PlaneGeometry(1.94, 0.52); _pgM.makeTranslation(x, 1.25, z - 0.056); _pgQ.setFromAxisAngle(UP, Math.PI); _pgM.compose(_pgV.set(x, 1.25, z - 0.056), _pgQ, _pgS); this.geo('parkSign', g, _pgM, 0xffffff);
+      this.collider(x - 1.0, 0, z - 0.08, x + 1.0, 1.6, z + 0.08); this.obstacle(x - 1.05, z - 0.1, x + 1.05, z + 0.1);
+    }
+  }
   // clipped hedges along the park's street edge (open at the path and the bus shelter)
   buildHedges() {
     const z0 = -31.85, z1 = -31.05, h = 0.78, rt = (z1 - z0) / 2;
@@ -1090,7 +1164,8 @@ float htGrassMask(vec2 p) { float m = 1.0; ${rects} return m; }`;
   }
   puddleSpots(rr) {
     const out = [];
-    const cand = [[-6, 12.5, 0.8], [7, -12.4, 1.0], [16.4, 6, 0.7], [-16.5, -8, 0.9], [0.2, 20, 1.0], [0.1, -25, 0.8], [-3, -33.2, 1.1], [14, -33.3, 0.9], [9, -38, 1.8], [-14, -40, 2.2], [26, 0.3, 0.8], [-4, 2.5, 1.0], [6, 7.5, 0.8], [-11.5, 0, 0.7]];
+    const cand = [[-6, 12.5, 0.8], [7, -12.4, 1.0], [16.4, 6, 0.7], [-16.5, -8, 0.9], [0.2, 20, 1.0], [0.1, -25, 0.8], [-3, -33.2, 1.1], [14, -33.3, 0.9], [9, -38, 1.8], [-14, -40, 2.2], [26, 0.3, 0.8], [-4, 2.5, 1.0], [-11.5, 0, 0.7],
+      [-19, -35.1, 1.1], [24, -35.05, 0.9], [11, -45.55, 1.2], [-27, -45.6, 1.0], [4.5, -47.6, 0.7]];   // water along the gutters
     for (const c of cand) out.push(c);
     void rr; return out;
   }
@@ -1150,6 +1225,7 @@ float htGrassMask(vec2 p) { float m = 1.0; ${rects} return m; }`;
   }
   surfaceAt(p) {
     const P = PG.play;
+    const SB = this.sandbox; if (SB && p.x > SB.x0 && p.x < SB.x1 && p.z > SB.z0 && p.z < SB.z1 && p.y < 0.3) return 'grass';   // soft sand
     if (p.x > P.x0 && p.x < P.x1 && p.z > P.z0 && p.z < P.z1) return p.y > 0.3 ? 'metal' : 'rubber';
     if (p.z < -32 && p.z > PG_ST.far) return p.y > 0.3 ? 'metal' : 'hard';
     return this.onPath(p.x, p.z) ? 'hard' : 'grass';
@@ -1267,10 +1343,23 @@ float htGrassMask(vec2 p) { float m = 1.0; ${rects} return m; }`;
     this._navNpc = npc || null;
     if (!npc) return dest;
     const N = npc._pgNav || (npc._pgNav = { path: null, i: 0, t: -9, dx: 1e9, dz: 1e9, losT: -9, los: true, g: new V3(), cw: new V3() });
+    // into the road from a sidewalk (to someone lying there): through a gap between the parked cars
+    if (this.traffic) {
+      const pk = p.z > TR.kerb1 ? 1 : p.z < TR.kerb0 ? -1 : 0, dk = dest.z > TR.kerb1 ? 1 : dest.z < TR.kerb0 ? -1 : 0;
+      if (pk !== 0 && dk === 0) {
+        const lz = pk > 0 ? TR.lanes[0].park : TR.lanes[1].park, t = clamp((lz - p.z) / ((dest.z - p.z) || 1e-6), 0, 1), xl = p.x + (dest.x - p.x) * t;
+        const gx = this.traffic.kerbGap(xl, pk);
+        if (Math.abs(gx - xl) > 0.3) {
+          const kz = pk > 0 ? TR.kerb1 + 0.45 : TR.kerb0 - 0.45;
+          if (Math.abs(p.x - gx) > 0.35) return N.cw.set(gx, p.y, kz);
+          return N.cw.set(gx, p.y, pk > 0 ? lz - 1.3 : lz + 1.3);
+        }
+      }
+    }
     // across the street: by the zebra crossing - to the kerb at the crossing, then straight over;
     // anyone standing in the road off the crossing leaves it the shortest way
-    { const k0 = TR.kerb0, k1 = TR.kerb1, mid = TR.center, sD = dest.z > mid ? 1 : -1, onRoad = p.z < k1 && p.z > k0;
-      if (onRoad || (Math.sign(p.z - mid) !== sD && this.crossesRoad(p.x, p.z, dest.x, dest.z))) {
+    { const k0 = TR.kerb0, k1 = TR.kerb1, mid = TR.center, sD = dest.z > mid ? 1 : -1, onRoad = p.z < k1 && p.z > k0, destOnRoad = dest.z < k1 && dest.z > k0;
+      if ((onRoad && !destOnRoad) || (Math.sign(p.z - mid) !== sD && this.crossesRoad(p.x, p.z, dest.x, dest.z))) {
         const cx0 = TR.cross.x0 + 0.5, cx1 = TR.cross.x1 - 0.5, xc = clamp((p.x + dest.x) / 2, cx0, cx1);
         if (onRoad) {
           if (p.x > cx0 - 0.4 && p.x < cx1 + 0.4) N.cw.set(clamp(p.x, cx0, cx1), p.y, sD > 0 ? k1 + 0.8 : k0 - 0.8);

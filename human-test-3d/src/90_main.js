@@ -318,7 +318,7 @@ class Game {
       npc.setLife('alive', 'revived');
     }
     npc.health = npc.maxHealth = 100; npc.regionDamage.fill(0); npc.hitCounts.fill(0); npc.criticalHead = false;
-    npc.cond.state = 'ok'; npc.cond.t = 0; npc.helpedBy = npc.calledBy = null; if (npc.downTimer > 1e6) npc.downTimer = 0;
+    npc.cond.state = 'ok'; npc.cond.t = 0; npc.helpedBy = npc.calledBy = null; if (npc.downTimer > 1e6) npc.downTimer = 0; npc.dirt = 0;
     npc.isZombie = false; npc.zombieTarget = null; npc.material.userData.u.uZombie.value = 0; npc.anim.zombie = 0; npc.fear = 0;
     { const u = npc.material.userData.u; if (u.uSick) { u.uSick.value = 0; u.uSweat.value = 0; } npc.anim.sick = 0; npc.infection = null; npc.zlook = null; if (u.uZTint) { u.uZTint.value.set(0.78, 0.9, 0.7); u.uZLook.value.set(0, 0, 0, 0); } }
     npc.reinc = { state: 'none', timer: 0, delay: 0, eligible: false, reason: '' };
@@ -466,6 +466,7 @@ class Game {
               const gn = this.env.groundNormal(ip.x, ip.z, _v3);
               this.fx.bodyDust(_v2.set(ip.x, gy, ip.z), gn, this.env.current.surface, clamp((imp - 2) / 5, 0.3, 1));
               const npc = b.owner && b.owner.npc, G = npc && npc.gore;
+              if (npc && !npc.horror) npc.dirt = Math.min(0.85, (npc.dirt || 0) + 0.025 * (imp - 2) * (1 + (this.env.current.wetness || 0)));   // V1.15: falls leave clothes dirty
               if (G && this.gore.on && G.blood > 0.3 && Settings.data.gore.pools && Math.random() < 0.6) this.gore.decals.add(_v2.set(ip.x, gy, ip.z), gn, 0.18 + Math.random() * 0.12, 'drop');
             }
           }
