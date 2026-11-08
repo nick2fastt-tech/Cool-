@@ -299,7 +299,7 @@ class UI {
     else if (a === 'revive') g.revive(npc);
     else if (a === 'zombie') g.zombies.makeZombieNow(npc);
     else if (a === 'remove') g.npcs.remove(npc);
-    else if (a === 'heal') { npc.health = npc.maxHealth; }
+    else if (a === 'heal') { npc.health = npc.maxHealth; if (npc.cond && npc.cond.state === 'unconscious') { npc.cond.state = 'waking'; npc.cond.t = 0; npc.downTimer = 0.3; } }
     this.sound('click');
     this.renderInspector();
   }

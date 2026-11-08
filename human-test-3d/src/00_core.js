@@ -93,6 +93,7 @@ const Events = {
     }
   }
 };
+HT.Events = Events;
 
 // --- object pool -------------------------------------------------------------
 class Pool {

@@ -33,6 +33,8 @@ const ARM_POSES = {
     { pos: [0.05, 0.52, -0.02], pole: [1, -0.3, 0.1], pron: -0.6, flex: 0.4, dev: 0, fing: 0.45, thumb: 0.3 }],
   watch: [{ pos: [-0.12, -0.34, 0.36], pole: [0.6, -0.5, -0.6], pron: -1.6, flex: 0.0, dev: 0, fing: 0.6, thumb: 0.4 },
     { pos: [0.10, -0.93, 0.07], pole: [0.25, 0, -1], pron: 0, flex: 0.12, dev: 0, fing: 0.35, thumb: 0.25 }],
+  call: [{ pos: [0.10, -0.93, 0.07], pole: [0.25, 0, -1], pron: 0, flex: 0.12, dev: 0, fing: 0.35, thumb: 0.25 },
+    { pos: [-0.07, 0.36, 0.07], pole: [1, -0.3, 0.1], pron: -1.4, flex: 0.45, dev: 0, fing: 0.62, thumb: 0.5 }],
   waveR: [{ pos: [0.10, -0.93, 0.07], pole: [0.25, 0, -1], pron: 0, flex: 0.12, dev: 0, fing: 0.35, thumb: 0.25 },
     { pos: [0.42, 0.32, 0.18], pole: [1, -1, -0.3], pron: -1.5, flex: -0.2, dev: 0, fing: 0.05, thumb: 0.1, wave: 1 }]
 };
@@ -76,7 +78,7 @@ const ANIM_STATES = {
   guard: { layer: 'upper', blend: 0.18 }, brace: { layer: 'upper', blend: 0.12 }, reach: { layer: 'upper', blend: 0.6 },
   hips: { layer: 'upper', blend: 0.6 }, pockets: { layer: 'upper', blend: 0.6 }, behind: { layer: 'upper', blend: 0.6 },
   clasp: { layer: 'upper', blend: 0.6 }, stretch: { layer: 'upper', blend: 0.8 }, crossed: { layer: 'upper', blend: 0.7 },
-  phone: { layer: 'upper', blend: 0.6 }, scratch: { layer: 'upper', blend: 0.5 }, watch: { layer: 'upper', blend: 0.5 },
+  phone: { layer: 'upper', blend: 0.6 }, scratch: { layer: 'upper', blend: 0.5 }, watch: { layer: 'upper', blend: 0.5 }, call: { layer: 'upper', blend: 0.5 },
   waveR: { layer: 'upper', blend: 0.4 }, flail: { layer: 'upper', blend: 0.12 }, claw: { layer: 'upper', blend: 0.15 },
   push: { layer: 'upper', blend: 0.15 }, clutch: { layer: 'upper', blend: 0.2 },
   getUp: { layer: 'clip', blend: 0.0 }, zombieRise: { layer: 'clip', blend: 0.0 }
@@ -555,8 +557,11 @@ class Animator {
     if (!b) return 'neutral';
     const st = b.state;
     if (n.grabbedBy || st === 'grabbed') return 'terror';
-    if (st === 'hurt' || n.physMode !== 'anim') return 'pain';
-    if (st === 'flee' || st === 'cower' || st === 'handsUp' || b.mesmerT > 0) return 'fear';
+    if (n.cond && n.cond.state === 'unconscious') return 'slack';               // V1.15: out cold
+    if (n.cond && (n.cond.state === 'waking' || n.cond.state === 'dazed') || st === 'dazed') return n.physMode === 'anim' ? 'tired' : 'pain';
+    if (st === 'hurt' || st === 'seek' || n.physMode !== 'anim') return 'pain';
+    if (st === 'flee' || st === 'cower' || st === 'handsUp' || st === 'dodge' || st === 'hide' || b.mesmerT > 0) return 'fear';
+    if (st === 'help' || st === 'call') return 'worried';
     if (st === 'react') return 'surprise';
     if (st === 'fight') return 'angry';
     if (st === 'chat') return 'friendly';
@@ -1157,6 +1162,7 @@ class Animator {
     else if (a.type === 'gutted') this.poseGutted(Pc, a, root, dt);
     else if (a.type === 'ill') this.poseIll(Pc, a, root, dt);
     else if (a.type === 'sit') this.poseSit(Pc, a, root, dt);
+    else if (a.type === 'tend') this.poseTend(Pc, a, root, dt);
     else if (a.type === 'ridehold') this.poseRideHold(Pc, a, root, dt);
     else if (a.type === 'htilt') this.poseHTilt(Pc, a, root);
     else if (a.type === 'hidle') this.poseHIdle(Pc, a, root);
@@ -1787,6 +1793,32 @@ class Animator {
     else if (m === 'look') { P.head.y += Math.sin(t * 0.4 + (a.ph || 0)) * 0.6; P.neck.y += Math.sin(t * 0.4 + (a.ph || 0)) * 0.2; }
     else if (m === 'lean') { P.spine.x += 0.22; P.chest.x += 0.12; for (let s = 0; s < 2; s++) { const hp = P.hand[s]; hp.posR.set(SIDE_SIGN[s] * 0.06, hipY + 0.12, -depth + rig.thighLen * 0.85); } P.head.x -= 0.1; }
     P.look = m === 'doze' ? 0 : 1;
+  }
+  // V1.15 kneeling beside someone on the ground: a hand on their chest and one on the shoulder, a gentle
+  // shake, now and then a hand to their face to feel for breath; leaning over them, looking at them
+  poseTend(P, a, root, dt) {
+    const rig = this.rig, H = rig.H, S = H / 1.75, t = a.t;
+    let tx = 0, ty = 0.15, tz = 0.45 * S;
+    if (a.point) { this.toRoot(a.point, root, _va); tx = _va.x; ty = _va.y; tz = _va.z; }
+    const hy = rig.thighLen * 0.62 + 0.09 * S + 0.035 * H, hz = -0.08 * S;
+    P.hipsOff.set(0, hy - rig.hipsHeight, hz);
+    const reachZ = Math.max(0.15, tz - hz), th = clamp(0.25 + (0.62 * S - ty) * 0.55 + (reachZ - 0.45 * S) * 0.6, 0.2, 0.95);
+    P.hipsRot.set(th * 0.3, 0, Math.sin(t * 0.8) * 0.02); P.spine.set(th * 0.32, 0, 0); P.chest.set(th * 0.38, 0, 0);
+    P.neck.set(0.12, 0, 0); P.head.set(0.18, 0, 0);
+    for (let s = 0; s < 2; s++) {
+      const sg = SIDE_SIGN[s], fp = P.foot[s];
+      fp.pos.set(sg * rig.hipHalf * 1.2, rig.ankleY * 0.3 + 0.1, -rig.shinLen * 0.86 + hz * 0.5);
+      fp.pitch = 1.25; fp.yaw = 0; fp.roll = 0; fp.pole.set(sg * 0.15, -0.5, 1);
+    }
+    const cyc = t % 6.5, face = cyc > 3.8 && cyc < 5.6 ? smooth01(Math.min(1, (cyc - 3.8) / 0.4)) * (1 - smooth01(Math.max(0, (cyc - 5.2) / 0.4))) : 0;
+    const shake = cyc < 1.6 ? Math.sin(t * 9) * 0.018 : 0;
+    for (let s = 0; s < 2; s++) {
+      const hp = P.hand[s], sg = SIDE_SIGN[s];
+      hp.posR.set(tx + sg * 0.13 * S, ty + 0.06, tz - 0.05 + (s === 1 ? shake : 0));
+      if (s === 1 && face > 0 && a.head) { this.toRoot(a.head, root, _vb); hp.posR.lerp(_vb.setY(_vb.y + 0.05), face * 0.85); }
+      hp.space = 1; hp.pole.set(sg, -0.5, -0.5); hp.pron = -1.3; hp.flex = 0.25; hp.fing = 0.35; hp.thumb = 0.45;
+    }
+    P.look = 1;
   }
   // standing in a moving train: one hand up on the grab rail, feet apart
   poseRideHold(P, a, root, dt) {

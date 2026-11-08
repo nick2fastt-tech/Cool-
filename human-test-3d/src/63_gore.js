@@ -1285,10 +1285,13 @@ class GoreSystem {
           }
         } else if (G.trail) G.trail = null;
       }
-      // bleeding out
+      // bleeding out; small wounds clot over a minute or two, heavy bleeding does not stop. Losing a lot
+      // of blood makes a person faint (V1.15) before it can kill them
       if (alive && G.bleed > 0) {
         npc.health -= G.bleed * dt * 0.6;
+        if (G.bleed < 4) G.bleed = Math.max(0, G.bleed - dt * (0.012 + G.bleed * 0.012));
         if (npc.health <= 0) { npc.health = 0; npc.die({ weapon: 'bleeding' }); HT.log('death', `${npc.idStr} ${npc.name} bled out`); }
+        else if (npc.health < 20 && G.bleed > 0.4 && npc.lifeState === 'alive' && !npc.horror && npc.cond && npc.cond.state === 'ok' && !npc.grabbedBy) npc.knockOut({ cause: 'blood loss', severity: 0.6 });
       }
       if (G.dirty) this.uploadWounds(npc);
     }

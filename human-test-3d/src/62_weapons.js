@@ -448,16 +448,22 @@ class Weapons {
         const npcHit = g.hits.raycastNPCs(pr.pos, dir, seg, pr.ignore);
         const propHit = g.physics.raycast(pr.pos, dir, seg, b => b.tag === 'prop' || b.tag === 'grenade');
         const envHit = this.rayEnv(pr.pos, dir, seg);
+        const trf = g.env.current && g.env.current.traffic, carHit = trf ? trf.raycast(pr.pos, dir, seg) : null;
         let best = null, bd = seg;
         if (npcHit && npcHit.dist < bd) { best = 'npc'; bd = npcHit.dist; }
         if (propHit && propHit.dist < bd) { best = 'prop'; bd = propHit.dist; }
         if (envHit && envHit.dist < bd) { best = 'env'; bd = envHit.dist; }
+        if (carHit && carHit.dist < bd) { best = 'car'; bd = carHit.dist; }
         if (!best) { pr.pos.addScaledVector(dir, seg); pr.travelled += seg; remaining = 0; break; }
         const hitPos = pr.pos.clone().addScaledVector(dir, bd);
         pr.travelled += bd;
         if (best === 'npc') {
           this.bulletHitNPC(pr, npcHit, dir);
           if (pr.pen > 0) { pr.pen--; pr.ignore = npcHit.npc; pr.dmgMul *= 0.55; pr.vel.multiplyScalar(0.7); pr.pos.copy(hitPos).addScaledVector(dir, 0.05); remaining = Math.max(0, seg - bd); continue; }
+        } else if (best === 'car') {
+          // V1.15 a car: a hole or a crack in the glass, sparks off the metal (the car keeps its marks)
+          trf.onShot(carHit, pr.tool.id === 'sniper' ? 2.2 : 1);
+          g.ai.emit('impact', carHit.point, { threatPos: g.camera.position });
         } else if (best === 'prop') {
           const b = propHit.body;
           g.physics.applyImpulse(b, dir.clone().multiplyScalar(pr.tool.impulse * 0.35 * Settings.data.physics.forceScale), propHit.point);
@@ -726,6 +732,8 @@ class Weapons {
       if (f > 0.12 || res.killed || npc.physMode === 'ragdoll') {
         if (npc.physMode !== 'ragdoll') npc.goRagdoll(res.killed ? 'Ragdoll (Deceased)' : 'Knockdown (Blast)', !npc.active);
         npc.downTimer = Math.max(npc.downTimer, 2 + f * 2);
+        // V1.15: close to a blast and still alive - often knocked out cold by it
+        if (!res.killed && f > 0.35 && Math.random() < 0.25 + f * 0.6) npc.knockOut({ cause: 'blast', severity: clamp(f, 0.2, 1) });
       } else {
         g.ai.onHit(npc, { region, dir: dir.clone(), force: 6, threatPos: pos.clone() });
       }

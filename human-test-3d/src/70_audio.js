@@ -264,6 +264,39 @@ class AudioEngine {
       { const b = this.buf(5.5, 2); for (const [arr, o] of [[b.L, -1], [b.R, 1]]) { const lp = new Biquad('lp', 600, 0.7, sr), bp = new Biquad('bp', 1100, 0.8, sr); let br = 0; for (let i = 0; i < arr.length; i++) { const t = i / sr, u = t / 5.5, n = this.noise(); br = (br + n * 0.05) * 0.996; const pass = Math.exp(-(((u - 0.5) * 4) ** 2)), pan = 0.5 + 0.5 * o * Math.tanh((u - 0.5) * 6); arr[i] = (lp.p(br * 8) * 1.2 + bp.p(n) * 0.35) * pass * pan; } } this.finish('carPass', b, 0.5); }
       { const b = this.buf(0.9), L = b.L, F = [new Biquad('bp', 650, 3, sr), new Biquad('bp', 1250, 4, sr), new Biquad('bp', 2400, 5, sr)]; let ph = 0; for (let i = 0; i < L.length; i++) { const t = i / sr; const on = t < 0.16 ? 1 : (t > 0.4 && t < 0.56 ? 1 : 0), k = on ? Math.sin(Math.PI * ((t < 0.3 ? t : t - 0.4) / 0.16)) : 0; ph += TAU * (420 - 160 * ((t < 0.3 ? t : t - 0.4) / 0.16)) / sr; const src = ((ph / TAU) % 1) * 2 - 1 + this.noise() * 0.5; L[i] = Math.tanh((F[0].p(src) + F[1].p(src) * 0.7 + F[2].p(src) * 0.3) * k * 3); } this.finish('dogBark', b, 0.5); }
       { const b = this.buf(0.7), L = b.L, bp = new Biquad('bp', 900, 0.9, sr); for (let i = 0; i < L.length; i++) { const t = i / sr; const beat = Math.max(0, Math.sin(t * TAU * 18)) ** 3; L[i] = bp.p(this.noise()) * beat * Math.exp(-t / 0.3) * (1 - Math.exp(-t / 0.01)); } this.finish('flutter', b, 0.45); }
+      // V1.15 traffic: an engine note (loops; the playback rate follows the revs), tyre roar, a horn,
+      // tyre squeal under hard braking, a collision (a heavy thump and a plastic crunch), a hit on glass
+      this.synthLoop('engineLoop', 1.5, (b) => {
+        const f0 = 70 / 1.5, lp = new Biquad('lp', 950, 0.8, sr), bp = new Biquad('bp', 180, 1.2, sr); let jit = 1, cyc = -1;
+        for (let i = 0; i < b.L.length; i++) {
+          const t = i / sr, ph = t * f0, p = ph % 1, c = Math.floor(ph);
+          if (c !== cyc) { cyc = c; jit = 0.85 + this.rng.next() * 0.3; }
+          const pulse = Math.exp(-p * 7) * (1 - Math.exp(-p * 70)) * jit;
+          const harm = Math.sin(TAU * f0 * t) * 0.35 + Math.sin(TAU * f0 * 2 * t + 0.6) * 0.22 + Math.sin(TAU * f0 * 0.5 * t) * 0.18 + Math.sin(TAU * f0 * 3 * t + 1.1) * 0.08;
+          b.L[i] = Math.tanh(lp.p(pulse * 1.4 + harm * 0.6 + bp.p(this.noise()) * pulse * 0.9) * 1.6);
+        }
+      });
+      this.synthLoop('tireLoop', 2, (b) => {
+        const lp = new Biquad('lp', 520, 0.7, sr), bp = new Biquad('bp', 1500, 0.6, sr); let br = 0;
+        for (let i = 0; i < b.L.length; i++) { const t = i / sr, n = this.noise(); br = (br + n * 0.05) * 0.995; b.L[i] = lp.p(br * 6) * (0.85 + 0.15 * Math.sin(t * 23)) + bp.p(n) * 0.14; }
+      });
+      { const b = this.buf(0.75), L = b.L, f1 = new Biquad('bp', 1250, 1.6, sr), f2 = new Biquad('bp', 2600, 2.4, sr); let p1 = 0, p2 = 0;
+        for (let i = 0; i < L.length; i++) { const t = i / sr; p1 = (p1 + 418 / sr) % 1; p2 = (p2 + 502 / sr) % 1; const sq = (p1 < 0.45 ? 1 : -1) * 0.55 + (p2 < 0.42 ? 1 : -1) * 0.45; const env = Math.min(1, t / 0.02) * (t > 0.62 ? Math.max(0, 1 - (t - 0.62) / 0.12) : 1); L[i] = Math.tanh((f1.p(sq) * 1.4 + f2.p(sq) * 0.6 + sq * 0.12) * env * 1.6); }
+        this.finish('horn', b, 0.8); }
+      { const b = this.buf(1.5), L = b.L, bp = new Biquad('bp', 1700, 7, sr), bp2 = new Biquad('bp', 3300, 6, sr); let ph = 0;
+        for (let i = 0; i < L.length; i++) { const t = i / sr, f = 1650 + 140 * Math.sin(t * 31) + 60 * Math.sin(t * 77) - t * 180; ph += TAU * f / sr; const env = Math.min(1, t / 0.06) * Math.exp(-t / 0.9); const n = this.noise(); L[i] = (Math.sin(ph) * 0.35 + bp.p(n) * 1.4 + bp2.p(n) * 0.5) * env * (0.8 + 0.2 * Math.sin(t * 13)); }
+        this.finish('skid', b, 0.75); }
+      { const b = this.buf(1.3, 2);
+        for (const [arr, o] of [[b.L, 0], [b.R, 1]]) { const lp = new Biquad('lp', 160, 0.9, sr), bp = new Biquad('bp', 900 + o * 300, 0.9, sr), hp = new Biquad('hp', 2500, 0.7, sr); let br = 0;
+          for (let i = 0; i < arr.length; i++) { const t = i / sr, n = this.noise(); br = (br + n * 0.08) * 0.99;
+            const thump = lp.p(br * 10) * Math.exp(-t / 0.12) * 2.2 + Math.sin(TAU * (70 - t * 30) * t) * Math.exp(-t / 0.08) * 1.4;
+            const crunch = bp.p(n) * Math.exp(-t / 0.18) * (0.6 + 0.4 * (this.rng.next() < 0.02 ? 1 : 0)) * 1.6;
+            const rattle = hp.p(n) * (t > 0.05 ? Math.exp(-(t - 0.05) / 0.35) : 0) * (this.rng.next() < 0.004 ? 3 : 0.35);
+            arr[i] = Math.tanh((thump + crunch + rattle) * 1.3); } }
+        this.finish('carCrash', b, 0.95); }
+      { const b = this.buf(0.6), L = b.L, hp = new Biquad('hp', 3000, 0.8, sr), bp = new Biquad('bp', 5200, 3, sr);
+        for (let i = 0; i < L.length; i++) { const t = i / sr, n = this.noise(); const crack = hp.p(n) * Math.exp(-t / 0.012) * 2.4; const tink = bp.p(n) * (this.rng.next() < 0.006 * Math.exp(-t / 0.2) ? 6 : 0.12) * Math.exp(-t / 0.25); L[i] = crack + tink; }
+        this.finish('glassHit', b, 0.8); }
       // bird chirps
       for (let k = 0; k < 4; k++) { const b = this.buf(0.6), L = b.L; let ph = 0; const n = 2 + k; for (let i = 0; i < L.length; i++) { const t = i / sr; const seg = Math.floor(t / 0.11); const u = (t % 0.11) / 0.11; if (seg >= n) { L[i] = 0; continue; } const f = 2600 + k * 400 + Math.sin(u * Math.PI) * 1500 * (seg % 2 ? -0.5 : 1); ph += TAU * f / sr; L[i] = Math.sin(ph) * Math.sin(Math.PI * u) ** 2; } this.finish('bird' + k, b, 0.35); }
     } else if (group === 6) {
@@ -519,8 +552,8 @@ class AudioEngine {
         this.hoodT = (this.hoodT == null ? 3 : this.hoodT) - dt;
         if (this.hoodT <= 0) {
           this.hoodT = 6 + Math.random() * 12;
-          if (Math.random() < 0.72) this.play('carPass', { bus: 'ambience', pos: _v2.set(cam.position.x + (Math.random() - 0.5) * 30, 1, -39), gain: 0.55 * (1 - wet * 0.3), ref: 12, reverb: false, vary: true });
-          else this.play('dogBark', { bus: 'ambience', pos: _v2.set(cam.position.x + (Math.random() < 0.5 ? -1 : 1) * (40 + Math.random() * 20), 1, -58 + Math.random() * 110), gain: 0.4, ref: 10 });
+          if (!env.traffic && Math.random() < 0.72) this.play('carPass', { bus: 'ambience', pos: _v2.set(cam.position.x + (Math.random() - 0.5) * 30, 1, -39), gain: 0.55 * (1 - wet * 0.3), ref: 12, reverb: false, vary: true });
+          else if (Math.random() < 0.55) this.play('dogBark', { bus: 'ambience', pos: _v2.set(cam.position.x + (Math.random() < 0.5 ? -1 : 1) * (40 + Math.random() * 20), 1, -58 + Math.random() * 110), gain: 0.4, ref: 10 });
         }
       }
     }

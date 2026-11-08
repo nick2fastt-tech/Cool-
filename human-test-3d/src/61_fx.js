@@ -126,6 +126,16 @@ class FX {
       this.glow.emit(p.x, p.y, p.z, d.x * sp, d.y * sp, d.z * sp, 0.12 + Math.random() * 0.15, 0.02, 0.005, 1.0, 0.75, 0.45, 0.9, 9.8, 1);
     }
   }
+  // V1.15 metal struck hard (a bullet on a car body, a scrape): a spray of short bright sparks
+  sparks(p, n, count = 8) {
+    for (let i = 0; i < count; i++) {
+      const d = _v1.set(n.x + (Math.random() - 0.5) * 1.4, n.y + (Math.random() - 0.2) * 1.2, n.z + (Math.random() - 0.5) * 1.4).normalize();
+      const sp = 2.5 + Math.random() * 5.5, hot = Math.random();
+      this.glow.emit(p.x + n.x * 0.01, p.y + n.y * 0.01, p.z + n.z * 0.01, d.x * sp, d.y * sp, d.z * sp, 0.1 + Math.random() * 0.22, 0.018, 0.004, 1.0, 0.7 + hot * 0.25, 0.35 + hot * 0.3, 1.0, 9.8, 1.5);
+    }
+    this.smoke.emit(p.x + n.x * 0.03, p.y + n.y * 0.03, p.z + n.z * 0.03, n.x * 0.4, n.y * 0.4 + 0.15, n.z * 0.4, 0.5, 0.03, 0.16, 0.7, 0.7, 0.72, 0.35, 0, 2);
+    if (count >= 6) this.flash(p, 0.8, 0.05, 0xffd6a0);
+  }
   // soft dust where a falling body meets the ground (no sparks): dirt and grass bits outdoors, faint dust indoors
   bodyDust(p, n, surface, k) {
     const grass = surface === 'grass';

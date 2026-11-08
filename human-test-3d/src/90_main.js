@@ -318,6 +318,7 @@ class Game {
       npc.setLife('alive', 'revived');
     }
     npc.health = npc.maxHealth = 100; npc.regionDamage.fill(0); npc.hitCounts.fill(0); npc.criticalHead = false;
+    npc.cond.state = 'ok'; npc.cond.t = 0; npc.helpedBy = npc.calledBy = null; if (npc.downTimer > 1e6) npc.downTimer = 0;
     npc.isZombie = false; npc.zombieTarget = null; npc.material.userData.u.uZombie.value = 0; npc.anim.zombie = 0; npc.fear = 0;
     { const u = npc.material.userData.u; if (u.uSick) { u.uSick.value = 0; u.uSweat.value = 0; } npc.anim.sick = 0; npc.infection = null; npc.zlook = null; if (u.uZTint) { u.uZTint.value.set(0.78, 0.9, 0.7); u.uZLook.value.set(0, 0, 0, 0); } }
     npc.reinc = { state: 'none', timer: 0, delay: 0, eligible: false, reason: '' };
@@ -337,6 +338,7 @@ class Game {
       if (n !== n0) { n.spawn.pos.copy(n0.spawn.pos); n.spawn.yaw = n0.spawn.yaw; n.spawnKind = n0.spawnKind; }
       if (n.vamp && n.vamp.state !== 'none' && n.lifeState === 'alive') this.vampires.cure(n);
       n.health = 100; n.regionDamage.fill(0); n.hitCounts.fill(0);
+      n.cond.state = 'ok'; n.cond.t = 0; n.helpedBy = n.calledBy = null; n.downTimer = 0;
       n.anim.clip = null; n.anim.snapshot = null; n.anim.action = null;
       if (this.transit) this.transit.release(n, true);
       if (n.physMode !== 'anim') { n.rag.setDynamic(false); n.physMode = 'anim'; }
@@ -468,6 +470,11 @@ class Game {
             }
           }
           else if (b.tag === 'prop') this.audio.play(b.owner.type === 'ball' ? 'thudLight' : 'hitWood', { pos: b.impactPoint.clone(), gain: clamp(imp / 8, 0.1, 0.8) });
+        }
+        // V1.15: a hard knock to the head (falling onto it, a heavy blow) leaves someone out cold
+        if (b.tag === 'npc' && !b.kinematic && b.index === RAG.HEAD && imp > 5.2) {
+          const npc = b.owner && b.owner.npc;
+          if (npc && npc.physMode === 'ragdoll' && npc.cond && npc.cond.state === 'ok' && (npc.lifeState === 'alive' || npc.lifeState === 'zombie')) npc.knockOut({ cause: 'head injury', severity: clamp((imp - 5.2) / 6, 0.1, 1) });
         }
         // a kinematic (animated) NPC struck by something heavy and fast -> knockdown
         if (b.kinematic && b.tag === 'npc' && imp > 3.2 && b.impactOther && !b.impactOther.kinematic && b.impactOther.mass > 4) {

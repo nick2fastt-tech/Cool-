@@ -5,7 +5,8 @@
 const STIM = {
   gunshot: { radius: 32, intensity: 0.55 }, sniper: { radius: 48, intensity: 0.75 }, impact: { radius: 7, intensity: 0.35 },
   explosion: { radius: 45, intensity: 1.0 }, death: { radius: 14, intensity: 0.45 }, scream: { radius: 16, intensity: 0.35 },
-  knife: { radius: 5, intensity: 0.5 }, zombie: { radius: 9, intensity: 0.4 }, thud: { radius: 6, intensity: 0.2 }
+  knife: { radius: 5, intensity: 0.5 }, zombie: { radius: 9, intensity: 0.4 }, thud: { radius: 6, intensity: 0.2 },
+  horn: { radius: 18, intensity: 0.22 }, crash: { radius: 30, intensity: 0.7 }, collapse: { radius: 12, intensity: 0.25 }   // V1.15
 };
 
 class Brain {
@@ -157,6 +158,8 @@ class AISystem {
     npc.fear = Math.max(0, npc.fear - dt * 0.04);
     for (let s = 0; s < 2; s++) anim.limp[s] = Math.max(0, anim.limp[s] - dt * 0.03);
     if (npc.physMode !== 'anim') { b.pending.length = 0; return; }
+    if (b.state !== 'help' && anim.action && anim.action.type === 'tend' && !anim.action.ending) { anim.setAction(null); anim.talking = false; }
+    if (b.state !== 'dodge' && b.turnMul === 3) b.turnMul = 1;
     if (!S.enabled || b.frozen) {
       b.speed = 0; b.dest.copy(npc.root.pos);
       if (b.holdPose) anim.setUpper(b.holdPose);
@@ -234,6 +237,16 @@ class AISystem {
         if (S.flee) { this.setState(npc, b, 'flee'); b.fleeT = 4; npc.lastReaction = 'Fleeing (Vampire)'; }
       }
     }
+    // V1.15: the street - calm people never stand about in the road; anyone close to someone out cold
+    // may go and help (checked now and then, while walking about too)
+    { const envR = game.env.current;
+      b.roadT = (b.roadT || 0) - dt;
+      if (envR.onRoad && b.roadT <= 0) {
+        b.roadT = 0.5 + Math.random() * 0.3;
+        if ((b.state === 'idle' || b.state === 'chat') && envR.onRoad(npc.root.pos.x, npc.root.pos.z)) { if (b.state === 'chat') this.endChat(npc); this.stepOffRoad(npc, b, 1.3); }
+        else if (b.state === 'wander' && Math.random() < 0.35) this.scanForCasualties(npc, b);
+      }
+    }
     // sitting / riding: only while calm (a fright, a hit or a grab stands them up)
     if (npc.transit && b.state !== 'idle' && b.state !== 'wander') game.transit.interrupt(npc);
     if ((b.state === 'idle' || b.state === 'wander') && game.transit && game.transit.think(npc, b, dt)) return;
@@ -253,7 +266,7 @@ class AISystem {
         b.socialT = (b.socialT == null ? Math.random() * 2 : b.socialT) - dt;
         if (b.socialT <= 0) {
           b.socialT = 1.2 + Math.random() * 0.8;
-          if (this.tryInspect(npc, b) || this.tryChat(npc, b)) break;
+          if (this.scanForCasualties(npc, b) || this.tryInspect(npc, b) || this.tryChat(npc, b)) break;
         }
         if (b.idleTime <= 0 && S.wander && Math.random() < S.wanderRate) {
           this.pickWander(npc, b); this.setState(npc, b, 'wander');
@@ -262,12 +275,19 @@ class AISystem {
       }
       case 'chat': this.updateChat(npc, b, dt); break;
       case 'inspect': this.updateInspect(npc, b, dt); break;
+      case 'help': this.updateHelp(npc, b, dt); break;
+      case 'call': this.updateCall(npc, b, dt); break;
+      case 'dazed': this.updateDazed(npc, b, dt); break;
+      case 'dodge': this.updateDodge(npc, b, dt); break;
+      case 'hide': this.updateHide(npc, b, dt); break;
+      case 'seek': this.updateSeek(npc, b, dt); break;
       case 'wander': {
         b.speed = npc.personality.walkSpeed * Math.sqrt(npc.rig.legLen / 0.84) * (1 - 0.45 * Math.max(anim.limp[0], anim.limp[1])) * (1 - 0.4 * smoothstep(0.4, 0.75, anim.sick || 0)) * (1 + 0.22 * Math.min(1, npc.fear * 1.5));
+        b.speed *= (b.walkMul || 1);
         if (!b.holdPose) anim.setUpper('hang');
         anim.setPosture('stand');
         this.idleLook(npc, b, dt);
-        if (npc.root.pos.distanceTo(b.dest) < 0.6 || b.t > 25) { this.setState(npc, b, 'idle'); b.idleTime = 3 + Math.random() * 8; }
+        if (npc.root.pos.distanceTo(b.dest) < 0.6 || b.t > 25) { this.setState(npc, b, 'idle'); b.idleTime = 3 + Math.random() * 8; b.walkMul = 1; }
         break;
       }
       case 'react': {
@@ -286,6 +306,10 @@ class AISystem {
         b.routeT = (b.routeT || 0) - dt;
         if (b.routeT <= 0 || b.t < 0.05) { b.routeT = 0.4; this.fleeDir(npc, b, _v1); b.dest.copy(npc.root.pos).addScaledVector(_v1, 5); game.env.clampToBounds(b.dest, 1); }
         anim.lookAt(_v3.copy(b.threat).setY(npc.rig.eyeY), 0.35);
+        if (b.t > 1.2 && b.t < 1.3 && (npc.personality.caution || 0) > 0.55 && npc.root.pos.distanceTo(b.threat) > 6) {
+          b.hideAt = b.hideAt || new V3();
+          if (this.findCover(npc, b.threat, b.hideAt)) { b.hidden = false; this.setState(npc, b, 'hide'); npc.lastReaction = 'Running for Cover'; Events.emit('reaction', { npc, reaction: npc.lastReaction }); break; }
+        }
         if (b.t > (b.fleeT || 5) && npc.root.pos.distanceTo(b.threat) > 10) { this.setState(npc, b, 'idle'); b.idleTime = 4 + Math.random() * 4; npc.lastReaction = 'Alert'; }
         break;
       }
@@ -310,6 +334,7 @@ class AISystem {
         if (b.t > b.hurtT) {
           anim.setUpper('hang'); anim.setPosture(npc.health < 35 ? 'wounded' : 'alert');
           this.decide(npc, b, true);
+          if (b.state !== 'flee' && b.state !== 'cower') this.trySeekHelp(npc, b);
         }
         break;
       }
@@ -375,8 +400,21 @@ class AISystem {
     anim.lookAt(_v1.copy(st.pos).setY(Math.max(st.pos.y, 0.8)), 1);
     b.lookKind = 'threat'; b.lookTimer = 3;
     if (!S.reactions) return;
-    if (b.state === 'flee' || b.state === 'cower') { b.fleeT = (b.fleeT || 4) + 1; b.cowerT = (b.cowerT || 3) + 0.5; return; }
-    if (b.state === 'hurt' || b.state === 'fight') return;
+    if (b.state === 'flee' || b.state === 'cower' || b.state === 'hide') { b.fleeT = (b.fleeT || 4) + 1; b.cowerT = (b.cowerT || 3) + 0.5; return; }
+    if (b.state === 'hurt' || b.state === 'fight' || b.state === 'dodge' || b.state === 'dazed') return;
+    if (st.type === 'horn') {
+      const envR = this.game.env.current;
+      npc.fear = Math.max(0, npc.fear - st.intensity * 0.5);   // a horn is a warning, not a threat
+      const px = npc.root.pos.x, crossing = px > TR.cross.x0 - 0.5 && px < TR.cross.x1 + 0.5;
+      if (envR.onRoad && envR.onRoad(npc.root.pos.x, npc.root.pos.z) && b.state !== 'help') {
+        if (crossing && b.state === 'wander') { b.walkMul = 1.35; npc.lastReaction = 'Hurrying Across'; }   // on the crossing: keep going, a bit quicker
+        else { this.stepOffRoad(npc, b, 1.7); npc.lastReaction = 'Startled (Horn)'; anim.setPosture('flinch', 0.06); }
+      }
+      else { npc.lastReaction = 'Look Toward Sound'; b.puzzledT = 1.5; }
+      return;
+    }
+    if ((b.state === 'help' || b.state === 'call') && st.type !== 'gunshot' && st.type !== 'sniper' && st.type !== 'explosion') return;
+    if (b.state === 'help' || b.state === 'call') this.leaveHelp(npc, b);
     const close = st.d < st.radius * 0.45;
     if (close || st.intensity > 0.35) {
       // flinch with individual style
@@ -1188,7 +1226,7 @@ class AISystem {
       if (c.lifeState === 'alive') {
         const res = c.applyHit({ region: REGION.ABDOMEN, damage: Z.biteDamage * 0.8 / REGION_DAMAGE_MUL[REGION.ABDOMEN], weapon: 'bite', force: 1 });
         infectNpc(c, z.idStr);
-        this.game.audio.play('scream' + Math.floor(Math.random() * 3), { pos: c.boneWPos[B.head].clone(), gain: 1 });
+        if (!c.cond || c.cond.state !== 'unconscious') this.game.audio.play('scream' + Math.floor(Math.random() * 3), { pos: c.boneWPos[B.head].clone(), gain: 1 });
         c.downTimer = Math.max(c.downTimer, 2.5);
         if (res.killed) z.kills++;
       }
@@ -1331,6 +1369,214 @@ class AISystem {
       z.kills++;
     }
   }
+  // --- V1.15 people and the street: traffic, casualties, hiding, seeking help -------------------
+  // a car that cannot stop for them: most jump clear (to the near side of its path), a few freeze
+  carDanger(npc, car) {
+    const b = npc.brain;
+    if (!b || npc.lifeState !== 'alive' || npc.physMode !== 'anim' || npc.seatLock || npc.grabbedBy || npc.horror || b.state === 'dodge') return;
+    const p = npc.personality, P = npc.root.pos, anim = npc.anim;
+    this.leaveHelp(npc, b);
+    npc.fear = Math.min(1, npc.fear + 0.5);
+    b.threat.set(car.x, P.y, car.z); b.hasThreat = true; b.threatNpc = null;
+    this.remember(npc, 'car', P, 0.45);
+    anim.lookAt(_v1.set(car.x, P.y + 1.0, car.z), 1);
+    const side = P.z > car.z ? 1 : -1, clearZ = car.z + side * (car.M.W / 2 + 0.95);
+    b.dest.set(P.x - car.dir * 0.4, P.y, clearZ);
+    const freeze = Math.random() < 0.05 + 0.14 * (1 - (p.caution != null ? p.caution : 0.5)) * (p.reaction > 0.25 ? 1.4 : 1);
+    if (freeze) { this.setState(npc, b, 'cower'); b.cowerT = 1.0; anim.setPosture('cower', 0.1); anim.setUpper('cover'); npc.lastReaction = 'Frozen (Car Coming)'; }
+    else { this.setState(npc, b, 'dodge'); b.dodgeT = 1.1 + Math.random() * 0.4; anim.setPosture('flinch', 0.06); anim.setUpper('flail'); npc.lastReaction = 'Jumping Clear (Car)'; }
+    if (Math.random() < 0.45) this.game.audio.play('gasp' + (Math.random() < 0.5 ? 0 : 1), { pos: npc.boneWPos[B.head].clone(), gain: 0.7, rate: npc.app.gender === 'female' ? 1.15 : 0.95 });
+    Events.emit('reaction', { npc, reaction: npc.lastReaction });
+  }
+  updateDodge(npc, b, dt) {
+    const anim = npc.anim;
+    b.speed = npc.personality.runSpeed * Math.sqrt(npc.rig.legLen / 0.84) * 1.05;
+    anim.setPosture('stand'); anim.setUpper(b.t < 0.45 ? 'flail' : 'hang');
+    b.turnMul = 3;
+    if (b.t > b.dodgeT || Math.hypot(npc.root.pos.x - b.dest.x, npc.root.pos.z - b.dest.z) < 0.3) {
+      b.turnMul = 1;
+      this.setState(npc, b, 'idle'); b.idleTime = 1.5 + Math.random() * 2; anim.setPosture('alert');
+      npc.lastReaction = 'Shaken (Near Miss)'; b.puzzledT = 2;
+      const env = this.game.env.current;
+      if (env.onRoad && env.onRoad(npc.root.pos.x, npc.root.pos.z)) this.stepOffRoad(npc, b, 1.4);
+    }
+  }
+  // out of the road to the nearer sidewalk (a horn, a car waiting, standing about in the lane)
+  stepOffRoad(npc, b, pace) {
+    const P = npc.root.pos, toPark = P.z > TR.center;
+    b.dest.set(P.x + (Math.random() - 0.5) * 1.5, P.y, toPark ? TR.kerb1 + 0.9 + Math.random() * 0.8 : TR.kerb0 - 0.9 - Math.random() * 0.6);
+    this.setState(npc, b, 'wander'); b.walkMul = pace || 1.3;
+  }
+  // somebody out cold close by: the kindest goes to them and kneels to check on them, another phones
+  // for help, the rest keep back (or run, if something hunts nearby)
+  scanForCasualties(npc, b) {
+    const p = npc.personality;
+    if (npc.infection || npc.horror || npc.fear > 0.45 || npc.transit || npc.seatLock || (p.kindness != null ? p.kindness : 0.5) < 0.3 || (npc.anim.sick || 0) > 0.3) return false;
+    let best = null, bd = 18;
+    for (const o of this.game.npcs.list) {
+      if (o === npc || o.removed || o.lifeState !== 'alive' || o.physMode !== 'ragdoll' || o.horror || !o.cond || o.cond.state !== 'unconscious' || (o.feeders || 0) > 0 || o.grabbedBy || o.carried) continue;
+      const cp = o.rag.bodies[RAG.CHEST].pos, d = Math.hypot(cp.x - npc.root.pos.x, cp.z - npc.root.pos.z);
+      if (d < bd && Math.abs(cp.y - npc.root.pos.y) < 1.5) { bd = d; best = o; }
+    }
+    if (!best || this.nearestZombie(npc, 12)) return false;
+    const live = (h, st) => h && !h.removed && h.lifeState === 'alive' && h.brain && h.brain.state === st && h.brain.patient === best;
+    if (!live(best.helpedBy, 'help')) {
+      best.helpedBy = npc; b.patient = best; b.helpPhase = 'go'; this.setState(npc, b, 'help');
+      npc.lastReaction = 'Going to Help'; Events.emit('reaction', { npc, reaction: npc.lastReaction });
+      return true;
+    }
+    if (!live(best.calledBy, 'call') && bd < 14) {
+      best.calledBy = npc; b.patient = best; b.callEnd = this.game.time + 14 + Math.random() * 10; this.setState(npc, b, 'call');
+      npc.lastReaction = 'Calling for Help'; Events.emit('reaction', { npc, reaction: npc.lastReaction });
+      return true;
+    }
+    return false;
+  }
+  leaveHelp(npc, b) {
+    const c = b.patient;
+    if (c && c.helpedBy === npc) c.helpedBy = null;
+    if (c && c.calledBy === npc) c.calledBy = null;
+    b.patient = null; npc.anim.talking = false;
+    if (npc.anim.action && npc.anim.action.type === 'tend') npc.anim.setAction(null);
+  }
+  // kneeling beside them: a hand on the shoulder and chest, talking to them, until they come round
+  updateHelp(npc, b, dt) {
+    const c = b.patient, anim = npc.anim;
+    const rising = c && !c.removed && (c.lifeState === 'reanimating' || c.lifeState === 'zombie' || (c.reinc && c.reinc.state === 'transforming'));
+    if (rising) { this.leaveHelp(npc, b); b.threat.copy(c.root.pos); b.hasThreat = true; b.threatNpc = c; npc.fear = 1; this.setState(npc, b, 'flee'); b.fleeT = 5; npc.lastReaction = 'Fleeing (The Body Moved)'; return; }
+    const ok = c && !c.removed && c.lifeState === 'alive' && c.helpedBy === npc && c.physMode === 'ragdoll' && c.cond.state === 'unconscious' && !(c.feeders > 0) && !c.carried && b.t < 90;
+    if (!ok) {
+      const came = c && !c.removed && c.lifeState === 'alive' && c.cond.state !== 'unconscious';
+      const died = c && !c.removed && c.lifeState === 'dead';
+      this.leaveHelp(npc, b);
+      this.setState(npc, b, 'idle'); b.idleTime = came ? 4 + Math.random() * 3 : 2; anim.setUpper(came ? 'hips' : 'cover');
+      if (came) { npc.lastReaction = 'Relieved (They Came Round)'; b.lookKind = 'npc'; b.lookNpc = c; b.lookTimer = 4; }
+      if (died) { npc.fear = Math.min(1, npc.fear + 0.4); npc.lastReaction = 'Shocked'; this.remember(npc, 'body', c.root.pos, 0.6); }
+      return;
+    }
+    const R = c.rag.bodies, ch = R[RAG.CHEST].pos, pel = R[RAG.PELVIS].pos;
+    let ax = ch.x - pel.x, az = ch.z - pel.z; const al = Math.hypot(ax, az) || 1; ax /= al; az /= al;
+    const px = az, pz = -ax, P = npc.root.pos, side = ((P.x - ch.x) * px + (P.z - ch.z) * pz) >= 0 ? 1 : -1;
+    if (b.helpSide == null || b.helpPhase === 'go') b.helpSide = side;
+    const reach = 0.6 * npc.rig.H / 1.75;
+    const sx = ch.x + px * b.helpSide * reach - ax * 0.12, sz = ch.z + pz * b.helpSide * reach - az * 0.12;
+    const d = Math.hypot(P.x - sx, P.z - sz);
+    if (b.helpPhase === 'go') {
+      b.dest.set(sx, P.y, sz); b.faceTarget = null;
+      b.speed = d > 5 ? npc.personality.runSpeed * 0.62 : npc.personality.walkSpeed * 1.05;
+      anim.setUpper('hang'); anim.lookAt(c.boneWPos[B.head], 0.9);
+      if (d < 0.4) { b.helpPhase = 'tend'; b.tendT = 0; npc.lastReaction = 'Helping (Checking on Them)'; }
+      return;
+    }
+    if (d > 1.2) { b.helpPhase = 'go'; anim.setAction(null); return; }
+    b.speed = 0; b.vel.set(0, 0, 0);
+    const k = Math.min(1, dt * 4); P.x += (sx - P.x) * k; P.z += (sz - P.z) * k;
+    npc.root.yaw = angleDamp(npc.root.yaw, Math.atan2(ch.x - P.x, ch.z - P.z), 5, dt);
+    if (!anim.action || anim.action.type !== 'tend' || anim.action.ending) anim.setAction('tend', { point: new V3(), head: new V3(), inT: 0.7, outT: 0.6 });
+    anim.action.point.copy(ch); anim.action.head.copy(c.boneWPos[B.head]);
+    anim.lookAt(c.boneWPos[B.head], 1);
+    b.tendT = (b.tendT || 0) + dt;
+    anim.talking = (b.tendT % 4.5) < 1.8;
+    anim.setPosture('stand');
+  }
+  // phoning for help a few metres away, looking over at the casualty
+  updateCall(npc, b, dt) {
+    const c = b.patient, anim = npc.anim;
+    const ok = c && !c.removed && c.lifeState === 'alive' && this.game.time < (b.callEnd || 0) && (c.calledBy === npc || c.calledBy == null);
+    if (!ok) { this.leaveHelp(npc, b); this.setState(npc, b, 'idle'); b.idleTime = 2 + Math.random() * 3; anim.setUpper('hang'); return; }
+    const cp = c.physMode === 'ragdoll' ? c.rag.bodies[RAG.CHEST].pos : c.root.pos, P = npc.root.pos;
+    const dx = P.x - cp.x, dz = P.z - cp.z, d = Math.hypot(dx, dz) || 1;
+    if (d > 4.5 || d < 2.2) { b.dest.set(cp.x + dx / d * 3.2, P.y, cp.z + dz / d * 3.2); b.speed = npc.personality.walkSpeed; anim.setUpper('hang'); }
+    else { b.speed = 0; b.dest.copy(P); b.faceTarget = cp; anim.setUpper('call'); anim.talking = (b.t % 3.2) < 2.2; }
+    anim.lookAt(c.boneWPos[B.head], 0.7);
+    anim.setPosture('alert');
+    npc.lastReaction = 'Calling for Help';
+  }
+  // just came round: groggy, a hand to the head, swaying; off the road first if lying in it
+  updateDazed(npc, b, dt) {
+    const anim = npc.anim, env = this.game.env.current, P = npc.root.pos;
+    anim.setPosture('wounded');
+    if (env.onRoad && env.onRoad(P.x, P.z)) {
+      const toPark = P.z > TR.center;
+      if (!b.dazedDest || b.t < 0.05) b.dazedDest = new V3(P.x, P.y, toPark ? TR.kerb1 + 1.2 : TR.kerb0 - 1.2);
+      b.dest.copy(b.dazedDest); b.speed = npc.personality.walkSpeed * 0.55; anim.setUpper('clutch', REGION.HEAD);
+    } else {
+      b.speed = 0; b.dest.copy(P);
+      anim.setUpper((b.t % 7) < 3.5 ? 'scratch' : 'hang');
+      b.swayT = (b.swayT || 0) - dt;
+      if (b.swayT <= 0) { b.swayT = 0.9 + Math.random() * 1.4; anim.kick(B.spine, _v1.set((Math.random() - 0.5) * 2, 0, (Math.random() - 0.5) * 3)); anim.kick(B.head, _v1.set((Math.random() - 0.3) * 3, (Math.random() - 0.5) * 3, 0)); }
+      this.idleLook(npc, b, dt);
+    }
+    npc.lastReaction = 'Dazed (Coming Round)';
+  }
+  // hurt and frightened: go to the nearest calm person; they phone for help
+  trySeekHelp(npc, b) {
+    if (npc.health > 45 || npc.infection || npc.horror) return false;
+    let best = null, bd = 16;
+    for (const o of this.game.npcs.list) {
+      if (o === npc || o.removed || o.lifeState !== 'alive' || o.horror || !o.brain || o.physMode !== 'anim' || o.fear > 0.5) continue;
+      const st = o.brain.state; if (st !== 'idle' && st !== 'wander' && st !== 'chat' && st !== 'inspect') continue;
+      const d = Math.hypot(o.root.pos.x - npc.root.pos.x, o.root.pos.z - npc.root.pos.z);
+      if (d < bd) { bd = d; best = o; }
+    }
+    if (!best || this.nearestZombie(npc, 10)) return false;
+    b.seekTo = best; this.setState(npc, b, 'seek'); npc.lastReaction = 'Seeking Help';
+    return true;
+  }
+  updateSeek(npc, b, dt) {
+    const o = b.seekTo, anim = npc.anim;
+    if (!o || o.removed || o.lifeState !== 'alive' || o.physMode !== 'anim' || b.t > 25) { this.setState(npc, b, 'idle'); b.idleTime = 3; return; }
+    const d = Math.hypot(o.root.pos.x - npc.root.pos.x, o.root.pos.z - npc.root.pos.z);
+    anim.setPosture('wounded'); anim.lookAt(o.boneWPos[B.head], 0.9);
+    if (d > 1.5) { b.dest.copy(o.root.pos); b.speed = npc.personality.walkSpeed * 0.8; return; }
+    b.speed = 0; b.dest.copy(npc.root.pos); b.faceTarget = o.root.pos;
+    const ob = o.brain;
+    if (ob && ob.state !== 'call' && ob.state !== 'flee' && ob.state !== 'help') {
+      if (ob.state === 'chat') this.endChat(o);
+      ob.patient = npc; ob.callEnd = this.game.time + 10 + Math.random() * 8; this.setState(o, ob, 'call'); npc.calledBy = o;
+      o.lastReaction = 'Calling for Help';
+    }
+    this.setState(npc, b, 'idle'); b.idleTime = 8 + Math.random() * 6; anim.setUpper('clutch', b.hurtRegion != null ? b.hurtRegion : REGION.ABDOMEN);
+    npc.lastReaction = 'Waiting for Help';
+  }
+  // hiding: somewhere with cover between them and the danger (parked cars, tree trunks, the play
+  // structure, walls); crouched, peeking out now and then; they run on if it comes close
+  findCover(npc, threat, out) {
+    const env = this.game.env.current, spots = this._cover || (this._cover = []);
+    spots.length = 0;
+    if (env.coverSpots) env.coverSpots(spots);
+    else if (env.treeSpots) for (const t of env.treeSpots) if (t.kind !== 's') spots.push({ x: t.x, z: t.z, r: t.r * 0.7 });
+    const P = npc.root.pos;
+    let best = null, bs = 1e9;
+    for (const s of spots) {
+      const tx = s.x - threat.x, tz = s.z - threat.z, tl = Math.hypot(tx, tz) || 1;
+      const hx = s.x + tx / tl * (s.r + 0.6), hz = s.z + tz / tl * (s.r + 0.6);
+      const dMe = Math.hypot(hx - P.x, hz - P.z), dTh = Math.hypot(hx - threat.x, hz - threat.z);
+      if (dMe > 16 || dTh < 6 || dMe > dTh * 0.8) continue;
+      if (env.onRoad && env.onRoad(hx, hz)) continue;
+      if (env.blockedAt && env.blockedAt(hx, hz)) continue;
+      const sc = dMe - dTh * 0.3;
+      if (sc < bs) { bs = sc; best = s; out.set(hx, P.y, hz); }
+    }
+    return best;
+  }
+  updateHide(npc, b, dt) {
+    const anim = npc.anim, P = npc.root.pos;
+    if (b.threatNpc && !b.threatNpc.removed && b.threatNpc.hostile) b.threat.copy(b.threatNpc.root.pos);
+    const dT = Math.hypot(b.threat.x - P.x, b.threat.z - P.z);
+    if (dT < 5 || b.t > 22) { this.setState(npc, b, dT < 5 ? 'flee' : 'idle'); b.fleeT = 4; b.idleTime = 2; anim.setPosture('alert'); npc.lastReaction = dT < 5 ? 'Fleeing (Found)' : 'Coming Out of Hiding'; return; }
+    const d = Math.hypot(b.hideAt.x - P.x, b.hideAt.z - P.z);
+    if (d > 0.5 && !b.hidden) {
+      b.dest.copy(b.hideAt); b.speed = npc.personality.runSpeed * 0.9; anim.setPosture('stand'); anim.setUpper('hang');
+      return;
+    }
+    b.hidden = true; b.speed = 0; b.dest.copy(P); b.faceTarget = b.threat;
+    anim.setPosture('cower'); anim.setUpper(npc.personality.bravery > 0.5 ? 'guard' : 'cover');
+    b.peekT = (b.peekT || 0) - dt;
+    if (b.peekT <= 0) { b.peekT = 1.5 + Math.random() * 2.5; anim.lookAt(_v3.copy(b.threat).setY(P.y + 1.2), 1); }
+    npc.lastReaction = 'Hiding';
+    if (dT > 22 && b.t > 8) { this.setState(npc, b, 'idle'); b.idleTime = 3; anim.setPosture('alert'); npc.lastReaction = 'Coming Out of Hiding'; }
+  }
   // --- steering -----------------------------------------------------------------------
   steer(npc, b, dt) {
     const game = this.game, root = npc.root;
@@ -1349,7 +1595,7 @@ class AISystem {
         // people slow down to change direction sharply instead of side-stepping
         wantYaw = Math.atan2(desired.x, desired.z);
         const off = Math.abs(wrapAngle(wantYaw - root.yaw));
-        spd = Math.min(spd, spd * d / 0.9) * clamp(1.2 - off / 1.7, 0.12, 1);
+        spd = Math.min(spd, spd * d / 0.9) * (b.state === 'dodge' ? 1 : clamp(1.2 - off / 1.7, 0.12, 1));   // a jump clear goes sideways at once
         desired.multiplyScalar(spd / d);
       } else desired.set(0, 0, 0);
     }
@@ -1400,6 +1646,33 @@ class AISystem {
       if (o.seat && seating) continue;
       const cx = clamp(root.pos.x, o.x0, o.x1), cz = clamp(root.pos.z, o.z0, o.z1), dx = root.pos.x - cx, dz = root.pos.z - cz, d = Math.hypot(dx, dz);
       if (d < 0.8 && d > 1e-4) { const k = (0.8 - d) / 0.8 * 2.6; desired.x += dx / d * k; desired.z += dz / d * k; }
+    }
+    // V1.15 the street: round the cars (moving ones from further off), and a look both ways at the kerb -
+    // nobody steps into the road while a car is coming that will not stop in time (waiting at the
+    // crossing also tells the drivers they want to cross)
+    const trf = envO && envO.traffic;
+    if (trf && !npc.riding) {
+      trf.avoid(npc, desired);
+      if (npc.lifeState === 'alive' && !npc.horror && b.speed > 0.01 && b.state !== 'dodge' && b.state !== 'help') {
+        const P = root.pos, len = Math.hypot(desired.x, desired.z);
+        if (len > 0.05) {
+          const ahead = 0.45 + Math.min(b.speed, 5) * 0.22, nx = P.x + desired.x / len * ahead, nz = P.z + desired.z / len * ahead;
+          if (!trf.onRoad(P.x, P.z) && trf.onRoad(nx, nz)) {
+            npc._wantsCross = game.time;
+            const toFar = P.z > TR.center, z1 = toFar ? TR.kerb0 - 0.3 : TR.kerb1 + 0.3;
+            const crossT = Math.abs(z1 - P.z) / Math.max(0.9, b.speed);
+            const care = (b.state === 'flee' ? 0.6 : 1.0 + (npc.personality.caution != null ? npc.personality.caution : 0.5) * 0.6) * Math.max(0.65, 1 - (b.kerbWaitT || 0) / 25);   // impatience after a long wait
+            if (!trf.crossingClear(P.x, P.z, z1, crossT * care)) {
+              if ((toFar && desired.z < 0) || (!toFar && desired.z > 0)) desired.z = 0;
+              desired.x *= 0.15;
+              b.kerbWaitT = (b.kerbWaitT || 0) + dt;
+              const car = trf.nearestApproaching(P.x, P.z, 70);
+              if (car) npc.anim.lookAt(_v3.set(car.x, P.y + 1.0, car.z), 0.9);
+              if (b.kerbWaitT > 0.4 && b.state !== 'flee') npc.lastReaction = 'Waiting to Cross';
+            } else b.kerbWaitT = 0;
+          }
+        }
+      }
     }
     // stagger impulse
     if (b.stagger.lengthSq() > 1e-4) {

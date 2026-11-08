@@ -15,7 +15,8 @@ function makePersonality(seed) {
     cadence: r.range(0.93, 1.07), stepLift: r.range(0.85, 1.15), bounce: r.range(0.8, 1.25), armSwing: r.range(0.75, 1.3),
     leanMul: r.range(0.8, 1.2), slouch: r.range(-0.03, 0.08), headTilt: r.range(-0.05, 0.05),
     walkSpeed: r.range(1.15, 1.55), runSpeed: r.range(3.6, 5.0), animSpeed: r.range(0.85, 1.15),
-    flinch: r.int(0, 2), cover: r.int(0, 2), toughness: r.range(0.8, 1.25), sociable: r.next(), zombieSpeed: r.range(0.8, 1.2)
+    flinch: r.int(0, 2), cover: r.int(0, 2), toughness: r.range(0.8, 1.25), sociable: r.next(), zombieSpeed: r.range(0.8, 1.2),
+    kindness: r.next(), caution: r.next()   // V1.15: helping others; looking before crossing a road
   };
 }
 
@@ -45,6 +46,8 @@ class NPC {
     this.spawn = { pos: new V3(), yaw: 0 };
     this.kills = 0; this.label = null; this.gore = null; this.infection = null; this.zlook = null;
     this.vamp = { state: 'none' }; this.spawnKind = null; this.horror = null;
+    // V1.15 condition: 'ok' | 'unconscious' (out cold on the ground) | 'dazed' (just came round)
+    this.cond = { state: 'ok', t: 0, dur: 0, cause: '', severity: 0 };
   }
   setupMesh(shell) {
     const geo = buildCharacterGeometry(this.app, this.rig, this.quality);
@@ -153,6 +156,7 @@ class NPC {
     if (this.isZombie) u.uZombie.value = Math.min(1, u.uZombie.value + dt * 0.6);
   }
   postPhysics(dt) {
+    if (this.cond.state !== 'ok') this.updateCondition(dt);
     if (this.physMode === 'ragdoll') {
       this.syncFromRagdoll();
       // root follows pelvis (for AI/labels)
@@ -192,7 +196,7 @@ class NPC {
         else if (i === B.jaw) Q[i].multiplyQuaternions(Q[p], _q2.setFromAxisAngle(LEFT, this.lifeState === 'alive' ? 0.02 : 0.12));
         else if (i === B.fingers1_L || i === B.fingers1_R) { const sd = i === B.fingers1_L ? 0 : 1; Q[i].multiplyQuaternions(Q[p], _q2.setFromAxisAngle(this.anim.flexAxis[sd], 0.55)); }
         else if (i === B.fingers2_L || i === B.fingers2_R) { const sd = i === B.fingers2_L ? 0 : 1; Q[i].multiplyQuaternions(Q[p], _q2.setFromAxisAngle(this.anim.flexAxis[sd], 0.7)); }
-        else if (i === B.lid_L || i === B.lid_R) Q[i].multiplyQuaternions(Q[p], _q2.setFromAxisAngle(LEFT, this.lifeState === 'dead' || this.lifeState === 'destroyed' ? 0.5 : 0.3));
+        else if (i === B.lid_L || i === B.lid_R) Q[i].multiplyQuaternions(Q[p], _q2.setFromAxisAngle(LEFT, this.lifeState === 'dead' || this.lifeState === 'destroyed' || this.cond.state === 'unconscious' ? 0.5 : 0.3));
         else Q[i].copy(Q[p]);
         W[i].copy(off[i]).applyQuaternion(Q[p]).add(W[p]);
       }
@@ -254,6 +258,58 @@ class NPC {
     bs.center.copy(this.physMode === 'ragdoll' ? this.boneWPos[B.hips] : this.boneWPos[B.hips]);
     bs.radius = this.rig.H * 0.75 + 0.25;
   }
+  // --- condition (V1.15): knocked out cold, coming round, dazed ------------------------
+  // severity 0..1. People go limp and stay down for a while (eyes shut); zombies and horror
+  // characters are only stunned for longer; vampires keep their own recovery (unchanged).
+  knockOut(o = {}) {
+    if (this.removed) return false;
+    const sev = clamp(o.severity != null ? o.severity : 0.5, 0, 1), cause = o.cause || 'impact';
+    if (this.lifeState === 'zombie' || this.lifeState === 'reanimating') {
+      if (this.physMode !== 'ragdoll') this.goRagdoll('Knocked Down (' + cause + ')');
+      this.downTimer = Math.max(this.downTimer, 1.5 + sev * 3.5);
+      return true;
+    }
+    if (this.lifeState === 'vampire') { if (this.physMode !== 'ragdoll') this.goRagdoll('Knocked Down (' + cause + ')'); return true; }
+    if (this.lifeState !== 'alive') return false;
+    if (this.horror) { if (this.physMode !== 'ragdoll') this.goRagdoll('Stunned (' + cause + ')'); this.downTimer = Math.max(this.downTimer, 2 + sev * 4); this.lastReaction = 'Stunned (' + cause + ')'; return true; }
+    const C = this.cond;
+    const dur = (5 + sev * 24) * (0.7 + 0.6 * Math.random()) / (this.personality.toughness || 1);
+    if (C.state === 'unconscious') { C.dur = Math.max(C.dur, C.t + dur * 0.5); C.severity = Math.max(C.severity, sev); return true; }
+    if (this.grabbedBy && this.grabbedBy.brain && this.game.ai && this.grabbedBy.lifeState === 'zombie') this.game.ai.endGrab(this.grabbedBy);
+    C.state = 'unconscious'; C.t = 0; C.dur = dur; C.cause = cause; C.severity = sev;
+    this.goRagdoll('Unconscious (' + cause + ')', true);   // limp: falls the way the body was going
+    this.downTimer = 1e9; this.fear = 0; this.knockouts++;
+    this.anim.jawTarget = 0.07;
+    const u = this.material.userData.u; if (u.uExpr) { u.uExpr.value.set(0, 0.1, -0.15, 0); u.uExpr2.value.set(0, 0, 0, 0); }
+    if (this.brain) { this.brain.state = 'down'; this.brain.pending.length = 0; }
+    this.lastReaction = 'Unconscious (' + cause + ')';
+    HT.log('hit', `${this.idStr} ${this.name} is unconscious (${cause}, about ${Math.round(dur)} s)`);
+    Events.emit('knockout', { npc: this, cause, severity: sev });
+    if (this.game.ai) this.game.ai.emit('collapse', this.boneWPos[B.chest].clone(), { source: this });
+    return true;
+  }
+  // per frame: the unconscious come round when their time is up (a helper beside them brings it forward)
+  updateCondition(dt) {
+    const C = this.cond;
+    if (C.state === 'ok') return;
+    if (this.lifeState !== 'alive') { C.state = 'ok'; return; }
+    C.t += dt * (this.helpedBy && !this.helpedBy.removed && this.helpedBy.brain && this.helpedBy.brain.state === 'help' ? 1.8 : 1);
+    if (C.state === 'unconscious') {
+      if (C.t >= C.dur && this.physMode === 'ragdoll' && !this.carried && !this.grabbedBy && !(this.feeders > 0)) {
+        C.state = 'waking'; C.t = 0;
+        this.downTimer = 0.3 + Math.random() * 0.6;   // handleDowned starts the (slow) get-up once the body is still
+        this.lastReaction = 'Coming Round';
+        HT.log('hit', `${this.idStr} ${this.name} is coming round`);
+        Events.emit('wake', { npc: this });
+      }
+    } else if (C.state === 'waking') {
+      if (this.physMode === 'anim') { C.state = 'dazed'; C.t = 0; C.dur = 7 + C.severity * 9 + Math.random() * 3; if (this.brain) { this.brain.state = 'dazed'; this.brain.t = 0; } }
+      else if (C.t > 25) { C.state = 'ok'; }
+    } else if (C.state === 'dazed') {
+      if (C.t >= C.dur) { C.state = 'ok'; if (this.brain && this.brain.state === 'dazed') { this.brain.state = 'idle'; this.brain.t = 0; this.brain.idleTime = 2; } }
+    }
+  }
+  get unconscious() { return this.cond.state === 'unconscious'; }
   // --- ragdoll control ---------------------------------------------------------------
   goRagdoll(reason, deadDamping) {
     if (this.physMode === 'ragdoll') { this.rag.setDynamic(true, deadDamping); return; }
@@ -274,6 +330,7 @@ class NPC {
   }
   handleDowned(dt) {
     if (!this.active || this.carried) return;
+    if (this.cond.state === 'unconscious') return;   // comes round on its own clock (updateCondition)
     if (this.vamp.state === 'turning') return; // the vampire system raises a turning body itself
     if (this.grabbedBy && this.grabbedBy.lifeState === 'vampire') return; // held down by a feeding vampire
     this.downTimer -= dt;
@@ -328,13 +385,13 @@ class NPC {
     this.anim.playClip(asZombie ? 'zombieRise' : 'getUp', keys, () => {
       if (this.physMode === 'getup') this.physMode = 'anim';
       if (asZombie) Events.emit('zombieRisen', this);
-      if (this.brain) this.brain.state = this.lifeState === 'vampire' ? 'vIdle' : 'idle';
+      if (this.brain) this.brain.state = this.lifeState === 'vampire' ? 'vIdle' : this.cond.state === 'waking' ? 'dazed' : 'idle';
     });
-    this.anim.clip.speed = asZombie ? 0.75 : (this.lifeState === 'vampire' ? 1.45 : this.personality.animSpeed);
+    this.anim.clip.speed = asZombie ? 0.75 : (this.lifeState === 'vampire' ? 1.45 : this.personality.animSpeed * (this.cond.state === 'waking' ? 0.62 : 1));
     this.anim.clip.zombie = asZombie;
     this.rag.setDynamic(false);
     this.physMode = 'getup';
-    this.lastReaction = asZombie ? 'Reanimating' : (this.lifeState === 'vampire' ? 'Rising (Vampire)' : 'Recovering (Get Up)');
+    this.lastReaction = asZombie ? 'Reanimating' : (this.lifeState === 'vampire' ? 'Rising (Vampire)' : this.cond.state === 'waking' ? 'Getting Up (Groggy)' : 'Recovering (Get Up)');
     Events.emit('npcGetUp', this);
   }
   // legs severed: blend from the ragdoll pose into a prone crawl
@@ -391,6 +448,7 @@ class NPC {
   }
   die(info) {
     if (!this.setLife('dead', info && info.weapon)) return false;
+    this.cond.state = 'ok';
     this.deathTime = this.game.time;
     this.fear = 0;
     this.anim.jawTarget = 0.1;
@@ -416,6 +474,8 @@ class NPC {
     if (this.lifeState === 'vampire') return this.vamp.state === 'turning' ? 'Turning (Vampire)' : 'Vampire';
     if (this.vamp.state === 'bitten') return 'Bitten (Vampire) - turning soon';
     const h = this.health / this.maxHealth;
+    if (this.cond.state === 'unconscious') return 'Unconscious (' + this.cond.cause + ')';
+    if (this.cond.state === 'waking' || this.cond.state === 'dazed') return 'Dazed (Coming Round)';
     if (h >= 0.999) return 'No Damage';
     if (h > 0.7) return 'Simulated Injury (Minor)';
     if (h > 0.4) return 'Simulated Injury (Moderate)';
