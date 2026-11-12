@@ -351,7 +351,7 @@ export function buildHQExterior() {
   const hq = grp(g, 0, 0, -9);
   const wallM = mat(0xe8ecf3, { r: 0.6 });
   const navy = mat(0x1d2a7a, { r: 0.5 });
-  const glow = mat(0x7fd4ff, { e: 0x2f8cff, ei: 0.9 });
+  const glow = mat(0x7fd4ff, { e: 0x2f8cff, ei: 0.9 }).clone();
   const glassDay = new THREE.MeshStandardMaterial({ color: 0x6fa8d8, roughness: 0.08, metalness: 0.6, emissive: 0xffc070, emissiveIntensity: 0 });
   box(hq, 16, 10.8, 10, 0, [0, 5.4, 0], { material: wallM });
   for (let f = 0; f < 3; f++) {
@@ -399,6 +399,7 @@ export function buildHQExterior() {
   const skyShade = TX.skyTex('#33405a', '#5d6d88', '#8e9db4');
   const skyNight = TX.skyTex('#03050f', '#0a1230', '#1a2650');
   const skyEve = TX.skyTex('#2b2f6e', '#c4608a', '#ffb070');
+  const TK_PURPLE = new THREE.Color(0xb040ff);
   return {
     name: 'hqExt', group: g, bg: skyDay, fog: [0xcfe4f5, 50, 140], exposure: 1.0,
     refs: { car },
@@ -419,6 +420,12 @@ export function buildHQExterior() {
       skyline.visible = v('hq.skyline', 0) > 0.5;
       glassDay.emissiveIntensity = night ? 1.1 : eve > 0.5 ? 0.85 : 0;
       glassDay.color.set(night || eve > 0.5 ? 0x3a3550 : 0x6fa8d8);
+      // Episode 10: the Soul Stealer takes over headquarters (windows and sign turn purple and flicker)
+      const tk = v('hq.takeover', 0);
+      glassDay.emissive.setHex(0xffc070).lerp(TK_PURPLE, tk);
+      if (tk > 0.01) glassDay.emissiveIntensity = Math.max(glassDay.emissiveIntensity, 1.4 * tk) * (hash(Math.floor(t * 8)) > 0.15 ? 1 : 0.35);
+      sign.color.setHex(0xffffff).lerp(TK_PURPLE, tk * (Math.sin(t * 13) > -0.3 ? 0.9 : 0.4));
+      glow.emissive.setHex(0x2f8cff).lerp(TK_PURPLE, tk); glow.color.setHex(0x7fd4ff).lerp(TK_PURPLE, tk);
       beacon.material.emissiveIntensity = Math.sin(t * 4) > 0 ? 2.5 : 0.2;
       car.position.set(v('hcar.x', -40), 0, v('hcar.z', 5.5));
       for (const w of car.userData.wheels) w.rotation.z = -v('hcar.x', -40) / 0.4;
@@ -797,6 +804,7 @@ export function buildLiving() {
   for (const [x, z] of [[-6.9, -4.5], [6.9, 5.2]]) { box(g, 0.3, 0.18, 0.3, 0, [x, 3.3, z], { material: emM, noShadow: true }); const l = new THREE.PointLight(0xff2020, 0, 12, 1.3); l.position.set(x * 0.9, 3.0, z * 0.9); g.add(l); emL.push(l); }
   const WALL0 = new THREE.Color(0xd5def0), ILL_WALL = new THREE.Color(0x2a0f44), CEIL0 = new THREE.Color(0xeef2fa), ILL_FLOOR = new THREE.Color(0x3a2448), WHITE = new THREE.Color(0xffffff);
   const OUT_DAY = new THREE.Color(0xdfeeff), OUT_PURPLE = new THREE.Color(0x7a2ad0);
+  const LP_PURPLE = new THREE.Color(0xa040ff), LP_WALL = new THREE.Color(0x5a3a8a);
   // Episode 5: night lighting + the reinforced steel table for the crown
   const ceil = new THREE.PointLight(0xffe0b8, 0, 12, 1.3); ceil.position.set(-1.5, 3.2, 0); g.add(ceil);
   const steel = grp(g, -3.6, 0, -1.7); steel.visible = false;
@@ -906,7 +914,10 @@ export function buildLiving() {
       L.sun.intensity *= lk; L.hemi.intensity *= flick * (1 - 0.9 * dark) * (1 - 0.6 * ill); lamp.intensity *= lk; ceil.intensity *= lk; tvLight.intensity *= flick * (1 - dark);
       wall.color.copy(WALL0).lerp(ILL_WALL, ill); ceilM.color.copy(CEIL0).lerp(ILL_WALL, ill); floor.color.copy(WHITE).lerp(ILL_FLOOR, ill);
       couchG.visible = ill < 0.5;
-      redL.intensity = ill * 34 * (0.8 + 0.2 * Math.sin(t * 6));
+      const lpu = v('living.purple', 0);
+      redL.color.setHex(0xff2030).lerp(LP_PURPLE, lpu > 0 && ill < 0.5 ? 1 : 0);
+      redL.intensity = ill * 34 * (0.8 + 0.2 * Math.sin(t * 6)) + lpu * 26 * (0.8 + 0.2 * Math.sin(t * 4));
+      if (lpu > 0) { wall.color.lerp(LP_WALL, lpu * 0.55); ceilM.color.lerp(LP_WALL, lpu * 0.4); }
       const blinkE = Math.sin(t * 5) > 0 ? 1 : 0.35;
       for (const l of emL) l.intensity = emg * 16 * blinkE;
       emM.emissiveIntensity = emg * 2.5 * blinkE;
@@ -1024,6 +1035,9 @@ export function buildTitle(font, TextGeometry) {
   const sub8 = mkText('THE ILLUSION', 0.56, 0.22, [new THREE.MeshStandardMaterial({ color: 0xf2e0ff, metalness: 0.4, roughness: 0.3, emissive: 0xa040ff, emissiveIntensity: 0.75 }), new THREE.MeshStandardMaterial({ color: 0x3a1a5a, metalness: 0.7, roughness: 0.3 })]);
   sub8.position.set(0, -1.2, 0.3);
   g.add(sub8);
+  const sub9 = mkText('SEASON 1 FINALE', 0.5, 0.2, [new THREE.MeshStandardMaterial({ color: 0xfff2c0, metalness: 0.5, roughness: 0.25, emissive: 0xffb020, emissiveIntensity: 0.75 }), new THREE.MeshStandardMaterial({ color: 0x6a4a10, metalness: 0.7, roughness: 0.3 })]);
+  sub9.position.set(0, -1.2, 0.3);
+  g.add(sub9);
   const westMats = [new THREE.MeshStandardMaterial({ color: 0xfff0d0, metalness: 0.5, roughness: 0.25, emissive: 0xd88a2a, emissiveIntensity: 0.7 }), new THREE.MeshStandardMaterial({ color: 0x8a4a1a, metalness: 0.7, roughness: 0.3, emissive: 0x3a1800, emissiveIntensity: 0.6 })];
   const westBg = new THREE.Color(0x1a0c04);
   const orangeMats = [new THREE.MeshStandardMaterial({ color: 0xffe0b0, metalness: 0.5, roughness: 0.2, emissive: 0xff7a10, emissiveIntensity: 0.8 }), new THREE.MeshStandardMaterial({ color: 0xd05a08, metalness: 0.8, roughness: 0.25, emissive: 0x602000, emissiveIntensity: 0.7 })];
@@ -1054,8 +1068,8 @@ export function buildTitle(font, TextGeometry) {
       title.position.x = red ? Math.sin(t * 61) * 0.03 * v('title.jolt', 0) : 0;
       const ks = v('title.sub', 0);
       const which = v('title.subText', 'BE READY!');
-      sub.visible = which === 'BE READY!'; sub2.visible = which === 'THE RED DIAMOND HUNT'; sub3.visible = which === "THE SOUL STEALER'S SECRET"; sub4.visible = which === 'SPOOKY HALLOWEEN PARTY'; sub5.visible = which === 'BEHEMOTH AWAKENS'; sub6.visible = which === 'WESTERN DISASTER'; sub7.visible = which === 'THE ESCAPE'; sub8.visible = which === 'THE ILLUSION';
-      for (const m of [sub, sub2, sub3, sub4, sub5, sub6, sub7, sub8]) { m.scale.setScalar(Math.max(0.001, ks)); m.position.y = v('title.subY', -1.2); }
+      sub.visible = which === 'BE READY!'; sub2.visible = which === 'THE RED DIAMOND HUNT'; sub3.visible = which === "THE SOUL STEALER'S SECRET"; sub4.visible = which === 'SPOOKY HALLOWEEN PARTY'; sub5.visible = which === 'BEHEMOTH AWAKENS'; sub6.visible = which === 'WESTERN DISASTER'; sub7.visible = which === 'THE ESCAPE'; sub8.visible = which === 'THE ILLUSION'; sub9.visible = which === 'SEASON 1 FINALE';
+      for (const m of [sub, sub2, sub3, sub4, sub5, sub6, sub7, sub8, sub9]) { m.scale.setScalar(Math.max(0.001, ks)); m.position.y = v('title.subY', -1.2); }
       // the illusion title shimmers and slips sideways now and then
       const gl = v('title.glitch', 0);
       sub8.position.x = gl * (Math.sin(t * 3.1) * 0.05 + (Math.sin(Math.floor(t * 12) * 91.7) > 0.8 ? 0.25 * Math.sin(t * 77) : 0));

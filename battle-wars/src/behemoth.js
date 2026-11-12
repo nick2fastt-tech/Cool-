@@ -663,6 +663,7 @@ export function buildDowntown() {
   const skyDark = TX.skyTex('#07040e', '#1d0b33', '#3a1a55');
   const skyEve = TX.skyTex('#2b2f6e', '#a0507a', '#ff9a5a');
   const skyNight = TX.skyTex('#02040e', '#0a1430', '#1a2448');
+  const skyDawn = TX.skyTex('#2a3a7a', '#e8907a', '#ffd08a');
   const darkBg = new THREE.Color();
   // night: building windows glow faintly, street lamps get real light
   const sideMats = new Set();
@@ -690,6 +691,13 @@ export function buildDowntown() {
         L.hemi.intensity = 0.4 + flash * 0.8;
         fillPurple.intensity = 0.45 + flash * 1.2;
         purple.intensity = 60 * (0.5 + flash * 3);
+      } else if (mode > 3.5) {
+        // dawn (Episode 10): the sun comes up low and golden after the long night
+        X.scene.background = skyDawn;
+        X.scene.fog.color.set(0xe8b8a0);
+        L.sun.intensity = 1.9; L.sun.color.set(0xffc08a); L.sun.position.set(40, 12, 30);
+        L.hemi.intensity = 0.95;
+        fillPurple.intensity = 0; purple.intensity = 0;
       } else if (mode > 2.5) {
         // night (Episode 8): moonlight, warm street lamps, faint lit windows, purple glow of the Soul Stealer's energy
         X.scene.background = skyNight;
@@ -706,7 +714,7 @@ export function buildDowntown() {
         fillPurple.intensity = 0.25 + flash * 1.2;
         purple.intensity = 300 * flash;
       }
-      const night = mode > 2.5;
+      const night = mode > 2.5 && mode < 3.5;
       if (night !== wasNight) {
         wasNight = night;
         for (const m of sideMats) { m.color.setHex(night ? 0x4a5468 : 0xffffff); m.emissive.setHex(night ? 0x2a3450 : 0x000000); m.emissiveMap = night ? m.map : null; m.emissiveIntensity = night ? 0.9 : 0; m.needsUpdate = true; }

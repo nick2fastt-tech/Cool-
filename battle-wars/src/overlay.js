@@ -26,6 +26,10 @@ export const SPEAKERS = {
   cowboy: { name: 'FRED', color: '#f0b46a' },
   guard2: { name: 'GUARD 2', color: '#b8e0a8' },
   soulX: { name: 'SOUL STEALER', color: '#ff4a5a' },
+  ped1: { name: 'CITIZEN', color: '#ffb35a' },
+  ped2: { name: 'CITIZEN', color: '#ffb35a' },
+  ped3: { name: 'KID', color: '#ffd27a' },
+  bus: { name: 'BUS DRIVER', color: '#ffb35a' },
 };
 
 function wrap(ctx, text, maxW) {
@@ -328,8 +332,26 @@ function drawVision(ctx, W, H, t, k) {
   ctx.restore();
 }
 
+// Episode 10: the power core meter in the corner while the two groups fight
+function drawCoreMeter(ctx, W, H, t, val) {
+  const s = H / 720, pct = val('core.pct', 100), pur = val('power.purple', 0) > 0.5;
+  const x = W - 300 * s, y = 26 * s, w = 270 * s, h = 64 * s;
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, val('hud.core', 0));
+  ctx.fillStyle = 'rgba(6,12,30,0.78)'; roundRect(ctx, x, y, w, h, 12 * s); ctx.fill();
+  const col = pct < 25 ? (Math.sin(t * 10) > 0 ? '#ff4a4a' : '#ff9a8a') : pur ? '#d080ff' : '#7fe0ff';
+  ctx.strokeStyle = col; ctx.lineWidth = 2.5 * s; roundRect(ctx, x, y, w, h, 12 * s); ctx.stroke();
+  ctx.fillStyle = col; ctx.font = `800 ${Math.round(19 * s)}px ${UI_FONT}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+  ctx.fillText('HQ POWER CORE', x + 14 * s, y + 18 * s);
+  ctx.textAlign = 'right'; ctx.fillText(`${Math.max(0, Math.round(pct))}%`, x + w - 14 * s, y + 18 * s);
+  ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fillRect(x + 14 * s, y + 36 * s, w - 28 * s, 16 * s);
+  ctx.fillStyle = col; ctx.fillRect(x + 14 * s, y + 36 * s, (w - 28 * s) * clamp(pct / 100), 16 * s);
+  ctx.restore();
+}
+
 export function drawOverlay(ctx, W, H, t, T, val) {
   if (val('cctv', 0) > 0.5) drawCCTV(ctx, W, H, t, val);
+  if (val('hud.core', 0) > 0.01) drawCoreMeter(ctx, W, H, t, val);
   const vk = val('vision', 0);
   if (vk > 0.01) drawVision(ctx, W, H, t, vk);
   for (const c of T.cards) drawCard(ctx, W, H, c, t);

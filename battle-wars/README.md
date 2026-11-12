@@ -1,6 +1,6 @@
 # Battle Wars
 
-A kid-friendly (ages 9–14) 3D animated action-comedy series. Season 1 is planned at 12–14 episodes.
+A kid-friendly (ages 9–14) 3D animated action-comedy series. Season 1 has 10 episodes and ends with the 26-minute Season 1 Finale.
 
 Every episode is delivered as one **1080p MP4** (1920×1080) with stereo sound and captions (Episodes 1–2 were made in 2K; `--2k` still renders at 2560×1440). There are no voices or text-to-speech: every line is a caption with the speaker's name in their color, and sounds get captions too.
 
@@ -17,6 +17,7 @@ Every episode is delivered as one **1080p MP4** (1920×1080) with stereo sound a
 | `s1e7-western-disaster` | Season 1, Episode 7: "WESTERN DISASTER" | 7:05 |
 | `s1e8-the-escape` | Season 1, Episode 8: "THE ESCAPE" | 9:11 |
 | `s1e9-the-illusion` | Season 1, Episode 9: "THE ILLUSION" | 12:26 |
+| `s1e10-season-finale` | Season 1, Episode 10: "SEASON 1 FINALE" | 26:18 |
 | `s1-red-diamonds` | Early Red Diamonds teaser scene (blue suits) | 1:02 |
 
 Finished videos go to `output/<episode-id>/` (not stored in git — GitHub's 100 MB file limit).
@@ -30,6 +31,7 @@ Finished videos go to `output/<episode-id>/` (not stored in git — GitHub's 100
 - Still camera shots slowly push in, and bright lights and energy effects get a soft glow.
 - Blinks come at random moments (now and then a quick double blink), and speakers look at the person they are answering.
 - Standing characters shift their weight from one leg to the other every few seconds; mouths change shape while talking.
+- Season 1 Finale upgrades: the titan can raise, reach and kneel with each arm, carry cars in its fists, topple over and crumble into stone; the shadow creature has arms that swipe, leans in and dissolves in sunlight; Fred's lasso of light (thrown, twirled, pulled tight, flickering and snapping) and his boomerang hat with a glowing trail; flying cars, a city bus and falling chunks of buildings with dust and debris; a blast door that bursts open; a power core that glows, overloads and turns purple; and new moves (hugs, double waves, hat throws and catches, energy blasts, kneeling hurt).
 
 ## Characters
 
@@ -53,10 +55,11 @@ Finished videos go to `output/<episode-id>/` (not stored in git — GitHub's 100
 | **Bird Eric** | Eric's bird form: a green bird with his brown tuft | — |
 | **The blue-eyed titan** | a 20-meter giant of dark stone with four glowing blue eyes, crystal spikes and arms that reach the ground (Episode 9) | — |
 | **Security Guard / Officers** | the bank guard with his flashlight, and the police officers who take Fred away | light blue / blue |
+| **Citizens of Aetherfall** | the people the heroes rescue in the finale, including a brave kid, a bus driver and the owner of a burger shop | light orange |
 
 ## Locations
 
-Aetherfall City streets · Aetherfall City Park · Aetherfall Coffee · Battle Wars HQ (outside, living room on floor 1, Controller Room on floor 3, hidden reactor room below) · Red Team HQ (with a lounge couch and TV) · abandoned subway tunnels, lower machine chamber and platform · the ancient diamond chamber · the Soul Stealer's crystal cavern (red or violet) · title card (blue, red "electric", or orange-and-purple Halloween style) · Flare and Aaron's bedroom · the Halloween store · Newark's house (outside at night, and the party room with stage and dance floor). Halloween episodes also decorate the living room and add pajama and costume outfits. Episode 5 adds Greg's HQ bedroom, a downtown intersection with a city-center plaza, a damaged city park, the UFO, and upgraded blue uniforms with armor. Episode 6 adds the Soul Stealer's lair with the Behemoth's cage, a dark city alley at night, a city view from the living-room window, and a little clay Behemoth figure. Episode 8 adds the street outside Aether Mart (with Battle Wars HQ at the far end), the store inside, the city prison (cell block and outside with a searchlight), downtown at night with a moon, and the Soul Stealer's rooftop. Episode 9 adds the Soul Stealer's dungeon (seen through Fred's blurry vision), the endless purple hallway from Greg's illusion, a haunted version of the living room (moving shadows, a TV that turns on by itself, red emergency lights, a front door with a glass window) and the street outside HQ at night, lit by a giant purple portal. Episode 7 adds the Aetherfall City Bank (street, lobby and storage room), an abandoned street, an abandoned warehouse (inside and out), police cars, a security-camera look and a western title card.
+Aetherfall City streets · Aetherfall City Park · Aetherfall Coffee · Battle Wars HQ (outside, living room on floor 1, Controller Room on floor 3, hidden reactor room below) · Red Team HQ (with a lounge couch and TV) · abandoned subway tunnels, lower machine chamber and platform · the ancient diamond chamber · the Soul Stealer's crystal cavern (red or violet) · title card (blue, red "electric", or orange-and-purple Halloween style) · Flare and Aaron's bedroom · the Halloween store · Newark's house (outside at night, and the party room with stage and dance floor). Halloween episodes also decorate the living room and add pajama and costume outfits. Episode 5 adds Greg's HQ bedroom, a downtown intersection with a city-center plaza, a damaged city park, the UFO, and upgraded blue uniforms with armor. Episode 6 adds the Soul Stealer's lair with the Behemoth's cage, a dark city alley at night, a city view from the living-room window, and a little clay Behemoth figure. Episode 8 adds the street outside Aether Mart (with Battle Wars HQ at the far end), the store inside, the city prison (cell block and outside with a searchlight), downtown at night with a moon, and the Soul Stealer's rooftop. Episode 9 adds the Soul Stealer's dungeon (seen through Fred's blurry vision), the endless purple hallway from Greg's illusion, a haunted version of the living room (moving shadows, a TV that turns on by itself, red emergency lights, a front door with a glass window) and the street outside HQ at night, lit by a giant purple portal. Episode 10 (the finale) adds the elevator down to the power core, the power control room deep below HQ (the glowing core, a blast door, control consoles and a big core meter), the purple takeover of HQ inside and out, downtown with flying cars, a bus and falling pieces of buildings, and a sunrise over the city. Episode 7 adds the Aetherfall City Bank (street, lobby and storage room), an abandoned street, an abandoned warehouse (inside and out), police cars, a security-camera look and a western title card.
 
 ## How it's made
 

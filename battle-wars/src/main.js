@@ -12,6 +12,7 @@ import { buildHorse, buildCat, buildLair, buildAlley } from './e6.js';
 import { buildBank, buildOldStreet, buildWarehouse, buildWarehouseExt, buildBird, buildClayBits } from './e7.js';
 import { buildShopStreet, buildMart, buildPrison, buildPrisonExt, buildDowntownExtras } from './e8.js';
 import { buildDungeon, buildEndlessHall, buildTitan, buildDome, buildCloak } from './e9.js';
+import { buildPowerRoom, buildElevator, buildFinaleCity, buildLasso, buildFlyHat } from './e10.js';
 import { buildFX } from './fx.js';
 import { evalTrack, evalStep, buildGaitTables, gaitAt } from './director.js';
 import { drawOverlay } from './overlay.js';
@@ -56,17 +57,20 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     ...(META?.e7 ? { bank: buildBank(), oldStreet: buildOldStreet(), warehouse: buildWarehouse(), whExt: buildWarehouseExt() } : {}),
     ...(META?.e8 ? { shopSt: buildShopStreet(), mart: buildMart(), prison: buildPrison(), prisonExt: buildPrisonExt() } : {}),
     ...(META?.e9 ? { dungeon: buildDungeon(), hall9: buildEndlessHall() } : {}),
+    ...(META?.e10 ? { power: buildPowerRoom(), lift: buildElevator() } : {}),
     black: { name: 'black', group: new THREE.Group(), bg: new THREE.Color(0x000000), update() {} },
   };
   for (const s of Object.values(SETS)) { s.group.visible = false; scene.add(s.group); }
   const dtExtras = META?.e8 && SETS.downtown ? buildDowntownExtras() : null;
   if (dtExtras) SETS.downtown.group.add(dtExtras.group);
+  const fcity = META?.e10 && SETS.downtown ? buildFinaleCity() : null;
+  if (fcity) SETS.downtown.group.add(fcity.group);
 
   // cast
   // each hero can have outfit variants (pajamas, party costumes); the `${name}.outfit` track picks one per frame
   const heroes = {}, heroSets = {};
   const CLAYS = META?.e7 ? ['clay1', 'clay2', 'clay3', 'clay4', 'clay5', 'clay6', 'clay7', 'clay8'] : [];
-  const HERO_NAMES = ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy', ...(META?.e7 ? ['guard', 'officer', 'officer2'] : []), ...(META?.e8 ? ['guard2', 'ped1', 'ped2', 'ped3'] : []), ...(META?.e9 ? ['soulX'] : []), ...CLAYS];
+  const HERO_NAMES = ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy', ...(META?.e7 ? ['guard', 'officer', 'officer2'] : []), ...(META?.e8 ? ['guard2', 'ped1', 'ped2', 'ped3'] : []), ...(META?.e9 ? ['soulX'] : []), ...(META?.e10 ? ['soulX2', 'soulX3'] : []), ...CLAYS];
   for (const n of HERO_NAMES) {
     const extras = [...(CAST[n].extras ?? []), ...(META?.extras?.[n] ?? [])];
     heroSets[n] = { base: buildHero({ ...CAST[n], ...(costume[n] ?? {}), extras }) };
@@ -83,7 +87,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   if (META?.e8) PROP_KINDS.push('box', 'mop', 'bucket', 'spray', 'paper');
   if (META?.e9) PROP_KINDS.push('burger', 'foodStack');
   for (const n of Object.keys(heroes)) for (const side of ['L', 'R']) for (const k of PROP_KINDS) {
-    if (CLAYS.includes(n) || n.startsWith('ped') || n === 'soulX') continue;
+    if (CLAYS.includes(n) || n.startsWith('ped') || n.startsWith('soulX')) continue;
     const m = buildProp(k); m.visible = false; heroes[n].J.hand[side].add(m); handProps[`${n}.${side}.${k}`] = onHand(n, side, m);
   }
   const water = buildWaterGuy();
@@ -113,7 +117,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   const fadeable = {};
   if (META?.e7) {
     const TEAL = new THREE.Color(0x40e8ff);
-    for (const n of ['cowboy']) {
+    for (const n of ['cowboy', ...(META?.e10 ? ['soulX', 'soulX2', 'soulX3'] : [])]) {
       const list = [];
       heroSets[n].base.root.traverse((o) => {
         if (!o.isMesh) return;
@@ -147,6 +151,9 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   // Episode 9: the blue-eyed titan, Aaron's barrier dome, the Soul Stealer's thrown-off cloak
   const titan = META?.e9 ? buildTitan() : null, dome = META?.e9 ? buildDome() : null, cloak = META?.e9 ? buildCloak() : null;
   for (const o of [titan, dome, cloak]) if (o) { o.root.visible = false; scene.add(o.root); }
+  // Episode 10: Fred's energy lasso and his flying hat
+  const lasso = META?.e10 ? buildLasso() : null, flyHat = META?.e10 ? buildFlyHat() : null;
+  for (const o of [lasso, flyHat]) if (o) scene.add(o.root);
   const gadget = {};
   if (META?.e6) {
     const holoTex = canvasTex(256, 160, (c, w, h) => {
@@ -211,10 +218,11 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     slices[n] = onHand(n, 'R', attachProp(heroes[n], 'R', m, [0, -0.12, 0.08], [0.4, 0, 0]));
   }
 
-  const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy', 'water', 'dog', 'birddog', 'tiger', 'horse', 'cat', ...(META?.e7 ? ['guard', 'officer', 'officer2'] : []), ...(META?.e8 ? ['guard2', 'ped1', 'ped2', 'ped3'] : []), ...(META?.e9 ? ['soulX', 'titan'] : []), ...CLAYS]);
+  const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy', 'water', 'dog', 'birddog', 'tiger', 'horse', 'cat', ...(META?.e7 ? ['guard', 'officer', 'officer2'] : []), ...(META?.e8 ? ['guard2', 'ped1', 'ped2', 'ped3'] : []), ...(META?.e9 ? ['soulX', 'titan'] : []), ...(META?.e10 ? ['soulX2', 'soulX3'] : []), ...CLAYS]);
   const val = (name, d = 0) => { const v = evalTrack(T.tracks[name], curT); return v === undefined ? d : v; };
   let curT = 0;
-  const X = { T, scene, val: (n, d = 0) => val(n, d), hand: (n, side = 'R') => { const v = new THREE.Vector3(); heroes[n].J.hand[side].getWorldPosition(v); return v; }, rig: () => rig, crownPos: () => crown ? crown.root.position.clone() : new THREE.Vector3() };
+  const X = { T, scene, val: (n, d = 0) => val(n, d), hand: (n, side = 'R') => { const v = new THREE.Vector3(); heroes[n].J.hand[side].getWorldPosition(v); return v; }, rig: () => rig, crownPos: () => crown ? crown.root.position.clone() : new THREE.Vector3(),
+    titanFist: (side = 'R') => { const v = new THREE.Vector3(); if (titan) { titan.root.updateMatrixWorld(true); titan.fists[side].getWorldPosition(v); } return v; } };
 
   function talkAmount(who, t) {
     for (const c of T.captions) {
@@ -231,7 +239,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   // ---------- the "life" layer (every episode): listeners look at whoever is talking, breathing,
   // small head drift, eye darts, two-handed talk gestures and snappier gesture blends.
   const UPPER = new Set(['aLF', 'aLO', 'aLT', 'eL', 'aRF', 'aRO', 'aRT', 'eR', 'hdN', 'hdY', 'hdT', 'spF', 'spT', 'spS']);
-  const NO_LIFE = new Set(['lieBack', 'lieSide', 'lieSleep', 'sitSleep', 'carried', 'knockBack', 'tumble', 'fly', 'hover', 'dive', 'dodge', 'freeze', 'freezeStand', 'freezeStep', 'climb', 'hang', 'climbHead', 'mount', 'melt', 'pinned', 'golem', 'golemReach', 'golemSwipe', 'heroLand', 'flail', 'dragged', 'struggle', 'stretchArms', 'jumpScare', 'stumble', 'frozenStare', 'lieFront', 'standUp', 'hoverPull', 'grabHem', 'pullOff']);
+  const NO_LIFE = new Set(['lieBack', 'lieSide', 'lieSleep', 'sitSleep', 'carried', 'knockBack', 'tumble', 'fly', 'hover', 'dive', 'dodge', 'freeze', 'freezeStand', 'freezeStep', 'climb', 'hang', 'climbHead', 'mount', 'melt', 'pinned', 'golem', 'golemReach', 'golemSwipe', 'heroLand', 'flail', 'dragged', 'struggle', 'stretchArms', 'jumpScare', 'stumble', 'frozenStare', 'lieFront', 'standUp', 'hoverPull', 'grabHem', 'pullOff', 'hurtKneel', 'hug']);
   const lines = T.captions.filter((c) => c.who && !c.sound).sort((a, b) => a.t0 - b.t0);
   const vAt = (n, tt, d = 0) => { const v = evalTrack(T.tracks[n], tt); return v === undefined ? d : v; };
   function speakerHead(who, tt) {
@@ -390,7 +398,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     h.applyFace(e, talk, blink, { x: clamp(lookX, -1, 1), y: clamp(lookY, -1, 1), mw });
     const fl = val(`${name}.flicker`, 0);
     h.applyGlow({ hair: val(`${name}.hairGlow`), suit: val(`${name}.suitGlow`), eyes: val(`${name}.eyeGlow`), glove: val(`${name}.gloveGlow`), red: val(`${name}.redEyes`), white: val(`${name}.whiteEyes`), dim: val(`${name}.dim`), flicker: fl > 0 ? (Math.sin(t * 37) * Math.sin(t * 13.7) > 0 ? 1 : 1 - fl) : 0 });
-    h.applyExtras({ mask: val(`${name}.mask`), milk: val(`${name}.milk`), slime: val(`${name}.slime`), scuff: val(`${name}.scuff`), reveal: val(`${name}.reveal`), hatTilt: val(`${name}.hatTilt`), bucket: val(`${name}.bucket`), energy: val(`${name}.energy`), t });
+    h.applyExtras({ mask: val(`${name}.mask`), milk: val(`${name}.milk`), slime: val(`${name}.slime`), scuff: val(`${name}.scuff`), reveal: val(`${name}.reveal`), hatTilt: val(`${name}.hatTilt`), bucket: val(`${name}.bucket`), energy: val(`${name}.energy`), hatOff: val(`${name}.hatOff`), t });
   }
 
   // Water Guy "actions" produce arm targets etc.
@@ -445,7 +453,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
       return tmpV.set(val('water.x'), val('water.y') + 1.95 * s * val('water.stretch', 1), val('water.z')).clone();
     }
     if (name === 'dog' || name === 'birddog') return new THREE.Vector3(val(`${name}.x`), val(`${name}.y`, 0) + 0.55, val(`${name}.z`));
-    if (name === 'shadow') return new THREE.Vector3(val('shadow.x'), 2.4, val('shadow.z'));
+    if (name === 'shadow') return META?.e10 ? new THREE.Vector3(val('shadow.x'), val('shadow.y', 0) + 7.4 * val('shadow.s', 1), val('shadow.z')) : new THREE.Vector3(val('shadow.x'), 2.4, val('shadow.z'));
     if (name === 'beh') { const r = rig ?? behemothRig(behParams((n, tt, d) => { const v = evalTrack(T.tracks[n], tt); return v === undefined ? d : v; }, curT)); return new THREE.Vector3(r.head[0], r.head[1], r.head[2]); }
     if (name === 'tiger') { tiger.headG.getWorldPosition(tmpV); return tmpV.clone(); }
     if (name === 'ufo') return new THREE.Vector3(val('ufo.x'), val('ufo.y'), val('ufo.z'));
@@ -501,7 +509,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   }
 
   // soft glow around bright lights and effects: blur a thresholded, downscaled copy and add it back
-  const BLOOM = { title: 0.35, lair: 0.42, alley: 0.42, bank: 0.3, oldStreet: 0.42, warehouse: 0.36, whExt: 0.42, cavern: 0.4, tunnel: 0.38, reactor: 0.4, machines: 0.35, platform: 0.35, chamber: 0.4, newarkExt: 0.4, party: 0.38, dungeon: 0.4, hall9: 0.42, black: 0 };
+  const BLOOM = { title: 0.35, lair: 0.42, alley: 0.42, bank: 0.3, oldStreet: 0.42, warehouse: 0.36, whExt: 0.42, cavern: 0.4, tunnel: 0.38, reactor: 0.4, machines: 0.35, platform: 0.35, chamber: 0.4, newarkExt: 0.4, party: 0.38, dungeon: 0.4, hall9: 0.42, power: 0.38, lift: 0.16, black: 0 };
   const gcan = document.createElement('canvas'); gcan.width = Math.round(canvasW / 4); gcan.height = Math.round(canvasH / 4);
   const gctx = gcan.getContext('2d');
   let activeSet = null;
@@ -521,6 +529,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     }
     set.update(t, X);
     if (dtExtras && setEntry.set === 'downtown') dtExtras.update(t, X);
+    if (fcity && setEntry.set === 'downtown') fcity.update(t, X);
     for (const n of Object.keys(heroes)) updateHero(n, t);
     updateWater(t);
     soul.root.visible = val('soul.vis', 0) > 0.5;
@@ -561,11 +570,12 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
       ufo.update({ t, vis: val('ufo.vis', 0) > 0.5, x: val('ufo.x'), y: val('ufo.y', 70), z: val('ufo.z'), size: val('ufo.size', 60), hatch: val('ufo.hatch', 0), beam: val('ufo.beam', 0) });
       tiger.root.visible = val('tiger.vis', 0) > 0.5;
       if (tiger.root.visible) {
-        tiger.root.position.set(val('tiger.x'), val('tiger.y'), val('tiger.z'));
+        const tsc = val('tiger.s', 1);
+        tiger.root.position.set(val('tiger.x'), val('tiger.y'), val('tiger.z')); tiger.root.scale.setScalar(tsc);
         tiger.root.rotation.set(0, val('tiger.ry'), 0);
         const st = evalStep(T.tracks['tiger.act'], t);
         const g = gaitAt(gait.tiger, t);
-        tiger.update({ t, act: st.v, a: st.since, speed: g.speed, phase: g.phase });
+        tiger.update({ t, act: st.v, a: st.since, speed: g.speed / tsc, phase: g.phase / tsc });
       }
       for (const c of coils) c.visible = false;
       const wk = val('greg.wrap', 0);
@@ -645,8 +655,9 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
       titan.root.visible = val('titan.vis', 0) > 0.5;
       if (titan.root.visible) {
         const g = gaitAt(gait.titan, t), s = val('titan.s', 1);
-        titan.root.position.set(val('titan.x'), val('titan.y', 0), val('titan.z')); titan.root.rotation.set(0, val('titan.ry'), 0); titan.root.scale.setScalar(s);
-        titan.update({ t, jaw: val('titan.jaw', 0), look: val('titan.look', 0), nod: val('titan.nod', 0), eyes: val('titan.eyes', 1), roar: val('titan.roar', 0), walk: clamp(g.speed / (0.8 * s)), phase: g.phase * 0.2 / s });
+        titan.root.position.set(val('titan.x'), val('titan.y', 0), val('titan.z')); titan.root.rotation.order = 'YXZ'; titan.root.rotation.set(val('titan.rx', 0), val('titan.ry'), val('titan.rz', 0)); titan.root.scale.setScalar(s);
+        titan.update({ t, jaw: val('titan.jaw', 0), look: val('titan.look', 0), nod: val('titan.nod', 0), eyes: val('titan.eyes', 1), roar: val('titan.roar', 0), walk: clamp(g.speed / (0.8 * s)), phase: g.phase * 0.2 / s,
+          upL: val('titan.upL', 0), upR: val('titan.upR', 0), reachL: val('titan.reachL', 0), reachR: val('titan.reachR', 0), lean: val('titan.lean', 0), kneel: val('titan.kneel', 0), crumble: val('titan.crumble', 0) });
       }
       dome.update({ t, on: val('dome.on', 0), x: val('dome.x', 0), z: val('dome.z', 0), r: val('dome.r', 3), hit: val('dome.hit', 0), flicker: val('dome.flicker', 0) > 0.5 });
       cloak.update({ t, vis: val('cloak.vis', 0) > 0.5, x: val('cloak.x'), y: val('cloak.y', 0), z: val('cloak.z'), ry: val('cloak.ry', 0), rx: val('cloak.rx', 0), rz: val('cloak.rz', 0), spread: val('cloak.spread', 0), flutter: val('cloak.flutter', 0), alpha: val('cloak.alpha', 1) });
@@ -659,7 +670,21 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
       b.update({ t, act: st.v ?? 'perch', a: st.since, seed: n.length * 1.7 + (n.charCodeAt(n.length - 1) % 7) });
     }
     bigShadow.root.visible = val('shadow.vis', 0) > 0.5;
-    if (bigShadow.root.visible) { bigShadow.root.position.set(val('shadow.x'), val('shadow.y', 0), val('shadow.z')); bigShadow.root.scale.setScalar(val('shadow.s', 1)); bigShadow.update(t, val('shadow.eyes', 0)); bigShadow.root.rotation.y += val('shadow.ry', 0); }
+    if (bigShadow.root.visible) { bigShadow.root.position.set(val('shadow.x'), val('shadow.y', 0), val('shadow.z')); bigShadow.update(t, val('shadow.eyes', 0), { lean: val('shadow.lean', 0), swipeL: val('shadow.swipeL', 0), swipeR: val('shadow.swipeR', 0), dissolve: val('shadow.dissolve', 0) }); bigShadow.root.scale.multiplyScalar(val('shadow.s', 1)); bigShadow.root.rotation.y += val('shadow.ry', 0); }
+    if (lasso) {
+      const on = val('lasso.on', 0);
+      let hand = null, tgt = null;
+      if (on > 0.01 && heroes.cowboy.root.visible) {
+        heroes.cowboy.root.updateMatrixWorld(true); hand = X.hand('cowboy', 'R');
+        const tn = evalStep(T.tracks['lasso.target'], t).v ?? 'none';
+        if (tn === 'titanR' || tn === 'titanL') tgt = X.titanFist(tn === 'titanR' ? 'R' : 'L');
+        else if (tn === 'beh' && rig) tgt = new THREE.Vector3(rig.head[0], rig.head[1], rig.head[2]);
+        else if (tn === 'shadow') tgt = new THREE.Vector3(val('shadow.x'), val('shadow.y', 0) + 5.5 * val('shadow.s', 1), val('shadow.z'));
+        else if (heroes[tn]) tgt = new THREE.Vector3(val(`${tn}.x`), val(`${tn}.y`) + 0.9, val(`${tn}.z`));
+      }
+      lasso.update({ t, on, hand, x: tgt ? tgt.x : val('lasso.x'), y: tgt ? tgt.y : val('lasso.y', 1), z: tgt ? tgt.z : val('lasso.z'), r: val('lasso.r', 0.5), flat: val('lasso.flat', 0), twirl: val('lasso.twirl', 0), flicker: val('lasso.flicker', 0) > 0.5, tiltX: val('lasso.tiltX', 0) });
+      flyHat.update({ t, vis: val('hat.vis', 0) > 0.5, x: val('hat.x'), y: val('hat.y', 1.5), z: val('hat.z'), glow: val('hat.glow', 1) });
+    }
     const fk = val('leon.field', 0);
     field.visible = fk > 0.01 && heroes.leon.root.visible;
     if (field.visible) {

@@ -456,7 +456,7 @@ export function buildDowntownExtras() {
       }
       blink.material.emissiveIntensity = Math.sin(t * 3) > 0.6 ? 2.5 : 0.2;
       roofGlow.intensity = 20 * v('roof.glow', 0) * (0.8 + 0.2 * Math.sin(t * 4));
-      moon.visible = v('sky.mode', 0) > 2.5;
+      moon.visible = v('sky.mode', 0) > 2.5 && v('sky.mode', 0) < 3.5;
     },
   };
 }

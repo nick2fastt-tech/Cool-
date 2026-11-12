@@ -202,6 +202,21 @@ export const ACTIONS = {
   floatSit: { sit: true, gest: true, f: (a, t) => ({ ...sitLegs, spF: 0.05, aLO: 0.5, aRO: 0.5, aLF: 0.35, aRF: 0.35, eL: 0.4, eR: 0.4, hdN: -0.05 + 0.03 * S(t * 2) }) },
   catchSide: { f: (a) => { const k = smoothstep(0, 0.15, a); return { aRF: 1.4 * k, aRO: 0.7 * k, eR: 0.5, aLO: 0.12, eL: 0.2, hdY: 0.2 }; } },
   pointMap: { gest: false, f: (a, t) => { const k = smoothstep(0, 0.4, a); return { lean: 0.05, spF: 0.3, aRF: 1.0 + 0.1 * k, aRO: 0.0, eR: 0.15, aLF: 0.85, aLO: 0.22, eL: 0.2, hdN: 0.2, lLO: 0.1, lRO: 0.1 }; } },
+  // Episode 10
+  hug: { gest: false, f: (a, t) => { const k = smoothstep(0, 0.5, a); return { aLF: 1.3 * k, aRF: 1.3 * k, aLO: 0.08, aRO: 0.08, aLT: -0.75 * k, aRT: -0.75 * k, eL: 1.55 * k, eR: 1.55 * k, spF: 0.14 * k, hdN: 0.12 * k, hdY: 0.4 * k, hdT: 0.1 * k }; } },
+  soulBlast: { gest: false, f: (a, t) => { const k = smoothstep(0, 0.25, a); return { aLF: 1.5 * k, aRF: 1.5 * k, aLO: 0.15, aRO: 0.15, eL: 0.15, eR: 0.15, lean: 0.12 * k, lLF: 0.45, kL: 0.35, lRF: -0.35, kR: 0.15, spF: 0.1 * k, hdN: 0.05, y: -0.04 + 0.006 * S(t * 30) * k }; } },
+  soulSweep: { gest: false, f: (a, t) => { const k = smoothstep(0, 0.55, a); return { aRF: 1.35, aRO: 0.1, aRT: -1.0 + 2.2 * k, eR: 0.2, aLF: 0.4, aLO: 0.3, eL: 0.6, spT: 0.5 - 1.0 * k, lLF: 0.35, kL: 0.3, lRF: -0.3, hdY: 0.3 - 0.6 * k }; } },
+  soulBlock: { gest: false, f: (a, t) => { const k = smoothstep(0, 0.2, a); return { aLF: 1.35 * k, aRF: 1.35 * k, aLT: 1.0 * k, aRT: 1.0 * k, eL: 1.7 * k, eR: 1.7 * k, aLO: 0.1, aRO: 0.1, spF: 0.2 * k, kL: 0.3 * k, kR: 0.3 * k, lLF: 0.25, lRF: -0.25, y: -0.06 * k, hdN: 0.2 * k }; } },
+  soulRaiseBoth: { gest: false, f: (a, t) => { const k = smoothstep(0, 0.8, a); return { aLF: 2.2 * k, aRF: 2.2 * k, aLO: 0.5 * k, aRO: 0.5 * k, eL: 0.2, eR: 0.2, spF: -0.15 * k, hdN: -0.3 * k, y: 0.01 * S(t * 3) }; } },
+  hurtKneel: { f: (a, t) => { const k = smoothstep(0, 0.4, a); return { y: -0.42 * k, lLF: 1.4 * k, kL: 1.6 * k, lRF: -0.15 * k, kR: 2.1 * k, fR: 0.6 * k, spF: 0.55 * k, aLF: 0.9 * k, eL: 0.4, aRF: 0.3, aRO: 0.25, eR: 0.5, hdN: 0.35 * k + 0.03 * S(t * 4) }; } },
+  lassoThrow: { gest: false, f: (a, t) => { const k = smoothstep(0, 0.3, a); return { aRF: 1.5 + 0.9 * (1 - k), aRO: 0.15, eR: 0.3 * k + 1.0 * (1 - k), aRT: -0.2, aLF: 0.45, aLO: 0.15, eL: 0.6, lean: 0.12 * k, lLF: 0.4, kL: 0.3, lRF: -0.3, spT: -0.25 * k }; } },
+  lassoTwirl: { gest: false, f: (a, t) => ({ aRF: 2.5 + 0.12 * S(t * 9), aRO: 0.35 + 0.1 * Math.cos(t * 9), eR: 0.5, aLO: 0.15, aLF: 0.3, eL: 0.5, spF: -0.04, hdN: -0.15 }) },
+  lassoPull: { gest: false, f: (a, t) => ({ aRF: 1.15, aLF: 1.1, aRO: 0.05, aLO: 0.05, eR: 0.5, eL: 0.6, aLT: -0.3, aRT: -0.3, lean: -0.32, lLF: 0.55, kL: 0.55, lRF: -0.45, kR: 0.2, spF: -0.12, y: -0.08 + 0.008 * S(t * 25) }) },
+  hatThrow: { gest: false, f: (a, t) => { const k = smoothstep(0.1, 0.35, a); return { aRF: 1.4 * k + 0.4 * (1 - k), aRO: 0.6 - 0.5 * k, aRT: 0.9 - 1.6 * k, eR: 1.6 - 1.3 * k, spT: 0.4 - 0.8 * k, aLO: 0.2, eL: 0.4, lLF: 0.3, kL: 0.25, lRF: -0.25 }; } },
+  catchHat: { gest: false, f: (a) => { const k = smoothstep(0, 0.25, a); return { aRF: 2.2 * k, aRO: 0.2, eR: 1.6 * k, aLO: 0.12, eL: 0.25, hdN: -0.15 * k }; } },
+  pushUp: { f: (a, t) => ({ aLF: 2.9, aRF: 2.9, aLO: 0.35, aRO: 0.35, eL: 0.25, eR: 0.25, lean: -0.1, spF: -0.2, lLF: 0.45, kL: 0.6, lRF: -0.3, kR: 0.35, y: -0.16 + 0.015 * S(t * 31), hdN: -0.35 }) },
+  waveBig: { gest: false, f: (a, t) => ({ aRF: 2.6, aRO: 0.35 + 0.35 * S(t * 7), eR: 0.4 + 0.2 * S(t * 7), aLO: 0.12, eL: 0.2, hdN: -0.05 }) },
+  waveBoth: { gest: false, f: (a, t) => ({ aRF: 2.6, aLF: 2.6, aRO: 0.35 + 0.35 * S(t * 7), aLO: 0.35 + 0.35 * S(t * 7 + 1), eR: 0.4, eL: 0.4, hdN: -0.1 }) },
   // Episode 9
   hoverPull: { f: (a, t) => ({ aLF: 0.75, aRF: 0.75, aLO: 0.35, aRO: 0.35, eL: 0.25, eR: 0.25, lLF: 0.25 + 0.1 * S(t * 3), lRF: -0.05 - 0.1 * S(t * 3), kL: 0.45, kR: 0.55, fL: 0.3, fR: 0.3, spF: 0.3, hdN: 0.4, y: 0.03 * S(t * 2.4) }) },
   grabHem: { gest: false, f: (a, t) => { const k = smoothstep(0, 0.5, a); return { aLF: 0.12, aRF: 0.12, aLO: 0.32 * k + 0.1, aRO: 0.32 * k + 0.1, eL: 0.35 * k, eR: 0.35 * k, aLT: -0.4 * k, aRT: -0.4 * k, spF: 0.18 * k, hdN: 0.25 * k, kL: 0.12 * k, kR: 0.12 * k, y: -0.02 * k }; } },
@@ -530,7 +545,7 @@ export function buildHero(cfg) {
     name: cfg.name, root, J, face, cfg, seed: cfg.seed ?? 1,
     extras,
     // costume pieces that move: the monster mask (0 off, 1 on the face, 2 pushed up)
-    applyExtras(x) { if (extras.mask) { const m = x.mask ?? 0; extras.mask.visible = m > 0.5; const up = m > 1.5 ? 1 : 0; extras.maskPivot.rotation.x = -2.4 * up; extras.maskPivot.position.set(0, extras.maskHc + 0.05 * up, -0.03 * up); } if (extras.milk) extras.milk.visible = (x.milk ?? 0) > 0.5; if (extras.slimeParts) for (const m of extras.slimeParts) m.visible = (x.slime ?? 0) > 0.5; if (extras.scuffs) for (const m of extras.scuffs) m.visible = (x.scuff ?? 0) > 0.5; if (extras.faceShade) { const rv = x.reveal ?? 0; extras.faceShade.visible = rv < 0.98; extras.faceShade.material.opacity = 1 - rv; extras.bandana.position.y = extras.bandanaY - 0.13 * rv; extras.bandana.position.z = 0.2 * 0.42 + 0.02 * rv; extras.bandana.scale.set(1 - 0.08 * rv, 1 - 0.45 * rv, 1 + 0.1 * rv); } if (extras.hat) extras.hat.rotation.set(0.12 - 0.12 * (x.reveal ?? 0), 0, x.hatTilt ?? 0); if (extras.bucket) extras.bucket.visible = (x.bucket ?? 0) > 0.5; if (extras.veins) { const en = x.energy ?? 0, pul = 0.75 + 0.25 * Math.sin((x.t ?? 0) * 6); for (const v of extras.veins) { const k = clamp((en - v.th) * 6); v.g.visible = k > 0.01; v.g.scale.set(1, Math.max(0.01, k), 1); } for (const gl of extras.eyeGlows) { gl.material.opacity = (0.45 + 0.55 * en) * pul; gl.scale.setScalar(1 + en * 0.8); } } },
+    applyExtras(x) { if (extras.mask) { const m = x.mask ?? 0; extras.mask.visible = m > 0.5; const up = m > 1.5 ? 1 : 0; extras.maskPivot.rotation.x = -2.4 * up; extras.maskPivot.position.set(0, extras.maskHc + 0.05 * up, -0.03 * up); } if (extras.milk) extras.milk.visible = (x.milk ?? 0) > 0.5; if (extras.slimeParts) for (const m of extras.slimeParts) m.visible = (x.slime ?? 0) > 0.5; if (extras.scuffs) for (const m of extras.scuffs) m.visible = (x.scuff ?? 0) > 0.5; if (extras.faceShade) { const rv = x.reveal ?? 0; extras.faceShade.visible = rv < 0.98; extras.faceShade.material.opacity = 1 - rv; extras.bandana.position.y = extras.bandanaY - 0.13 * rv; extras.bandana.position.z = 0.2 * 0.42 + 0.02 * rv; extras.bandana.scale.set(1 - 0.08 * rv, 1 - 0.45 * rv, 1 + 0.1 * rv); } if (extras.hat) { extras.hat.rotation.set(0.12 - 0.12 * (x.reveal ?? 0), 0, x.hatTilt ?? 0); extras.hat.visible = (x.hatOff ?? 0) < 0.5; } if (extras.bucket) extras.bucket.visible = (x.bucket ?? 0) > 0.5; if (extras.veins) { const en = x.energy ?? 0, pul = 0.75 + 0.25 * Math.sin((x.t ?? 0) * 6); for (const v of extras.veins) { const k = clamp((en - v.th) * 6); v.g.visible = k > 0.01; v.g.scale.set(1, Math.max(0.01, k), 1); } for (const gl of extras.eyeGlows) { gl.material.opacity = (0.45 + 0.55 * en) * pul; gl.scale.setScalar(1 + en * 0.8); } } },
     props: {},
     applyPose(p) {
       J.hips.position.y = 0.95 + p.y;
@@ -1438,7 +1453,32 @@ export function buildShadow() {
   for (const sd of [1, -1]) mk(new THREE.ConeGeometry(0.5, 2.4, 8), m, root, [sd * 1.1, 8.6, 0], [0, 0, sd * -0.5], null, false);
   const eyes = [];
   for (const sd of [1, -1]) eyes.push(mk(new THREE.SphereGeometry(0.11, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff8a20, transparent: true, opacity: 0 }), root, [sd * 0.42, 7.7, 1.15], [0, 0, 0], [1.6, 0.6, 0.5], false));
-  return { root, update(t, eyesK) { eyes.forEach((e) => { e.material.opacity = eyesK; }); root.rotation.y = 0.05 * Math.sin(t * 0.4); } };
+  // Episode 10: long shadowy arms with claws, a lean, and dissolving into smoke
+  const arms = [];
+  for (const sd of [1, -1]) {
+    const sh = grp(root, sd * 1.6, 6.4, 0.2); sh.rotation.order = 'ZXY';
+    mk(new THREE.CylinderGeometry(0.45, 0.2, 5.2, 10), m, sh, [0, -2.6, 0], [0, 0, 0], null, false);
+    for (let i = 0; i < 3; i++) mk(new THREE.ConeGeometry(0.12, 0.9, 6), m, sh, [(i - 1) * 0.22, -5.5, 0.15], [P + 0.2, 0, (i - 1) * 0.3], null, false);
+    arms.push({ sh, sd });
+  }
+  const body0 = root.children.slice();
+  return {
+    root,
+    // o: { lean, swipeL, swipeR (0..1), dissolve (0..1) }
+    update(t, eyesK, o = {}) {
+      const dz = o.dissolve ?? 0;
+      eyes.forEach((e) => { e.material.opacity = eyesK * (1 - dz); });
+      root.rotation.y = 0.05 * Math.sin(t * 0.4);
+      root.rotation.x = (o.lean ?? 0) * 0.35;
+      for (const A of arms) {
+        const sw = A.sd > 0 ? (o.swipeL ?? 0) : (o.swipeR ?? 0);
+        A.sh.rotation.set(-0.15 - 1.9 * sw + 0.06 * Math.sin(t * 1.3 + A.sd), 0.6 * sw * A.sd, A.sd * (0.25 + 0.5 * Math.sin(sw * P)) + 0.05 * Math.sin(t * 0.9));
+      }
+      m.opacity = 0.92 * (1 - dz);
+      m.depthWrite = dz < 0.5;
+      root.scale.set(1 + dz * 0.6, 1 - dz * 0.5, 1 + dz * 0.6);
+    },
+  };
 }
 
 // Character colours / builds (matched to the reference sheet)
@@ -1465,6 +1505,8 @@ export const CAST = {
   ped1: { name: 'ped1', seed: 41, scale: 0.9, hair: 'wavy', hairColor: 0x8a4a1a, browColor: 0x5a2a10, skin: 0xf0c8a0, skinDark: 0xe0b48a, eyeColor: 0x2a5a3a, casual: true, emblem: false, shirt: 0xd04a6a, pants: 0x2a3a5a, boot: 0xf2f2f2, belt: 0x1a1a1a, bareHands: true, sleeves: 'short' },
   ped2: { name: 'ped2', seed: 42, scale: 0.95, hair: 'spiky', hairColor: 0x1a1410, browColor: 0x120d0a, skin: 0x8a5a3a, skinDark: 0x7a4a2e, eyeColor: 0x1a100a, casual: true, emblem: false, shirt: 0xf2c84a, pants: 0x3a3a40, boot: 0x2a2a2a, belt: 0x1a1a1a, bareHands: true },
   ped3: { name: 'ped3', seed: 43, scale: 0.88, hair: 'tall', hairColor: 0x5a3a20, browColor: 0x3a2410, skin: 0xd9a07a, skinDark: 0xc98e68, eyeColor: 0x3a2412, casual: true, emblem: false, shirt: 0x4aa86a, pants: 0x5a4a3a, boot: 0x3a2a1a, belt: 0x1a1a1a, bareHands: true, sleeves: 'short' },
+  soulX2: { name: 'soulX2', seed: 62, scale: 1.12, face: 'soul', skin: 0xeceef6, skinDark: 0xd8dbe6, eyeColor: 0xe8c8ff, emblem: false, suit: 0x161020, suitDark: 0x0a0710, accent: 0xb050ff, accentGlow: 0x7020d0, pad: 0x2a1a3e, glove: 0x0e0a14, boot: 0x1a1226, belt: 0x0a0710, extras: ['soulTrue'] },
+  soulX3: { name: 'soulX3', seed: 63, scale: 1.12, face: 'soul', skin: 0xeceef6, skinDark: 0xd8dbe6, eyeColor: 0xe8c8ff, emblem: false, suit: 0x161020, suitDark: 0x0a0710, accent: 0xb050ff, accentGlow: 0x7020d0, pad: 0x2a1a3e, glove: 0x0e0a14, boot: 0x1a1226, belt: 0x0a0710, extras: ['soulTrue'] },
   soulX: { name: 'soulX', seed: 61, scale: 1.12, face: 'soul', skin: 0xeceef6, skinDark: 0xd8dbe6, eyeColor: 0xe8c8ff, emblem: false, suit: 0x161020, suitDark: 0x0a0710, accent: 0xb050ff, accentGlow: 0x7020d0, pad: 0x2a1a3e, glove: 0x0e0a14, boot: 0x1a1226, belt: 0x0a0710, extras: ['soulTrue'] },
   barista: { name: 'barista', seed: 4, hair: 'wavy', hairColor: 0x2b1d14, skin: 0xc98d68, skinDark: 0xb87d5a, eyeColor: 0x2d1a10, casual: true, emblem: false, shirt: 0xf4f1ea, pants: 0x4a3a2c, apron: 0x2f7d4f, boot: 0x2a2420, bareHands: true, sleeves: 'short' },
 };

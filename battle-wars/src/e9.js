@@ -212,37 +212,43 @@ export function buildTitan() {
     mk(new RoundedBoxGeometry(2.0, 0.9, 2.8, 2, 0.35), plateM, an, [0, -0.15, 0.5]);
     legs.push({ hp, kn, an, sd });
   }
+  const stoneC = stone.color.clone(), plateC = plateM.color.clone(), GREY = new THREE.Color(0x6a6e78);
   return {
-    root, head,
-    // st: { t, jaw, look, nod, eyes, walk (0..1 stride), phase, roar (0..1), breathe }
+    root, head, fists: { L: arms[0].fist, R: arms[1].fist },
+    // st: { t, jaw, look, nod, eyes, walk (0..1 stride), phase, roar (0..1), upL/upR (arm overhead), reachL/reachR (arm forward),
+    //       lean (bend forward), kneel, crumble (turning to stone and falling apart) }
     update(st) {
       const t = st.t, br = Math.sin(t * 1.7), walk = st.walk ?? 0, ph = st.phase ?? 0, roar = st.roar ?? 0;
-      hips.position.y = 5.6 - 0.25 * Math.abs(Math.sin(ph)) * walk;
-      hips.rotation.set(0, 0.06 * Math.sin(ph) * walk, 0.04 * Math.sin(ph) * walk);
-      chest.rotation.set(0.12 + 0.03 * br - 0.28 * roar, 0, 0);
+      const kn = st.kneel ?? 0, cr = st.crumble ?? 0, lean = st.lean ?? 0;
+      hips.position.y = 5.6 - 0.25 * Math.abs(Math.sin(ph)) * walk - 2.3 * kn - 3.2 * cr;
+      hips.rotation.set(0.25 * kn, 0.06 * Math.sin(ph) * walk, 0.04 * Math.sin(ph) * walk + 0.12 * cr);
+      chest.rotation.set(0.12 + 0.03 * br * (1 - cr) - 0.28 * roar + 0.6 * lean + 0.7 * cr, 0, 0.1 * cr);
       chest.scale.set(1 + 0.012 * br, 1 + 0.02 * br, 1 + 0.012 * br);
       neck.rotation.set((st.nod ?? 0) - 0.35 * roar, st.look ?? 0, 0);
       jaw.rotation.x = 0.55 * clamp((st.jaw ?? 0) + roar * (0.8 + 0.2 * Math.sin(t * 30)));
       mouthGlow.material.opacity = 0.8 * clamp((st.jaw ?? 0) + roar);
       for (const A of arms) {
         const sw = Math.sin(ph + (A.sd > 0 ? P : 0)) * 0.3 * walk;
-        A.sh.rotation.set(-0.25 + sw - 0.4 * roar + 0.03 * br, 0, A.sd * (0.12 + 0.55 * roar));
-        A.el.rotation.x = -0.35 - 0.5 * roar;
+        const up = A.sd > 0 ? (st.upL ?? 0) : (st.upR ?? 0), reach = A.sd > 0 ? (st.reachL ?? 0) : (st.reachR ?? 0);
+        A.sh.rotation.set(-0.25 + sw - 0.4 * roar + 0.03 * br - 2.55 * up - 1.25 * reach + 0.35 * cr, 0, A.sd * (0.12 + 0.55 * roar + 0.25 * up + 0.2 * cr));
+        A.el.rotation.x = -0.35 - 0.5 * roar - 0.25 * up + 0.25 * reach;
         A.fist.rotation.x = 0.2 * roar;
       }
       for (const Lg of legs) {
         const s = Math.sin(ph + (Lg.sd > 0 ? 0 : P));
-        Lg.hp.rotation.x = -s * 0.35 * walk;
-        Lg.kn.rotation.x = Math.max(0, -Math.cos(ph + (Lg.sd > 0 ? 0 : P))) * 0.5 * walk;
-        Lg.an.rotation.x = 0;
+        Lg.hp.rotation.x = -s * 0.35 * walk - 1.1 * kn - 1.2 * cr;
+        Lg.kn.rotation.x = Math.max(0, -Math.cos(ph + (Lg.sd > 0 ? 0 : P))) * 0.5 * walk + 1.9 * kn + 2.0 * cr;
+        Lg.an.rotation.x = -0.8 * (kn + cr) * 0.5;
       }
-      const ey = st.eyes ?? 1;
+      stone.color.copy(stoneC).lerp(GREY, cr); plateM.color.copy(plateC).lerp(GREY, cr);
+      crackM.color.setHex(0x3aa8ff).multiplyScalar(1 - cr);
+      const ey = (st.eyes ?? 1) * (1 - cr);
       for (const e of eyes) { e.gl.material.opacity = Math.min(1, ey) * (0.75 + 0.25 * Math.sin(t * 5 + e.s * 40)); e.gl.scale.setScalar(0.7 + 0.5 * ey); }
       eyeM.color.setHex(0x7ad8ff).lerp(new THREE.Color(0xeaffff), Math.min(1, ey * 0.7));
       faceL.intensity = 30 * ey;
-      crystal.emissiveIntensity = 1.2 + 0.5 * Math.sin(t * 2.2) + 0.8 * roar;
+      crystal.emissiveIntensity = (1.2 + 0.5 * Math.sin(t * 2.2) + 0.8 * roar) * (1 - 0.95 * cr);
       core.rotation.set(t * 0.6, t * 0.8, 0);
-      coreGlow.material.opacity = 0.45 + 0.2 * Math.sin(t * 2.2) + 0.3 * roar;
+      coreGlow.material.opacity = (0.45 + 0.2 * Math.sin(t * 2.2) + 0.3 * roar) * (1 - cr);
     },
   };
 }
