@@ -550,7 +550,7 @@ class FieldEnvironment {
   buildGrass(q, R) {
     const count = q === 'low' ? 16000 : q === 'ultra' ? 76000 : 40000;
     this.grassR = R;
-    const segs = 5, verts = [], uvs = [], idx = [];
+    const segs = GFX.mobile ? 3 : 5, verts = [], uvs = [], idx = [];   // phones: three segments a blade (the bend still reads; 44% fewer triangles)
     for (let i = 0; i <= segs; i++) {
       const t = i / segs, w = 0.03 * (1 - t * 0.85);
       if (i < segs) { verts.push(-w, t, 0, w, t, 0); uvs.push(0, t, 1, t); }

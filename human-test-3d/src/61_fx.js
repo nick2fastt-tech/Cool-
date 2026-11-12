@@ -21,7 +21,7 @@ class ParticleSystem {
       blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
       vertexShader: `attribute vec3 aCol; attribute float aSize; attribute float aAlpha; uniform float uScale; varying vec3 vCol; varying float vA;
         void main() { vCol = aCol; vA = aAlpha; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mv;
-          gl_PointSize = clamp(aSize * uScale / max(0.05, -mv.z), 1.0, 512.0); }`,
+          gl_PointSize = clamp(aSize * uScale / max(0.05, -mv.z), 1.0, ${GFX.mobile ? '240.0' : '512.0'}); }`,
       fragmentShader: `uniform sampler2D map; varying vec3 vCol; varying float vA;
         void main() { vec4 t = texture2D(map, gl_PointCoord); gl_FragColor = vec4(vCol * t.rgb, t.a * vA); if (gl_FragColor.a < 0.004) discard;
         #include <tonemapping_fragment>
@@ -102,15 +102,19 @@ class FX {
       m.visible = false; sc.add(m); this.rings.push({ mesh: m, t: 0, max: 0 });
     }
     // shared flash light
+    // the flash of a shot or a blast: a point light on desktop; on phones a brief warm lift of the
+    // ambient light instead (an idle point light still costs every lit pixel a full lighting pass)
     this.light = new THREE.PointLight(0xffc27a, 0, 12, 2);
     this.light.position.set(0, -100, 0);
-    sc.add(this.light);
+    if (GFX.mobile) { this.amb = new THREE.AmbientLight(0xffc27a, 0); sc.add(this.amb); }
+    else sc.add(this.light);
     this.lightT = 0; this.lightMax = 0;
   }
   ground(x, z, y) { return this.game.env.groundHeight(x, z, y); }
   flash(pos, intensity, dur, color) {
     this.light.position.copy(pos); this.light.color.set(color || 0xffc27a);
     this.lightMax = intensity; this.lightT = dur; this.lightDur = dur; this.light.intensity = intensity;
+    if (this.amb) { const d = this.game.camera.position.distanceTo(pos), k = clamp(1 - d / 14, 0, 1); this.amb.color.copy(this.light.color); this.ambMax = Math.min(1.6, intensity * 0.12) * k * k; this.amb.intensity = this.ambMax; }
   }
   impactDust(p, n, surface, scale = 1) {
     const grass = surface === 'grass';
@@ -245,8 +249,8 @@ class FX {
     const sc = h / (2 * Math.tan(fov * DEG / 2));
     this.smoke.uniforms.uScale.value = sc; this.glow.uniforms.uScale.value = sc;
     // light
-    if (this.lightT > 0) { this.lightT -= dt; this.light.intensity = this.lightMax * Math.max(0, this.lightT / this.lightDur); }
-    else this.light.intensity = 0;
+    if (this.lightT > 0) { this.lightT -= dt; const k = Math.max(0, this.lightT / this.lightDur); this.light.intensity = this.lightMax * k; if (this.amb) this.amb.intensity = (this.ambMax || 0) * k; }
+    else { this.light.intensity = 0; if (this.amb) this.amb.intensity = 0; }
     // tracers
     for (const t of this.tracers) {
       if (t.life <= 0) continue;

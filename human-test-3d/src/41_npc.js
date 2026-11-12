@@ -642,7 +642,7 @@ class NPCManager {
   // crowd poses far/off-screen people at half rate (alternating, so the work is spread evenly), and
   // only the nearest people render into the shadow map (the rest keep their soft contact shadows).
   updateLod() {
-    const g = this.game, cam = g.camera, L = this.list, n = L.length, crowd = n > 10 && !this.lodOff, farD2 = (n > 24 ? 16 : 22) ** 2;
+    const g = this.game, cam = g.camera, L = this.list, n = L.length, mob = GFX.mobile, crowd = n > (mob ? 6 : 10) && !this.lodOff, farD2 = (n > 24 ? 16 : mob ? 14 : 22) ** 2;
     _lodM.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse); _lodF.setFromProjectionMatrix(_lodM);
     const cp = cam.position;
     for (const o of L) {
@@ -661,7 +661,8 @@ class NPCManager {
     }
     if (g.frame % 12 === 0 || this.lodN !== n) {
       this.lodN = n;
-      const maxCast = n > 12 ? 16 : 99, maxD2 = (n > 12 ? 30 : 45) ** 2;
+      // phones: the nearest eight people cast real shadows in a crowd (the rest keep their soft contact shadows)
+      const maxCast = mob ? (n > 8 ? 8 : 99) : (n > 12 ? 16 : 99), maxD2 = (mob ? (n > 8 ? 22 : 32) : (n > 12 ? 30 : 45)) ** 2;
       const order = this._lodOrder || (this._lodOrder = []); order.length = 0;
       for (const o of L) order.push(o);
       order.sort((a, b) => a.camD2 - b.camD2);

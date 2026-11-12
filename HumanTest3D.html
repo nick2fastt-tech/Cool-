@@ -4550,7 +4550,7 @@ class FieldEnvironment {
   buildGrass(q, R) {
     const count = q === 'low' ? 16000 : q === 'ultra' ? 76000 : 40000;
     this.grassR = R;
-    const segs = 5, verts = [], uvs = [], idx = [];
+    const segs = GFX.mobile ? 3 : 5, verts = [], uvs = [], idx = [];   // phones: three segments a blade (the bend still reads; 44% fewer triangles)
     for (let i = 0; i <= segs; i++) {
       const t = i / segs, w = 0.03 * (1 - t * 0.85);
       if (i < segs) { verts.push(-w, t, 0, w, t, 0); uvs.push(0, t, 1, t); }
@@ -7104,9 +7104,17 @@ class PlaygroundEnvironment extends FieldEnvironment {
     ];
   }
   grassMaskGLSL() {
-    const rects = this.noGrassRects().map(r => `m *= htOut(p, vec4(${r.map(v => v.toFixed(2)).join(', ')}));`).join('\n');
+    // V1.16: every blade's vertex runs this, so only the rectangles on its own side of the street are
+    // tested (the park's, or the yards' across the road); the result is exactly the same
+    const R = this.noGrassRects(), line = r => `m *= htOut(p, vec4(${r.map(v => v.toFixed(2)).join(', ')}));`;
+    const street = R[R.length - 1], rest = R.slice(0, -1), far = PG_ST.far;
+    const yard = rest.filter(r => r[3] <= far + 0.01).map(line).join(' '), park = rest.filter(r => r[3] > far + 0.01).map(line).join(' ');
     return `float htOut(vec2 p, vec4 r) { vec2 d = max(r.xy - p, p - r.zw); return smoothstep(-0.02, 0.1, max(d.x, d.y)); }
-float htGrassMask(vec2 p) { float m = 1.0; ${rects} return m; }`;
+float htGrassMask(vec2 p) { float m = 1.0;
+  if (p.y < ${far.toFixed(2)}) { ${yard} ${line(street)} }
+  else if (p.y < -32.0) { m = 0.0; }
+  else { ${park} ${line(street)} }
+  return m; }`;
   }
   // rubber 2 cm up, paths 1.2 cm: what feet, bodies and blood stand on
   baseHeight(x, z) {
@@ -7847,11 +7855,11 @@ float htGrassMask(vec2 p) { float m = 1.0; ${rects} return m; }`;
     if (!pts.length) return;
     // geometry: stem + two leaves (green), blossom (white, tinted per instance)
     const stem = new PGBatch(), bl = new PGBatch();
-    { const s = new THREE.CylinderGeometry(0.005, 0.007, 0.3, 4); s.translate(0, 0.15, 0); stem.push(s, _pgM.identity(), _pgC.set(0x3f7a2c));
+    { const s = new THREE.CylinderGeometry(0.005, 0.007, 0.3, 3, 1, true); s.translate(0, 0.15, 0); stem.push(s, _pgM.identity(), _pgC.set(0x3f7a2c));
       for (const [a, y] of [[0.4, 0.08], [2.6, 0.13]]) { const l = new THREE.PlaneGeometry(0.035, 0.09); l.translate(0, 0.045, 0); l.rotateX(-0.9); l.rotateY(a); l.translate(0, y, 0); stem.push(l, _pgM.identity(), _pgC.set(0x4a8a34)); }
-      const sh = new THREE.Shape(); for (let k = 0; k <= 40; k++) { const a = k / 40 * TAU, r = 0.03 * (0.55 + 0.45 * Math.abs(Math.cos(a * 2.5))); if (k) sh.lineTo(Math.cos(a) * r, Math.sin(a) * r); else sh.moveTo(r, 0); }
+      const sh = new THREE.Shape(); for (let k = 0; k <= 20; k++) { const a = k / 20 * TAU, r = 0.03 * (0.55 + 0.45 * Math.abs(Math.cos(a * 2.5))); if (k) sh.lineTo(Math.cos(a) * r, Math.sin(a) * r); else sh.moveTo(r, 0); }
       const b = new THREE.ShapeGeometry(sh, 1); b.rotateX(-Math.PI / 2 + 0.25); b.translate(0, 0.305, 0); bl.push(b, _pgM.identity(), _pgC.set(0xffffff));
-      const c = new THREE.SphereGeometry(0.008, 6, 4); c.translate(0, 0.31, 0); bl.push(c, _pgM.identity(), _pgC.set(0xf2c22a)); }
+      const c = new THREE.SphereGeometry(0.008, 5, 3); c.translate(0, 0.31, 0); bl.push(c, _pgM.identity(), _pgC.set(0xf2c22a)); }
     const mat = (sway) => {
       const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0, side: THREE.DoubleSide, envMapIntensity: 0.4 });
       m.onBeforeCompile = (sh) => {
@@ -7959,7 +7967,7 @@ float htGrassMask(vec2 p) { float m = 1.0; ${rects} return m; }`;
   // street lamps glow and light the playground after dark
   buildLampLights() {
     this.lampLights = [];
-    for (const i of [0, 1, 2, 3]) { const p = this.lampPosts[i]; const L = new THREE.PointLight(0xffd9a0, 0, 22, 1.6); L.position.copy(p).y -= 0.15; this.group.add(L); this.lampLights.push(L); }
+    for (const i of (GFX.mobile ? [0, 1] : [0, 1, 2, 3])) { const p = this.lampPosts[i]; const L = new THREE.PointLight(0xffd9a0, 0, 22, 1.6); L.position.copy(p).y -= 0.15; L.visible = false; this.group.add(L); this.lampLights.push(L); }
   }
   applyTimeWeather() {
     super.applyTimeWeather();
@@ -7967,7 +7975,7 @@ float htGrassMask(vec2 p) { float m = 1.0; ${rects} return m; }`;
     const P = Settings.data.environment.field;
     const lit = smoothstep(0.35, 0.85, night) + (P.weather === 'rain' || P.weather === 'fog' ? 0.25 * (1 - night) : 0);
     this.mats.lamp.emissiveIntensity = lit * 2.2;
-    for (const L of this.lampLights || []) L.intensity = lit * 9;
+    for (const L of this.lampLights || []) { L.intensity = lit * 9; const v = lit > 0.02; if (L.visible !== v) { L.visible = v; this.game.shadowDirty = true; } }
     this.mats.window.emissive.setRGB(1, 1, 1).multiplyScalar(smoothstep(0.4, 0.9, night) * 0.9);
     this.mats.window2.emissive.setRGB(1, 1, 1).multiplyScalar(smoothstep(0.5, 0.95, night) * 0.28);
     this._poolLit = smoothstep(0.35, 0.85, night) * 0.3;
@@ -8330,6 +8338,15 @@ float htGrassMask(vec2 p) { float m = 1.0; ${rects} return m; }`;
     if (this.birds) this.birds.update(dt, cam);
     if (this.traffic) this.traffic.updateVisuals(dt, cam);
     this.updateWetSurfaces();
+    // phones: the two lamp lights sit at the two park lamps nearest the camera
+    if (GFX.mobile && this.lampLights && this.lampLights[0].visible) {
+      this.lampT = (this.lampT || 0) - dt;
+      if (this.lampT <= 0) {
+        this.lampT = 0.5;
+        const P = this.lampPosts.slice(0, 8).sort((a, b) => a.distanceToSquared(cam.position) - b.distanceToSquared(cam.position));
+        for (let i = 0; i < this.lampLights.length; i++) { this.lampLights[i].position.copy(P[i]); this.lampLights[i].position.y -= 0.15; }
+      }
+    }
   }
   // rain darkens and polishes the hard surfaces (the road and the sidewalks shine; the rubber and wood soak)
   updateWetSurfaces() {
@@ -8466,6 +8483,7 @@ const CAR_MODELS = {
   taxi: { L: 4.72, W: 1.82, wb: 2.78, wr: 0.33, clr: 0.17, belt: 0.95, roof: 1.44, c0: -1.12, c1: 0.96, rr: 0.62, fr: 0.74, nose: 0.66, tail: 0.92, sign: true, w: 0.45 }
 };
 const CAR_PAINTS = [0xf2f2f0, 0xc9cbcd, 0x8a8e93, 0x3b3e43, 0x111214, 0x7a1418, 0xb32422, 0x1d3a6b, 0x2d5d9a, 0x23442e, 0x5b6b3a, 0xc6b79a, 0x6e4b2e, 0x9aa5ad, 0xf2f2f0, 0x4a2a5e, 0x8a8e93, 0x111214, 0x0f5c6e, 0xd06a1a];
+const _trF = new THREE.Frustum(), _trS = new THREE.Sphere();
 const _tv1 = new V3(), _tv2 = new V3(), _tv3 = new V3(), _tq1 = new THREE.Quaternion(), _tq2 = new THREE.Quaternion(), _tm1 = new THREE.Matrix4(), _tm2 = new THREE.Matrix4(), _tE = new THREE.Euler(), _tS = new V3(1, 1, 1), _tC = new THREE.Color();
 
 class TrafficSystem {
@@ -8476,6 +8494,7 @@ class TrafficSystem {
     this.driveways = opts.driveways || [];
     this.buildModels();
     this.buildShared();
+    this.modelList = Object.values(this.models);
     this.slots = [];
     for (let li = 0; li < 2; li++) {
       const L = TR.lanes[li];
@@ -8585,15 +8604,15 @@ class TrafficSystem {
     // wheels: tyre (rounded profile, sidewall lettering ring) and a five-spoke rim
     const wparts = new PGBatch();
     const prof = []; const tr = 0.33, tw = 0.115;
-    for (let k = 0; k <= 10; k++) { const a = -Math.PI / 2 + Math.PI * k / 10; prof.push(new THREE.Vector2(tr - 0.055 + Math.cos(a) * 0.055, Math.sin(a) * tw)); }
+    for (let k = 0; k <= 5; k++) { const a = -Math.PI / 2 + Math.PI * k / 5; prof.push(new THREE.Vector2(tr - 0.055 + Math.cos(a) * 0.055, Math.sin(a) * tw)); }
     prof.unshift(new THREE.Vector2(0.21, -tw)); prof.push(new THREE.Vector2(0.21, tw));
-    const tyre = new THREE.LatheGeometry(prof, 28); tyre.rotateX(Math.PI / 2);
+    const tyre = new THREE.LatheGeometry(prof, 18); tyre.rotateX(Math.PI / 2);
     wparts.push(tyre, _tm1.identity(), _tC.set(0x141516));
-    const rim = new THREE.CylinderGeometry(0.215, 0.215, 0.2, 24); rim.rotateX(Math.PI / 2); wparts.push(rim, _tm1.identity(), _tC.set(0x6c7076));
+    const rim = new THREE.CylinderGeometry(0.215, 0.215, 0.2, 14); rim.rotateX(Math.PI / 2); wparts.push(rim, _tm1.identity(), _tC.set(0x6c7076));
     for (let k = 0; k < 5; k++) { const sp = new THREE.BoxGeometry(0.035, 0.19, 0.03); sp.translate(0, 0.1, 0.105); sp.rotateZ(k / 5 * TAU); wparts.push(sp, _tm1.identity(), _tC.set(0xb7bcc2)); }
-    const hub = new THREE.CylinderGeometry(0.05, 0.05, 0.03, 12); hub.rotateX(Math.PI / 2); hub.translate(0, 0, 0.11); wparts.push(hub, _tm1.identity(), _tC.set(0xc7ccd2));
+    const hub = new THREE.CylinderGeometry(0.05, 0.05, 0.03, 8); hub.rotateX(Math.PI / 2); hub.translate(0, 0, 0.11); wparts.push(hub, _tm1.identity(), _tC.set(0xc7ccd2));
     this.wheelMesh = new THREE.InstancedMesh(wparts.geometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.4, envMapIntensity: 0.6 }), cap * 4);
-    this.wheelMesh.count = 0; this.wheelMesh.castShadow = true; this.wheelMesh.frustumCulled = false; g.add(this.wheelMesh);
+    this.wheelMesh.count = 0; this.wheelMesh.castShadow = false; this.wheelMesh.frustumCulled = false; g.add(this.wheelMesh);
     // lights: emissive quads, and pools of headlight on the road
     const lq = new THREE.PlaneGeometry(1, 1); lq.rotateY(Math.PI / 2);
     this.lightMesh = new THREE.InstancedMesh(lq, new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 }), cap * 10);
@@ -8681,8 +8700,7 @@ class TrafficSystem {
     return out.compose(_tv1.set(c.x, TR.y + c.heave, c.z), _tq1, _tS);
   }
   placeCar(c) {
-    const M = c.M, m = this.carMatrix(c, _tm2);
-    for (const part of ['paint', 'trim', 'glass']) { M.inst[part].setMatrixAt(c.inst, m); M.inst[part].instanceMatrix.needsUpdate = true; }
+    const M = c.M;
     // collision boxes (world AABBs of the lower body and the cabin)
     const cy = Math.cos(c.yaw) * c.dir, sy = Math.sin(c.yaw) * c.dir;
     const box = (b, x0, y0, x1, y1, hw) => {
@@ -9213,8 +9231,18 @@ class TrafficSystem {
     let wi = 0, li = 0, pi = 0, di = 0;
     const blink = (this.time % 0.8) < 0.42;
     const W = this.wheelMesh, LM = this.lightMesh, PM = this.poolMesh, DM = this.dmgMesh, aTile = DM.geometry.attributes.aTile;
+    // V1.16: only the cars in view (or close enough for their shadow to be) are drawn at all
+    _trF.setFromProjectionMatrix(_tm1.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+    const cp = cam.position, far2 = (GFX.mobile ? 120 : 170) ** 2;
+    for (const M of this.modelList) M.vis = 0;
     for (const c of this.cars) {
-      const M = c.M, m = this.carMatrix(c, _tm2);
+      const M = c.M;
+      const d2 = (c.x - cp.x) ** 2 + (c.z - cp.z) ** 2;
+      c.inView = d2 < far2 && _trF.intersectsSphere(_trS.set(_tv1.set(c.x, 0.8, c.z), d2 < 900 ? 9 : 3.5));
+      if (!c.inView) continue;
+      const m = this.carMatrix(c, _tm2), k = M.vis++;
+      M.inst.paint.setMatrixAt(k, m); M.inst.trim.setMatrixAt(k, m); M.inst.glass.setMatrixAt(k, m);
+      M.inst.paint.instanceColor.setXYZ(k, c.paint.r, c.paint.g, c.paint.b);
       for (let k = 0; k < 4; k++) {
         const w = M.wheels[k], front = k < 2;
         _tE.set(0, front ? c.steer : 0, -c.spin, 'YXZ'); _tq1.setFromEuler(_tE);
@@ -9255,6 +9283,7 @@ class TrafficSystem {
         DM.setMatrixAt(di, _tm1); aTile.setX(di, d.kind === 1 ? 1 : 0); di++;
       }
     }
+    for (const M of this.modelList) { for (const part of ['paint', 'trim', 'glass']) { const im = M.inst[part]; im.count = M.vis; im.instanceMatrix.needsUpdate = true; } M.inst.paint.instanceColor.needsUpdate = true; }
     W.count = wi; LM.count = li; PM.count = pi; DM.count = di;
     W.instanceMatrix.needsUpdate = true; LM.instanceMatrix.needsUpdate = true; LM.instanceColor.needsUpdate = true;
     PM.instanceMatrix.needsUpdate = true; PM.instanceColor.needsUpdate = true; DM.instanceMatrix.needsUpdate = true; aTile.needsUpdate = true;
@@ -9276,7 +9305,10 @@ class TrafficSystem {
         this.voices.push({ eng, tyre, p, car: null });
       }
     }
-    const near = this.cars.filter(c => c.mode !== 'parked').sort((a, b) => Math.hypot(a.x - cam.position.x, a.z - cam.position.z) - Math.hypot(b.x - cam.position.x, b.z - cam.position.z)).slice(0, 3);
+    this.nearT = (this.nearT || 0) - dt;
+    if (this.nearT <= 0 || !this.nearCars) { this.nearT = 0.25; const px = cam.position.x, pz = cam.position.z; this.nearCars = this.cars.filter(c => c.mode !== 'parked').sort((a, b) => ((a.x - px) ** 2 + (a.z - pz) ** 2) - ((b.x - px) ** 2 + (b.z - pz) ** 2)).slice(0, 3); }
+    const near = this.nearCars;
+    for (let i = 0; i < near.length; i++) if (this.cars.indexOf(near[i]) < 0) { near.splice(i--, 1); }
     const wet = this.env.rainK || 0;
     for (let i = 0; i < 3; i++) {
       const V = this.voices[i], c = near[i];
@@ -13173,7 +13205,7 @@ class NPCManager {
   // crowd poses far/off-screen people at half rate (alternating, so the work is spread evenly), and
   // only the nearest people render into the shadow map (the rest keep their soft contact shadows).
   updateLod() {
-    const g = this.game, cam = g.camera, L = this.list, n = L.length, crowd = n > 10 && !this.lodOff, farD2 = (n > 24 ? 16 : 22) ** 2;
+    const g = this.game, cam = g.camera, L = this.list, n = L.length, mob = GFX.mobile, crowd = n > (mob ? 6 : 10) && !this.lodOff, farD2 = (n > 24 ? 16 : mob ? 14 : 22) ** 2;
     _lodM.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse); _lodF.setFromProjectionMatrix(_lodM);
     const cp = cam.position;
     for (const o of L) {
@@ -13192,7 +13224,8 @@ class NPCManager {
     }
     if (g.frame % 12 === 0 || this.lodN !== n) {
       this.lodN = n;
-      const maxCast = n > 12 ? 16 : 99, maxD2 = (n > 12 ? 30 : 45) ** 2;
+      // phones: the nearest eight people cast real shadows in a crowd (the rest keep their soft contact shadows)
+      const maxCast = mob ? (n > 8 ? 8 : 99) : (n > 12 ? 16 : 99), maxD2 = (mob ? (n > 8 ? 22 : 32) : (n > 12 ? 30 : 45)) ** 2;
       const order = this._lodOrder || (this._lodOrder = []); order.length = 0;
       for (const o of L) order.push(o);
       order.sort((a, b) => a.camD2 - b.camD2);
@@ -17617,7 +17650,7 @@ class ParticleSystem {
       blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
       vertexShader: `attribute vec3 aCol; attribute float aSize; attribute float aAlpha; uniform float uScale; varying vec3 vCol; varying float vA;
         void main() { vCol = aCol; vA = aAlpha; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mv;
-          gl_PointSize = clamp(aSize * uScale / max(0.05, -mv.z), 1.0, 512.0); }`,
+          gl_PointSize = clamp(aSize * uScale / max(0.05, -mv.z), 1.0, ${GFX.mobile ? '240.0' : '512.0'}); }`,
       fragmentShader: `uniform sampler2D map; varying vec3 vCol; varying float vA;
         void main() { vec4 t = texture2D(map, gl_PointCoord); gl_FragColor = vec4(vCol * t.rgb, t.a * vA); if (gl_FragColor.a < 0.004) discard;
         #include <tonemapping_fragment>
@@ -17698,15 +17731,19 @@ class FX {
       m.visible = false; sc.add(m); this.rings.push({ mesh: m, t: 0, max: 0 });
     }
     // shared flash light
+    // the flash of a shot or a blast: a point light on desktop; on phones a brief warm lift of the
+    // ambient light instead (an idle point light still costs every lit pixel a full lighting pass)
     this.light = new THREE.PointLight(0xffc27a, 0, 12, 2);
     this.light.position.set(0, -100, 0);
-    sc.add(this.light);
+    if (GFX.mobile) { this.amb = new THREE.AmbientLight(0xffc27a, 0); sc.add(this.amb); }
+    else sc.add(this.light);
     this.lightT = 0; this.lightMax = 0;
   }
   ground(x, z, y) { return this.game.env.groundHeight(x, z, y); }
   flash(pos, intensity, dur, color) {
     this.light.position.copy(pos); this.light.color.set(color || 0xffc27a);
     this.lightMax = intensity; this.lightT = dur; this.lightDur = dur; this.light.intensity = intensity;
+    if (this.amb) { const d = this.game.camera.position.distanceTo(pos), k = clamp(1 - d / 14, 0, 1); this.amb.color.copy(this.light.color); this.ambMax = Math.min(1.6, intensity * 0.12) * k * k; this.amb.intensity = this.ambMax; }
   }
   impactDust(p, n, surface, scale = 1) {
     const grass = surface === 'grass';
@@ -17841,8 +17878,8 @@ class FX {
     const sc = h / (2 * Math.tan(fov * DEG / 2));
     this.smoke.uniforms.uScale.value = sc; this.glow.uniforms.uScale.value = sc;
     // light
-    if (this.lightT > 0) { this.lightT -= dt; this.light.intensity = this.lightMax * Math.max(0, this.lightT / this.lightDur); }
-    else this.light.intensity = 0;
+    if (this.lightT > 0) { this.lightT -= dt; const k = Math.max(0, this.lightT / this.lightDur); this.light.intensity = this.lightMax * k; if (this.amb) this.amb.intensity = (this.ambMax || 0) * k; }
+    else { this.light.intensity = 0; if (this.amb) this.amb.intensity = 0; }
     // tracers
     for (const t of this.tracers) {
       if (t.life <= 0) continue;
@@ -21648,7 +21685,7 @@ class UI {
     let s = this.sec(b, 'Quality');
     this.note(s, '<b>HIGH MAX</b> &middot; the game always runs at its highest graphics quality and keeps itself smooth automatically.');
     s = this.sec(b, 'Display');
-    this.select(s, 'Frame rate cap', [[30, '30 FPS'], [60, '60 FPS'], [0, 'Unlimited']], G.fpsCap, v => Settings.set('graphics.fpsCap', +v));
+    this.select(s, 'Frame rate cap', [[30, '30 FPS'], [60, '60 FPS'], [0, 'Unlimited']], G.fpsCap, v => { Settings.set('graphics.fpsCap', +v); if (g.pace) g.pace.extra = 0; });
     this.toggle(s, 'Show FPS', 'graphics.showFps');
     this.slider(s, 'Field of view', 'controls.fov', 50, 100, 1, x => x + '°');
   }
@@ -22025,6 +22062,8 @@ class LoadingScreen {
 const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+// the nearest usual display rate to a measured one
+function snapHz(hz) { let b = hz, bd = 1e9; for (const r of [60, 72, 75, 90, 100, 120, 144, 165, 240]) { const d = Math.abs(hz - r) / r; if (d < 0.06 && d < bd) { bd = d; b = r; } } return b; }
 class Game {
   constructor() {
     this.time = 0; this.frame = 0; this.timeScale = 1; this.loaded = false; this.acc = 0; this.fixed = 1 / 60;
@@ -22092,13 +22131,32 @@ class Game {
     r.outputColorSpace = THREE.SRGBColorSpace;
     r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.0;
     r.shadowMap.enabled = G.shadowQuality !== 'off'; r.shadowMap.type = THREE.PCFSoftShadowMap;
+    // V1.16 phones: the soft shadow filter with four depth reads instead of thirteen (the same smooth
+    // edge, one texel wide), and the shadow map redrawn every other frame (see step) - shadows are the
+    // costliest part of every lit pixel on a phone's graphics chip
+    if (GFX.mobile) {
+      const C = THREE.ShaderChunk, k = 'shadowmap_pars_fragment', src = C[k];
+      const a = src.indexOf('#elif defined( SHADOWMAP_TYPE_PCF_SOFT )'), b = src.indexOf('#elif defined( SHADOWMAP_TYPE_VSM )', a);
+      if (a > 0 && b > a) C[k] = src.slice(0, a) + `#elif defined( SHADOWMAP_TYPE_PCF_SOFT )
+			vec2 texelSize = vec2( 1.0 ) / shadowMapSize;
+			vec2 st = shadowCoord.xy * shadowMapSize - 0.5;
+			vec2 f = fract( st );
+			vec2 uv = ( floor( st ) + 0.5 ) * texelSize;
+			shadow = mix(
+				mix( texture2DCompare( shadowMap, uv, shadowCoord.z ), texture2DCompare( shadowMap, uv + vec2( texelSize.x, 0.0 ), shadowCoord.z ), f.x ),
+				mix( texture2DCompare( shadowMap, uv + vec2( 0.0, texelSize.y ), shadowCoord.z ), texture2DCompare( shadowMap, uv + texelSize, shadowCoord.z ), f.x ),
+				f.y );
+		` + src.slice(b);
+      r.shadowMap.autoUpdate = false; r.shadowMap.needsUpdate = true;
+    }
     this.renderer = r;
-    this.maxAniso = Math.min(8, r.capabilities.getMaxAnisotropy());
+    this.maxAniso = Math.min(GFX.mobile ? 4 : 8, r.capabilities.getMaxAnisotropy());
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(Settings.data.controls.fov, innerWidth / innerHeight, 0.05, 2500);
     this.scene.add(this.camera);
     this.resize();
     window.addEventListener('resize', () => this.resize());
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && this.pace) { this.pace.probe = 16; this.pace.pd.length = 0; } });
     canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); HT.toast && HT.toast('Graphics context lost - attempting recovery', 'bad'); reportError('WebGL context lost', 'renderer'); });
     canvas.addEventListener('webglcontextrestored', () => { HT.toast && HT.toast('Graphics context restored'); });
   }
@@ -22224,17 +22282,57 @@ class Game {
   }
   // internal dynamic resolution: keeps HIGH MAX smooth on slower devices without changing the preset
   adaptResolution(rdt) {
-    const D = this.dynRes || (this.dynRes = { scale: 1, acc: 0, n: 0, cool: 3 });
-    if (document.hidden || (this.ui && this.ui.drawerOpen)) { D.acc = 0; D.n = 0; return; }
-    D.acc += rdt; D.n++; D.cool -= rdt;
-    if (D.acc < 1.5) return;
-    const fps = D.n / D.acc, target = Settings.data.graphics.fpsCap || 60;
-    D.acc = 0; D.n = 0;
+    // V1.16: reacts within a second, drops in proportion to how far behind it is, takes back a raise
+    // that did not hold and waits longer before trying it again, so it settles instead of bouncing.
+    // The rate it aims for is the one the frame pacer runs at (see loop), which follows the display.
+    // The level it settles on is remembered per map on this device, so the next visit starts there.
+    const D = this.dynRes || (this.dynRes = this.newDynRes());
+    if (document.hidden || (this.ui && this.ui.drawerOpen)) { D.acc = 0; D.n = 0; D.slow = 0; return; }
+    D.acc += rdt; D.n++; D.cool -= rdt; D.ceilT -= rdt; D.sinceRaise += rdt; D.stableT += rdt;
+    const P = this.pace, target = this.fpsTarget || Settings.data.graphics.fpsCap || 60;
+    if (rdt > 1.75 / target) D.slow++;
+    if (D.acc < 1.0) return;
+    const fps = D.n / D.acc, slowK = D.slow / D.n, floor = GFX.mobile ? 0.5 : 0.55, win = D.acc;
+    D.acc = 0; D.n = 0; D.slow = 0;
     if (D.cool > 0) return;
+    if (D.ceilT <= 0) D.ceil = 1;
     let s = D.scale;
-    if (fps < target * 0.8 && s > 0.55) s = Math.max(0.55, s - (fps < target * 0.55 ? 0.12 : 0.07));
-    else if (fps > target * 0.95 && s < 1) s = Math.min(1, s + 0.05);
-    if (s !== D.scale) { D.scale = s; D.cool = 2; this.resize(); }
+    const behind = fps < target * 0.88 || slowK > 0.25;
+    if (behind && P && s < 0.78 && target > 62 && P.hz / (P.skip + 1) >= 40) {
+      // a fast display that cannot be kept up with even at a lower resolution: every other refresh
+      // instead (a steady 45 on a 90 Hz screen beats an uneven 60-70), at a fuller picture again
+      P.extra++; D.retryT = D.retryGap; D.retryGap = Math.min(600, D.retryGap * 2);
+      s = Math.min(1, s * 1.25); D.ceil = 1; D.ceilT = 0; D.good = 0; D.sinceRaise = 99;
+    } else if (behind && D.sinceRaise < 6 && D.prev < s) {
+      // the raise just tried did not hold: back to where it did, and leave it longer each time
+      s = D.prev; D.ceil = s; D.ceilT = D.ceilGap; D.ceilGap = Math.min(240, D.ceilGap * 2); D.good = 0; D.sinceRaise = 99;
+    } else if (behind && s > floor) {
+      D.ceil = Math.max(floor, s - 0.04); D.ceilT = Math.max(D.ceilT, 30); D.good = 0;
+      // pixels drawn go with the square of the scale
+      s = Math.max(floor, s * clamp(Math.sqrt(Math.max(0.3, fps / target)) * 0.97, 0.8, 0.94));
+    } else if (!behind && fps > target * 0.96 && slowK < 0.05 && s < D.ceil) { if (++D.good >= 3) { D.prev = s; s = Math.min(D.ceil, s + 0.05); D.good = 0; D.sinceRaise = 0; } }
+    else D.good = 0;
+    // now and then try the display's full rate again (less and less often if it keeps failing)
+    if (P && P.extra > 0 && !behind && s >= 0.99) { D.retryT -= win; if (D.retryT <= 0) { P.extra--; D.retryT = D.retryGap; D.cool = 2.5; } }
+    if (Math.abs(s - D.scale) > 0.004) { D.scale = s; D.cool = Math.max(D.cool, 1.2); D.stableT = 0; this.resize(); }
+    else if (D.stableT > 12 && D.sinceRaise > 8) this.rememberScale();
+  }
+  newDynRes() { return { scale: 1, acc: 0, n: 0, cool: 2, good: 0, ceil: 1, ceilT: 0, ceilGap: 30, slow: 0, retryT: 0, retryGap: 45, prev: 1, sinceRaise: 99, stableT: 0 }; }
+  // the settled resolution of each map, kept on the device
+  rememberScale() {
+    const D = this.dynRes, k = this.env.current && this.env.current.kind; if (!D || !k) return;
+    const M = this.dynMem || (this.dynMem = {});
+    if (Math.abs((M[k] != null ? M[k] : -1) - D.scale) < 0.03) return;
+    M[k] = +D.scale.toFixed(2);
+    try { localStorage.setItem('ht3d.dyn', JSON.stringify(M)); } catch (e) { }
+  }
+  recallScale(kind) {
+    if (!this.dynMem) { this.dynMem = {}; try { const v = JSON.parse(localStorage.getItem('ht3d.dyn') || '{}'); if (v && typeof v === 'object') this.dynMem = v; } catch (e) { } }
+    const D = this.dynRes || (this.dynRes = this.newDynRes()), m = +this.dynMem[kind];
+    // a phone that has not seen this map yet starts a little under full and climbs if it can
+    const s = m >= 0.5 && m <= 1 ? m : (GFX.mobile ? 0.85 : 1);
+    Object.assign(D, { acc: 0, n: 0, slow: 0, cool: 2.5, good: 0, ceil: 1, ceilT: 0, ceilGap: 30, prev: s, sinceRaise: 99, stableT: 0 });
+    if (Math.abs(s - D.scale) > 0.004) { D.scale = s; this.resize(); }
   }
   resize() {
     if (!this.renderer) return;
@@ -22256,6 +22354,8 @@ class Game {
     if (env.floorAt) { ph.heightfield = (x, z, y) => env.floorAt(x, z, y); ph.heightNormalFn = (x, z, out, y) => env.groundNormal(x, z, out, y); }
     ph.setStaticBoxes(env.boxes || null);
     ph.movers = null;
+    this.shadowDirty = true;
+    this.recallScale(kind);
     if (env.attachPhysics) env.attachPhysics(ph);
     document.getElementById('envName') && (document.getElementById('envName').textContent = env.name);
     if (!initial) {
@@ -22390,8 +22490,27 @@ class Game {
   loop(now) {
     requestAnimationFrame((t) => this.loop(t));
     if (this.manual) { this.lastT = now; return; } // externally stepped (tests / capture)
+    // V1.16 frame pacing by the display: the refresh rate is measured from the gaps between refreshes,
+    // and frames are drawn on every refresh, every second, every third... - never at a rate the screen
+    // cannot show evenly (a 60 cap on a 90 Hz phone used to give a juddering 45 and a needlessly low
+    // resolution). 60 Hz: 60 (or 30); 90 Hz: 90; 120 Hz: 60; 144 Hz: 72.
+    const P = this.pace || (this.pace = { prev: now, d: [], hz: 60, skip: 1, extra: 0, probe: 24, pd: [] });
+    const gap = now - P.prev; P.prev = now;
+    if (P.probe > 0) {
+      // a quarter of a second without drawing (at the start, and when the page comes back): the bare
+      // rhythm of the display, which a busy frame would hide
+      if (gap > 3 && gap < 60) P.pd.push(gap);
+      if (--P.probe === 0) { if (P.pd.length > 8) { P.pd.sort((x, y) => x - y); const hz = snapHz(1000 / P.pd[P.pd.length >> 1]); if (hz >= 40 && hz <= 260) P.hz = Math.max(48, hz); } P.pd.length = 0; }
+      this.lastT = now; return;
+    }
+    if (gap > 3 && gap < 60) {
+      P.d.push(gap);
+      if (P.d.length >= 40) { P.d.sort((x, y) => x - y); const hz = snapHz(1000 / P.d[6]); P.d.length = 0; if (hz > P.hz + 3 && hz <= 260) P.hz = hz; }   // otherwise only ever learned upward
+    }
     const cap = Settings.data.graphics.fpsCap;
-    if (cap > 0 && now - this.lastT < 1000 / cap - 2) return;
+    P.skip = (cap > 0 ? Math.max(1, Math.floor(P.hz / cap + 0.2)) : 1) + P.extra;
+    this.fpsTarget = P.hz / P.skip;
+    if (now - this.lastT < (P.skip - 0.5) * 1000 / P.hz) return;
     let rdt = Math.min((now - this.lastT) / 1000, 0.1);
     this.lastT = now;
     this.adaptResolution(rdt);
@@ -22441,6 +22560,8 @@ class Game {
     this.ui.update(rdt);
     this.diag.update(rdt);
     P.begin('render');
+    // phones: the shadow map every other frame (every frame when frames are already few)
+    if (GFX.mobile && ((this.frame & 1) === 0 || this.shadowDirty || (this.fpsTarget || 60) < 50)) { this.renderer.shadowMap.needsUpdate = true; this.shadowDirty = false; }
     if (this.post && this.post.enabled) this.post.render(); else this.renderer.render(this.scene, this.camera);
     this.weapons.render(this.renderer);
     P.end('render');

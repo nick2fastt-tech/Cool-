@@ -27,6 +27,7 @@ const CAR_MODELS = {
   taxi: { L: 4.72, W: 1.82, wb: 2.78, wr: 0.33, clr: 0.17, belt: 0.95, roof: 1.44, c0: -1.12, c1: 0.96, rr: 0.62, fr: 0.74, nose: 0.66, tail: 0.92, sign: true, w: 0.45 }
 };
 const CAR_PAINTS = [0xf2f2f0, 0xc9cbcd, 0x8a8e93, 0x3b3e43, 0x111214, 0x7a1418, 0xb32422, 0x1d3a6b, 0x2d5d9a, 0x23442e, 0x5b6b3a, 0xc6b79a, 0x6e4b2e, 0x9aa5ad, 0xf2f2f0, 0x4a2a5e, 0x8a8e93, 0x111214, 0x0f5c6e, 0xd06a1a];
+const _trF = new THREE.Frustum(), _trS = new THREE.Sphere();
 const _tv1 = new V3(), _tv2 = new V3(), _tv3 = new V3(), _tq1 = new THREE.Quaternion(), _tq2 = new THREE.Quaternion(), _tm1 = new THREE.Matrix4(), _tm2 = new THREE.Matrix4(), _tE = new THREE.Euler(), _tS = new V3(1, 1, 1), _tC = new THREE.Color();
 
 class TrafficSystem {
@@ -37,6 +38,7 @@ class TrafficSystem {
     this.driveways = opts.driveways || [];
     this.buildModels();
     this.buildShared();
+    this.modelList = Object.values(this.models);
     this.slots = [];
     for (let li = 0; li < 2; li++) {
       const L = TR.lanes[li];
@@ -146,15 +148,15 @@ class TrafficSystem {
     // wheels: tyre (rounded profile, sidewall lettering ring) and a five-spoke rim
     const wparts = new PGBatch();
     const prof = []; const tr = 0.33, tw = 0.115;
-    for (let k = 0; k <= 10; k++) { const a = -Math.PI / 2 + Math.PI * k / 10; prof.push(new THREE.Vector2(tr - 0.055 + Math.cos(a) * 0.055, Math.sin(a) * tw)); }
+    for (let k = 0; k <= 5; k++) { const a = -Math.PI / 2 + Math.PI * k / 5; prof.push(new THREE.Vector2(tr - 0.055 + Math.cos(a) * 0.055, Math.sin(a) * tw)); }
     prof.unshift(new THREE.Vector2(0.21, -tw)); prof.push(new THREE.Vector2(0.21, tw));
-    const tyre = new THREE.LatheGeometry(prof, 28); tyre.rotateX(Math.PI / 2);
+    const tyre = new THREE.LatheGeometry(prof, 18); tyre.rotateX(Math.PI / 2);
     wparts.push(tyre, _tm1.identity(), _tC.set(0x141516));
-    const rim = new THREE.CylinderGeometry(0.215, 0.215, 0.2, 24); rim.rotateX(Math.PI / 2); wparts.push(rim, _tm1.identity(), _tC.set(0x6c7076));
+    const rim = new THREE.CylinderGeometry(0.215, 0.215, 0.2, 14); rim.rotateX(Math.PI / 2); wparts.push(rim, _tm1.identity(), _tC.set(0x6c7076));
     for (let k = 0; k < 5; k++) { const sp = new THREE.BoxGeometry(0.035, 0.19, 0.03); sp.translate(0, 0.1, 0.105); sp.rotateZ(k / 5 * TAU); wparts.push(sp, _tm1.identity(), _tC.set(0xb7bcc2)); }
-    const hub = new THREE.CylinderGeometry(0.05, 0.05, 0.03, 12); hub.rotateX(Math.PI / 2); hub.translate(0, 0, 0.11); wparts.push(hub, _tm1.identity(), _tC.set(0xc7ccd2));
+    const hub = new THREE.CylinderGeometry(0.05, 0.05, 0.03, 8); hub.rotateX(Math.PI / 2); hub.translate(0, 0, 0.11); wparts.push(hub, _tm1.identity(), _tC.set(0xc7ccd2));
     this.wheelMesh = new THREE.InstancedMesh(wparts.geometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.4, envMapIntensity: 0.6 }), cap * 4);
-    this.wheelMesh.count = 0; this.wheelMesh.castShadow = true; this.wheelMesh.frustumCulled = false; g.add(this.wheelMesh);
+    this.wheelMesh.count = 0; this.wheelMesh.castShadow = false; this.wheelMesh.frustumCulled = false; g.add(this.wheelMesh);
     // lights: emissive quads, and pools of headlight on the road
     const lq = new THREE.PlaneGeometry(1, 1); lq.rotateY(Math.PI / 2);
     this.lightMesh = new THREE.InstancedMesh(lq, new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 }), cap * 10);
@@ -242,8 +244,7 @@ class TrafficSystem {
     return out.compose(_tv1.set(c.x, TR.y + c.heave, c.z), _tq1, _tS);
   }
   placeCar(c) {
-    const M = c.M, m = this.carMatrix(c, _tm2);
-    for (const part of ['paint', 'trim', 'glass']) { M.inst[part].setMatrixAt(c.inst, m); M.inst[part].instanceMatrix.needsUpdate = true; }
+    const M = c.M;
     // collision boxes (world AABBs of the lower body and the cabin)
     const cy = Math.cos(c.yaw) * c.dir, sy = Math.sin(c.yaw) * c.dir;
     const box = (b, x0, y0, x1, y1, hw) => {
@@ -774,8 +775,18 @@ class TrafficSystem {
     let wi = 0, li = 0, pi = 0, di = 0;
     const blink = (this.time % 0.8) < 0.42;
     const W = this.wheelMesh, LM = this.lightMesh, PM = this.poolMesh, DM = this.dmgMesh, aTile = DM.geometry.attributes.aTile;
+    // V1.16: only the cars in view (or close enough for their shadow to be) are drawn at all
+    _trF.setFromProjectionMatrix(_tm1.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+    const cp = cam.position, far2 = (GFX.mobile ? 120 : 170) ** 2;
+    for (const M of this.modelList) M.vis = 0;
     for (const c of this.cars) {
-      const M = c.M, m = this.carMatrix(c, _tm2);
+      const M = c.M;
+      const d2 = (c.x - cp.x) ** 2 + (c.z - cp.z) ** 2;
+      c.inView = d2 < far2 && _trF.intersectsSphere(_trS.set(_tv1.set(c.x, 0.8, c.z), d2 < 900 ? 9 : 3.5));
+      if (!c.inView) continue;
+      const m = this.carMatrix(c, _tm2), k = M.vis++;
+      M.inst.paint.setMatrixAt(k, m); M.inst.trim.setMatrixAt(k, m); M.inst.glass.setMatrixAt(k, m);
+      M.inst.paint.instanceColor.setXYZ(k, c.paint.r, c.paint.g, c.paint.b);
       for (let k = 0; k < 4; k++) {
         const w = M.wheels[k], front = k < 2;
         _tE.set(0, front ? c.steer : 0, -c.spin, 'YXZ'); _tq1.setFromEuler(_tE);
@@ -816,6 +827,7 @@ class TrafficSystem {
         DM.setMatrixAt(di, _tm1); aTile.setX(di, d.kind === 1 ? 1 : 0); di++;
       }
     }
+    for (const M of this.modelList) { for (const part of ['paint', 'trim', 'glass']) { const im = M.inst[part]; im.count = M.vis; im.instanceMatrix.needsUpdate = true; } M.inst.paint.instanceColor.needsUpdate = true; }
     W.count = wi; LM.count = li; PM.count = pi; DM.count = di;
     W.instanceMatrix.needsUpdate = true; LM.instanceMatrix.needsUpdate = true; LM.instanceColor.needsUpdate = true;
     PM.instanceMatrix.needsUpdate = true; PM.instanceColor.needsUpdate = true; DM.instanceMatrix.needsUpdate = true; aTile.needsUpdate = true;
@@ -837,7 +849,10 @@ class TrafficSystem {
         this.voices.push({ eng, tyre, p, car: null });
       }
     }
-    const near = this.cars.filter(c => c.mode !== 'parked').sort((a, b) => Math.hypot(a.x - cam.position.x, a.z - cam.position.z) - Math.hypot(b.x - cam.position.x, b.z - cam.position.z)).slice(0, 3);
+    this.nearT = (this.nearT || 0) - dt;
+    if (this.nearT <= 0 || !this.nearCars) { this.nearT = 0.25; const px = cam.position.x, pz = cam.position.z; this.nearCars = this.cars.filter(c => c.mode !== 'parked').sort((a, b) => ((a.x - px) ** 2 + (a.z - pz) ** 2) - ((b.x - px) ** 2 + (b.z - pz) ** 2)).slice(0, 3); }
+    const near = this.nearCars;
+    for (let i = 0; i < near.length; i++) if (this.cars.indexOf(near[i]) < 0) { near.splice(i--, 1); }
     const wet = this.env.rainK || 0;
     for (let i = 0; i < 3; i++) {
       const V = this.voices[i], c = near[i];

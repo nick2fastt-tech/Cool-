@@ -317,9 +317,17 @@ class PlaygroundEnvironment extends FieldEnvironment {
     ];
   }
   grassMaskGLSL() {
-    const rects = this.noGrassRects().map(r => `m *= htOut(p, vec4(${r.map(v => v.toFixed(2)).join(', ')}));`).join('\n');
+    // V1.16: every blade's vertex runs this, so only the rectangles on its own side of the street are
+    // tested (the park's, or the yards' across the road); the result is exactly the same
+    const R = this.noGrassRects(), line = r => `m *= htOut(p, vec4(${r.map(v => v.toFixed(2)).join(', ')}));`;
+    const street = R[R.length - 1], rest = R.slice(0, -1), far = PG_ST.far;
+    const yard = rest.filter(r => r[3] <= far + 0.01).map(line).join(' '), park = rest.filter(r => r[3] > far + 0.01).map(line).join(' ');
     return `float htOut(vec2 p, vec4 r) { vec2 d = max(r.xy - p, p - r.zw); return smoothstep(-0.02, 0.1, max(d.x, d.y)); }
-float htGrassMask(vec2 p) { float m = 1.0; ${rects} return m; }`;
+float htGrassMask(vec2 p) { float m = 1.0;
+  if (p.y < ${far.toFixed(2)}) { ${yard} ${line(street)} }
+  else if (p.y < -32.0) { m = 0.0; }
+  else { ${park} ${line(street)} }
+  return m; }`;
   }
   // rubber 2 cm up, paths 1.2 cm: what feet, bodies and blood stand on
   baseHeight(x, z) {
@@ -1060,11 +1068,11 @@ float htGrassMask(vec2 p) { float m = 1.0; ${rects} return m; }`;
     if (!pts.length) return;
     // geometry: stem + two leaves (green), blossom (white, tinted per instance)
     const stem = new PGBatch(), bl = new PGBatch();
-    { const s = new THREE.CylinderGeometry(0.005, 0.007, 0.3, 4); s.translate(0, 0.15, 0); stem.push(s, _pgM.identity(), _pgC.set(0x3f7a2c));
+    { const s = new THREE.CylinderGeometry(0.005, 0.007, 0.3, 3, 1, true); s.translate(0, 0.15, 0); stem.push(s, _pgM.identity(), _pgC.set(0x3f7a2c));
       for (const [a, y] of [[0.4, 0.08], [2.6, 0.13]]) { const l = new THREE.PlaneGeometry(0.035, 0.09); l.translate(0, 0.045, 0); l.rotateX(-0.9); l.rotateY(a); l.translate(0, y, 0); stem.push(l, _pgM.identity(), _pgC.set(0x4a8a34)); }
-      const sh = new THREE.Shape(); for (let k = 0; k <= 40; k++) { const a = k / 40 * TAU, r = 0.03 * (0.55 + 0.45 * Math.abs(Math.cos(a * 2.5))); if (k) sh.lineTo(Math.cos(a) * r, Math.sin(a) * r); else sh.moveTo(r, 0); }
+      const sh = new THREE.Shape(); for (let k = 0; k <= 20; k++) { const a = k / 20 * TAU, r = 0.03 * (0.55 + 0.45 * Math.abs(Math.cos(a * 2.5))); if (k) sh.lineTo(Math.cos(a) * r, Math.sin(a) * r); else sh.moveTo(r, 0); }
       const b = new THREE.ShapeGeometry(sh, 1); b.rotateX(-Math.PI / 2 + 0.25); b.translate(0, 0.305, 0); bl.push(b, _pgM.identity(), _pgC.set(0xffffff));
-      const c = new THREE.SphereGeometry(0.008, 6, 4); c.translate(0, 0.31, 0); bl.push(c, _pgM.identity(), _pgC.set(0xf2c22a)); }
+      const c = new THREE.SphereGeometry(0.008, 5, 3); c.translate(0, 0.31, 0); bl.push(c, _pgM.identity(), _pgC.set(0xf2c22a)); }
     const mat = (sway) => {
       const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0, side: THREE.DoubleSide, envMapIntensity: 0.4 });
       m.onBeforeCompile = (sh) => {
@@ -1172,7 +1180,7 @@ float htGrassMask(vec2 p) { float m = 1.0; ${rects} return m; }`;
   // street lamps glow and light the playground after dark
   buildLampLights() {
     this.lampLights = [];
-    for (const i of [0, 1, 2, 3]) { const p = this.lampPosts[i]; const L = new THREE.PointLight(0xffd9a0, 0, 22, 1.6); L.position.copy(p).y -= 0.15; this.group.add(L); this.lampLights.push(L); }
+    for (const i of (GFX.mobile ? [0, 1] : [0, 1, 2, 3])) { const p = this.lampPosts[i]; const L = new THREE.PointLight(0xffd9a0, 0, 22, 1.6); L.position.copy(p).y -= 0.15; L.visible = false; this.group.add(L); this.lampLights.push(L); }
   }
   applyTimeWeather() {
     super.applyTimeWeather();
@@ -1180,7 +1188,7 @@ float htGrassMask(vec2 p) { float m = 1.0; ${rects} return m; }`;
     const P = Settings.data.environment.field;
     const lit = smoothstep(0.35, 0.85, night) + (P.weather === 'rain' || P.weather === 'fog' ? 0.25 * (1 - night) : 0);
     this.mats.lamp.emissiveIntensity = lit * 2.2;
-    for (const L of this.lampLights || []) L.intensity = lit * 9;
+    for (const L of this.lampLights || []) { L.intensity = lit * 9; const v = lit > 0.02; if (L.visible !== v) { L.visible = v; this.game.shadowDirty = true; } }
     this.mats.window.emissive.setRGB(1, 1, 1).multiplyScalar(smoothstep(0.4, 0.9, night) * 0.9);
     this.mats.window2.emissive.setRGB(1, 1, 1).multiplyScalar(smoothstep(0.5, 0.95, night) * 0.28);
     this._poolLit = smoothstep(0.35, 0.85, night) * 0.3;
@@ -1543,6 +1551,15 @@ float htGrassMask(vec2 p) { float m = 1.0; ${rects} return m; }`;
     if (this.birds) this.birds.update(dt, cam);
     if (this.traffic) this.traffic.updateVisuals(dt, cam);
     this.updateWetSurfaces();
+    // phones: the two lamp lights sit at the two park lamps nearest the camera
+    if (GFX.mobile && this.lampLights && this.lampLights[0].visible) {
+      this.lampT = (this.lampT || 0) - dt;
+      if (this.lampT <= 0) {
+        this.lampT = 0.5;
+        const P = this.lampPosts.slice(0, 8).sort((a, b) => a.distanceToSquared(cam.position) - b.distanceToSquared(cam.position));
+        for (let i = 0; i < this.lampLights.length; i++) { this.lampLights[i].position.copy(P[i]); this.lampLights[i].position.y -= 0.15; }
+      }
+    }
   }
   // rain darkens and polishes the hard surfaces (the road and the sidewalks shine; the rubber and wood soak)
   updateWetSurfaces() {

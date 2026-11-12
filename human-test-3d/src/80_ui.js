@@ -437,7 +437,7 @@ class UI {
     let s = this.sec(b, 'Quality');
     this.note(s, '<b>HIGH MAX</b> &middot; the game always runs at its highest graphics quality and keeps itself smooth automatically.');
     s = this.sec(b, 'Display');
-    this.select(s, 'Frame rate cap', [[30, '30 FPS'], [60, '60 FPS'], [0, 'Unlimited']], G.fpsCap, v => Settings.set('graphics.fpsCap', +v));
+    this.select(s, 'Frame rate cap', [[30, '30 FPS'], [60, '60 FPS'], [0, 'Unlimited']], G.fpsCap, v => { Settings.set('graphics.fpsCap', +v); if (g.pace) g.pace.extra = 0; });
     this.toggle(s, 'Show FPS', 'graphics.showFps');
     this.slider(s, 'Field of view', 'controls.fov', 50, 100, 1, x => x + '°');
   }

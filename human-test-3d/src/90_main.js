@@ -30,6 +30,8 @@ class LoadingScreen {
 const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+// the nearest usual display rate to a measured one
+function snapHz(hz) { let b = hz, bd = 1e9; for (const r of [60, 72, 75, 90, 100, 120, 144, 165, 240]) { const d = Math.abs(hz - r) / r; if (d < 0.06 && d < bd) { bd = d; b = r; } } return b; }
 class Game {
   constructor() {
     this.time = 0; this.frame = 0; this.timeScale = 1; this.loaded = false; this.acc = 0; this.fixed = 1 / 60;
@@ -97,13 +99,32 @@ class Game {
     r.outputColorSpace = THREE.SRGBColorSpace;
     r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.0;
     r.shadowMap.enabled = G.shadowQuality !== 'off'; r.shadowMap.type = THREE.PCFSoftShadowMap;
+    // V1.16 phones: the soft shadow filter with four depth reads instead of thirteen (the same smooth
+    // edge, one texel wide), and the shadow map redrawn every other frame (see step) - shadows are the
+    // costliest part of every lit pixel on a phone's graphics chip
+    if (GFX.mobile) {
+      const C = THREE.ShaderChunk, k = 'shadowmap_pars_fragment', src = C[k];
+      const a = src.indexOf('#elif defined( SHADOWMAP_TYPE_PCF_SOFT )'), b = src.indexOf('#elif defined( SHADOWMAP_TYPE_VSM )', a);
+      if (a > 0 && b > a) C[k] = src.slice(0, a) + `#elif defined( SHADOWMAP_TYPE_PCF_SOFT )
+			vec2 texelSize = vec2( 1.0 ) / shadowMapSize;
+			vec2 st = shadowCoord.xy * shadowMapSize - 0.5;
+			vec2 f = fract( st );
+			vec2 uv = ( floor( st ) + 0.5 ) * texelSize;
+			shadow = mix(
+				mix( texture2DCompare( shadowMap, uv, shadowCoord.z ), texture2DCompare( shadowMap, uv + vec2( texelSize.x, 0.0 ), shadowCoord.z ), f.x ),
+				mix( texture2DCompare( shadowMap, uv + vec2( 0.0, texelSize.y ), shadowCoord.z ), texture2DCompare( shadowMap, uv + texelSize, shadowCoord.z ), f.x ),
+				f.y );
+		` + src.slice(b);
+      r.shadowMap.autoUpdate = false; r.shadowMap.needsUpdate = true;
+    }
     this.renderer = r;
-    this.maxAniso = Math.min(8, r.capabilities.getMaxAnisotropy());
+    this.maxAniso = Math.min(GFX.mobile ? 4 : 8, r.capabilities.getMaxAnisotropy());
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(Settings.data.controls.fov, innerWidth / innerHeight, 0.05, 2500);
     this.scene.add(this.camera);
     this.resize();
     window.addEventListener('resize', () => this.resize());
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && this.pace) { this.pace.probe = 16; this.pace.pd.length = 0; } });
     canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); HT.toast && HT.toast('Graphics context lost - attempting recovery', 'bad'); reportError('WebGL context lost', 'renderer'); });
     canvas.addEventListener('webglcontextrestored', () => { HT.toast && HT.toast('Graphics context restored'); });
   }
@@ -229,17 +250,57 @@ class Game {
   }
   // internal dynamic resolution: keeps HIGH MAX smooth on slower devices without changing the preset
   adaptResolution(rdt) {
-    const D = this.dynRes || (this.dynRes = { scale: 1, acc: 0, n: 0, cool: 3 });
-    if (document.hidden || (this.ui && this.ui.drawerOpen)) { D.acc = 0; D.n = 0; return; }
-    D.acc += rdt; D.n++; D.cool -= rdt;
-    if (D.acc < 1.5) return;
-    const fps = D.n / D.acc, target = Settings.data.graphics.fpsCap || 60;
-    D.acc = 0; D.n = 0;
+    // V1.16: reacts within a second, drops in proportion to how far behind it is, takes back a raise
+    // that did not hold and waits longer before trying it again, so it settles instead of bouncing.
+    // The rate it aims for is the one the frame pacer runs at (see loop), which follows the display.
+    // The level it settles on is remembered per map on this device, so the next visit starts there.
+    const D = this.dynRes || (this.dynRes = this.newDynRes());
+    if (document.hidden || (this.ui && this.ui.drawerOpen)) { D.acc = 0; D.n = 0; D.slow = 0; return; }
+    D.acc += rdt; D.n++; D.cool -= rdt; D.ceilT -= rdt; D.sinceRaise += rdt; D.stableT += rdt;
+    const P = this.pace, target = this.fpsTarget || Settings.data.graphics.fpsCap || 60;
+    if (rdt > 1.75 / target) D.slow++;
+    if (D.acc < 1.0) return;
+    const fps = D.n / D.acc, slowK = D.slow / D.n, floor = GFX.mobile ? 0.5 : 0.55, win = D.acc;
+    D.acc = 0; D.n = 0; D.slow = 0;
     if (D.cool > 0) return;
+    if (D.ceilT <= 0) D.ceil = 1;
     let s = D.scale;
-    if (fps < target * 0.8 && s > 0.55) s = Math.max(0.55, s - (fps < target * 0.55 ? 0.12 : 0.07));
-    else if (fps > target * 0.95 && s < 1) s = Math.min(1, s + 0.05);
-    if (s !== D.scale) { D.scale = s; D.cool = 2; this.resize(); }
+    const behind = fps < target * 0.88 || slowK > 0.25;
+    if (behind && P && s < 0.78 && target > 62 && P.hz / (P.skip + 1) >= 40) {
+      // a fast display that cannot be kept up with even at a lower resolution: every other refresh
+      // instead (a steady 45 on a 90 Hz screen beats an uneven 60-70), at a fuller picture again
+      P.extra++; D.retryT = D.retryGap; D.retryGap = Math.min(600, D.retryGap * 2);
+      s = Math.min(1, s * 1.25); D.ceil = 1; D.ceilT = 0; D.good = 0; D.sinceRaise = 99;
+    } else if (behind && D.sinceRaise < 6 && D.prev < s) {
+      // the raise just tried did not hold: back to where it did, and leave it longer each time
+      s = D.prev; D.ceil = s; D.ceilT = D.ceilGap; D.ceilGap = Math.min(240, D.ceilGap * 2); D.good = 0; D.sinceRaise = 99;
+    } else if (behind && s > floor) {
+      D.ceil = Math.max(floor, s - 0.04); D.ceilT = Math.max(D.ceilT, 30); D.good = 0;
+      // pixels drawn go with the square of the scale
+      s = Math.max(floor, s * clamp(Math.sqrt(Math.max(0.3, fps / target)) * 0.97, 0.8, 0.94));
+    } else if (!behind && fps > target * 0.96 && slowK < 0.05 && s < D.ceil) { if (++D.good >= 3) { D.prev = s; s = Math.min(D.ceil, s + 0.05); D.good = 0; D.sinceRaise = 0; } }
+    else D.good = 0;
+    // now and then try the display's full rate again (less and less often if it keeps failing)
+    if (P && P.extra > 0 && !behind && s >= 0.99) { D.retryT -= win; if (D.retryT <= 0) { P.extra--; D.retryT = D.retryGap; D.cool = 2.5; } }
+    if (Math.abs(s - D.scale) > 0.004) { D.scale = s; D.cool = Math.max(D.cool, 1.2); D.stableT = 0; this.resize(); }
+    else if (D.stableT > 12 && D.sinceRaise > 8) this.rememberScale();
+  }
+  newDynRes() { return { scale: 1, acc: 0, n: 0, cool: 2, good: 0, ceil: 1, ceilT: 0, ceilGap: 30, slow: 0, retryT: 0, retryGap: 45, prev: 1, sinceRaise: 99, stableT: 0 }; }
+  // the settled resolution of each map, kept on the device
+  rememberScale() {
+    const D = this.dynRes, k = this.env.current && this.env.current.kind; if (!D || !k) return;
+    const M = this.dynMem || (this.dynMem = {});
+    if (Math.abs((M[k] != null ? M[k] : -1) - D.scale) < 0.03) return;
+    M[k] = +D.scale.toFixed(2);
+    try { localStorage.setItem('ht3d.dyn', JSON.stringify(M)); } catch (e) { }
+  }
+  recallScale(kind) {
+    if (!this.dynMem) { this.dynMem = {}; try { const v = JSON.parse(localStorage.getItem('ht3d.dyn') || '{}'); if (v && typeof v === 'object') this.dynMem = v; } catch (e) { } }
+    const D = this.dynRes || (this.dynRes = this.newDynRes()), m = +this.dynMem[kind];
+    // a phone that has not seen this map yet starts a little under full and climbs if it can
+    const s = m >= 0.5 && m <= 1 ? m : (GFX.mobile ? 0.85 : 1);
+    Object.assign(D, { acc: 0, n: 0, slow: 0, cool: 2.5, good: 0, ceil: 1, ceilT: 0, ceilGap: 30, prev: s, sinceRaise: 99, stableT: 0 });
+    if (Math.abs(s - D.scale) > 0.004) { D.scale = s; this.resize(); }
   }
   resize() {
     if (!this.renderer) return;
@@ -261,6 +322,8 @@ class Game {
     if (env.floorAt) { ph.heightfield = (x, z, y) => env.floorAt(x, z, y); ph.heightNormalFn = (x, z, out, y) => env.groundNormal(x, z, out, y); }
     ph.setStaticBoxes(env.boxes || null);
     ph.movers = null;
+    this.shadowDirty = true;
+    this.recallScale(kind);
     if (env.attachPhysics) env.attachPhysics(ph);
     document.getElementById('envName') && (document.getElementById('envName').textContent = env.name);
     if (!initial) {
@@ -395,8 +458,27 @@ class Game {
   loop(now) {
     requestAnimationFrame((t) => this.loop(t));
     if (this.manual) { this.lastT = now; return; } // externally stepped (tests / capture)
+    // V1.16 frame pacing by the display: the refresh rate is measured from the gaps between refreshes,
+    // and frames are drawn on every refresh, every second, every third... - never at a rate the screen
+    // cannot show evenly (a 60 cap on a 90 Hz phone used to give a juddering 45 and a needlessly low
+    // resolution). 60 Hz: 60 (or 30); 90 Hz: 90; 120 Hz: 60; 144 Hz: 72.
+    const P = this.pace || (this.pace = { prev: now, d: [], hz: 60, skip: 1, extra: 0, probe: 24, pd: [] });
+    const gap = now - P.prev; P.prev = now;
+    if (P.probe > 0) {
+      // a quarter of a second without drawing (at the start, and when the page comes back): the bare
+      // rhythm of the display, which a busy frame would hide
+      if (gap > 3 && gap < 60) P.pd.push(gap);
+      if (--P.probe === 0) { if (P.pd.length > 8) { P.pd.sort((x, y) => x - y); const hz = snapHz(1000 / P.pd[P.pd.length >> 1]); if (hz >= 40 && hz <= 260) P.hz = Math.max(48, hz); } P.pd.length = 0; }
+      this.lastT = now; return;
+    }
+    if (gap > 3 && gap < 60) {
+      P.d.push(gap);
+      if (P.d.length >= 40) { P.d.sort((x, y) => x - y); const hz = snapHz(1000 / P.d[6]); P.d.length = 0; if (hz > P.hz + 3 && hz <= 260) P.hz = hz; }   // otherwise only ever learned upward
+    }
     const cap = Settings.data.graphics.fpsCap;
-    if (cap > 0 && now - this.lastT < 1000 / cap - 2) return;
+    P.skip = (cap > 0 ? Math.max(1, Math.floor(P.hz / cap + 0.2)) : 1) + P.extra;
+    this.fpsTarget = P.hz / P.skip;
+    if (now - this.lastT < (P.skip - 0.5) * 1000 / P.hz) return;
     let rdt = Math.min((now - this.lastT) / 1000, 0.1);
     this.lastT = now;
     this.adaptResolution(rdt);
@@ -446,6 +528,8 @@ class Game {
     this.ui.update(rdt);
     this.diag.update(rdt);
     P.begin('render');
+    // phones: the shadow map every other frame (every frame when frames are already few)
+    if (GFX.mobile && ((this.frame & 1) === 0 || this.shadowDirty || (this.fpsTarget || 60) < 50)) { this.renderer.shadowMap.needsUpdate = true; this.shadowDirty = false; }
     if (this.post && this.post.enabled) this.post.render(); else this.renderer.render(this.scene, this.camera);
     this.weapons.render(this.renderer);
     P.end('render');
