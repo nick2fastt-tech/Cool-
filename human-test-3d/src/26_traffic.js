@@ -247,35 +247,36 @@ class TrafficSystem {
     const M = c.M;
     // collision boxes (world AABBs of the lower body and the cabin)
     const cy = Math.cos(c.yaw) * c.dir, sy = Math.sin(c.yaw) * c.dir;
-    const box = (b, x0, y0, x1, y1, hw) => {
-      const ex = Math.abs(cy) * (x1 - x0) / 2 + Math.abs(sy) * hw, ez = Math.abs(sy) * (x1 - x0) / 2 + Math.abs(cy) * hw, cx = c.x + cy * (x0 + x1) / 2, cz = c.z - sy * (x0 + x1) / 2;
-      b.min.set(cx - ex, TR.y + y0 + c.heave, cz - ez); b.max.set(cx + ex, TR.y + y1 + c.heave, cz + ez);
-    };
-    box(c.mover.boxes[0], -M.L / 2, M.clr, M.L / 2, M.belt, M.W / 2);
-    box(c.mover.boxes[1], M.c0, M.belt, M.c1, M.roof + 0.02, M.W * 0.42);
+    this.boxOf(c, c.mover.boxes[0], cy, sy, -M.L / 2, M.clr, M.L / 2, M.belt, M.W / 2);
+    this.boxOf(c, c.mover.boxes[1], cy, sy, M.c0, M.belt, M.c1, M.roof + 0.02, M.W * 0.42);
     c.mover.min.copy(c.mover.boxes[0].min).min(c.mover.boxes[1].min); c.mover.max.copy(c.mover.boxes[0].max).max(c.mover.boxes[1].max);
+  }
+  boxOf(c, b, cy, sy, x0, y0, x1, y1, hw) {
+    const acy = Math.abs(cy), asy = Math.abs(sy), ex = acy * (x1 - x0) / 2 + asy * hw, ez = asy * (x1 - x0) / 2 + acy * hw, cx = c.x + cy * (x0 + x1) / 2, cz = c.z - sy * (x0 + x1) / 2;
+    b.min.set(cx - ex, TR.y + y0 + c.heave, cz - ez); b.max.set(cx + ex, TR.y + y1 + c.heave, cz + ez);
   }
   // ----------------------------------------------------------------- driving ---
   laneCarsAhead(c, zc, wHalf) {
     let best = null, bg = 1e9;
+    const R = this._lres || (this._lres = { car: null, gap: 0 });
     for (const o of this.cars) {
       if (o === c || Math.abs(o.z - zc) > (o.M.W / 2 + wHalf + 0.15)) continue;
       const dx = (o.x - c.x) * c.dir; if (dx <= 0) continue;
       const gap = dx - (o.M.L + c.M.L) / 2;
       if (gap < bg) { bg = gap; best = o; }
     }
-    return { car: best, gap: bg };
+    R.car = best; R.gap = bg; return R;
   }
   // anything in the corridor ahead: people (standing or down), props, the player
   obstacleAhead(c, zc, range) {
-    const g = this.game, front = c.x + c.dir * c.M.L / 2, hw = c.M.W / 2 + 0.5;
-    let bg = 1e9, who = null, person = false;
-    const test = (x, y, z, r, o, isPerson) => {
-      if (y > TR.y + 2.6 || Math.abs(z - zc) > hw + r) return;
-      const d = (x - front) * c.dir - r;
-      if (d < -c.M.L || d > range) return;
-      if (d < bg) { bg = d; who = o; person = isPerson; }
-    };
+    const g = this.game, Q = this._oq || (this._oq = { bg: 0, who: null, person: false, front: 0, hw: 0, zc: 0, range: 0, c: null });
+    Q.front = c.x + c.dir * c.M.L / 2; Q.hw = c.M.W / 2 + 0.5; Q.zc = zc; Q.range = range; Q.c = c; Q.bg = 1e9; Q.who = null; Q.person = false;
+    const test = this._otest || (this._otest = (x, y, z, r, o, isPerson) => {
+      if (y > TR.y + 2.6 || Math.abs(z - Q.zc) > Q.hw + r) return;
+      const d = (x - Q.front) * Q.c.dir - r;
+      if (d < -Q.c.M.L || d > Q.range) return;
+      if (d < Q.bg) { Q.bg = d; Q.who = o; Q.person = isPerson; }
+    });
     for (const n of g.npcs.list) {
       if (n.removed) continue;
       if (n.physMode === 'ragdoll') { for (const bi of [RAG.PELVIS, RAG.CHEST, RAG.HEAD, RAG.SHIN_L, RAG.SHIN_R]) { const b = n.rag.bodies[bi]; if (!n.rag.detached[bi]) test(b.pos.x, b.pos.y, b.pos.z, 0.2, n, false); } }
@@ -284,7 +285,8 @@ class TrafficSystem {
     for (const p of g.props.list) { const b = p.body; if (b) test(b.pos.x, b.pos.y - p.radius, b.pos.z, p.radius, p, false); }
     const cam = g.camera.position;
     if (cam.y < TR.y + 2.4 && cam.z < TR.kerb1 + 0.5 && cam.z > TR.kerb0 - 0.5) test(cam.x, cam.y - 1.6, cam.z, 0.35, 'player', true);
-    return { gap: bg - 1.1, who, person };
+    const R = this._ores || (this._ores = { gap: 0, who: null, person: false });
+    R.gap = Q.bg - 1.1; R.who = Q.who; R.person = Q.person; return R;
   }
   // someone on the crosswalk, or waiting right at its kerb to cross
   crosswalkBusy() {
