@@ -10,6 +10,31 @@ const P = Math.PI;
 const glowTex = () => canvasTex(64, 64, (c, w, h) => { const g = c.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.3, 'rgba(255,255,255,0.5)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; c.fillRect(0, 0, w, h); });
 const addMat = (o) => new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, ...o });
 
+
+// floating particles that fill the air (embers, dust, sparks); positions depend only on t so every frame renders the same
+function ambientParticles(parent, n, [x0, x1], [y0, y1], [z0, z1], { size = 0.12, seed = 7, rise = 0.4, drift = 0.25 } = {}) {
+  const R = rng(seed), base = [], geo = new THREE.BufferGeometry(), pos = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) base.push({ x: x0 + R() * (x1 - x0), y: R(), z: z0 + R() * (z1 - z0), sp: 0.6 + R() * 0.8, ph: R() * 7 });
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const m = new THREE.PointsMaterial({ map: glowTex(), size, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0, color: 0xffffff });
+  const pts = new THREE.Points(geo, m); pts.frustumCulled = false; parent.add(pts);
+  return {
+    m,
+    update(t, amount, color, riseK = 1) {
+      pts.visible = amount > 0.01; if (!pts.visible) return;
+      m.opacity = amount; m.color.set(color);
+      const H = y1 - y0;
+      base.forEach((b, i) => {
+        const y = ((b.y * H + t * rise * riseK * b.sp) % H + H) % H;
+        pos[i * 3] = b.x + Math.sin(t * 0.7 * b.sp + b.ph) * drift;
+        pos[i * 3 + 1] = y0 + y;
+        pos[i * 3 + 2] = b.z + Math.cos(t * 0.5 * b.sp + b.ph) * drift;
+      });
+      geo.attributes.position.needsUpdate = true;
+    },
+  };
+}
+
 // ------------------------------------------------------------------ THE POWER CONTROL ROOM (below headquarters)
 // A big arena: the glowing power core at the back (0, -6), a blast door at the front (z = +11), consoles and pillars.
 export function buildPowerRoom() {
@@ -123,6 +148,7 @@ export function buildPowerRoom() {
     mk(new THREE.PlaneGeometry(4.5, 4.5), crM, g, [6.0, 3.0, -11.7], [0, 0, 0], null, false),
   ];
   const BLUE = new THREE.Color(0x3fb0ff), PURPLE = new THREE.Color(0xb040ff), HOT = new THREE.Color(0xffc060), tmp = new THREE.Color(), STRIP0 = new THREE.Color(0x2f8cff);
+  const motes = ambientParticles(g, 260, [-13, 13], [0.2, 6.5], [-11, 11], { size: 0.15, seed: 31, rise: 0.12, drift: 0.4 });
   return {
     name: 'power', group: g, bg: new THREE.Color(0x05070c), exposure: 1.05,
     update(t, X) {
@@ -133,6 +159,7 @@ export function buildPowerRoom() {
       const pulse = 0.85 + 0.15 * Math.sin(t * (2.4 + hot * 9 + pur * 3));
       coreM.emissive.copy(tmp); coreM.emissiveIntensity = (0.5 + 2.2 * lvl + 2.5 * hot) * pulse * fl;
       coreM.color.set(0xbfeaff).lerp(tmp, 0.5);
+      motes.update(t, 0.55 + 0.3 * hot, tmp, 1 + 3 * hot);
       coreGlow.material.color.copy(tmp); coreGlow.material.opacity = (0.15 + 0.45 * lvl + 0.35 * hot) * pulse * fl;
       coreGlow.scale.setScalar(1 + 0.5 * hot);
       coreL.color.copy(tmp); coreL.intensity = (10 + 55 * lvl + 90 * hot) * pulse * fl; coreL2.color.copy(tmp); coreL2.intensity = (5 + 25 * lvl + 40 * hot) * fl;
@@ -267,10 +294,15 @@ export function buildFinaleCity() {
     rub.push(pile);
   }
   for (const o of Object.values(objs)) o.holder.visible = false;
+  const embers = ambientParticles(g, 420, [-30, 30], [0, 14], [-24, 30], { size: 0.26, seed: 57, rise: 0.9, drift: 0.6 });
+  const dawnDust = ambientParticles(g, 260, [-26, 26], [0, 9], [-20, 28], { size: 0.2, seed: 91, rise: 0.15, drift: 0.5 });
   return {
     group: g,
     update(t, X) {
       const v = X.val;
+      const mode = v('sky.mode', 0), np = v('night.purple', 0), night = mode > 2.5 && mode < 3.5;
+      embers.update(t, night ? 0.25 + 0.75 * clamp(np * 2) : 0, np > 0.3 ? 0xff9a5a : 0xffb070);
+      dawnDust.update(t, mode > 3.5 ? 0.55 : 0, 0xffd9a0);
       for (const [name, o] of Object.entries(objs)) {
         const vis = v(`${name}.vis`, 0) > 0.5;
         o.holder.visible = vis;

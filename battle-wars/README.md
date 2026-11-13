@@ -17,7 +17,7 @@ Every episode is delivered as one **1080p MP4** (1920×1080) with stereo sound a
 | `s1e7-western-disaster` | Season 1, Episode 7: "WESTERN DISASTER" | 7:05 |
 | `s1e8-the-escape` | Season 1, Episode 8: "THE ESCAPE" | 9:11 |
 | `s1e9-the-illusion` | Season 1, Episode 9: "THE ILLUSION" | 12:26 |
-| `s1e10-season-finale` | Season 1, Episode 10: "SEASON 1 FINALE" | 26:18 |
+| `s1e10-season-finale` | Season 1, Episode 10: "SEASON 1 FINALE" (with an after-credits scene) | 26:55 |
 | `s1-red-diamonds` | Early Red Diamonds teaser scene (blue suits) | 1:02 |
 
 Finished videos go to `output/<episode-id>/` (not stored in git — GitHub's 100 MB file limit).
@@ -31,7 +31,7 @@ Finished videos go to `output/<episode-id>/` (not stored in git — GitHub's 100
 - Still camera shots slowly push in, and bright lights and energy effects get a soft glow.
 - Blinks come at random moments (now and then a quick double blink), and speakers look at the person they are answering.
 - Standing characters shift their weight from one leg to the other every few seconds; mouths change shape while talking.
-- Season 1 Finale upgrades: the titan can raise, reach and kneel with each arm, carry cars in its fists, topple over and crumble into stone; the shadow creature has arms that swipe, leans in and dissolves in sunlight; Fred's lasso of light (thrown, twirled, pulled tight, flickering and snapping) and his boomerang hat with a glowing trail; flying cars, a city bus and falling chunks of buildings with dust and debris; a blast door that bursts open; a power core that glows, overloads and turns purple; and new moves (hugs, double waves, hat throws and catches, energy blasts, kneeling hurt).
+- Season 1 Finale upgrades: the titan can raise, reach and kneel with each arm, carry cars in its fists, topple over and crumble into stone; the shadow creature has arms that swipe, leans in and dissolves in sunlight; Fred's lasso of light (thrown, twirled, pulled tight, flickering and snapping) and his boomerang hat with a glowing trail; flying cars, a city bus and falling chunks of buildings with dust and debris; a blast door that bursts open; a power core that glows, overloads and turns purple; floating embers over the burning city, golden dust at sunrise and glowing motes around the power core; and new moves (hugs, double waves, hat throws and catches, energy blasts, kneeling hurt).
 
 ## Characters
 

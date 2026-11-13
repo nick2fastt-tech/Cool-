@@ -1592,12 +1592,31 @@ export function buildEpisode() {
   D.say('aaron', "No. That's called being smart.", { cam: R('aaron', 20, 2.0, 0.15), expr: 'smug', dur: 1.8 });
   D.act('soulX', 'idle'); D.expr('soulX', 'serious');
   D.say('soulX', "This isn't over, heroes. You'll see me again.", { cam: R('soulX', 10, 1.4, 0.05, { lookY: -0.02, fov: 40 }), dur: 2.6 });
+  // the final defeat: one last attack, the team answers together, and he sinks into the ground
   {
-    D.fx('smoke', { x: 0.8, y: 0.4, z: 6.5, n: 60, dur: 2.6, color: 0x3a1a5a, color2: 0x6a2aa0 }); D.fx('flashBurst', { x: 0.8, y: 1.2, z: 6.5, dur: 0.6, radius: 1.8, color: 0xa040ff, light: 30 });
-    D.anim('soulX.alpha', 0, 0.8, 0.2); D.hide('soulX', 1.1); D.sfx('teleport', 0, 0.8); D.sfx('smokeDissolve', 0.1, 0.6);
-    D.path('flare', [[0.4, 5.6]], 4.0, 0.3); D.act('flare', 'reach', 0.8);
-    D.cam(FIX([-3.5, 1.5, 3.2], [0.8, 1.2, 6.4], { fov: 50 }));
-    D.sound('He vanishes in a cloud of purple smoke before Flare can grab him', 2.8, 0.2); D.wait(3.0);
+    D.act('soulX', 'soulRaiseBoth'); D.expr('soulX', 'angry'); D.anim('soulX.eyeGlow', 3.5, 0.6); D.anim('soulX.energy', 0.35, 0.8);
+    D.fx('bodyAura', { who: 'soulX', dur: 2.4, color: 0xa040ff, power: 0.8 }); D.sfx('energyCharge', 0, 0.7);
+    D.cam(FIX([-1.2, 1.4, 4.3], [0.8, 1.6, 6.5], { fov: 58 }));
+    D.sound('With the last of his strength, he tries one more attack...', 2.6, 0.2); wait0(3.0);
+  }
+  D.say('aaron', 'TOGETHER!', { cam: R('aaron', 20, 2.0, 0.15, { fov: 42 }), act: 'point', expr: 'determined', dur: 0.9, gap: 0.15 });
+  {
+    D.act('flare', 'blastPose'); D.act('leon', 'powerFist'); D.act('aaron', 'wristUp');
+    D.fx('beam', { who: 'flare', side: 'R', to: [0.75, 1.2, 6.4], dur: 1.8, width: 0.24, color: 0xff7a20 }); D.fx('beam', { who: 'leon', side: 'R', to: [0.85, 1.1, 6.4], dur: 1.8, width: 0.2, color: 0xf2b632 }, 0.1); D.fx('beam', { who: 'aaron', side: 'L', to: [0.8, 1.3, 6.4], dur: 1.8, width: 0.2, color: 0x4ab0ff }, 0.2);
+    D.sfx('fireRoar', 0, 0.9); D.sfx('energyWave', 0.1, 0.8); D.sfx('powerUpBlue', 0.2, 0.7);
+    D.fx('flashBurst', { x: 0.8, y: 1.2, z: 6.5, dur: 0.9, radius: 2.4, color: 0xffffff, light: 70 }, 0.5); D.sfx('bigBlast', 0.5, 1.0); D.shake(1.4, 1.2, 0.5);
+    D.act('soulX', 'knockBack', 0.55); D.anim('soulX.energy', 0, 0.4, 0.6); D.anim('soulX.eyeGlow', 1.0, 0.6, 0.6); D.act('soulX', 'hurtKneel', 1.3);
+    D.comic('KA-BLAAAM!', 0.5, 1.2, { x: 0.5, y: 0.34, size: 125, rot: -4, c1: '#ffffff', c2: '#7fd4ff' });
+    D.cam(FIX([-5.5, 1.6, 4.0], [0.6, 1.3, 5.6], { fov: 56 }));
+    D.sound('Fire, strength and light hit him all at once!', 2.4, 0.3); wait0(2.8);
+  }
+  {
+    D.fx('ring', { x: 0.8, y: 0.08, z: 6.5, radius: 2.2, dur: 2.6, color: 0xa040ff }); D.fx('sparks', { x: 0.8, y: 0.2, z: 6.5, n: 70, color: 0xc070ff, speed: 3 });
+    D.fx('smoke', { x: 0.8, y: 0.3, z: 6.5, n: 70, dur: 3.2, color: 0x3a1a5a, color2: 0x6a2aa0 }, 0.4); D.sfx('rockCrumble', 0, 0.8); D.sfx('rumbleDeep', 0.1, 0.8); D.shake(0.6, 2.4);
+    D.anim('soulX.y', -2.4, 2.2, 0.4, 'in'); D.anim('soulX.alpha', 0, 1.2, 1.4); D.hide('soulX', 2.8); D.sfx('smokeDissolve', 1.0, 0.7);
+    everyone((c) => { D.act(c, 'ready'); D.expr(c, 'shocked'); }, POWER3);
+    D.cam(FIX([-3.6, 2.6, 4.2], [0.8, 0.5, 6.5], { fov: 50 }));
+    D.sound('The floor cracks open beneath him... and the Soul Stealer sinks deep into the ground', 3.2, 0.2); wait0(3.8);
   }
   D.act('flare', 'idle'); everyone((c) => D.expr(c, 'serious'), POWER3);
   D.say('leon', "...He's gone.", { cam: R('leon', -25, 2.0, 0.15), dur: 1.1 });
@@ -1606,7 +1625,7 @@ export function buildEpisode() {
   D.sound('Behind them, the core glows calm and blue again. The lights come back on', 2.8, 0.2); D.wait(3.0);
   D.say('aaron', "But the core is safe. Headquarters is safe.", { cam: R('aaron', 160, 2.0, 0.15), dur: 2.2 });
   D.faceChar('aaron', 'flare', 0.4); D.faceChar('flare', 'aaron', 0.4); D.faceChar('leon', 'aaron', 0.4);
-  D.say('flare', 'Did we... actually win?', { cam: R('flare', 20, 2.0, 0.15), expr: 'surprised', dur: 1.6 });
+  D.say('flare', 'Did we... actually win?', { cam: R('flare', 65, 1.6, 0.15), expr: 'surprised', dur: 1.6 });
   D.expr('aaron', 'grin');
   D.say('aaron', 'We won.', { cam: R('aaron', 20, 2.0, 0.15), dur: 1.0 });
   everyone((c) => { D.act(c, 'cheerJump'); D.expr(c, 'grin'); }, POWER3);
@@ -1955,18 +1974,56 @@ export function buildEpisode() {
   D.music('theme', 0.55, 0, 0.1);
   D.set('title.theme', 0); D.set('title.k', 1); D.set('title.sub', 0); D.set('title.y', 1.4); D.set('title.jolt', 0); D.set('title.glitch', 0);
   D.cam(FIX([0, 0.6, 10.5], [0, 0.4, 0], { pos2: [0, 0.5, 10.0], fov: 42 }));
-  const endDur = 18;
+  const endDur = 14;
   D.card('credits', endDur, {
     lines: [
       { text: 'END OF SEASON 1', big: true, y: 0.55, color: '#ffd23f' },
       { text: 'Thank you for watching!', bold: true, y: 0.645, color: '#7fd4ff' },
       { text: 'Starring  Aaron  ·  Greg  ·  Flare  ·  Eric  ·  Leon  ·  Fred Yeehaw  ·  and the Soul Stealer', y: 0.73 },
       { text: 'Created by Nick', y: 0.8 },
-      { text: 'Battle Wars will return...', bold: true, y: 0.88, color: '#c79bff' },
+      { text: 'Wait... don’t go yet!', bold: true, y: 0.88, color: '#c79bff' },
     ],
   });
   wait0(endDur - 2.0);
   D.anim('fade', 1, 1.8); wait0(2.0);
+
+  // ===================================================================== SCENE 10: DEEP UNDERGROUND (after the credits)
+  D.scene('10. Deep Underground');
+  D.location('cavern');
+  cast(['soulX']);
+  D.set('cave.violet', 1); D.set('cave.glow', 0.25); D.set('cave.ring', 0);
+  D.place('soulX', 0, -2.4, 0); D.set('soulX.y', -2.4); D.set('soulX.alpha', 0); D.set('soulX.energy', 0); D.set('soulX.eyeGlow', 0.4); D.act('soulX', 'hurtKneel'); D.expr('soulX', 'tired');
+  D.music('eerie', 0.3, 0, 1.0); D.sfx('rumbleDeep', 0.3, 0.8); D.sfx('drip', 1.4, 0.5); D.sfx('drip', 3.0, 0.4);
+  D.anim('fade', 0, 1.2);
+  D.cam(FIX([0, 6.8, 6.5], [0, 1.0, -2.4], { pos2: [0.3, 3.0, 3.6], look2: [0, 1.2, -2.4], fov: 46 }));
+  D.card('location', 3.2, { text: 'FAR BENEATH AETHERFALL CITY' });
+  D.sound('Deep underground, in the Soul Stealer’s old hideout, everything is quiet...', 3.0, 0.6); D.wait(3.6);
+  {
+    D.fx('ring', { x: 0, y: 0.08, z: -2.4, radius: 1.8, dur: 3.4, color: 0xa040ff }); D.fx('smoke', { x: 0, y: 0.3, z: -2.4, n: 70, dur: 3.6, color: 0x3a1a5a, color2: 0x6a2aa0 });
+    D.fx('sparks', { x: 0, y: 0.3, z: -2.4, n: 60, color: 0xc070ff, speed: 2.5 }, 0.4); D.sfx('rockCrumble', 0, 0.8); D.shake(0.5, 2.6);
+    D.anim('soulX.alpha', 1, 1.0, 0.3); D.anim('soulX.y', 0, 2.6, 0.3, 'out');
+    D.cam(FIX([2.6, 1.2, 1.4], [0, 1.0, -2.4], { fov: 48 }));
+    D.sound('...until the ground cracks open, and the Soul Stealer rises out of it', 3.0, 0.4); wait0(3.6);
+  }
+  D.cam(R('soulX', 10, 1.6, 0.1, { lookY: -0.15, fov: 40 }));
+  D.sound('He is weak. His stolen power is gone', 2.2, 0.2); D.wait(2.6);
+  D.say('soulX', 'They beat me...', { dur: 1.4 });
+  D.say('soulX', '...this time.', { dur: 1.2 });
+  {
+    D.act('soulX', 'powerStance'); D.expr('soulX', 'smug'); D.anim('soulX.eyeGlow', 4.5, 1.2, 0.2); D.anim('cave.glow', 0.75, 1.6, 0.2); D.sfx('blackPulse', 0.2, 0.7);
+    D.cam(R('soulX', 0, 1.2, 0.05, { lookY: 0.05, fov: 34, dist2: 0.95 }));
+    D.sound('He slowly stands up. His eyes begin to glow again', 2.4, 0.2); D.wait(2.8);
+  }
+  D.say('soulX', "But I'm not finished, Battle Wars. Not even close.", { dur: 2.8 });
+  D.cam(FIX([0, 2.2, 3.4], [0, 1.8, -2.4], { fov: 44 })); D.sound('He laughs quietly in the dark', 1.8, 0.2); D.wait(2.2);
+  D.set('flashViolet', 0.6); D.anim('flashViolet', 0, 0.5); D.sfx('warHit', 0, 1.0); D.set('fade', 1, 0.15); D.music('none', 0, 0, 0.3); wait0(0.8);
+  D.location('title');
+  cast([]);
+  D.set('title.theme', 0); D.set('title.k', 1); D.set('title.sub', 0); D.set('title.y', 1.4);
+  D.cam(FIX([0, 0.6, 10.5], [0, 0.4, 0], { pos2: [0, 0.5, 10.0], fov: 42 }));
+  D.anim('fade', 0, 0.8);
+  D.card('credits', 6.0, { lines: [{ text: 'BATTLE WARS WILL RETURN...', big: true, y: 0.6, color: '#c79bff' }] });
+  wait0(5.0); D.anim('fade', 1, 1.0); wait0(1.2);
 
   const T = D.end();
   // never show two captions of the same kind at once: end the earlier one just before the next starts
