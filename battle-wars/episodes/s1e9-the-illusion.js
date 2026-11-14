@@ -535,7 +535,12 @@ export function buildEpisode() {
   D.say('aaron', 'Everyone back to headquarters. We need a plan.', { cam: R('aaron', 25, 2.0, 0.15), act: 'point', expr: 'determined', dur: 2.2 });
   D.act('aaron', 'idle');
   everyone((c) => { D.expr(c, 'determined'); }, ['flare', 'eric', 'leon']);
-  D.anim('fade', 1, 0.5); D.wait(0.6);
+  // let Aaron's line land, then a slower fade so the scene change doesn't feel like the video cut off
+  D.cam(R('aaron', 35, 2.6, 0.2, { fov: 46 }));
+  D.act('aaron', 'fistPump', 0.15); D.expr('aaron', 'grin', 0.15);
+  D.sound('Aaron pumps his fist. The team is ready', 1.4); D.wait(1.353125);
+  D.act('aaron', 'idle', 0.3);
+  D.anim('fade', 1, 0.9); D.wait(1.2);
 
   // ===================================================================== SCENE 5: SOMETHING IS WRONG
   D.scene('5. Something Is Wrong');

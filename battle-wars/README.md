@@ -16,7 +16,7 @@ Every episode is delivered as one **1080p MP4** (1920×1080) with stereo sound a
 | `s1e6-the-power-returns` | Season 1, Episode 6: "THE POWER RETURNS" | 10:19 |
 | `s1e7-western-disaster` | Season 1, Episode 7: "WESTERN DISASTER" | 7:05 |
 | `s1e8-the-escape` | Season 1, Episode 8: "THE ESCAPE" | 9:11 |
-| `s1e9-the-illusion` | Season 1, Episode 9: "THE ILLUSION" | 12:26 |
+| `s1e9-the-illusion` | Season 1, Episode 9: "THE ILLUSION" | 12:29 |
 | `s1e10-season-finale` | Season 1, Episode 10: "SEASON 1 FINALE" (with an after-credits scene) | 26:55 |
 | `s1-red-diamonds` | Early Red Diamonds teaser scene (blue suits) | 1:02 |
 
