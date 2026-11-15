@@ -2,7 +2,9 @@
 Wow
 
 ## Games
-- **ZShooter.html**: Zombie Shooter Alpha V1.05. Open it in a browser and play.
+- **ZShooter.html**: Zombie Shooter Alpha V1.06. Open it in a browser and play.
+  - **2X XP event** from 15 to 22 November 2026: every kill gives double XP (countdown on the main menu).
+  - Touch controls: floating joystick in the bottom-left, fire button in the bottom-right.
   - **World 1: The White Room**, waves 1–10, starting with an 18-second elevator cutscene.
   - **World 2: The Corrupted Room**, waves 11–20. Clearing World 1 plays a cutscene that takes the squad down to World 2.
     - World 2 is a dark version of the white room: slimy black concrete and flickering purple lights.
