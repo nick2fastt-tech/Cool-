@@ -11267,8 +11267,8 @@ $$("#mcTabs button").forEach(b => b.addEventListener("click", () => {
 
 /* ---------- grid geometry ---------- */
 function mcGeom(){
-  const cv = $("#mcCanvas");
-  const w = cv.clientWidth, h = cv.clientHeight;
+  if (!mcSize.w) mcMeasure();
+  const w = mcSize.w, h = mcSize.h;
   const gap = 8;
   const colW = Math.min(64, (w - MC_HEAD - gap - 6) / 8);
   const gridW = colW * 8 + gap;
@@ -11292,13 +11292,28 @@ function mcSnapT(G, t){
   return clamp(MC.offset + k * G.step, 0, MC.duration - 0.05);
 }
 
+/* The canvas size is measured when it changes, not every frame. Reading it
+   inside the frame, after the time label had been rewritten, made the
+   browser lay the whole page out again on every frame — invisible on a
+   desktop, a steady stutter on a phone. */
+const mcSize = { w: 0, h: 0 };
+function mcMeasure(){
+  const cv = $("#mcCanvas");
+  mcSize.w = cv.clientWidth; mcSize.h = cv.clientHeight;
+}
 function mcResize(){
   const cv = $("#mcCanvas");
+  mcMeasure();
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const w = cv.clientWidth, h = cv.clientHeight;
+  const w = mcSize.w, h = mcSize.h;
   if (!w || !h) return;
-  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  const pw = Math.round(w * dpr), ph = Math.round(h * dpr);
+  if (cv.width !== pw) cv.width = pw;
+  if (cv.height !== ph) cv.height = ph;
   if (MC) MC.dpr = dpr;
+}
+if (typeof ResizeObserver !== "undefined"){
+  new ResizeObserver(() => { if (MC){ mcResize(); mcKick(); } }).observe($("#mcCanvas"));
 }
 window.addEventListener("resize", () => { if (currentScreen === "manualScreen" && MC){ mcResize(); mcKick(); } });
 
@@ -11332,6 +11347,7 @@ function mcPlay(){
     return { src, gain, key: it.key };
   });
   MC.startedAt = at; MC.startPos = MC.time; MC.lastHit = MC.time;
+  MC.smoothT = null; MC.hitIdx = 0;
   MC.playing = true; MC.vel = 0;
   mcPaintControls();
   mcKick();
@@ -11661,21 +11677,24 @@ function mcFrame(now){
   now = now || performance.now();
   const dt = Math.min(0.05, (now - (mcLastFrame || now)) / 1000);
   mcLastFrame = now;
-  const cv = $("#mcCanvas");
-  if (cv.width !== Math.round(cv.clientWidth * (MC.dpr || 1)) ||
-      cv.height !== Math.round(cv.clientHeight * (MC.dpr || 1))) mcResize();
+  if (!mcSize.w) mcResize();
   const G = mcGeom();
 
   if (MC.playing){
     const ctx = getCtx();
-    const t = MC.startPos + Math.max(0, ctx.currentTime - MC.startedAt) * MC.rate;
-    // hitsounds and receptor flashes for notes crossing the line
-    for (const n of MC.notes){
-      if (n.t > MC.lastHit && n.t <= t){
-        MC.flash[(n.mustHit ? 4 : 0) + n.lane] = 1;
-        if (MC.hits) mcClick(ctx.currentTime);
-      }
+    const t = mcClock(ctx, dt);
+    // hitsounds and receptor flashes for notes crossing the line, read from
+    // a running position rather than by scanning every note every frame
+    const notes = MC.notes;
+    let i = MC.hitIdx || 0;
+    if (i > notes.length || (i > 0 && notes[i - 1].t > MC.lastHit)) i = mcFirstAfter(MC.lastHit);
+    while (i < notes.length && notes[i].t <= MC.lastHit) i++;
+    for (; i < notes.length && notes[i].t <= t; i++){
+      const n = notes[i];
+      MC.flash[(n.mustHit ? 4 : 0) + n.lane] = 1;
+      if (MC.hits) mcClick(ctx.currentTime);
     }
+    MC.hitIdx = i;
     MC.lastHit = t;
     MC.time = t;
     if (t >= MC.duration){ MC.time = MC.duration; mcPause(); }
@@ -11689,6 +11708,43 @@ function mcFrame(now){
   mcDraw(G);
   mcPaintTime();
   if (MC.playing || Math.abs(MC.vel) > 0.01 || MC.flash.some(f => f > 0)) mcKick();
+}
+
+/* Where the song is, for drawing. The audio clock on a phone only moves in
+   steps — every 20-40ms, whenever the device hands the next block of sound
+   to the speaker — so drawing straight from it makes the chart jerk along
+   in little jumps however fast the screen redraws. This clock runs on the
+   screen's own time between those steps and is pulled gently back onto the
+   audio, so it glides and still never drifts. Where the browser can say
+   what is actually coming out of the speaker right now, that is what it
+   follows, so the notes cross the line when you hear them. */
+function mcAudioNow(ctx){
+  if (ctx.getOutputTimestamp){
+    try{
+      const ts = ctx.getOutputTimestamp();
+      if (ts && ts.contextTime > 0 && ts.performanceTime > 0){
+        return ts.contextTime + Math.max(0, performance.now() - ts.performanceTime) / 1000;
+      }
+    }catch(e){}
+  }
+  return ctx.currentTime;
+}
+function mcClock(ctx, dt){
+  const raw = MC.startPos + Math.max(0, mcAudioNow(ctx) - MC.startedAt) * MC.rate;
+  if (MC.smoothT == null || Math.abs(raw - MC.smoothT) > 0.12) MC.smoothT = raw;
+  else {
+    const next = MC.smoothT + dt * MC.rate;
+    // follow the audio, but never step backwards on screen
+    MC.smoothT = Math.max(MC.smoothT, next + (raw - next) * 0.12);
+  }
+  return MC.smoothT;
+}
+/* index of the first note after time t (notes are kept in time order) */
+function mcFirstAfter(t){
+  const a = MC.notes;
+  let lo = 0, hi = a.length;
+  while (lo < hi){ const m = (lo + hi) >> 1; if (a[m].t <= t) lo = m + 1; else hi = m; }
+  return lo;
 }
 
 function mcDraw(G){
@@ -11771,7 +11827,15 @@ function mcDraw(G){
 
   // notes: holds first, heads on top
   const size = G.colW * 0.82;
-  const vis = MC.notes.filter(n => n.t + n.len >= tTop && n.t <= tBot);
+  // the notes on screen: found by search, since the chart is in time order;
+  // a hold that started above the top is still drawn
+  const vis = [];
+  {
+    const a = MC.notes;
+    let i = mcFirstAfter(tTop - 8);
+    while (i > 0 && a[i - 1].t > tTop - 8) i--;
+    for (; i < a.length && a[i].t <= tBot; i++) if (a[i].t + a[i].len >= tTop) vis.push(a[i]);
+  }
   for (const n of vis){
     if (n.len <= 0) continue;
     const c = (n.mustHit ? 4 : 0) + n.lane;
@@ -11797,7 +11861,13 @@ function mcDraw(G){
   for (let c = 0; c < 8; c++){
     const x = G.colX(c) + G.colW / 2;
     const f = MC.flash[c];
-    drawArrow(g, x, G.playY, size * (1 + f * 0.12 + pulse), c & 3, f > 0.05 ? "filled" : "outline", f > 0.05 ? 0.5 + f * 0.5 : 0.9);
+    // Drawn from the one cached sprite and scaled on the way out. Asking for
+    // the pulsing size itself painted a fresh sprite on most frames.
+    const sc = 1 + f * 0.12 + pulse;
+    g.save();
+    g.translate(x, G.playY); g.scale(sc, sc);
+    drawArrow(g, 0, 0, size, c & 3, f > 0.05 ? "filled" : "outline", f > 0.05 ? 0.5 + f * 0.5 : 0.9);
+    g.restore();
   }
   g.fillStyle = "#ff5c9a";
   g.fillRect(left - 6, G.playY - 1, right - left + 12, 2);
@@ -11824,10 +11894,14 @@ function mcPaintTime(){
   const b = Math.floor((t - MC.offset) / beat + 1e-6);
   const s = Math.max(0, t);
   const fmt = x => Math.floor(x / 60) + ":" + (x % 60).toFixed(1).padStart(4, "0");
-  $("#mcTime").innerHTML = "<b>" + fmt(s) + "</b> / " + fmtTime(MC.duration) +
+  // Only touched when the text actually changes: rewriting the page every
+  // frame costs a phone a layout pass it does not need.
+  const html = "<b>" + fmt(s) + "</b> / " + fmtTime(MC.duration) +
     "<br>Bar " + (Math.floor(b / 4) + 1) + " · Beat " + ((((b % 4) + 4) % 4) + 1) + " · " + MC.notes.length + " notes";
+  if (html !== mcPaintTime.last){ $("#mcTime").innerHTML = html; mcPaintTime.last = html; }
   const seek = $("#mcSeek");
-  if (document.activeElement !== seek) seek.value = String(Math.round(t / Math.max(0.001, MC.duration) * 1000));
+  const v = String(Math.round(t / Math.max(0.001, MC.duration) * 1000));
+  if (document.activeElement !== seek && v !== mcPaintTime.seek){ seek.value = v; mcPaintTime.seek = v; }
 }
 
 /* ---------- controls ---------- */
