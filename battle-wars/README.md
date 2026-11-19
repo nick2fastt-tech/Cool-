@@ -18,6 +18,7 @@ Every episode is delivered as one **1080p MP4** (1920×1080) with stereo sound a
 | `s1e8-the-escape` | Season 1, Episode 8: "THE ESCAPE" | 9:11 |
 | `s1e9-the-illusion` | Season 1, Episode 9: "THE ILLUSION" | 12:29 |
 | `s1e10-season-finale` | Season 1, Episode 10: "SEASON 1 FINALE" (with an after-credits scene) | 26:55 |
+| `s2e1-thanksgiving` | Season 2, Episode 1: "THANKSGIVING TURKEY RUSH" (new Season 2 intro, characters and suits) | 15:26 |
 | `s1-red-diamonds` | Early Red Diamonds teaser scene (blue suits) | 1:02 |
 
 Finished videos go to `output/<episode-id>/` (not stored in git — GitHub's 100 MB file limit).
@@ -32,6 +33,15 @@ Finished videos go to `output/<episode-id>/` (not stored in git — GitHub's 100
 - Blinks come at random moments (now and then a quick double blink), and speakers look at the person they are answering.
 - Standing characters shift their weight from one leg to the other every few seconds; mouths change shape while talking.
 - Season 1 Finale upgrades: the titan can raise, reach and kneel with each arm, carry cars in its fists, topple over and crumble into stone; the shadow creature has arms that swipe, leans in and dissolves in sunlight; Fred's lasso of light (thrown, twirled, pulled tight, flickering and snapping) and his boomerang hat with a glowing trail; flying cars, a city bus and falling chunks of buildings with dust and debris; a blast door that bursts open; a power core that glows, overloads and turns purple; floating embers over the burning city, golden dust at sunrise and glowing motes around the power core; and new moves (hugs, double waves, hat throws and catches, energy blasts, kneeling hurt).
+
+## Season 2 look (`src/s2chars.js`, `src/s2anim.js`)
+
+- **New intro:** the same theme song over quick scenes from Season 2, then "BATTLE WARS" rises up while fire, blue lightning, green and gold power streams shoot out of both sides, and "SEASON 2" lands underneath.
+- **New characters:** sculpted heads with eyelids that blink and squint, detailed irises, noses, lips and ears; hair built from many tapered locks (Aaron's swept-up brown spikes and bangs, Flare's tall black spikes, Eric's soft brown waves, Leon's slicked-back hair with a gray streak) that bounces when they move; realistic-but-cartoon bodies with shaped muscles and five-fingered hands.
+- **Remade suits:** sculpted blue chest armor with white trim, layered shoulder plates, armored gauntlets (Aaron's has a wrist screen), knee and shin guards, boots with glowing soles, and a glowing line color for each hero (Aaron gold, Flare orange, Eric green, Leon amber on navy). Greg's trench coat has lapels, a belt, buttons and coat tails that swing.
+- **Remade animation:** new walk, run and sprint cycles (heel strike, hip and shoulder turn, arm pump), hands that make fists, point, grip and open for each move, hair and coat secondary motion, plus new moves (tug-of-war, carrying, catching, slipping, flailing, pushing a cart, toasting, hand on heart, high five, panting, carving, sitting at a table, food coma and more).
+- **Smarter cameras:** a close-up that would look through someone or through a store shelf swings to the nearest clear angle.
+- **New places:** Gus's Market (inside and out), the Thanksgiving parade avenue with a giant turkey balloon, and the HQ dining room and kitchen.
 
 ## Characters
 
@@ -55,6 +65,8 @@ Finished videos go to `output/<episode-id>/` (not stored in git — GitHub's 100
 | **Bird Eric** | Eric's bird form: a green bird with his brown tuft | — |
 | **The blue-eyed titan** | a 20-meter giant of dark stone with four glowing blue eyes, crystal spikes and arms that reach the ground (Episode 9) | — |
 | **Security Guard / Officers** | the bank guard with his flashlight, and the police officers who take Fred away | light blue / blue |
+| **Gus** (Season 2) | owner of Gus's Market: bald on top, gray mustache, glasses, green apron; grumpy until he gets invited to dinner | green |
+| **Grandma Rose, Marcus and Lily** (Season 2) | a kind grandma with her two grandkids, who join the team for Thanksgiving | pink / light blue / yellow |
 | **Citizens of Aetherfall** | the people the heroes rescue in the finale, including a brave kid, a bus driver and the owner of a burger shop | light orange |
 
 ## Locations

@@ -87,16 +87,16 @@ export function buildEpisode() {
   D.fx('flame', { who: 'flare', side: 'R', dur: 2.2, size: 0.4 }, 0.2); D.sfx('flameIgnite', 0.2, 0.7);
   D.cam(FIX([0.6, 1.5, -3.4], [0, 1.3, -2], { pos2: [0.45, 1.5, -3.1], fov: 40 })); D.wait(1.8);
   // 4. Leon catches a falling store shelf
-  cast(['leon']); D.place('leon', 0.6, -3.0, -P / 2); D.act('leon', 'blockPipe'); D.expr('leon', 'determined');
-  D.set('mkt.tip', 0.42); D.anim('mkt.tip', 0.32, 0.4, 0.1, 'out');
-  D.cam(FIX([-0.9, 0.9, 0.5], [1.0, 1.6, -3.2], { fov: 54 })); D.sfx('metalCrash', 0, 0.6); D.shake(0.3, 0.4);
+  cast(['leon']); D.place('leon', 0.7, -3.0, P / 2); D.act('leon', 'blockPipe'); D.expr('leon', 'determined');
+  D.set('mkt.tip', 0.45); D.anim('mkt.tip', 0.36, 0.4, 0.1, 'out');
+  D.cam(FIX([-0.7, 1.15, -1.0], [1.1, 1.6, -3.1], { pos2: [-0.6, 1.2, -1.4], fov: 52 })); D.sfx('metalCrash', 0, 0.6); D.shake(0.3, 0.4);
   D.wait(1.8);
   D.set('mkt.tip', 0);
   // 5. the frozen turkey spins through the air and Aaron dives for it
   cast(['aaron']); D.place('aaron', 0, 0.6, P); D.expr('aaron', 'determined');
   D.set('turkey.vis', 1); D.set('turkey.kind', 'frozen'); D.set('turkey.spin', 2.2); tk(0, 2.4, -2.5); tk(0, 1.25, 0.1, 1.8, 0, 'out');
   D.act('aaron', 'catchS2', 1.0); D.anim('aaron.z', 0.2, 0.4, 1.0);
-  D.cam(FIX([0.95, 1.0, 1.8], [0, 1.6, -1.4], { pos2: [0.9, 1.1, 1.4], fov: 48 })); D.sfx('whoosh', 0, 0.6);
+  D.cam(FIX([0.9, 1.1, -2.8], [0, 1.4, 0.6], { pos2: [0.85, 1.15, -2.4], fov: 48 })); D.sfx('whoosh', 0, 0.6);
   D.wait(1.9);
   D.set('turkey.vis', 0); D.set('turkey.spin', 0);
   // 5b. cat Eric zips across the store floor
@@ -244,7 +244,7 @@ export function buildEpisode() {
   D.cam(FIX([-6.2, 1.4, -5.2], [-10, 1.2, 1.5], { fov: 54 })); D.wait(1.6);
   everyone((c) => { D.faceTo(c, 0, -2, 0.4); D.act(c, 'panting'); }, ['eric', 'greg']);
   D.act('aaron', 'idle'); D.faceTo('aaron', 0, -2, 0.3);
-  D.say('aaron', "Gus's Market is on the other side of the parade. We have to get across.", { cam: R('aaron', 30, 1.7, 0.1), dur: 2.6 });
+  D.say('aaron', "Gus's Market is on the other side of the parade. We have to get across.", { cam: FIX([-6.6, 1.6, -3.4], [-9.0, 1.4, -1.0], { fov: 44 }), dur: 2.6 });
   D.cam(FIX([-8.4, 1.6, -3.6], [6, 1.6, -2], { pos2: [-8.4, 1.6, -3.0], fov: 54 }));
   D.set('float1.z', -16); D.anim('float1.z', 10, 9, 0, 'linear');
   D.sound('The giant pumpkin float rolls past, right in front of them', 2.4, 0.1); D.wait(2.6);
@@ -255,7 +255,7 @@ export function buildEpisode() {
   D.act('eric', 'idle'); D.expr('eric', 'determined');
   D.say('eric', 'Right. Turkey. Focusing.', { cam: R('eric', 25, 1.7, 0.1), dur: 1.2 });
   D.say('leon', "We can't stop the parade. People have been waiting all year for this.", { cam: R('leon', 25, 1.7, 0.1), dur: 2.6 });
-  D.say('flare', 'Then we go around the floats. Wait for a gap...', { cam: R('flare', 25, 1.7, 0.1), dur: 2.0 });
+  D.say('flare', 'Then we go around the floats. Wait for a gap...', { cam: R('flare', -50, 1.7, 0.1), dur: 2.0 });
   everyone((c) => D.act(c, 'ready'), ['aaron', 'flare', 'eric', 'leon']); D.act('greg', 'idle');
   D.wait(0.5);
   D.say('flare', 'NOW!', { cam: R('flare', 15, 1.2, 0.05, { fov: 40 }), dur: 0.8 });
@@ -267,7 +267,7 @@ export function buildEpisode() {
   D.cam(FIX([0, 0.6, 9], [0, 1.2, -2], { pos2: [0, 0.8, 7], fov: 60 })); D.wait(2.4);
   D.act('greg', 'idle'); D.anim('greg.y', 0, 0.4); D.set('greg.y', 0, 0.4);
   everyone((c) => { D.act(c, 'idle'); D.faceTo(c, 0, -10, 0.4); });
-  D.say('eric', 'We made it! That was easy!', { cam: R('eric', 30, 1.7, 0.1), expr: 'grin', dur: 1.6 });
+  D.say('eric', 'We made it! That was easy!', { cam: R('eric', -50, 1.7, 0.1), expr: 'grin', dur: 1.6 });
   // the balloon breaks loose
   D.set('balloon.loose', 1); D.sfx('glassCrack', 0, 0.6); D.sfx('whoosh', 0, 0.8); D.sfx('wind', 0, 0.6);
   D.anim('balloon.x', 6, 3.0, 0, 'inout'); D.anim('balloon.y', 9, 3.0); D.anim('balloon.z', -6, 3.0); D.anim('balloon.rz', -0.35, 3.0);
@@ -278,9 +278,9 @@ export function buildEpisode() {
   D.act('kid1', 'gasp'); D.expr('kid1', 'scared'); D.act('kid2', 'gasp'); D.expr('kid2', 'scared'); D.expr('rose', 'worried');
   D.say('kid2', "The turkey balloon! It's going to hit the buildings!", { cam: R('kid2', 30, 1.3, 0.0, { lookY: 0.15, fov: 40 }), dur: 2.2 });
   D.say('aaron', "We can't just leave. Greg, grab the ropes! Leon, anchor it!", { cam: R('aaron', 25, 1.6, 0.1), expr: 'determined', dur: 2.4 });
-  D.say('greg', 'On it!', { cam: R('greg', 25, 1.5, 0.1), expr: 'determined', dur: 0.9 });
+  D.say('greg', 'On it!', { cam: R('greg', -50, 1.6, 0.1), expr: 'determined', dur: 0.9 });
   D.act('greg', 'fly'); fly('greg', 6, 5.2, -3.6, 1.2, 0, 'inout'); D.sfx('whoosh', 0, 0.7);
-  D.cam(FIX([8, 2.0, 6], [6, 6.5, -6], { fov: 58 })); D.wait(1.4);
+  D.cam(FIX([7.8, 4.4, 1.2], [6, 5.9, -4.4], { fov: 56 })); D.wait(1.4);
   D.act('greg', 'stretchBoth'); D.set('greg.stretch', 0); D.anim('greg.stretch', 1, 0.5); D.sfx('stretchBoing', 0, 0.8);
   for (const sd of ['L', 'R']) { D.set(`greg.t${sd}x`, sd === 'L' ? 5.2 : 6.8); D.set(`greg.t${sd}y`, 5.4); D.set(`greg.t${sd}z`, -5.8); }
   D.sound('Greg stretches his arms and grabs two of the ropes', 2.0, 0.1); D.wait(2.0);
@@ -380,7 +380,7 @@ export function buildEpisode() {
   D.path('aaron', [[-5.4, 5.0]], 2.0); D.path('flare', [[-4.6, 5.6]], 2.0); D.path('leon', [[-4.9, 4.4]], 2.0); D.path('eric', [[-4.0, 5.0]], 2.0); D.path('greg', [[-4.2, 6.0]], 2.0);
   D.wait(1.3);
   everyone((c) => D.faceChar(c, 'gus', 0.3));
-  D.say('aaron', 'Hi, Gus! Happy Thanksgiving! Please tell me you still have a turkey.', { cam: R('aaron', 30, 1.7, 0.1), expr: 'happy', dur: 2.6 });
+  D.say('aaron', 'Hi, Gus! Happy Thanksgiving! Please tell me you still have a turkey.', { cam: R('aaron', -50, 1.7, 0.1), expr: 'happy', dur: 2.6 });
   D.act('gus', 'point');
   D.say('gus', 'Just one left. Back freezer, under the big sign.', { cam: R('gus', 25, 1.6, 0.1), expr: 'neutral', dur: 2.0 });
   D.act('gus', 'idle');
@@ -485,7 +485,7 @@ export function buildEpisode() {
   D.place('aaron', 0.1, -4.6, 0); D.act('aaron', 'catchItem', 0.6); D.set('turkey.hold', 'aaron.both', 0.9); D.act('aaron', 'carryS2', 1.0); D.expr('aaron', 'grin');
   D.sfx('meow', 0, 0.6); D.sfx('slide', 0.1, 0.5); D.sfx('catchPlate', 0.9, 0.6);
   D.cam(FIX([0.9, 0.9, -5.4], [0, 0.6, -2.6], { fov: 52 })); D.sound('He pushes the turkey back out with his head... right to Aaron!', 2.6, 0.2); D.wait(2.4);
-  D.say('aaron', 'Nice work, Eric!', { cam: R('aaron', 25, 1.8, 0.1), dur: 1.0 });
+  D.say('aaron', 'Nice work, Eric!', { cam: FIX([0.6, 1.6, -2.9], [0.1, 1.3, -4.6], { fov: 46 }), dur: 1.0 });
   D.set('cat.act', 'meow'); D.say('eric', 'Meow! I mean... you\'re welcome!', { cam: F(['cat'], 160, 1.3, 0.2, { lookY: -0.2, fov: 42 }), dur: 1.6 });
   D.set('flashWhite', 0.4); D.anim('flashWhite', 0, 0.3); D.sfx('transform', 0, 0.6); D.set('cat.vis', 0); D.place('eric', 0.1, -3.2, P); D.expr('eric', 'happy');
   // the tipping shelf: Leon to the rescue
@@ -493,9 +493,11 @@ export function buildEpisode() {
   D.place('shop1', 3.0, -3.0, -P / 2); D.act('shop1', 'pushCart'); D.set('cart1.x', 2.6); D.set('cart1.z', -3.0); D.set('cart1.ry', -P / 2);
   D.place('kid1', -0.4, -4.4, P / 2); D.place('kid2', -0.3, -5.0, P / 2); D.expr('kid1', 'neutral'); D.expr('kid2', 'neutral'); D.act('kid1', 'idle'); D.act('kid2', 'idle');
   D.place('leon', -1.0, -1.6, P); D.act('leon', 'idle');
+  D.place('shop2', 3.6, -6.0, 0); D.place('shop4', -3.6, -5.0, 0); D.place('shop3', -3.6, -2.0, 0); D.place('shop6', 3.6, -1.0, 0); D.place('shop5', 3.6, 1.4, P);
+  for (const c of ['shop2', 'shop3', 'shop4', 'shop5', 'shop6']) { D.act(c, 'idle'); D.expr(c, 'neutral'); }
   D.anim('cart1.x', 2.1, 0.3); D.sfx('metalCrash', 0.25, 0.8); D.shake(0.4, 0.5, 0.25);
   D.anim('mkt.tip', 0.5, 0.9, 0.3, 'in');
-  D.cam(FIX([-1.0, 2.6, -1.2], [0.8, 1.2, -4.6], { fov: 56 }));
+  D.cam(FIX([-0.9, 2.4, -2.6], [0.8, 1.2, -4.8], { fov: 58 }));
   D.sound('CRASH! A cart slams into the shelf, and it starts to tip... right over two kids!', 2.8, 0.1); D.wait(1.0);
   D.act('kid1', 'jumpScare'); D.act('kid2', 'jumpScare'); D.expr('kid1', 'scared'); D.expr('kid2', 'scared');
   D.say('rose', 'MY GRANDBABIES!', { label: 'GRANDMA ROSE', cam: FIX([-0.4, 1.2, 1.5], [-0.4, 1.0, -4.6], { fov: 44 }), dur: 1.0, gap: 0.1 });
@@ -555,9 +557,9 @@ export function buildEpisode() {
   tk(0.2, 1.25, -0.2, 1.2, 0, 'in'); D.set('turkey.spin', 0, 1.2);
   D.place('aaron', 0.2, -1.6, 0); D.act('aaron', 'dive', 0.6); D.anim('aaron.z', -0.6, 0.5, 0.6, 'out');
   D.set('turkey.hold', 'aaron.both', 1.2); D.act('aaron', 'hugTurkey', 1.3); D.expr('aaron', 'grin');
-  D.cam(FIX([0.9, 0.8, -2.6], [0.2, 1.0, 0], { fov: 50 })); D.sfx('catchPlate', 1.2, 0.7); D.wait(2.0);
+  D.cam(FIX([0.9, 0.9, 1.6], [0.2, 1.1, -0.6], { fov: 50 })); D.sfx('catchPlate', 1.2, 0.7); D.wait(2.0);
   D.say('aaron', 'GOT IT!', { cam: R('aaron', 25, 1.6, 0.1), dur: 1.0 });
-  D.say('flare', "...Just so everyone knows, I wasn't really going to do anything. I just wanted everyone to stop.", { cam: R('flare', 25, 1.7, 0.1), act: 'shrug', expr: 'smug', dur: 3.4 });
+  D.say('flare', "...Just so everyone knows, I wasn't really going to do anything. I just wanted everyone to stop.", { cam: R('flare', -40, 1.7, 0.1), act: 'shrug', expr: 'smug', dur: 3.4 });
   for (const c of SHOP) { D.act(c, 'idle'); D.expr(c, 'sad'); }
   D.act('flare', 'idle'); D.sfx('crowdLaugh', 0, 0.3);
   { const el = D.now - battleT0; D.anim('clock.left', 95, el, -el, 'linear'); D.anim('mkt.clock', 60 - 95 / 60, el, -el, 'linear'); }
@@ -579,7 +581,7 @@ export function buildEpisode() {
   D.sound('Aaron looks down at the turkey in his arms', 2.0, 0.1); D.wait(2.0);
   everyone((c) => D.faceChar(c, 'aaron', 0.3), ['flare', 'leon', 'eric', 'greg']);
   D.say('aaron', 'Guys... are you thinking what I\'m thinking?', { cam: R('aaron', 25, 1.6, 0.1), expr: 'neutral', dur: 1.8 });
-  D.say('greg', 'That we should share it?', { cam: R('greg', 25, 1.6, 0.1), expr: 'happy', dur: 1.2 });
+  D.say('greg', 'That we should share it?', { cam: R('greg', -40, 1.8, 0.1), expr: 'happy', dur: 1.2 });
   D.say('greg', 'I was actually thinking about pie. But yeah. That too.', { dur: 2.0 });
   D.path('aaron', [[0.2, 3.4]], 1.0); D.face('aaron', P * 0.0, 0.3); D.expr('aaron', 'happy');
   D.say('aaron', "Ma'am? We'd like you to have Thanksgiving with us. At our headquarters. All of you.", { cam: R('aaron', 30, 1.6, 0.1), dur: 3.0 });
@@ -665,12 +667,12 @@ export function buildEpisode() {
   D.sound('Soft, steady flames dance around the turkey', 2.4, 0.1); D.wait(2.6);
   D.say('aaron', '348... 349... 350. Perfect. Hold it right there.', { cam: R('aaron', 30, 1.4, 0.0, { lookY: -0.15, fov: 40 }), dur: 2.4 });
   D.act('flare', 'stretch'); D.expr('flare', 'tired');
-  D.say('flare', 'This is kind of relaxing, actually... *yawn*', { cam: R('flare', 30, 1.5, 0.05), dur: 1.8 });
+  D.say('flare', 'This is kind of relaxing, actually... *yawn*', { cam: R('flare', -45, 1.6, 0.05), dur: 1.8 });
   D.fx('fire', { x: -1.05, y: 1.1, z: -2.8, dur: 1.0, size: 0.75 }); D.sfx('fireRoar', 0, 0.7); D.shake(0.2, 0.4);
   D.expr('aaron', 'shocked');
   D.say('aaron', '400! 450! FLARE!', { cam: R('aaron', 20, 1.3, 0.0, { fov: 40 }), act: 'flailS2', dur: 1.2 });
   D.act('flare', 'conjure'); D.expr('flare', 'worried');
-  D.say('flare', 'SORRY! Sorry! Back to low and slow.', { cam: R('flare', 25, 1.5, 0.05), dur: 1.6 });
+  D.say('flare', 'SORRY! Sorry! Back to low and slow.', { cam: R('flare', -45, 1.6, 0.05), dur: 1.6 });
   D.act('aaron', 'holdDevice');
   // Greg sneaks a taste
   D.act('greg', 'idle'); D.place('greg', 1.2, -4.6, P); D.act('greg', 'sneakS2'); D.expr('greg', 'mischief');
@@ -735,7 +737,7 @@ export function buildEpisode() {
   D.act('kid1', 'idle');
   D.say('eric', 'It sure is. Want to see me turn into a cat later?', { cam: R('eric', 25, 1.6, 0.1), expr: 'grin', dur: 2.0 });
   D.act('kid1', 'cheerJump'); D.act('kid2', 'cheerJump');
-  D.say('kid2', 'YES!', { label: 'MARCUS & LILY', cam: F(['kid1', 'kid2'], 230, 2.6, 0.0, { lookY: 0.15, fov: 44 }), dur: 0.9 });
+  D.say('kid2', 'YES!', { label: 'MARCUS & LILY', cam: FIX([-1.9, 1.25, 2.9], [-3.4, 0.95, 3.7], { fov: 46 }), dur: 0.9 });
   D.say('leon', 'Welcome, everybody. Please, sit down. Dinner is ready!', { cam: R('leon', 25, 1.7, 0.1), dur: 2.0 });
   D.anim('fade', 1, 0.3); D.wait(0.3); D.anim('fade', 0, 0.4, 0.05);
   D.set('din.night', 1);
