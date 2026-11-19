@@ -14,6 +14,9 @@ import { buildShopStreet, buildMart, buildPrison, buildPrisonExt, buildDowntownE
 import { buildDungeon, buildEndlessHall, buildTitan, buildDome, buildCloak } from './e9.js';
 import { buildPowerRoom, buildElevator, buildFinaleCity, buildLasso, buildFlyHat } from './e10.js';
 import { buildFX } from './fx.js';
+import { buildHeroS2, S2CAST } from './s2chars.js';
+import { S2_ACTIONS, locomotionS2 } from './s2anim.js';
+import { buildMarket, buildMarketExt, buildAvenue, buildDining, buildThanksDecor, buildS2Title, buildS2E1Objects } from './s2e1.js';
 import { evalTrack, evalStep, buildGaitTables, gaitAt } from './director.js';
 import { drawOverlay } from './overlay.js';
 import { clamp, lerp, smoothstep, noise1, hash, mk, mat, canvasTex } from './util.js';
@@ -28,6 +31,8 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   await document.fonts.load('bold 40px "Inter Display"').catch(() => {});
   await document.fonts.load('700 40px Caveat').catch(() => {});
   const T = buildEpisode();
+  const S2 = !!META?.s2;
+  if (S2) Object.assign(ACTIONS, S2_ACTIONS);
 
   const renderer = new THREE.WebGLRenderer({ antialias: !new URLSearchParams(location.search).has('noaa'), preserveDrawingBuffer: true });
   renderer.setPixelRatio(1);
@@ -58,23 +63,27 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     ...(META?.e8 ? { shopSt: buildShopStreet(), mart: buildMart(), prison: buildPrison(), prisonExt: buildPrisonExt() } : {}),
     ...(META?.e9 ? { dungeon: buildDungeon(), hall9: buildEndlessHall() } : {}),
     ...(META?.e10 ? { power: buildPowerRoom(), lift: buildElevator() } : {}),
+    ...(META?.s2e1 ? { market: buildMarket(), marketExt: buildMarketExt(), avenue: buildAvenue(), dining: buildDining(), s2title: buildS2Title(font, TextGeometry) } : {}),
     black: { name: 'black', group: new THREE.Group(), bg: new THREE.Color(0x000000), update() {} },
   };
   for (const s of Object.values(SETS)) { s.group.visible = false; scene.add(s.group); }
   const dtExtras = META?.e8 && SETS.downtown ? buildDowntownExtras() : null;
   if (dtExtras) SETS.downtown.group.add(dtExtras.group);
   const fcity = META?.e10 && SETS.downtown ? buildFinaleCity() : null;
+  const thxDecor = META?.s2e1 ? buildThanksDecor() : null;
+  if (thxDecor) SETS.living.group.add(thxDecor);
+  const s2obj = META?.s2e1 ? buildS2E1Objects(scene) : null;
   if (fcity) SETS.downtown.group.add(fcity.group);
 
   // cast
   // each hero can have outfit variants (pajamas, party costumes); the `${name}.outfit` track picks one per frame
   const heroes = {}, heroSets = {};
   const CLAYS = META?.e7 ? ['clay1', 'clay2', 'clay3', 'clay4', 'clay5', 'clay6', 'clay7', 'clay8'] : [];
-  const HERO_NAMES = ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy', ...(META?.e7 ? ['guard', 'officer', 'officer2'] : []), ...(META?.e8 ? ['guard2', 'ped1', 'ped2', 'ped3'] : []), ...(META?.e9 ? ['soulX'] : []), ...(META?.e10 ? ['soulX2', 'soulX3'] : []), ...CLAYS];
+  const HERO_NAMES = ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy', ...(META?.e7 ? ['guard', 'officer', 'officer2'] : []), ...(META?.e8 ? ['guard2', 'ped1', 'ped2', 'ped3'] : []), ...(META?.e9 ? ['soulX'] : []), ...(META?.e10 ? ['soulX2', 'soulX3'] : []), ...CLAYS, ...(S2 ? (META.s2Cast ?? []) : [])];
   for (const n of HERO_NAMES) {
-    const extras = [...(CAST[n].extras ?? []), ...(META?.extras?.[n] ?? [])];
-    heroSets[n] = { base: buildHero({ ...CAST[n], ...(costume[n] ?? {}), extras }) };
-    for (const o of META?.outfits ?? []) if (OUTFITS[o]?.[n]) heroSets[n][o] = buildHero({ ...CAST[n], ...(costume[n] ?? {}), ...OUTFITS[o][n], extras: [...(OUTFITS[o][n].extras ?? []), ...extras.filter((e) => e === 'monsterMask')] });
+    const extras = [...(CAST[n]?.extras ?? []), ...(META?.extras?.[n] ?? [])];
+    heroSets[n] = { base: S2 && S2CAST[n] ? buildHeroS2({ ...S2CAST[n], ...(META.s2Looks?.[n] ?? {}) }) : buildHero({ ...CAST[n], ...(costume[n] ?? {}), extras }) };
+    for (const o of META?.outfits ?? []) if (!S2 && OUTFITS[o]?.[n]) heroSets[n][o] = buildHero({ ...CAST[n], ...(costume[n] ?? {}), ...OUTFITS[o][n], extras: [...(OUTFITS[o][n].extras ?? []), ...extras.filter((e) => e === 'monsterMask')] });
     for (const h of Object.values(heroSets[n])) { h.root.visible = false; scene.add(h.root); }
     heroes[n] = heroSets[n].base;
   }
@@ -88,6 +97,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   if (META?.e9) PROP_KINDS.push('burger', 'foodStack');
   for (const n of Object.keys(heroes)) for (const side of ['L', 'R']) for (const k of PROP_KINDS) {
     if (CLAYS.includes(n) || n.startsWith('ped') || n.startsWith('soulX')) continue;
+    if (S2 && !(META.propHeroes ?? ['aaron', 'flare', 'eric', 'leon', 'greg']).includes(n)) continue;
     const m = buildProp(k); m.visible = false; heroes[n].J.hand[side].add(m); handProps[`${n}.${side}.${k}`] = onHand(n, side, m);
   }
   const water = buildWaterGuy();
@@ -218,10 +228,11 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     slices[n] = onHand(n, 'R', attachProp(heroes[n], 'R', m, [0, -0.12, 0.08], [0.4, 0, 0]));
   }
 
-  const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy', 'water', 'dog', 'birddog', 'tiger', 'horse', 'cat', ...(META?.e7 ? ['guard', 'officer', 'officer2'] : []), ...(META?.e8 ? ['guard2', 'ped1', 'ped2', 'ped3'] : []), ...(META?.e9 ? ['soulX', 'titan'] : []), ...(META?.e10 ? ['soulX2', 'soulX3'] : []), ...CLAYS]);
+  const gait = buildGaitTables(T, ['aaron', 'flare', 'eric', 'barista', 'leon', 'greg', 'newark', 'cowboy', 'water', 'dog', 'birddog', 'tiger', 'horse', 'cat', ...(META?.e7 ? ['guard', 'officer', 'officer2'] : []), ...(META?.e8 ? ['guard2', 'ped1', 'ped2', 'ped3'] : []), ...(META?.e9 ? ['soulX', 'titan'] : []), ...(META?.e10 ? ['soulX2', 'soulX3'] : []), ...CLAYS, ...(S2 ? (META.s2Cast ?? []) : [])]);
   const val = (name, d = 0) => { const v = evalTrack(T.tracks[name], curT); return v === undefined ? d : v; };
   let curT = 0;
   const X = { T, scene, val: (n, d = 0) => val(n, d), hand: (n, side = 'R') => { const v = new THREE.Vector3(); heroes[n].J.hand[side].getWorldPosition(v); return v; }, rig: () => rig, crownPos: () => crown ? crown.root.position.clone() : new THREE.Vector3(),
+    step: (n) => evalStep(T.tracks[n], curT).v, visible: (n) => !!heroes[n]?.root.visible,
     titanFist: (side = 'R') => { const v = new THREE.Vector3(); if (titan) { titan.root.updateMatrixWorld(true); titan.fists[side].getWorldPosition(v); } return v; } };
 
   function talkAmount(who, t) {
@@ -335,7 +346,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     const g = gaitAt(gait[name], t);
     const moveW = (cur.sit || val(`${name}.y`) > 0.25) ? 0 : smoothstep(0.12, 0.6, g.speed);
     if (moveW > 0) {
-      const loco = locomotion(g.phase, smoothstep(1.9, 3.4, g.speed));
+      const loco = h.s2 ? locomotionS2(g.phase, smoothstep(1.9, 3.4, g.speed), smoothstep(4.6, 6.2, g.speed)) : locomotion(g.phase, smoothstep(1.9, 3.4, g.speed));
       if (cur.upper) { for (const k of LEG_KEYS) p[k] = lerp(p[k], loco[k], moveW); }
       else p = blendPose(p, loco, moveW);
     }
@@ -399,6 +410,10 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     const fl = val(`${name}.flicker`, 0);
     h.applyGlow({ hair: val(`${name}.hairGlow`), suit: val(`${name}.suitGlow`), eyes: val(`${name}.eyeGlow`), glove: val(`${name}.gloveGlow`), red: val(`${name}.redEyes`), white: val(`${name}.whiteEyes`), dim: val(`${name}.dim`), flicker: fl > 0 ? (Math.sin(t * 37) * Math.sin(t * 13.7) > 0 ? 1 : 1 - fl) : 0 });
     h.applyExtras({ mask: val(`${name}.mask`), milk: val(`${name}.milk`), slime: val(`${name}.slime`), scuff: val(`${name}.scuff`), reveal: val(`${name}.reveal`), hatTilt: val(`${name}.hatTilt`), bucket: val(`${name}.bucket`), energy: val(`${name}.energy`), hatOff: val(`${name}.hatOff`), t });
+    if (h.tick) {
+      const g0 = gaitAt(gait[name], Math.max(0, t - 0.15));
+      h.tick(t, { act: st.v ?? 'idle', prevAct: st.prev ?? 'idle', since: st.since, speed: g.speed, phase: g.phase, accel: clamp((g.speed - g0.speed) / 3, -1, 1), prop: { L: ![undefined, null, "", "none"].includes(evalTrack(T.tracks[`${name}.propL`], t)), R: ![undefined, null, "", "none"].includes(evalTrack(T.tracks[`${name}.propR`], t)) } });
+    }
   }
 
   // Water Guy "actions" produce arm targets etc.
@@ -509,7 +524,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
   }
 
   // soft glow around bright lights and effects: blur a thresholded, downscaled copy and add it back
-  const BLOOM = { title: 0.35, lair: 0.42, alley: 0.42, bank: 0.3, oldStreet: 0.42, warehouse: 0.36, whExt: 0.42, cavern: 0.4, tunnel: 0.38, reactor: 0.4, machines: 0.35, platform: 0.35, chamber: 0.4, newarkExt: 0.4, party: 0.38, dungeon: 0.4, hall9: 0.42, power: 0.38, lift: 0.16, black: 0 };
+  const BLOOM = { title: 0.35, s2title: 0.5, dining: 0.22, lair: 0.42, alley: 0.42, bank: 0.3, oldStreet: 0.42, warehouse: 0.36, whExt: 0.42, cavern: 0.4, tunnel: 0.38, reactor: 0.4, machines: 0.35, platform: 0.35, chamber: 0.4, newarkExt: 0.4, party: 0.38, dungeon: 0.4, hall9: 0.42, power: 0.38, lift: 0.16, black: 0 };
   const gcan = document.createElement('canvas'); gcan.width = Math.round(canvasW / 4); gcan.height = Math.round(canvasH / 4);
   const gctx = gcan.getContext('2d');
   let activeSet = null;
@@ -531,6 +546,8 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     if (dtExtras && setEntry.set === 'downtown') dtExtras.update(t, X);
     if (fcity && setEntry.set === 'downtown') fcity.update(t, X);
     for (const n of Object.keys(heroes)) updateHero(n, t);
+    if (thxDecor) thxDecor.visible = val('thx.decor', 0) > 0.5;
+    if (s2obj) { scene.updateMatrixWorld(true); s2obj.update(t, X); }
     updateWater(t);
     soul.root.visible = val('soul.vis', 0) > 0.5;
     if (soul.root.visible) {

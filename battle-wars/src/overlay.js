@@ -244,6 +244,8 @@ function drawCard(ctx, W, H, c, t) {
     });
     ctx.globalAlpha = alpha;
     ctx.font = `${Math.round(56 * s)}px ${UI_FONT}`; ctx.fillText('🎃', px + pw / 2, py + 0.1 * ph);
+  } else if (c.kind === 'shopList') {
+    drawShopList(ctx, W, H, c, t, 1);
   } else if (c.kind === 'credits') {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -349,7 +351,55 @@ function drawCoreMeter(ctx, W, H, t, val) {
   ctx.restore();
 }
 
+// Season 2: "store closes in" countdown (clock.left = seconds until Gus's Market closes)
+function drawClock(ctx, W, H, t, val) {
+  const s = H / 720, left = Math.max(0, val('clock.left', 600));
+  const x = W - 330 * s, y = 24 * s, w = 300 * s, h = 76 * s;
+  const urgent = left < 120, flash = urgent && Math.sin(t * 9) > 0;
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, val('hud.clock', 0));
+  ctx.fillStyle = 'rgba(20,8,4,0.8)'; roundRect(ctx, x, y, w, h, 14 * s); ctx.fill();
+  ctx.strokeStyle = urgent ? (flash ? '#ff4a3a' : '#ffb09a') : '#ffb84a'; ctx.lineWidth = 3 * s; roundRect(ctx, x, y, w, h, 14 * s); ctx.stroke();
+  ctx.fillStyle = '#ffd890'; ctx.font = `800 ${Math.round(17 * s)}px ${UI_FONT}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+  ctx.fillText("GUS'S MARKET CLOSES IN", x + 16 * s, y + 20 * s);
+  const mm = Math.floor(left / 60), ss = Math.floor(left % 60);
+  ctx.fillStyle = urgent ? (flash ? '#ff4a3a' : '#ffffff') : '#ffffff'; ctx.font = `${Math.round(40 * s)}px ${FONT}`;
+  ctx.fillText(`${mm}:${String(ss).padStart(2, '0')}`, x + 16 * s, y + 52 * s);
+  // a little turkey icon
+  ctx.translate(x + w - 46 * s, y + 46 * s);
+  for (let i = 0; i < 5; i++) { ctx.fillStyle = ['#c0441a', '#e08a22', '#f2c23a', '#e08a22', '#c0441a'][i]; ctx.beginPath(); ctx.ellipse(0, -4 * s, 6 * s, 20 * s, (i - 2) * 0.45, 0, Math.PI * 2); ctx.fill(); }
+  ctx.fillStyle = '#7a4a22'; ctx.beginPath(); ctx.arc(0, 6 * s, 15 * s, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(0, -10 * s, 7 * s, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// Season 2: the handwritten Thanksgiving shopping list (items crossed off as c.done grows)
+function drawShopList(ctx, W, H, c, t, alpha) {
+  const s = H / 720, a = t - c.t0;
+  const k = smoothstep(0, 0.45, a);
+  const w = 360 * s, h = 470 * s, x = W - w - 60 * s, y = (H - h) / 2 + (1 - k) * 60 * s;
+  ctx.save(); ctx.globalAlpha = alpha;
+  ctx.translate(x + w / 2, y + h / 2); ctx.rotate(0.04); ctx.translate(-w / 2, -h / 2);
+  ctx.fillStyle = '#fffbea'; ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 18 * s; ctx.fillRect(0, 0, w, h); ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(80,140,220,0.35)'; ctx.lineWidth = 1.5 * s;
+  for (let ly = 90 * s; ly < h; ly += 40 * s) { ctx.beginPath(); ctx.moveTo(10 * s, ly); ctx.lineTo(w - 10 * s, ly); ctx.stroke(); }
+  ctx.strokeStyle = 'rgba(220,60,60,0.5)'; ctx.beginPath(); ctx.moveTo(44 * s, 0); ctx.lineTo(44 * s, h); ctx.stroke();
+  ctx.fillStyle = '#7a2a12'; ctx.font = `700 ${Math.round(38 * s)}px Caveat, cursive`; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+  ctx.fillText(c.title ?? 'THANKSGIVING LIST', 56 * s, 62 * s);
+  c.items.forEach((it, i) => {
+    const iy = 122 * s + i * 40 * s;
+    const done = (c.done ?? []).includes(i) && t > (c.doneAt?.[i] ?? c.t0);
+    const big = c.big === i;
+    ctx.fillStyle = big ? '#c0201a' : '#1a2a5a'; ctx.font = `700 ${Math.round((big ? 36 : 30) * s)}px Caveat, cursive`;
+    ctx.fillText(it, 56 * s, iy);
+    if (done) { const tw = ctx.measureText(it).width; ctx.strokeStyle = '#1a6a2a'; ctx.lineWidth = 3 * s; ctx.beginPath(); ctx.moveTo(52 * s, iy - 9 * s); ctx.lineTo(60 * s + tw, iy - 11 * s); ctx.stroke(); }
+    if (big && c.circle && t > c.circle) { const tw = ctx.measureText(it).width, cp = smoothstep(c.circle, c.circle + 0.5, t); ctx.strokeStyle = '#d0201a'; ctx.lineWidth = 3.5 * s; ctx.beginPath(); ctx.ellipse(56 * s + tw / 2, iy - 10 * s, tw / 2 + 16 * s, 24 * s, -0.04, 0, Math.PI * 2 * cp); ctx.stroke(); }
+  });
+  ctx.restore();
+}
+
 export function drawOverlay(ctx, W, H, t, T, val) {
+  if (val('hud.clock', 0) > 0.01) drawClock(ctx, W, H, t, val);
   if (val('cctv', 0) > 0.5) drawCCTV(ctx, W, H, t, val);
   if (val('hud.core', 0) > 0.01) drawCoreMeter(ctx, W, H, t, val);
   const vk = val('vision', 0);
