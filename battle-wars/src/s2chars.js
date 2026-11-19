@@ -697,7 +697,7 @@ export const S2CAST = {
   // Gus, owner of Gus's Market: bald on top, gray mustache, glasses, green apron
   gus: { name: 'gus', seed: 31, scale: 0.9, bulk: 1.25, hair: 'fringe', hairColor: 0x9a9a9a, browColor: 0x7a7a7a, skin: 0xe2a882, skinDark: 0xcf9470, eyeColor: 0x3a5a7a, casual: true, shirt: 0xf2efe6, pants: 0x3a3a44, boot: 0x2a1a10, apron: 0x2f8a4a, mustache: true, mustacheColor: 0x8a8a8a, glasses: 0x2a2a2a, sleeves: 'short' },
   // Grandma Rose and her grandkids
-  rose: { name: 'rose', seed: 32, scale: 0.8, hair: 'bun', hairColor: 0xe8e8ec, browColor: 0xbababa, skin: 0xf0c4a4, skinDark: 0xe0ae8c, eyeColor: 0x4a6a8a, casual: true, top: 'sweater', shirt: 0xb0485a, stripe: 0xf6e7c0, pants: 0x4a3a5a, dress: 0x5a3a6a, boot: 0x3a2a2a, glasses: 0xb08a3a, scarf: 0xe8a23a, cane: true, lip: 0xc0606a },
+  rose: { name: 'rose', seed: 32, scale: 0.8, hair: 'bun', hairColor: 0xe8e8ec, browColor: 0xbababa, skin: 0xf0c4a4, skinDark: 0xe0ae8c, eyeColor: 0x4a6a8a, casual: true, top: 'sweater', shirt: 0xb0485a, stripe: 0xf6e7c0, pants: 0x4a3a5a, dress: 0x5a3a6a, boot: 0x3a2a2a, glasses: 0xb08a3a, scarf: 0xe8a23a, lip: 0xc0606a },
   kid1: { name: 'kid1', seed: 33, scale: 0.6, headScale: 1.2, hair: 'curly', hairColor: 0x1a1210, browColor: 0x120c0a, skin: 0x8a5a3c, skinDark: 0x7a4a30, eyeColor: 0x2a1a10, casual: true, top: 'hoodie', shirt: 0x3a9ae0, pants: 0x2a2a3a, boot: 0xe04040 },
   kid2: { name: 'kid2', seed: 34, scale: 0.56, headScale: 1.22, hair: 'ponytail', hairColor: 0x8a4a1a, browColor: 0x5a2a10, skin: 0x8a5a3c, skinDark: 0x7a4a30, eyeColor: 0x2a1a10, casual: true, top: 'sweater', shirt: 0xf2c84a, stripe: 0xe05a3a, pants: 0x5a3a8a, boot: 0xf2f2f2, tie: 0xe05a8a },
   // shoppers

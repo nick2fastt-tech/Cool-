@@ -482,6 +482,49 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
     return tmpV.clone().add(new THREE.Vector3(0, 0.12, 0));
   }
 
+  // Season 2: a close-up that would look through someone else's body swings around (once, at the start of the
+  // shot) to the nearest clear angle. Decided from the timeline alone, so every render worker picks the same angle.
+  const clearCache = new Map();
+  const ACTORS = Object.keys(heroSets);
+  function clearYaw(idx, s, dur) {
+    if (clearCache.has(idx)) return clearCache.get(idx);
+    const ts = s.t0 + Math.min(0.6, dur * 0.3);
+    const on = s.on.filter((n) => heroes[n]);
+    if (!on.length) { clearCache.set(idx, 0); return 0; }
+    const c = new THREE.Vector3();
+    for (const n of on) { const sitting = (ACTIONS[evalStep(T.tracks[`${n}.act`], ts).v] ?? {}).sit; c.add(new THREE.Vector3(vAt(`${n}.x`, ts), vAt(`${n}.y`, ts) + (sitting ? 1.05 : 1.45) * ((S2CAST[n]?.scale ?? 0.86) / 0.86), vAt(`${n}.z`, ts))); }
+    c.multiplyScalar(1 / on.length); c.y += s.lookY ?? -0.1;
+    const base = (s.yaw ?? 0) * P / 180 + (s.rel ? vAt(`${s.rel}.ry`, ts) : 0);
+    const dist = s.dist ?? 4, hh = s.h ?? 0.2;
+    const others = ACTORS.filter((n) => !on.includes(n) && vAt(`${n}.vis`, ts) > 0.5).map((n) => {
+      const sitting = (ACTIONS[evalStep(T.tracks[`${n}.act`], ts).v] ?? {}).sit, sc = (S2CAST[n]?.scale ?? 0.86) / 0.86;
+      return { x: vAt(`${n}.x`, ts), z: vAt(`${n}.z`, ts), y0: vAt(`${n}.y`, ts) + 0.1, y1: vAt(`${n}.y`, ts) + (sitting ? 1.35 : 1.8) * sc, r: 0.3 * Math.max(0.8, sc) };
+    });
+    let setName = T.sets[0].set; for (const e of T.sets) if (e.t0 <= ts) setName = e.set;
+    const bounds = META.camBounds?.[setName];
+    const blocks = META.camBlocks?.[setName] ?? [];
+    const inBlock = (q) => blocks.some((bk) => q.x > bk[0] && q.x < bk[1] && q.z > bk[2] && q.z < bk[3] && q.y < bk[4]);
+    const blocked = (yaw) => {
+      const p = new THREE.Vector3(c.x + Math.sin(yaw) * dist, c.y + hh, c.z + Math.cos(yaw) * dist);
+      if (bounds && (p.x < bounds[0] || p.x > bounds[1] || p.z < bounds[2] || p.z > bounds[3])) return 99;
+      if (inBlock(p)) return 99;
+      let hits = 0;
+      for (let k = 1; k < 10; k++) if (inBlock(p.clone().lerp(c, k / 10))) { hits += 2; break; }
+      for (const o of others) {
+        const dx = c.x - p.x, dz = c.z - p.z, L2 = dx * dx + dz * dz;
+        const u = clamp(((o.x - p.x) * dx + (o.z - p.z) * dz) / Math.max(1e-6, L2), 0, 1);
+        if (u <= 0.02 || u >= 0.92) continue;
+        const qx = p.x + dx * u, qz = p.z + dz * u, qy = p.y + (c.y - p.y) * u;
+        if (Math.hypot(o.x - qx, o.z - qz) < o.r && qy > o.y0 && qy < o.y1) hits++;
+      }
+      return hits;
+    };
+    let best = 0, bestHits = blocked(base);
+    if (bestHits > 0) for (const d of [25, -25, 45, -45, 65, -65, 90, -90, 120, -120]) { const h = blocked(base + d * P / 180); if (h < bestHits) { best = d * P / 180; bestHits = h; if (h === 0) break; } }
+    clearCache.set(idx, best);
+    return best;
+  }
+
   function updateCamera(t) {
     let i = -1;
     for (let k = 0; k < T.shots.length; k++) { if (T.shots[k].t0 <= t) i = k; else break; }
@@ -499,6 +542,7 @@ export async function createEpisode(canvasW = 1280, canvasH = 720, epId = 's1e1-
       if (s.offset) { c.x += s.offset[0]; c.y += s.offset[1]; c.z += s.offset[2]; }
       let yaw = (s.yaw ?? 0) * P / 180;
       if (s.rel) yaw += val(`${s.rel}.ry`);
+      if (S2 && !s.noAuto) yaw += clearYaw(Math.max(0, i), s, dur);
       yaw += ((s.orbit ?? 0) * P / 180) * (t - s.t0);
       if (s.yaw2 != null) yaw = lerp(yaw, s.yaw2 * P / 180 + (s.rel ? val(`${s.rel}.ry`) : 0), k);
       const dist = lerp(s.dist ?? 4, s.dist2 ?? s.dist ?? 4, k);

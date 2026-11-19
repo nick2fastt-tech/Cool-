@@ -178,7 +178,7 @@ export function buildMarket() {
   box(fz, 9.0, 0.9, 1.4, 0, [0, 0.45, 0], { material: mat(0xf2f4f8, { r: 0.3, m: 0.2 }), round: 0.05 });
   box(fz, 8.8, 0.05, 1.2, 0, [0, 0.86, 0], { material: mat(0x9fd8ff, { e: 0x4ab8ff, ei: 0.25, r: 0.1 }), noShadow: true });
   mk(new THREE.PlaneGeometry(8.9, 0.45), glass, fz, [0, 1.12, 0.69], [0, 0, 0], null, false);
-  box(fz, 9.0, 0.08, 1.45, 0, [0, 1.36, 0], { material: mat(0xd8dce4, { m: 0.5, r: 0.3 }) });
+  for (const zz of [0.68, -0.68]) box(fz, 9.0, 0.08, 0.1, 0, [0, zz > 0 ? 1.36 : 1.0, zz], { material: mat(0xd8dce4, { m: 0.5, r: 0.3 }) });
   sign(fz, 'FRESH TURKEYS', 3.2, 0.7, [0, 2.4, -0.7], '#c0441a', '#fff4d0');
   const turkeyCut = canvasTex(256, 256, (c, w, h) => {
     c.clearRect(0, 0, w, h);
@@ -553,8 +553,7 @@ export function buildDining() {
   dish(sides, -0.9, 0, -0.2, 0xf6f0e0, 'mound'); dish(sides, 0.9, 0, 0.2, 0x9a0a2a); dish(sides, -1.5, 0, 0.25, 0, 'corn'); dish(sides, 1.5, 0, -0.25, 0x4a8a2a, 'mound');
   dish(sides, -0.5, 0, 0.35, 0xb07a3a, 'mound'); dish(sides, 0.5, 0, -0.35, 0xe8c070, 'mound');
   pie(sides, 2.0, 0, 0.2); pie(sides, -2.0, 0, -0.2, 0x5a2a1a);
-  for (const x of [-1.1, 1.1]) { mk(new THREE.CylinderGeometry(0.03, 0.03, 0.25, 10), mat(0xfff4e0, { r: 0.6 }), food, [x, 0.13, 0]); }
-  const flames = [-1.1, 1.1].map((x) => mk(new THREE.SphereGeometry(0.025, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffc040 }), food, [x, 0.28, 0], [0, 0, 0], [1, 1.8, 1], false));
+  const flames = [];
   for (let i = 0; i < 3; i++) pumpkin(food, -0.25 + i * 0.25, 0, 0.55 * (i % 2 ? 1 : -1) * 0, 0.4);
   // decorations: banner, garlands, string lights
   banner(g, 'HAPPY THANKSGIVING', 6.0, [0, 3.0, -5.8]);
