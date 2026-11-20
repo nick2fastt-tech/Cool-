@@ -117,6 +117,7 @@ instead, so players still see it.
 npm test                                  # schedule, password hashing, server + email
 node tests/e2e/shots.cjs                  # menus walkthrough (needs `npm run dev` running)
 node tests/e2e/play-shots.cjs             # in-game walkthrough
+node tests/e2e/mechanics.cjs              # joystick, look, walls, doors, stairs, sitting (real touch input)
 node tests/e2e/route-check.cjs            # students reach their seats after every bell
 ```
 

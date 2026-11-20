@@ -44,7 +44,7 @@ const want = (k) => only.size === 0 || only.has(k);
     await page.waitForSelector('#tapStart:not(.hidden)', { timeout: 180000 });
     await page.tap('#screen-loading');
     await page.waitForSelector('#screen-auth:not(.hidden) .idcard');
-    await page.fill('#authEmail', 'tester.student@gmail.com');
+    await page.fill('#authEmail', 'tester.student.' + Date.now() + '@gmail.com');
     await page.fill('#authPass', 'pass1234');
     await page.fill('#authConfirm', 'pass1234');
     await page.tap('[data-gender="female"]');

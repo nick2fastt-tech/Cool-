@@ -112,11 +112,21 @@ async function boot() {
 }
 
 function registerServiceWorker() {
-  if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
+  if (!import.meta.env.PROD) return;
+  // Only pages that ship the app manifest (and sw.js next to it) install the offline worker.
+  if (!document.querySelector('link[rel="manifest"]')) return;
   const secure = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   if (!secure) return;
   window.addEventListener('load', () => {
-    navigator.serviceWorker
+    let sw;
+    try {
+      // Sandboxed frames can throw just for reading navigator.serviceWorker.
+      sw = navigator.serviceWorker;
+    } catch (e) {
+      return;
+    }
+    if (!sw || typeof sw.register !== 'function') return;
+    sw
       .register('./sw.js')
       .then((reg) => {
         const urls = performance
@@ -125,7 +135,7 @@ function registerServiceWorker() {
           .filter((u) => u.startsWith(location.origin) && !u.includes('/api/') && !u.endsWith('.mp3'));
         const sendList = (w) => w && w.postMessage({ type: 'cache', urls });
         if (reg.active) sendList(reg.active);
-        else navigator.serviceWorker.ready.then((r) => sendList(r.active)).catch(() => {});
+        else sw.ready.then((r) => sendList(r.active)).catch(() => {});
       })
       .catch(() => {});
   });

@@ -25,10 +25,10 @@ const IGNORE = [/GPU stall due to ReadPixels/];
     await page.waitForSelector('#tapStart:not(.hidden)', { timeout: 180000 });
     await page.tap('#screen-loading');
     await page.waitForSelector('#screen-auth:not(.hidden) .idcard');
-    await page.fill('#authEmail', 'route.test@gmail.com'); await page.fill('#authPass', 'pass1234'); await page.fill('#authConfirm', 'pass1234');
+    await page.fill('#authEmail', 'route.test.' + Date.now() + '@gmail.com'); await page.fill('#authPass', 'pass1234'); await page.fill('#authConfirm', 'pass1234');
     await page.tap('[data-gender="female"]'); await page.tap('#authSubmit');
     await page.waitForSelector('#lockContinue', { timeout: 20000 }); await page.tap('#lockContinue');
-    await page.waitForSelector('#letterOk'); await page.tap('#letterOk');
+    await page.waitForSelector('#letterOk, #screen-menu:not(.hidden)'); if (await page.$('#letterOk')) await page.tap('#letterOk');
     await page.waitForSelector('#screen-menu:not(.hidden)');
     await page.tap('#btnPlay', { force: true });
     await page.waitForSelector('#screen-grade:not(.hidden)'); await page.waitForTimeout(600);
@@ -43,16 +43,19 @@ const IGNORE = [/GPU stall due to ReadPixels/];
         const st0 = {}; for (const n of g.npcs.list) st0[n.state] = (st0[n.state] || 0) + 1;
         p.fastForward(80);
         const st = {}; for (const n of g.npcs.list) st[n.state] = (st[n.state] || 0) + 1;
+        const toClass = g.npcs.list.filter((n) => n.state !== 'seated' && n.seat).length;
         const stuck = g.npcs.list.filter((n) => n.state === 'walk').map((n) => ({ i: n.i, x: +n.x.toFixed(2), z: +n.z.toFixed(2), pi: n.pi, len: n.path.length, next: n.path[n.pi], seat: n.seat && n.seat.room, block: +n.blockT.toFixed(2) }));
         // seated NPCs must be exactly on their seat
         let bad = 0;
         for (const n of g.npcs.list) if (n.state === 'seated' && (Math.abs(n.x - n.seat.x) > 0.01 || Math.abs(n.z - n.seat.z) > 0.01 || n.seat.occupant !== n)) bad++;
         const per = {}; for (const n of g.npcs.list) if (n.state === 'seated') per[n.seat.room] = (per[n.seat.room] || 0) + 1;
-        return { round, afterBell: st0, after80s: st, perRoom: per, badSeats: bad, stuck: stuck.slice(0, 6), period: p.state.period };
+        return { round, afterBell: st0, after80s: st, perRoom: per, badSeats: bad, toClass, stuck: stuck.slice(0, 6), period: p.state.period };
       }, round);
       console.log(JSON.stringify(res));
       if (res.badSeats) problems.push('[route] NPCs not on their seats: ' + res.badSeats);
-      if ((res.after80s.walk || 0) > 2) problems.push('[route] NPCs still walking after 80s: ' + res.after80s.walk);
+      // hallway wanderers walk on purpose; everyone heading to a class must be seated by now
+      if (res.toClass) problems.push('[route] students still on their way to class after 80s: ' + res.toClass);
+      if ((res.after80s.seated || 0) < 44) problems.push('[route] only ' + res.after80s.seated + ' students seated');
     }
     await page.evaluate(() => window.__SL.play.teleport(14.6, 3.2, Math.PI, -0.05));
     await page.waitForTimeout(1500);

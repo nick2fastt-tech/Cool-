@@ -38,7 +38,7 @@ const IGNORE = [/GPU stall due to ReadPixels/];
   await page.waitForSelector('#tapStart:not(.hidden)', { timeout: 180000 });
   await page.tap('#screen-loading');
   await page.waitForSelector('#screen-auth:not(.hidden) .idcard');
-  await page.fill('#authEmail', 'nick@gmail.com');
+  await page.fill('#authEmail', 'nick.' + Date.now() + '@gmail.com');
   await page.fill('#authPass', 'schoollife');
   await page.fill('#authConfirm', 'schoollife');
   await page.tap('[data-gender="male"]');

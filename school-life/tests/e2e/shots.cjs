@@ -55,7 +55,7 @@ const want = (k) => only.size === 0 || only.has(k);
   await page.tap('#authSubmit');
   await page.waitForTimeout(500);
   if (want('auth')) await shot('04-auth-error');
-  await page.fill('#authEmail', 'nick.student@gmail.com');
+  await page.fill('#authEmail', 'nick.student.' + Date.now() + '@gmail.com');
   await page.fill('#authPass', 'schoollife1');
   await page.fill('#authConfirm', 'schoollife1');
   await page.tap('[data-gender="male"]');
