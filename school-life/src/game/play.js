@@ -1,8 +1,8 @@
 // One play session: you, your grade's schedule, the school and everyone in it.
 import * as THREE from 'three';
 import { Player } from './player.js';
-import { getScheduleState, ordinal } from '../core/schedule.js';
-import { ROOMS } from '../config.js';
+import { getScheduleState, ordinal, formatTime, SCHOOL_START, SCHOOL_END } from '../core/schedule.js';
+import { ROOMS, SCHEDULE } from '../config.js';
 import { LESSONS, TEACHERS } from './lessons.js';
 import * as L from '../world/layout.js';
 
@@ -23,6 +23,9 @@ export class PlaySession {
     this.inter = game.interactions;
     this.npcs = game.npcs;
     this.lastKey = null;
+    this.prevState = null;
+    this.attendance = {};
+    this.newDayPending = false;
     this.zone = 'lobby';
     this.target = null;
     this.subTimer = 0;
@@ -37,21 +40,41 @@ export class PlaySession {
     this.player.onLand = () => this.audio.footstep(1.4);
   }
 
+  sched() {
+    const c = this.game.clock;
+    return getScheduleState(c.minutes, this.grade, c.day);
+  }
+
   start(now) {
     const p = this.player;
     p.spawn(L.SPAWN.x, L.SPAWN.z, L.SPAWN.yaw);
     for (const g of this.world.zones.values()) g.visible = true;
-    this.state = getScheduleState(now, this.grade);
+    this.attendance = {};
+    this.state = this.sched();
     this.lastKey = this.state.key;
-    if (this.npcs) this.npcs.reset(now, this.state.index);
+    this.prevState = this.state;
+    const s = this.state;
+    if (this.npcs) this.npcs.reset(now, s.phase === 'after' ? -1 : s.index);
     this.hud.show();
     this.input.setEnabled(true);
     this.hud.onUse = () => { this.input.useRequested = true; };
     this.hud.onSchedule = () => this.toggleSchedule();
     this.game.gr.r.shadowMap.needsUpdate = true;
-    const s = this.state;
-    this.ui.toast(`Welcome to ${ordinal(this.grade)} grade! Period ${s.period}: <b>${s.cls}</b> in Room ${s.room}.`, 'bell', { big: true, ms: 4200 });
+    this.welcome(s, `Welcome to ${ordinal(this.grade)} grade!`);
     this.updateVisibility(true);
+  }
+
+  /** First message of a school day (and the 8:00 AM bell). */
+  welcome(s, hello) {
+    const clock = formatTime(this.game.clock.date());
+    if (s.phase === 'class') {
+      if (this.game.clock.minutes - s.startMin < 0.1) this.audio.bell(3.0);
+      this.ui.toast(`${hello} It's ${clock}. Period ${s.period}: <b>${s.cls}</b> in Room ${s.room}. Be there by ${formatTime(s.lateAt)}!`, 'bell', { big: true, ms: 5200 });
+    } else if (s.phase === 'after') {
+      this.ui.toast(`${hello} School's out for today.`, 'bell', { big: true, ms: 4200 });
+    } else {
+      this.ui.toast(`${hello} Next up: <b>${s.cls}</b> in Room ${s.room} at ${formatTime(s.start)}.`, 'bell', { big: true, ms: 4600 });
+    }
   }
 
   stop() {
@@ -81,7 +104,7 @@ export class PlaySession {
     const g = this.game;
     const steps = Math.ceil(sec / 0.05);
     for (let i = 0; i < steps; i++) {
-      g.timeOffsetMs += 50;
+      g.clock.advance(0.05);
       this.update(0.05, g.now());
     }
   }
@@ -132,7 +155,7 @@ export class PlaySession {
     this.audio.click();
     this.input.reset();
     const now = this.game.now();
-    this.hud.openSchedule(getScheduleState(now, this.grade), now, this.grade, {
+    this.hud.openSchedule(this.sched(), now, this.grade, {
       onResume: () => {
         this.audio.click();
         this.hud.closeSchedule();
@@ -145,13 +168,30 @@ export class PlaySession {
     });
   }
 
+  /** Attendance for the class the schedule points at. */
+  att(s) {
+    const k = s.day + ':' + s.index;
+    if (!this.attendance[k]) this.attendance[k] = { arrived: false, late: false, warned: false };
+    return this.attendance[k];
+  }
+
+  hereRoom() {
+    return L.roomOfZone(this.zone === 'office' ? 'r106' : this.zone);
+  }
+
   status() {
     const s = this.state;
     const seat = this.player.seat;
-    if (seat && seat.room === s.room) return { text: 'In class! Great job.', ok: true };
-    const here = L.roomOfZone(this.zone === 'office' ? 'r106' : this.zone);
-    if (here === s.room) return { text: 'Find a seat!', ok: false };
-    return { text: `Go to Room ${s.room}`, ok: false };
+    if (s.phase === 'after') return { text: "School's out!", cls: 'ok' };
+    const a = this.att(s);
+    if (this.hereRoom() === s.room) {
+      if (s.phase !== 'class') return { text: 'Ready for class!', cls: 'ok' };
+      if (seat && seat.room === s.room) return a.late ? { text: 'In class (late)', cls: 'warn' } : { text: 'In class! Great job.', cls: 'ok' };
+      return { text: a.late ? 'Late! Find a seat' : 'Find a seat!', cls: 'warn' };
+    }
+    if (s.phase === 'class' && s.late) return { text: `LATE! Go to Room ${s.room}`, cls: 'late' };
+    if (s.phase === 'class') return { text: `Go to Room ${s.room} by ${formatTime(s.lateAt)}`, cls: 'warn' };
+    return { text: `Next: Room ${s.room} at ${formatTime(s.start)}`, cls: 'warn' };
   }
 
   use(it) {
@@ -185,10 +225,15 @@ export class PlaySession {
         p.sit(seat);
         this.audio.sit();
         const s = this.state;
-        if (seat.room === s.room) {
+        if (seat.room === s.room && s.phase !== 'after') {
+          const late = this.att(s).late;
           setTimeout(() => {
-            this.audio.success();
-            ui.toast(`You're in class: <b>${s.cls}</b>!`, 'star', { ms: 2600 });
+            if (late) {
+              ui.toast(`You're in <b>${s.cls}</b>, but you were late.`, 'clock', { ms: 2600 });
+            } else {
+              this.audio.success();
+              ui.toast(s.phase === 'class' ? `You're in class: <b>${s.cls}</b>!` : `Ready for <b>${s.cls}</b>!`, 'star', { ms: 2600 });
+            }
           }, 650);
         }
         break;
@@ -251,6 +296,66 @@ export class PlaySession {
     return dx * dx + dz * dz < 1.0;
   }
 
+  onPhaseChange(prev, s, now) {
+    const ui = this.ui;
+    if (s.phase === 'class') {
+      // a class starts: the bell rings
+      this.audio.bell(3.0);
+      ui.toast(`<b>Period ${s.period}</b> &middot; ${s.cls} in Room ${s.room}. Late at ${formatTime(s.lateAt)}!`, 'bell', { big: true, ms: 4600 });
+      if (prev && prev.phase === 'class' && this.npcs) this.npcs.onPeriodChange(now, s.index);
+    } else if (s.phase === 'passing') {
+      // a class ends: everyone heads to their next room
+      ui.toast(`Class is over! Next: <b>${s.cls}</b> in Room ${s.room} at ${formatTime(s.start)}.`, 'clock', { ms: 4200 });
+      this.audio.chime();
+      if (this.npcs) this.npcs.onPeriodChange(now, s.index);
+    } else if (s.phase === 'after') {
+      this.audio.bell(3.5);
+      ui.toast("School's out! A new school day starts at 8:00 AM.", 'bell', { big: true, ms: 5200 });
+      if (this.npcs) this.npcs.dismissAll();
+      this.hud.setSubtitle(null);
+    }
+  }
+
+  checkAttendance(s) {
+    if (s.phase === 'after') return;
+    const a = this.att(s);
+    if (!a.arrived && this.hereRoom() === s.room) {
+      a.arrived = true;
+      if (s.phase === 'class' && s.late) {
+        a.late = true;
+        this.ui.toast(`You made it to <b>${s.cls}</b>, but you're late.`, 'clock', { ms: 3200 });
+      }
+    }
+    if (s.phase === 'class' && s.late && !a.arrived && !a.warned) {
+      a.warned = true;
+      a.late = true;
+      this.audio.error();
+      this.ui.toast(`You're late for <b>${s.cls}</b>! Get to Room ${s.room}.`, 'clock', { ms: 4200 });
+    }
+  }
+
+  /** After school: a new school day starts at 8:00 AM. */
+  async startNewDay() {
+    const clock = this.game.clock;
+    const day = clock.day + 1;
+    await this.ui.fadeOut('Day ' + day, 'School starts at 8:00 AM');
+    if (this.game.play !== this) return;
+    const p = this.player;
+    if (p.seat) p.seat.occupant = null;
+    clock.reset(SCHOOL_START, day);
+    this.attendance = {};
+    this.teleport(L.SPAWN.x, L.SPAWN.z, L.SPAWN.yaw, -0.04);
+    const s = this.sched();
+    this.state = s;
+    this.lastKey = s.key;
+    this.prevState = s;
+    if (this.npcs) this.npcs.reset(this.game.now(), s.index);
+    this.updateVisibility(true);
+    this.newDayPending = false;
+    await this.ui.fadeIn();
+    this.welcome(s, `Day ${day}!`);
+  }
+
   update(dt, now) {
     const p = this.player;
     const hud = this.hud;
@@ -305,34 +410,28 @@ export class PlaySession {
     if (this.npcs) this.npcs.update(dt, now, p, vis);
 
     // schedule, bells, attendance
-    this.state = getScheduleState(now, this.grade);
-    const s = this.state;
+    const s = this.sched();
+    this.state = s;
     if (s.key !== this.lastKey) {
+      this.onPhaseChange(this.prevState, s, now);
       this.lastKey = s.key;
-      this.audio.bell(3.0);
-      this.ui.toast(`<b>Period ${s.period}</b> &middot; ${s.cls} in Room ${s.room}`, 'bell', { big: true, ms: 4200 });
-      if (this.npcs) this.npcs.onPeriodChange(now, s.index);
-      this.lateWarned = null;
     }
+    this.prevState = s;
+    this.checkAttendance(s);
     this.schedTick -= dt;
     if (this.schedTick <= 0) {
       this.schedTick = 0.25;
       hud.setSchedule(s, now, this.status());
       hud.tickSchedule(s, now, this.grade);
     }
-    const elapsed = (1 - s.msLeft / (30 * 60000)) * 30;
-    this.sessionTime = (this.sessionTime || 0) + dt;
-    if (elapsed > 3 && this.sessionTime > 20 && this.lateWarned !== s.key && !(p.seat && p.seat.room === s.room)) {
-      const here = L.roomOfZone(this.zone === 'office' ? 'r106' : this.zone);
-      if (here !== s.room) {
-        this.lateWarned = s.key;
-        this.ui.toast(`You're late for <b>${s.cls}</b>! Head to Room ${s.room}.`, 'clock', { ms: 3600 });
-      } else this.lateWarned = s.key;
+    if (s.phase === 'after' && !this.newDayPending && this.game.clock.minutes >= SCHOOL_END + SCHEDULE.afterSchoolMinutes) {
+      this.newDayPending = true;
+      this.startNewDay();
     }
 
     // teacher subtitles in the room you're in
-    const room = L.roomOfZone(this.zone === 'office' ? 'r106' : this.zone);
-    if (room && !paused) {
+    const room = this.hereRoom();
+    if (room && !paused && s.phase === 'class') {
       if (this.subRoom !== room) {
         this.subRoom = room;
         this.subIndex = Math.floor(Math.random() * 3);

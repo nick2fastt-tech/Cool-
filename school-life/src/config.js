@@ -19,14 +19,20 @@ export const ROOMS = {
   106: { id: 106, name: 'Library', sign: 'LIBRARY', color: '#c0392b' },
 };
 
-// Bell schedule: 8 periods, 30 minutes each, running on the real-life clock.
-// 1st period starts at 8:00 AM. The demo keeps school in session all day, so after
-// 8th period the schedule starts again at 1st period (every 4 hours).
+// School day. The game clock starts at 8:00 AM when you press Play and goes up
+// 1 minute every 60 seconds. Classes are 30 minutes with a 1-minute break, so
+// 1st period is 8:00-8:30 and the bell at 8:31 starts 2nd period. 8th period is
+// 45 minutes, so school lets out at 12:22 PM. You're late if you're not in class
+// 15 minutes after it starts (8:15 for 1st period).
 export const SCHEDULE = {
-  periods: 8,
-  periodMinutes: 30,
-  anchorHour: 8,
-  anchorMinute: 0,
+  startHour: 8,
+  startMinute: 0,
+  classMinutes: 30,
+  lastClassMinutes: 45,
+  passingMinutes: 1,
+  lateAfterMinutes: 15,
+  realSecondsPerGameMinute: 60,
+  afterSchoolMinutes: 1, // then a new school day starts at 8:00 AM
 };
 
 // The 8 classes, and each grade's order. Homeroom room changes by grade.
@@ -70,7 +76,8 @@ export const WELCOME = {
   subject: 'Welcome to School Life! \u{1F392}',
   intro: 'I hope you enjoy this game!',
   features: [
-    '8 classes, 30 minutes each, running on the real-life clock',
+    '8 classes from 8:00 AM to 12:22 PM: 30 minutes each, and 8th period is 45 minutes',
+    'The clock goes up 1 minute every minute. Get to class within 15 minutes or you\'re late!',
     'Pick 6th, 7th, 8th or 9th grade',
     '6 rooms: 101 Math, 102 Auditorium (seats + a stage), 103 Algebra I, 104 Photosynthesis, 105 English and 106 Library',
     'The Library has seats, comfy lounges and the Principal\'s Office (no entry yet!)',

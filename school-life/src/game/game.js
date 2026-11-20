@@ -1,4 +1,4 @@
-// Game core: owns the renderer, world, camera and the main loop.
+// Game core: owns the renderer, world, camera, game clock and the main loop.
 import * as THREE from 'three';
 import { GameRenderer } from '../engine/renderer.js';
 import { buildWorld } from '../world/world.js';
@@ -7,6 +7,11 @@ import { Input } from './input.js';
 import { Interactions } from './interact.js';
 import { NPCs } from './npcs.js';
 import { PlaySession } from './play.js';
+import { GameClock } from '../core/clock.js';
+import { SCHOOL_START, getScheduleState, minutesToDate } from '../core/schedule.js';
+
+// The main menu shows the school on a sunny morning.
+const MENU_TIME = 8 * 60 + 20;
 
 export class Game {
   constructor({ canvas, ui, audio, account, debug }) {
@@ -16,23 +21,23 @@ export class Game {
     this.account = account;
     this.debug = debug || {};
     this.mode = 'loading';
-    this.timeOffsetMs = 0;
     this.menuT = 0;
     this.lastFrame = 0;
     this.running = false;
     this.play = null;
+    this.clock = new GameClock();
+    this.startMinutes = SCHOOL_START;
+    // ?time=HH:MM starts the school day at another time (used by the tests)
     if (this.debug.time) {
       const m = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(this.debug.time);
-      if (m) {
-        const d = new Date();
-        d.setHours(Number(m[1]), Number(m[2]), Number(m[3] || 0), 0);
-        this.timeOffsetMs = d.getTime() - Date.now();
-      }
+      if (m) this.startMinutes = Number(m[1]) * 60 + Number(m[2]) + Number(m[3] || 0) / 60;
     }
+    this.menuDate = minutesToDate(MENU_TIME);
   }
 
+  /** The time shown in the game: the game clock while playing, a fixed morning in the menu. */
   now() {
-    return new Date(Date.now() + this.timeOffsetMs);
+    return this.mode === 'play' ? this.clock.date() : this.menuDate;
   }
 
   async load(onProgress) {
@@ -92,6 +97,7 @@ export class Game {
 
   async startPlaying(grade, user) {
     if (this.play) this.play.stop();
+    this.clock.reset(this.startMinutes);
     this.play = new PlaySession(this, grade, user);
     this.mode = 'play';
     this.play.start(this.now());
@@ -99,14 +105,13 @@ export class Game {
     if (this.debug.enabled) window.__SL.play = this.play;
   }
 
-  /** Debug: move the clock so the next bell rings in `sec` seconds. */
+  /** Debug: move the clock to `sec` seconds before the next class ends (or the next bell). */
   skipToBell(sec = 5) {
-    const now = this.now();
-    const ms = 30 * 60000;
-    const minsOfDay = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60 + now.getMilliseconds() / 60000;
-    const into = ((minsOfDay - 8 * 60) % 30 + 30) % 30;
-    const left = ms - into * 60000;
-    this.timeOffsetMs += left - sec * 1000;
+    const s = getScheduleState(this.clock.minutes, this.play ? this.play.grade : 6, this.clock.day);
+    let target = null;
+    if (s.phase === 'class') target = s.endMin;
+    else if (s.phase === 'passing' || s.phase === 'before') target = s.startMin;
+    if (target !== null) this.clock.minutes = target - sec / 60;
   }
 
   stopPlaying() {
@@ -131,6 +136,10 @@ export class Game {
     this.lastFrame = t;
     const dt = Math.min(0.05, Math.max(0, frameMs / 1000));
     if (this.gr.contextLost) return;
+    if (this.mode === 'play' && this.play) {
+      // 1 game minute per 60 real seconds (pauses while the app is in the background)
+      this.clock.advance(Math.min(0.25, Math.max(0, frameMs / 1000)));
+    }
     const now = this.now();
     if (this.mode === 'menu' || this.mode === 'loading') this.updateMenuCamera(dt);
     if (this.mode === 'play' && this.play) this.play.update(dt, now);

@@ -361,6 +361,9 @@ export class NPCs {
       n.path = [];
       n.sit = 0;
       n.walk = 0;
+      n.pending = null;
+      n.sitFrom = null;
+      n.curSpeed = 0;
       const role = this.roleFor(n, periodIndex);
       if (role.wander) {
         const t = this.wanderTarget(n);
@@ -392,6 +395,8 @@ export class NPCs {
   }
 
   roleFor(n, periodIndex) {
+    // after school (periodIndex < 0) everyone hangs out in the halls and the lobby
+    if (periodIndex < 0) return { wander: true };
     // 4 students per period roam the halls instead of going to class, each from a different room
     if (this.wanderSet(periodIndex).has(n.i)) return { wander: true };
     return { room: npcRoomForPeriod(n.i, periodIndex) };
@@ -417,6 +422,11 @@ export class NPCs {
     n.z = z;
     n.y = y !== null ? y : this.physics.groundAt(x, z, 0.5) || 0;
     n.yaw = yaw;
+  }
+
+  /** School's out: students leave their classes and roam the halls and lobby. */
+  dismissAll() {
+    this.onPeriodChange(null, -1);
   }
 
   onPeriodChange(now, periodIndex) {

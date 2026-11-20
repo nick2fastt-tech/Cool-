@@ -1,57 +1,104 @@
-// Real-time bell schedule. Pure functions (no DOM) so they can be unit tested in Node.
+// Bell schedule on the game clock. Pure functions (no DOM) so they can be unit tested.
+// Times are "game minutes": minutes since midnight (8:00 AM = 480).
 import { SCHEDULE, GRADE_SCHEDULES, ROOMS } from '../config.js';
 
-export const PERIOD_MS = SCHEDULE.periodMinutes * 60000;
-export const BLOCK_MINUTES = SCHEDULE.periods * SCHEDULE.periodMinutes;
+export const SCHOOL_START = SCHEDULE.startHour * 60 + SCHEDULE.startMinute;
 
-/**
- * Work out which period it is right now for a grade.
- * The clock is the real local time. Periods are back-to-back 30 minute blocks
- * starting at the anchor time (8:00 AM) and repeating every 8 periods.
- */
-export function getScheduleState(now = new Date(), grade = 6) {
+/** The 8 periods of a grade's day with their start, end and late times. */
+export function dayPeriods(grade) {
   const list = GRADE_SCHEDULES[grade] || GRADE_SCHEDULES[6];
-  const minsOfDay = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60 + now.getMilliseconds() / 60000;
-  const anchor = SCHEDULE.anchorHour * 60 + SCHEDULE.anchorMinute;
-  let rel = (minsOfDay - anchor) % BLOCK_MINUTES;
-  if (rel < 0) rel += BLOCK_MINUTES;
-  let index = Math.floor(rel / SCHEDULE.periodMinutes);
-  if (index >= SCHEDULE.periods) index = SCHEDULE.periods - 1; // float guard
-  const blockStartMs = now.getTime() - rel * 60000;
-  // Round to the nearest second so the period boundaries are stable.
-  const blockStart = Math.round(blockStartMs / 1000) * 1000;
-
-  const rows = list.map(([cls, room], i) => {
-    const start = new Date(blockStart + i * PERIOD_MS);
-    const end = new Date(blockStart + (i + 1) * PERIOD_MS);
-    return {
+  const rows = [];
+  let t = SCHOOL_START;
+  list.forEach(([cls, room], i) => {
+    const len = i === list.length - 1 ? SCHEDULE.lastClassMinutes : SCHEDULE.classMinutes;
+    rows.push({
       period: i + 1,
       cls,
       room,
       roomName: ROOMS[room] ? ROOMS[room].name : '',
-      start,
-      end,
-      current: i === index,
-      past: i < index,
-    };
+      startMin: t,
+      endMin: t + len,
+      lateMin: t + SCHEDULE.lateAfterMinutes,
+    });
+    t += len + SCHEDULE.passingMinutes;
   });
+  return rows;
+}
 
+export const SCHOOL_END = (() => {
+  const rows = dayPeriods(6);
+  return rows[rows.length - 1].endMin;
+})();
+
+/** A Date whose local hours/minutes/seconds show a game time (date part doesn't matter). */
+export function minutesToDate(min) {
+  const d = new Date(2026, 8, 1, 0, 0, 0, 0); // no daylight-saving change on this day
+  d.setTime(d.getTime() + Math.round(min * 60000));
+  return d;
+}
+
+/**
+ * Where we are in the school day.
+ * phase: 'before' (before 8:00) | 'class' | 'passing' (break before the next class) | 'after' (school's out)
+ */
+export function getScheduleState(gameMin, grade = 6, day = 1) {
+  const rows = dayPeriods(grade);
+  const last = rows[rows.length - 1];
+  let phase;
+  let index;
+  if (gameMin < rows[0].startMin) {
+    phase = 'before';
+    index = 0;
+  } else if (gameMin >= last.endMin) {
+    phase = 'after';
+    index = rows.length - 1;
+  } else {
+    index = rows.findIndex((r) => gameMin < r.endMin);
+    phase = gameMin >= rows[index].startMin ? 'class' : 'passing';
+  }
   const cur = rows[index];
-  const msLeft = Math.max(0, cur.end.getTime() - now.getTime());
+  let leftMin = 0;
+  let total = 1;
+  if (phase === 'class') {
+    leftMin = cur.endMin - gameMin;
+    total = cur.endMin - cur.startMin;
+  } else if (phase === 'passing' || phase === 'before') {
+    leftMin = cur.startMin - gameMin;
+    total = phase === 'passing' ? SCHEDULE.passingMinutes : Math.max(1, cur.startMin - gameMin);
+  }
+  // next bell: the next class start, or the end of school during the last class
+  let bellMin = null;
+  if (phase === 'class') bellMin = index + 1 < rows.length ? rows[index + 1].startMin : last.endMin;
+  else if (phase !== 'after') bellMin = cur.startMin;
   return {
     grade,
+    day,
+    phase,
     index,
-    period: index + 1,
+    period: cur.period,
     cls: cur.cls,
     room: cur.room,
     roomName: cur.roomName,
-    start: cur.start,
-    end: cur.end,
-    msLeft,
-    progress: 1 - msLeft / PERIOD_MS,
-    next: rows[(index + 1) % rows.length],
-    rows,
-    key: blockStart + ':' + index,
+    startMin: cur.startMin,
+    endMin: cur.endMin,
+    lateMin: cur.lateMin,
+    start: minutesToDate(cur.startMin),
+    end: minutesToDate(cur.endMin),
+    lateAt: minutesToDate(cur.lateMin),
+    late: phase === 'class' && gameMin >= cur.lateMin,
+    msLeft: Math.max(0, leftMin * 60000),
+    msToBell: bellMin === null ? 0 : Math.max(0, (bellMin - gameMin) * 60000),
+    progress: phase === 'class' ? 1 - leftMin / total : 0,
+    next: rows[index + 1] || null,
+    rows: rows.map((r, i) => ({
+      ...r,
+      start: minutesToDate(r.startMin),
+      end: minutesToDate(r.endMin),
+      current: i === index && phase === 'class',
+      upcoming: i === index && (phase === 'passing' || phase === 'before'),
+      past: r.endMin <= gameMin,
+    })),
+    key: day + ':' + phase + ':' + index,
   };
 }
 

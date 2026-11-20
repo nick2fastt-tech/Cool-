@@ -92,30 +92,36 @@ export class HUD {
 
   setSchedule(s, now, status) {
     const t = formatTime(now);
-    const [hm, ap] = t.split(' ');
-    if (this._last.hm !== hm) {
-      this._last.hm = hm;
-      this.chip.time.textContent = hm + ' ' + ap;
+    if (this._last.hm !== t) {
+      this._last.hm = t;
+      this.chip.time.textContent = t;
     }
-    const left = formatCountdown(s.msLeft) + ' left';
+    let left = '';
+    if (s.phase === 'class') left = formatCountdown(s.msLeft) + ' left';
+    else if (s.phase !== 'after') left = 'Bell in ' + formatCountdown(s.msToBell);
     if (this._last.left !== left) {
       this._last.left = left;
       this.chip.left.textContent = left;
     }
-    const cls = `P${s.period} · ${s.cls} · Rm ${s.room}`;
+    let cls;
+    if (s.phase === 'class') cls = `P${s.period} \u00b7 ${s.cls} \u00b7 Rm ${s.room}`;
+    else if (s.phase === 'after') cls = "School's out \u00b7 back at 8:00 AM";
+    else cls = `Next: P${s.period} \u00b7 ${s.cls} \u00b7 Rm ${s.room}`;
     if (this._last.cls !== cls) {
       this._last.cls = cls;
       this.chip.cls.textContent = cls;
     }
-    const pct = (s.progress * 100).toFixed(1) + '%';
+    const pct = (s.phase === 'class' ? s.progress * 100 : s.phase === 'after' ? 100 : 0).toFixed(1) + '%';
     if (this._last.pct !== pct) {
       this._last.pct = pct;
       this.chip.bar.style.width = pct;
     }
-    if (this._last.status !== status.text) {
-      this._last.status = status.text;
+    const key = status.text + '|' + status.cls;
+    if (this._last.status !== key) {
+      this._last.status = key;
       this.chip.status.textContent = status.text;
-      this.chip.status.classList.toggle('ok', !!status.ok);
+      this.chip.status.classList.toggle('ok', status.cls === 'ok');
+      this.chip.status.classList.toggle('late', status.cls === 'late');
     }
   }
 
@@ -147,21 +153,21 @@ export class HUD {
   renderSchedule(s, now, grade) {
     const rows = s.rows
       .map((r) => `
-        <div class="prow ${r.current ? 'current' : ''} ${r.past ? 'past' : ''}">
+        <div class="prow ${r.current ? 'current' : ''} ${r.upcoming ? 'upcoming' : ''} ${r.past ? 'past' : ''}">
           <div class="pnum">${r.period}</div>
-          <div><div class="pcls">${esc(r.cls)}</div><div class="ptime">${formatTime(r.start)} &ndash; ${formatTime(r.end)}</div></div>
+          <div><div class="pcls">${esc(r.cls)}</div><div class="ptime">${formatTime(r.start)} &ndash; ${formatTime(r.end)} &middot; late at ${formatTime(new Date(r.start.getTime() + (r.lateMin - r.startMin) * 60000))}</div></div>
           <div class="proom" style="--rc:${ROOMS[r.room].color}">Room ${r.room}</div>
         </div>`)
       .join('');
-    const day = now.toLocaleDateString(undefined, { weekday: 'long' });
+    const bell = s.phase === 'after' ? "School's out" : 'Next bell in ' + formatCountdown(s.msToBell);
     this.modal.innerHTML = `
       <div class="planner pop-in" role="dialog" aria-label="Schedule">
         <div class="planner-head">
-          <div><h2>My Schedule</h2><div class="sub">${ordinal(grade)} Grade &middot; ${esc(day)}</div></div>
-          <div class="now"><b id="schNow">${formatTime(now)}</b><span id="schBell">Next bell in ${formatCountdown(s.msLeft)}</span></div>
+          <div><h2>My Schedule</h2><div class="sub">${ordinal(grade)} Grade &middot; Day ${s.day}</div></div>
+          <div class="now"><b id="schNow">${formatTime(now)}</b><span id="schBell">${esc(bell)}</span></div>
         </div>
         <div class="planner-rows">${rows}</div>
-        <div class="planner-note">Every class is 30 minutes on the real clock. In the demo, the 8-period day repeats every 4 hours so there's always a class.</div>
+        <div class="planner-note">School starts at 8:00 AM and lets out at 12:22 PM. Classes are 30 minutes (8th period is 45). The clock goes up 1 minute every 60 seconds. Get to class within 15 minutes of the bell or you're late!</div>
         <div class="planner-foot">
           <button class="btn btn-green btn-small" id="schResume">${icon('play')}<span>Back to class</span></button>
           <button class="btn btn-blue btn-small" id="schMenu">${icon('menu')}<span>Main Menu</span></button>
@@ -182,7 +188,7 @@ export class HUD {
     const n = this.modal.querySelector('#schNow');
     const b = this.modal.querySelector('#schBell');
     if (n) n.textContent = formatTime(now);
-    if (b) b.textContent = 'Next bell in ' + formatCountdown(s.msLeft);
+    if (b) b.textContent = s.phase === 'after' ? "School's out" : 'Next bell in ' + formatCountdown(s.msToBell);
   }
 
   closeSchedule() {

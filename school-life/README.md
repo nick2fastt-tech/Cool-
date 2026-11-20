@@ -16,7 +16,8 @@ media file is your theme song.
 | **Play** | Pick **6th, 7th, 8th or 9th grade**. Each grade has its own 8-class schedule. |
 | **Character** | Locked for now. |
 | **Settings** | Graphics: **MAX** (the other levels are locked). Dynamic resolution keeps it smooth, so there's no lag. Sign out is here too. |
-| **8 classes** | Homeroom, Math, English, Algebra I, Photosynthesis, Library, Auditorium, Study Hall — **30 minutes each** on the **real-life clock**. |
+| **8 classes** | Homeroom, Math, English, Algebra I, Photosynthesis, Library, Auditorium, Study Hall. School starts at **8:00 AM**; classes are **30 minutes** with a 1-minute break (the bell at **8:31** starts 2nd period), and **8th period is 45 minutes**, so school lets out at **12:22 PM**. |
+| **Game clock** | Starts at 8:00 AM when you press Play and goes up **1 minute every 60 seconds**. If you're not in class **15 minutes** after the bell (8:15 for 1st period), you're **late**. After school, a new day starts at 8:00 AM. |
 | **6 rooms** | 101 Math · 102 Auditorium (seats + stage) · 103 Algebra I · 104 Photosynthesis · 105 English · 106 Library (seats, comfy lounges and the Principal's Office — locked). |
 | **2 floors** | The grand staircase in the lobby goes up to the 2nd floor, which is still under construction. |
 | **Can't leave** | All exit doors are locked during the demo. |
@@ -38,9 +39,9 @@ media file is your theme song.
 
 1. **Room numbers:** your list had two rooms numbered 102, so the rooms are 101–106 in the
    order you listed them. Change the names/numbers in [`src/config.js`](src/config.js).
-2. **School hours:** 1st period starts at **8:00 AM** and each class is 30 minutes. So you can
-   play at any time of day, the 8-period day **repeats every 4 hours** in the demo
-   (8 AM, 12 PM, 4 PM, 8 PM...). Change `SCHEDULE` in [`src/config.js`](src/config.js).
+2. **School hours:** seven 30-minute classes plus a 45-minute 8th period end at **12:22 PM**
+   (1st period 8:00-8:30, 2nd 8:31-9:01, ... 8th 11:37-12:22). Change `SCHEDULE` in
+   [`src/config.js`](src/config.js) to adjust class length, breaks or the late time.
 
 ## How to play
 
@@ -51,8 +52,9 @@ media file is your theme song.
 | **USE** button = open doors, sit down / stand up, read signs, drink from the fountain, browse books, play the piano | `E` |
 | Schedule icon (top right) = your full schedule + Main Menu | `Q` or `Tab` |
 
-Sit in your class's room to get marked **In class**. When the real clock hits the next
-half hour, the bell rings and everyone heads to their next class.
+Get to your class's room before the late time (15 minutes after the bell) and grab a seat.
+When a class ends, everyone heads to their next room, and the bell rings 1 minute later to
+start the next class.
 
 ## Run it
 
@@ -100,6 +102,9 @@ instead, so players still see it.
 
 ## Put it on your phone
 
+* **One file:** [`release/School-Life-V1.00.html`](release/School-Life-V1.00.html) has the whole
+  game inside it (code, fonts, icon and your theme song). Open it in a browser or send it to your
+  phone. Accounts are saved on that device. Rebuild it with `npm run build:html`.
 * **Same Wi-Fi:** run `npm run dev` and open the "Network" address it prints on your phone.
 * **Online:** deploy the `dist/` folder anywhere (GitHub Pages, Netlify...) or run the Node
   server on a host with a persistent disk (Render, Railway, Fly.io, a VPS). Set `DATA_DIR` to a
@@ -119,6 +124,7 @@ node tests/e2e/shots.cjs                  # menus walkthrough (needs `npm run de
 node tests/e2e/play-shots.cjs             # in-game walkthrough
 node tests/e2e/mechanics.cjs              # joystick, look, walls, doors, stairs, sitting (real touch input)
 node tests/e2e/route-check.cjs            # students reach their seats after every bell
+node tests/e2e/clock-check.cjs            # 8:00 start, +1 min per minute, late at 8:15, bell at 8:31, out at 12:22
 ```
 
 The browser tests fail if the page logs any error or warning.

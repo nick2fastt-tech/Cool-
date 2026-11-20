@@ -44,12 +44,29 @@ function goFullscreen() {
   }
 }
 
+/** The theme song: embedded in the single-file version, otherwise audio/theme.mp3. */
+function themeUrl() {
+  const data = window.SL_THEME_DATA;
+  if (typeof data === 'string' && data.length > 1000) {
+    try {
+      const bin = atob(data);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      window.SL_THEME_DATA = null;
+      return URL.createObjectURL(new Blob([bytes], { type: 'audio/mpeg' }));
+    } catch (e) {
+      /* fall back to the file */
+    }
+  }
+  return new URL('audio/theme.mp3', document.baseURI).toString();
+}
+
 async function boot() {
   const audio = new AudioManager();
   const account = new AccountService();
   const ui = new UI({ audio, account });
   ui.build();
-  audio.loadMusic(new URL('audio/theme.mp3', document.baseURI).toString());
+  audio.loadMusic(themeUrl());
   const accountReady = account.init().catch(() => null);
 
   const canvas = document.getElementById('scene');
